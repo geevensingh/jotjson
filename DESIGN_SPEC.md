@@ -30,7 +30,7 @@
 | Azure Cosmos DB (NoSQL, serverless tier) | Store JSON blobs, user profiles, history |
 | Azure AD B2C | Identity provider (email/password + social logins) |
 | Azure CDN / Front Door | *(deferred to post-v1)* — add for WAF and advanced routing if needed. v1 uses Static Web Apps' built-in CDN and custom domain support. |
-| Azure Blob Storage | Storage for user avatars and large JSON blob overflow |
+| Azure Blob Storage | Storage for user avatars and export ZIP artifacts |
 
 ### High-Level Diagram
 
@@ -133,7 +133,7 @@ When the user has not overridden a color, the app uses the theme-appropriate def
   userId: string,
   blobId: string,
   accessedAt: DateTime,
-  action: "created" | "viewed" | "edited"
+  action: "saved" | "viewed" | "edited" | "pasted"
 }
 ```
 
@@ -185,7 +185,7 @@ The primary page. Available to **all users** (anonymous + registered).
 - **JSON Input Panel** (left or top, depending on layout preference)
   - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON/JSONC-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size. Editor language mode auto-detects JSON vs JSONC based on content (presence of `//` or `/* */` comments) and can be toggled manually via a **JSON / JSONC** switch in the toolbar.
   - **JSONC support**: the editor and parser accept JSON with Comments (single-line `//` and multi-line `/* */`), as well as trailing commas. Comments are stripped before parsing into the tree view but preserved in the raw editor text. When saving a blob, the original text (with comments) is stored; the parsed tree is derived on load. This uses a JSONC-aware parser (e.g., `jsonc-parser` from the VS Code ecosystem) rather than native `JSON.parse`.
-  - "Paste JSON from Clipboard", "Upload File", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
+  - "Paste JSON from Clipboard", "Upload File", "Download as File", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
   - Real-time JSON validation with inline error messages (line + column of parse error).
   - **Smart Paste Button** behavior:
     - On page load (and periodically while the page is focused), the app reads the clipboard using the **Clipboard API** (`navigator.clipboard.readText()`).
@@ -204,6 +204,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - If the editor already has content, a confirmation prompt asks: "Replace current JSON with uploaded file?" with Replace / Cancel options.
     - The file name is shown in a subtle label near the editor (e.g., "Loaded: config.json") until the content is manually edited.
     - **Privacy note:** file contents are read entirely client-side and never uploaded to the server unless the user explicitly saves the blob.
+  - **Download as File** — a toolbar button saves the current editor content as a file to the user's device. Uses a client-side `Blob` + anchor `download` attribute — no server involvement. Default filename is the blob's title (slugified) or `jotjson-<slug>.json` for a saved blob, or `jotjson-untitled.json` for unsaved editor content. Extension is `.jsonc` when the editor is in JSONC mode (contains comments or user toggled JSONC), otherwise `.json`. Available to all users (anonymous + registered).
 
 - **Tree View Panel** (right or bottom, depending on layout preference)
   - Renders the parsed JSON as a collapsible, interactive tree.
@@ -389,7 +390,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | POST | `/api/blobs` | Required | Create a new JSON blob |
-| GET | `/api/blobs/:id` | Optional* | Get a blob by UUID or slug (*public blobs accessible without auth) |
+| GET | `/api/blobs/:id` | Optional* | Get a blob by UUID or slug (*no auth required for private/unlisted or public blobs; owner auth only needed for blobs explicitly set to owner-only, a post-v1 feature) |
 | PUT | `/api/blobs/:id` | Required (owner) | Update a blob |
 | DELETE | `/api/blobs/:id` | Required (owner) | Delete a blob |
 | GET | `/api/blobs` | Required | List user's blobs (paginated) |
@@ -545,7 +546,7 @@ src/
 | Azure Functions | Consumption | Serverless API |
 | Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (partitionKey: `/ownerId`), `users` (`/id`), `history` (`/userId`), `rule-sets` (`/userId`) |
 | Azure AD B2C | Free (50k MAU) | Identity |
-| Azure Blob Storage | Standard LRS | User avatars + large blob overflow |
+| Azure Blob Storage | Standard LRS | User avatars + export ZIP artifacts (SAS-linked, 1-hour TTL) |
 | Azure Front Door | *(deferred post-v1)* | Add for WAF / advanced routing if needed |
 | Azure Monitor / App Insights | Pay-as-you-go | Logging, telemetry |
 
@@ -572,7 +573,7 @@ src/
 4. **Persistent links** — Blob CRUD API, save & share flow, `/s/:id` route.
 5. **History** — History tracking, `/history` page, management actions.
 6. **Formatting rules** — Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
-7. **Polish & launch** — Custom domain, CDN, dark/light theme, accessibility audit, SEO, monitoring.
+7. **Polish & launch** — Custom domain, dark/light theme polish, accessibility audit, SEO (pre-rendering + OG tags), monitoring (App Insights dashboards & alerts), Static Web Apps upgrade to Standard tier.
 
 ---
 
@@ -581,6 +582,6 @@ src/
 - **Collaboration:** Real-time collaborative editing (future — would need SignalR/WebSockets).
 - **JSON Schema validation:** Let users supply a schema and validate blobs against it.
 - **Diff view:** Compare two JSON blobs side-by-side.
-- **Import/Export:** Export JSON blobs to `.json` files (download button).
+- **Bulk export/import:** Export/import `.json` files in bulk (single-blob download is in v1).
 - **API access:** Provide API keys for programmatic blob storage (developer tier).
 - **Monetization:** Pro plan with higher limits (larger blobs, more storage, private blobs, custom slugs).
