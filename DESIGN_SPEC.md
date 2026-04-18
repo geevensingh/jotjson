@@ -163,8 +163,16 @@ The primary page. Available to **all users** (anonymous + registered).
 
 - **JSON Input Panel** (left or top)
   - Large code editor textarea (consider integrating Monaco Editor or CodeMirror for syntax highlighting, line numbers, and error markers).
-  - "Paste", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
+  - "Paste JSON from Clipboard", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
   - Real-time JSON validation with inline error messages (line + column of parse error).
+  - **Smart Paste Button** behavior:
+    - On page load (and periodically while the page is focused), the app reads the clipboard using the **Clipboard API** (`navigator.clipboard.readText()`).
+    - The browser will prompt the user for clipboard permission on first access. The app should request this permission early — on first interaction or via a clear prompt (e.g., "Allow clipboard access to enable one-click paste"). If the user denies permission, the button is hidden and standard `Ctrl+V` paste still works normally.
+    - The clipboard contents are tested with a lightweight JSON parse attempt (`JSON.parse` wrapped in try/catch). If the text is valid JSON (or starts with `{` or `[` and is plausibly JSON), the **"Paste JSON from Clipboard"** button is **enabled** with a green/active state and a tooltip showing a preview of the first ~80 characters.
+    - If the clipboard does not contain JSON-like text, the button is **disabled/grayed out** with a tooltip: "Clipboard does not contain JSON".
+    - Clicking the enabled button replaces the editor contents with the clipboard JSON and triggers the tree view to render.
+    - The clipboard check runs: (1) on page/tab focus, (2) when the user clicks into the editor panel, and (3) on a short polling interval (~2 seconds) while the page is visible. Polling stops when the tab is backgrounded (using `document.visibilityState`).
+    - **Privacy note:** clipboard contents are never sent to the server — the check is entirely client-side.
 
 - **Tree View Panel** (right or bottom)
   - Renders the parsed JSON as a collapsible, interactive tree.
