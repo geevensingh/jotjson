@@ -1,0 +1,47 @@
+# Cursor Rules — JotJSON
+
+The authoritative instructions for this repo are in `AGENTS.md` at the root.
+Always read and follow `AGENTS.md` and `DESIGN_SPEC.md` before making changes.
+The summary below is for quick reference; `AGENTS.md` wins on any conflict.
+
+## Non-negotiables
+
+- `DESIGN_SPEC.md` is the source of truth. Flag conflicts before implementing.
+- Stack is fixed: Angular (latest LTS) + Signals + Material, Azure Functions in
+  TypeScript, Cosmos DB (serverless), Azure Static Web Apps, Bicep in `/infra`.
+- Use `jsonc-parser` for all user JSON/JSONC — never `JSON.parse`.
+- Strict TypeScript. No `any`; use `unknown` + narrowing.
+- Standalone Angular components, `OnPush`, `inject()`, Signals for state, RxJS
+  only at I/O boundaries.
+- Kebab-case filenames; co-located `*.spec.ts`; no default exports in app code.
+- Azure Functions: thin handlers, zod-validated inputs, B2C JWT auth on
+  protected routes, typed JSON responses with explicit status codes.
+
+## Workflow
+
+- Make surgical changes that fully address the request. Don't reformat or
+  refactor unrelated code.
+- Add or update tests for every logic change. No test = not done.
+- Before finishing: `npm run lint`, `npm test`, and `npm run build` must pass
+  for both the frontend and `api/`. Don't add new toolchains to satisfy this.
+- Update `DESIGN_SPEC.md` in the same change when behavior or architecture
+  changes.
+
+## Security & Privacy
+
+- Never log or transmit clipboard contents, editor contents, or PII.
+- No secrets in source. Use SWA/Functions app settings + Key Vault.
+- Enforce spec limits on both client and server (1 MB saved blob, 5 MB upload,
+  100-blob cap).
+- Use Angular interpolation/binding over `innerHTML`.
+
+## Commits
+
+- Small, focused, imperative subject lines.
+- AI-assisted commits include:
+  `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
+
+## When Unsure
+
+Ask a clarifying question rather than guessing on defaults, limits, scope, or
+behavior. Prefer the simpler, spec-aligned option.
