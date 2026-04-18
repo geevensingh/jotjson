@@ -1,0 +1,40 @@
+@use './variables' as *;
+
+:root {
+  --color-primary: #{$color-primary};
+  --font-mono: #{$font-mono};
+  --font-ui: #{$font-ui};
+}
+
+.theme-dark,
+:root {
+  --bg: #{$color-bg-dark};
+  --fg: #{$color-fg-dark};
+
+  --highlight-selection: #{$highlight-selection-dark};
+  --highlight-matching: #{$highlight-matching-dark};
+  --highlight-ancestor: #{$highlight-ancestor-dark};
+  --highlight-search: #{$highlight-search-dark};
+}
+
+.theme-light {
+  --bg: #{$color-bg-light};
+  --fg: #{$color-fg-light};
+
+  --highlight-selection: #{$highlight-selection-light};
+  --highlight-matching: #{$highlight-matching-light};
+  --highlight-ancestor: #{$highlight-ancestor-light};
+  --highlight-search: #{$highlight-search-light};
+}
+
+@media (prefers-color-scheme: light) {
+  .theme-system {
+    --bg: #{$color-bg-light};
+    --fg: #{$color-fg-light};
+
+    --highlight-selection: #{$highlight-selection-light};
+    --highlight-matching: #{$highlight-matching-light};
+    --highlight-ancestor: #{$highlight-ancestor-light};
+    --highlight-search: #{$highlight-search-light};
+  }
+}

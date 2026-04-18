@@ -1,0 +1,26 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "FUNCTIONS_EXTENSION_VERSION": "~4",
+    "FUNCTIONS_NODE_VERSION": "~20",
+
+    "COSMOS_ENDPOINT": "",
+    "COSMOS_KEY": "",
+    "COSMOS_DATABASE": "jotjson",
+
+    "BLOB_STORAGE_CONNECTION": "",
+    "AVATAR_CONTAINER": "avatars",
+    "EXPORT_CONTAINER": "exports",
+
+    "B2C_TENANT_ID": "",
+    "B2C_CLIENT_ID": "",
+    "B2C_POLICY": ""
+  },
+  "Host": {
+    "LocalHttpPort": 7071,
+    "CORS": "http://localhost:4200",
+    "CORSCredentials": true
+  }
+}

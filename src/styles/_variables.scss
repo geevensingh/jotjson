@@ -1,0 +1,34 @@
+// Design tokens — see DESIGN_SPEC.md § UI/UX Guidelines and § TreeHighlightColors.
+
+$color-primary: #00bcd4;
+
+$color-bg-dark: #1e1e1e;
+$color-bg-light: #fafafa;
+
+$color-fg-dark: #e4e4e4;
+$color-fg-light: #1a1a1a;
+
+// JSON type colors (used by type labels and editor syntax theming).
+$json-string: #6a8759;
+$json-number: #ff9800;
+$json-boolean: #2196f3;
+$json-null: #9e9e9e;
+$json-array: #9c27b0;
+$json-object: #009688;
+
+// Tree highlight defaults (see TreeHighlightColors section of DESIGN_SPEC.md).
+$highlight-selection-dark: #264f78;
+$highlight-matching-dark: #3e3d32;
+$highlight-ancestor-dark: #2a2d2e;
+$highlight-search-dark: #6a4c00;
+
+$highlight-selection-light: #cce4f7;
+$highlight-matching-light: #fff4cc;
+$highlight-ancestor-light: #ececec;
+$highlight-search-light: #ffe082;
+
+$font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+$font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+$breakpoint-mobile: 768px;
+$breakpoint-tablet: 1024px;

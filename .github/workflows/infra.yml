@@ -1,0 +1,62 @@
+name: Infra (Bicep)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/infra.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        required: true
+        default: dev
+        type: choice
+        options: [dev, prod]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  validate:
+    name: Bicep what-if
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build bicep
+        run: az bicep build --file infra/main.bicep
+      - name: What-if (dev)
+        if: github.event_name == 'push' || github.event.inputs.environment == 'dev'
+        run: |
+          az deployment group what-if \
+            --resource-group rg-jotjson-dev \
+            --template-file infra/main.bicep \
+            --parameters infra/parameters/dev.bicepparam
+
+  deploy:
+    name: Deploy
+    needs: validate
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy Bicep
+        run: |
+          az deployment group create \
+            --resource-group rg-jotjson-${{ github.event.inputs.environment }} \
+            --template-file infra/main.bicep \
+            --parameters infra/parameters/${{ github.event.inputs.environment }}.bicepparam

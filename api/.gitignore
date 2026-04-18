@@ -1,0 +1,16 @@
+# Azure Functions build output
+dist/
+
+# Local settings — contains secrets
+local.settings.json
+
+# Node modules
+node_modules/
+
+# Azure Functions local state
+.python_packages/
+bin/
+obj/
+
+# Logs
+*.log
