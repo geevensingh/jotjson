@@ -158,7 +158,12 @@ The primary page. Available to **all users** (anonymous + registered).
 - **Tree View Panel** (right or bottom)
   - Renders the parsed JSON as a collapsible, interactive tree.
   - Each node shows: key, value, type badge (string, number, boolean, null, object, array).
-  - Expand/collapse all toggle.
+  - **Expansion controls** (toolbar above the tree):
+    - **Collapse All** button — collapses every node in the tree.
+    - **Expand All** button — expands every node in the tree.
+    - **Expand to Level** — a dropdown or numeric stepper (1–10) that expands nodes down to the chosen depth and collapses everything deeper. E.g., "Level 2" expands the root and its immediate children but collapses grandchildren.
+    - The current expansion level is displayed and persists across re-renders of the same blob.
+    - Keyboard shortcuts: `Ctrl+Shift+[` (collapse all), `Ctrl+Shift+]` (expand all), `Ctrl+1` through `Ctrl+9` (expand to level N).
   - Click-to-copy path (e.g., `$.users[0].name`).
   - Search/filter within the tree.
 
@@ -178,7 +183,7 @@ Available to **registered users** only (anonymous users see a prompt to sign up)
 
 Available to **registered users** only.
 
-- Chronological list of previously submitted/viewed JSON blobs.
+- Chronological list of previously submitted/viewed JSON blobs for that user.
 - Each entry shows: title (or first 80 chars of JSON), date, size, actions (open, delete, share).
 - Search and filter by date range or keyword.
 - Pagination or infinite scroll.
@@ -348,7 +353,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 
 - **Theme:** Clean, developer-friendly. Dark mode default with light mode toggle.
 - **Typography:** Monospace font for JSON content (e.g., JetBrains Mono, Fira Code). Sans-serif for UI chrome.
-- **Color Palette:** 
+- **Color Palette:**
   - Primary: Teal/Cyan accent (#00BCD4 family).
   - Background: Dark (#1E1E1E) / Light (#FAFAFA).
   - JSON types color-coded: strings=green, numbers=orange, booleans=blue, null=gray.
