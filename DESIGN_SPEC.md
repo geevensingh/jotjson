@@ -25,7 +25,7 @@
 
 | Service | Purpose |
 |---|---|
-| Azure Static Web Apps *or* Azure App Service | Host the Angular SPA |
+| Azure Static Web Apps | Host the Angular SPA (with built-in Azure Functions proxy) |
 | Azure Functions (Node/TypeScript) | Serverless API layer |
 | Azure Cosmos DB (NoSQL, serverless tier) | Store JSON blobs, user profiles, history |
 | Azure AD B2C | Identity provider (email/password + social logins) |
@@ -57,7 +57,8 @@ Browser (Angular SPA)
 #### JsonBlob
 ```
 {
-  id: string (UUID / short-id),
+  id: string (UUID — internal primary key),
+  slug: string (NanoID short-id, e.g., "abc123" — used in public URLs, unique with collision check),
   content: string (raw JSON text),
   title?: string,
   createdAt: DateTime,
@@ -162,7 +163,7 @@ Browser (Angular SPA)
 The primary page. Available to **all users** (anonymous + registered).
 
 - **JSON Input Panel** (left or top)
-  - Large code editor textarea (consider integrating Monaco Editor or CodeMirror for syntax highlighting, line numbers, and error markers).
+  - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size.
   - "Paste JSON from Clipboard", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
   - Real-time JSON validation with inline error messages (line + column of parse error).
   - **Smart Paste Button** behavior:
@@ -172,6 +173,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - If the clipboard does not contain JSON-like text, the button is **disabled/grayed out** with a tooltip: "Clipboard does not contain JSON".
     - Clicking the enabled button replaces the editor contents with the clipboard JSON and triggers the tree view to render.
     - The clipboard check runs: (1) on page/tab focus, (2) when the user clicks into the editor panel, and (3) on a short polling interval (~2 seconds) while the page is visible. Polling stops when the tab is backgrounded (using `document.visibilityState`).
+    - **Fallback for restricted browsers:** if the browser denies clipboard polling (some require a user gesture), the button remains always visible in an "unknown" state. Clicking it triggers a user-gesture clipboard read — if the content is valid JSON, it pastes immediately; if not, a brief tooltip says "Clipboard does not contain JSON". This ensures the feature works even without polling permission.
     - **Privacy note:** clipboard contents are never sent to the server — the check is entirely client-side.
 
 - **Tree View Panel** (right or bottom)
@@ -225,10 +227,10 @@ The primary page. Available to **all users** (anonymous + registered).
 
 ### 2. Persistent Link / Share  (`/s/:id`)
 
-Available to **registered users** only (anonymous users see a prompt to sign up).
+Available to **registered users** (create/manage). **Anonymous users can view** public shared links.
 
 - After submitting JSON, a registered user can click **"Save & Share"**.
-- Generates a short, unique URL: `jotjson.com/s/abc123`.
+- Generates a short, unique URL: `jotjson.com/s/abc123` (using the blob's NanoID slug).
 - The link loads the saved JSON blob into the editor + tree view.
 - Owner can update or delete the blob.
 - Optional: set blob to public (viewable by anyone with the link) or private (owner only).
@@ -311,12 +313,15 @@ Available to **registered users** only.
   - Matching nodes receive the configured inline styles (background, text color, font weight, etc.).
   - Multiple rules can match the same node — styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
   - A small indicator badge or tooltip shows which rule(s) matched a given node.
+  - **Highlight priority** (highest to lowest): selection highlight → matching-value highlight → ancestor highlight → search highlight → formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
   - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply.
 
 - **Built-in Presets** — ship a few starter rule sets users can clone and customize:
   - "Error Detection" — highlights keys like `error`, `err`, `exception`, `fault` in red.
   - "Status Codes" — color-codes values like `200` (green), `400` (yellow), `500` (red).
   - "Null Finder" — highlights all `null` values with a yellow background.
+
+- **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set.
 
 ---
 
@@ -438,6 +443,19 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 - **Logo:** "JotJSON" wordmark — "Jot" in regular weight, "JSON" in bold, with a `{ }` icon element.
 - **Responsive breakpoints:** Mobile (< 768px), Tablet (768–1024px), Desktop (> 1024px).
 
+### Error, Loading & Empty States
+
+- **Loading skeletons:** show pulsing placeholder blocks while API data loads (history list, blob fetch, rule sets). The editor + tree view render instantly from local state.
+- **Error toasts:** non-blocking toast notifications (bottom-right, auto-dismiss after 5 seconds) for API errors, save failures, and network issues. Include a "Retry" action where applicable.
+- **404 page:** friendly "Blob not found" page for invalid `/s/:id` links, with a CTA to go to the editor. Similarly, a generic 404 for unknown routes.
+- **Offline banner:** persistent banner at the top of the page when network is unavailable (detected via `navigator.onLine` + service worker). Dismisses automatically when connectivity returns.
+- **Empty states:** contextual illustrations + messages for:
+  - History page with no entries: "No history yet — paste some JSON to get started."
+  - No saved blobs: "You haven't saved any JSON blobs yet."
+  - No formatting rule sets: "Create your first rule set to highlight JSON your way."
+  - Search with no matches: "No matches found for '…'"
+- **Validation error inline:** JSON parse errors appear as a red banner below the editor with the error message, line number, and column. The editor scrolls to and highlights the offending line.
+
 ---
 
 ## Project Structure (Angular)
@@ -477,7 +495,7 @@ src/
 
 ---
 
-## Azure Infrastructure (IaC — Bicep or Terraform)
+## Azure Infrastructure (IaC — Bicep)
 
 | Resource | SKU / Tier | Notes |
 |---|---|---|
@@ -487,6 +505,19 @@ src/
 | Azure AD B2C | Free (50k MAU) | Identity |
 | Azure Front Door | Standard | CDN + custom domain + WAF |
 | Azure Monitor / App Insights | Pay-as-you-go | Logging, telemetry |
+
+---
+
+## CI/CD (GitHub Actions)
+
+- **CI pipeline** — runs on every push and PR:
+  - Lint (ESLint), unit tests (Karma/Jest), build (`ng build --configuration production`).
+  - Azure Functions: lint, test, build.
+- **CD pipeline** — deploys on merge to `main`:
+  - Angular SPA → Azure Static Web Apps (using the `azure/static-web-apps-deploy` action).
+  - Azure Functions → deployed via Static Web Apps managed functions or separate Functions deploy action.
+  - Staging slot for preview on PRs (Static Web Apps preview environments).
+- **Infrastructure** — Bicep templates applied via a separate workflow on changes to `/infra` directory.
 
 ---
 
