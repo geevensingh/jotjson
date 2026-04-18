@@ -2,7 +2,7 @@
 
 ## Overview
 
-**JotJSON** (jotjson.com) is a web application for inputting, storing, and displaying JSON. Users paste or type raw JSON, and the site renders it as an interactive tree view. The app works without an account, but registered users unlock persistent links and submission history.
+**JotJSON** (jotjson.com) is a web application for inputting, storing, and displaying JSON and JSONC (JSON with Comments). Users paste or type raw JSON or JSONC, and the site renders it as an interactive tree view. The app works without an account, but registered users unlock persistent links and submission history.
 
 **Stack:** Angular frontend, Azure hosting (App Service + related services).
 
@@ -163,22 +163,23 @@ Browser (Angular SPA)
 The primary page. Available to **all users** (anonymous + registered).
 
 - **JSON Input Panel** (left or top)
-  - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size.
+  - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON/JSONC-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size. Editor language mode auto-detects JSON vs JSONC based on content (presence of `//` or `/* */` comments) and can be toggled manually via a **JSON / JSONC** switch in the toolbar.
+  - **JSONC support**: the editor and parser accept JSON with Comments (single-line `//` and multi-line `/* */`), as well as trailing commas. Comments are stripped before parsing into the tree view but preserved in the raw editor text. When saving a blob, the original text (with comments) is stored; the parsed tree is derived on load. This uses a JSONC-aware parser (e.g., `jsonc-parser` from the VS Code ecosystem) rather than native `JSON.parse`.
   - "Paste JSON from Clipboard", "Upload File", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
   - Real-time JSON validation with inline error messages (line + column of parse error).
   - **Smart Paste Button** behavior:
     - On page load (and periodically while the page is focused), the app reads the clipboard using the **Clipboard API** (`navigator.clipboard.readText()`).
     - The browser will prompt the user for clipboard permission on first access. The app should request this permission early — on first interaction or via a clear prompt (e.g., "Allow clipboard access to enable one-click paste"). If the user denies permission, the button is hidden and standard `Ctrl+V` paste still works normally.
-    - The clipboard contents are tested with a lightweight JSON parse attempt (`JSON.parse` wrapped in try/catch). If the text is valid JSON (or starts with `{` or `[` and is plausibly JSON), the **"Paste JSON from Clipboard"** button is **enabled** with a green/active state and a tooltip showing a preview of the first ~80 characters.
+    - The clipboard contents are tested with a lightweight parse attempt (JSONC-aware parser). If the text is valid JSON or JSONC (or starts with `{` or `[` and is plausibly JSON), the **"Paste JSON from Clipboard"** button is **enabled** with a green/active state and a tooltip showing a preview of the first ~80 characters.
     - If the clipboard does not contain JSON-like text, the button is **disabled/grayed out** with a tooltip: "Clipboard does not contain JSON".
     - Clicking the enabled button replaces the editor contents with the clipboard JSON and triggers the tree view to render.
     - The clipboard check runs: (1) on page/tab focus, (2) when the user clicks into the editor panel, and (3) on a short polling interval (~2 seconds) while the page is visible. Polling stops when the tab is backgrounded (using `document.visibilityState`).
     - **Fallback for restricted browsers:** if the browser denies clipboard polling (some require a user gesture), the button remains always visible in an "unknown" state. Clicking it triggers a user-gesture clipboard read — if the content is valid JSON, it pastes immediately; if not, a brief tooltip says "Clipboard does not contain JSON". This ensures the feature works even without polling permission.
     - **Privacy note:** clipboard contents are never sent to the server — the check is entirely client-side.
   - **File Upload** — two ways to load a JSON file:
-    - **Toolbar button** ("Upload File"): opens a native file picker filtered to `.json`, `.jsonl`, `.geojson`, and `.txt` extensions. Reads the selected file client-side via the `FileReader` API and loads its contents into the editor.
+    - **Toolbar button** ("Upload File"): opens a native file picker filtered to `.json`, `.jsonc`, `.jsonl`, `.geojson`, and `.txt` extensions. Reads the selected file client-side via the `FileReader` API and loads its contents into the editor.
     - **Drag & drop**: users can drag a file from their desktop onto **any part of the page**. A full-page drop zone overlay appears with a visual cue (dashed border + "Drop JSON file here" message) when a file is dragged over the window. On drop, the file is read and loaded into the editor.
-    - **Validation**: after reading, the file contents are parsed with `JSON.parse`. If invalid, the raw text is still loaded into the editor but the validation error banner appears (same as manual input errors).
+    - **Validation**: after reading, the file contents are parsed with the JSONC-aware parser. If invalid, the raw text is still loaded into the editor but the validation error banner appears (same as manual input errors). If the file contains comments, the editor automatically switches to JSONC mode.
     - **Size limit**: files up to **5 MB** are accepted client-side. Larger files show a toast: "File too large — max 5 MB". (Server-side save limit remains 1 MB for persisted blobs.)
     - If the editor already has content, a confirmation prompt asks: "Replace current JSON with uploaded file?" with Replace / Cancel options.
     - The file name is shown in a subtle label near the editor (e.g., "Loaded: config.json") until the content is manually edited.
@@ -382,7 +383,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 
 ### Validation Rules
 - Max blob size: **1 MB** (free tier).
-- Must be valid JSON (server re-validates).
+- Must be valid JSON or JSONC (server re-validates using JSONC-aware parser).
 - Rate limiting: 60 requests/min per IP (anonymous), 120/min (authenticated).
 
 ---
