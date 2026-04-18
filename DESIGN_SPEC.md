@@ -157,7 +157,16 @@ The primary page. Available to **all users** (anonymous + registered).
 
 - **Tree View Panel** (right or bottom)
   - Renders the parsed JSON as a collapsible, interactive tree.
-  - Each node shows: key, value, type badge (string, number, boolean, null, object, array).
+  - Each row layout: `[expand/collapse icon]  key: value  ................  [type label]`
+  - **Type labels** — right-aligned on every row, showing the JSON type with contextual counts:
+    - `string` — string values.
+    - `number` — numeric values.
+    - `boolean` — true/false values.
+    - `null` — null values.
+    - `array:N` — arrays, where N is the number of direct items (e.g., `array:5`).
+    - `json:X` — objects, where X is the total number of nodes in the subtree rooted at that object (recursive count of all descendant keys). E.g., a nested object containing 3 keys, one of which is itself an object with 2 keys, displays `json:5`.
+  - Type labels are styled with a muted/subdued color and a small monospace font so they don't compete with the key/value content. Each type has a distinct color (consistent with the color palette: strings=green, numbers=orange, booleans=blue, null=gray, array=purple, json=teal).
+  - Type labels can be toggled on/off via the "Show type labels" preference in user settings.
   - **Expansion controls** (toolbar above the tree):
     - **Collapse All** button — collapses every node in the tree.
     - **Expand All** button — expands every node in the tree.
