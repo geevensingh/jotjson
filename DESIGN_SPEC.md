@@ -198,7 +198,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Privacy note:** clipboard contents are never sent to the server — the check is entirely client-side.
   - **File Upload** — two ways to load a JSON file:
     - **Toolbar button** ("Upload File"): opens a native file picker filtered to `.json`, `.jsonc`, `.jsonl`, `.geojson`, and `.txt` extensions. Reads the selected file client-side via the `FileReader` API and loads its contents into the editor.
-    - **Drag & drop**: users can drag a file from their desktop onto **any part of the page**. A full-page drop zone overlay appears with a visual cue (dashed border + "Drop JSON file here" message) when a file is dragged over the window. On drop, the file is read and loaded into the editor.
+    - **Drag & drop**: users can drag a file from their desktop onto **any part of the page**. A full-page drop zone overlay appears with a visual cue (dashed border + "Drop JSON file here" message) when a file is dragged over the window. On drop, the file is read and loaded into the editor. If the user drops **multiple files**, the drop is rejected entirely with an error toast: "Please drop one file at a time."
     - **Validation**: after reading, the file contents are parsed with the JSONC-aware parser. If invalid, the raw text is still loaded into the editor but the validation error banner appears (same as manual input errors). If the file contains comments, the editor automatically switches to JSONC mode.
     - **Size limit**: files up to **5 MB** are accepted client-side. Larger files show a toast: "File too large — max 5 MB". (Server-side save limit remains 1 MB for persisted blobs.)
     - If the editor already has content, a confirmation prompt asks: "Replace current JSON with uploaded file?" with Replace / Cancel options.
@@ -284,7 +284,7 @@ Available to **registered users** only.
 
 - **Account Section**
   - Edit display name.
-  - Upload / change avatar (stored in Azure Blob Storage, URL saved to user profile).
+  - **Upload / change avatar** — accepts **PNG, JPEG, or WebP**; client-side validation rejects other formats. Max file size: **2 MB** (toast if exceeded). Client-side crop-to-square UI, then resize to **256×256** before upload. Stored in Azure Blob Storage, URL saved to the user profile. A "Remove avatar" option reverts to a generated default (initials on a tinted background).
   - View email address (read-only — identity managed by Azure AD B2C).
   - **Change password** — triggers the Azure AD B2C password reset flow (redirect to B2C's self-service password reset policy). Applies to email/password users only; hidden for social login accounts.
   - **Linked accounts** — show which social providers are connected (Google, GitHub). Allow linking/unlinking additional providers.
@@ -314,7 +314,7 @@ Available to **registered users** only.
     - A "Reset to defaults" button restores theme-appropriate colors.
 
 - **Data & Privacy Section**
-  - **Export my data** — enqueues a background job to generate a ZIP of all blobs, history, and rule sets. User receives a download link when ready (polled via `GET /api/me/export/:jobId`). Avoids Azure Functions timeout limits.
+  - **Export my data** — enqueues a background job to generate a ZIP of all blobs, history, and rule sets. User receives a download link when ready (polled via `GET /api/me/export/:jobId`). The download URL is a pre-signed Azure Blob Storage SAS link valid for **1 hour** from generation; if it expires, the user can re-request a new export. Avoids Azure Functions timeout limits.
   - **Clear all history** — one-click purge of history entries.
   - **Clear all blobs** — delete all saved JSON blobs (with confirmation).
 
@@ -444,6 +444,11 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 - WCAG 2.1 AA compliance.
 - Keyboard-navigable tree view.
 - Screen-reader-friendly labels.
+
+### Internationalization (i18n)
+- **v1 ships in English only.**
+- The app is **architected for future i18n** using Angular's built-in `@angular/localize` tooling. All user-facing strings are authored as extractable messages (via `i18n` attributes / `$localize` tagged templates) from day one so additional languages can be added later without a rewrite.
+- Dates, times, and relative-time annotations in the tree view already use `Intl.DateTimeFormat` / `Intl.RelativeTimeFormat` with the user's browser locale (independent of UI language).
 
 ### SEO / Social
 - Pre-rendering at build time for the `/` landing page (compatible with Static Web Apps; no server runtime needed).
