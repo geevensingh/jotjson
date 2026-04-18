@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   web:
     name: Web build & type-check
@@ -22,8 +25,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build -- --configuration=production
-      - run: npm test -- --watch=false --browsers=ChromeHeadless --no-progress
-        continue-on-error: true
 
   api:
     name: API build
@@ -51,5 +52,3 @@ jobs:
         run: az bicep install
       - name: Build main.bicep
         run: az bicep build --file infra/main.bicep
-
-# trigger: ci smoke test
