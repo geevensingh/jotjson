@@ -203,7 +203,7 @@ The primary page. Available to **all users** (anonymous + registered).
   - **Expansion controls** (toolbar above the tree):
     - **Collapse All** button — collapses every node in the tree.
     - **Expand All** button — expands every node in the tree.
-    - **Expand to Level** — a dropdown or numeric stepper (1–10) that expands nodes down to the chosen depth and collapses everything deeper. E.g., "Level 2" expands the root and its immediate children but collapses grandchildren.
+    - **Expand to Level** — a dropdown (values 1–10) that expands nodes down to the chosen depth and collapses everything deeper. E.g., "Level 2" expands the root and its immediate children but collapses grandchildren.
     - The current expansion level is displayed and persists across re-renders of the same blob.
     - Keyboard shortcuts: `Ctrl+Shift+[` (collapse all), `Ctrl+Shift+]` (expand all), `Alt+1` through `Alt+9` (expand to level N — uses Alt to avoid conflicting with browser tab shortcuts).
   - Click-to-copy path (e.g., `$.users[0].name`).
