@@ -91,6 +91,7 @@ Browser (Angular SPA)
   defaultTreeExpansionDepth: number (default: 3, range: 1–10),
   defaultRuleSetId?: string (auto-apply this rule set on load),
   editorWordWrap: boolean (default: false),
+  layoutOrientation: "horizontal" | "vertical" (default: "horizontal" — editor left, tree right; "vertical" = editor top, tree bottom),
   treeShowTypeLabels: boolean (default: true),
   treeShowDateAnnotations: boolean (default: true),
   historyTrackingMode: "save_only" | "all_actions" (default: "save_only"),
@@ -164,7 +165,7 @@ Browser (Angular SPA)
 
 The primary page. Available to **all users** (anonymous + registered).
 
-- **JSON Input Panel** (left or top)
+- **JSON Input Panel** (left or top, depending on layout preference)
   - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON/JSONC-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size. Editor language mode auto-detects JSON vs JSONC based on content (presence of `//` or `/* */` comments) and can be toggled manually via a **JSON / JSONC** switch in the toolbar.
   - **JSONC support**: the editor and parser accept JSON with Comments (single-line `//` and multi-line `/* */`), as well as trailing commas. Comments are stripped before parsing into the tree view but preserved in the raw editor text. When saving a blob, the original text (with comments) is stored; the parsed tree is derived on load. This uses a JSONC-aware parser (e.g., `jsonc-parser` from the VS Code ecosystem) rather than native `JSON.parse`.
   - "Paste JSON from Clipboard", "Upload File", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
@@ -187,7 +188,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - The file name is shown in a subtle label near the editor (e.g., "Loaded: config.json") until the content is manually edited.
     - **Privacy note:** file contents are read entirely client-side and never uploaded to the server unless the user explicitly saves the blob.
 
-- **Tree View Panel** (right or bottom)
+- **Tree View Panel** (right or bottom, depending on layout preference)
   - Renders the parsed JSON as a collapsible, interactive tree.
   - Each row layout: `[expand/collapse icon]  key: value  ................  [type label]`
   - **Type labels** — right-aligned on every row, showing the JSON type with contextual counts:
@@ -233,7 +234,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - The search field is always visible — it does not need to be toggled open.
     - Keyboard shortcut: `Ctrl+F` is **context-aware** — when the editor panel is focused, it triggers Monaco's built-in find; when the tree panel is focused (or no panel is focused), it focuses the tree search field.
 
-- **Layout:** Split-pane (resizable) — editor on one side, tree on the other. Responsive: stacks vertically on mobile.
+- **Layout:** Split-pane (resizable). **Horizontal** (default): editor left, tree right. **Vertical**: editor top, tree bottom. Toggled via a layout button in the toolbar or `layoutOrientation` user preference. On mobile (< 768px), always stacks vertically regardless of preference.
 
 ### 2. Persistent Link / Share  (`/s/:id`)
 
@@ -277,6 +278,7 @@ Available to **registered users** only.
   - **Editor font size** — slider or dropdown (10–24px).
   - **Editor tab size** — 2 or 4 spaces.
   - **Editor word wrap** — on/off toggle.
+  - **Layout orientation** — horizontal (editor left, tree right) or vertical (editor top, tree bottom). A toolbar button also provides quick toggling.
   - **Default tree expansion depth** — how many levels to auto-expand (1–10).
   - **Show type labels in tree** — toggle the type badges (string, number, etc.) on/off.
   - **Show date/time annotations** — toggle smart date detection annotations on/off.
