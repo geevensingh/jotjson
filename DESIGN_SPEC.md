@@ -90,7 +90,17 @@ Browser (Angular SPA)
   defaultTreeExpansionDepth: number (default: 3, range: 1–10),
   defaultRuleSetId?: string (auto-apply this rule set on load),
   editorWordWrap: boolean (default: false),
-  treeShowTypeLabels: boolean (default: true)
+  treeShowTypeLabels: boolean (default: true),
+  treeHighlightColors: TreeHighlightColors
+}
+```
+
+#### TreeHighlightColors
+```
+{
+  selectionColor: string,          # primary — the selected row (default: "#264F78", a muted blue)
+  matchingValueColor: string,      # secondary — other rows with the same value (default: "#3E3D32", a warm gray)
+  ancestorColor: string            # parent chain — all ancestors of the selected node (default: "#2A2D2E", a subtle dark highlight)
 }
 ```
 
@@ -183,6 +193,13 @@ The primary page. Available to **all users** (anonymous + registered).
     - Detection heuristics: ISO 8601, RFC 2822, Unix timestamps (seconds and milliseconds as numbers), and common formats like `YYYY-MM-DD`, `MM/DD/YYYY`. Uses a conservative parser — ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates.
     - Relative time updates live (e.g., "3 minutes ago" → "4 minutes ago") while the page is open.
     - This feature can be toggled on/off via a tree toolbar toggle or user preferences.
+  - **Selection highlighting** — clicking a row in the tree activates three highlight layers:
+    - **Selected row** — highlighted in the user's **primary selection color** (default: muted blue `#264F78`). Only one row is selected at a time.
+    - **Matching value rows** — all other rows whose value is identical to the selected row's value are highlighted in the **secondary color** (default: warm gray `#3E3D32`). Matching compares the raw JSON value (type-aware: `"1"` ≠ `1`). A subtle badge or count (e.g., "3 matches") appears near the selected row.
+    - **Ancestor rows** — every parent node from the selected row up to the root is highlighted in the **ancestor color** (default: subtle dark `#2A2D2E`), making it easy to see the path/context of the selection.
+    - All three colors have sensible defaults that work well in both dark and light themes (auto-adjusted per theme).
+    - Registered users can override each color individually in the **Profile → Preferences** section via color pickers.
+    - Highlights clear when clicking outside the tree or pressing `Escape`.
 
 - **Layout:** Split-pane (resizable) — editor on one side, tree on the other. Responsive: stacks vertically on mobile.
 
@@ -230,6 +247,11 @@ Available to **registered users** only.
   - **Default tree expansion depth** — how many levels to auto-expand (1–10).
   - **Show type labels in tree** — toggle the type badges (string, number, etc.) on/off.
   - **Default formatting rule set** — dropdown to pick a rule set to auto-apply when viewing JSON.
+  - **Tree highlight colors** — three color pickers to customize:
+    - Selection color (primary) — the clicked/selected row.
+    - Matching value color (secondary) — rows with the same value as the selection.
+    - Ancestor color — parent nodes up to the root.
+    - A "Reset to defaults" button restores theme-appropriate colors.
 
 - **Data & Privacy Section**
   - **Export my data** — download all blobs, history, and rule sets as a ZIP archive.
