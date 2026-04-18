@@ -74,8 +74,23 @@ Browser (Angular SPA)
   id: string (Azure AD B2C object ID),
   displayName: string,
   email: string,
+  avatarUrl?: string,
   createdAt: DateTime,
-  plan: "free" (future: "pro")
+  plan: "free" (future: "pro"),
+  preferences: UserPreferences
+}
+```
+
+#### UserPreferences
+```
+{
+  theme: "dark" | "light" | "system",
+  editorFontSize: number (default: 14, range: 10–24),
+  editorTabSize: number (default: 2, range: 2 | 4),
+  defaultTreeExpansionDepth: number (default: 3, range: 1–10),
+  defaultRuleSetId?: string (auto-apply this rule set on load),
+  editorWordWrap: boolean (default: false),
+  treeShowTypeLabels: boolean (default: true)
 }
 ```
 
@@ -172,14 +187,39 @@ Available to **registered users** only.
 
 - **Sign Up / Sign In** — handled via Azure AD B2C hosted UI or embedded MSAL redirect.
 - Options: email + password, Google, GitHub (social identity providers via B2C).
-- **Profile page** (`/profile`) — display name, email, account management.
 
-### 5. Landing / Marketing Elements
+### 5. Profile & Settings Page  (`/profile`)
+
+Available to **registered users** only.
+
+- **Account Section**
+  - Edit display name.
+  - Upload / change avatar (stored in Azure Blob Storage, URL saved to user profile).
+  - View email address (read-only — identity managed by Azure AD B2C).
+  - **Change password** — triggers the Azure AD B2C password reset flow (redirect to B2C's self-service password reset policy). Applies to email/password users only; hidden for social login accounts.
+  - **Linked accounts** — show which social providers are connected (Google, GitHub). Allow linking/unlinking additional providers.
+  - **Delete account** — confirmation dialog, then deletes user profile, all blobs, history, and rule sets. Irreversible.
+
+- **Preferences Section** (persisted to `UserPreferences` in Cosmos DB)
+  - **Theme** — dark / light / system (follows OS preference).
+  - **Editor font size** — slider or dropdown (10–24px).
+  - **Editor tab size** — 2 or 4 spaces.
+  - **Editor word wrap** — on/off toggle.
+  - **Default tree expansion depth** — how many levels to auto-expand (1–10).
+  - **Show type labels in tree** — toggle the type badges (string, number, etc.) on/off.
+  - **Default formatting rule set** — dropdown to pick a rule set to auto-apply when viewing JSON.
+
+- **Data & Privacy Section**
+  - **Export my data** — download all blobs, history, and rule sets as a ZIP archive.
+  - **Clear all history** — one-click purge of history entries.
+  - **Clear all blobs** — delete all saved JSON blobs (with confirmation).
+
+### 6. Landing / Marketing Elements
 
 - Hero section on `/` (above the editor when not yet interacting): tagline, "Paste your JSON to get started" CTA.
 - Footer: About, Privacy Policy, Terms, GitHub link.
 
-### 6. Formatting Rules Page  (`/formatting-rules`)
+### 7. Formatting Rules Page  (`/formatting-rules`)
 
 Available to **registered users** only.
 
@@ -250,6 +290,10 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 | GET | `/api/history` | Required | Get user's history (paginated) |
 | DELETE | `/api/history` | Required | Clear history |
 | GET | `/api/me` | Required | Get current user profile |
+| PUT | `/api/me` | Required | Update display name, avatar |
+| PUT | `/api/me/preferences` | Required | Update user preferences |
+| POST | `/api/me/export` | Required | Request data export (returns ZIP download URL) |
+| DELETE | `/api/me` | Required | Delete account and all associated data |
 | POST | `/api/rule-sets` | Required | Create a formatting rule set |
 | GET | `/api/rule-sets` | Required | List user's rule sets |
 | GET | `/api/rule-sets/:id` | Required (owner) | Get a rule set by ID |
