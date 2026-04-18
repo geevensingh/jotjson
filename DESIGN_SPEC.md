@@ -104,10 +104,15 @@ Browser (Angular SPA)
 
 #### TreeHighlightColors
 
-Stored as a single object; the active set applied at runtime depends on the current theme. Registered users override individual values via color pickers.
+Stored per-theme: users customize dark-theme and light-theme colors independently so each scheme looks correct on its own background. The app applies `dark` or `light` at runtime based on the active theme (including when `theme = "system"` resolves). Registered users override individual values via color pickers in Profile → Preferences.
 
 ```
 {
+  dark: ThemeColorSet,
+  light: ThemeColorSet
+}
+
+ThemeColorSet {
   selectionColor: string,          # primary — the selected row
   matchingValueColor: string,      # secondary — other rows with the same value
   ancestorColor: string,           # parent chain — all ancestors of the selected node
@@ -124,7 +129,7 @@ Stored as a single object; the active set applied at runtime depends on the curr
 | `ancestorColor` | `#2A2D2E` (subtle dark) | `#ECECEC` (subtle light gray) |
 | `searchHighlightColor` | `#6A4C00` (muted amber/gold) | `#FFE082` (soft yellow) |
 
-When the user has not overridden a color, the app uses the theme-appropriate default and re-evaluates on theme changes. The "Reset to defaults" button in Profile → Preferences restores the theme-appropriate values for the currently active theme.
+When the user has not overridden a color for a given theme, the app uses that theme's default. Switching themes swaps the active color set; overrides for the inactive theme are preserved. The "Reset to defaults" button in Profile → Preferences restores the defaults for the **currently active theme only**.
 
 #### HistoryEntry
 ```
@@ -233,16 +238,16 @@ The primary page. Available to **all users** (anonymous + registered).
     - Detection heuristics: ISO 8601, RFC 2822, and common formats like `YYYY-MM-DD`, `MM/DD/YYYY`. Uses a conservative parser — ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates. Numeric values (e.g., Unix timestamps) are **not** annotated — only string values are eligible.
     - Relative time updates live (e.g., "3 minutes ago" → "4 minutes ago") while the page is open.
     - This feature can be toggled on/off via a tree toolbar toggle or the `treeShowDateAnnotations` user preference.
-  - **Selection highlighting** — clicking a row in the tree activates three highlight layers:
-    - **Selected row** — highlighted in the user's **primary selection color** (default: muted blue `#264F78`). Only one row is selected at a time.
-    - **Matching value rows** — all other rows whose value is identical to the selected row's value are highlighted in the **secondary color** (default: warm gray `#3E3D32`). Matching compares the raw JSON value (type-aware: `"1"` ≠ `1`). A small badge icon appears on each matching row to make them easy to spot.
-    - **Ancestor rows** — every parent node from the selected row up to the root is highlighted in the **ancestor color** (default: subtle dark `#2A2D2E`), making it easy to see the path/context of the selection.
-    - All three colors have sensible defaults that work well in both dark and light themes (auto-adjusted per theme).
-    - Registered users can override each color individually in the **Profile → Preferences** section via color pickers.
+  - **Selection highlighting** — clicking a row in the tree activates three highlight layers (colors below reference the active theme's values from `TreeHighlightColors`):
+    - **Selected row** — highlighted in the user's **primary selection color**. Only one row is selected at a time.
+    - **Matching value rows** — all other rows whose value is identical to the selected row's value are highlighted in the **secondary color**. Matching compares the raw JSON value (type-aware: `"1"` ≠ `1`). A small badge icon appears on each matching row to make them easy to spot.
+    - **Ancestor rows** — every parent node from the selected row up to the root is highlighted in the **ancestor color**, making it easy to see the path/context of the selection.
+    - Theme-appropriate defaults are defined in the `TreeHighlightColors` section of the Domain Model.
+    - Registered users can override each color individually (per theme) in the **Profile → Preferences** section via color pickers.
     - Highlights clear when clicking outside the tree or pressing `Escape`.
   - **Search highlight** — a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
-    - Any row whose key or value contains the search text (case-insensitive by default) is highlighted in the **search highlight color** (default: muted amber/gold `#6A4C00`).
+    - Any row whose key or value contains the search text (case-insensitive by default) is highlighted in the **search highlight color** (theme-aware default defined in `TreeHighlightColors`).
     - The matched substring within the key or value text has an **inline background highlight** so users can see exactly what matched.
     - A match count is displayed next to the search field (e.g., "12 matches").
     - **Previous / Next** navigation buttons (and `Enter` / `Shift+Enter` shortcuts) jump between matches, auto-expanding collapsed parent nodes as needed and scrolling the match into view.
@@ -256,7 +261,7 @@ The primary page. Available to **all users** (anonymous + registered).
 
 ### 2. Persistent Link / Share  (`/s/:id`)
 
-Available to **registered users** (create/manage). **Anonymous users can view** public shared links.
+Available to **registered users** (create/manage). **Anonymous users can view any shared link** they have the slug for (both unlisted and public blobs).
 
 - After submitting JSON, a registered user can click **"Save & Share"**.
 - Generates a short, unique URL: `jotjson.com/s/abc123` (using the blob's NanoID slug).
@@ -307,12 +312,12 @@ Available to **registered users** only.
     - **Regex mode** — on/off (default: off).
     - **Search scope** — keys only / values only / both (default: both).
   - **Blob quota strategy** — when your 100-blob cap is reached, either auto-delete the oldest blob to make room (default) or block the save with a manual prompt.
-  - **Tree highlight colors** — four color pickers to customize:
+  - **Tree highlight colors (per theme)** — the dark and light themes each have their own set of four color pickers (the inactive theme's values are preserved when you switch themes):
     - Selection color (primary) — the clicked/selected row.
     - Matching value color (secondary) — rows with the same value as the selection.
     - Ancestor color — parent nodes up to the root.
     - Search highlight color — rows matching the search query.
-    - A "Reset to defaults" button restores theme-appropriate colors.
+    - A "Reset to defaults" button restores the defaults for the currently active theme.
 
 - **Data & Privacy Section**
   - **Export my data** — enqueues a background job to generate a ZIP of all blobs, history, and rule sets. User receives a download link when ready (polled via `GET /api/me/export/:jobId`). The download URL is a pre-signed Azure Blob Storage SAS link valid for **1 hour** from generation; if it expires, the user can re-request a new export. Avoids Azure Functions timeout limits.
