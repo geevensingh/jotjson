@@ -51,3 +51,5 @@ jobs:
         run: az bicep install
       - name: Build main.bicep
         run: az bicep build --file infra/main.bicep
+
+# trigger: ci smoke test
