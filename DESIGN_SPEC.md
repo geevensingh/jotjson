@@ -1,0 +1,385 @@
+# JotJSON — Design Specification
+
+## Overview
+
+**JotJSON** (jotjson.com) is a web application for inputting, storing, and displaying JSON. Users paste or type raw JSON, and the site renders it as an interactive tree view. The app works without an account, but registered users unlock persistent links and submission history.
+
+**Stack:** Angular frontend, Azure hosting (App Service + related services).
+
+---
+
+## Architecture
+
+### Frontend — Angular SPA
+
+| Layer | Technology |
+|---|---|
+| Framework | Angular (latest LTS) |
+| UI Component Library | Angular Material |
+| JSON Tree View | Custom component (recursive tree built on Angular CDK Tree or `mat-tree`) |
+| State Management | Angular Signals / lightweight service-based state |
+| Routing | Angular Router (lazy-loaded feature modules) |
+| Auth | MSAL Angular (@azure/msal-angular) for Azure AD B2C |
+
+### Backend — Azure
+
+| Service | Purpose |
+|---|---|
+| Azure Static Web Apps *or* Azure App Service | Host the Angular SPA |
+| Azure Functions (Node/TypeScript) | Serverless API layer |
+| Azure Cosmos DB (NoSQL, serverless tier) | Store JSON blobs, user profiles, history |
+| Azure AD B2C | Identity provider (email/password + social logins) |
+| Azure CDN / Front Door | CDN, custom domain (jotjson.com), SSL |
+| Azure Blob Storage | (Optional) large JSON blob overflow storage |
+
+### High-Level Diagram
+
+```
+Browser (Angular SPA)
+  │
+  ├── jotjson.com  ──▶  Azure CDN / Front Door (SSL, custom domain)
+  │                        │
+  │                        ▼
+  │                 Azure Static Web Apps / App Service (SPA files)
+  │
+  └── API calls ──▶  Azure Functions (REST API)
+                        │
+                        ├──▶ Azure Cosmos DB  (blobs, users, history)
+                        └──▶ Azure AD B2C     (auth tokens)
+```
+
+---
+
+## Domain Model
+
+### Entities
+
+#### JsonBlob
+```
+{
+  id: string (UUID / short-id),
+  content: string (raw JSON text),
+  title?: string,
+  createdAt: DateTime,
+  updatedAt: DateTime,
+  ownerId?: string (null for anonymous),
+  isPublic: boolean,
+  expiresAt?: DateTime (auto-expire for anonymous blobs)
+}
+```
+
+#### User
+```
+{
+  id: string (Azure AD B2C object ID),
+  displayName: string,
+  email: string,
+  createdAt: DateTime,
+  plan: "free" (future: "pro")
+}
+```
+
+#### HistoryEntry
+```
+{
+  id: string,
+  userId: string,
+  blobId: string,
+  accessedAt: DateTime,
+  action: "created" | "viewed" | "edited"
+}
+```
+
+#### FormattingRuleSet
+```
+{
+  id: string,
+  userId: string,
+  name: string,                    # e.g., "Error Highlighter", "API Response Theme"
+  rules: FormattingRule[],
+  createdAt: DateTime,
+  updatedAt: DateTime
+}
+```
+
+#### FormattingRule
+```
+{
+  id: string,
+  target: "key" | "value" | "key_and_value",
+  matchType: "exact" | "contains" | "regex" | "starts_with" | "ends_with",
+  matchValue: string,              # the pattern to match (e.g., "error", "^err_.*")
+  caseSensitive: boolean,
+  style: FormattingStyle
+}
+```
+
+#### FormattingStyle
+```
+{
+  backgroundColor?: string,        # hex color, e.g., "#FFEB3B"
+  textColor?: string,              # hex color
+  bold?: boolean,
+  italic?: boolean,
+  underline?: boolean,
+  borderColor?: string,            # outline/border highlight color
+  icon?: string                    # optional icon identifier (e.g., "warning", "check", "star")
+}
+```
+
+---
+
+## Features & Pages
+
+### 1. Home / Editor Page  (`/`)
+
+The primary page. Available to **all users** (anonymous + registered).
+
+- **JSON Input Panel** (left or top)
+  - Large code editor textarea (consider integrating Monaco Editor or CodeMirror for syntax highlighting, line numbers, and error markers).
+  - "Paste", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
+  - Real-time JSON validation with inline error messages (line + column of parse error).
+
+- **Tree View Panel** (right or bottom)
+  - Renders the parsed JSON as a collapsible, interactive tree.
+  - Each node shows: key, value, type badge (string, number, boolean, null, object, array).
+  - Expand/collapse all toggle.
+  - Click-to-copy path (e.g., `$.users[0].name`).
+  - Search/filter within the tree.
+
+- **Layout:** Split-pane (resizable) — editor on one side, tree on the other. Responsive: stacks vertically on mobile.
+
+### 2. Persistent Link / Share  (`/s/:id`)
+
+Available to **registered users** only (anonymous users see a prompt to sign up).
+
+- After submitting JSON, a registered user can click **"Save & Share"**.
+- Generates a short, unique URL: `jotjson.com/s/abc123`.
+- The link loads the saved JSON blob into the editor + tree view.
+- Owner can update or delete the blob.
+- Optional: set blob to public (viewable by anyone with the link) or private (owner only).
+
+### 3. History Page  (`/history`)
+
+Available to **registered users** only.
+
+- Chronological list of previously submitted/viewed JSON blobs.
+- Each entry shows: title (or first 80 chars of JSON), date, size, actions (open, delete, share).
+- Search and filter by date range or keyword.
+- Pagination or infinite scroll.
+
+### 4. Auth Pages
+
+- **Sign Up / Sign In** — handled via Azure AD B2C hosted UI or embedded MSAL redirect.
+- Options: email + password, Google, GitHub (social identity providers via B2C).
+- **Profile page** (`/profile`) — display name, email, account management.
+
+### 5. Landing / Marketing Elements
+
+- Hero section on `/` (above the editor when not yet interacting): tagline, "Paste your JSON to get started" CTA.
+- Footer: About, Privacy Policy, Terms, GitHub link.
+
+### 6. Formatting Rules Page  (`/formatting-rules`)
+
+Available to **registered users** only.
+
+- **Rule Set Manager** — users create named rule sets (e.g., "Error Highlighter", "API Status Codes").
+  - Each rule set contains one or more formatting rules.
+  - Users can switch between rule sets or apply multiple simultaneously.
+  - A "default" rule set is auto-applied if set by the user.
+
+- **Rule Builder UI** — for each rule:
+  - **Target:** pick whether the rule applies to keys, values, or both.
+  - **Match type:** exact match, contains, starts with, ends with, or regex.
+  - **Match value:** the string or pattern to match against.
+  - **Case sensitivity** toggle.
+  - **Style picker:** visual controls for:
+    - Background color (color swatch picker).
+    - Text color.
+    - Bold / italic / underline toggles.
+    - Border/outline color.
+    - Optional icon badge (warning, check, star, etc.).
+  - **Live preview** — a sample JSON snippet updates in real time as the user configures the rule, showing how matches will look.
+
+- **How it works in the Tree View:**
+  - When a rule set is active, the tree view scans each node's key and value.
+  - Matching nodes receive the configured inline styles (background, text color, font weight, etc.).
+  - Multiple rules can match the same node — styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
+  - A small indicator badge or tooltip shows which rule(s) matched a given node.
+  - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply.
+
+- **Built-in Presets** — ship a few starter rule sets users can clone and customize:
+  - "Error Detection" — highlights keys like `error`, `err`, `exception`, `fault` in red.
+  - "Status Codes" — color-codes values like `200` (green), `400` (yellow), `500` (red).
+  - "Null Finder" — highlights all `null` values with a yellow background.
+
+---
+
+## User Flows
+
+### Anonymous User
+1. Lands on `jotjson.com`.
+2. Pastes or types JSON into the editor.
+3. Tree view renders in real time.
+4. Can format, minify, copy output.
+5. If they try to "Save & Share" or view history → prompted to create an account.
+6. Session data (current JSON) stored in browser `localStorage` so it persists across refreshes.
+
+### Registered User
+1. Signs in via Azure AD B2C.
+2. All anonymous features plus:
+   - **Save & Share**: persists the blob to Cosmos DB, generates a shareable link.
+   - **History**: all saved/submitted blobs appear in `/history`.
+   - **My Blobs**: manage (edit, delete, toggle public/private) saved blobs.
+   - **Formatting Rules**: create custom highlighting rules that auto-apply to the tree view.
+3. Session state syncs to server.
+
+---
+
+## API Design (Azure Functions)
+
+Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/blobs` | Required | Create a new JSON blob |
+| GET | `/api/blobs/:id` | Optional* | Get a blob by ID (*public blobs accessible without auth) |
+| PUT | `/api/blobs/:id` | Required (owner) | Update a blob |
+| DELETE | `/api/blobs/:id` | Required (owner) | Delete a blob |
+| GET | `/api/blobs` | Required | List user's blobs (paginated) |
+| GET | `/api/history` | Required | Get user's history (paginated) |
+| DELETE | `/api/history` | Required | Clear history |
+| GET | `/api/me` | Required | Get current user profile |
+| POST | `/api/rule-sets` | Required | Create a formatting rule set |
+| GET | `/api/rule-sets` | Required | List user's rule sets |
+| GET | `/api/rule-sets/:id` | Required (owner) | Get a rule set by ID |
+| PUT | `/api/rule-sets/:id` | Required (owner) | Update a rule set |
+| DELETE | `/api/rule-sets/:id` | Required (owner) | Delete a rule set |
+| GET | `/api/rule-sets/presets` | Required | List built-in preset rule sets |
+| POST | `/api/rule-sets/presets/:id/clone` | Required | Clone a preset into user's rule sets |
+
+### Validation Rules
+- Max blob size: **1 MB** (free tier).
+- Must be valid JSON (server re-validates).
+- Rate limiting: 60 requests/min per IP (anonymous), 120/min (authenticated).
+
+---
+
+## Non-Functional Requirements
+
+### Performance
+- Tree view should render blobs up to **5 MB** without freezing the UI (use virtual scrolling for large trees).
+- Time-to-interactive < 2 seconds on 4G connection.
+- API response time < 200ms (p95) for blob CRUD.
+
+### Security
+- All traffic over HTTPS (enforced by Front Door).
+- Azure AD B2C handles all credential storage — no passwords in Cosmos DB.
+- Input sanitization: JSON blobs are treated as opaque strings, never rendered as HTML.
+- CORS: allow only `jotjson.com` origins.
+- Content Security Policy headers.
+
+### Scalability
+- Cosmos DB serverless scales automatically.
+- Azure Functions consumption plan scales to zero when idle.
+- CDN caches static assets aggressively.
+
+### Reliability
+- Anonymous blobs auto-expire after **30 days** (TTL in Cosmos DB).
+- Registered user blobs persist indefinitely (free tier: up to 100 blobs).
+- Cosmos DB automatic backups.
+
+### Accessibility
+- WCAG 2.1 AA compliance.
+- Keyboard-navigable tree view.
+- Screen-reader-friendly labels.
+
+### SEO / Social
+- Server-side rendering or pre-rendering for `/` landing page.
+- Open Graph tags for shared blob links (`/s/:id`) — show preview of JSON structure.
+
+---
+
+## UI/UX Guidelines
+
+- **Theme:** Clean, developer-friendly. Dark mode default with light mode toggle.
+- **Typography:** Monospace font for JSON content (e.g., JetBrains Mono, Fira Code). Sans-serif for UI chrome.
+- **Color Palette:** 
+  - Primary: Teal/Cyan accent (#00BCD4 family).
+  - Background: Dark (#1E1E1E) / Light (#FAFAFA).
+  - JSON types color-coded: strings=green, numbers=orange, booleans=blue, null=gray.
+- **Logo:** "JotJSON" wordmark — "Jot" in regular weight, "JSON" in bold, with a `{ }` icon element.
+- **Responsive breakpoints:** Mobile (< 768px), Tablet (768–1024px), Desktop (> 1024px).
+
+---
+
+## Project Structure (Angular)
+
+```
+src/
+├── app/
+│   ├── core/                  # Singleton services, guards, interceptors
+│   │   ├── auth/              # MSAL config, auth guard, auth service
+│   │   ├── api/               # HTTP services (BlobService, HistoryService)
+│   │   └── interceptors/      # Auth token interceptor, error interceptor
+│   ├── shared/                # Reusable components, pipes, directives
+│   │   ├── components/
+│   │   │   ├── json-editor/   # Code editor wrapper component
+│   │   │   ├── json-tree/     # Recursive tree view component
+│   │   │   └── toolbar/       # Action buttons (format, minify, copy, share)
+│   │   └── pipes/
+│   │       └── json-type.pipe.ts
+│   ├── features/
+│   │   ├── home/              # Main editor + tree view page
+│   │   ├── share/             # /s/:id persistent link viewer
+│   │   ├── history/           # /history page
+│   │   ├── formatting-rules/  # /formatting-rules — rule set manager + rule builder
+│   │   └── profile/           # /profile page
+│   ├── app.component.ts
+│   ├── app.routes.ts
+│   └── app.config.ts
+├── assets/
+├── environments/
+│   ├── environment.ts
+│   └── environment.prod.ts
+└── styles/
+    ├── _variables.scss
+    ├── _theme.scss
+    └── styles.scss
+```
+
+---
+
+## Azure Infrastructure (IaC — Bicep or Terraform)
+
+| Resource | SKU / Tier | Notes |
+|---|---|---|
+| Azure Static Web Apps | Free / Standard | Hosts SPA + proxies to Functions |
+| Azure Functions | Consumption | Serverless API |
+| Cosmos DB | Serverless | Database: `jotjson`, Containers: `blobs`, `users`, `history`, `rule-sets` |
+| Azure AD B2C | Free (50k MAU) | Identity |
+| Azure Front Door | Standard | CDN + custom domain + WAF |
+| Azure Monitor / App Insights | Pay-as-you-go | Logging, telemetry |
+
+---
+
+## Milestones
+
+1. **Project scaffolding** — Angular app, Azure Functions project, Cosmos DB setup, CI/CD pipeline.
+2. **Core editor experience** — JSON input + tree view on `/`, localStorage persistence, no auth.
+3. **Auth integration** — Azure AD B2C sign-up/sign-in, MSAL Angular, protected routes.
+4. **Persistent links** — Blob CRUD API, save & share flow, `/s/:id` route.
+5. **History** — History tracking, `/history` page, management actions.
+6. **Formatting rules** — Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
+7. **Polish & launch** — Custom domain, CDN, dark/light theme, accessibility audit, SEO, monitoring.
+
+---
+
+## Open Questions / Future Considerations
+
+- **Collaboration:** Real-time collaborative editing (future — would need SignalR/WebSockets).
+- **JSON Schema validation:** Let users supply a schema and validate blobs against it.
+- **Diff view:** Compare two JSON blobs side-by-side.
+- **Import/Export:** Upload `.json` files, export to file.
+- **API access:** Provide API keys for programmatic blob storage (developer tier).
+- **Monetization:** Pro plan with higher limits (larger blobs, more storage, private blobs, custom slugs).
