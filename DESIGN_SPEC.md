@@ -589,4 +589,4 @@ src/
 - **Diff view:** Compare two JSON blobs side-by-side.
 - **Bulk export/import:** Export/import `.json` files in bulk (single-blob download is in v1).
 - **API access:** Provide API keys for programmatic blob storage (developer tier).
-- **Monetization:** Pro plan with higher limits (larger blobs, more storage, private blobs, custom slugs).
+- **Monetization:** Pro plan with higher limits (larger blobs, more storage, **owner-only blobs** where the slug alone isn't enough to view, custom slugs).
