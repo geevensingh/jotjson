@@ -95,6 +95,9 @@ Browser (Angular SPA)
   treeShowTypeLabels: boolean (default: true),
   treeShowDateAnnotations: boolean (default: true),
   historyTrackingMode: "save_only" | "all_actions" (default: "save_only"),
+  searchCaseSensitive: boolean (default: false),
+  searchRegexMode: boolean (default: false),
+  searchScope: "keys" | "values" | "both" (default: "both"),
   treeHighlightColors: TreeHighlightColors
 }
 ```
@@ -284,6 +287,10 @@ Available to **registered users** only.
   - **Show date/time annotations** — toggle smart date detection annotations on/off.
   - **History tracking mode** — "Save only" (default) or "All actions" (records paste, view, edit events too).
   - **Default formatting rule set** — dropdown to pick a rule set to auto-apply when viewing JSON.
+  - **Search defaults**:
+    - **Case sensitive** — on/off (default: off).
+    - **Regex mode** — on/off (default: off).
+    - **Search scope** — keys only / values only / both (default: both).
   - **Tree highlight colors** — four color pickers to customize:
     - Selection color (primary) — the clicked/selected row.
     - Matching value color (secondary) — rows with the same value as the selection.
