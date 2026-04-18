@@ -400,7 +400,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 - API response time < 200ms (p95) for blob CRUD.
 
 ### Security
-- All traffic over HTTPS (enforced by Front Door).
+- All traffic over HTTPS (enforced by Azure Static Web Apps' built-in SSL).
 - Azure AD B2C handles all credential storage — no passwords in Cosmos DB.
 - Input sanitization: JSON blobs are treated as opaque strings, never rendered as HTML.
 - CORS: allow only `jotjson.com` origins.
