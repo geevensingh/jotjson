@@ -29,18 +29,18 @@
 | Azure Functions (Node/TypeScript) | Serverless API layer |
 | Azure Cosmos DB (NoSQL, serverless tier) | Store JSON blobs, user profiles, history |
 | Azure AD B2C | Identity provider (email/password + social logins) |
-| Azure CDN / Front Door | CDN, custom domain (jotjson.com), SSL |
-| Azure Blob Storage | (Optional) large JSON blob overflow storage |
+| Azure CDN / Front Door | *(deferred to post-v1)* — add for WAF and advanced routing if needed. v1 uses Static Web Apps' built-in CDN and custom domain support. |
+| Azure Blob Storage | Storage for user avatars and large JSON blob overflow |
 
 ### High-Level Diagram
 
 ```
 Browser (Angular SPA)
   │
-  ├── jotjson.com  ──▶  Azure CDN / Front Door (SSL, custom domain)
+  ├── jotjson.com  ──▶  Azure Static Web Apps (built-in CDN, SSL, custom domain)
   │                        │
   │                        ▼
-  │                 Azure Static Web Apps (SPA files)
+  │                 Angular SPA (static files)
   │
   └── API calls ──▶  Azure Functions (REST API)
                         │
@@ -206,7 +206,6 @@ The primary page. Available to **all users** (anonymous + registered).
     - The current expansion level is displayed and persists across re-renders of the same blob.
     - Keyboard shortcuts: `Ctrl+Shift+[` (collapse all), `Ctrl+Shift+]` (expand all), `Alt+1` through `Alt+9` (expand to level N — uses Alt to avoid conflicting with browser tab shortcuts).
   - Click-to-copy path (e.g., `$.users[0].name`).
-  - Search/filter within the tree.
   - **Smart date/time detection** — when a string value is parseable as a date/time, the tree displays:
     - The raw original string as-is (e.g., `"2024-11-05T18:30:00Z"`).
     - Followed by a parenthetical annotation showing: the parsed date/time in the user's local format and an approximate relative time.
@@ -291,7 +290,7 @@ Available to **registered users** only.
     - A "Reset to defaults" button restores theme-appropriate colors.
 
 - **Data & Privacy Section**
-  - **Export my data** — download all blobs, history, and rule sets as a ZIP archive.
+  - **Export my data** — enqueues a background job to generate a ZIP of all blobs, history, and rule sets. User receives a download link when ready (polled via `GET /api/me/export/:jobId`). Avoids Azure Functions timeout limits.
   - **Clear all history** — one-click purge of history entries.
   - **Clear all blobs** — delete all saved JSON blobs (with confirmation).
 
@@ -375,7 +374,8 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 | GET | `/api/me` | Required | Get current user profile |
 | PUT | `/api/me` | Required | Update display name, avatar |
 | PUT | `/api/me/preferences` | Required | Update user preferences |
-| POST | `/api/me/export` | Required | Request data export (returns ZIP download URL) |
+| POST | `/api/me/export` | Required | Enqueue data export job (returns job ID) |
+| GET | `/api/me/export/:jobId` | Required | Poll export job status; returns ZIP download URL when complete |
 | DELETE | `/api/me` | Required | Delete account and all associated data |
 | POST | `/api/rule-sets` | Required | Create a formatting rule set |
 | GET | `/api/rule-sets` | Required | List user's rule sets |
@@ -512,11 +512,12 @@ src/
 
 | Resource | SKU / Tier | Notes |
 |---|---|---|
-| Azure Static Web Apps | Free / Standard | Hosts SPA + proxies to Functions |
+| Azure Static Web Apps | Free (dev) → Standard (launch) | Hosts SPA + proxies to Functions. Start Free, upgrade to Standard before launch for SLA + 5 GB storage. |
 | Azure Functions | Consumption | Serverless API |
-| Cosmos DB | Serverless | Database: `jotjson`, Containers: `blobs`, `users`, `history`, `rule-sets` |
+| Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (partitionKey: `/ownerId`), `users` (`/id`), `history` (`/userId`), `rule-sets` (`/userId`) |
 | Azure AD B2C | Free (50k MAU) | Identity |
-| Azure Front Door | Standard | CDN + custom domain + WAF |
+| Azure Blob Storage | Standard LRS | User avatars + large blob overflow |
+| Azure Front Door | *(deferred post-v1)* | Add for WAF / advanced routing if needed |
 | Azure Monitor / App Insights | Pay-as-you-go | Logging, telemetry |
 
 ---
