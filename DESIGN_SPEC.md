@@ -175,6 +175,14 @@ The primary page. Available to **all users** (anonymous + registered).
     - Keyboard shortcuts: `Ctrl+Shift+[` (collapse all), `Ctrl+Shift+]` (expand all), `Ctrl+1` through `Ctrl+9` (expand to level N).
   - Click-to-copy path (e.g., `$.users[0].name`).
   - Search/filter within the tree.
+  - **Smart date/time detection** — when a string value is parseable as a date/time, the tree displays:
+    - The raw original string as-is (e.g., `"2024-11-05T18:30:00Z"`).
+    - Followed by a parenthetical annotation showing: the parsed date/time in the user's local format and an approximate relative time.
+    - Example: `"2024-11-05T18:30:00Z"  (Nov 5, 2024, 11:30 AM PST — 1 year ago)`
+    - The annotation is styled in a muted/italic font to distinguish it from the raw value.
+    - Detection heuristics: ISO 8601, RFC 2822, Unix timestamps (seconds and milliseconds as numbers), and common formats like `YYYY-MM-DD`, `MM/DD/YYYY`. Uses a conservative parser — ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates.
+    - Relative time updates live (e.g., "3 minutes ago" → "4 minutes ago") while the page is open.
+    - This feature can be toggled on/off via a tree toolbar toggle or user preferences.
 
 - **Layout:** Split-pane (resizable) — editor on one side, tree on the other. Responsive: stacks vertically on mobile.
 
