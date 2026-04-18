@@ -164,7 +164,7 @@ The primary page. Available to **all users** (anonymous + registered).
 
 - **JSON Input Panel** (left or top)
   - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size.
-  - "Paste JSON from Clipboard", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
+  - "Paste JSON from Clipboard", "Upload File", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
   - Real-time JSON validation with inline error messages (line + column of parse error).
   - **Smart Paste Button** behavior:
     - On page load (and periodically while the page is focused), the app reads the clipboard using the **Clipboard API** (`navigator.clipboard.readText()`).
@@ -175,6 +175,14 @@ The primary page. Available to **all users** (anonymous + registered).
     - The clipboard check runs: (1) on page/tab focus, (2) when the user clicks into the editor panel, and (3) on a short polling interval (~2 seconds) while the page is visible. Polling stops when the tab is backgrounded (using `document.visibilityState`).
     - **Fallback for restricted browsers:** if the browser denies clipboard polling (some require a user gesture), the button remains always visible in an "unknown" state. Clicking it triggers a user-gesture clipboard read — if the content is valid JSON, it pastes immediately; if not, a brief tooltip says "Clipboard does not contain JSON". This ensures the feature works even without polling permission.
     - **Privacy note:** clipboard contents are never sent to the server — the check is entirely client-side.
+  - **File Upload** — two ways to load a JSON file:
+    - **Toolbar button** ("Upload File"): opens a native file picker filtered to `.json`, `.jsonl`, `.geojson`, and `.txt` extensions. Reads the selected file client-side via the `FileReader` API and loads its contents into the editor.
+    - **Drag & drop**: users can drag a file from their desktop onto **any part of the page**. A full-page drop zone overlay appears with a visual cue (dashed border + "Drop JSON file here" message) when a file is dragged over the window. On drop, the file is read and loaded into the editor.
+    - **Validation**: after reading, the file contents are parsed with `JSON.parse`. If invalid, the raw text is still loaded into the editor but the validation error banner appears (same as manual input errors).
+    - **Size limit**: files up to **5 MB** are accepted client-side. Larger files show a toast: "File too large — max 5 MB". (Server-side save limit remains 1 MB for persisted blobs.)
+    - If the editor already has content, a confirmation prompt asks: "Replace current JSON with uploaded file?" with Replace / Cancel options.
+    - The file name is shown in a subtle label near the editor (e.g., "Loaded: config.json") until the content is manually edited.
+    - **Privacy note:** file contents are read entirely client-side and never uploaded to the server unless the user explicitly saves the blob.
 
 - **Tree View Panel** (right or bottom)
   - Renders the parsed JSON as a collapsible, interactive tree.
