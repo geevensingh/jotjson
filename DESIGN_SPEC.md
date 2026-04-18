@@ -407,6 +407,24 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 - Server-side rendering or pre-rendering for `/` landing page.
 - Open Graph tags for shared blob links (`/s/:id`) — show preview of JSON structure.
 
+### Progressive Web App (PWA)
+- The site is installable as a **browser app** (PWA) on desktop and mobile.
+- **Web App Manifest** (`manifest.webmanifest`):
+  - `name`: "JotJSON", `short_name`: "JotJSON"
+  - `display`: `standalone` (runs without browser chrome).
+  - `start_url`: `/`
+  - `theme_color` and `background_color` matching the app's dark/light theme.
+  - Icons at standard sizes: 192×192, 512×512 (maskable + any).
+  - `categories`: `["developer-tools", "utilities"]`
+  - `screenshots`: at least one wide and one narrow for richer install prompts.
+- **Service Worker** (using Angular's `@angular/service-worker`):
+  - Caches the app shell (HTML, CSS, JS, fonts, icons) for offline loading.
+  - Offline mode: the editor and tree view work fully offline with `localStorage` data. API-dependent features (save, share, history, formatting rules) show a "You're offline" banner and queue actions for sync when reconnected.
+  - Cache-first strategy for static assets; network-first for API calls.
+  - Background sync for queued blob saves when connectivity is restored.
+  - Automatic update prompt: when a new version is deployed, users see a non-intrusive toast ("A new version is available — click to refresh").
+- **Install prompt**: a subtle "Install JotJSON" button in the toolbar/header, shown when the browser fires the `beforeinstallprompt` event. Hidden once installed.
+
 ---
 
 ## UI/UX Guidelines
