@@ -4,7 +4,7 @@
 
 **JotJSON** (jotjson.com) is a web application for inputting, storing, and displaying JSON and JSONC (JSON with Comments). Users paste or type raw JSON or JSONC, and the site renders it as an interactive tree view. The app works without an account, but registered users unlock persistent links and submission history.
 
-**Stack:** Angular frontend, Azure hosting (App Service + related services).
+**Stack:** Angular frontend, Azure hosting (Static Web Apps + related services).
 
 ---
 
@@ -40,7 +40,7 @@ Browser (Angular SPA)
   ├── jotjson.com  ──▶  Azure CDN / Front Door (SSL, custom domain)
   │                        │
   │                        ▼
-  │                 Azure Static Web Apps / App Service (SPA files)
+  │                 Azure Static Web Apps (SPA files)
   │
   └── API calls ──▶  Azure Functions (REST API)
                         │
@@ -58,7 +58,7 @@ Browser (Angular SPA)
 ```
 {
   id: string (UUID — internal primary key),
-  slug: string (NanoID short-id, e.g., "abc123" — used in public URLs, unique with collision check),
+  slug: string (NanoID short-id, 6 characters, e.g., "a3Bf9x" — used in public URLs, unique with collision check),
   content: string (raw JSON text),
   title?: string,
   createdAt: DateTime,
@@ -92,6 +92,8 @@ Browser (Angular SPA)
   defaultRuleSetId?: string (auto-apply this rule set on load),
   editorWordWrap: boolean (default: false),
   treeShowTypeLabels: boolean (default: true),
+  treeShowDateAnnotations: boolean (default: true),
+  historyTrackingMode: "save_only" | "all_actions" (default: "save_only"),
   treeHighlightColors: TreeHighlightColors
 }
 ```
@@ -202,7 +204,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Expand All** button — expands every node in the tree.
     - **Expand to Level** — a dropdown or numeric stepper (1–10) that expands nodes down to the chosen depth and collapses everything deeper. E.g., "Level 2" expands the root and its immediate children but collapses grandchildren.
     - The current expansion level is displayed and persists across re-renders of the same blob.
-    - Keyboard shortcuts: `Ctrl+Shift+[` (collapse all), `Ctrl+Shift+]` (expand all), `Ctrl+1` through `Ctrl+9` (expand to level N).
+    - Keyboard shortcuts: `Ctrl+Shift+[` (collapse all), `Ctrl+Shift+]` (expand all), `Alt+1` through `Alt+9` (expand to level N — uses Alt to avoid conflicting with browser tab shortcuts).
   - Click-to-copy path (e.g., `$.users[0].name`).
   - Search/filter within the tree.
   - **Smart date/time detection** — when a string value is parseable as a date/time, the tree displays:
@@ -210,9 +212,9 @@ The primary page. Available to **all users** (anonymous + registered).
     - Followed by a parenthetical annotation showing: the parsed date/time in the user's local format and an approximate relative time.
     - Example: `"2024-11-05T18:30:00Z"  (Nov 5, 2024, 11:30 AM PST — 1 year ago)`
     - The annotation is styled in a muted/italic font to distinguish it from the raw value.
-    - Detection heuristics: ISO 8601, RFC 2822, Unix timestamps (seconds and milliseconds as numbers), and common formats like `YYYY-MM-DD`, `MM/DD/YYYY`. Uses a conservative parser — ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates.
+    - Detection heuristics: ISO 8601, RFC 2822, and common formats like `YYYY-MM-DD`, `MM/DD/YYYY`. Uses a conservative parser — ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates. Numeric values (e.g., Unix timestamps) are **not** annotated — only string values are eligible.
     - Relative time updates live (e.g., "3 minutes ago" → "4 minutes ago") while the page is open.
-    - This feature can be toggled on/off via a tree toolbar toggle or user preferences.
+    - This feature can be toggled on/off via a tree toolbar toggle or the `treeShowDateAnnotations` user preference.
   - **Selection highlighting** — clicking a row in the tree activates three highlight layers:
     - **Selected row** — highlighted in the user's **primary selection color** (default: muted blue `#264F78`). Only one row is selected at a time.
     - **Matching value rows** — all other rows whose value is identical to the selected row's value are highlighted in the **secondary color** (default: warm gray `#3E3D32`). Matching compares the raw JSON value (type-aware: `"1"` ≠ `1`). A subtle badge or count (e.g., "3 matches") appears near the selected row.
@@ -230,7 +232,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - Options available via small toggles next to the search field: **case sensitive**, **regex mode**, **keys only / values only / both**.
     - Clearing the search field (or pressing `Escape` while focused in it) removes all search highlights.
     - The search field is always visible — it does not need to be toggled open.
-    - Keyboard shortcut: `Ctrl+F` focuses the search field.
+    - Keyboard shortcut: `Ctrl+F` is **context-aware** — when the editor panel is focused, it triggers Monaco's built-in find; when the tree panel is focused (or no panel is focused), it focuses the tree search field.
 
 - **Layout:** Split-pane (resizable) — editor on one side, tree on the other. Responsive: stacks vertically on mobile.
 
@@ -244,14 +246,15 @@ Available to **registered users** (create/manage). **Anonymous users can view** 
 - Owner can update or delete the blob.
 - Optional: set blob to public (viewable by anyone with the link) or private (owner only).
 
-### 3. History Page  (`/history`)
+### 3. History & My Blobs Page  (`/history`)
 
 Available to **registered users** only.
 
 - Chronological list of previously submitted/viewed JSON blobs for that user.
-- Each entry shows: title (or first 80 chars of JSON), date, size, actions (open, delete, share).
+- Each entry shows: title (or first 80 chars of JSON), date, size, actions (open, edit, delete, share, toggle public/private).
 - Search and filter by date range or keyword.
 - Pagination or infinite scroll.
+- **History trigger preference**: by default, a history entry is created only on explicit save ("Save & Share"). Users can opt into recording all actions (paste, view shared link, edit) via a `historyTrackingMode` preference in Profile settings.
 
 ### 4. Auth Pages
 
@@ -277,6 +280,8 @@ Available to **registered users** only.
   - **Editor word wrap** — on/off toggle.
   - **Default tree expansion depth** — how many levels to auto-expand (1–10).
   - **Show type labels in tree** — toggle the type badges (string, number, etc.) on/off.
+  - **Show date/time annotations** — toggle smart date detection annotations on/off.
+  - **History tracking mode** — "Save only" (default) or "All actions" (records paste, view, edit events too).
   - **Default formatting rule set** — dropdown to pick a rule set to auto-apply when viewing JSON.
   - **Tree highlight colors** — four color pickers to customize:
     - Selection color (primary) — the clicked/selected row.
@@ -348,8 +353,7 @@ Available to **registered users** only.
 1. Signs in via Azure AD B2C.
 2. All anonymous features plus:
    - **Save & Share**: persists the blob to Cosmos DB, generates a shareable link.
-   - **History**: all saved/submitted blobs appear in `/history`.
-   - **My Blobs**: manage (edit, delete, toggle public/private) saved blobs.
+   - **History & My Blobs**: all saved blobs appear in `/history` with full management (edit, delete, share, toggle public/private).
    - **Formatting Rules**: create custom highlighting rules that auto-apply to the tree view.
 3. Session state syncs to server.
 
@@ -362,7 +366,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | POST | `/api/blobs` | Required | Create a new JSON blob |
-| GET | `/api/blobs/:id` | Optional* | Get a blob by ID (*public blobs accessible without auth) |
+| GET | `/api/blobs/:id` | Optional* | Get a blob by UUID or slug (*public blobs accessible without auth) |
 | PUT | `/api/blobs/:id` | Required (owner) | Update a blob |
 | DELETE | `/api/blobs/:id` | Required (owner) | Delete a blob |
 | GET | `/api/blobs` | Required | List user's blobs (paginated) |
@@ -547,6 +551,6 @@ src/
 - **Collaboration:** Real-time collaborative editing (future — would need SignalR/WebSockets).
 - **JSON Schema validation:** Let users supply a schema and validate blobs against it.
 - **Diff view:** Compare two JSON blobs side-by-side.
-- **Import/Export:** Upload `.json` files, export to file.
+- **Import/Export:** Export JSON blobs to `.json` files (download button).
 - **API access:** Provide API keys for programmatic blob storage (developer tier).
 - **Monetization:** Pro plan with higher limits (larger blobs, more storage, private blobs, custom slugs).
