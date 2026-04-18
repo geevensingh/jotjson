@@ -63,9 +63,8 @@ Browser (Angular SPA)
   title?: string,
   createdAt: DateTime,
   updatedAt: DateTime,
-  ownerId?: string (null for anonymous),
-  isPublic: boolean,
-  expiresAt?: DateTime (auto-expire for anonymous blobs)
+  ownerId: string (every server-persisted blob has an owner; anonymous users keep their JSON only in localStorage),
+  isPublic: boolean
 }
 ```
 
@@ -98,19 +97,34 @@ Browser (Angular SPA)
   searchCaseSensitive: boolean (default: false),
   searchRegexMode: boolean (default: false),
   searchScope: "keys" | "values" | "both" (default: "both"),
+  blobQuotaStrategy: "auto_fifo" | "manual" (default: "auto_fifo" — delete oldest blob when 100-blob cap reached; "manual" blocks the save with a prompt instead),
   treeHighlightColors: TreeHighlightColors
 }
 ```
 
 #### TreeHighlightColors
+
+Stored as a single object; the active set applied at runtime depends on the current theme. Registered users override individual values via color pickers.
+
 ```
 {
-  selectionColor: string,          # primary — the selected row (default: "#264F78", a muted blue)
-  matchingValueColor: string,      # secondary — other rows with the same value (default: "#3E3D32", a warm gray)
-  ancestorColor: string,           # parent chain — all ancestors of the selected node (default: "#2A2D2E", a subtle dark highlight)
-  searchHighlightColor: string     # search matches — rows matching the search query (default: "#6A4C00", a muted amber/gold)
+  selectionColor: string,          # primary — the selected row
+  matchingValueColor: string,      # secondary — other rows with the same value
+  ancestorColor: string,           # parent chain — all ancestors of the selected node
+  searchHighlightColor: string     # search matches — rows matching the search query
 }
 ```
+
+**Default values by theme:**
+
+| Color | Dark theme default | Light theme default |
+|---|---|---|
+| `selectionColor` | `#264F78` (muted blue) | `#CCE4F7` (soft sky blue) |
+| `matchingValueColor` | `#3E3D32` (warm gray) | `#FFF4CC` (pale amber) |
+| `ancestorColor` | `#2A2D2E` (subtle dark) | `#ECECEC` (subtle light gray) |
+| `searchHighlightColor` | `#6A4C00` (muted amber/gold) | `#FFE082` (soft yellow) |
+
+When the user has not overridden a color, the app uses the theme-appropriate default and re-evaluates on theme changes. The "Reset to defaults" button in Profile → Preferences restores the theme-appropriate values for the currently active theme.
 
 #### HistoryEntry
 ```
@@ -246,8 +260,8 @@ Available to **registered users** (create/manage). **Anonymous users can view** 
 - After submitting JSON, a registered user can click **"Save & Share"**.
 - Generates a short, unique URL: `jotjson.com/s/abc123` (using the blob's NanoID slug).
 - The link loads the saved JSON blob into the editor + tree view.
+- **Visibility**: every saved blob is **private (unlisted) by default** — the link works for anyone who has it, but the blob is not listed on any public index, has a `noindex` meta tag, and does not emit rich Open Graph previews. The owner can toggle the blob to **public**, which enables Open Graph previews on `/s/:id` and allows indexing.
 - Owner can update or delete the blob.
-- Optional: set blob to public (viewable by anyone with the link) or private (owner only).
 
 ### 3. History & My Blobs Page  (`/history`)
 
@@ -291,6 +305,7 @@ Available to **registered users** only.
     - **Case sensitive** — on/off (default: off).
     - **Regex mode** — on/off (default: off).
     - **Search scope** — keys only / values only / both (default: both).
+  - **Blob quota strategy** — when your 100-blob cap is reached, either auto-delete the oldest blob to make room (default) or block the save with a manual prompt.
   - **Tree highlight colors** — four color pickers to customize:
     - Selection color (primary) — the clicked/selected row.
     - Matching value color (secondary) — rows with the same value as the selection.
@@ -398,6 +413,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 - Max blob size: **1 MB** (free tier).
 - Must be valid JSON or JSONC (server re-validates using JSONC-aware parser).
 - Rate limiting: 60 requests/min per IP (anonymous), 120/min (authenticated).
+- **Blob quota (free tier: 100 blobs per user)** — when a user saves their 101st blob, the server automatically deletes the **oldest** blob (by `updatedAt`, then `createdAt` as tiebreaker) to make room. The user is notified via a toast: "Deleted oldest blob '[title]' to stay within your 100-blob limit." The first time this happens per user, a one-time modal explains the auto-delete behavior and offers "OK, got it" or "Let me manage manually" (which instead aborts the save with a prompt to delete blobs from `/history`). This choice is remembered as a user preference (`blobQuotaStrategy`: `"auto_fifo"` default or `"manual"`).
 
 ---
 
@@ -421,8 +437,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 - CDN caches static assets aggressively.
 
 ### Reliability
-- Anonymous blobs auto-expire after **30 days** (TTL in Cosmos DB).
-- Registered user blobs persist indefinitely (free tier: up to 100 blobs).
+- Anonymous blobs are not persisted server-side — they live only in the browser's `localStorage`. Registered user blobs persist indefinitely (free tier: up to 100 blobs).
 - Cosmos DB automatic backups.
 
 ### Accessibility
@@ -432,7 +447,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 
 ### SEO / Social
 - Pre-rendering at build time for the `/` landing page (compatible with Static Web Apps; no server runtime needed).
-- Open Graph tags for shared blob links (`/s/:id`) — show preview of JSON structure.
+- Open Graph tags for **public** shared blob links (`/s/:id`) — show preview of JSON structure. Private (unlisted) blobs emit a `noindex` meta tag and omit OG previews.
 
 ### Progressive Web App (PWA)
 - The site is installable as a **browser app** (PWA) on desktop and mobile.
