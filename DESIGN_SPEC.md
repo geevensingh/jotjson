@@ -100,7 +100,8 @@ Browser (Angular SPA)
 {
   selectionColor: string,          # primary — the selected row (default: "#264F78", a muted blue)
   matchingValueColor: string,      # secondary — other rows with the same value (default: "#3E3D32", a warm gray)
-  ancestorColor: string            # parent chain — all ancestors of the selected node (default: "#2A2D2E", a subtle dark highlight)
+  ancestorColor: string,           # parent chain — all ancestors of the selected node (default: "#2A2D2E", a subtle dark highlight)
+  searchHighlightColor: string     # search matches — rows matching the search query (default: "#6A4C00", a muted amber/gold)
 }
 ```
 
@@ -200,6 +201,17 @@ The primary page. Available to **all users** (anonymous + registered).
     - All three colors have sensible defaults that work well in both dark and light themes (auto-adjusted per theme).
     - Registered users can override each color individually in the **Profile → Preferences** section via color pickers.
     - Highlights clear when clicking outside the tree or pressing `Escape`.
+  - **Search highlight** — a persistent search field is positioned near the top of the tree view panel (above or alongside the expansion controls):
+    - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
+    - Any row whose key or value contains the search text (case-insensitive by default) is highlighted in the **search highlight color** (default: muted amber/gold `#6A4C00`).
+    - The matched substring within the key or value text is **bold** or has an inline background highlight so users can see exactly what matched.
+    - A match count is displayed next to the search field (e.g., "12 matches").
+    - **Previous / Next** navigation buttons (and `Enter` / `Shift+Enter` shortcuts) jump between matches, auto-expanding collapsed parent nodes as needed and scrolling the match into view.
+    - **Highlight priority**: if a row is both a search match and has a selection/matching-value/ancestor highlight, the selection highlights take precedence and the search highlight is suppressed for that row (avoiding visual noise).
+    - Options available via small toggles next to the search field: **case sensitive**, **regex mode**, **keys only / values only / both**.
+    - Clearing the search field (or pressing `Escape` while focused in it) removes all search highlights.
+    - The search field is always visible — it does not need to be toggled open.
+    - Keyboard shortcut: `Ctrl+F` focuses the search field.
 
 - **Layout:** Split-pane (resizable) — editor on one side, tree on the other. Responsive: stacks vertically on mobile.
 
@@ -247,10 +259,11 @@ Available to **registered users** only.
   - **Default tree expansion depth** — how many levels to auto-expand (1–10).
   - **Show type labels in tree** — toggle the type badges (string, number, etc.) on/off.
   - **Default formatting rule set** — dropdown to pick a rule set to auto-apply when viewing JSON.
-  - **Tree highlight colors** — three color pickers to customize:
+  - **Tree highlight colors** — four color pickers to customize:
     - Selection color (primary) — the clicked/selected row.
     - Matching value color (secondary) — rows with the same value as the selection.
     - Ancestor color — parent nodes up to the root.
+    - Search highlight color — rows matching the search query.
     - A "Reset to defaults" button restores theme-appropriate colors.
 
 - **Data & Privacy Section**
