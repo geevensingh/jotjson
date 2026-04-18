@@ -16,7 +16,7 @@
 |---|---|
 | Framework | Angular (latest LTS) |
 | UI Component Library | Angular Material |
-| JSON Tree View | Custom component (recursive tree built on Angular CDK Tree or `mat-tree`) |
+| JSON Tree View | Custom component (recursive tree built on `mat-tree`) |
 | State Management | Angular Signals / lightweight service-based state |
 | Routing | Angular Router (lazy-loaded feature modules) |
 | Auth | MSAL Angular (@azure/msal-angular) for Azure AD B2C |
@@ -172,7 +172,7 @@ The primary page. Available to **all users** (anonymous + registered).
   - Real-time JSON validation with inline error messages (line + column of parse error).
   - **Smart Paste Button** behavior:
     - On page load (and periodically while the page is focused), the app reads the clipboard using the **Clipboard API** (`navigator.clipboard.readText()`).
-    - The browser will prompt the user for clipboard permission on first access. The app should request this permission early — on first interaction or via a clear prompt (e.g., "Allow clipboard access to enable one-click paste"). If the user denies permission, the button is hidden and standard `Ctrl+V` paste still works normally.
+    - The browser will prompt the user for clipboard permission on first access. The app requests this permission early via a clear banner prompt (e.g., "Allow clipboard access to enable one-click paste") shown on first page load. If the user denies permission, the button is hidden and standard `Ctrl+V` paste still works normally.
     - The clipboard contents are tested with a lightweight parse attempt (JSONC-aware parser). If the text is valid JSON or JSONC (or starts with `{` or `[` and is plausibly JSON), the **"Paste JSON from Clipboard"** button is **enabled** with a green/active state and a tooltip showing a preview of the first ~80 characters.
     - If the clipboard does not contain JSON-like text, the button is **disabled/grayed out** with a tooltip: "Clipboard does not contain JSON".
     - Clicking the enabled button replaces the editor contents with the clipboard JSON and triggers the tree view to render.
@@ -217,15 +217,15 @@ The primary page. Available to **all users** (anonymous + registered).
     - This feature can be toggled on/off via a tree toolbar toggle or the `treeShowDateAnnotations` user preference.
   - **Selection highlighting** — clicking a row in the tree activates three highlight layers:
     - **Selected row** — highlighted in the user's **primary selection color** (default: muted blue `#264F78`). Only one row is selected at a time.
-    - **Matching value rows** — all other rows whose value is identical to the selected row's value are highlighted in the **secondary color** (default: warm gray `#3E3D32`). Matching compares the raw JSON value (type-aware: `"1"` ≠ `1`). A subtle badge or count (e.g., "3 matches") appears near the selected row.
+    - **Matching value rows** — all other rows whose value is identical to the selected row's value are highlighted in the **secondary color** (default: warm gray `#3E3D32`). Matching compares the raw JSON value (type-aware: `"1"` ≠ `1`). A small badge icon appears on each matching row to make them easy to spot.
     - **Ancestor rows** — every parent node from the selected row up to the root is highlighted in the **ancestor color** (default: subtle dark `#2A2D2E`), making it easy to see the path/context of the selection.
     - All three colors have sensible defaults that work well in both dark and light themes (auto-adjusted per theme).
     - Registered users can override each color individually in the **Profile → Preferences** section via color pickers.
     - Highlights clear when clicking outside the tree or pressing `Escape`.
-  - **Search highlight** — a persistent search field is positioned near the top of the tree view panel (above or alongside the expansion controls):
+  - **Search highlight** — a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
     - Any row whose key or value contains the search text (case-insensitive by default) is highlighted in the **search highlight color** (default: muted amber/gold `#6A4C00`).
-    - The matched substring within the key or value text is **bold** or has an inline background highlight so users can see exactly what matched.
+    - The matched substring within the key or value text has an **inline background highlight** so users can see exactly what matched.
     - A match count is displayed next to the search field (e.g., "12 matches").
     - **Previous / Next** navigation buttons (and `Enter` / `Shift+Enter` shortcuts) jump between matches, auto-expanding collapsed parent nodes as needed and scrolling the match into view.
     - **Highlight priority**: if a row is both a search match and has a selection/matching-value/ancestor highlight, the selection highlights take precedence and the search highlight is suppressed for that row (avoiding visual noise).
@@ -253,12 +253,12 @@ Available to **registered users** only.
 - Chronological list of previously submitted/viewed JSON blobs for that user.
 - Each entry shows: title (or first 80 chars of JSON), date, size, actions (open, edit, delete, share, toggle public/private).
 - Search and filter by date range or keyword.
-- Pagination or infinite scroll.
+- Infinite scroll (loads more entries as the user scrolls down).
 - **History trigger preference**: by default, a history entry is created only on explicit save ("Save & Share"). Users can opt into recording all actions (paste, view shared link, edit) via a `historyTrackingMode` preference in Profile settings.
 
 ### 4. Auth Pages
 
-- **Sign Up / Sign In** — handled via Azure AD B2C hosted UI or embedded MSAL redirect.
+- **Sign Up / Sign In** — handled via Azure AD B2C hosted UI (redirect to Microsoft-hosted login page, customizable via B2C user flows).
 - Options: email + password, Google, GitHub (social identity providers via B2C).
 
 ### 5. Profile & Settings Page  (`/profile`)
@@ -275,7 +275,7 @@ Available to **registered users** only.
 
 - **Preferences Section** (persisted to `UserPreferences` in Cosmos DB)
   - **Theme** — dark / light / system (follows OS preference).
-  - **Editor font size** — slider or dropdown (10–24px).
+  - **Editor font size** — dropdown (10, 12, 14, 16, 18, 20, 22, 24px).
   - **Editor tab size** — 2 or 4 spaces.
   - **Editor word wrap** — on/off toggle.
   - **Layout orientation** — horizontal (editor left, tree right) or vertical (editor top, tree bottom). A toolbar button also provides quick toggling.
@@ -327,7 +327,7 @@ Available to **registered users** only.
   - When a rule set is active, the tree view scans each node's key and value.
   - Matching nodes receive the configured inline styles (background, text color, font weight, etc.).
   - Multiple rules can match the same node — styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
-  - A small indicator badge or tooltip shows which rule(s) matched a given node.
+  - A tooltip on hover shows which rule(s) matched a given node (keeps the tree visually clean).
   - **Highlight priority** (highest to lowest): selection highlight → matching-value highlight → ancestor highlight → search highlight → formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
   - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply.
 
@@ -424,7 +424,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 - Screen-reader-friendly labels.
 
 ### SEO / Social
-- Server-side rendering or pre-rendering for `/` landing page.
+- Pre-rendering at build time for the `/` landing page (compatible with Static Web Apps; no server runtime needed).
 - Open Graph tags for shared blob links (`/s/:id`) — show preview of JSON structure.
 
 ### Progressive Web App (PWA)
@@ -531,7 +531,7 @@ src/
   - Azure Functions: lint, test, build.
 - **CD pipeline** — deploys on merge to `main`:
   - Angular SPA → Azure Static Web Apps (using the `azure/static-web-apps-deploy` action).
-  - Azure Functions → deployed via Static Web Apps managed functions or separate Functions deploy action.
+  - Azure Functions → deployed as Static Web Apps managed functions (bundled with the SPA in a single deployment).
   - Staging slot for preview on PRs (Static Web Apps preview environments).
 - **Infrastructure** — Bicep templates applied via a separate workflow on changes to `/infra` directory.
 
