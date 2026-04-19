@@ -13,9 +13,6 @@ permissions:
   contents: read
   id-token: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   deploy:
     name: Build and deploy to Azure Static Web Apps
@@ -39,7 +36,7 @@ jobs:
           submodules: true
           lfs: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.check.outputs.have_token == 'true'
         with:
           node-version: 24

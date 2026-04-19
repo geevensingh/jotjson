@@ -8,6 +8,7 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
@@ -31,7 +32,7 @@ interface TreeNode {
 @Component({
   selector: 'jj-json-tree',
   standalone: true,
-  imports: [FormsModule, MatTreeModule, IconComponent],
+  imports: [FormsModule, MatMenuModule, MatTreeModule, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
   styleUrl: './json-tree.component.scss'
@@ -45,6 +46,8 @@ export class JsonTreeComponent {
 
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
+
+  readonly expandMenuButtonLabel = $localize`:@@tree.expand.menu.button:Expand to…`;
 
   readonly treeControl = new NestedTreeControl<TreeNode, string>(
     (n) => n.children ?? [],

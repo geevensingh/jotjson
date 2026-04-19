@@ -17,7 +17,9 @@ export type JjIconName =
   | 'sun'
   | 'moon'
   | 'system'
-  | 'copy-path';
+  | 'copy-path'
+  | 'chevron-right'
+  | 'chevron-down';
 
 @Component({
   selector: 'jj-icon',
@@ -99,12 +101,14 @@ export type JjIconName =
           <path d="M12 16.5V20" />
         }
         @case ('copy-path') {
-          <circle cx="3.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
-          <circle cx="7" cy="12" r="1.1" fill="currentColor" stroke="none" />
-          <circle cx="10.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
-          <rect x="14.5" y="6.5" width="7" height="13" rx="1.25" />
-          <rect x="16.5" y="4.5" width="3" height="3" rx="0.5" />
-          <path d="M16.5 12h3M16.5 14.5h3M16.5 17h2" />
+          <path d="M10 14a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
+          <path d="M14 10a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" />
+        }
+        @case ('chevron-right') {
+          <path d="M9 6l6 6-6 6" />
+        }
+        @case ('chevron-down') {
+          <path d="M6 9l6 6 6-6" />
         }
       }
     </svg>

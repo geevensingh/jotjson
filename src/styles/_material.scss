@@ -28,6 +28,9 @@ $jotjson-dark: mat.define-theme(
   )
 );
 
+// PreferencesService resolves 'system' → 'dark'|'light' at runtime and always
+// applies one of those classes to <body>, so we only need two emissions:
+// baseline structural + dark colors, then scoped light colors.
 html {
   @include mat.all-component-themes($jotjson-dark);
 }
@@ -35,10 +38,4 @@ html {
 html:has(body.theme-light),
 body.theme-light {
   @include mat.all-component-colors($jotjson-light);
-}
-
-@media (prefers-color-scheme: light) {
-  body.theme-system {
-    @include mat.all-component-colors($jotjson-light);
-  }
 }
