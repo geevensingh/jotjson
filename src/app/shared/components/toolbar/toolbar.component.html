@@ -8,7 +8,7 @@
     i18n-aria-label="@@toolbar.paste.aria"
     (click)="paste.emit()"
   >
-    <mat-icon>content_paste</mat-icon>
+    <jj-icon name="paste" />
   </button>
 
   <button
@@ -20,7 +20,7 @@
     i18n-aria-label="@@toolbar.upload.aria"
     (click)="triggerFilePicker()"
   >
-    <mat-icon>upload_file</mat-icon>
+    <jj-icon name="upload" />
   </button>
   <input
     #fileInput
@@ -40,7 +40,7 @@
     [disabled]="!hasContent()"
     (click)="download.emit()"
   >
-    <mat-icon>download</mat-icon>
+    <jj-icon name="download" />
   </button>
 
   <span class="divider" aria-hidden="true"></span>
@@ -55,7 +55,7 @@
     [disabled]="!hasContent()"
     (click)="format.emit()"
   >
-    <mat-icon>data_object</mat-icon>
+    <jj-icon name="format" />
   </button>
 
   <button
@@ -68,7 +68,7 @@
     [disabled]="!hasContent()"
     (click)="minify.emit()"
   >
-    <mat-icon>compress</mat-icon>
+    <jj-icon name="minify" />
   </button>
 
   <button
@@ -81,7 +81,7 @@
     [disabled]="!hasContent()"
     (click)="clear.emit()"
   >
-    <mat-icon>delete_sweep</mat-icon>
+    <jj-icon name="clear" />
   </button>
 
   <span class="divider" aria-hidden="true"></span>
@@ -120,7 +120,7 @@
     i18n-aria-label="@@toolbar.layout.aria"
     (click)="toggleLayout.emit()"
   >
-    <mat-icon>{{ layoutIcon }}</mat-icon>
+    <jj-icon [name]="layoutIcon()" />
   </button>
 
   <button
@@ -132,6 +132,6 @@
     i18n-aria-label="@@toolbar.theme.aria"
     (click)="toggleTheme.emit()"
   >
-    <mat-icon>{{ themeIcon }}</mat-icon>
+    <jj-icon [name]="themeIcon()" />
   </button>
 </div>

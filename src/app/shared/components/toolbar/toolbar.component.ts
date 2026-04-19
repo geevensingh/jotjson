@@ -2,23 +2,24 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  computed,
   inject,
   input,
   output,
   viewChild
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { IconComponent, JjIconName } from '../icon/icon.component';
 
 export type EditorMode = 'json' | 'jsonc';
 
 @Component({
   selector: 'jj-toolbar',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatTooltipModule, MatButtonToggleModule],
+  imports: [MatButtonModule, MatTooltipModule, MatButtonToggleModule, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toolbar.component.html',
   styleUrl: './toolbar.component.scss'
@@ -42,15 +43,15 @@ export class ToolbarComponent {
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
 
-  get layoutIcon(): string {
-    return this.prefs.prefs().layoutOrientation === 'horizontal'
-      ? 'splitscreen_vertical'
-      : 'splitscreen';
-  }
+  readonly layoutIcon = computed<JjIconName>(() =>
+    this.prefs.prefs().layoutOrientation === 'horizontal'
+      ? 'layout-vertical'
+      : 'layout-horizontal'
+  );
 
-  get themeIcon(): string {
-    return this.prefs.effectiveTheme() === 'light' ? 'dark_mode' : 'light_mode';
-  }
+  readonly themeIcon = computed<JjIconName>(() =>
+    this.prefs.effectiveTheme() === 'light' ? 'moon' : 'sun'
+  );
 
   triggerFilePicker(): void {
     this.fileInput().nativeElement.click();
