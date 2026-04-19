@@ -27,7 +27,7 @@ jobs:
     name: Bicep build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build main.bicep
         run: az bicep build --file infra/main.bicep
 
@@ -38,7 +38,7 @@ jobs:
     # Only run what-if when Azure credentials are configured in the repo.
     if: ${{ vars.AZURE_CLIENT_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
