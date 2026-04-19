@@ -70,6 +70,22 @@ describe('HomeComponent (unit-level)', () => {
     expect(fixture.componentInstance.mode()).toBe('jsonc');
   });
 
+  it('does not flip to jsonc for // or /* inside strings', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{"url":"https://example.com/foo","glob":"/* star */"}');
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.mode()).toBe('json');
+  });
+
+  it('detects block comments', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('/* hi */ {"a":1}');
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.mode()).toBe('jsonc');
+  });
+
   it('onFormat pretty-prints unformatted JSON', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1,"b":2}');

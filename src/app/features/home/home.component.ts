@@ -9,7 +9,7 @@ import {
   signal,
   viewChild
 } from '@angular/core';
-import { format as jsoncFormat, applyEdits, ParseError } from 'jsonc-parser';
+import { format as jsoncFormat, applyEdits, visit } from 'jsonc-parser';
 import { DraftService } from '../../core/preferences/draft.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import {
@@ -276,10 +276,19 @@ export class HomeComponent {
 
   private detectMode(text: string): EditorMode {
     if (!text) return 'json';
-    // Quick heuristic: look for // or /* that aren't inside strings. Use the
-    // parser's error output: if parsing succeeds with comments allowed and the
-    // text contains // or /*, it's JSONC.
-    if (/\/\/|\/\*/.test(text)) return 'jsonc';
+    // Use jsonc-parser's scanner to detect comments authoritatively.
+    // Throwing a sentinel short-circuits the scan on the first comment.
+    const FOUND_COMMENT = {};
+    try {
+      visit(text, {
+        onComment: () => {
+          throw FOUND_COMMENT;
+        }
+      });
+    } catch (e) {
+      if (e === FOUND_COMMENT) return 'jsonc';
+      throw e;
+    }
     return 'json';
   }
 }
