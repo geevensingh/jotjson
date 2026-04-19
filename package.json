@@ -13,6 +13,7 @@
     "build:prod": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
+    "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
     "lint": "tsc --noEmit -p tsconfig.app.json",
     "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf"
   },

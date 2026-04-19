@@ -100,8 +100,10 @@ Place new code in the correct bucket:
 ## 5. Testing
 
 - **Always add/update tests** for logic changes. No test = not done.
-- Frontend: Jest (or Karma if already configured) for units; test components
-  with Angular Testing Library patterns.
+- Frontend: **Karma + Jasmine** (configured via `karma.conf.js` with a
+  `ChromeHeadlessCI` launcher for GitHub Actions). Run with `npm test`
+  locally and `npm run test:ci` in CI (adds `--code-coverage`). Co-locate
+  specs as `*.spec.ts` alongside the unit under test.
 - Functions: Jest with mocked Cosmos / Blob clients.
 - Test names describe behavior: `it('returns 404 when blob slug is unknown')`.
 - Run the full lint + test + build suite before declaring completion (see §7).
