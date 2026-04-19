@@ -1,0 +1,116 @@
+<div class="tree-controls">
+  <input
+    type="search"
+    class="tree-search"
+    placeholder="Search keys, values, or paths…"
+    [value]="search()"
+    (input)="onSearchInput($event)"
+    aria-label="Search tree"
+  />
+  <select
+    class="tree-select"
+    aria-label="Expand to level"
+    (change)="expandToLevel(+($any($event.target).value))"
+  >
+    <option value="1">Expand: 1</option>
+    <option value="2" selected>Expand: 2</option>
+    <option value="3">Expand: 3</option>
+    <option value="4">Expand: 4</option>
+    <option value="99">Expand: all</option>
+  </select>
+  <button type="button" class="tree-btn" (click)="expandAll()">Expand all</button>
+  <button type="button" class="tree-btn" (click)="collapseAll()">Collapse all</button>
+</div>
+
+<div class="tree-body">
+  @if (root()) {
+    <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
+      <!-- Leaf nodes -->
+      <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding>
+        <div class="tree-row" [class.is-search-hit]="searchHits().has(node.pathString)">
+          <span class="tree-twisty tree-spacer" aria-hidden="true">·</span>
+
+          @if (node.segment !== undefined) {
+            @if (segmentIsIndex(node)) {
+              <span class="tree-index">{{ node.segment }}:</span>
+            } @else {
+              <span class="tree-key">{{ node.segment }}</span>
+            }
+          }
+
+          @switch (node.type) {
+            @case ('string') {
+              <span class="tree-value-string">{{ renderLeaf(node.value, node.type) }}</span>
+            }
+            @case ('number') {
+              <span class="tree-value-number">{{ renderLeaf(node.value, node.type) }}</span>
+            }
+            @case ('boolean') {
+              <span class="tree-value-boolean">{{ renderLeaf(node.value, node.type) }}</span>
+            }
+            @case ('null') {
+              <span class="tree-value-null">null</span>
+            }
+          }
+
+          @if (showTypeBadges()) {
+            <span class="tree-type-badge">{{ node.type }}</span>
+          }
+          <button type="button" class="tree-path-pill" title="Copy path" (click)="copyPath(node)">
+            {{ node.pathString }}
+          </button>
+        </div>
+      </mat-tree-node>
+
+      <!-- Container nodes -->
+      <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
+        <div class="tree-row" [class.is-search-hit]="searchHits().has(node.pathString)">
+          <button
+            type="button"
+            class="tree-twisty"
+            matTreeNodeToggle
+            [attr.aria-label]="treeControl.isExpanded(node) ? 'Collapse' : 'Expand'"
+          >
+            {{ treeControl.isExpanded(node) ? '▾' : '▸' }}
+          </button>
+
+          @if (node.segment !== undefined) {
+            @if (segmentIsIndex(node)) {
+              <span class="tree-index">{{ node.segment }}:</span>
+            } @else {
+              <span class="tree-key">{{ node.segment }}</span>
+            }
+          }
+
+          <span class="tree-value-container">
+            <span class="tree-value-brace">
+              {{ treeControl.isExpanded(node) ? (node.type === 'array' ? '[' : '{') : containerSummary(node) }}
+            </span>
+            <span class="tree-count">{{ containerCountText(node) }}</span>
+          </span>
+
+          @if (showTypeBadges()) {
+            <span class="tree-type-badge">{{ node.type }}</span>
+          }
+          <button type="button" class="tree-path-pill" title="Copy path" (click)="copyPath(node)">
+            {{ node.pathString }}
+          </button>
+        </div>
+
+        <div
+          class="tree-children"
+          [class.tree-children-hidden]="!treeControl.isExpanded(node)"
+        >
+          <ng-container matTreeNodeOutlet></ng-container>
+          @if (treeControl.isExpanded(node)) {
+            <div class="tree-row">
+              <span class="tree-value-brace">{{ node.type === 'array' ? ']' : '}' }}</span>
+            </div>
+          }
+        </div>
+      </mat-nested-tree-node>
+    </mat-tree>
+  } @else {
+    <div class="tree-empty">Paste or type JSON on the left to see the tree view.</div>
+  }
+</div>

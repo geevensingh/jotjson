@@ -1,0 +1,218 @@
+@use '../../../../styles/variables' as v;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: v.$font-ui;
+}
+
+.tree-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  flex-wrap: wrap;
+}
+
+.tree-search {
+  flex: 1 1 200px;
+  min-width: 160px;
+  padding: 6px 10px;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+}
+
+.tree-btn,
+.tree-select {
+  padding: 5px 10px;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+
+  &:hover {
+    background: rgba(127, 127, 127, 0.08);
+  }
+}
+
+.tree-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 4px 14px;
+  font-family: v.$font-mono;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.tree-empty {
+  color: rgba(127, 127, 127, 0.7);
+  padding: 20px;
+  text-align: center;
+  font-family: v.$font-ui;
+  font-size: 13px;
+}
+
+.tree-node {
+  display: block;
+  padding-left: 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 1px 4px 1px 0;
+  border-radius: 3px;
+  cursor: default;
+
+  &:hover {
+    background: rgba(127, 127, 127, 0.08);
+  }
+
+  &.is-search-hit {
+    background: var(--highlight-search);
+  }
+}
+
+.tree-twisty {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0;
+  opacity: 0.75;
+
+  &:hover {
+    opacity: 1;
+  }
+
+  &.tree-spacer {
+    cursor: default;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.tree-key {
+  color: var(--fg);
+  font-weight: 600;
+
+  &::after {
+    content: ': ';
+    color: rgba(127, 127, 127, 0.8);
+    font-weight: normal;
+  }
+}
+
+.tree-index {
+  color: rgba(127, 127, 127, 0.8);
+  font-weight: normal;
+  margin-right: 6px;
+}
+
+.tree-value-string {
+  color: #6a8759;
+  word-break: break-word;
+}
+
+.tree-value-number {
+  color: #ff9b30;
+}
+
+.tree-value-boolean {
+  color: #3fa1f3;
+}
+
+.tree-value-null {
+  color: rgba(127, 127, 127, 0.75);
+  font-style: italic;
+}
+
+.tree-value-container {
+  color: rgba(127, 127, 127, 0.9);
+
+  .tree-value-brace {
+    color: inherit;
+    font-weight: 600;
+  }
+
+  .tree-count {
+    margin-left: 4px;
+    color: rgba(127, 127, 127, 0.7);
+    font-style: italic;
+  }
+}
+
+.tree-type-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 0 5px;
+  margin-left: 8px;
+  border-radius: 9px;
+  background: rgba(127, 127, 127, 0.15);
+  color: rgba(127, 127, 127, 0.85);
+  text-transform: lowercase;
+  letter-spacing: 0.3px;
+  font-family: v.$font-ui;
+  font-weight: 500;
+}
+
+.tree-children {
+  display: block;
+}
+
+.tree-children-hidden {
+  display: none;
+}
+
+// Neutralize Material's default tree node paddings/backgrounds so our row
+// styling (padding from mat-tree-node-padding only) remains consistent.
+:host ::ng-deep .mat-tree {
+  background: transparent;
+  font-family: inherit;
+}
+
+:host ::ng-deep .mat-tree-node,
+:host ::ng-deep .mat-nested-tree-node {
+  min-height: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.tree-path-pill {
+  margin-left: 8px;
+  font-size: 10.5px;
+  color: rgba(127, 127, 127, 0.6);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  font-family: v.$font-mono;
+
+  &:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
+  }
+}

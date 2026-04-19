@@ -1,0 +1,17 @@
+<div class="editor-host" [class.editor-error]="hasErrors()">
+  <div #host style="height: 100%; width: 100%;"></div>
+  @if (!ready()) {
+    <div class="editor-loading">Loading editor…</div>
+  }
+</div>
+
+@if (errors().length > 0) {
+  <ul class="editor-errors" role="alert" aria-label="JSON parse errors">
+    @for (err of errors(); track err.offset) {
+      <li>
+        <span class="editor-errors-loc">L{{ err.line }}:{{ err.column }}</span>
+        {{ err.message }}
+      </li>
+    }
+  </ul>
+}

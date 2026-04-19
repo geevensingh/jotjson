@@ -1,0 +1,44 @@
+@use '@angular/material' as mat;
+@use './variables' as v;
+
+@include mat.core();
+
+// Two theme definitions using Material's prebuilt "azure/blue" palettes; the
+// JotJSON brand colors come from our own CSS variables, Material is just here
+// for component chrome (buttons, selects, menus, tree).
+$jotjson-light: mat.define-theme(
+  (
+    color: (
+      theme-type: light,
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette
+    ),
+    density: (scale: -1)
+  )
+);
+
+$jotjson-dark: mat.define-theme(
+  (
+    color: (
+      theme-type: dark,
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette
+    ),
+    density: (scale: -1)
+  )
+);
+
+html {
+  @include mat.all-component-themes($jotjson-dark);
+}
+
+html:has(body.theme-light),
+body.theme-light {
+  @include mat.all-component-colors($jotjson-light);
+}
+
+@media (prefers-color-scheme: light) {
+  body.theme-system {
+    @include mat.all-component-colors($jotjson-light);
+  }
+}

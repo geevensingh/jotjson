@@ -1,0 +1,63 @@
+@use '../../../styles/variables' as v;
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+.home {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 4px 1fr;
+  grid-template-rows: 1fr;
+  min-height: 0;
+  flex: 1;
+}
+
+.home.vertical .split {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 4px 1fr;
+}
+
+.pane {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pane-editor {
+  background: var(--bg);
+}
+
+.pane-tree {
+  background: var(--bg);
+  padding: 8px;
+  overflow: auto;
+}
+
+.splitter {
+  background: rgba(127, 127, 127, 0.2);
+  cursor: col-resize;
+}
+
+.home.vertical .splitter {
+  cursor: row-resize;
+}
+
+@media (max-width: #{v.$breakpoint-mobile}) {
+  .split {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 4px 1fr !important;
+  }
+  .splitter {
+    cursor: row-resize;
+  }
+}

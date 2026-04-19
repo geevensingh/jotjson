@@ -1,0 +1,100 @@
+<div class="toolbar">
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Paste JSON from clipboard"
+    (click)="paste.emit()"
+  >
+    <mat-icon>content_paste</mat-icon>
+  </button>
+
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Upload file"
+    (click)="triggerFilePicker()"
+  >
+    <mat-icon>upload_file</mat-icon>
+  </button>
+  <input
+    #fileInput
+    type="file"
+    class="hidden-file-input"
+    accept=".json,.jsonc,.jsonl,.geojson,.txt,application/json"
+    (change)="onFileChange($event)"
+  />
+
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Download as file"
+    [disabled]="!hasContent()"
+    (click)="download.emit()"
+  >
+    <mat-icon>download</mat-icon>
+  </button>
+
+  <span class="divider" aria-hidden="true"></span>
+
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Format (pretty-print)"
+    [disabled]="!hasContent()"
+    (click)="format.emit()"
+  >
+    <mat-icon>data_object</mat-icon>
+  </button>
+
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Minify"
+    [disabled]="!hasContent()"
+    (click)="minify.emit()"
+  >
+    <mat-icon>compress</mat-icon>
+  </button>
+
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Clear editor"
+    [disabled]="!hasContent()"
+    (click)="clear.emit()"
+  >
+    <mat-icon>delete_sweep</mat-icon>
+  </button>
+
+  <span class="divider" aria-hidden="true"></span>
+
+  <mat-button-toggle-group
+    class="mode-toggle"
+    [value]="mode()"
+    (change)="onModeChange($any($event.value))"
+    aria-label="Editor mode"
+  >
+    <mat-button-toggle value="json" matTooltip="JSON only">JSON</mat-button-toggle>
+    <mat-button-toggle value="jsonc" matTooltip="JSON with comments">JSONC</mat-button-toggle>
+  </mat-button-toggle-group>
+
+  <span class="spacer"></span>
+
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Toggle layout"
+    (click)="toggleLayout.emit()"
+  >
+    <mat-icon>{{ layoutIcon }}</mat-icon>
+  </button>
+
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Toggle theme"
+    (click)="toggleTheme.emit()"
+  >
+    <mat-icon>{{ themeIcon }}</mat-icon>
+  </button>
+</div>

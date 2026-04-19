@@ -1,0 +1,58 @@
+@use '../../../../styles/variables' as v;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.editor-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid rgba(127, 127, 127, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+
+  &.editor-error {
+    border-color: rgba(231, 76, 60, 0.55);
+  }
+}
+
+.editor-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(127, 127, 127, 0.8);
+  font-family: v.$font-ui;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.editor-errors {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid #e74c3c;
+  background: rgba(231, 76, 60, 0.08);
+  font-family: v.$font-ui;
+  font-size: 12.5px;
+  max-height: 90px;
+  overflow: auto;
+
+  li {
+    padding: 2px 0;
+  }
+
+  .editor-errors-loc {
+    color: #e74c3c;
+    margin-right: 8px;
+    font-family: v.$font-mono;
+  }
+}

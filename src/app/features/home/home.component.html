@@ -1,0 +1,31 @@
+<div class="home" [class.vertical]="layoutOrientation() === 'vertical'">
+  <jj-toolbar
+    [mode]="mode()"
+    [hasContent]="hasContent()"
+    (paste)="onPaste()"
+    (upload)="onUpload($event)"
+    (download)="onDownload()"
+    (clear)="onClear()"
+    (format)="onFormat()"
+    (minify)="onMinify()"
+    (modeChange)="onModeChange($event)"
+    (toggleLayout)="onToggleLayout()"
+    (toggleTheme)="onToggleTheme()"
+  ></jj-toolbar>
+
+  <div class="split">
+    <section class="pane pane-editor" aria-label="JSON input">
+      <jj-json-editor
+        [value]="content()"
+        [errors]="errors()"
+        (valueChange)="onValueChange($event)"
+      ></jj-json-editor>
+    </section>
+
+    <div class="splitter" role="separator" aria-hidden="true"></div>
+
+    <section class="pane pane-tree" aria-label="Tree view" #treeHost>
+      <jj-json-tree [value]="treeValue()"></jj-json-tree>
+    </section>
+  </div>
+</div>

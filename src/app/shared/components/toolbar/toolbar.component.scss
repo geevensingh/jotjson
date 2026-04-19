@@ -1,0 +1,35 @@
+@use '../../../../styles/variables' as v;
+
+:host {
+  display: block;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  flex-wrap: wrap;
+}
+
+.divider {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  background: rgba(127, 127, 127, 0.3);
+  margin: 0 6px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.mode-toggle {
+  font-family: v.$font-ui;
+  font-size: 12px;
+}

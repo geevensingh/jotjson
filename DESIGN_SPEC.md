@@ -578,7 +578,17 @@ src/
 4. **Persistent links** — Blob CRUD API, save & share flow, `/s/:id` route.
 5. **History** — History tracking, `/history` page, management actions.
 6. **Formatting rules** — Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
-7. **Polish & launch** — Custom domain, dark/light theme polish, accessibility audit, SEO (pre-rendering + OG tags), monitoring (App Insights dashboards & alerts), Static Web Apps upgrade to Standard tier.
+7. **Polish & launch** — Each of these lands as its own step/commit:
+   - **M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).
+   - **M7b**: Drag-and-drop file upload with full-page drop overlay (Home page §1).
+   - **M7c**: Smart date/time detection + relative-time annotations in the tree view (Home page §1).
+   - **M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).
+   - **M7e**: Custom domain (`jotjson.com`).
+   - **M7f**: Dark/light theme polish.
+   - **M7g**: Accessibility audit.
+   - **M7h**: SEO (pre-rendering + OG tags).
+   - **M7i**: Monitoring (App Insights dashboards & alerts).
+   - **M7j**: Static Web Apps upgrade to Standard tier.
 
 ---
 
