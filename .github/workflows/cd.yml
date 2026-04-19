@@ -64,9 +64,3 @@ jobs:
           app_location: '/'
           api_location: 'api'
           output_location: 'dist/jotjson/browser'
-
-      # Azure/static-web-apps-deploy@v1 runs in a root-owned Docker container and
-      # leaves .git/ owned by root, which breaks actions/checkout post cleanup.
-      - name: Restore workspace ownership
-        if: always() && steps.check.outputs.have_token == 'true'
-        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
