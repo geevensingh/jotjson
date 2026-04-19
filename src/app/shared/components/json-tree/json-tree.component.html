@@ -86,7 +86,10 @@
             matTreeNodeToggle
             [attr.aria-label]="treeControl.isExpanded(node) ? collapseLabel : expandLabel"
           >
-            {{ treeControl.isExpanded(node) ? '▾' : '▸' }}
+            <jj-icon
+              [name]="treeControl.isExpanded(node) ? 'chevron-down' : 'chevron-right'"
+              [size]="14"
+            />
           </button>
 
           @if (node.segment !== undefined) {
