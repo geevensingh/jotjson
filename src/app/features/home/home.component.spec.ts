@@ -7,6 +7,7 @@ import { provideRouter } from '@angular/router';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
+const SPLIT_KEY = 'jotjson.splitRatio.v1';
 
 describe('HomeComponent (unit-level)', () => {
   // NOTE: Full rendering of HomeComponent would load Monaco. These tests
@@ -15,6 +16,7 @@ describe('HomeComponent (unit-level)', () => {
   beforeEach(() => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
@@ -25,6 +27,7 @@ describe('HomeComponent (unit-level)', () => {
   afterEach(() => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
   });
 
   it('onToggleTheme cycles light → dark → system → light', () => {
@@ -144,13 +147,15 @@ describe('HomeComponent (unit-level)', () => {
     fixture.componentInstance.splitRatio.set(0.75);
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
-    expect(localStorage.getItem('jotjson.splitRatio.v1')).toBe('0.75');
+    expect(localStorage.getItem(SPLIT_KEY)).toBe('0.75');
 
-    localStorage.setItem('jotjson.splitRatio.v1', '0.02');
+    localStorage.setItem(SPLIT_KEY, '0.02');
     TestBed.resetTestingModule();
-    TestBed.configureTestingModule({ imports: [HomeComponent] });
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
     const f2 = TestBed.createComponent(HomeComponent);
     expect(f2.componentInstance.splitRatio()).toBe(0.1);
-    localStorage.removeItem('jotjson.splitRatio.v1');
   });
 });

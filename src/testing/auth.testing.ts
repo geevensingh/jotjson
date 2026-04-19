@@ -1,5 +1,5 @@
 import { Provider } from '@angular/core';
-import { Subject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 import {
   AccountInfo,
   AuthenticationResult,
@@ -59,7 +59,9 @@ export class FakeMsalClient implements Partial<IPublicClientApplication> {
 /** MsalBroadcastService stub with the two subjects AuthService consumes. */
 export class FakeMsalBroadcastService {
   msalSubject$ = new Subject<EventMessage>();
-  inProgress$ = new Subject<InteractionStatus>();
+  // BehaviorSubject seeded with `None` so `AuthService.waitForInteractionComplete()`
+  // resolves immediately under test rather than hanging until Jasmine times out.
+  inProgress$ = new BehaviorSubject<InteractionStatus>(InteractionStatus.None);
 }
 
 /**
