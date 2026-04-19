@@ -153,11 +153,12 @@ export class HomeComponent {
   }
 
   onToggleTheme(): void {
-    // The toolbar button is a two-state visual toggle driven by the effective
-    // theme. Choosing 'system' is a preferences-page concern (M3+), not a
-    // one-click toolbar action.
-    const effective = this.prefs.effectiveTheme();
-    this.prefs.update({ theme: effective === 'dark' ? 'light' : 'dark' });
+    // Three-state cycle driven by the raw preference: light -> dark -> system.
+    // 'system' follows the OS's prefers-color-scheme setting.
+    const current = this.prefs.prefs().theme;
+    const next =
+      current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';
+    this.prefs.update({ theme: next });
   }
 
   focusTreeSearch(): void {

@@ -49,9 +49,12 @@ export class ToolbarComponent {
       : 'layout-horizontal'
   );
 
-  readonly themeIcon = computed<JjIconName>(() =>
-    this.prefs.effectiveTheme() === 'light' ? 'moon' : 'sun'
-  );
+  readonly themeIcon = computed<JjIconName>(() => {
+    const theme = this.prefs.prefs().theme;
+    if (theme === 'light') return 'sun';
+    if (theme === 'dark') return 'moon';
+    return 'system';
+  });
 
   triggerFilePicker(): void {
     this.fileInput().nativeElement.click();
