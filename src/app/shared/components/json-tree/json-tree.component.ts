@@ -45,7 +45,10 @@ export class JsonTreeComponent {
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
 
-  readonly treeControl = new NestedTreeControl<TreeNode>((n) => n.children ?? []);
+  readonly treeControl = new NestedTreeControl<TreeNode, string>(
+    (n) => n.children ?? [],
+    { trackBy: (n) => n.pathString }
+  );
   readonly dataSource = new MatTreeNestedDataSource<TreeNode>();
 
   readonly root = computed<TreeNode | undefined>(() => {
@@ -101,11 +104,20 @@ export class JsonTreeComponent {
     return matches;
   });
 
+  private hasInitializedExpansion = false;
+
   constructor() {
     effect(() => {
       const r = this.root();
       this.dataSource.data = r ? [r] : [];
-      this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth);
+      if (!r) {
+        this.hasInitializedExpansion = false;
+        return;
+      }
+      if (!this.hasInitializedExpansion) {
+        this.hasInitializedExpansion = true;
+        this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth);
+      }
     });
   }
 
@@ -113,13 +125,16 @@ export class JsonTreeComponent {
     !!node.children && node.children.length > 0;
 
   expandAll(): void {
-    this.treeControl.expandAll();
+    const walk = (node: TreeNode | undefined): void => {
+      if (!node || !node.children) return;
+      this.treeControl.expand(node);
+      for (const c of node.children) walk(c);
+    };
+    walk(this.root());
   }
 
   collapseAll(): void {
     this.treeControl.collapseAll();
-    const r = this.root();
-    if (r) this.treeControl.expand(r);
   }
 
   expandToLevel(depth: number): void {
