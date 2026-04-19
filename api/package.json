@@ -12,7 +12,7 @@
     "watch": "tsc -w",
     "prestart": "npm run build",
     "start": "func start",
-    "test": "echo \"No API tests yet\" && exit 0",
+    "test": "jest",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -21,10 +21,16 @@
     "@azure/identity": "^4.5.0",
     "@azure/storage-blob": "^12.24.0",
     "jsonc-parser": "^3.3.1",
+    "jsonwebtoken": "^9.0.3",
+    "jwks-rsa": "^3.2.2",
     "nanoid": "^5.0.7"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.0.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
     "typescript": "~6.0.3"
   }
 }
