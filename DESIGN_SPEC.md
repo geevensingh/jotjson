@@ -590,6 +590,7 @@ src/
    - **M7i**: Monitoring (App Insights dashboards & alerts).
    - **M7j**: Static Web Apps upgrade to Standard tier.
    - **M7k**: Surface JSONC comments in the tree view (e.g., attach leading/trailing comments from `jsonc-parser` to the nearest node and render them as dimmed annotations or a hover affordance).
+   - **M7l**: Responsive layout — on viewports narrower than 768px, force the editor/tree split to stack vertically (editor on top, tree below) regardless of the user's `layoutOrientation` preference, per Home page §Layout.
 
 ---
 
