@@ -60,6 +60,18 @@ describe('HomeComponent (unit-level)', () => {
     expect(fixture.componentInstance.content()).toBe('{"x":42}');
   });
 
+  it('auto-switches back to json when comments are removed', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('// c\n{"a":1}');
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.mode()).toBe('jsonc');
+    fixture.componentInstance.content.set('{"a":1}');
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.mode()).toBe('json');
+  });
+
   it('auto-switches to jsonc when comments appear', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     // Trigger the view-level effects by running change detection on the

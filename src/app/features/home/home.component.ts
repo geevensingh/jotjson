@@ -94,10 +94,11 @@ export class HomeComponent {
       this.draft.set(this.content());
     });
 
-    // Auto-switch to JSONC when comments appear.
+    // Keep mode in sync with content: jsonc if comments are present, json otherwise.
     effect(() => {
-      if (this.detectMode(this.content()) === 'jsonc' && this.mode() === 'json') {
-        this.mode.set('jsonc');
+      const detected = this.detectMode(this.content());
+      if (this.mode() !== detected) {
+        this.mode.set(detected);
       }
     });
 
