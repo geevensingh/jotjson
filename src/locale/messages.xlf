@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file source-language="en-US" datatype="plaintext" original="ng2.template">
+    <body>
+      <trans-unit id="formattingRules.title" datatype="html">
+        <source>Formatting Rules</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">8,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.note" datatype="html">
+        <source> Implementation in Milestone 6 (Formatting rules). </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">10,13</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.title" datatype="html">
+        <source>History</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">8,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.note" datatype="html">
+        <source>Implementation in Milestone 5 (History).</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">9,12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="upload.tooLarge.log" datatype="html">
+        <source>File too large (max 5 MB)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">96</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="profile.title" datatype="html">
+        <source>Profile &amp; Settings</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/profile.component.ts</context>
+          <context context-type="linenumber">8,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="profile.note" datatype="html">
+        <source> Implementation in Milestone 3 (Auth) and subsequent milestones. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/profile.component.ts</context>
+          <context context-type="linenumber">10,12</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="share.title" datatype="html">
+        <source>Shared JSON</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/share/share.component.ts</context>
+          <context context-type="linenumber">8,10</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="share.slug.label" datatype="html">
+        <source>Slug:</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/share/share.component.ts</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="share.note" datatype="html">
+        <source>Implementation in Milestone 4 (Persistent links).</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/share/share.component.ts</context>
+          <context context-type="linenumber">13,16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="editor.loading" datatype="html">
+        <source>Loading editor…</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-editor/json-editor.component.html</context>
+          <context context-type="linenumber">4,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="editor.errors.aria" datatype="html">
+        <source>JSON parse errors</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-editor/json-editor.component.html</context>
+          <context context-type="linenumber">12,13</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.search.placeholder" datatype="html">
+        <source>Search keys, values, or paths…</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.search.aria" datatype="html">
+        <source>Search tree</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">7,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.expand.select.aria" datatype="html">
+        <source>Expand to level</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">14,15</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.expand.level.1" datatype="html">
+        <source>Expand: 1</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">18,19</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.expand.level.2" datatype="html">
+        <source>Expand: 2</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">19,20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.expand.level.3" datatype="html">
+        <source>Expand: 3</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">20,21</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.expand.level.4" datatype="html">
+        <source>Expand: 4</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">21,22</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.expand.level.all" datatype="html">
+        <source>Expand: all</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">22,24</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.expand.all" datatype="html">
+        <source> Expand all </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">25,27</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.collapse.all" datatype="html">
+        <source> Collapse all </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">28,32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.copyPath.title" datatype="html">
+        <source>Copy path</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">69,70</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">111,112</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.empty" datatype="html">
+        <source> Paste or type JSON on the left to see the tree view. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
+          <context context-type="linenumber">134,137</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.node.expand" datatype="html">
+        <source>Expand</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
+          <context context-type="linenumber">45</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.node.collapse" datatype="html">
+        <source>Collapse</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
+          <context context-type="linenumber">46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.paste.tooltip" datatype="html">
+        <source>Paste JSON from clipboard</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.paste.aria" datatype="html">
+        <source>Paste JSON from clipboard</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">7,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.upload.tooltip" datatype="html">
+        <source>Upload file</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.upload.aria" datatype="html">
+        <source>Upload file</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">19,20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.download.tooltip" datatype="html">
+        <source>Download as file</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">36,37</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.download.aria" datatype="html">
+        <source>Download as file</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">38,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.format.tooltip" datatype="html">
+        <source>Format (pretty-print)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">51,52</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.format.aria" datatype="html">
+        <source>Format</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">54</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.minify.tooltip" datatype="html">
+        <source>Minify</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">65</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.minify.aria" datatype="html">
+        <source>Minify</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">67</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.clear.tooltip" datatype="html">
+        <source>Clear editor</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">77,78</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.clear.aria" datatype="html">
+        <source>Clear editor</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">79,80</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.mode.aria" datatype="html">
+        <source>Editor mode</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">93,94</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.mode.json.tooltip" datatype="html">
+        <source>JSON only</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">98,99</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.mode.json.label" datatype="html">
+        <source>JSON</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">101,102</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.mode.jsonc.tooltip" datatype="html">
+        <source>JSON with comments</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">105,106</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.mode.jsonc.label" datatype="html">
+        <source>JSONC</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">108,109</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.layout.tooltip" datatype="html">
+        <source>Toggle layout</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">117,118</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.layout.aria" datatype="html">
+        <source>Toggle layout</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">119,120</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.theme.tooltip" datatype="html">
+        <source>Toggle theme</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">129,130</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.theme.aria" datatype="html">
+        <source>Toggle theme</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
+          <context context-type="linenumber">131,132</context>
+        </context-group>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

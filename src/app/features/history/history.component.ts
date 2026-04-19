@@ -5,8 +5,8 @@ import { Component } from '@angular/core';
   standalone: true,
   template: `
     <main>
-      <h1>History</h1>
-      <p class="note">Implementation in Milestone 5 (History).</p>
+      <h1 i18n="@@history.title">History</h1>
+      <p class="note" i18n="@@history.note">Implementation in Milestone 5 (History).</p>
     </main>
   `,
   styles: [

@@ -67,6 +67,23 @@ Place new code in the correct bucket:
 - Theming uses the `TreeHighlightColors` / theme tokens from the spec — do not
   hardcode colors in components.
 
+### Internationalization (i18n)
+- v1 ships in English only, but **all user-facing strings must be extractable**
+  per `DESIGN_SPEC.md` §Internationalization.
+- Template text, attribute values (including `matTooltip`, `aria-label`,
+  `title`, `placeholder`), and visible labels use Angular `i18n` attributes
+  with a stable ID, e.g., `i18n="@@toolbar.paste.tooltip"`. Non-text attributes
+  use `i18n-<attrname>="@@id"`.
+- TS/Runtime strings (toast messages, logs that are visible to users, aria
+  labels bound via expressions) use `$localize` tagged template literals with
+  a stable ID, e.g., ``$localize`:@@upload.tooLarge:File too large — max 5 MB` ``.
+- Stable ID convention: `<area>.<element>.<purpose>` in camelCase / dot
+  segments (e.g., `@@tree.search.placeholder`, `@@home.empty`).
+- Never use plain strings in templates or `console.warn`/`toast` calls when
+  they are user-visible.
+- Run `npm run extract-i18n` to refresh `src/locale/messages.xlf` when you add
+  or change strings.
+
 ### Azure Functions
 - One function per folder. Keep handlers thin; put logic in `src/lib/`.
 - Validate all inputs (zod or equivalent schema validation).

@@ -5,9 +5,12 @@ import { Component, Input } from '@angular/core';
   standalone: true,
   template: `
     <main>
-      <h1>Shared JSON</h1>
-      <p>Slug: <code>{{ slug }}</code></p>
-      <p class="note">Implementation in Milestone 4 (Persistent links).</p>
+      <h1 i18n="@@share.title">Shared JSON</h1>
+      <p>
+        <ng-container i18n="@@share.slug.label">Slug:</ng-container>
+        <code>{{ slug }}</code>
+      </p>
+      <p class="note" i18n="@@share.note">Implementation in Milestone 4 (Persistent links).</p>
     </main>
   `,
   styles: [

@@ -93,7 +93,7 @@ export class HomeComponent {
   async onUpload(file: File): Promise<void> {
     const MAX = 5 * 1024 * 1024;
     if (file.size > MAX) {
-      console.warn('JotJSON: file too large (max 5 MB)');
+      console.warn($localize`:@@upload.tooLarge.log:File too large (max 5 MB)`);
       return;
     }
     const text = await file.text();

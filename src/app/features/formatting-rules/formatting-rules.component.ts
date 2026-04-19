@@ -5,8 +5,10 @@ import { Component } from '@angular/core';
   standalone: true,
   template: `
     <main>
-      <h1>Formatting Rules</h1>
-      <p class="note">Implementation in Milestone 6 (Formatting rules).</p>
+      <h1 i18n="@@formattingRules.title">Formatting Rules</h1>
+      <p class="note" i18n="@@formattingRules.note">
+        Implementation in Milestone 6 (Formatting rules).
+      </p>
     </main>
   `,
   styles: [

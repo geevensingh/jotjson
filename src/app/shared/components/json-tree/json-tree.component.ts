@@ -42,6 +42,9 @@ export class JsonTreeComponent {
 
   readonly search = signal('');
 
+  readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
+  readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
+
   readonly treeControl = new NestedTreeControl<TreeNode>((n) => n.children ?? []);
   readonly dataSource = new MatTreeNestedDataSource<TreeNode>();
 

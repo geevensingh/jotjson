@@ -5,8 +5,10 @@ import { Component } from '@angular/core';
   standalone: true,
   template: `
     <main>
-      <h1>Profile &amp; Settings</h1>
-      <p class="note">Implementation in Milestone 3 (Auth) and subsequent milestones.</p>
+      <h1 i18n="@@profile.title">Profile &amp; Settings</h1>
+      <p class="note" i18n="@@profile.note">
+        Implementation in Milestone 3 (Auth) and subsequent milestones.
+      </p>
     </main>
   `,
   styles: [

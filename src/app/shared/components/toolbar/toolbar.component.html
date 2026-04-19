@@ -3,6 +3,9 @@
     type="button"
     mat-icon-button
     matTooltip="Paste JSON from clipboard"
+    i18n-matTooltip="@@toolbar.paste.tooltip"
+    aria-label="Paste JSON from clipboard"
+    i18n-aria-label="@@toolbar.paste.aria"
     (click)="paste.emit()"
   >
     <mat-icon>content_paste</mat-icon>
@@ -12,6 +15,9 @@
     type="button"
     mat-icon-button
     matTooltip="Upload file"
+    i18n-matTooltip="@@toolbar.upload.tooltip"
+    aria-label="Upload file"
+    i18n-aria-label="@@toolbar.upload.aria"
     (click)="triggerFilePicker()"
   >
     <mat-icon>upload_file</mat-icon>
@@ -28,6 +34,9 @@
     type="button"
     mat-icon-button
     matTooltip="Download as file"
+    i18n-matTooltip="@@toolbar.download.tooltip"
+    aria-label="Download as file"
+    i18n-aria-label="@@toolbar.download.aria"
     [disabled]="!hasContent()"
     (click)="download.emit()"
   >
@@ -40,6 +49,9 @@
     type="button"
     mat-icon-button
     matTooltip="Format (pretty-print)"
+    i18n-matTooltip="@@toolbar.format.tooltip"
+    aria-label="Format"
+    i18n-aria-label="@@toolbar.format.aria"
     [disabled]="!hasContent()"
     (click)="format.emit()"
   >
@@ -50,6 +62,9 @@
     type="button"
     mat-icon-button
     matTooltip="Minify"
+    i18n-matTooltip="@@toolbar.minify.tooltip"
+    aria-label="Minify"
+    i18n-aria-label="@@toolbar.minify.aria"
     [disabled]="!hasContent()"
     (click)="minify.emit()"
   >
@@ -60,6 +75,9 @@
     type="button"
     mat-icon-button
     matTooltip="Clear editor"
+    i18n-matTooltip="@@toolbar.clear.tooltip"
+    aria-label="Clear editor"
+    i18n-aria-label="@@toolbar.clear.aria"
     [disabled]="!hasContent()"
     (click)="clear.emit()"
   >
@@ -73,9 +91,22 @@
     [value]="mode()"
     (change)="onModeChange($any($event.value))"
     aria-label="Editor mode"
+    i18n-aria-label="@@toolbar.mode.aria"
   >
-    <mat-button-toggle value="json" matTooltip="JSON only">JSON</mat-button-toggle>
-    <mat-button-toggle value="jsonc" matTooltip="JSON with comments">JSONC</mat-button-toggle>
+    <mat-button-toggle
+      value="json"
+      matTooltip="JSON only"
+      i18n-matTooltip="@@toolbar.mode.json.tooltip"
+    >
+      <ng-container i18n="@@toolbar.mode.json.label">JSON</ng-container>
+    </mat-button-toggle>
+    <mat-button-toggle
+      value="jsonc"
+      matTooltip="JSON with comments"
+      i18n-matTooltip="@@toolbar.mode.jsonc.tooltip"
+    >
+      <ng-container i18n="@@toolbar.mode.jsonc.label">JSONC</ng-container>
+    </mat-button-toggle>
   </mat-button-toggle-group>
 
   <span class="spacer"></span>
@@ -84,6 +115,9 @@
     type="button"
     mat-icon-button
     matTooltip="Toggle layout"
+    i18n-matTooltip="@@toolbar.layout.tooltip"
+    aria-label="Toggle layout"
+    i18n-aria-label="@@toolbar.layout.aria"
     (click)="toggleLayout.emit()"
   >
     <mat-icon>{{ layoutIcon }}</mat-icon>
@@ -93,6 +127,9 @@
     type="button"
     mat-icon-button
     matTooltip="Toggle theme"
+    i18n-matTooltip="@@toolbar.theme.tooltip"
+    aria-label="Toggle theme"
+    i18n-aria-label="@@toolbar.theme.aria"
     (click)="toggleTheme.emit()"
   >
     <mat-icon>{{ themeIcon }}</mat-icon>
