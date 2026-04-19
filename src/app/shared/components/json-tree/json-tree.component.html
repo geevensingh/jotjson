@@ -33,7 +33,7 @@
   @if (root()) {
     <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
       <!-- Leaf nodes -->
-      <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding>
+      <mat-nested-tree-node *matTreeNodeDef="let node">
         <div class="tree-row" [class.is-search-hit]="searchHits().has(node.pathString)">
           <span class="tree-twisty tree-spacer" aria-hidden="true">·</span>
 
@@ -72,10 +72,10 @@
             i18n-aria-label="@@tree.copyPath.aria"
             (click)="copyPath(node)"
           >
-            <jj-icon name="copy-path" [size]="14" />
+            <jj-icon name="copy-path" [size]="15" />
           </button>
         </div>
-      </mat-tree-node>
+      </mat-nested-tree-node>
 
       <!-- Container nodes -->
       <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
@@ -116,7 +116,7 @@
             i18n-aria-label="@@tree.copyPath.aria"
             (click)="copyPath(node)"
           >
-            <jj-icon name="copy-path" [size]="14" />
+            <jj-icon name="copy-path" [size]="15" />
           </button>
         </div>
 

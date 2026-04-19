@@ -1,0 +1,75 @@
+# Dependabot configuration for JotJSON.
+# Covers ecosystems actually used in this repo:
+#   - npm: /           (Angular SPA)
+#   - npm: /api        (Azure Functions)
+#   - github-actions   (CI/CD workflows)
+# Bicep (/infra) has no Dependabot ecosystem.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - web
+    commit-message:
+      prefix: deps(web)
+      include: scope
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
+          - "@angular-devkit/*"
+      material:
+        patterns:
+          - "@angular/material"
+          - "@angular/cdk"
+      dev-minor:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - api
+    commit-message:
+      prefix: deps(api)
+      include: scope
+    groups:
+      azure-sdk:
+        patterns:
+          - "@azure/*"
+      dev-minor:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: deps(ci)
+      include: scope

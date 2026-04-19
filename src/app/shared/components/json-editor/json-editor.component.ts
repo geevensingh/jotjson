@@ -117,18 +117,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       });
 
       // JotJSON is JSONC — defer validation to our parser.
-      const jsonLang = (monaco.languages as unknown as {
-        json: {
-          jsonDefaults: {
-            setDiagnosticsOptions: (opts: {
-              validate?: boolean;
-              allowComments?: boolean;
-              trailingCommas?: 'error' | 'warning' | 'ignore';
-            }) => void;
-          };
-        };
-      }).json;
-      jsonLang.jsonDefaults.setDiagnosticsOptions({
+      monaco.json.jsonDefaults.setDiagnosticsOptions({
         validate: false,
         allowComments: true,
         trailingCommas: 'ignore'
