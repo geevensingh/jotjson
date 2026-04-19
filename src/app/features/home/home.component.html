@@ -13,7 +13,7 @@
     (toggleTheme)="onToggleTheme()"
   ></jj-toolbar>
 
-  <div class="split">
+  <div class="split" [style]="splitStyle()" #splitHost>
     <section class="pane pane-editor" aria-label="JSON input">
       <jj-json-editor
         [value]="content()"
@@ -22,7 +22,13 @@
       ></jj-json-editor>
     </section>
 
-    <div class="splitter" role="separator" aria-hidden="true"></div>
+    <div
+      class="splitter"
+      role="separator"
+      aria-orientation="vertical"
+      tabindex="-1"
+      (pointerdown)="onSplitterPointerDown($event)"
+    ></div>
 
     <section class="pane pane-tree" aria-label="Tree view" #treeHost>
       <jj-json-tree [value]="treeValue()"></jj-json-tree>

@@ -58,6 +58,20 @@ export class HomeComponent {
 
   readonly hasContent = computed(() => this.content().trim().length > 0);
 
+  readonly splitRatio = signal(this.loadSplitRatio());
+
+  readonly splitStyle = computed(() => {
+    const r = this.splitRatio();
+    const a = `${(r * 100).toFixed(3)}%`;
+    const b = `${((1 - r) * 100).toFixed(3)}%`;
+    return this.layoutOrientation() === 'vertical'
+      ? { 'grid-template-rows': `${a} var(--splitter-size) ${b}` }
+      : { 'grid-template-columns': `${a} var(--splitter-size) ${b}` };
+  });
+
+  private readonly splitHost =
+    viewChild<ElementRef<HTMLElement>>('splitHost');
+
   private readonly treeHost =
     viewChild<ElementRef<HTMLElement>>('treeHost');
 
@@ -73,6 +87,62 @@ export class HomeComponent {
         this.mode.set('jsonc');
       }
     });
+
+    // Persist split ratio to localStorage (local-only; not synced via prefs).
+    effect(() => {
+      const r = this.splitRatio();
+      try {
+        localStorage.setItem('jotjson.splitRatio.v1', String(r));
+      } catch {
+        /* storage unavailable */
+      }
+    });
+  }
+
+  onSplitterPointerDown(ev: PointerEvent): void {
+    if (ev.button !== 0) return;
+    const host = this.splitHost()?.nativeElement;
+    if (!host) return;
+    ev.preventDefault();
+    const target = ev.currentTarget as HTMLElement;
+    target.setPointerCapture(ev.pointerId);
+    const vertical = this.layoutOrientation() === 'vertical';
+
+    const move = (e: PointerEvent): void => {
+      const rect = host.getBoundingClientRect();
+      const raw = vertical
+        ? (e.clientY - rect.top) / rect.height
+        : (e.clientX - rect.left) / rect.width;
+      const clamped = Math.min(0.9, Math.max(0.1, raw));
+      this.splitRatio.set(clamped);
+    };
+
+    const end = (e: PointerEvent): void => {
+      try {
+        target.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', end);
+      target.removeEventListener('pointercancel', end);
+    };
+
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', end);
+    target.addEventListener('pointercancel', end);
+  }
+
+  private loadSplitRatio(): number {
+    try {
+      const raw = localStorage.getItem('jotjson.splitRatio.v1');
+      if (!raw) return 0.5;
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return 0.5;
+      return Math.min(0.9, Math.max(0.1, n));
+    } catch {
+      return 0.5;
+    }
   }
 
   onValueChange(next: string): void {

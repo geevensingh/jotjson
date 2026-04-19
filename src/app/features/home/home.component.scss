@@ -14,15 +14,16 @@
 
 .split {
   display: grid;
-  grid-template-columns: 1fr 4px 1fr;
+  grid-template-columns: 1fr var(--splitter-size) 1fr;
   grid-template-rows: 1fr;
   min-height: 0;
   flex: 1;
+  --splitter-size: 6px;
 }
 
 .home.vertical .split {
   grid-template-columns: 1fr;
-  grid-template-rows: 1fr 4px 1fr;
+  grid-template-rows: 1fr var(--splitter-size) 1fr;
 }
 
 .pane {
@@ -46,16 +47,37 @@
 .splitter {
   background: rgba(127, 127, 127, 0.2);
   cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  position: relative;
+  z-index: 1;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: -4px 0;
+    cursor: inherit;
+  }
+
+  &:hover,
+  &:active {
+    background: rgba(127, 127, 127, 0.45);
+  }
 }
 
 .home.vertical .splitter {
   cursor: row-resize;
+
+  &::before {
+    margin: 0 -4px;
+  }
 }
 
 @media (max-width: #{v.$breakpoint-mobile}) {
   .split {
     grid-template-columns: 1fr !important;
-    grid-template-rows: 1fr 4px 1fr !important;
+    grid-template-rows: 1fr var(--splitter-size) 1fr !important;
   }
   .splitter {
     cursor: row-resize;

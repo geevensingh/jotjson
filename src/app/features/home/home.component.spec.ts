@@ -94,4 +94,30 @@ describe('HomeComponent (unit-level)', () => {
     fixture.componentInstance.onMinify();
     expect(fixture.componentInstance.content()).toBe(broken);
   });
+
+  it('splitRatio defaults to 0.5 and splitStyle reflects orientation', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+    expect(c.splitRatio()).toBe(0.5);
+    expect(c.splitStyle()['grid-template-columns']).toContain('50.000%');
+
+    TestBed.inject(PreferencesService).update({ layoutOrientation: 'vertical' });
+    expect(c.splitStyle()['grid-template-rows']).toContain('50.000%');
+    expect(c.splitStyle()['grid-template-columns']).toBeUndefined();
+  });
+
+  it('splitRatio persists to localStorage and clamps on rehydrate', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.splitRatio.set(0.75);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(localStorage.getItem('jotjson.splitRatio.v1')).toBe('0.75');
+
+    localStorage.setItem('jotjson.splitRatio.v1', '0.02');
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ imports: [HomeComponent] });
+    const f2 = TestBed.createComponent(HomeComponent);
+    expect(f2.componentInstance.splitRatio()).toBe(0.1);
+    localStorage.removeItem('jotjson.splitRatio.v1');
+  });
 });
