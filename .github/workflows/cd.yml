@@ -42,7 +42,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.check.outputs.have_token == 'true'
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install web deps

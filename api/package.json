@@ -5,7 +5,7 @@
   "private": true,
   "main": "dist/src/functions/*.js",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "build": "tsc",
@@ -24,7 +24,7 @@
     "nanoid": "^5.0.7"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
+    "@types/node": "^24.0.0",
     "typescript": "~5.7.2"
   }
 }
