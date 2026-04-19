@@ -19,6 +19,21 @@ param customDomain string = ''
 @allowed(['Free', 'Standard'])
 param staticWebAppSku string = 'Free'
 
+@description('Microsoft Entra External ID tenant id (GUID). Empty disables JWT validation in the API.')
+param entraTenantId string = ''
+
+@description('Entra External ID authority URL, e.g. https://<subdomain>.ciamlogin.com/<tenantId>/. Empty disables JWT validation in the API.')
+param entraAuthority string = ''
+
+@description('Client id (application id) of the SPA app registration.')
+param entraSpaClientId string = ''
+
+@description('Client id (application id) of the API app registration. The API validates that incoming access tokens have this id as their audience.')
+param entraApiClientId string = ''
+
+@description('Expected audience claim for API access tokens. Typically api://<entraApiClientId>. Empty disables JWT validation in the API.')
+param entraApiAudience string = ''
+
 var resourceSuffix = toLower('${appName}-${environmentName}')
 var tags = {
   app: appName
@@ -68,6 +83,11 @@ module swa 'modules/staticWebApp.bicep' = {
       AVATAR_CONTAINER: storage.outputs.avatarsContainer
       EXPORT_CONTAINER: storage.outputs.exportsContainer
       APPLICATIONINSIGHTS_CONNECTION_STRING: insights.outputs.connectionString
+      ENTRA_TENANT_ID: entraTenantId
+      ENTRA_SPA_CLIENT_ID: entraSpaClientId
+      ENTRA_API_CLIENT_ID: entraApiClientId
+      ENTRA_AUTHORITY: entraAuthority
+      ENTRA_API_AUDIENCE: entraApiAudience
     }
   }
 }
