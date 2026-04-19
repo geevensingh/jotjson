@@ -12,6 +12,7 @@ import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
+import { IconComponent } from '../icon/icon.component';
 
 interface TreeNode {
   segment: string | number | undefined;
@@ -30,7 +31,7 @@ interface TreeNode {
 @Component({
   selector: 'jj-json-tree',
   standalone: true,
-  imports: [FormsModule, MatTreeModule],
+  imports: [FormsModule, MatTreeModule, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
   styleUrl: './json-tree.component.scss'

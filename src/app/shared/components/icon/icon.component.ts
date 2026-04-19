@@ -16,7 +16,8 @@ export type JjIconName =
   | 'layout-vertical'
   | 'sun'
   | 'moon'
-  | 'system';
+  | 'system'
+  | 'copy-path';
 
 @Component({
   selector: 'jj-icon',
@@ -96,6 +97,14 @@ export type JjIconName =
           <path d="M3 13.5h18" />
           <path d="M9 20h6" />
           <path d="M12 16.5V20" />
+        }
+        @case ('copy-path') {
+          <circle cx="3.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
+          <circle cx="7" cy="12" r="1.1" fill="currentColor" stroke="none" />
+          <circle cx="10.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
+          <rect x="14.5" y="6.5" width="7" height="13" rx="1.25" />
+          <rect x="16.5" y="4.5" width="3" height="3" rx="0.5" />
+          <path d="M16.5 12h3M16.5 14.5h3M16.5 17h2" />
         }
       }
     </svg>

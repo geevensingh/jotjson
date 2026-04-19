@@ -68,9 +68,11 @@
             class="tree-path-pill"
             title="Copy path"
             i18n-title="@@tree.copyPath.title"
+            aria-label="Copy path"
+            i18n-aria-label="@@tree.copyPath.aria"
             (click)="copyPath(node)"
           >
-            {{ node.pathString }}
+            <jj-icon name="copy-path" [size]="14" />
           </button>
         </div>
       </mat-tree-node>
@@ -110,9 +112,11 @@
             class="tree-path-pill"
             title="Copy path"
             i18n-title="@@tree.copyPath.title"
+            aria-label="Copy path"
+            i18n-aria-label="@@tree.copyPath.aria"
             (click)="copyPath(node)"
           >
-            {{ node.pathString }}
+            <jj-icon name="copy-path" [size]="14" />
           </button>
         </div>
 
