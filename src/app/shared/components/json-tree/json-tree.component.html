@@ -9,18 +9,26 @@
     [value]="search()"
     (input)="onSearchInput($event)"
   />
-  <select
+  <button
+    type="button"
     class="tree-select"
-    aria-label="Expand to level"
-    i18n-aria-label="@@tree.expand.select.aria"
-    (change)="expandToLevel(+($any($event.target).value))"
+    [matMenuTriggerFor]="expandMenu"
+    [attr.aria-label]="expandMenuButtonLabel"
   >
-    <option value="1" i18n="@@tree.expand.level.1">Expand: 1</option>
-    <option value="2" selected i18n="@@tree.expand.level.2">Expand: 2</option>
-    <option value="3" i18n="@@tree.expand.level.3">Expand: 3</option>
-    <option value="4" i18n="@@tree.expand.level.4">Expand: 4</option>
-    <option value="99" i18n="@@tree.expand.level.all">Expand: all</option>
-  </select>
+    {{ expandMenuButtonLabel }}
+  </button>
+  <mat-menu #expandMenu="matMenu">
+    <button type="button" mat-menu-item (click)="expandToLevel(1)" i18n="@@tree.expand.level.1">Expand: 1</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(2)" i18n="@@tree.expand.level.2">Expand: 2</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(3)" i18n="@@tree.expand.level.3">Expand: 3</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(4)" i18n="@@tree.expand.level.4">Expand: 4</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(5)" i18n="@@tree.expand.level.5">Expand: 5</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(6)" i18n="@@tree.expand.level.6">Expand: 6</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(7)" i18n="@@tree.expand.level.7">Expand: 7</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(8)" i18n="@@tree.expand.level.8">Expand: 8</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(9)" i18n="@@tree.expand.level.9">Expand: 9</button>
+    <button type="button" mat-menu-item (click)="expandAll()" i18n="@@tree.expand.level.all">Expand: all</button>
+  </mat-menu>
   <button type="button" class="tree-btn" (click)="expandAll()" i18n="@@tree.expand.all">
     Expand all
   </button>
@@ -33,7 +41,7 @@
   @if (root()) {
     <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
       <!-- Leaf nodes -->
-      <mat-tree-node *matTreeNodeDef="let node" matTreeNodePadding>
+      <mat-nested-tree-node *matTreeNodeDef="let node">
         <div class="tree-row" [class.is-search-hit]="searchHits().has(node.pathString)">
           <span class="tree-twisty tree-spacer" aria-hidden="true">·</span>
 
@@ -72,10 +80,10 @@
             i18n-aria-label="@@tree.copyPath.aria"
             (click)="copyPath(node)"
           >
-            <jj-icon name="copy-path" [size]="14" />
+            <jj-icon name="copy-path" [size]="15" />
           </button>
         </div>
-      </mat-tree-node>
+      </mat-nested-tree-node>
 
       <!-- Container nodes -->
       <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
@@ -86,7 +94,10 @@
             matTreeNodeToggle
             [attr.aria-label]="treeControl.isExpanded(node) ? collapseLabel : expandLabel"
           >
-            {{ treeControl.isExpanded(node) ? '▾' : '▸' }}
+            <jj-icon
+              [name]="treeControl.isExpanded(node) ? 'chevron-down' : 'chevron-right'"
+              [size]="14"
+            />
           </button>
 
           @if (node.segment !== undefined) {
@@ -116,7 +127,7 @@
             i18n-aria-label="@@tree.copyPath.aria"
             (click)="copyPath(node)"
           >
-            <jj-icon name="copy-path" [size]="14" />
+            <jj-icon name="copy-path" [size]="15" />
           </button>
         </div>
 

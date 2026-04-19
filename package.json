@@ -13,6 +13,7 @@
     "build:prod": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
+    "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
     "lint": "tsc --noEmit -p tsconfig.app.json",
     "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf"
   },
@@ -36,7 +37,7 @@
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^19.2.24",
-    "@angular/cli": "^19.2.24",
+    "@angular/cli": "^21.2.7",
     "@angular/compiler-cli": "^19.2.0",
     "@angular/localize": "^19.2.21",
     "@types/jasmine": "~5.1.0",
@@ -47,5 +48,8 @@
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
     "typescript": "~5.7.2"
+  },
+  "overrides": {
+    "serialize-javascript": "7.0.5"
   }
 }
