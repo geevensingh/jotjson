@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { authGuard } from './core/auth/auth.guard';
 
 export const routes: Routes = [
   {
@@ -31,6 +32,7 @@ export const routes: Routes = [
     path: 'profile',
     loadComponent: () =>
       import('./features/profile/profile.component').then((m) => m.ProfileComponent),
+    canActivate: [authGuard],
     title: 'Profile — JotJSON'
   },
   { path: '**', redirectTo: '' }

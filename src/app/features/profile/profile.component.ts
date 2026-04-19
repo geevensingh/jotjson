@@ -1,28 +1,28 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { AuthService } from '../../core/auth/auth.service';
+import { IconComponent } from '../../shared/components/icon/icon.component';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  template: `
-    <main>
-      <h1 i18n="@@profile.title">Profile &amp; Settings</h1>
-      <p class="note" i18n="@@profile.note">
-        Implementation in Milestone 3 (Auth) and subsequent milestones.
-      </p>
-    </main>
-  `,
-  styles: [
-    `
-      main {
-        max-width: 720px;
-        margin: 4rem auto;
-        padding: 0 1.5rem;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      }
-      .note {
-        color: #888;
-      }
-    `
-  ]
+  imports: [MatButtonModule, IconComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './profile.component.html',
+  styleUrl: './profile.component.scss'
 })
-export class ProfileComponent {}
+export class ProfileComponent {
+  private readonly auth = inject(AuthService);
+
+  readonly user = this.auth.user;
+  readonly isSignedIn = this.auth.isSignedIn;
+  readonly isConfigured = this.auth.isConfigured;
+
+  onSignIn(): void {
+    this.auth.signIn();
+  }
+
+  onSignOut(): void {
+    this.auth.signOut();
+  }
+}

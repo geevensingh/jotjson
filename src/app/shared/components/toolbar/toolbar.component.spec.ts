@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ToolbarComponent } from './toolbar.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
@@ -18,7 +19,7 @@ describe('ToolbarComponent', () => {
   async function create() {
     await TestBed.configureTestingModule({
       imports: [ToolbarComponent],
-      providers: [...provideFakeAuth()]
+      providers: [...provideFakeAuth(), provideRouter([])]
     }).compileComponents();
     const fixture = TestBed.createComponent(ToolbarComponent);
     fixture.detectChanges();

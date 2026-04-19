@@ -3,6 +3,7 @@ import { HomeComponent } from './home.component';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { DraftService } from '../../core/preferences/draft.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
+import { provideRouter } from '@angular/router';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -17,7 +18,7 @@ describe('HomeComponent (unit-level)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth()]
+      providers: [...provideFakeAuth(), provideRouter([])]
     });
   });
 

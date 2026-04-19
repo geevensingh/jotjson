@@ -11,6 +11,7 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { IconComponent, JjIconName } from '../icon/icon.component';
@@ -20,7 +21,7 @@ export type EditorMode = 'json' | 'jsonc';
 @Component({
   selector: 'jj-toolbar',
   standalone: true,
-  imports: [MatButtonModule, MatTooltipModule, MatButtonToggleModule, IconComponent],
+  imports: [MatButtonModule, MatTooltipModule, MatButtonToggleModule, RouterLink, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toolbar.component.html',
   styleUrl: './toolbar.component.scss'

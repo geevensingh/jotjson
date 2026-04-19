@@ -138,7 +138,14 @@
   @if (authConfigured) {
     <span class="divider" aria-hidden="true"></span>
     @if (isSignedIn()) {
-      <span class="user-name" aria-hidden="true">{{ user()?.displayName }}</span>
+      <a
+        class="user-name"
+        routerLink="/profile"
+        matTooltip="View profile"
+        i18n-matTooltip="@@toolbar.profile.tooltip"
+        aria-label="View profile"
+        i18n-aria-label="@@toolbar.profile.aria"
+      >{{ user()?.displayName }}</a>
       <button
         type="button"
         mat-icon-button

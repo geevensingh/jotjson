@@ -1,0 +1,60 @@
+<main class="profile">
+  <h1 i18n="@@profile.title">Profile</h1>
+
+  @if (isSignedIn()) {
+    <section class="card" aria-labelledby="profile-identity">
+      <h2 id="profile-identity" class="card-title" i18n="@@profile.identity.title">
+        Identity
+      </h2>
+
+      <dl>
+        <dt i18n="@@profile.displayName.label">Display name</dt>
+        <dd class="value">{{ user()?.displayName }}</dd>
+
+        <dt i18n="@@profile.email.label">Email</dt>
+        <dd class="value">
+          @if (user()?.email) {
+            <span>{{ user()?.email }}</span>
+          } @else {
+            <span class="muted" i18n="@@profile.email.notProvided">
+              Not provided by your identity provider
+            </span>
+          }
+        </dd>
+      </dl>
+
+      <div class="actions">
+        <button
+          type="button"
+          mat-stroked-button
+          color="warn"
+          (click)="onSignOut()"
+        >
+          <jj-icon name="sign-out" />
+          <span i18n="@@profile.signOut">Sign out</span>
+        </button>
+      </div>
+    </section>
+  } @else {
+    <section class="card" aria-labelledby="profile-signed-out">
+      <h2 id="profile-signed-out" class="card-title" i18n="@@profile.signedOut.title">
+        You are signed out
+      </h2>
+      <p i18n="@@profile.signedOut.body">
+        Sign in to view your profile, save persistent links, and keep history
+        across devices.
+      </p>
+      @if (isConfigured) {
+        <button type="button" mat-flat-button color="primary" (click)="onSignIn()">
+          <jj-icon name="sign-in" />
+          <span i18n="@@profile.signIn">Sign in</span>
+        </button>
+      } @else {
+        <button type="button" mat-flat-button color="primary" disabled>
+          <jj-icon name="sign-in" />
+          <span i18n="@@profile.signIn.notConfigured">Sign in (not configured)</span>
+        </button>
+      }
+    </section>
+  }
+</main>
