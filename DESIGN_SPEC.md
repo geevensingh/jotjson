@@ -19,7 +19,7 @@
 | JSON Tree View | Custom component (recursive tree built on `mat-tree`) |
 | State Management | Angular Signals / lightweight service-based state |
 | Routing | Angular Router (lazy-loaded feature modules) |
-| Auth | MSAL Angular (@azure/msal-angular) for Azure AD B2C |
+| Auth | MSAL Angular (@azure/msal-angular) for Microsoft Entra External ID |
 
 ### Backend — Azure
 
@@ -28,7 +28,7 @@
 | Azure Static Web Apps | Host the Angular SPA (with built-in Azure Functions proxy) |
 | Azure Functions (Node/TypeScript) | Serverless API layer |
 | Azure Cosmos DB (NoSQL, serverless tier) | Store JSON blobs, user profiles, history |
-| Azure AD B2C | Identity provider (email/password + social logins) |
+| Microsoft Entra External ID | Identity provider (email/password + Google social login). Successor to Azure AD B2C (which Microsoft is retiring). |
 | Azure CDN / Front Door | *(deferred to post-v1)* — add for WAF and advanced routing if needed. v1 uses Static Web Apps' built-in CDN and custom domain support. |
 | Azure Blob Storage | Storage for user avatars and export ZIP artifacts |
 
@@ -45,7 +45,7 @@ Browser (Angular SPA)
   └── API calls ──▶  Azure Functions (REST API)
                         │
                         ├──▶ Azure Cosmos DB  (blobs, users, history)
-                        └──▶ Azure AD B2C     (auth tokens)
+                        └──▶ Entra External ID (auth tokens)
 ```
 
 ---
@@ -71,7 +71,7 @@ Browser (Angular SPA)
 #### User
 ```
 {
-  id: string (Azure AD B2C object ID),
+  id: string (Entra External ID object ID / `oid` claim),
   displayName: string,
   email: string,
   avatarUrl?: string,
@@ -281,8 +281,8 @@ Available to **registered users** only.
 
 ### 4. Auth Pages
 
-- **Sign Up / Sign In** — handled via Azure AD B2C hosted UI (redirect to Microsoft-hosted login page, customizable via B2C user flows).
-- Options: email + password, Google, GitHub (social identity providers via B2C).
+- **Sign Up / Sign In** — handled via Microsoft Entra External ID hosted UI (redirect to Microsoft-hosted login page, customizable via External ID user flows).
+- Options for v1: email + password, Google (social identity provider via External ID). GitHub may be added in a later polish step.
 
 ### 5. Profile & Settings Page  (`/profile`)
 
@@ -291,8 +291,8 @@ Available to **registered users** only.
 - **Account Section**
   - Edit display name.
   - **Upload / change avatar** — accepts **PNG, JPEG, or WebP**; client-side validation rejects other formats. Max file size: **2 MB** (toast if exceeded). Client-side crop-to-square UI, then resize to **256×256** before upload. Stored in Azure Blob Storage, URL saved to the user profile. A "Remove avatar" option reverts to a generated default (initials on a tinted background).
-  - View email address (read-only — identity managed by Azure AD B2C).
-  - **Change password** — triggers the Azure AD B2C password reset flow (redirect to B2C's self-service password reset policy). Applies to email/password users only; hidden for social login accounts.
+  - View email address (read-only — identity managed by Entra External ID).
+  - **Change password** — triggers the Entra External ID password reset flow (redirect to the self-service password reset user flow). Applies to email/password users only; hidden for social login accounts.
   - **Linked accounts** — show which social providers are connected (Google, GitHub). Allow linking/unlinking additional providers.
   - **Delete account** — confirmation dialog, then deletes user profile, all blobs, history, and rule sets. Irreversible.
 
@@ -379,7 +379,7 @@ Available to **registered users** only.
 6. Session data (current JSON) stored in browser `localStorage` so it persists across refreshes.
 
 ### Registered User
-1. Signs in via Azure AD B2C.
+1. Signs in via Microsoft Entra External ID.
 2. All anonymous features plus:
    - **Save & Share**: persists the blob to Cosmos DB, generates a shareable link.
    - **History & My Blobs**: all saved blobs appear in `/history` with full management (edit, delete, share, toggle public/private).
@@ -432,7 +432,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 
 ### Security
 - All traffic over HTTPS (enforced by Azure Static Web Apps' built-in SSL).
-- Azure AD B2C handles all credential storage — no passwords in Cosmos DB.
+- Microsoft Entra External ID handles all credential storage — no passwords in Cosmos DB.
 - Input sanitization: JSON blobs are treated as opaque strings, never rendered as HTML.
 - CORS: allow only `jotjson.com` origins.
 - Content Security Policy headers.
@@ -550,7 +550,7 @@ src/
 | Azure Static Web Apps | Free (dev) → Standard (launch) | Hosts SPA + proxies to Functions. Start Free, upgrade to Standard before launch for SLA + 5 GB storage. |
 | Azure Functions | Consumption | Serverless API |
 | Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (partitionKey: `/ownerId`), `users` (`/id`), `history` (`/userId`), `rule-sets` (`/userId`) |
-| Azure AD B2C | Free (50k MAU) | Identity |
+| Microsoft Entra External ID | Free (50k MAU) | Identity |
 | Azure Blob Storage | Standard LRS | User avatars + export ZIP artifacts (SAS-linked, 1-hour TTL) |
 | Azure Front Door | *(deferred post-v1)* | Add for WAF / advanced routing if needed |
 | Azure Monitor / App Insights | Pay-as-you-go | Logging, telemetry |
@@ -574,7 +574,10 @@ src/
 
 1. **Project scaffolding** — Angular app, Azure Functions project, Cosmos DB setup, CI/CD pipeline.
 2. **Core editor experience** — JSON input + tree view on `/`, localStorage persistence, no auth.
-3. **Auth integration** — Azure AD B2C sign-up/sign-in, MSAL Angular, protected routes.
+3. **Auth integration** — Microsoft Entra External ID + MSAL Angular, delivered in three steps:
+   - **M3a**: Plumbing — MSAL bootstrap, `AuthService`, sign-in/sign-out toolbar control, signed-in user signal, HTTP interceptor attaching access tokens to `/api/*` calls, auth guard available (not yet applied to any route). Tenant/app-registration config read from environment/app-settings. No user-facing protected pages yet.
+   - **M3b**: Profile page scaffold at `/profile` (display name, read-only email, sign-out button). Route is auth-guarded.
+   - **M3c**: Migrate preferences from `localStorage` to the signed-in user — when the user signs in, merge/upload the current local preferences to their Cosmos DB `UserPreferences` document; subsequent changes persist to Cosmos while they remain signed in. Anonymous usage continues to read/write `localStorage`.
 4. **Persistent links** — Blob CRUD API, save & share flow, `/s/:id` route.
 5. **History** — History tracking, `/history` page, management actions.
 6. **Formatting rules** — Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
