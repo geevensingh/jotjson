@@ -30,6 +30,18 @@ describe('JsonTreeComponent', () => {
 
   afterEach(() => localStorage.removeItem(STORAGE_KEY));
 
+  it('does not warn about mixed flat/nested tree node types', async () => {
+    const warn = spyOn(console, 'warn').and.callThrough();
+    await createWith({ a: { b: 1 } });
+    const warnings = warn.calls
+      .allArgs()
+      .flat()
+      .filter((a) => typeof a === 'string' && a.includes('conflicting node types'));
+    expect(warnings)
+      .withContext('mat-tree must not emit flat/nested conflict warning')
+      .toEqual([]);
+  });
+
   describe('root() and path formatting', () => {
     it('returns undefined when no value is set', async () => {
       await createWith(undefined);
