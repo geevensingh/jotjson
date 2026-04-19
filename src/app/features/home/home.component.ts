@@ -75,6 +75,8 @@ export class HomeComponent {
   private readonly treeHost =
     viewChild<ElementRef<HTMLElement>>('treeHost');
 
+  private readonly tree = viewChild(JsonTreeComponent);
+
   constructor() {
     // Persist edits to the draft.
     effect(() => {
@@ -242,24 +244,20 @@ export class HomeComponent {
   onKeydown(ev: KeyboardEvent): void {
     // Ctrl+Shift+] / Ctrl+Shift+[ — expand/collapse all
     if (ev.ctrlKey && ev.shiftKey && (ev.key === ']' || ev.key === '[')) {
-      const tree = this.treeHost()?.nativeElement;
+      const tree = this.tree();
       if (!tree) return;
       ev.preventDefault();
-      const btn = tree.querySelector<HTMLButtonElement>(
-        ev.key === ']' ? '.tree-btn:nth-of-type(1)' : '.tree-btn:nth-of-type(2)'
-      );
-      btn?.click();
+      if (ev.key === ']') tree.expandAll();
+      else tree.collapseAll();
       return;
     }
 
     // Alt+1..9 — expand to level N (uses Alt to avoid browser tab shortcuts per spec)
     if (ev.altKey && !ev.ctrlKey && !ev.metaKey && /^[1-9]$/.test(ev.key)) {
-      const tree = this.treeHost()?.nativeElement;
-      const select = tree?.querySelector<HTMLSelectElement>('.tree-select');
-      if (select) {
+      const tree = this.tree();
+      if (tree) {
         ev.preventDefault();
-        select.value = ev.key;
-        select.dispatchEvent(new Event('change'));
+        tree.expandToLevel(Number(ev.key));
       }
       return;
     }
