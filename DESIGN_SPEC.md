@@ -589,6 +589,7 @@ src/
    - **M7h**: SEO (pre-rendering + OG tags).
    - **M7i**: Monitoring (App Insights dashboards & alerts).
    - **M7j**: Static Web Apps upgrade to Standard tier.
+   - **M7k**: Surface JSONC comments in the tree view (e.g., attach leading/trailing comments from `jsonc-parser` to the nearest node and render them as dimmed annotations or a hover affordance).
 
 ---
 
