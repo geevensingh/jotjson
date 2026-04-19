@@ -39,7 +39,7 @@ jobs:
           submodules: true
           lfs: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.check.outputs.have_token == 'true'
         with:
           node-version: 24
