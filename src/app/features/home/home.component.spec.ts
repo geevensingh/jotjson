@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { HomeComponent } from './home.component';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { DraftService } from '../../core/preferences/draft.service';
+import { provideFakeAuth } from '../../../testing/auth.testing';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -14,7 +15,10 @@ describe('HomeComponent (unit-level)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     TestBed.resetTestingModule();
-    TestBed.configureTestingModule({ imports: [HomeComponent] });
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth()]
+    });
   });
 
   afterEach(() => {

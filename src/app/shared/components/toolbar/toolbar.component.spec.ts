@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ToolbarComponent } from './toolbar.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 
@@ -15,7 +16,10 @@ describe('ToolbarComponent', () => {
   });
 
   async function create() {
-    await TestBed.configureTestingModule({ imports: [ToolbarComponent] }).compileComponents();
+    await TestBed.configureTestingModule({
+      imports: [ToolbarComponent],
+      providers: [...provideFakeAuth()]
+    }).compileComponents();
     const fixture = TestBed.createComponent(ToolbarComponent);
     fixture.detectChanges();
     return { fixture, prefs: TestBed.inject(PreferencesService) };

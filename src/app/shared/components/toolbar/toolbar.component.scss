@@ -33,3 +33,14 @@
   font-family: v.$font-ui;
   font-size: 12px;
 }
+
+.user-name {
+  font-family: v.$font-ui;
+  font-size: 12px;
+  padding: 0 8px;
+  opacity: 0.85;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

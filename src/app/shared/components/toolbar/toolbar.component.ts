@@ -11,6 +11,7 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 
@@ -26,6 +27,7 @@ export type EditorMode = 'json' | 'jsonc';
 })
 export class ToolbarComponent {
   private readonly prefs = inject(PreferencesService);
+  private readonly auth = inject(AuthService);
 
   readonly mode = input<EditorMode>('json');
   readonly hasContent = input<boolean>(false);
@@ -56,6 +58,10 @@ export class ToolbarComponent {
     return 'system';
   });
 
+  readonly isSignedIn = this.auth.isSignedIn;
+  readonly user = this.auth.user;
+  readonly authConfigured = this.auth.isConfigured;
+
   triggerFilePicker(): void {
     this.fileInput().nativeElement.click();
   }
@@ -70,4 +76,13 @@ export class ToolbarComponent {
   onModeChange(next: EditorMode): void {
     this.modeChange.emit(next);
   }
+
+  onSignIn(): void {
+    this.auth.signIn();
+  }
+
+  onSignOut(): void {
+    this.auth.signOut();
+  }
 }
+

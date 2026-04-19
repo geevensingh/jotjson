@@ -3,11 +3,12 @@ import { Environment } from './environment.interface';
 export const environment: Environment = {
   production: true,
   apiBaseUrl: '/api',
-  b2c: {
+  auth: {
     clientId: '',
     authority: '',
     knownAuthorities: [],
     redirectUri: 'https://jotjson.com/',
+    postLogoutRedirectUri: 'https://jotjson.com/',
     scopes: []
   }
 };

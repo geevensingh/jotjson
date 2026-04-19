@@ -134,4 +134,34 @@
   >
     <jj-icon [name]="themeIcon()" />
   </button>
+
+  @if (authConfigured) {
+    <span class="divider" aria-hidden="true"></span>
+    @if (isSignedIn()) {
+      <span class="user-name" aria-hidden="true">{{ user()?.displayName }}</span>
+      <button
+        type="button"
+        mat-icon-button
+        matTooltip="Sign out"
+        i18n-matTooltip="@@toolbar.signOut.tooltip"
+        aria-label="Sign out"
+        i18n-aria-label="@@toolbar.signOut.aria"
+        (click)="onSignOut()"
+      >
+        <jj-icon name="sign-out" />
+      </button>
+    } @else {
+      <button
+        type="button"
+        mat-icon-button
+        matTooltip="Sign in"
+        i18n-matTooltip="@@toolbar.signIn.tooltip"
+        aria-label="Sign in"
+        i18n-aria-label="@@toolbar.signIn.aria"
+        (click)="onSignIn()"
+      >
+        <jj-icon name="sign-in" />
+      </button>
+    }
+  }
 </div>
