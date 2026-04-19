@@ -9,7 +9,18 @@ import {
   signal,
   viewChild
 } from '@angular/core';
-import { format as jsoncFormat, applyEdits, visit } from 'jsonc-parser';
+import {
+  format as jsoncFormat,
+  applyEdits,
+  createScanner
+} from 'jsonc-parser';
+
+// SyntaxKind values inlined: jsonc-parser exports SyntaxKind as a `const enum`,
+// which TypeScript cannot access under `isolatedModules`. See jsonc-parser
+// main.d.ts: LineCommentTrivia=12, BlockCommentTrivia=13, EOF=17.
+const SK_LINE_COMMENT = 12;
+const SK_BLOCK_COMMENT = 13;
+const SK_EOF = 17;
 import { DraftService } from '../../core/preferences/draft.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import {
@@ -276,18 +287,14 @@ export class HomeComponent {
 
   private detectMode(text: string): EditorMode {
     if (!text) return 'json';
-    // Use jsonc-parser's scanner to detect comments authoritatively.
-    // Throwing a sentinel short-circuits the scan on the first comment.
-    const FOUND_COMMENT = {};
-    try {
-      visit(text, {
-        onComment: () => {
-          throw FOUND_COMMENT;
-        }
-      });
-    } catch (e) {
-      if (e === FOUND_COMMENT) return 'jsonc';
-      throw e;
+    // Scan tokens; stop on the first comment trivia.
+    const scanner = createScanner(text, /* ignoreTrivia */ false);
+    let kind = scanner.scan();
+    while (kind !== SK_EOF) {
+      if (kind === SK_LINE_COMMENT || kind === SK_BLOCK_COMMENT) {
+        return 'jsonc';
+      }
+      kind = scanner.scan();
     }
     return 'json';
   }
