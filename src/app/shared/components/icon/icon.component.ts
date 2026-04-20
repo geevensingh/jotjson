@@ -118,9 +118,9 @@ export type JjIconName =
           <path d="M11 7l5 5-5 5" />
         }
         @case ('sign-out') {
-          <path d="M9 3H5.5A1.5 1.5 0 0 0 4 4.5v15A1.5 1.5 0 0 0 5.5 21H9" />
-          <path d="M20 12H8" />
-          <path d="M15 7l5 5-5 5" />
+          <path d="M15 3h3.5A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5H15" />
+          <path d="M3 12h12" />
+          <path d="M8 7l-5 5 5 5" />
         }
       }
     </svg>
