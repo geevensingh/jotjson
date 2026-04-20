@@ -24,7 +24,7 @@ jobs:
           SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
         run: |
           if [ -z "$SWA_TOKEN" ]; then
-            echo "AZURE_STATIC_WEB_APPS_API_TOKEN not set — skipping deploy."
+            echo "AZURE_STATIC_WEB_APPS_API_TOKEN not set - skipping deploy."
             echo "have_token=false" >> "$GITHUB_OUTPUT"
           else
             echo "have_token=true" >> "$GITHUB_OUTPUT"
@@ -94,7 +94,7 @@ jobs:
           sed -i "s|__ENTRA_KNOWN_AUTHORITY__|${ENTRA_KNOWN_AUTHORITY}|g" src/environments/environment.prod.ts
           sed -i "s|__ENTRA_API_SCOPE__|${ENTRA_API_SCOPE}|g" src/environments/environment.prod.ts
           if grep -q "__ENTRA_" src/environments/environment.prod.ts; then
-            echo "::error::One or more ENTRA_* secrets are missing — aborting deploy."
+            echo "::error::One or more ENTRA_* secrets are missing - aborting deploy."
             exit 1
           fi
 

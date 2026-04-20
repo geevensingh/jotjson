@@ -37,7 +37,7 @@ export function getUsersContainer(): Container {
   return cached;
 }
 
-/** Reset the cached container — used by tests. */
+/** Reset the cached container - used by tests. */
 export function __resetUsersContainerForTesting(): void {
   cached = undefined;
 }

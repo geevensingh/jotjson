@@ -9,7 +9,7 @@ describe('JsonParserService', () => {
     svc = TestBed.inject(JsonParserService);
   });
 
-  describe('parse — empty inputs', () => {
+  describe('parse - empty inputs', () => {
     it('treats empty string as empty', () => {
       const r = svc.parse('');
       expect(r.empty).toBeTrue();
@@ -24,7 +24,7 @@ describe('JsonParserService', () => {
     });
   });
 
-  describe('parse — strict JSON', () => {
+  describe('parse - strict JSON', () => {
     it('parses primitives at root', () => {
       expect(svc.parse('42').value).toBe(42);
       expect(svc.parse('"hi"').value).toBe('hi');
@@ -39,7 +39,7 @@ describe('JsonParserService', () => {
     });
   });
 
-  describe('parse — JSONC tolerance', () => {
+  describe('parse - JSONC tolerance', () => {
     it('accepts // line comments', () => {
       const r = svc.parse('// top\n{"a":1}');
       expect(r.value).toEqual({ a: 1 });
@@ -59,7 +59,7 @@ describe('JsonParserService', () => {
     });
   });
 
-  describe('parse — error reporting', () => {
+  describe('parse - error reporting', () => {
     it('reports structured errors with line/column', () => {
       const r = svc.parse('{"a":}');
       expect(r.errors.length).toBeGreaterThan(0);

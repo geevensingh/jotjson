@@ -16,7 +16,7 @@ Azure Functions (Node.js v4 programming model, TypeScript). Deployed as Static W
 When running the Angular dev server (`ng serve`), requests to `/api/*`
 on `http://localhost:4200` are forwarded to `http://localhost:7071` via
 `proxy.conf.json` in the repo root. Start the Functions host first
-(`cd api && npm start`), then `npm start` from the repo root — otherwise
+(`cd api && npm start`), then `npm start` from the repo root - otherwise
 the SPA dev server returns `index.html` for `/api/*` and the browser
 sees "Http failure during parsing" because it was expecting JSON.
 

@@ -54,7 +54,7 @@ Thumbs.db
 # Scratch directory for scripts/generate-icons.mjs (ephemeral sharp install).
 /.iconbuild
 
-# Local dev environment with real Entra/MSAL values — never committed.
+# Local dev environment with real Entra/MSAL values - never committed.
 # Use `src/environments/environment.example.ts` as the template.
 /src/environments/environment.ts
 

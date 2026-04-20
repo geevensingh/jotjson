@@ -10,13 +10,13 @@ const FLUSH_DEBOUNCE_MS = 500;
 
 /**
  * Preference sync lifecycle against the server:
- * - `anon`        — no authenticated user; preferences live in localStorage.
- * - `hydrating`   — user just signed in; we are reading `/api/me` to decide
+ * - `anon`        - no authenticated user; preferences live in localStorage.
+ * - `hydrating`   - user just signed in; we are reading `/api/me` to decide
  *                   whether to replace local state (remote wins) or seed
  *                   the server from local (first sign-in ever).
- * - `synced`      — signed in and preferences are being mirrored to the
+ * - `synced`      - signed in and preferences are being mirrored to the
  *                   server.
- * - `error`       — hydration or write failed. Local state is authoritative
+ * - `error`       - hydration or write failed. Local state is authoritative
  *                   for now; writes are NOT retried silently.
  */
 export type PreferenceSyncState = 'anon' | 'hydrating' | 'synced' | 'error';
@@ -72,7 +72,7 @@ export class PreferencesService {
   readonly effectiveTheme = computed(() => resolveEffectiveTheme(this._prefs().theme));
 
   /**
-   * Monotonically increasing "sync generation" — incremented whenever the
+   * Monotonically increasing "sync generation" - incremented whenever the
    * authenticated user changes. Pending writes captured against an old
    * generation are dropped rather than sent to the wrong account.
    */
@@ -130,7 +130,7 @@ export class PreferencesService {
 
     if (typeof window !== 'undefined') {
       const flushOnHide = (): void => {
-        // `pagehide` fires when the tab is discarded — flush any pending
+        // `pagehide` fires when the tab is discarded - flush any pending
         // debounced write synchronously. The HTTP client is still async,
         // but we at least give the request a chance to leave the box.
         this.flushPending();

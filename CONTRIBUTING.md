@@ -5,9 +5,9 @@ both humans and AI agents. Please read these before opening a PR.
 
 ## Before You Start
 
-1. Read [`DESIGN_SPEC.md`](DESIGN_SPEC.md) — it is the source of truth for
+1. Read [`DESIGN_SPEC.md`](DESIGN_SPEC.md) - it is the source of truth for
    product behavior, architecture, entities, and limits.
-2. Read [`AGENTS.md`](AGENTS.md) — it is the authoritative coding, testing,
+2. Read [`AGENTS.md`](AGENTS.md) - it is the authoritative coding, testing,
    security, and workflow guide. Everything below is a summary; `AGENTS.md`
    wins on any conflict.
 
@@ -29,14 +29,14 @@ frameworks, or cloud services without prior approval.
    `fix/<short-slug>`.
 2. **First-time setup**: copy
    `src/environments/environment.example.ts` to
-   `src/environments/environment.ts`. The real file is gitignored — fill in
+   `src/environments/environment.ts`. The real file is gitignored - fill in
    your local Microsoft Entra External ID values for sign-in to work
    (`infra/README.md` → "Auth setup" walks through provisioning). Leaving the
    placeholders in place is fine if you don't need to exercise auth locally;
    the toolbar will show a disabled "Sign in (not configured)" button.
 3. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
    `inject()`, Signals, kebab-case filenames, co-located `*.spec.ts`).
-4. **Test** — add or update tests for any logic change. No test = not done.
+4. **Test** - add or update tests for any logic change. No test = not done.
 5. **Validate** locally:
    - `npm run lint` (frontend and `api/`)
    - `npm test` (frontend and `api/`)
@@ -57,7 +57,7 @@ frameworks, or cloud services without prior approval.
 
 ## Pull Requests
 
-- Keep PRs focused — one logical change per PR.
+- Keep PRs focused - one logical change per PR.
 - Link the relevant issue or spec section.
 - Update `DESIGN_SPEC.md` in the same PR if behavior or architecture changes.
 - CI (lint, test, build for both frontend and Functions) must be green.

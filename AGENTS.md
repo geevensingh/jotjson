@@ -1,4 +1,4 @@
-# Agent Instructions — JotJSON
+# Agent Instructions - JotJSON
 
 These are the default instructions for any AI coding agent (Copilot CLI, Copilot
 coding agent, Cursor, Claude Code, etc.) working in this repository. Follow them
@@ -17,7 +17,7 @@ unless a task explicitly overrides a specific rule.
 - **Frontend:** Angular (latest LTS), standalone components, Angular Signals for
   state, Angular Material for UI, Angular Router with lazy-loaded features,
   MSAL Angular for auth, SCSS for styles.
-- **Editor:** Monaco (lazy-loaded). JSON/JSONC parsing via `jsonc-parser` — do
+- **Editor:** Monaco (lazy-loaded). JSON/JSONC parsing via `jsonc-parser` - do
   **not** use native `JSON.parse` for user input.
 - **Backend:** Azure Functions in **TypeScript (Node)**. No other languages.
 - **Data:** Azure Cosmos DB (NoSQL, serverless). Respect container partition
@@ -49,7 +49,7 @@ Place new code in the correct bucket:
 
 ### TypeScript (frontend + functions)
 - `strict: true`, `noImplicitAny`, `noUncheckedIndexedAccess`. Never disable
-  with `any` — use `unknown` + narrowing.
+  with `any` - use `unknown` + narrowing.
 - Prefer `type` for unions/aliases, `interface` for object contracts that may be
   extended.
 - No default exports in app code (except Angular-required cases).
@@ -62,9 +62,9 @@ Place new code in the correct bucket:
   routing, events).
 - Use `inject()` over constructor DI for new code.
 - Components: `OnPush` change detection by default.
-- Template logic stays trivial — push branching into the component or a pipe.
+- Template logic stays trivial - push branching into the component or a pipe.
 - Styles are component-scoped SCSS. Global tokens live in `src/styles/`.
-- Theming uses the `TreeHighlightColors` / theme tokens from the spec — do not
+- Theming uses the `TreeHighlightColors` / theme tokens from the spec - do not
   hardcode colors in components.
 
 ### Internationalization (i18n)
@@ -76,7 +76,7 @@ Place new code in the correct bucket:
   use `i18n-<attrname>="@@id"`.
 - TS/Runtime strings (toast messages, logs that are visible to users, aria
   labels bound via expressions) use `$localize` tagged template literals with
-  a stable ID, e.g., ``$localize`:@@upload.tooLarge:File too large — max 5 MB` ``.
+  a stable ID, e.g., ``$localize`:@@upload.tooLarge:File too large - max 5 MB` ``.
 - Stable ID convention: `<area>.<element>.<purpose>` in camelCase / dot
   segments (e.g., `@@tree.search.placeholder`, `@@home.empty`).
 - Never use plain strings in templates or `console.warn`/`toast` calls when
@@ -127,7 +127,7 @@ Before finishing a task:
 1. `npm run lint` passes (frontend and `api/`).
 2. `npm test` passes (frontend and `api/`).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
-4. Only run the suites that exist — do not introduce new toolchains to satisfy
+4. Only run the suites that exist - do not introduce new toolchains to satisfy
    this checklist. If a suite isn't set up yet and the task is scaffolding,
    set it up per the spec.
 5. No new TypeScript errors, ESLint errors, or console warnings introduced.

@@ -4,9 +4,9 @@
  * should not have to reach into MSAL types directly.
  */
 export interface AuthUser {
-  /** Stable Entra object id — `oid` claim, falling back to `sub`. */
+  /** Stable Entra object id - `oid` claim, falling back to `sub`. */
   id: string;
-  /** Display name — `name` claim, falling back to the account `username`. */
+  /** Display name - `name` claim, falling back to the account `username`. */
   displayName: string;
   /**
    * Email address if the IdP released one. Not guaranteed: social providers

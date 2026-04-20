@@ -17,7 +17,7 @@ export class UserApiService {
 
   /**
    * Read the current user's document. Returns `null` if the server responds
-   * 404 — this indicates the user has signed in but has never had a
+   * 404 - this indicates the user has signed in but has never had a
    * document seeded. Other errors propagate.
    */
   getMe(): Observable<User | null> {

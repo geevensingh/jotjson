@@ -1,7 +1,7 @@
 /**
  * Shared preference schema + normalization for the `/api/me/preferences`
  * endpoint. This file intentionally re-declares the same `UserPreferences`
- * shape as `src/app/core/api/models.ts` — `api/` has an independent
+ * shape as `src/app/core/api/models.ts` - `api/` has an independent
  * tsconfig and cannot import from the Angular app.
  *
  * Keep these two copies in lockstep. The canonical version is the one in
@@ -177,7 +177,7 @@ function normalizeColorSet(input: unknown, field: string): ThemeColorSet {
  * returns a normalized copy. Rejects unknown keys, out-of-range numbers,
  * invalid enum values, and malformed hex colors.
  *
- * We deliberately require the full object (not a partial) — per the M3c
+ * We deliberately require the full object (not a partial) - per the M3c
  * rubber-duck review, accepting partial updates on nested fields like
  * `treeHighlightColors` invites clobbers.
  */

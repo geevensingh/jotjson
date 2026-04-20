@@ -116,7 +116,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         bracketPairColorization: { enabled: true }
       });
 
-      // JotJSON is JSONC — defer validation to our parser.
+      // JotJSON is JSONC - defer validation to our parser.
       monaco.json.jsonDefaults.setDiagnosticsOptions({
         validate: false,
         allowComments: true,

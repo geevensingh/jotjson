@@ -2,7 +2,7 @@
 
 A place to **input, store, and display JSON**. Paste or type JSON (or JSONC)
 on the left and it is parsed, formatted, and rendered as a searchable tree on
-the right. Anonymous use is the default — signing in unlocks persistent,
+the right. Anonymous use is the default - signing in unlocks persistent,
 shareable links, history, and formatting rules (planned).
 
 Production site: **https://jotjson.com** (target).
@@ -86,7 +86,7 @@ npm start              # func start (also runs build via prestart)
 npm run lint           # tsc --noEmit
 ```
 
-`api/local.settings.sample.json` documents required settings — copy to
+`api/local.settings.sample.json` documents required settings - copy to
 `local.settings.json` (gitignored) and fill in.
 
 ### Infra (Bicep)
@@ -99,11 +99,11 @@ resource layout.
 
 Three workflows run on push and PR:
 
-- **CI** (`ci.yml`) — Web build + type-check, API build, Bicep validate, web
+- **CI** (`ci.yml`) - Web build + type-check, API build, Bicep validate, web
   unit tests with coverage artifact.
-- **CD** (`cd.yml`) — Deploys the web app + managed Functions to Azure Static
+- **CD** (`cd.yml`) - Deploys the web app + managed Functions to Azure Static
   Web Apps. Gated on `AZURE_STATIC_WEB_APPS_API_TOKEN` being configured.
-- **Infra** (`infra.yml`) — `az deployment group what-if` / apply for Bicep
+- **Infra** (`infra.yml`) - `az deployment group what-if` / apply for Bicep
   changes. Gated on `vars.AZURE_CLIENT_ID` (OIDC federated credentials).
 
 Dependencies are kept current by Dependabot (`.github/dependabot.yml`:
@@ -120,7 +120,7 @@ before opening a PR. Key rules:
   `npm run build` must pass before merge (enforced by CI).
 - Strict TypeScript; no `any`. Standalone Angular components, `OnPush`,
   `inject()`, Signals. Kebab-case filenames.
-- Use `jsonc-parser` — never `JSON.parse` — for user JSON/JSONC input.
+- Use `jsonc-parser` - never `JSON.parse` - for user JSON/JSONC input.
 - Never log or transmit clipboard/editor contents. No secrets in source.
 
 AI-assisted commits include:

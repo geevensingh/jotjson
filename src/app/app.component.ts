@@ -16,7 +16,7 @@ export class AppComponent implements OnInit {
   ngOnInit(): void {
     // Process a returning sign-in redirect (if any) and prime the user
     // signal from the MSAL cache. Standalone Angular apps must do this
-    // themselves — `MsalRedirectComponent` is an NgModule-era construct.
+    // themselves - `MsalRedirectComponent` is an NgModule-era construct.
     void this.auth.initializeFromRedirect();
   }
 }

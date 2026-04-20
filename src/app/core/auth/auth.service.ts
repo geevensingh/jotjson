@@ -17,13 +17,13 @@ import { MSAL_INSTANCE } from './msal-instance';
  * Entry point for identity in the app.
  *
  * Exposes:
- * - `user()` — signal of the current `AuthUser` or `null`.
- * - `isSignedIn()` — computed derived signal.
- * - `isConfigured` — whether the environment has real auth config
+ * - `user()` - signal of the current `AuthUser` or `null`.
+ * - `isSignedIn()` - computed derived signal.
+ * - `isConfigured` - whether the environment has real auth config
  *   (non-empty clientId). False in local dev with empty config, and the
  *   toolbar disables sign-in in that case.
- * - `signIn()` / `signOut()` — interactive redirect flows.
- * - `acquireTokenSilent()` — silent-only; returns `null` on failure.
+ * - `signIn()` / `signOut()` - interactive redirect flows.
+ * - `acquireTokenSilent()` - silent-only; returns `null` on failure.
  *
  * Redirect handling is driven by `AppComponent` via
  * `initializeFromRedirect()`, which must be called once on app start.

@@ -2,7 +2,7 @@
 
 The default coding instructions for this repository live in
 [`AGENTS.md`](../AGENTS.md) at the repo root. Follow those in full for every
-task — they cover the tech stack, project layout, coding conventions, testing,
+task - they cover the tech stack, project layout, coding conventions, testing,
 security, and Definition of Done.
 
 Key points (see `AGENTS.md` for the authoritative version):

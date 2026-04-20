@@ -8,7 +8,7 @@ import { environment } from '../../../environments/environment';
 
 /**
  * Re-export msal-angular's `MSAL_INSTANCE` token so application code has a
- * single import source. We deliberately do NOT define our own token — the
+ * single import source. We deliberately do NOT define our own token - the
  * built-in `MsalService` and `MsalBroadcastService` both inject
  * `@azure/msal-angular`'s `MSAL_INSTANCE`, and having two tokens with the
  * same debug name causes a NullInjectorError for the msal-angular services.

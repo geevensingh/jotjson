@@ -4,22 +4,22 @@ Bicep templates for Azure resources backing JotJSON. See DESIGN_SPEC.md § Azure
 
 ## Resources provisioned
 
-- **Static Web App** — hosts the Angular SPA and SWA-managed Functions (`/api`).
-- **Azure DNS zone** — `jotjson.com`. Nameservers are delegated at the
+- **Static Web App** - hosts the Angular SPA and SWA-managed Functions (`/api`).
+- **Azure DNS zone** - `jotjson.com`. Nameservers are delegated at the
   the registrar (GoDaddy) so SWA custom domain binding works. See
   [DNS + custom domain](#dns--custom-domain).
-- **Cosmos DB (serverless)** — database `jotjson` with containers:
+- **Cosmos DB (serverless)** - database `jotjson` with containers:
   - `blobs` (partition key: `/ownerId`, 30-day default TTL for anonymous)
   - `users` (partition key: `/id`)
   - `history` (partition key: `/userId`)
   - `rule-sets` (partition key: `/userId`)
-- **Blob Storage** — containers `avatars`, `exports`.
-- **Application Insights + Log Analytics** — telemetry.
+- **Blob Storage** - containers `avatars`, `exports`.
+- **Application Insights + Log Analytics** - telemetry.
 
 **Not provisioned here** (managed separately):
-- Microsoft Entra External ID tenant + app registrations — must be created
+- Microsoft Entra External ID tenant + app registrations - must be created
   manually in the Entra admin center (see [Auth setup](#auth-setup)).
-- Registrar nameserver delegation — one-time manual step at GoDaddy; see
+- Registrar nameserver delegation - one-time manual step at GoDaddy; see
   [DNS + custom domain](#dns--custom-domain).
 
 ## Current deployment
@@ -90,7 +90,7 @@ The SPA's MSAL config uses `scopes: ['api://<apiClientId>/access_as_user']`.
 - Create a **Sign up and sign in** user flow.
 - Enable identity providers:
   - **Email with password** (built-in).
-  - **Google** — requires registering a separate OAuth 2.0 client in Google
+  - **Google** - requires registering a separate OAuth 2.0 client in Google
     Cloud Console (authorized redirect URI is the tenant-issued callback;
     Entra shows the exact value). Paste the Google client id + secret into
     the Entra federation config.
@@ -130,8 +130,8 @@ secrets:
 **Redirect URIs to register on the SPA app** (Entra → App registrations →
 JotJSON Web (SPA) → Authentication, Single-page application platform):
 
-- `https://jotjson.com/` — production custom domain.
-- `http://localhost:4200/` — local `ng serve`.
+- `https://jotjson.com/` - production custom domain.
+- `http://localhost:4200/` - local `ng serve`.
 - Optionally your SWA default hostname (e.g.
   `https://<site>.azurestaticapps.net/`) during the window before the custom
   domain is bound. The production build's `redirectUri` is hard-coded to
@@ -170,7 +170,7 @@ the zone to Azure nameservers.
 2. Log into GoDaddy → **Domains → jotjson.com → Nameservers → Change**.
    Replace GoDaddy's defaults with the 4 Azure nameservers. Save.
 3. Wait for propagation (usually 15–60 min, up to 48h). Verify with
-   `nslookup -type=NS jotjson.com` — it should return the Azure nameservers.
+   `nslookup -type=NS jotjson.com` - it should return the Azure nameservers.
 4. In the Azure portal → Static Web App → **Custom domains** → delete any
    stale pending entries for `jotjson.com` left over from earlier attempts.
    Re-add using **Custom domain on Azure DNS** → pick the `jotjson.com` zone.

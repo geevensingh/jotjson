@@ -24,7 +24,7 @@ export const appConfig: ApplicationConfig = {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000'
     }),
-    // MSAL wiring — deliberately NOT using `MsalRedirectComponent` or the
+    // MSAL wiring - deliberately NOT using `MsalRedirectComponent` or the
     // `MSAL_GUARD_CONFIG`/`MSAL_INTERCEPTOR_CONFIG` bundles, which assume an
     // NgModule bootstrap. Standalone apps drive redirect handling themselves
     // from `AppComponent.ngOnInit` via `AuthService.initializeFromRedirect()`.

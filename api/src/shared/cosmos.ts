@@ -8,8 +8,8 @@ let cachedDatabase: Database | undefined;
  * Returns a cached Cosmos DB client and database handle.
  *
  * Auth precedence:
- *  1. COSMOS_KEY env var (local dev fallback) — key auth
- *  2. DefaultAzureCredential — managed identity in Azure; `az login` locally
+ *  1. COSMOS_KEY env var (local dev fallback) - key auth
+ *  2. DefaultAzureCredential - managed identity in Azure; `az login` locally
  *
  * COSMOS_ENDPOINT is always required. COSMOS_DATABASE defaults to `jotjson`.
  */
@@ -31,7 +31,7 @@ export function getCosmos(): { client: CosmosClient; database: Database } {
   return { client: cachedClient, database: cachedDatabase };
 }
 
-/** Reset the cached client — used by tests. */
+/** Reset the cached client - used by tests. */
 export function __resetCosmosForTesting(): void {
   cachedClient = undefined;
   cachedDatabase = undefined;

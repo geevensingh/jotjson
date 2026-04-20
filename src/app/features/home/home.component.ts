@@ -35,7 +35,7 @@ import {
 } from '../../shared/components/toolbar/toolbar.component';
 
 /**
- * Primary editor + tree experience. Home is an anonymous page — persistence
+ * Primary editor + tree experience. Home is an anonymous page - persistence
  * goes to localStorage via DraftService (spec §Features #1 / §Milestones #2).
  */
 @Component({
@@ -170,7 +170,7 @@ export class HomeComponent {
         this.content.set(text);
       }
     } catch {
-      // Clipboard unavailable / denied — graceful fallback: user can still Ctrl+V.
+      // Clipboard unavailable / denied - graceful fallback: user can still Ctrl+V.
     }
   }
 
@@ -254,7 +254,7 @@ export class HomeComponent {
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(ev: KeyboardEvent): void {
-    // Ctrl+Shift+] / Ctrl+Shift+[ — expand/collapse all
+    // Ctrl+Shift+] / Ctrl+Shift+[ - expand/collapse all
     if (ev.ctrlKey && ev.shiftKey && (ev.key === ']' || ev.key === '[')) {
       const tree = this.tree();
       if (!tree) return;
@@ -264,7 +264,7 @@ export class HomeComponent {
       return;
     }
 
-    // Alt+1..9 — expand to level N (uses Alt to avoid browser tab shortcuts per spec)
+    // Alt+1..9 - expand to level N (uses Alt to avoid browser tab shortcuts per spec)
     if (ev.altKey && !ev.ctrlKey && !ev.metaKey && /^[1-9]$/.test(ev.key)) {
       const tree = this.tree();
       if (tree) {

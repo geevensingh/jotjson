@@ -6,8 +6,8 @@
  * validate those tokens here before exposing user-scoped data.
  *
  * Configuration via environment variables (all required for live checks):
- * - ENTRA_AUTHORITY — e.g. `https://<subdomain>.ciamlogin.com/<tenantId>/`
- * - ENTRA_API_AUDIENCE — the API application's client id or App ID URI
+ * - ENTRA_AUTHORITY - e.g. `https://<subdomain>.ciamlogin.com/<tenantId>/`
+ * - ENTRA_API_AUDIENCE - the API application's client id or App ID URI
  *
  * If either is empty the middleware returns 401 for protected calls rather
  * than silently bypassing validation.
@@ -18,11 +18,11 @@ import type { GetPublicKeyOrSecret, JwtPayload } from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
 
 export interface AuthenticatedPrincipal {
-  /** Stable Entra object id — `oid` claim, falling back to `sub`. */
+  /** Stable Entra object id - `oid` claim, falling back to `sub`. */
   id: string;
-  /** Display name — `name` claim if present. */
+  /** Display name - `name` claim if present. */
   displayName?: string;
-  /** Email — `email` or `preferred_username`. */
+  /** Email - `email` or `preferred_username`. */
   email?: string;
   /** Raw validated JWT payload, for callers that need additional claims. */
   claims: JwtPayload;
@@ -119,7 +119,7 @@ function getJwksClient(authority: string): JwksClientLike {
 }
 
 /**
- * Injectable hook for tests — swap in a fake JWKS client without touching
+ * Injectable hook for tests - swap in a fake JWKS client without touching
  * the network. Production code never calls this.
  */
 export function __setJwksClientForTesting(client: JwksClientLike | null): void {
@@ -142,7 +142,7 @@ function getKey(authority: string): GetPublicKeyOrSecret {
 }
 
 function extractBearerToken(req: HttpRequest): string | null {
-  // Prefer the custom header — Azure Static Web Apps strips the standard
+  // Prefer the custom header - Azure Static Web Apps strips the standard
   // `Authorization` header from requests forwarded to managed Functions,
   // so our SPA sends the bearer token under a custom name. Fall back to
   // `Authorization` for local development (where requests go through the
@@ -203,7 +203,7 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
  * Middleware-style helper for Functions routes. Call at the top of a
  * handler that should only execute for signed-in users.
  *
- * NOTE: Not wired to any route in M3a — lives ready for M4's blob CRUD.
+ * NOTE: Not wired to any route in M3a - lives ready for M4's blob CRUD.
  */
 export async function requireAuth(req: HttpRequest): Promise<AuthenticatedPrincipal> {
   const token = extractBearerToken(req);
