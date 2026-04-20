@@ -5,7 +5,7 @@ Bicep templates for Azure resources backing JotJSON. See DESIGN_SPEC.md § Azure
 ## Resources provisioned
 
 - **Static Web App** — hosts the Angular SPA and SWA-managed Functions (`/api`).
-- **Azure DNS zone** (prod only) — `jotjson.com`. Nameservers are delegated at
+- **Azure DNS zone** — `jotjson.com`. Nameservers are delegated at the
   the registrar (GoDaddy) so SWA custom domain binding works. See
   [DNS + custom domain](#dns--custom-domain).
 - **Cosmos DB (serverless)** — database `jotjson` with containers:
@@ -25,16 +25,14 @@ Bicep templates for Azure resources backing JotJSON. See DESIGN_SPEC.md § Azure
 ## Current deployment
 
 The live site runs out of `rg-jotjson-dev` / `swa-jotjson-dev` (the CD
-pipeline's SWA deploy token targets that resource). For a solo project there's
-no dev/prod separation today; the `dev` environment **is** production.
-`prod.bicepparam` exists for the day a split is useful, but it isn't wired to
-anything live.
+pipeline's SWA deploy token targets that resource). For a solo project
+there's no dev/prod separation; the `dev` environment **is** production.
+A parallel `prod` stack can be added later if the split becomes useful.
 
 ## Deploy
 
-Trigger **Actions → Deploy infra (Bicep) → Run workflow → dev** (or `prod`
-once a parallel stack is warranted). The workflow ensures the resource group
-exists before running `az deployment group create`.
+Trigger **Actions → Deploy infra (Bicep) → Run workflow**. The workflow
+ensures `rg-jotjson-dev` exists before running `az deployment group create`.
 
 Manual equivalent:
 
@@ -144,9 +142,9 @@ JotJSON Web (SPA) → Authentication, Single-page application platform):
 
 ```powershell
 az deployment group create `
-  --resource-group rg-jotjson-prod `
+  --resource-group rg-jotjson-dev `
   --template-file main.bicep `
-  --parameters parameters/prod.bicepparam `
+  --parameters parameters/dev.bicepparam `
   --parameters entraTenantId=$env:ENTRA_TENANT_ID `
                entraAuthority=$env:ENTRA_AUTHORITY `
                entraSpaClientId=$env:ENTRA_SPA_CLIENT_ID `
@@ -158,14 +156,14 @@ az deployment group create `
 
 Apex (`jotjson.com`) is the canonical hostname. Azure Static Web Apps only
 supports apex via ALIAS / ANAME / flattened CNAME records, which **GoDaddy
-does not support**. So prod DNS lives in **Azure DNS** (zone provisioned by
+does not support**. So DNS lives in **Azure DNS** (zone provisioned by
 `modules/dnsZone.bicep`), and GoDaddy is just the registrar that delegates
 the zone to Azure nameservers.
 
 **One-time setup:**
 
 1. Deploy infra (`infra.yml` workflow, or the manual command above). Bicep
-   creates the `jotjson.com` DNS zone in `rg-jotjson-prod`. The deployment
+   creates the `jotjson.com` DNS zone in `rg-jotjson-dev`. The deployment
    output `dnsNameServers` lists 4 Azure nameservers, e.g.
    `ns1-xx.azure-dns.com`, `ns2-xx.azure-dns.net`, etc. (Also visible in the
    Azure portal → DNS zone → Overview.)
