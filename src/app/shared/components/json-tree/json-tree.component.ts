@@ -47,7 +47,7 @@ export class JsonTreeComponent {
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
 
-  readonly expandMenuButtonLabel = $localize`:@@tree.expand.menu.button:Expand to…`;
+  readonly expandMenuButtonLabel = $localize`:@@tree.expand.menu.button:Expand to...`;
 
   readonly treeControl = new NestedTreeControl<TreeNode, string>(
     (n) => n.children ?? [],
@@ -184,11 +184,11 @@ export class JsonTreeComponent {
   containerSummary(node: TreeNode): string {
     if (node.type === 'array') {
       const n = (node.value as unknown[]).length;
-      return `[ ${n === 0 ? '' : '…'} ]`;
+      return `[ ${n === 0 ? '' : '...'} ]`;
     }
     if (node.type === 'object') {
       const keys = Object.keys(node.value as Record<string, unknown>);
-      return `{ ${keys.length === 0 ? '' : '…'} }`;
+      return `{ ${keys.length === 0 ? '' : '...'} }`;
     }
     return '';
   }

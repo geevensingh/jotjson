@@ -219,7 +219,7 @@ export class HomeComponent {
     if (parsed.empty || parsed.errors.length > 0) return;
     try {
       this.content.set(JSON.stringify(parsed.value));
-      // Minified output has no comments → switch back to JSON mode.
+      // Minified output has no comments -> switch back to JSON mode.
       this.mode.set('json');
     } catch {
       /* ignore */
@@ -274,7 +274,7 @@ export class HomeComponent {
       return;
     }
 
-    // Ctrl+F when focus is NOT in the editor → focus tree search. When in the
+    // Ctrl+F when focus is NOT in the editor -> focus tree search. When in the
     // editor, Monaco's native find runs.
     if ((ev.ctrlKey || ev.metaKey) && ev.key === 'f') {
       const active = document.activeElement;

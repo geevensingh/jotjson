@@ -1,14 +1,14 @@
 /**
  * /api/me - authenticated user endpoints.
  *
- * GET  /api/me                    → read the current user document
+ * GET  /api/me                    -> read the current user document
  *                                   200 with doc, or 404 if not yet seeded
- * POST /api/me                    → first-time seed: create a user document
+ * POST /api/me                    -> first-time seed: create a user document
  *                                   with preferences taken from the request
  *                                   body (typically the anon user's local
  *                                   prefs). Idempotent - returns 409 if the
  *                                   document already exists.
- * PUT  /api/me/preferences        → replace the full preferences object
+ * PUT  /api/me/preferences        -> replace the full preferences object
  *                                   with a validated + normalized copy.
  *                                   Returns the normalized preferences.
  *

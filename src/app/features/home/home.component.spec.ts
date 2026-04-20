@@ -30,7 +30,7 @@ describe('HomeComponent (unit-level)', () => {
     localStorage.removeItem(SPLIT_KEY);
   });
 
-  it('onToggleTheme cycles light → dark → system → light', () => {
+  it('onToggleTheme cycles light -> dark -> system -> light', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const prefs = TestBed.inject(PreferencesService);
     prefs.update({ theme: 'light' });

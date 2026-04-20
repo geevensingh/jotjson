@@ -31,7 +31,7 @@ frameworks, or cloud services without prior approval.
    `src/environments/environment.example.ts` to
    `src/environments/environment.ts`. The real file is gitignored - fill in
    your local Microsoft Entra External ID values for sign-in to work
-   (`infra/README.md` → "Auth setup" walks through provisioning). Leaving the
+   (`infra/README.md` -> "Auth setup" walks through provisioning). Leaving the
    placeholders in place is fine if you don't need to exercise auth locally;
    the toolbar will show a disabled "Sign in (not configured)" button.
 3. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
@@ -47,7 +47,7 @@ frameworks, or cloud services without prior approval.
 
 ## Commit Messages
 
-- Imperative mood, sentence case, ≤ 72 chars for the subject.
+- Imperative mood, sentence case, <= 72 chars for the subject.
 - Body explains **why**, not just **what**, when non-obvious.
 - If the commit was authored with AI assistance, include this trailer:
 

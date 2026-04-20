@@ -31,7 +31,7 @@ A parallel `prod` stack can be added later if the split becomes useful.
 
 ## Deploy
 
-Trigger **Actions → Deploy infra (Bicep) → Run workflow**. The workflow
+Trigger **Actions -> Deploy infra (Bicep) -> Run workflow**. The workflow
 ensures `rg-jotjson-dev` exists before running `az deployment group create`.
 
 Manual equivalent:
@@ -67,7 +67,7 @@ Authority URL is `https://<subdomain>.ciamlogin.com/<tenantId>/`.
 - Post-logout redirect URIs: same as above.
 - Leave implicit grant / hybrid flow unchecked.
 
-Record the **Application (client) id** → `ENTRA_SPA_CLIENT_ID`.
+Record the **Application (client) id** -> `ENTRA_SPA_CLIENT_ID`.
 
 ### 3. Register the API app (Functions)
 
@@ -75,13 +75,13 @@ Record the **Application (client) id** → `ENTRA_SPA_CLIENT_ID`.
 - **Expose an API**: set Application ID URI to `api://<apiClientId>` and add a
   scope `access_as_user` (admins + users consent).
 
-Record the **Application (client) id** → `ENTRA_API_CLIENT_ID`.
+Record the **Application (client) id** -> `ENTRA_API_CLIENT_ID`.
 The audience the API validates is `ENTRA_API_AUDIENCE = api://<apiClientId>`.
 
 ### 4. Wire the SPA to the API
 
-On the SPA app registration → **API permissions** → add the
-`access_as_user` delegated scope from the API app → **Grant admin consent**.
+On the SPA app registration -> **API permissions** -> add the
+`access_as_user` delegated scope from the API app -> **Grant admin consent**.
 
 The SPA's MSAL config uses `scopes: ['api://<apiClientId>/access_as_user']`.
 
@@ -127,8 +127,8 @@ secrets:
   `ENTRA_API_AUDIENCE`). The API reads `ENTRA_AUTHORITY` + `ENTRA_API_AUDIENCE`
   at runtime to validate JWTs.
 
-**Redirect URIs to register on the SPA app** (Entra → App registrations →
-JotJSON Web (SPA) → Authentication, Single-page application platform):
+**Redirect URIs to register on the SPA app** (Entra -> App registrations ->
+JotJSON Web (SPA) -> Authentication, Single-page application platform):
 
 - `https://jotjson.com/` - production custom domain.
 - `http://localhost:4200/` - local `ng serve`.
@@ -166,23 +166,23 @@ the zone to Azure nameservers.
    creates the `jotjson.com` DNS zone in `rg-jotjson-dev`. The deployment
    output `dnsNameServers` lists 4 Azure nameservers, e.g.
    `ns1-xx.azure-dns.com`, `ns2-xx.azure-dns.net`, etc. (Also visible in the
-   Azure portal → DNS zone → Overview.)
-2. Log into GoDaddy → **Domains → jotjson.com → Nameservers → Change**.
+   Azure portal -> DNS zone -> Overview.)
+2. Log into GoDaddy -> **Domains -> jotjson.com -> Nameservers -> Change**.
    Replace GoDaddy's defaults with the 4 Azure nameservers. Save.
-3. Wait for propagation (usually 15–60 min, up to 48h). Verify with
+3. Wait for propagation (usually 15-60 min, up to 48h). Verify with
    `nslookup -type=NS jotjson.com` - it should return the Azure nameservers.
-4. In the Azure portal → Static Web App → **Custom domains** → delete any
+4. In the Azure portal -> Static Web App -> **Custom domains** -> delete any
    stale pending entries for `jotjson.com` left over from earlier attempts.
-   Re-add using **Custom domain on Azure DNS** → pick the `jotjson.com` zone.
+   Re-add using **Custom domain on Azure DNS** -> pick the `jotjson.com` zone.
    SWA creates the required TXT + alias A records in the zone automatically
    and issues a managed cert.
-5. (Optional) For `www.jotjson.com`: GoDaddy → Domain settings → **Forwarding**
-   → forward `www.jotjson.com → https://jotjson.com`, 301 Permanent.
+5. (Optional) For `www.jotjson.com`: GoDaddy -> Domain settings -> **Forwarding**
+   -> forward `www.jotjson.com -> https://jotjson.com`, 301 Permanent.
    Alternatively, add `www` as a second custom domain on SWA and configure a
    redirect route in `staticwebapp.config.json`.
 
 **After the domain is live**, confirm these are configured to match:
 
-- `src/environments/environment.prod.ts` → `redirectUri: 'https://jotjson.com/'` ✔
-- Entra SPA app registration → Authentication → redirect URI includes
-  `https://jotjson.com/` ✔
+- `src/environments/environment.prod.ts` -> `redirectUri: 'https://jotjson.com/'` [x]
+- Entra SPA app registration -> Authentication -> redirect URI includes
+  `https://jotjson.com/` [x]

@@ -31,7 +31,7 @@ frameworks, or cloud services without explicit approval.
 
 ## 3. Repository Layout
 
-Follow the Angular layout in `DESIGN_SPEC.md` → *Project Structure*:
+Follow the Angular layout in `DESIGN_SPEC.md` -> *Project Structure*:
 
 ```
 src/app/{core,shared,features}/...
@@ -41,9 +41,9 @@ api/                   # Azure Functions (TypeScript)
 ```
 
 Place new code in the correct bucket:
-- Singleton services / guards / interceptors → `core/`
-- Reusable UI / pipes / directives → `shared/`
-- Page-level features → `features/<name>/`
+- Singleton services / guards / interceptors -> `core/`
+- Reusable UI / pipes / directives -> `shared/`
+- Page-level features -> `features/<name>/`
 
 ## 4. Coding Conventions
 

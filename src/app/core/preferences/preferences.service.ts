@@ -118,7 +118,7 @@ export class PreferencesService {
     });
 
     effect(() => {
-      // Mirror prefs → server while signed in + synced. Debounced so rapid
+      // Mirror prefs -> server while signed in + synced. Debounced so rapid
       // user edits coalesce. Skipped while hydrating to avoid clobbering.
       const state = this._syncState();
       const current = this._prefs();

@@ -85,9 +85,9 @@ Browser (Angular SPA)
 ```
 {
   theme: "dark" | "light" | "system",
-  editorFontSize: number (default: 14, range: 10–24),
+  editorFontSize: number (default: 14, range: 10-24),
   editorTabSize: number (default: 2, range: 2 | 4),
-  defaultTreeExpansionDepth: number (default: 3, range: 1–10),
+  defaultTreeExpansionDepth: number (default: 3, range: 1-10),
   defaultRuleSetId?: string (auto-apply this rule set on load),
   editorWordWrap: boolean (default: false),
   layoutOrientation: "horizontal" | "vertical" (default: "horizontal" - editor left, tree right; "vertical" = editor top, tree bottom),
@@ -104,7 +104,7 @@ Browser (Angular SPA)
 
 #### TreeHighlightColors
 
-Stored per-theme: users customize dark-theme and light-theme colors independently so each scheme looks correct on its own background. The app applies `dark` or `light` at runtime based on the active theme (including when `theme = "system"` resolves). Registered users override individual values via color pickers in Profile → Preferences.
+Stored per-theme: users customize dark-theme and light-theme colors independently so each scheme looks correct on its own background. The app applies `dark` or `light` at runtime based on the active theme (including when `theme = "system"` resolves). Registered users override individual values via color pickers in Profile -> Preferences.
 
 ```
 {
@@ -129,7 +129,7 @@ ThemeColorSet {
 | `ancestorColor` | `#2A2D2E` (subtle dark) | `#ECECEC` (subtle light gray) |
 | `searchHighlightColor` | `#6A4C00` (muted amber/gold) | `#FFE082` (soft yellow) |
 
-When the user has not overridden a color for a given theme, the app uses that theme's default. Switching themes swaps the active color set; overrides for the inactive theme are preserved. The "Reset to defaults" button in Profile → Preferences restores the defaults for the **currently active theme only**.
+When the user has not overridden a color for a given theme, the app uses that theme's default. Switching themes swaps the active color set; overrides for the inactive theme are preserved. The "Reset to defaults" button in Profile -> Preferences restores the defaults for the **currently active theme only**.
 
 #### HistoryEntry
 ```
@@ -226,7 +226,7 @@ The primary page. Available to **all users** (anonymous + registered).
   - **Expansion controls** (toolbar above the tree):
     - **Collapse All** button - collapses every node in the tree.
     - **Expand All** button - expands every node in the tree.
-    - **Expand to Level** - a dropdown (values 1–10) that expands nodes down to the chosen depth and collapses everything deeper. E.g., "Level 2" expands the root and its immediate children but collapses grandchildren.
+    - **Expand to Level** - a dropdown (values 1-10) that expands nodes down to the chosen depth and collapses everything deeper. E.g., "Level 2" expands the root and its immediate children but collapses grandchildren.
     - The current expansion level is displayed and persists across re-renders of the same blob.
     - Keyboard shortcuts: `Ctrl+Shift+[` (collapse all), `Ctrl+Shift+]` (expand all), `Alt+1` through `Alt+9` (expand to level N - uses Alt to avoid conflicting with browser tab shortcuts).
   - Click-to-copy path (e.g., `$.users[0].name`).
@@ -236,14 +236,14 @@ The primary page. Available to **all users** (anonymous + registered).
     - Example: `"2024-11-05T18:30:00Z"  (Nov 5, 2024, 11:30 AM PST - 1 year ago)`
     - The annotation is styled in a muted/italic font to distinguish it from the raw value.
     - Detection heuristics: ISO 8601, RFC 2822, and common formats like `YYYY-MM-DD`, `MM/DD/YYYY`. Uses a conservative parser - ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates. Numeric values (e.g., Unix timestamps) are **not** annotated - only string values are eligible.
-    - Relative time updates live (e.g., "3 minutes ago" → "4 minutes ago") while the page is open.
+    - Relative time updates live (e.g., "3 minutes ago" -> "4 minutes ago") while the page is open.
     - This feature can be toggled on/off via a tree toolbar toggle or the `treeShowDateAnnotations` user preference.
   - **Selection highlighting** - clicking a row in the tree activates three highlight layers (colors below reference the active theme's values from `TreeHighlightColors`):
     - **Selected row** - highlighted in the user's **primary selection color**. Only one row is selected at a time.
-    - **Matching value rows** - all other rows whose value is identical to the selected row's value are highlighted in the **secondary color**. Matching compares the raw JSON value (type-aware: `"1"` ≠ `1`). A small badge icon appears on each matching row to make them easy to spot.
+    - **Matching value rows** - all other rows whose value is identical to the selected row's value are highlighted in the **secondary color**. Matching compares the raw JSON value (type-aware: `"1"` != `1`). A small badge icon appears on each matching row to make them easy to spot.
     - **Ancestor rows** - every parent node from the selected row up to the root is highlighted in the **ancestor color**, making it easy to see the path/context of the selection.
     - Theme-appropriate defaults are defined in the `TreeHighlightColors` section of the Domain Model.
-    - Registered users can override each color individually (per theme) in the **Profile → Preferences** section via color pickers.
+    - Registered users can override each color individually (per theme) in the **Profile -> Preferences** section via color pickers.
     - Highlights clear when clicking outside the tree or pressing `Escape`.
   - **Search highlight** - a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
@@ -290,7 +290,7 @@ Available to **registered users** only.
 
 - **Account Section**
   - Edit display name.
-  - **Upload / change avatar** - accepts **PNG, JPEG, or WebP**; client-side validation rejects other formats. Max file size: **2 MB** (toast if exceeded). Client-side crop-to-square UI, then resize to **256×256** before upload. Stored in Azure Blob Storage, URL saved to the user profile. A "Remove avatar" option reverts to a generated default (initials on a tinted background).
+  - **Upload / change avatar** - accepts **PNG, JPEG, or WebP**; client-side validation rejects other formats. Max file size: **2 MB** (toast if exceeded). Client-side crop-to-square UI, then resize to **256x256** before upload. Stored in Azure Blob Storage, URL saved to the user profile. A "Remove avatar" option reverts to a generated default (initials on a tinted background).
   - View email address (read-only - identity managed by Entra External ID).
   - **Change password** - triggers the Entra External ID password reset flow (redirect to the self-service password reset user flow). Applies to email/password users only; hidden for social login accounts.
   - **Linked accounts** - show which social providers are connected (Google, GitHub). Allow linking/unlinking additional providers.
@@ -302,7 +302,7 @@ Available to **registered users** only.
   - **Editor tab size** - 2 or 4 spaces.
   - **Editor word wrap** - on/off toggle.
   - **Layout orientation** - horizontal (editor left, tree right) or vertical (editor top, tree bottom). A toolbar button also provides quick toggling.
-  - **Default tree expansion depth** - how many levels to auto-expand (1–10).
+  - **Default tree expansion depth** - how many levels to auto-expand (1-10).
   - **Show type labels in tree** - toggle the type badges (string, number, etc.) on/off.
   - **Show date/time annotations** - toggle smart date detection annotations on/off.
   - **History tracking mode** - "Save only" (default) or "All actions" (records paste, view, edit events too).
@@ -356,7 +356,7 @@ Available to **registered users** only.
   - Matching nodes receive the configured inline styles (background, text color, font weight, etc.).
   - Multiple rules can match the same node - styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
   - A tooltip on hover shows which rule(s) matched a given node (keeps the tree visually clean).
-  - **Highlight priority** (highest to lowest): selection highlight → matching-value highlight → ancestor highlight → search highlight → formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
+  - **Highlight priority** (highest to lowest): selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
   - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply.
 
 - **Built-in Presets** - ship a few starter rule sets users can clone and customize:
@@ -375,7 +375,7 @@ Available to **registered users** only.
 2. Pastes or types JSON into the editor.
 3. Tree view renders in real time.
 4. Can format, minify, copy output.
-5. If they try to "Save & Share" or view history → prompted to create an account.
+5. If they try to "Save & Share" or view history -> prompted to create an account.
 6. Session data (current JSON) stored in browser `localStorage` so it persists across refreshes.
 
 ### Registered User
@@ -467,7 +467,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
   - `display`: `standalone` (runs without browser chrome).
   - `start_url`: `/`
   - `theme_color` and `background_color` matching the app's dark/light theme.
-  - Icons at standard sizes: 192×192, 512×512 (maskable + any).
+  - Icons at standard sizes: 192x192, 512x512 (maskable + any).
   - `categories`: `["developer-tools", "utilities"]`
   - `screenshots`: at least one wide and one narrow for richer install prompts.
 - **Service Worker** (using Angular's `@angular/service-worker`):
@@ -489,7 +489,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
   - Background: Dark (#1E1E1E) / Light (#FAFAFA).
   - JSON types color-coded: strings=green, numbers=orange, booleans=blue, null=gray.
 - **Logo:** "JotJSON" wordmark - "Jot" in regular weight, "JSON" in bold, with a `{ }` icon element.
-- **Responsive breakpoints:** Mobile (< 768px), Tablet (768–1024px), Desktop (> 1024px).
+- **Responsive breakpoints:** Mobile (< 768px), Tablet (768-1024px), Desktop (> 1024px).
 
 ### Error, Loading & Empty States
 
@@ -501,7 +501,7 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
   - History page with no entries: "No history yet - paste some JSON to get started."
   - No saved blobs: "You haven't saved any JSON blobs yet."
   - No formatting rule sets: "Create your first rule set to highlight JSON your way."
-  - Search with no matches: "No matches found for '…'"
+  - Search with no matches: "No matches found for '...'"
 - **Validation error inline:** JSON parse errors appear as a red banner below the editor with the error message, line number, and column. The editor scrolls to and highlights the offending line.
 
 ---
@@ -547,7 +547,7 @@ src/
 
 | Resource | SKU / Tier | Notes |
 |---|---|---|
-| Azure Static Web Apps | Free (dev) → Standard (launch) | Hosts SPA + proxies to Functions. Start Free, upgrade to Standard before launch for SLA + 5 GB storage. |
+| Azure Static Web Apps | Free (dev) -> Standard (launch) | Hosts SPA + proxies to Functions. Start Free, upgrade to Standard before launch for SLA + 5 GB storage. |
 | Azure Functions | Consumption | Serverless API |
 | Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (partitionKey: `/ownerId`), `users` (`/id`), `history` (`/userId`), `rule-sets` (`/userId`) |
 | Microsoft Entra External ID | Free (50k MAU) | Identity |
@@ -563,8 +563,8 @@ src/
   - Lint (ESLint), unit tests (Karma/Jest), build (`ng build --configuration production`).
   - Azure Functions: lint, test, build.
 - **CD pipeline** - deploys on merge to `main`:
-  - Angular SPA → Azure Static Web Apps (using the `azure/static-web-apps-deploy` action).
-  - Azure Functions → deployed as Static Web Apps managed functions (bundled with the SPA in a single deployment).
+  - Angular SPA -> Azure Static Web Apps (using the `azure/static-web-apps-deploy` action).
+  - Azure Functions -> deployed as Static Web Apps managed functions (bundled with the SPA in a single deployment).
   - Staging slot for preview on PRs (Static Web Apps preview environments).
 - **Infrastructure** - Bicep templates applied via a separate workflow on changes to `/infra` directory.
 

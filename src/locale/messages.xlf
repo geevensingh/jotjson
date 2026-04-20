@@ -73,7 +73,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="editor.loading" datatype="html">
-        <source>Loading editor…</source>
+        <source>Loading editor...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-editor/json-editor.component.html</context>
           <context context-type="linenumber">4,8</context>
@@ -87,7 +87,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.placeholder" datatype="html">
-        <source>Search keys, values, or paths…</source>
+        <source>Search keys, values, or paths...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
           <context context-type="linenumber">5,6</context>
@@ -228,7 +228,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.menu.button" datatype="html">
-        <source>Expand to…</source>
+        <source>Expand to...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
           <context context-type="linenumber">50</context>
