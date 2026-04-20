@@ -15,6 +15,9 @@ param appName string = 'jotjson'
 @description('Custom domain for the Static Web App. Leave empty to skip domain binding.')
 param customDomain string = ''
 
+@description('Azure DNS zone name to create in this resource group, e.g. jotjson.com. Empty skips zone creation. Delegate at the registrar by pointing nameservers at the zone outputs.')
+param dnsZoneName string = ''
+
 @description('SKU tier for the Static Web App.')
 @allowed(['Free', 'Standard'])
 param staticWebAppSku string = 'Free'
@@ -92,7 +95,16 @@ module swa 'modules/staticWebApp.bicep' = {
   }
 }
 
+module dns 'modules/dnsZone.bicep' = if (!empty(dnsZoneName)) {
+  name: 'dns'
+  params: {
+    zoneName: dnsZoneName
+    tags: tags
+  }
+}
+
 output staticWebAppHostname string = swa.outputs.defaultHostname
+output dnsNameServers array = empty(dnsZoneName) ? [] : dns.outputs.nameServers
 output cosmosEndpoint string = cosmos.outputs.endpoint
 output storageAccountName string = storage.outputs.accountName
 output appInsightsConnectionString string = insights.outputs.connectionString

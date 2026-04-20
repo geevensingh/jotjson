@@ -5,6 +5,9 @@ Bicep templates for Azure resources backing JotJSON. See DESIGN_SPEC.md § Azure
 ## Resources provisioned
 
 - **Static Web App** — hosts the Angular SPA and SWA-managed Functions (`/api`).
+- **Azure DNS zone** (prod only) — `jotjson.com`. Nameservers are delegated at
+  the registrar (GoDaddy) so SWA custom domain binding works. See
+  [DNS + custom domain](#dns--custom-domain).
 - **Cosmos DB (serverless)** — database `jotjson` with containers:
   - `blobs` (partition key: `/ownerId`, 30-day default TTL for anonymous)
   - `users` (partition key: `/id`)
@@ -16,7 +19,8 @@ Bicep templates for Azure resources backing JotJSON. See DESIGN_SPEC.md § Azure
 **Not provisioned here** (managed separately):
 - Microsoft Entra External ID tenant + app registrations — must be created
   manually in the Entra admin center (see [Auth setup](#auth-setup)).
-- DNS records for `jotjson.com` — configured at the registrar.
+- Registrar nameserver delegation — one-time manual step at GoDaddy; see
+  [DNS + custom domain](#dns--custom-domain).
 
 ## Deploy (dev)
 
@@ -146,3 +150,37 @@ az deployment group create `
                entraApiAudience=$env:ENTRA_API_AUDIENCE
 ```
 
+## DNS + custom domain
+
+Apex (`jotjson.com`) is the canonical hostname. Azure Static Web Apps only
+supports apex via ALIAS / ANAME / flattened CNAME records, which **GoDaddy
+does not support**. So prod DNS lives in **Azure DNS** (zone provisioned by
+`modules/dnsZone.bicep`), and GoDaddy is just the registrar that delegates
+the zone to Azure nameservers.
+
+**One-time setup:**
+
+1. Deploy infra (`infra.yml` workflow, or the manual command above). Bicep
+   creates the `jotjson.com` DNS zone in `rg-jotjson-prod`. The deployment
+   output `dnsNameServers` lists 4 Azure nameservers, e.g.
+   `ns1-xx.azure-dns.com`, `ns2-xx.azure-dns.net`, etc. (Also visible in the
+   Azure portal → DNS zone → Overview.)
+2. Log into GoDaddy → **Domains → jotjson.com → Nameservers → Change**.
+   Replace GoDaddy's defaults with the 4 Azure nameservers. Save.
+3. Wait for propagation (usually 15–60 min, up to 48h). Verify with
+   `nslookup -type=NS jotjson.com` — it should return the Azure nameservers.
+4. In the Azure portal → Static Web App → **Custom domains** → delete any
+   stale pending entries for `jotjson.com` left over from earlier attempts.
+   Re-add using **Custom domain on Azure DNS** → pick the `jotjson.com` zone.
+   SWA creates the required TXT + alias A records in the zone automatically
+   and issues a managed cert.
+5. (Optional) For `www.jotjson.com`: GoDaddy → Domain settings → **Forwarding**
+   → forward `www.jotjson.com → https://jotjson.com`, 301 Permanent.
+   Alternatively, add `www` as a second custom domain on SWA and configure a
+   redirect route in `staticwebapp.config.json`.
+
+**After the domain is live**, confirm these are configured to match:
+
+- `src/environments/environment.prod.ts` → `redirectUri: 'https://jotjson.com/'` ✔
+- Entra SPA app registration → Authentication → redirect URI includes
+  `https://jotjson.com/` ✔
