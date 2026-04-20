@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { JsonTreeComponent } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 
@@ -20,7 +21,10 @@ describe('JsonTreeComponent', () => {
   async function createWith(value: unknown): Promise<void> {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
-    await TestBed.configureTestingModule({ imports: [JsonTreeComponent] }).compileComponents();
+    await TestBed.configureTestingModule({
+      imports: [JsonTreeComponent],
+      providers: [...provideFakeAuth()]
+    }).compileComponents();
     fixture = TestBed.createComponent(JsonTreeComponent);
     prefs = TestBed.inject(PreferencesService);
     fixture.componentRef.setInput('value', value);

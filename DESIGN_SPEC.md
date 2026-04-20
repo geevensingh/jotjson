@@ -577,7 +577,7 @@ src/
 3. **Auth integration** — Microsoft Entra External ID + MSAL Angular, delivered in three steps:
    - **M3a**: Plumbing — MSAL bootstrap, `AuthService`, sign-in/sign-out toolbar control, signed-in user signal, HTTP interceptor attaching access tokens to `/api/*` calls, auth guard available (not yet applied to any route). Tenant/app-registration config read from environment/app-settings. No user-facing protected pages yet.
    - **M3b**: Profile page scaffold at `/profile` (display name, read-only email, sign-out button). Route is auth-guarded.
-   - **M3c**: Migrate preferences from `localStorage` to the signed-in user — when the user signs in, merge/upload the current local preferences to their Cosmos DB `UserPreferences` document; subsequent changes persist to Cosmos while they remain signed in. Anonymous usage continues to read/write `localStorage`.
+   - **M3c**: Migrate preferences from `localStorage` to the signed-in user. On sign-in, the client calls `GET /api/me`; if the user document exists, its preferences replace the local copy (remote wins). If it does not exist (first sign-in ever), the client `POST`s the current local preferences to `/api/me` to seed the server — the anon user's customizations are preserved exactly once. Subsequent changes are mirrored to Cosmos via a debounced `PUT /api/me/preferences` while the user is signed in; anonymous usage continues to read/write `localStorage`. The server rejects unknown keys and out-of-range values on every write.
 4. **Persistent links** — Blob CRUD API, save & share flow, `/s/:id` route.
 5. **History** — History tracking, `/history` page, management actions.
 6. **Formatting rules** — Rule set CRUD API, rule builder UI, tree view integration, built-in presets.

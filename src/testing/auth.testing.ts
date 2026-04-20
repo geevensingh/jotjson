@@ -1,4 +1,6 @@
 import { Provider } from '@angular/core';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { BehaviorSubject, Subject } from 'rxjs';
 import {
   AccountInfo,
@@ -81,7 +83,13 @@ export function provideFakeAuth(client?: FakeMsalClient): Provider[] {
     { provide: MsalBroadcastService, useClass: FakeMsalBroadcastService },
     // MsalService depends on MSAL_INSTANCE and a few other things. AuthService
     // does not call into it directly; provide a bare stub so DI resolves.
-    { provide: MsalService, useValue: {} }
+    { provide: MsalService, useValue: {} },
+    // PreferencesService transitively depends on HttpClient via the
+    // UserApiService. Provide the testing client so tests that do not stage
+    // specific requests still construct cleanly; none are expected to fire
+    // while the fake auth user is `null` (anon lifecycle).
+    provideHttpClient(),
+    provideHttpClientTesting()
   ];
 }
 
