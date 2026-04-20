@@ -49,16 +49,20 @@ describe('AuthService', () => {
       return svc;
     }
 
-    it('signIn calls loginRedirect', () => {
+    it('signIn calls loginRedirect', async () => {
       const auth = configuredAuth();
       auth.signIn();
+      await Promise.resolve();
+      await Promise.resolve();
       expect(fake.loginRedirectCalls).toBe(1);
     });
 
-    it('signOut calls logoutRedirect', () => {
+    it('signOut calls logoutRedirect', async () => {
       const auth = configuredAuth();
       fake.accounts = [makeAccount()];
       auth.signOut();
+      await Promise.resolve();
+      await Promise.resolve();
       expect(fake.logoutRedirectCalls).toBe(1);
     });
 
