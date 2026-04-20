@@ -89,7 +89,7 @@ Place new code in the correct bucket:
 - Validate all inputs (zod or equivalent schema validation).
 - Return typed JSON responses with explicit status codes. Never leak stack
   traces.
-- Auth: validate B2C-issued JWTs on every protected route.
+- Auth: validate Entra External ID-issued JWTs on every protected route.
 
 ### Naming
 - Files: `kebab-case.ts`. Angular: `thing.component.ts`, `thing.service.ts`,
@@ -117,7 +117,8 @@ Place new code in the correct bucket:
   100-blob cap, etc.). Enforce on both client and server.
 - Sanitize any user-provided strings rendered as HTML. Prefer Angular's default
   interpolation/binding over `innerHTML`.
-- All API routes that mutate or read user data require a valid B2C token except
+- All API routes that mutate or read user data require a valid Entra External ID
+  token except
   the explicitly-public blob read path.
 
 ## 7. Definition of Done

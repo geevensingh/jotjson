@@ -18,11 +18,11 @@ architecture spec.
 | Frontend   | Angular 19 (standalone + Signals), Angular Material, SCSS   |
 | Editor     | Monaco (lazy-loaded), [`jsonc-parser`](https://www.npmjs.com/package/jsonc-parser) for JSON/JSONC parsing |
 | Backend    | Azure Functions v4, TypeScript (Node 24)                    |
-| Data       | Azure Cosmos DB (serverless, NoSQL) — planned               |
-| Auth       | MSAL Angular + Azure AD B2C — planned                       |
+| Data       | Azure Cosmos DB (serverless, NoSQL)                         |
+| Auth       | MSAL Angular + Microsoft Entra External ID                  |
 | Hosting    | Azure Static Web Apps with managed Functions                |
 | IaC        | Bicep (`/infra`)                                            |
-| Testing    | Karma + Jasmine (frontend); Jest planned for API            |
+| Testing    | Karma + Jasmine (frontend); Jest (API)                      |
 | CI/CD      | GitHub Actions (build, test, Bicep validate, SWA deploy)    |
 
 Node **24** is required locally and in CI (pinned via `.nvmrc`, engines, and

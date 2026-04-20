@@ -14,7 +14,8 @@ making any non-trivial change. The summary below is for quick reference only;
 - Strict TypeScript; no `any`; prefer `unknown` + narrowing.
 - Standalone Angular components, `OnPush`, `inject()`, Signals, RxJS only at
   I/O boundaries. Kebab-case filenames; co-located `*.spec.ts`.
-- Azure Functions: thin handlers, zod-validated inputs, B2C JWT auth, typed
+- Azure Functions: thin handlers, zod-validated inputs, Entra External ID JWT
+  auth, typed
   JSON responses.
 
 ## Workflow

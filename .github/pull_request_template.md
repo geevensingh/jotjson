@@ -39,7 +39,7 @@ AGENTS.md for the full guidelines.
 - [ ] `npm run build` / `ng build --configuration production` succeeds
 - [ ] No secrets, tokens, or PII in code, logs, or tests
 - [ ] Enforces spec limits (blob size, upload size, quota) where relevant
-- [ ] Protected API routes validate B2C JWTs (if touched)
+- [ ] Protected API routes validate Entra External ID JWTs (if touched)
 - [ ] No new frameworks/languages/services introduced without prior approval
 
 ## AI Assistance

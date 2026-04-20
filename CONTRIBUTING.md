@@ -71,7 +71,7 @@ frameworks, or cloud services without prior approval.
   requires. Clipboard/file reads are client-side only.
 - Enforce spec limits (1 MB saved blob, 5 MB upload, 100-blob cap) on both
   client and server.
-- Validate and authenticate every mutating API route with a B2C-issued JWT.
+- Validate and authenticate every mutating API route with an Entra External ID-issued JWT.
 
 ## Reporting Issues
 

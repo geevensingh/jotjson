@@ -1,12 +1,11 @@
 import { Provider } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { Subject } from 'rxjs';
 import {
   AccountInfo,
   AuthenticationResult,
   EventMessage,
-  InteractionStatus,
   IPublicClientApplication
 } from '@azure/msal-browser';
 import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
@@ -64,12 +63,9 @@ export class FakeMsalClient implements Partial<IPublicClientApplication> {
   }
 }
 
-/** MsalBroadcastService stub with the two subjects AuthService consumes. */
+/** MsalBroadcastService stub exposing the event subject AuthService consumes. */
 export class FakeMsalBroadcastService {
   msalSubject$ = new Subject<EventMessage>();
-  // BehaviorSubject seeded with `None` so `AuthService.waitForInteractionComplete()`
-  // resolves immediately under test rather than hanging until Jasmine times out.
-  inProgress$ = new BehaviorSubject<InteractionStatus>(InteractionStatus.None);
 }
 
 /**
