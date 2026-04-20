@@ -76,7 +76,7 @@ export class FakeMsalBroadcastService {
  * Providers to drop into `TestBed.configureTestingModule` for any spec that
  * transitively imports a component depending on `AuthService`.
  */
-export function provideFakeAuth(client?: FakeMsalClient): Provider[] {
+export function provideFakeAuth(client?: FakeMsalClient): (Provider | ReturnType<typeof provideHttpClient>)[] {
   const fake = client ?? new FakeMsalClient();
   return [
     { provide: MSAL_INSTANCE, useValue: fake as unknown as IPublicClientApplication },

@@ -177,9 +177,9 @@ describe('PreferencesService', () => {
       expect(end).toBe('error');
     });
 
-    it('clears localStorage and resets on sign-out', async () => {
+    it('clears previous user prefs from localStorage and resets on sign-out', async () => {
       const svc = TestBed.inject(PreferencesService);
-      api.getMe.and.returnValue(of(makeUser({ theme: 'light' })));
+      api.getMe.and.returnValue(of(makeUser({ theme: 'light', editorFontSize: 22 })));
       auth.signInAs('u-1');
       TestBed.flushEffects();
       await svc.__waitForSync();
@@ -189,7 +189,12 @@ describe('PreferencesService', () => {
       TestBed.flushEffects();
       expect(svc.syncState()).toBe('anon');
       expect(svc.prefs()).toEqual(DEFAULT_PREFERENCES);
-      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+      // localStorage is wiped at sign-out; the subsequent anon write-through
+      // effect repopulates it with DEFAULT_PREFERENCES, so the previous
+      // user's customizations must not leak through.
+      const raw = localStorage.getItem(STORAGE_KEY);
+      expect(raw).toBeTruthy();
+      expect(JSON.parse(raw!)).toEqual(DEFAULT_PREFERENCES);
     });
 
     it('PUTs preferences after sync on subsequent updates (debounced)', async () => {
