@@ -129,7 +129,7 @@ export function __setJwksClientForTesting(client: JwksClientLike | null): void {
 function getKey(authority: string): GetPublicKeyOrSecret {
   return (header, callback) => {
     if (!header.kid) {
-      callback(new AuthError(`Missing kid (header=${JSON.stringify(header)})`));
+      callback(new AuthError('Missing kid'));
       return;
     }
     getJwksClient(authority)
@@ -142,7 +142,16 @@ function getKey(authority: string): GetPublicKeyOrSecret {
 }
 
 function extractBearerToken(req: HttpRequest): string | null {
-  const header = req.headers.get('authorization') ?? req.headers.get('Authorization');
+  // Prefer the custom header — Azure Static Web Apps strips the standard
+  // `Authorization` header from requests forwarded to managed Functions,
+  // so our SPA sends the bearer token under a custom name. Fall back to
+  // `Authorization` for local development (where requests go through the
+  // dev proxy directly to the Functions host) and for non-SWA hosting.
+  const custom =
+    req.headers.get('x-jotjson-authorization') ??
+    req.headers.get('X-Jotjson-Authorization');
+  const fallback = req.headers.get('authorization') ?? req.headers.get('Authorization');
+  const header = custom ?? fallback;
   if (!header) return null;
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
   return match ? match[1] : null;

@@ -143,5 +143,16 @@ describe('shared/auth Entra JWT validation', () => {
         requireAuth(makeRequest({ Authorization: 'Basic abc' }))
       ).rejects.toBeInstanceOf(AuthError);
     });
+
+    it('prefers the custom X-Jotjson-Authorization header over Authorization', async () => {
+      const customToken = sign({ oid: 'oid-custom' });
+      const principal = await requireAuth(
+        makeRequest({
+          'X-Jotjson-Authorization': `Bearer ${customToken}`,
+          Authorization: 'Bearer stripped-by-swa'
+        })
+      );
+      expect(principal.id).toBe('oid-custom');
+    });
   });
 });

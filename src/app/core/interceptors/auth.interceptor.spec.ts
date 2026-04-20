@@ -51,7 +51,7 @@ describe('authInterceptor', () => {
     // Allow the interceptor's from(Promise) to flush.
     await Promise.resolve();
     const req = httpMock.expectOne('/api/blobs/1');
-    observed.push(req.request.headers.get('Authorization') ?? '');
+    observed.push(req.request.headers.get('X-Jotjson-Authorization') ?? '');
     req.flush({});
     expect(observed[0]).toBe('Bearer abc.def.ghi');
   });
@@ -61,7 +61,7 @@ describe('authInterceptor', () => {
     http.get('/api/public').subscribe();
     await Promise.resolve();
     const req = httpMock.expectOne('/api/public');
-    expect(req.request.headers.has('Authorization')).toBe(false);
+    expect(req.request.headers.has('X-Jotjson-Authorization')).toBe(false);
     req.flush({});
   });
 
@@ -73,7 +73,7 @@ describe('authInterceptor', () => {
     });
     http.get('/api/public').subscribe();
     const req = httpMock.expectOne('/api/public');
-    expect(req.request.headers.has('Authorization')).toBe(false);
+    expect(req.request.headers.has('X-Jotjson-Authorization')).toBe(false);
     expect(spy).not.toHaveBeenCalled();
     req.flush({});
   });
@@ -82,7 +82,7 @@ describe('authInterceptor', () => {
     setup(fakeAuthService({ signedIn: true, token: 'abc' }));
     http.get('/public-assets/config.json').subscribe();
     const req = httpMock.expectOne('/public-assets/config.json');
-    expect(req.request.headers.has('Authorization')).toBe(false);
+    expect(req.request.headers.has('X-Jotjson-Authorization')).toBe(false);
     req.flush({});
   });
 
@@ -95,7 +95,7 @@ describe('authInterceptor', () => {
     await Promise.resolve();
     const req = httpMock.expectOne('/api/protected');
     // Verify the request still went out (interceptor did not redirect away).
-    expect(req.request.headers.has('Authorization')).toBe(false);
+    expect(req.request.headers.has('X-Jotjson-Authorization')).toBe(false);
     req.flush('unauthorized', { status: 401, statusText: 'Unauthorized' });
     expect(caught).toBeTruthy();
   });
