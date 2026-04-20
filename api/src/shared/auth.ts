@@ -45,6 +45,26 @@ function getAudience(): string {
 }
 
 /**
+ * Entra v2.0 access tokens set `aud` to the API application's client id
+ * (a bare GUID), while v1.0 tokens use the App ID URI (`api://<guid>`).
+ * Accept both forms so the same configured audience works across tenants
+ * regardless of which token version Entra emits.
+ */
+function getAcceptedAudiences(): [string, ...string[]] | null {
+  const configured = getAudience();
+  if (!configured) return null;
+  const accepted = new Set<string>([configured]);
+  const apiUriMatch = /^api:\/\/(.+)$/i.exec(configured);
+  if (apiUriMatch) {
+    accepted.add(apiUriMatch[1]);
+  } else {
+    accepted.add(`api://${configured}`);
+  }
+  const [first, ...rest] = [...accepted];
+  return [first, ...rest];
+}
+
+/**
  * Resolves the JWKS URI from the authority. Entra publishes the OpenID
  * configuration at `<authority>/.well-known/openid-configuration`; this
  * helper hard-codes the canonical keys endpoint, which avoids a second
@@ -108,8 +128,8 @@ function extractBearerToken(req: HttpRequest): string | null {
 
 export async function verifyAccessToken(token: string): Promise<AuthenticatedPrincipal> {
   const authority = getAuthority();
-  const audience = getAudience();
-  if (!authority || !audience) {
+  const audiences = getAcceptedAudiences();
+  if (!authority || !audiences) {
     throw new AuthError('Auth not configured');
   }
   const payload = await new Promise<JwtPayload>((resolve, reject) => {
@@ -117,7 +137,7 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
       token,
       getKey(authority),
       {
-        audience,
+        audience: audiences,
         issuer: [authority, `${authority}/v2.0`],
         algorithms: ['RS256']
       },
