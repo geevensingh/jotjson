@@ -34,6 +34,7 @@ export class ToolbarComponent {
   readonly hasContent = input<boolean>(false);
 
   readonly paste = output<void>();
+  readonly copy = output<void>();
   readonly upload = output<File>();
   readonly download = output<void>();
   readonly clear = output<void>();

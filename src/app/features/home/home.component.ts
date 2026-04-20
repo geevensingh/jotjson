@@ -174,6 +174,16 @@ export class HomeComponent {
     }
   }
 
+  async onCopy(): Promise<void> {
+    const text = this.content();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard unavailable / denied - graceful fallback: user can still Ctrl+C.
+    }
+  }
+
   async onUpload(file: File): Promise<void> {
     const MAX = 5 * 1024 * 1024;
     if (file.size > MAX) {

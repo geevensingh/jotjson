@@ -131,6 +131,35 @@ describe('HomeComponent (unit-level)', () => {
     expect(fixture.componentInstance.content()).toBe(broken);
   });
 
+  it('onCopy writes the editor text to the clipboard', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{"a":1}');
+    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(
+      Promise.resolve()
+    );
+    await fixture.componentInstance.onCopy();
+    expect(spy).toHaveBeenCalledWith('{"a":1}');
+  });
+
+  it('onCopy is a no-op when content is empty', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('');
+    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(
+      Promise.resolve()
+    );
+    await fixture.componentInstance.onCopy();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('onCopy swallows clipboard errors', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{"a":1}');
+    spyOn(navigator.clipboard, 'writeText').and.returnValue(
+      Promise.reject(new Error('denied'))
+    );
+    await expectAsync(fixture.componentInstance.onCopy()).toBeResolved();
+  });
+
   it('splitRatio defaults to 0.5 and splitStyle reflects orientation', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const c = fixture.componentInstance;

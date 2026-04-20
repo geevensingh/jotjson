@@ -14,6 +14,19 @@
   <button
     type="button"
     mat-icon-button
+    matTooltip="Copy editor contents to clipboard"
+    i18n-matTooltip="@@toolbar.copy.tooltip"
+    aria-label="Copy editor contents to clipboard"
+    i18n-aria-label="@@toolbar.copy.aria"
+    [disabled]="!hasContent()"
+    (click)="copy.emit()"
+  >
+    <jj-icon name="copy" />
+  </button>
+
+  <button
+    type="button"
+    mat-icon-button
     matTooltip="Upload file"
     i18n-matTooltip="@@toolbar.upload.tooltip"
     aria-label="Upload file"

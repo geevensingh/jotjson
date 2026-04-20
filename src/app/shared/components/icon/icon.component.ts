@@ -7,6 +7,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  */
 export type JjIconName =
   | 'paste'
+  | 'copy'
   | 'upload'
   | 'download'
   | 'format'
@@ -47,6 +48,10 @@ export type JjIconName =
           <rect x="8" y="3" width="8" height="4" rx="1" />
           <path d="M16 5h2.5A1.5 1.5 0 0 1 20 6.5v13A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5v-13A1.5 1.5 0 0 1 5.5 5H8" />
           <path d="M8.5 12h7M8.5 15.5h7M8.5 18.5h4" />
+        }
+        @case ('copy') {
+          <rect x="9" y="3" width="12" height="14" rx="2" />
+          <path d="M15 17v2.5A1.5 1.5 0 0 1 13.5 21h-9A1.5 1.5 0 0 1 3 19.5v-12A1.5 1.5 0 0 1 4.5 6H7" />
         }
         @case ('upload') {
           <path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8l-5-5z" />

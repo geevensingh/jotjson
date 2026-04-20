@@ -108,4 +108,13 @@ describe('ToolbarComponent', () => {
     cmp.onModeChange('jsonc');
     expect(spy).toHaveBeenCalledWith('jsonc');
   });
+
+  it('copy output fires when button click is translated (direct emit path)', async () => {
+    const { fixture } = await create();
+    const cmp = fixture.componentInstance;
+    const spy = jasmine.createSpy('copy');
+    cmp.copy.subscribe(spy);
+    cmp.copy.emit();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
 });
