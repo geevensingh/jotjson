@@ -129,7 +129,7 @@ export function __setJwksClientForTesting(client: JwksClientLike | null): void {
 function getKey(authority: string): GetPublicKeyOrSecret {
   return (header, callback) => {
     if (!header.kid) {
-      callback(new AuthError('Missing kid'));
+      callback(new AuthError(`Missing kid (header=${JSON.stringify(header)})`));
       return;
     }
     getJwksClient(authority)
