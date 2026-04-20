@@ -30,7 +30,7 @@ jobs:
             echo "have_token=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.check.outputs.have_token == 'true'
         with:
           submodules: true
