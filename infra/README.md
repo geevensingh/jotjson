@@ -22,7 +22,21 @@ Bicep templates for Azure resources backing JotJSON. See DESIGN_SPEC.md § Azure
 - Registrar nameserver delegation — one-time manual step at GoDaddy; see
   [DNS + custom domain](#dns--custom-domain).
 
-## Deploy (dev)
+## Current deployment
+
+The live site runs out of `rg-jotjson-dev` / `swa-jotjson-dev` (the CD
+pipeline's SWA deploy token targets that resource). For a solo project there's
+no dev/prod separation today; the `dev` environment **is** production.
+`prod.bicepparam` exists for the day a split is useful, but it isn't wired to
+anything live.
+
+## Deploy
+
+Trigger **Actions → Deploy infra (Bicep) → Run workflow → dev** (or `prod`
+once a parallel stack is warranted). The workflow ensures the resource group
+exists before running `az deployment group create`.
+
+Manual equivalent:
 
 ```powershell
 az group create --name rg-jotjson-dev --location eastus2
@@ -30,16 +44,6 @@ az deployment group create `
   --resource-group rg-jotjson-dev `
   --template-file main.bicep `
   --parameters parameters/dev.bicepparam
-```
-
-## Deploy (prod)
-
-```powershell
-az group create --name rg-jotjson-prod --location eastus2
-az deployment group create `
-  --resource-group rg-jotjson-prod `
-  --template-file main.bicep `
-  --parameters parameters/prod.bicepparam
 ```
 
 ## Auth setup (Microsoft Entra External ID)

@@ -3,7 +3,7 @@ using '../main.bicep'
 param environmentName = 'prod'
 param appName = 'jotjson'
 param staticWebAppSku = 'Standard'
-param customDomain = 'jotjson.com'
+param customDomain = ''
 param dnsZoneName = 'jotjson.com'
 
 // Entra External ID — production values are injected at deploy time from
