@@ -29,33 +29,104 @@ switch between projects without reinstalling Node globally.
 
 ### Option A: fnm (recommended, cross-platform)
 
-[fnm](https://github.com/Schniz/fnm) is fast, single-binary, and reads
-`.nvmrc` out of the box.
+[fnm](https://github.com/Schniz/fnm) ("Fast Node Manager") is a
+single-binary version manager written in Rust. It's fast, reads
+`.nvmrc` out of the box, and works identically on macOS, Linux, and
+Windows. Full docs: https://github.com/Schniz/fnm.
 
-**macOS / Linux:**
+#### macOS
+
+Install via Homebrew:
+
+```bash
+brew install fnm
+```
+
+or via the official installer script:
 
 ```bash
 curl -fsSL https://fnm.vercel.app/install | bash
-# restart your shell, then:
-fnm install 24
-fnm use 24
 ```
 
-**Windows (PowerShell):**
+Then wire it into your shell so `fnm` is on PATH and auto-switches when
+you `cd` into a directory with a `.nvmrc`. Add **one** of these lines
+to your shell rc file and restart the shell:
+
+```bash
+# ~/.zshrc  (default on modern macOS)
+eval "$(fnm env --use-on-cd --shell zsh)"
+
+# ~/.bashrc
+eval "$(fnm env --use-on-cd --shell bash)"
+
+# ~/.config/fish/config.fish
+fnm env --use-on-cd --shell fish | source
+```
+
+#### Linux
+
+Install via the official script:
+
+```bash
+curl -fsSL https://fnm.vercel.app/install | bash
+```
+
+This installs the binary to `~/.local/share/fnm` and appends the shell
+hook to `~/.bashrc` or `~/.zshrc` for you. Restart your shell.
+
+If your distro has a package (Arch: `pacman -S fnm`), that works too -
+but you'll still need to add the `eval "$(fnm env --use-on-cd ...)"`
+hook manually.
+
+#### Windows
+
+Install via winget (Windows 10 / 11):
 
 ```powershell
 winget install Schniz.fnm
-# restart PowerShell, then:
-fnm install 24.15.0
-fnm use 24.15.0
 ```
 
-Add this to your PowerShell `$PROFILE` so fnm auto-switches when you
-`cd` into the repo:
+Alternatives:
+
+- Scoop: `scoop install fnm`
+- Chocolatey: `choco install fnm`
+- Cargo (if you have Rust): `cargo install fnm`
+
+Then wire it into PowerShell. Open your profile:
+
+```powershell
+notepad $PROFILE
+```
+
+Add this line and save:
 
 ```powershell
 fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression
 ```
+
+Restart PowerShell. If `notepad $PROFILE` complains the file doesn't
+exist, create it first with `New-Item -Type File -Path $PROFILE -Force`.
+
+#### Install Node 24 with fnm
+
+Once `fnm` is on PATH in a fresh shell:
+
+```bash
+fnm install 24          # downloads latest 24.x
+fnm use 24              # activates it in the current shell
+fnm default 24          # makes it the default for new shells
+```
+
+On Windows the version string must be explicit:
+
+```powershell
+fnm install 24.15.0
+fnm use 24.15.0
+fnm default 24.15.0
+```
+
+With the `--use-on-cd` hook active, `cd C:\Repos\jotjson` (or wherever
+you cloned the repo) will auto-switch to the version in `.nvmrc`.
 
 ### Option B: nvm
 
