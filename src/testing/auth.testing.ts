@@ -25,6 +25,12 @@ export class FakeMsalClient implements Partial<IPublicClientApplication> {
   loginRedirectCalls = 0;
   logoutRedirectCalls = 0;
   acquireTokenSilentCalls = 0;
+  initializeCalls = 0;
+
+  initialize(): Promise<void> {
+    this.initializeCalls += 1;
+    return Promise.resolve();
+  }
 
   getAllAccounts(): AccountInfo[] {
     return this.accounts;

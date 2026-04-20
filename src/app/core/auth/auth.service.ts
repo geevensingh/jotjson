@@ -35,6 +35,7 @@ export class AuthService {
   private readonly broadcast = inject(MsalBroadcastService, { optional: true });
 
   private readonly userSignal = signal<AuthUser | null>(null);
+  private initPromise: Promise<void> | null = null;
 
   readonly user = this.userSignal.asReadonly();
   readonly isSignedIn = computed(() => this.userSignal() !== null);
@@ -70,8 +71,8 @@ export class AuthService {
       this.userSignal.set(null);
       return Promise.resolve();
     }
-    return this.msal
-      .handleRedirectPromise()
+    return this.ensureInitialized()
+      .then(() => this.msal.handleRedirectPromise())
       .then((result: AuthenticationResult | null) => {
         if (result?.account) {
           this.msal.setActiveAccount(result.account);
@@ -86,18 +87,22 @@ export class AuthService {
 
   signIn(): void {
     if (!this.isConfigured) return;
-    void this.msal.loginRedirect({
-      scopes: environment.auth.scopes,
-      prompt: 'select_account'
-    });
+    void this.ensureInitialized().then(() =>
+      this.msal.loginRedirect({
+        scopes: environment.auth.scopes,
+        prompt: 'select_account'
+      })
+    );
   }
 
   signOut(): void {
     if (!this.isConfigured) return;
-    const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
-    void this.msal.logoutRedirect({
-      account,
-      postLogoutRedirectUri: environment.auth.postLogoutRedirectUri
+    void this.ensureInitialized().then(() => {
+      const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
+      return this.msal.logoutRedirect({
+        account,
+        postLogoutRedirectUri: environment.auth.postLogoutRedirectUri
+      });
     });
   }
 
@@ -109,6 +114,7 @@ export class AuthService {
    */
   async acquireTokenSilent(): Promise<string | null> {
     if (!this.isConfigured) return null;
+    await this.ensureInitialized();
     const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
     if (!account) return null;
     try {
@@ -123,6 +129,23 @@ export class AuthService {
       }
       return null;
     }
+  }
+
+  /**
+   * Memoized `msal.initialize()` call. MSAL v5 requires this before any other
+   * API and throws `BrowserAuthError: uninitialized_public_client_application`
+   * otherwise. The promise is cached so repeated calls are no-ops.
+   */
+  private ensureInitialized(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = Promise.resolve(this.msal.initialize()).catch((err) => {
+        // If initialize fails we clear the cache so a subsequent call can
+        // retry rather than replaying the rejection forever.
+        this.initPromise = null;
+        throw err;
+      });
+    }
+    return this.initPromise;
   }
 
   private waitForInteractionComplete(): Promise<void> {
