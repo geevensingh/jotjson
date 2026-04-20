@@ -52,8 +52,11 @@ proxy.conf.json    ng serve proxy that forwards /api/* to func start on :7071
 - Node **24** (pinned via `.nvmrc`; works with `nvm use` or `fnm use`)
 - npm 10+
 - For API local dev: Azure Functions Core Tools v4
-  (`npm i -g azure-functions-core-tools@4`)
-- For infra: Azure CLI + Bicep (`az bicep install`)
+- For infra: Azure CLI + Bicep
+- A Chromium-family browser on PATH for `npm test`
+
+Detailed install instructions (by OS, with verification steps and
+troubleshooting) are in [PREREQUISITES.md](PREREQUISITES.md).
 
 ## Setup
 
