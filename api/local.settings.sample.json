@@ -6,7 +6,7 @@
     "FUNCTIONS_EXTENSION_VERSION": "~4",
     "FUNCTIONS_NODE_VERSION": "~24",
 
-    "COSMOS_ENDPOINT": "",
+    "COSMOS_ENDPOINT": "https://cosmos-jotjson-dev.documents.azure.com:443/",
     "COSMOS_KEY": "",
     "COSMOS_DATABASE": "jotjson",
 
@@ -14,9 +14,11 @@
     "AVATAR_CONTAINER": "avatars",
     "EXPORT_CONTAINER": "exports",
 
-    "B2C_TENANT_ID": "",
-    "B2C_CLIENT_ID": "",
-    "B2C_POLICY": ""
+    "ENTRA_TENANT_ID": "",
+    "ENTRA_AUTHORITY": "",
+    "ENTRA_SPA_CLIENT_ID": "",
+    "ENTRA_API_CLIENT_ID": "",
+    "ENTRA_API_AUDIENCE": ""
   },
   "Host": {
     "LocalHttpPort": 7071,
