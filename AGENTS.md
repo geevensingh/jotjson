@@ -97,6 +97,16 @@ Place new code in the correct bucket:
 - Classes: `PascalCase`. Variables/functions: `camelCase`. Constants: `UPPER_SNAKE`.
 - Test files: co-located as `*.spec.ts`.
 
+### ASCII-only repository
+- Tracked source files **must be ASCII** unless the codepoint is explicitly
+  allowlisted in `scripts/check-ascii.mjs`. Use `-` for em/en-dash, `...` for
+  ellipsis, `->` for right-arrow, `<=` / `!=` / `x` for math, `[x]` for check
+  marks, etc. i18n-extractable strings go through Angular's i18n pipeline,
+  not inline Unicode typography.
+- CI runs `npm run check:ascii` on every push and PR. If you genuinely need a
+  new non-ASCII codepoint (e.g., a UI glyph), add it to the `ALLOWED` set in
+  `scripts/check-ascii.mjs` with an inline comment explaining why.
+
 ## 5. Testing
 
 - **Always add/update tests** for logic changes. No test = not done.
@@ -127,11 +137,13 @@ Before finishing a task:
 1. `npm run lint` passes (frontend and `api/`).
 2. `npm test` passes (frontend and `api/`).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
-4. Only run the suites that exist - do not introduce new toolchains to satisfy
+4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the
+   allowlist in `scripts/check-ascii.mjs`).
+5. Only run the suites that exist - do not introduce new toolchains to satisfy
    this checklist. If a suite isn't set up yet and the task is scaffolding,
    set it up per the spec.
-5. No new TypeScript errors, ESLint errors, or console warnings introduced.
-6. Spec is updated if behavior or architecture changed.
+6. No new TypeScript errors, ESLint errors, or console warnings introduced.
+7. Spec is updated if behavior or architecture changed.
 
 ## 8. Git & PR Hygiene
 

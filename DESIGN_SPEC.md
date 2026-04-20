@@ -392,6 +392,24 @@ Available to **registered users** only.
 
 Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 
+### Auth forwarding (SWA managed-Functions quirk)
+
+Azure Static Web Apps' managed-Functions runtime **rewrites the incoming
+`Authorization` header** with its own internal HS256 JWT before forwarding the
+request to the Function. A bearer token placed on `Authorization` by the SPA
+does not reach the Function as-is. To work around this, JotJSON uses a custom
+header:
+
+- **SPA -> API**: the auth HTTP interceptor attaches the Entra access token as
+  `X-Jotjson-Authorization: Bearer <token>` on every `/api/*` request.
+- **API**: `verifyAccessToken` reads `X-Jotjson-Authorization` first, then
+  falls back to the standard `Authorization` header (used only by local
+  `func start`, where SWA's rewriting does not apply).
+
+**Every future protected endpoint, and every new API client, must use this
+convention.** Do not rely on the standard `Authorization` header for
+SPA-originated calls in production.
+
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | POST | `/api/blobs` | Required | Create a new JSON blob |
@@ -433,6 +451,11 @@ Base path: `https://api.jotjson.com/` (or `/api/` proxied via Static Web Apps)
 ### Security
 - All traffic over HTTPS (enforced by Azure Static Web Apps' built-in SSL).
 - Microsoft Entra External ID handles all credential storage - no passwords in Cosmos DB.
+- **MSAL cache lives in `localStorage`** (not `sessionStorage`) so signed-in
+  state survives tab close and browser restart. The SPA reads the cached
+  account on app start to hydrate the `signedInUser` signal without a full
+  redirect round-trip. Sign-out explicitly clears MSAL cache and the local
+  preferences copy.
 - Input sanitization: JSON blobs are treated as opaque strings, never rendered as HTML.
 - CORS: allow only `jotjson.com` origins.
 - Content Security Policy headers.
@@ -555,6 +578,19 @@ src/
 | Azure Front Door | *(deferred post-v1)* | Add for WAF / advanced routing if needed |
 | Azure Monitor / App Insights | Pay-as-you-go | Logging, telemetry |
 
+### Cosmos DB authentication
+
+The SWA deployment provisions a system-assigned managed identity on the Static
+Web App and a `cosmosRoleAssignment.bicep` that grants Cosmos DB Built-in Data
+Contributor at the database scope. However, **the SWA managed-Functions
+runtime does not expose that managed identity to the Function process** -
+`DefaultAzureCredential` cannot acquire tokens inside a managed-Function at
+runtime. As a result, the API authenticates to Cosmos with a primary key
+(`COSMOS_KEY` app setting) in production. The managed-identity + RBAC
+machinery is retained in Bicep for the day JotJSON moves off managed Functions
+(e.g., to a bring-your-own Function App or Container App), at which point the
+key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
+
 ---
 
 ## CI/CD (GitHub Actions)
@@ -579,6 +615,10 @@ src/
    - **M3b**: Profile page scaffold at `/profile` (display name, read-only email, sign-out button). Route is auth-guarded.
    - **M3c**: Migrate preferences from `localStorage` to the signed-in user. On sign-in, the client calls `GET /api/me`; if the user document exists, its preferences replace the local copy (remote wins). If it does not exist (first sign-in ever), the client `POST`s the current local preferences to `/api/me` to seed the server - the anon user's customizations are preserved exactly once. Subsequent changes are mirrored to Cosmos via a debounced `PUT /api/me/preferences` while the user is signed in; anonymous usage continues to read/write `localStorage`. The server rejects unknown keys and out-of-range values on every write.
 4. **Persistent links** - Blob CRUD API, save & share flow, `/s/:id` route.
+   Includes per-blob page title via the Angular `Title` service so the
+   browser tab reflects the active blob's name (e.g. `my-config.json · JotJSON`)
+   instead of the static homepage title. Anonymous / new / unsaved blobs fall
+   back to the homepage title.
 5. **History** - History tracking, `/history` page, management actions.
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
 7. **Polish & launch** - Each of these lands as its own step/commit:
