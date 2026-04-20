@@ -69,19 +69,35 @@
           }
 
           @if (showTypeBadges()) {
-            <span class="tree-type-badge">{{ node.type }}</span>
+            <span class="tree-row-right">
+              <span class="tree-type-badge">{{ node.type }}</span>
+              <button
+                type="button"
+                class="tree-path-pill"
+                title="Copy path"
+                i18n-title="@@tree.copyPath.title"
+                aria-label="Copy path"
+                i18n-aria-label="@@tree.copyPath.aria"
+                (click)="copyPath(node)"
+              >
+                <jj-icon name="copy-path" [size]="15" />
+              </button>
+            </span>
+          } @else {
+            <span class="tree-row-right">
+              <button
+                type="button"
+                class="tree-path-pill"
+                title="Copy path"
+                i18n-title="@@tree.copyPath.title"
+                aria-label="Copy path"
+                i18n-aria-label="@@tree.copyPath.aria"
+                (click)="copyPath(node)"
+              >
+                <jj-icon name="copy-path" [size]="15" />
+              </button>
+            </span>
           }
-          <button
-            type="button"
-            class="tree-path-pill"
-            title="Copy path"
-            i18n-title="@@tree.copyPath.title"
-            aria-label="Copy path"
-            i18n-aria-label="@@tree.copyPath.aria"
-            (click)="copyPath(node)"
-          >
-            <jj-icon name="copy-path" [size]="15" />
-          </button>
         </div>
       </mat-nested-tree-node>
 
@@ -112,23 +128,25 @@
             <span class="tree-value-brace">
               {{ treeControl.isExpanded(node) ? (node.type === 'array' ? '[' : '{') : containerSummary(node) }}
             </span>
-            <span class="tree-count">{{ containerCountText(node) }}</span>
           </span>
 
-          @if (showTypeBadges()) {
-            <span class="tree-type-badge">{{ node.type }}</span>
-          }
-          <button
-            type="button"
-            class="tree-path-pill"
-            title="Copy path"
-            i18n-title="@@tree.copyPath.title"
-            aria-label="Copy path"
-            i18n-aria-label="@@tree.copyPath.aria"
-            (click)="copyPath(node)"
-          >
-            <jj-icon name="copy-path" [size]="15" />
-          </button>
+          <span class="tree-row-right">
+            <span class="tree-count">{{ containerCountText(node) }}</span>
+            @if (showTypeBadges()) {
+              <span class="tree-type-badge">{{ node.type }}</span>
+            }
+            <button
+              type="button"
+              class="tree-path-pill"
+              title="Copy path"
+              i18n-title="@@tree.copyPath.title"
+              aria-label="Copy path"
+              i18n-aria-label="@@tree.copyPath.aria"
+              (click)="copyPath(node)"
+            >
+              <jj-icon name="copy-path" [size]="15" />
+            </button>
+          </span>
         </div>
 
         <div

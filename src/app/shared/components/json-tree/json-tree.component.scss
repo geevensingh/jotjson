@@ -157,11 +157,22 @@
     color: inherit;
     font-weight: 600;
   }
+}
+
+.tree-row-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
 
   .tree-count {
-    margin-left: 4px;
     color: rgba(127, 127, 127, 0.7);
     font-style: italic;
+  }
+
+  .tree-type-badge,
+  .tree-path-pill {
+    margin-left: 0;
   }
 }
 
