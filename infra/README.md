@@ -97,17 +97,42 @@ The deploy workflow builds the Angular SPA with environment values baked in
 forwards the same values to Bicep as deploy parameters. Configure these repo
 secrets:
 
-| Secret                  | Example                                                    |
-| ----------------------- | ---------------------------------------------------------- |
-| `ENTRA_TENANT_ID`       | `00000000-0000-0000-0000-000000000000`                     |
-| `ENTRA_AUTHORITY`       | `https://jotjsonauth.ciamlogin.com/<tenantId>/`            |
-| `ENTRA_KNOWN_AUTHORITY` | `jotjsonauth.ciamlogin.com`                                |
-| `ENTRA_SPA_CLIENT_ID`   | SPA app registration's Application (client) id            |
-| `ENTRA_API_CLIENT_ID`   | API app registration's Application (client) id            |
-| `ENTRA_API_SCOPE`       | `api://<apiClientId>/access_as_user`                       |
-| `ENTRA_API_AUDIENCE`    | `api://<apiClientId>`                                      |
+| Secret                  | Used by              | Example                                          |
+| ----------------------- | -------------------- | ------------------------------------------------ |
+| `ENTRA_TENANT_ID`       | Bicep                | `00000000-0000-0000-0000-000000000000`           |
+| `ENTRA_AUTHORITY`       | Bicep + SPA build    | `https://jotjsonauth.ciamlogin.com/<tenantId>/`  |
+| `ENTRA_KNOWN_AUTHORITY` | SPA build            | `jotjsonauth.ciamlogin.com`                      |
+| `ENTRA_SPA_CLIENT_ID`   | Bicep + SPA build    | SPA app registration's Application (client) id   |
+| `ENTRA_API_CLIENT_ID`   | Bicep                | API app registration's Application (client) id   |
+| `ENTRA_API_SCOPE`       | SPA build            | `api://<apiClientId>/access_as_user`             |
+| `ENTRA_API_AUDIENCE`    | Bicep                | `api://<apiClientId>`                            |
 
-At deploy time, pass the infra-bound values through as Bicep overrides:
+**What each consumer does with them:**
+
+- **SPA build** (GitHub Actions `cd.yml`): before `ng build --configuration=production`,
+  writes a `src/environments/environment.prod.ts` substituting the values.
+  The resulting static bundle therefore has the client id, authority,
+  known-authority host, and API scope hard-baked. The deploy step then fails
+  fast if any placeholder survives the substitution.
+- **Bicep** (GitHub Actions `infra.yml`, workflow_dispatch): passes the values
+  as `--parameters` overrides on `az deployment group create`. They flow into
+  the Static Web App's Functions app settings (`ENTRA_TENANT_ID`,
+  `ENTRA_AUTHORITY`, `ENTRA_SPA_CLIENT_ID`, `ENTRA_API_CLIENT_ID`,
+  `ENTRA_API_AUDIENCE`). The API reads `ENTRA_AUTHORITY` + `ENTRA_API_AUDIENCE`
+  at runtime to validate JWTs.
+
+**Redirect URIs to register on the SPA app** (Entra → App registrations →
+JotJSON Web (SPA) → Authentication, Single-page application platform):
+
+- `https://jotjson.com/` — production custom domain.
+- `http://localhost:4200/` — local `ng serve`.
+- Optionally your SWA default hostname (e.g.
+  `https://<site>.azurestaticapps.net/`) during the window before the custom
+  domain is bound. The production build's `redirectUri` is hard-coded to
+  `https://jotjson.com/` so sign-in via the SWA hostname won't round-trip
+  until the custom domain is live.
+
+**Manual local deploy example** (equivalent to what `infra.yml` runs):
 
 ```powershell
 az deployment group create `
