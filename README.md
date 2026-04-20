@@ -82,6 +82,19 @@ The Angular dev server proxies `/api/*` to the local Functions host
 (`proxy.conf.json` -> `http://localhost:7071`), so both pieces need to be
 running to exercise the full stack.
 
+**Quick start (Windows):**
+
+```powershell
+.\scripts\dev.ps1
+```
+
+`scripts/dev.ps1` checks prereqs, runs `npm install` if needed, verifies
+your env files exist, and opens a Windows Terminal with three tabs:
+`web` (ng serve), `api` (func start), and `tests` (ng test + jest
+--watch split pane). Use `-SkipTests` to skip the tests tab.
+
+**Manual (any OS):**
+
 ```bash
 # Terminal 1 - Functions API on :7071
 cd api
