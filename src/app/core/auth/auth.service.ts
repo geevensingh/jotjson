@@ -5,11 +5,10 @@ import {
   EventMessage,
   EventType,
   InteractionRequiredAuthError,
-  InteractionStatus,
   IPublicClientApplication
 } from '@azure/msal-browser';
 import { MsalBroadcastService } from '@azure/msal-angular';
-import { filter, take } from 'rxjs/operators';
+import { filter } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { AuthUser } from './auth-user';
 import { MSAL_INSTANCE } from './msal-instance';
@@ -77,7 +76,14 @@ export class AuthService {
         if (result?.account) {
           this.msal.setActiveAccount(result.account);
         }
-        return this.waitForInteractionComplete().then(() => this.refreshFromCache());
+        // Populate the user signal directly from the MSAL cache. We used to
+        // also wait on `MsalBroadcastService.inProgress$ === None`, but that
+        // subject only advances when callers drive MSAL through
+        // `MsalService`; we talk to the browser MSAL instance directly, so
+        // on a plain reload the broadcast stays in `Startup` forever and the
+        // UI would render as signed-out even though the cache has an
+        // account.
+        this.refreshFromCache();
       })
       .catch(() => {
         // Swallow: MSAL logs internally; a failed redirect should not crash
@@ -146,18 +152,6 @@ export class AuthService {
       });
     }
     return this.initPromise;
-  }
-
-  private waitForInteractionComplete(): Promise<void> {
-    if (!this.broadcast) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      this.broadcast!.inProgress$
-        .pipe(
-          filter((status) => status === InteractionStatus.None),
-          take(1)
-        )
-        .subscribe(() => resolve());
-    });
   }
 
   private refreshFromCache(): void {
