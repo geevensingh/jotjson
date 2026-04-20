@@ -40,6 +40,28 @@ function getAuthority(): string {
   return (process.env['ENTRA_AUTHORITY'] ?? '').trim().replace(/\/+$/, '');
 }
 
+/**
+ * Entra External ID may issue access tokens whose `iss` claim uses the
+ * tenant GUID subdomain (e.g. `https://<tenantId>.ciamlogin.com/...`) even
+ * when the configured authority uses a vanity subdomain
+ * (e.g. `https://<name>.ciamlogin.com/...`). Accept both forms, with and
+ * without the `/v2.0` suffix, so validation works regardless of which
+ * subdomain Entra picks when signing the token.
+ */
+function getAcceptedIssuers(authority: string): [string, ...string[]] | null {
+  if (!authority) return null;
+  const accepted = new Set<string>([authority, `${authority}/v2.0`]);
+  const match = /^(https:\/\/)([^/]+)\.ciamlogin\.com\/([^/]+)(.*)$/i.exec(authority);
+  if (match) {
+    const [, scheme, , tenantId, rest] = match;
+    const tenantHostAuthority = `${scheme}${tenantId}.ciamlogin.com/${tenantId}${rest}`;
+    accepted.add(tenantHostAuthority);
+    accepted.add(`${tenantHostAuthority}/v2.0`);
+  }
+  const [first, ...tail] = [...accepted];
+  return [first, ...tail];
+}
+
 function getAudience(): string {
   return (process.env['ENTRA_API_AUDIENCE'] ?? '').trim();
 }
@@ -129,7 +151,8 @@ function extractBearerToken(req: HttpRequest): string | null {
 export async function verifyAccessToken(token: string): Promise<AuthenticatedPrincipal> {
   const authority = getAuthority();
   const audiences = getAcceptedAudiences();
-  if (!authority || !audiences) {
+  const issuers = getAcceptedIssuers(authority);
+  if (!authority || !audiences || !issuers) {
     throw new AuthError('Auth not configured');
   }
   const payload = await new Promise<JwtPayload>((resolve, reject) => {
@@ -138,7 +161,7 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
       getKey(authority),
       {
         audience: audiences,
-        issuer: [authority, `${authority}/v2.0`],
+        issuer: issuers,
         algorithms: ['RS256']
       },
       (err, decoded) => {
