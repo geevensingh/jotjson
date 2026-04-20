@@ -103,7 +103,18 @@ module dns 'modules/dnsZone.bicep' = if (!empty(dnsZoneName)) {
   }
 }
 
+module swaCosmosRole 'modules/cosmosRoleAssignment.bicep' = {
+  name: 'swaCosmosRole'
+  params: {
+    cosmosAccountName: cosmos.outputs.accountName
+    databaseName: cosmos.outputs.databaseName
+    principalId: swa.outputs.principalId
+    nameSeed: 'swa'
+  }
+}
+
 output staticWebAppHostname string = swa.outputs.defaultHostname
+output staticWebAppPrincipalId string = swa.outputs.principalId
 output dnsNameServers array = empty(dnsZoneName) ? [] : dns.outputs.nameServers
 output cosmosEndpoint string = cosmos.outputs.endpoint
 output storageAccountName string = storage.outputs.accountName

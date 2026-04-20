@@ -66,4 +66,5 @@ resource containerResources 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
 
 output endpoint string = account.properties.documentEndpoint
 output accountName string = account.name
+output accountId string = account.id
 output databaseName string = db.name
