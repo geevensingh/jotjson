@@ -37,10 +37,11 @@ export function createMsalInstance(): IPublicClientApplication {
       postLogoutRedirectUri
     },
     cache: {
-      // Session cache: cleared on tab close. Safer default than localStorage
-      // for a public-internet SPA; we trade some "remember me" UX for a
-      // shorter window of exposure for cached tokens.
-      cacheLocation: 'sessionStorage'
+      // localStorage so sign-in persists across tab close and new tabs, which
+      // matches typical SPA "stay signed in" UX. MSAL still enforces token
+      // expiry and relies on the silent/interactive refresh flow; the cached
+      // material is refresh-token-equivalent, not a long-lived password.
+      cacheLocation: 'localStorage'
     },
     system: {
       loggerOptions: {
