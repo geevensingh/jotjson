@@ -51,6 +51,10 @@ jobs:
         working-directory: api
         run: npm ci
 
+      - name: Materialize environment.ts
+        if: steps.check.outputs.have_token == 'true'
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
+
       - name: Deploy to Azure Static Web Apps
         if: steps.check.outputs.have_token == 'true'
         uses: Azure/static-web-apps-deploy@v1

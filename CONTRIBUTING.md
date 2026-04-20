@@ -27,16 +27,23 @@ frameworks, or cloud services without prior approval.
 
 1. **Branch** off `main`: `git checkout -b feat/<short-slug>` or
    `fix/<short-slug>`.
-2. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
+2. **First-time setup**: copy
+   `src/environments/environment.example.ts` to
+   `src/environments/environment.ts`. The real file is gitignored — fill in
+   your local Microsoft Entra External ID values for sign-in to work
+   (`infra/README.md` → "Auth setup" walks through provisioning). Leaving the
+   placeholders in place is fine if you don't need to exercise auth locally;
+   the toolbar will show a disabled "Sign in (not configured)" button.
+3. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
    `inject()`, Signals, kebab-case filenames, co-located `*.spec.ts`).
-3. **Test** — add or update tests for any logic change. No test = not done.
-4. **Validate** locally:
+4. **Test** — add or update tests for any logic change. No test = not done.
+5. **Validate** locally:
    - `npm run lint` (frontend and `api/`)
    - `npm test` (frontend and `api/`)
    - `npm run build` / `ng build --configuration production`
-5. **Commit** in small, focused commits with imperative subjects
+6. **Commit** in small, focused commits with imperative subjects
    (e.g., `Add slug collision check to BlobService`).
-6. **Open a PR** using the template. Fill in all sections.
+7. **Open a PR** using the template. Fill in all sections.
 
 ## Commit Messages
 

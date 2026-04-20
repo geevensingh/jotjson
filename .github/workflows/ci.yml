@@ -20,6 +20,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Materialize environment.ts
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
       - run: npm run lint
       - run: npm run build -- --configuration=production
 
@@ -60,6 +62,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Materialize environment.ts
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
       - run: npm run test:ci
       - name: Upload coverage
         if: always()

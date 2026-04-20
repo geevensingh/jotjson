@@ -51,3 +51,7 @@ Thumbs.db
 # Bicep build output (from `az bicep build`)
 /infra/**/*.json
 
+# Local dev environment with real Entra/MSAL values — never committed.
+# Use `src/environments/environment.example.ts` as the template.
+/src/environments/environment.ts
+
