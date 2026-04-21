@@ -34,13 +34,19 @@ export class JsonParserService {
       return { value: undefined, ast: undefined, errors: [], empty: true };
     }
 
+    // Strip a leading UTF-8/UTF-16 BOM (U+FEFF). Many Windows editors and
+    // older file-exporting tools prefix JSON with a BOM, which jsonc-parser
+    // reports as an InvalidSymbol error at offset 0. A BOM is a file-level
+    // encoding artifact, not part of the JSON grammar, so we silently elide.
+    const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+
     const rawErrors: ParseError[] = [];
-    const ast = parseTree(text, rawErrors, {
+    const ast = parseTree(stripped, rawErrors, {
       allowTrailingComma: true,
       disallowComments: false
     });
 
-    const errors = rawErrors.map((e) => this.toError(e, text));
+    const errors = rawErrors.map((e) => this.toError(e, stripped));
     const value = ast ? this.nodeToValue(ast) : undefined;
 
     return { value, ast, errors, empty: false };

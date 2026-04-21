@@ -110,6 +110,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "**/*",
+                "input": "test-examples",
+                "output": "/test-examples"
               }
             ],
             "styles": [
