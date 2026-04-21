@@ -634,6 +634,7 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
    - **M7j**: Static Web Apps upgrade to Standard tier.
    - **M7k**: Surface JSONC comments in the tree view (e.g., attach leading/trailing comments from `jsonc-parser` to the nearest node and render them as dimmed annotations or a hover affordance).
    - **M7l**: Responsive layout - on viewports narrower than 768px, force the editor/tree split to stack vertically (editor on top, tree below) regardless of the user's `layoutOrientation` preference, per Home page §Layout.
+   - **M7m**: Status bar - a slim, always-visible strip along the bottom of the Home page that surfaces at-a-glance stats about the current document. Left cluster covers the raw text (character count, line count, byte size in UTF-8, current cursor line/column); right cluster covers the parsed tree (total node count, max depth, array vs. object counts, JSON vs. JSONC mode indicator). Stats update reactively as the user types. Hidden or collapsed to a single-line summary on narrow viewports (see M7l). No interactivity required in v1 - purely informational.
 
 ---
 
