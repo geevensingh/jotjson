@@ -113,8 +113,8 @@
               },
               {
                 "glob": "**/*",
-                "input": "test-examples",
-                "output": "/test-examples"
+                "input": "src/testing/fixtures",
+                "output": "/fixtures"
               }
             ],
             "styles": [
