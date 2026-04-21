@@ -1,0 +1,107 @@
+﻿{
+  "self_url": "/1d3c4776-3ecf-43bd-ae8c-683205134fdd/capture-schedules/025b23f8f562079c2e551d71b3ec3ae8",
+  "id": "025b23f8f562079c2e551d71b3ec3ae8",
+  "account_id": "1d3c4776-3ecf-43bd-ae8c-683205134fdd",
+  "external_reference": {
+    "id": "63814b11-3ca0-4299-9939-7b8cb957e8c9",
+    "url": "/1d3c4776-3ecf-43bd-ae8c-683205134fdd/captures/63814b11-3ca0-4299-9939-7b8cb957e8c9"
+  },
+  "version": 4,
+  "created_timestamp": "2018-01-01T10:36:30.1219975Z",
+  "updated_timestamp": "2018-01-01T10:38:33.7037889Z",
+  "start_date": "2018-01-01T10:36:30.1219975Z",
+  "due_date": "2018-01-01T10:36:30.1219975Z",
+  "capture_context": {
+    "line_items": [
+      {
+        "billing_record_id": "b3c02056-c586-47e7-a2b9-14ce5ddfdd98",
+        "line_item_ids": [
+          {
+            "id": "014bfbad-e3ac-47b0-bdb6-d9fed5e29369",
+            "low": 0,
+            "high": 0
+          }
+        ]
+      }
+    ],
+    "capture_instructions": {
+      "payment_instrument_id": {
+        "account_id": "1d3c4776-3ecf-43bd-ae8c-683205134fdd",
+        "id": "hn9aHgAAAAADAACA"
+      },
+      "instruction_type": "single_payment_instrument"
+    }
+  },
+  "expiration": 7,
+  "days_overdue": 0,
+  "days_since_start": 0,
+  "events": [
+    {
+      "capture_context": {
+        "line_items": [
+          {
+            "billing_record_id": "b3c02056-c586-47e7-a2b9-14ce5ddfdd98",
+            "line_item_ids": [
+              {
+                "id": "014bfbad-e3ac-47b0-bdb6-d9fed5e29369",
+                "low": 0,
+                "high": 0
+              }
+            ]
+          }
+        ],
+        "capture_instructions": {
+          "payment_instrument_id": {
+            "account_id": "1d3c4776-3ecf-43bd-ae8c-683205134fdd",
+            "id": "hn9aHgAAAAADAACA"
+          },
+          "instruction_type": "single_payment_instrument"
+        }
+      },
+      "id": "f9bef3bc-575c-4f91-9f31-0a82990046e0",
+      "event_type": "created",
+      "timestamp": "2018-01-01T10:36:30.1219975Z",
+      "version_added": 1
+    },
+    {
+      "evaluation_time": "2018-01-01T10:36:30.1219975Z",
+      "id": "9c730575-1abd-404c-a0ab-d19e431be838",
+      "event_type": "capture_evaluation_scheduled",
+      "timestamp": "2018-01-01T10:37:31.5046848Z",
+      "version_added": 2
+    },
+    {
+      "capture_context": {
+        "line_items": [
+          {
+            "billing_record_id": "b3c02056-c586-47e7-a2b9-14ce5ddfdd98",
+            "line_item_ids": [
+              {
+                "id": "014bfbad-e3ac-47b0-bdb6-d9fed5e29369",
+                "low": 0,
+                "high": 0
+              }
+            ]
+          }
+        ],
+        "capture_instructions": {
+          "payment_instrument_id": {
+            "account_id": "1d3c4776-3ecf-43bd-ae8c-683205134fdd",
+            "id": "hn9aHgAAAAADAACA"
+          },
+          "instruction_type": "single_payment_instrument"
+        }
+      },
+      "capture_reference": {
+        "id": "339117e1-88f1-4bca-9cf1-cd28f3d3729d",
+        "url": "https://billingservice.cp.microsoft.com/1d3c4776-3ecf-43bd-ae8c-683205134fdd/captures/339117e1-88f1-4bca-9cf1-cd28f3d3729d"
+      },
+      "result": "succeeded",
+      "id": "8e2c5f10-c978-4c44-9c84-3dee1ff5cc2e",
+      "event_type": "capture_attempted",
+      "timestamp": "2018-01-01T10:38:33.7037889Z",
+      "version_added": 4
+    }
+  ],
+  "state": "succeeded"
+}
