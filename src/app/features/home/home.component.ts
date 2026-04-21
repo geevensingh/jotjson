@@ -33,6 +33,7 @@ import {
   EditorMode,
   ToolbarComponent
 } from '../../shared/components/toolbar/toolbar.component';
+import { StatusBarComponent } from './status-bar/status-bar.component';
 
 /**
  * Primary editor + tree experience. Home is an anonymous page - persistence
@@ -41,7 +42,7 @@ import {
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [JsonEditorComponent, JsonTreeComponent, ToolbarComponent],
+  imports: [JsonEditorComponent, JsonTreeComponent, ToolbarComponent, StatusBarComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss'
@@ -53,6 +54,7 @@ export class HomeComponent {
 
   readonly content = signal(this.draft.content());
   readonly mode = signal<EditorMode>(this.detectMode(this.draft.content()));
+  readonly cursor = signal<{ line: number; column: number } | undefined>(undefined);
 
   readonly parseResult = computed<JsonParseResult>(() =>
     this.parser.parse(this.content())
@@ -161,6 +163,10 @@ export class HomeComponent {
 
   onValueChange(next: string): void {
     this.content.set(next);
+  }
+
+  onCursorChange(pos: { line: number; column: number }): void {
+    this.cursor.set(pos);
   }
 
   async onPaste(): Promise<void> {

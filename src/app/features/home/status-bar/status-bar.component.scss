@@ -1,0 +1,62 @@
+@use '../../../../styles/variables' as v;
+
+:host {
+  display: block;
+  border-top: 1px solid rgba(127, 127, 127, 0.2);
+  background: rgba(127, 127, 127, 0.04);
+  font-family: v.$font-ui;
+  font-size: 12px;
+  user-select: none;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 10px;
+  min-height: 22px;
+  line-height: 1;
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: rgba(127, 127, 127, 1);
+  white-space: nowrap;
+}
+
+.label {
+  opacity: 0.75;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.value {
+  font-family: v.$font-mono;
+  color: currentColor;
+  opacity: 0.95;
+}
+
+.stat-mode .mode {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(127, 127, 127, 0.15);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.stat-mode.mode-jsonc .mode {
+  background: rgba(100, 150, 255, 0.18);
+  color: rgb(60, 100, 200);
+}

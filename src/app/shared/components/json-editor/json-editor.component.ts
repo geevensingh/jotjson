@@ -35,6 +35,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   readonly value = input<string>('');
   readonly errors = input<JsonParseError[]>([]);
   readonly valueChange = output<string>();
+  readonly cursorPositionChange = output<{ line: number; column: number }>();
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
@@ -128,6 +129,11 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         if (this.suppressChange) return;
         const v = editor.getValue();
         this.zone.run(() => this.valueChange.emit(v));
+      });
+
+      editor.onDidChangeCursorPosition((e) => {
+        const pos = { line: e.position.lineNumber, column: e.position.column };
+        this.zone.run(() => this.cursorPositionChange.emit(pos));
       });
 
       // Auto-unescape pasted JSON (issue #38). Only rewrite when the pasted

@@ -34,7 +34,126 @@
         <source>File too large (max 5 MB)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">212</context>
+          <context context-type="linenumber">218</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.chars.aria" datatype="html">
+        <source>Characters</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.chars.label" datatype="html">
+        <source>Chars</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">8,9</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.lines.aria" datatype="html">
+        <source>Lines</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">14</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.lines.label" datatype="html">
+        <source>Lines</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">16,17</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.bytes.aria" datatype="html">
+        <source>Size in UTF-8 bytes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">21,22</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.bytes.label" datatype="html">
+        <source>Size</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">24,25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.cursor.aria" datatype="html">
+        <source>Cursor position</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">29,30</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.cursor.label" datatype="html">
+        <source>Ln</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">32,33</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.col.label" datatype="html">
+        <source>Col</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">34,35</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.nodes.aria" datatype="html">
+        <source>Total nodes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">42,43</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.nodes.label" datatype="html">
+        <source>Nodes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">45,46</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.depth.aria" datatype="html">
+        <source>Maximum depth</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">50,51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.depth.label" datatype="html">
+        <source>Depth</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">53,54</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.objects.aria" datatype="html">
+        <source>Object count</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">58,59</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.objects.label" datatype="html">
+        <source>Obj</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">61,62</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.arrays.aria" datatype="html">
+        <source>Array count</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">66,67</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.arrays.label" datatype="html">
+        <source>Arr</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">69,70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.title" datatype="html">
