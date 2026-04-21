@@ -34,7 +34,7 @@
         <source>File too large (max 5 MB)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">190</context>
+          <context context-type="linenumber">212</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.title" datatype="html">
@@ -313,7 +313,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.copy.tooltip" datatype="html">
-        <source>Copy editor contents to clipboard</source>
+        <source>Copy editor contents to clipboard (hold Alt to copy as escaped JSON string)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
           <context context-type="linenumber">17,18</context>

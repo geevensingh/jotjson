@@ -15,7 +15,7 @@ import {
   viewChild
 } from '@angular/core';
 import type * as MonacoNS from 'monaco-editor';
-import { JsonParseError } from '../../../core/json/json-parser.service';
+import { JsonParseError, JsonParserService } from '../../../core/json/json-parser.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { loadMonaco } from './monaco-loader';
 
@@ -28,6 +28,7 @@ import { loadMonaco } from './monaco-loader';
 })
 export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   private readonly prefs = inject(PreferencesService);
+  private readonly parser = inject(JsonParserService);
   private readonly zone = inject(NgZone);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -127,6 +128,33 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         if (this.suppressChange) return;
         const v = editor.getValue();
         this.zone.run(() => this.valueChange.emit(v));
+      });
+
+      // Auto-unescape pasted JSON (issue #38). Only rewrite when the pasted
+      // region is itself an escaped JSON document AND unescaping it leaves the
+      // full buffer parseable - prevents us from rewriting legitimate string
+      // values that happen to contain escape sequences.
+      editor.onDidPaste((e) => {
+        const model = editor.getModel();
+        if (!model) return;
+        const pasted = model.getValueInRange(e.range);
+        if (!pasted) return;
+        const { unescaped, changed } = this.parser.tryUnescape(pasted);
+        if (!changed) return;
+        const full = model.getValue();
+        const before = model.getValueInRange({
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: e.range.startLineNumber,
+          endColumn: e.range.startColumn
+        });
+        const after = full.substring(before.length + pasted.length);
+        const hypothetical = before + unescaped + after;
+        if (!this.parser.parse(hypothetical).errors.length) {
+          editor.executeEdits('jotjson-unescape-paste', [
+            { range: e.range, text: unescaped, forceMoveMarkers: true }
+          ]);
+        }
       });
 
       this.editor = editor;

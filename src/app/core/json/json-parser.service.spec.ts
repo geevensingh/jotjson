@@ -141,4 +141,77 @@ describe('JsonParserService', () => {
       }
     });
   });
+
+  describe('tryUnescape', () => {
+    it('leaves valid JSON unchanged', () => {
+      const text = '{"a":1,"b":[2,3]}';
+      const r = svc.tryUnescape(text);
+      expect(r.changed).toBeFalse();
+      expect(r.unescaped).toBe(text);
+    });
+
+    it('leaves valid JSONC (with comments, trailing commas) unchanged', () => {
+      const text = '{\n  // hi\n  "a": 1,\n}';
+      const r = svc.tryUnescape(text);
+      expect(r.changed).toBeFalse();
+      expect(r.unescaped).toBe(text);
+    });
+
+    it('leaves empty and whitespace-only unchanged', () => {
+      expect(svc.tryUnescape('').changed).toBeFalse();
+      expect(svc.tryUnescape('   \n\t').changed).toBeFalse();
+    });
+
+    it('leaves plain prose containing \\n unchanged', () => {
+      const text = 'hello\\nworld';
+      const r = svc.tryUnescape(text);
+      expect(r.changed).toBeFalse();
+      expect(r.unescaped).toBe(text);
+    });
+
+    it('unescapes the exact payload from issue #38', () => {
+      const text =
+        '{\\r\\n    \\"created_timestamp\\": \\"2026-04-15T22:39:31.3752771Z\\",\\r\\n    \\"updated_timestamp\\": \\"2026-04-15T22:39:34.828969Z\\",\\r\\n    \\"total_request_charge_amount\\": 200.0,\\r\\n    \\"total_customer_charge_amount\\": 200.0,\\r\\n    \\"balance_owing\\": 200.0\\r\\n }';
+      const r = svc.tryUnescape(text);
+      expect(r.changed).toBeTrue();
+      expect(svc.parse(r.unescaped).errors).toEqual([]);
+      expect(svc.parse(r.unescaped).value).toEqual({
+        created_timestamp: '2026-04-15T22:39:31.3752771Z',
+        updated_timestamp: '2026-04-15T22:39:34.828969Z',
+        total_request_charge_amount: 200.0,
+        total_customer_charge_amount: 200.0,
+        balance_owing: 200.0
+      });
+    });
+
+    it('unescapes a quoted JSON string literal', () => {
+      const text = '"{\\"a\\":1,\\"b\\":2}"';
+      const r = svc.tryUnescape(text);
+      expect(r.changed).toBeTrue();
+      expect(svc.parse(r.unescaped).value).toEqual({ a: 1, b: 2 });
+    });
+
+    it('rejects top-level primitives after unescape', () => {
+      // A bare escaped string like '\"hello\"' would unescape to '"hello"'
+      // which parses cleanly - but we only accept object/array unescapes to
+      // avoid false positives on ordinary prose.
+      const text = '\\"hello\\"';
+      const r = svc.tryUnescape(text);
+      expect(r.changed).toBeFalse();
+    });
+  });
+
+  describe('escapeAsJsonString', () => {
+    it('produces JSON.stringify semantics', () => {
+      expect(svc.escapeAsJsonString('{"a":1}')).toBe('"{\\"a\\":1}"');
+    });
+
+    it('round-trips through tryUnescape for object payloads', () => {
+      const original = '{"a":1,"b":[2,3]}';
+      const escaped = svc.escapeAsJsonString(original);
+      const r = svc.tryUnescape(escaped);
+      expect(r.changed).toBeTrue();
+      expect(svc.parse(r.unescaped).value).toEqual({ a: 1, b: [2, 3] });
+    });
+  });
 });

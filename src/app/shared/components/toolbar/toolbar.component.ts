@@ -35,6 +35,7 @@ export class ToolbarComponent {
 
   readonly paste = output<void>();
   readonly copy = output<void>();
+  readonly copyEscaped = output<void>();
   readonly upload = output<File>();
   readonly download = output<void>();
   readonly clear = output<void>();
@@ -77,6 +78,18 @@ export class ToolbarComponent {
 
   onModeChange(next: EditorMode): void {
     this.modeChange.emit(next);
+  }
+
+  /**
+   * Click handler for the Copy button. Alt-click is a power-user affordance
+   * that copies the editor contents as a JSON-string-literal (see issue #38).
+   */
+  onCopyClick(ev: MouseEvent): void {
+    if (ev.altKey) {
+      this.copyEscaped.emit();
+    } else {
+      this.copy.emit();
+    }
   }
 
   onSignIn(): void {

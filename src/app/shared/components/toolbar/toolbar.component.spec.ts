@@ -117,4 +117,30 @@ describe('ToolbarComponent', () => {
     cmp.copy.emit();
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  describe('onCopyClick', () => {
+    it('emits copy on a plain click', async () => {
+      const { fixture } = await create();
+      const cmp = fixture.componentInstance;
+      const copy = jasmine.createSpy('copy');
+      const copyEscaped = jasmine.createSpy('copyEscaped');
+      cmp.copy.subscribe(copy);
+      cmp.copyEscaped.subscribe(copyEscaped);
+      cmp.onCopyClick(new MouseEvent('click', { altKey: false }));
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(copyEscaped).not.toHaveBeenCalled();
+    });
+
+    it('emits copyEscaped when Alt is held', async () => {
+      const { fixture } = await create();
+      const cmp = fixture.componentInstance;
+      const copy = jasmine.createSpy('copy');
+      const copyEscaped = jasmine.createSpy('copyEscaped');
+      cmp.copy.subscribe(copy);
+      cmp.copyEscaped.subscribe(copyEscaped);
+      cmp.onCopyClick(new MouseEvent('click', { altKey: true }));
+      expect(copyEscaped).toHaveBeenCalledTimes(1);
+      expect(copy).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -166,8 +166,13 @@ export class HomeComponent {
   async onPaste(): Promise<void> {
     try {
       const text = await navigator.clipboard.readText();
-      if (text && text.trim().length > 0) {
-        this.content.set(text);
+      if (!text || text.trim().length === 0) return;
+      const { unescaped, changed } = this.parser.tryUnescape(text);
+      this.content.set(unescaped);
+      if (changed) {
+        // Pretty-print the newly-unescaped payload so the user sees the real
+        // structure rather than a single dense line (per issue #38).
+        this.onFormat();
       }
     } catch {
       // Clipboard unavailable / denied - graceful fallback: user can still Ctrl+V.
@@ -181,6 +186,23 @@ export class HomeComponent {
       await navigator.clipboard.writeText(text);
     } catch {
       // Clipboard unavailable / denied - graceful fallback: user can still Ctrl+C.
+    }
+  }
+
+  /**
+   * Copies the editor contents as a JSON-string-literal encoding - i.e. what
+   * `JSON.stringify(content)` returns. The resulting clipboard value can be
+   * pasted directly into another JSON document as a string value and later
+   * round-tripped by onPaste's auto-unescape. Bound to Alt+click on the
+   * toolbar Copy button (issue #38).
+   */
+  async onCopyEscaped(): Promise<void> {
+    const text = this.content();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(this.parser.escapeAsJsonString(text));
+    } catch {
+      // Clipboard unavailable / denied - no fallback beyond raw Ctrl+C.
     }
   }
 

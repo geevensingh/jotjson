@@ -160,6 +160,49 @@ describe('HomeComponent (unit-level)', () => {
     await expectAsync(fixture.componentInstance.onCopy()).toBeResolved();
   });
 
+  it('onPaste auto-unescapes an escaped JSON payload and formats it', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const escaped =
+      '{\\r\\n    \\"a\\": 1,\\r\\n    \\"b\\": 2\\r\\n }';
+    spyOn(navigator.clipboard, 'readText').and.returnValue(
+      Promise.resolve(escaped)
+    );
+    await fixture.componentInstance.onPaste();
+    const content = fixture.componentInstance.content();
+    // Unescaped + formatted: multiline with indentation.
+    expect(content).toContain('\n');
+    expect(content).toMatch(/"a":\s*1/);
+    expect(content).toMatch(/"b":\s*2/);
+  });
+
+  it('onPaste leaves already-valid JSON unchanged (no unescape)', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const text = '{"a":1}';
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve(text));
+    await fixture.componentInstance.onPaste();
+    expect(fixture.componentInstance.content()).toBe(text);
+  });
+
+  it('onCopyEscaped writes JSON.stringify of content to clipboard', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{"a":1}');
+    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(
+      Promise.resolve()
+    );
+    await fixture.componentInstance.onCopyEscaped();
+    expect(spy).toHaveBeenCalledWith('"{\\"a\\":1}"');
+  });
+
+  it('onCopyEscaped is a no-op when content is empty', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('');
+    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(
+      Promise.resolve()
+    );
+    await fixture.componentInstance.onCopyEscaped();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('splitRatio defaults to 0.5 and splitStyle reflects orientation', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const c = fixture.componentInstance;
