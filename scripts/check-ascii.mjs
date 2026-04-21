@@ -61,7 +61,13 @@ function scan(path) {
     return [];
   }
   if (looksBinary(buf)) return [];
-  const text = buf.toString('utf8');
+  let text = buf.toString('utf8');
+  // A leading UTF-8 BOM (U+FEFF) is a structural encoding marker, not content.
+  // Many editors add it silently and the app strips it at parse time, so
+  // skip it here rather than flagging every such file.
+  if (text.charCodeAt(0) === 0xfeff) {
+    text = text.slice(1);
+  }
   const violations = [];
   let line = 1;
   let col = 1;
