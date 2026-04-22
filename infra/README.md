@@ -9,7 +9,7 @@ Bicep templates for Azure resources backing JotJSON. See DESIGN_SPEC.md § Azure
   the registrar (GoDaddy) so SWA custom domain binding works. See
   [DNS + custom domain](#dns--custom-domain).
 - **Cosmos DB (serverless)** - database `jotjson` with containers:
-  - `blobs` (partition key: `/ownerId`, 30-day default TTL for anonymous)
+  - `blobs` (partition key: `/ownerId`, no TTL - persistent for registered users)
   - `users` (partition key: `/id`)
   - `history` (partition key: `/userId`)
   - `rule-sets` (partition key: `/userId`)
