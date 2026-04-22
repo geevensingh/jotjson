@@ -110,6 +110,31 @@
 
   <span class="divider" aria-hidden="true"></span>
 
+  <mat-button-toggle-group
+    class="mode-toggle"
+    [value]="mode()"
+    (change)="onModeChange($any($event.value))"
+    aria-label="Editor mode"
+    i18n-aria-label="@@toolbar.mode.aria"
+  >
+    <mat-button-toggle
+      value="json"
+      matTooltip="JSON only"
+      i18n-matTooltip="@@toolbar.mode.json.tooltip"
+    >
+      <ng-container i18n="@@toolbar.mode.json.label">JSON</ng-container>
+    </mat-button-toggle>
+    <mat-button-toggle
+      value="jsonc"
+      matTooltip="JSON with comments"
+      i18n-matTooltip="@@toolbar.mode.jsonc.tooltip"
+    >
+      <ng-container i18n="@@toolbar.mode.jsonc.label">JSONC</ng-container>
+    </mat-button-toggle>
+  </mat-button-toggle-group>
+
+  <span class="divider" aria-hidden="true"></span>
+
   <input
     type="text"
     class="title-field"
@@ -133,31 +158,6 @@
   >
     <jj-icon name="save" />
   </button>
-
-  <span class="divider" aria-hidden="true"></span>
-
-  <mat-button-toggle-group
-    class="mode-toggle"
-    [value]="mode()"
-    (change)="onModeChange($any($event.value))"
-    aria-label="Editor mode"
-    i18n-aria-label="@@toolbar.mode.aria"
-  >
-    <mat-button-toggle
-      value="json"
-      matTooltip="JSON only"
-      i18n-matTooltip="@@toolbar.mode.json.tooltip"
-    >
-      <ng-container i18n="@@toolbar.mode.json.label">JSON</ng-container>
-    </mat-button-toggle>
-    <mat-button-toggle
-      value="jsonc"
-      matTooltip="JSON with comments"
-      i18n-matTooltip="@@toolbar.mode.jsonc.tooltip"
-    >
-      <ng-container i18n="@@toolbar.mode.jsonc.label">JSONC</ng-container>
-    </mat-button-toggle>
-  </mat-button-toggle-group>
 
   <span class="spacer"></span>
 
