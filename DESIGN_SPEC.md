@@ -610,12 +610,12 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 
 ## Milestones
 
-1. ~~**Project scaffolding** - Angular app, Azure Functions project, Cosmos DB setup, CI/CD pipeline.~~ ✅
-2. ~~**Core editor experience** - JSON input + tree view on `/`, localStorage persistence, no auth.~~ ✅
-3. ~~**Auth integration**~~ ✅ - Microsoft Entra External ID + MSAL Angular, delivered in three steps:
-   - ~~**M3a**: Plumbing - MSAL bootstrap, `AuthService`, sign-in/sign-out toolbar control, signed-in user signal, HTTP interceptor attaching access tokens to `/api/*` calls, auth guard available (not yet applied to any route). Tenant/app-registration config read from environment/app-settings. No user-facing protected pages yet.~~ ✅
-   - ~~**M3b**: Profile page scaffold at `/profile` (display name, read-only email, sign-out button). Route is auth-guarded.~~ ✅
-   - ~~**M3c**: Migrate preferences from `localStorage` to the signed-in user. On sign-in, the client calls `GET /api/me`; if the user document exists, its preferences replace the local copy (remote wins). If it does not exist (first sign-in ever), the client `POST`s the current local preferences to `/api/me` to seed the server - the anon user's customizations are preserved exactly once. Subsequent changes are mirrored to Cosmos via a debounced `PUT /api/me/preferences` while the user is signed in; anonymous usage continues to read/write `localStorage`. The server rejects unknown keys and out-of-range values on every write.~~ ✅
+1. ~~**Project scaffolding** - Angular app, Azure Functions project, Cosmos DB setup, CI/CD pipeline.~~ (done)
+2. ~~**Core editor experience** - JSON input + tree view on `/`, localStorage persistence, no auth.~~ (done)
+3. ~~**Auth integration**~~ (done) - Microsoft Entra External ID + MSAL Angular, delivered in three steps:
+   - ~~**M3a**: Plumbing - MSAL bootstrap, `AuthService`, sign-in/sign-out toolbar control, signed-in user signal, HTTP interceptor attaching access tokens to `/api/*` calls, auth guard available (not yet applied to any route). Tenant/app-registration config read from environment/app-settings. No user-facing protected pages yet.~~ (done)
+   - ~~**M3b**: Profile page scaffold at `/profile` (display name, read-only email, sign-out button). Route is auth-guarded.~~ (done)
+   - ~~**M3c**: Migrate preferences from `localStorage` to the signed-in user. On sign-in, the client calls `GET /api/me`; if the user document exists, its preferences replace the local copy (remote wins). If it does not exist (first sign-in ever), the client `POST`s the current local preferences to `/api/me` to seed the server - the anon user's customizations are preserved exactly once. Subsequent changes are mirrored to Cosmos via a debounced `PUT /api/me/preferences` while the user is signed in; anonymous usage continues to read/write `localStorage`. The server rejects unknown keys and out-of-range values on every write.~~ (done)
 4. **Persistent links** - Blob CRUD API, save & share flow, `/s/:id` route.
    Includes per-blob page title via the Angular `Title` service so the
    browser tab reflects the active blob's name (e.g. `my-config.json · JotJSON`)
@@ -628,7 +628,7 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
    - **M7b**: Drag-and-drop file upload with full-page drop overlay (Home page §1).
    - **M7c**: Smart date/time detection + relative-time annotations in the tree view (Home page §1).
    - **M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).
-   - ~~**M7e**: Custom domain (`jotjson.com`).~~ ✅
+   - ~~**M7e**: Custom domain (`jotjson.com`).~~ (done)
    - **M7f**: Dark/light theme polish.
    - **M7g**: Accessibility audit.
    - **M7h**: SEO (pre-rendering + OG tags).
@@ -636,7 +636,7 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
    - **M7j**: Static Web Apps upgrade to Standard tier.
    - **M7k**: Surface JSONC comments in the tree view (e.g., attach leading/trailing comments from `jsonc-parser` to the nearest node and render them as dimmed annotations or a hover affordance).
    - **M7l**: Responsive layout - on viewports narrower than 768px, force the editor/tree split to stack vertically (editor on top, tree below) regardless of the user's `layoutOrientation` preference, per Home page §Layout. Also collapse the status bar (M7m) to a single-line summary - keep Bytes, Lines, and Mode; hide cursor, nodes, depth, and object/array counts.
-   - ~~**M7m**: Status bar - a slim, always-visible strip along the bottom of the Home page that surfaces at-a-glance stats about the current document. Left cluster covers the raw text (character count, line count, byte size in UTF-8, current cursor line/column); right cluster covers the parsed tree (total node count, max depth, array vs. object counts, JSON vs. JSONC mode indicator). Stats update reactively as the user types. Hidden or collapsed to a single-line summary on narrow viewports (see M7l). No interactivity required in v1 - purely informational.~~ ✅
+   - ~~**M7m**: Status bar - a slim, always-visible strip along the bottom of the Home page that surfaces at-a-glance stats about the current document. Left cluster covers the raw text (character count, line count, byte size in UTF-8, current cursor line/column); right cluster covers the parsed tree (total node count, max depth, array vs. object counts, JSON vs. JSONC mode indicator). Stats update reactively as the user types. Hidden or collapsed to a single-line summary on narrow viewports (see M7l). No interactivity required in v1 - purely informational.~~ (done)
 
 ---
 
