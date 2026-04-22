@@ -617,10 +617,36 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
    - ~~**M3b**: Profile page scaffold at `/profile` (display name, read-only email, sign-out button). Route is auth-guarded.~~ (done)
    - ~~**M3c**: Migrate preferences from `localStorage` to the signed-in user. On sign-in, the client calls `GET /api/me`; if the user document exists, its preferences replace the local copy (remote wins). If it does not exist (first sign-in ever), the client `POST`s the current local preferences to `/api/me` to seed the server - the anon user's customizations are preserved exactly once. Subsequent changes are mirrored to Cosmos via a debounced `PUT /api/me/preferences` while the user is signed in; anonymous usage continues to read/write `localStorage`. The server rejects unknown keys and out-of-range values on every write.~~ (done)
 4. **Persistent links** - Blob CRUD API, save & share flow, `/s/:id` route.
-   Includes per-blob page title via the Angular `Title` service so the
-   browser tab reflects the active blob's name (e.g. `my-config.json · JotJSON`)
-   instead of the static homepage title. Anonymous / new / unsaved blobs fall
-   back to the homepage title.
+   Broken into three sub-milestones:
+   - **M4a**: API + core share flow. Cosmos `blobs` container
+     (partition key `/ownerId`), server-side `POST /api/blobs`,
+     `GET /api/blobs/:idOrSlug`, and `PUT /api/blobs/:id` with
+     NanoID(6) slug generation + collision retry, zod validation,
+     1 MB server-side size enforcement, and `isPublic` defaulting to
+     `false`. Client-side: an inline editable title field plus a
+     Save button in the toolbar (disabled for anonymous users with a
+     "Sign in to save & share" tooltip); `HomeComponent` owns a
+     nullable `loadedBlob` signal and chooses update-in-place vs.
+     create-new-slug based on ownership (Gist/Pastebin semantics -
+     owner updates in place, non-owner forks on save). The `/s/:slug`
+     route is routed through `HomeComponent` via a resolver that
+     pre-loads the blob; the placeholder `ShareComponent` retires.
+     Per-blob browser tab title via the Angular `Title` service
+     (`"<title or 'Untitled'> | JotJSON"`) that resets to the homepage
+     title when the loaded blob clears. Anonymous users can view any
+     `/s/:slug` link but cannot save. `DELETE` and list endpoints are
+     deferred to M4b.
+   - **M4b**: Owner management. `DELETE /api/blobs/:id`,
+     `GET /api/blobs` (paginated list of the caller's blobs),
+     `isPublic` toggle in the toolbar overflow menu, `/history` page
+     enumerating the owner's blobs with open/edit/delete/share
+     actions, and the 100-blob cap UX (auto-FIFO default with a
+     one-time explainer modal, or abort-with-prompt for users who pick
+     the `manual` strategy).
+   - **M4c**: SEO + 404 polish. Open Graph meta tags on public blobs
+     (`/s/:slug` where `isPublic === true`), `noindex` meta on private
+     blobs, friendly "Blob not found" 404 page for invalid slugs,
+     `/history` loading skeleton and empty state.
 5. **History** - History tracking, `/history` page, management actions.
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
 7. **Polish & launch** - Each of these lands as its own step/commit:
