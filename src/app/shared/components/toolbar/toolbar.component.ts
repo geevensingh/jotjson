@@ -36,8 +36,8 @@ export class ToolbarComponent {
   readonly canSave = input<boolean>(false);
   readonly saveInFlight = input<boolean>(false);
 
-  readonly paste = output<void>();
-  readonly copy = output<void>();
+  readonly pasteRequested = output<void>();
+  readonly copyRequested = output<void>();
   readonly copyEscaped = output<void>();
   readonly upload = output<File>();
   readonly download = output<void>();
@@ -118,7 +118,7 @@ export class ToolbarComponent {
     if (ev.altKey) {
       this.copyEscaped.emit();
     } else {
-      this.copy.emit();
+      this.copyRequested.emit();
     }
   }
 

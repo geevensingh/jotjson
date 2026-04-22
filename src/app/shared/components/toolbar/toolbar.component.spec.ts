@@ -109,22 +109,22 @@ describe('ToolbarComponent', () => {
     expect(spy).toHaveBeenCalledWith('jsonc');
   });
 
-  it('copy output fires when button click is translated (direct emit path)', async () => {
+  it('copyRequested output fires when button click is translated (direct emit path)', async () => {
     const { fixture } = await create();
     const cmp = fixture.componentInstance;
-    const spy = jasmine.createSpy('copy');
-    cmp.copy.subscribe(spy);
-    cmp.copy.emit();
+    const spy = jasmine.createSpy('copyRequested');
+    cmp.copyRequested.subscribe(spy);
+    cmp.copyRequested.emit();
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
   describe('onCopyClick', () => {
-    it('emits copy on a plain click', async () => {
+    it('emits copyRequested on a plain click', async () => {
       const { fixture } = await create();
       const cmp = fixture.componentInstance;
-      const copy = jasmine.createSpy('copy');
+      const copy = jasmine.createSpy('copyRequested');
       const copyEscaped = jasmine.createSpy('copyEscaped');
-      cmp.copy.subscribe(copy);
+      cmp.copyRequested.subscribe(copy);
       cmp.copyEscaped.subscribe(copyEscaped);
       cmp.onCopyClick(new MouseEvent('click', { altKey: false }));
       expect(copy).toHaveBeenCalledTimes(1);
@@ -134,9 +134,9 @@ describe('ToolbarComponent', () => {
     it('emits copyEscaped when Alt is held', async () => {
       const { fixture } = await create();
       const cmp = fixture.componentInstance;
-      const copy = jasmine.createSpy('copy');
+      const copy = jasmine.createSpy('copyRequested');
       const copyEscaped = jasmine.createSpy('copyEscaped');
-      cmp.copy.subscribe(copy);
+      cmp.copyRequested.subscribe(copy);
       cmp.copyEscaped.subscribe(copyEscaped);
       cmp.onCopyClick(new MouseEvent('click', { altKey: true }));
       expect(copyEscaped).toHaveBeenCalledTimes(1);
@@ -218,6 +218,24 @@ describe('ToolbarComponent', () => {
       cmp.save.subscribe(spy);
       cmp.onTitleKeydown(new KeyboardEvent('keydown', { key: 'a' }));
       expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('native paste into the title input does NOT trigger the pasteRequested output (regression)', async () => {
+      const { fixture } = await create();
+      const cmp = fixture.componentInstance;
+      const pasteSpy = jasmine.createSpy('pasteRequested');
+      const copySpy = jasmine.createSpy('copyRequested');
+      cmp.pasteRequested.subscribe(pasteSpy);
+      cmp.copyRequested.subscribe(copySpy);
+
+      const host: HTMLElement = fixture.nativeElement;
+      const titleInput = host.querySelector<HTMLInputElement>('input.title-field');
+      expect(titleInput).toBeTruthy();
+      titleInput!.dispatchEvent(new Event('paste', { bubbles: true }));
+      titleInput!.dispatchEvent(new Event('copy', { bubbles: true }));
+
+      expect(pasteSpy).not.toHaveBeenCalled();
+      expect(copySpy).not.toHaveBeenCalled();
     });
   });
 });

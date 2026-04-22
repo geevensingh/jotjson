@@ -6,7 +6,7 @@
     i18n-matTooltip="@@toolbar.paste.tooltip"
     aria-label="Paste JSON from clipboard"
     i18n-aria-label="@@toolbar.paste.aria"
-    (click)="paste.emit()"
+    (click)="pasteRequested.emit()"
   >
     <jj-icon name="paste" />
   </button>
