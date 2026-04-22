@@ -72,5 +72,13 @@
     <span class="stat stat-mode" [class.mode-jsonc]="mode() === 'jsonc'">
       <span class="value mode">{{ modeLabel() }}</span>
     </span>
+    <span
+      class="stat stat-build"
+      [title]="buildTitle"
+      aria-label="Build commit"
+      i18n-aria-label="@@status.build.aria"
+    >
+      <span class="value sha">{{ buildSha }}</span>
+    </span>
   </div>
 </div>

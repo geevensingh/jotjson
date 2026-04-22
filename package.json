@@ -16,7 +16,15 @@
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
     "lint": "tsc --noEmit -p tsconfig.app.json",
     "check:ascii": "node scripts/check-ascii.mjs",
-    "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf"
+    "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf",
+    "build:info": "node scripts/write-build-info.mjs",
+    "prestart": "node scripts/write-build-info.mjs",
+    "prebuild": "node scripts/write-build-info.mjs",
+    "prebuild:prod": "node scripts/write-build-info.mjs",
+    "prewatch": "node scripts/write-build-info.mjs",
+    "prelint": "node scripts/write-build-info.mjs",
+    "pretest": "node scripts/write-build-info.mjs",
+    "pretest:ci": "node scripts/write-build-info.mjs"
   },
   "dependencies": {
     "@angular/animations": "^19.2.0",

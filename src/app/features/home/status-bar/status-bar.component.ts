@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { JsonParseResult } from '../../../core/json/json-parser.service';
 import { EditorMode } from '../../../shared/components/toolbar/toolbar.component';
+import { BUILD_INFO } from '../../../../generated/build-info';
 import { computeTextStats, computeTreeStats, formatBytes } from './stats';
 
 /**
@@ -42,4 +43,14 @@ export class StatusBarComponent {
   readonly modeLabel = computed(() => (this.mode() === 'jsonc' ? 'JSONC' : 'JSON'));
 
   readonly placeholder = '-';
+
+  // Short-term build info (pre-M7n): displays the local-git commit SHA so
+  // users can report exactly what they were running. M7n will replace this
+  // with a CI-authoritative version + SHA pair.
+  readonly buildSha = BUILD_INFO.sha + (BUILD_INFO.dirty ? '*' : '');
+  readonly buildTitle =
+    `JotJSON v${BUILD_INFO.version}` +
+    (BUILD_INFO.branch ? ` (${BUILD_INFO.branch})` : '') +
+    `\nbuilt ${BUILD_INFO.builtAt}` +
+    (BUILD_INFO.dirty ? ' (working tree dirty)' : '');
 }
