@@ -35,6 +35,7 @@ import {
 } from '../../core/json/json-parser.service';
 import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
 import { JsonTreeComponent } from '../../shared/components/json-tree/json-tree.component';
+import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import {
   EditorMode,
   ToolbarComponent
@@ -48,7 +49,13 @@ import { StatusBarComponent } from './status-bar/status-bar.component';
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [JsonEditorComponent, JsonTreeComponent, ToolbarComponent, StatusBarComponent],
+  imports: [
+    AppHeaderComponent,
+    JsonEditorComponent,
+    JsonTreeComponent,
+    ToolbarComponent,
+    StatusBarComponent
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss'

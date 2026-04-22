@@ -11,7 +11,6 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { IconComponent, JjIconName } from '../icon/icon.component';
@@ -21,7 +20,7 @@ export type EditorMode = 'json' | 'jsonc';
 @Component({
   selector: 'jj-toolbar',
   standalone: true,
-  imports: [MatButtonModule, MatTooltipModule, MatButtonToggleModule, RouterLink, IconComponent],
+  imports: [MatButtonModule, MatTooltipModule, MatButtonToggleModule, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toolbar.component.html',
   styleUrl: './toolbar.component.scss'
@@ -67,7 +66,6 @@ export class ToolbarComponent {
   });
 
   readonly isSignedIn = this.auth.isSignedIn;
-  readonly user = this.auth.user;
   readonly authConfigured = this.auth.isConfigured;
 
   readonly saveDisabled = computed(
@@ -120,14 +118,6 @@ export class ToolbarComponent {
     } else {
       this.copyRequested.emit();
     }
-  }
-
-  onSignIn(): void {
-    this.auth.signIn();
-  }
-
-  onSignOut(): void {
-    this.auth.signOut();
   }
 }
 

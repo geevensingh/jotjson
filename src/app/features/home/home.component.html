@@ -1,24 +1,26 @@
 <div class="home" [class.vertical]="layoutOrientation() === 'vertical'">
-  <jj-toolbar
-    [mode]="mode()"
-    [hasContent]="hasContent()"
-    [title]="title()"
-    [canSave]="canSave()"
-    [saveInFlight]="saveInFlight()"
-    (pasteRequested)="onPaste()"
-    (copyRequested)="onCopy()"
-    (copyEscaped)="onCopyEscaped()"
-    (upload)="onUpload($event)"
-    (download)="onDownload()"
-    (clear)="onClear()"
-    (format)="onFormat()"
-    (minify)="onMinify()"
-    (modeChange)="onModeChange($event)"
-    (toggleLayout)="onToggleLayout()"
-    (toggleTheme)="onToggleTheme()"
-    (save)="onSave()"
-    (titleChange)="onTitleChange($event)"
-  ></jj-toolbar>
+  <jj-app-header>
+    <jj-toolbar
+      [mode]="mode()"
+      [hasContent]="hasContent()"
+      [title]="title()"
+      [canSave]="canSave()"
+      [saveInFlight]="saveInFlight()"
+      (pasteRequested)="onPaste()"
+      (copyRequested)="onCopy()"
+      (copyEscaped)="onCopyEscaped()"
+      (upload)="onUpload($event)"
+      (download)="onDownload()"
+      (clear)="onClear()"
+      (format)="onFormat()"
+      (minify)="onMinify()"
+      (modeChange)="onModeChange($event)"
+      (toggleLayout)="onToggleLayout()"
+      (toggleTheme)="onToggleTheme()"
+      (save)="onSave()"
+      (titleChange)="onTitleChange($event)"
+    ></jj-toolbar>
+  </jj-app-header>
 
   <div class="split" [style]="splitStyle()" #splitHost>
     <section class="pane pane-editor" aria-label="JSON input">
