@@ -2,6 +2,9 @@
   <jj-toolbar
     [mode]="mode()"
     [hasContent]="hasContent()"
+    [title]="title()"
+    [canSave]="canSave()"
+    [saveInFlight]="saveInFlight()"
     (paste)="onPaste()"
     (copy)="onCopy()"
     (copyEscaped)="onCopyEscaped()"
@@ -13,6 +16,8 @@
     (modeChange)="onModeChange($event)"
     (toggleLayout)="onToggleLayout()"
     (toggleTheme)="onToggleTheme()"
+    (save)="onSave()"
+    (titleChange)="onTitleChange($event)"
   ></jj-toolbar>
 
   <div class="split" [style]="splitStyle()" #splitHost>

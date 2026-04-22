@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
+import { shareBlobResolver } from './features/share/share-blob.resolver';
 
 export const routes: Routes = [
   {
@@ -11,7 +12,8 @@ export const routes: Routes = [
   {
     path: 's/:slug',
     loadComponent: () =>
-      import('./features/share/share.component').then((m) => m.ShareComponent),
+      import('./features/home/home.component').then((m) => m.HomeComponent),
+    resolve: { initialBlob: shareBlobResolver },
     title: 'Shared JSON - JotJSON'
   },
   {

@@ -143,4 +143,81 @@ describe('ToolbarComponent', () => {
       expect(copy).not.toHaveBeenCalled();
     });
   });
+
+  describe('save button / title field (M4a)', () => {
+    it('saveDisabled is true when canSave is false', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('canSave', false);
+      fixture.componentRef.setInput('hasContent', true);
+      fixture.componentRef.setInput('saveInFlight', false);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.saveDisabled()).toBe(true);
+    });
+
+    it('saveDisabled is true when saveInFlight is true even if canSave', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('canSave', true);
+      fixture.componentRef.setInput('hasContent', true);
+      fixture.componentRef.setInput('saveInFlight', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.saveDisabled()).toBe(true);
+    });
+
+    it('saveDisabled is false when canSave and hasContent and not in flight', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('canSave', true);
+      fixture.componentRef.setInput('hasContent', true);
+      fixture.componentRef.setInput('saveInFlight', false);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.saveDisabled()).toBe(false);
+    });
+
+    it('onTitleInput emits titleChange with the new value', async () => {
+      const { fixture } = await create();
+      const cmp = fixture.componentInstance;
+      const spy = jasmine.createSpy('titleChange');
+      cmp.titleChange.subscribe(spy);
+      const input = document.createElement('input');
+      input.value = 'My JSON';
+      cmp.onTitleInput({ target: input } as unknown as Event);
+      expect(spy).toHaveBeenCalledWith('My JSON');
+    });
+
+    it('onTitleKeydown emits save on Enter when enabled', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('canSave', true);
+      fixture.componentRef.setInput('hasContent', true);
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      const spy = jasmine.createSpy('save');
+      cmp.save.subscribe(spy);
+      const ev = new KeyboardEvent('keydown', { key: 'Enter' });
+      cmp.onTitleKeydown(ev);
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('onTitleKeydown does not emit save on Enter when disabled', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('canSave', false);
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      const spy = jasmine.createSpy('save');
+      cmp.save.subscribe(spy);
+      const ev = new KeyboardEvent('keydown', { key: 'Enter' });
+      cmp.onTitleKeydown(ev);
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('onTitleKeydown ignores non-Enter keys', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('canSave', true);
+      fixture.componentRef.setInput('hasContent', true);
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      const spy = jasmine.createSpy('save');
+      cmp.save.subscribe(spy);
+      cmp.onTitleKeydown(new KeyboardEvent('keydown', { key: 'a' }));
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
 });

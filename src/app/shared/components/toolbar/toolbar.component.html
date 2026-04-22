@@ -99,6 +99,32 @@
 
   <span class="divider" aria-hidden="true"></span>
 
+  <input
+    type="text"
+    class="title-field"
+    [value]="title()"
+    placeholder="Title (optional)"
+    i18n-placeholder="@@toolbar.title.placeholder"
+    aria-label="Blob title"
+    i18n-aria-label="@@toolbar.title.aria"
+    maxlength="200"
+    (input)="onTitleInput($event)"
+    (keydown)="onTitleKeydown($event)"
+  />
+
+  <button
+    type="button"
+    mat-icon-button
+    [matTooltip]="saveTooltip()"
+    [attr.aria-label]="saveTooltip()"
+    [disabled]="saveDisabled()"
+    (click)="save.emit()"
+  >
+    <jj-icon name="save" />
+  </button>
+
+  <span class="divider" aria-hidden="true"></span>
+
   <mat-button-toggle-group
     class="mode-toggle"
     [value]="mode()"

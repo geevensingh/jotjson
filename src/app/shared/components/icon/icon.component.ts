@@ -22,7 +22,8 @@ export type JjIconName =
   | 'chevron-right'
   | 'chevron-down'
   | 'sign-in'
-  | 'sign-out';
+  | 'sign-out'
+  | 'save';
 
 @Component({
   selector: 'jj-icon',
@@ -126,6 +127,11 @@ export type JjIconName =
           <path d="M15 3h3.5A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5H15" />
           <path d="M3 12h12" />
           <path d="M8 7l-5 5 5 5" />
+        }
+        @case ('save') {
+          <path d="M5 3h11l4 4v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20V4.5A1.5 1.5 0 0 1 5.5 3" />
+          <path d="M8 3v5h8V3" />
+          <rect x="8" y="13" width="8" height="6" rx="0.5" />
         }
       }
     </svg>

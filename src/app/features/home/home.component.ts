@@ -6,9 +6,12 @@ import {
   computed,
   effect,
   inject,
+  input,
   signal,
   viewChild
 } from '@angular/core';
+import { Router } from '@angular/router';
+import { Title } from '@angular/platform-browser';
 import {
   format as jsoncFormat,
   applyEdits,
@@ -21,6 +24,9 @@ import {
 const SK_LINE_COMMENT = 12;
 const SK_BLOCK_COMMENT = 13;
 const SK_EOF = 17;
+import { AuthService } from '../../core/auth/auth.service';
+import { BlobService } from '../../core/api/blob.service';
+import type { JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import {
@@ -51,10 +57,26 @@ export class HomeComponent {
   private readonly draft = inject(DraftService);
   private readonly prefs = inject(PreferencesService);
   private readonly parser = inject(JsonParserService);
+  private readonly auth = inject(AuthService);
+  private readonly blobs = inject(BlobService);
+  private readonly router = inject(Router);
+  private readonly titleService = inject(Title);
+
+  /**
+   * Blob hydrated by the /s/:slug resolver. When present, the editor starts
+   * from this blob's content and the title field reflects its title.
+   */
+  readonly initialBlob = input<JsonBlob | undefined>(undefined);
 
   readonly content = signal(this.draft.content());
   readonly mode = signal<EditorMode>(this.detectMode(this.draft.content()));
   readonly cursor = signal<{ line: number; column: number } | undefined>(undefined);
+
+  /** The currently-loaded server blob, if any. Null when editing an anonymous draft. */
+  readonly loadedBlob = signal<JsonBlob | null>(null);
+  readonly title = signal<string>('');
+  readonly saveInFlight = signal<boolean>(false);
+  readonly saveError = signal<string | null>(null);
 
   readonly parseResult = computed<JsonParseResult>(() =>
     this.parser.parse(this.content())
@@ -70,6 +92,10 @@ export class HomeComponent {
   readonly layoutOrientation = computed(() => this.prefs.prefs().layoutOrientation);
 
   readonly hasContent = computed(() => this.content().trim().length > 0);
+
+  readonly canSave = computed(() => this.auth.isSignedIn() && this.hasContent());
+
+  private readonly homepageTitle = $localize`:@@app.title.homepage:JotJSON - JSON viewer, formatter, and tree explorer`;
 
   readonly splitRatio = signal(this.loadSplitRatio());
 
@@ -102,6 +128,32 @@ export class HomeComponent {
       if (this.mode() !== detected) {
         this.mode.set(detected);
       }
+    });
+
+    // Hydrate from the resolved blob when navigating to /s/:slug.
+    effect(() => {
+      const blob = this.initialBlob();
+      if (blob && blob.id !== this.loadedBlob()?.id) {
+        this.loadedBlob.set(blob);
+        this.content.set(blob.content);
+        this.title.set(blob.title ?? '');
+      }
+    });
+
+    // Update the browser tab title whenever the loaded blob or local title
+    // changes. Anonymous / unsaved editing falls back to the homepage title.
+    effect(() => {
+      const blob = this.loadedBlob();
+      const title = this.title();
+      if (!blob) {
+        this.titleService.setTitle(this.homepageTitle);
+        return;
+      }
+      const label =
+        title.trim().length > 0
+          ? title.trim()
+          : $localize`:@@app.title.untitled:Untitled`;
+      this.titleService.setTitle(`${label} | JotJSON`);
     });
 
     // Persist split ratio to localStorage (local-only; not synced via prefs).
@@ -238,6 +290,74 @@ export class HomeComponent {
 
   onClear(): void {
     this.content.set('');
+    this.title.set('');
+    this.loadedBlob.set(null);
+    if (this.router.url !== '/') {
+      void this.router.navigate(['/']);
+    }
+  }
+
+  onTitleChange(next: string): void {
+    this.title.set(next);
+  }
+
+  /**
+   * Save the current editor contents. If the loaded blob is owned by the
+   * current user, update in place (same slug). Otherwise, create a new blob
+   * (fork) with a fresh slug.
+   */
+  async onSave(): Promise<void> {
+    if (!this.canSave() || this.saveInFlight()) return;
+    const user = this.auth.user();
+    if (!user) return;
+
+    this.saveInFlight.set(true);
+    this.saveError.set(null);
+
+    const existing = this.loadedBlob();
+    const content = this.content();
+    const trimmedTitle = this.title().trim();
+    const titlePatch = trimmedTitle.length > 0 ? trimmedTitle : undefined;
+
+    try {
+      if (existing && existing.ownerId === user.id) {
+        const updated = await new Promise<JsonBlob>((resolve, reject) => {
+          this.blobs
+            .update(existing.id, { content, title: titlePatch })
+            .subscribe({ next: resolve, error: reject });
+        });
+        this.loadedBlob.set(updated);
+        this.title.set(updated.title ?? '');
+      } else {
+        const created = await new Promise<JsonBlob>((resolve, reject) => {
+          this.blobs
+            .create(content, titlePatch, false)
+            .subscribe({ next: resolve, error: reject });
+        });
+        this.loadedBlob.set(created);
+        this.title.set(created.title ?? '');
+        void this.router.navigate(['/s', created.slug]);
+      }
+    } catch (err) {
+      const message = this.formatSaveError(err);
+      this.saveError.set(message);
+      console.warn($localize`:@@save.failed.log:Save failed`, err);
+    } finally {
+      this.saveInFlight.set(false);
+    }
+  }
+
+  private formatSaveError(err: unknown): string {
+    const httpErr = err as { status?: number; error?: { error?: string } };
+    const body = httpErr.error?.error;
+    if (body) return body;
+    if (httpErr.status === 401) {
+      return $localize`:@@save.error.signIn:Please sign in to save`;
+    }
+    if (httpErr.status === 403) {
+      return $localize`:@@save.error.forbidden:You do not own this blob`;
+    }
+    return $localize`:@@save.error.generic:Could not save - please try again`;
   }
 
   onFormat(): void {

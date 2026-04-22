@@ -32,6 +32,9 @@ export class ToolbarComponent {
 
   readonly mode = input<EditorMode>('json');
   readonly hasContent = input<boolean>(false);
+  readonly title = input<string>('');
+  readonly canSave = input<boolean>(false);
+  readonly saveInFlight = input<boolean>(false);
 
   readonly paste = output<void>();
   readonly copy = output<void>();
@@ -44,6 +47,8 @@ export class ToolbarComponent {
   readonly modeChange = output<EditorMode>();
   readonly toggleLayout = output<void>();
   readonly toggleTheme = output<void>();
+  readonly save = output<void>();
+  readonly titleChange = output<string>();
 
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
@@ -64,6 +69,31 @@ export class ToolbarComponent {
   readonly isSignedIn = this.auth.isSignedIn;
   readonly user = this.auth.user;
   readonly authConfigured = this.auth.isConfigured;
+
+  readonly saveDisabled = computed(
+    () => !this.canSave() || !this.hasContent() || this.saveInFlight()
+  );
+
+  readonly saveTooltip = computed(() => {
+    if (this.saveInFlight()) return $localize`:@@toolbar.save.tooltip.saving:Saving...`;
+    if (!this.authConfigured || !this.isSignedIn()) {
+      return $localize`:@@toolbar.save.tooltip.signIn:Sign in to save & share`;
+    }
+    if (!this.hasContent()) return $localize`:@@toolbar.save.tooltip.empty:Nothing to save`;
+    return $localize`:@@toolbar.save.tooltip.save:Save & share`;
+  });
+
+  onTitleInput(ev: Event): void {
+    const value = (ev.target as HTMLInputElement).value;
+    this.titleChange.emit(value);
+  }
+
+  onTitleKeydown(ev: KeyboardEvent): void {
+    if (ev.key === 'Enter' && !this.saveDisabled()) {
+      ev.preventDefault();
+      this.save.emit();
+    }
+  }
 
   triggerFilePicker(): void {
     this.fileInput().nativeElement.click();

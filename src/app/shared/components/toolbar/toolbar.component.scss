@@ -34,6 +34,30 @@
   font-size: 12px;
 }
 
+.title-field {
+  font-family: v.$font-ui;
+  font-size: 13px;
+  height: 28px;
+  padding: 0 8px;
+  margin: 0 4px;
+  min-width: 140px;
+  max-width: 260px;
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  border-radius: 4px;
+  outline: none;
+
+  &::placeholder {
+    color: currentColor;
+    opacity: 0.5;
+  }
+
+  &:focus {
+    border-color: v.$color-primary;
+  }
+}
+
 .user-name {
   font-family: v.$font-ui;
   font-size: 12px;
