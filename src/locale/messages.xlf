@@ -275,6 +275,13 @@
           <context context-type="linenumber">55,58</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="appHeader.brand.aria" datatype="html">
+        <source>JotJSON - back to editor</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="editor.loading" datatype="html">
         <source>Loading editor...</source>
         <context-group purpose="location">
