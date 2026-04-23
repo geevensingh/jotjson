@@ -5,6 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HistoryComponent } from './history.component';
 import { BlobService } from '../../core/api/blob.service';
+import { provideFakeAuth } from '../../../testing/auth.testing';
 import type { JsonBlob } from '../../core/api/models';
 
 function blob(overrides: Partial<JsonBlob> = {}): JsonBlob {
@@ -51,6 +52,7 @@ function setup(opts: SetupOpts = {}) {
   TestBed.configureTestingModule({
     imports: [HistoryComponent],
     providers: [
+      ...provideFakeAuth(),
       provideRouter([]),
       { provide: BlobService, useValue: stub },
       { provide: MatDialog, useValue: dialog },

@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { BlobService } from '../../core/api/blob.service';
 import type { JsonBlob } from '../../core/api/models';
+import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import {
   ConfirmDialogComponent,
@@ -31,6 +32,7 @@ type LoadState = 'loading' | 'ready' | 'error';
     RouterLink,
     MatButtonModule,
     MatTooltipModule,
+    AppHeaderComponent,
     IconComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

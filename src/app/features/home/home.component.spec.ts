@@ -578,24 +578,25 @@ describe('HomeComponent blob actions (M4b)', () => {
     const dialog = { open: jasmine.createSpy('open').and.returnValue(dialogRef) };
     const snack = { open: jasmine.createSpy('open') };
 
-    // Clipboard stubbing: by default available and resolves.
-    const origClipboard = (navigator as { clipboard?: unknown }).clipboard;
+    // Clipboard stubbing via spyOnProperty so jasmine auto-restores between
+    // tests. Replacing navigator.clipboard with Object.defineProperty would
+    // leak into the HomeComponent copy/paste specs that spyOn the real one.
+    let clipboardStub: { writeText: jasmine.Spy } | undefined;
     if (opts.clipboardAvailable === false) {
-      Object.defineProperty(navigator, 'clipboard', {
-        value: undefined,
-        configurable: true
-      });
+      spyOnProperty(navigator, 'clipboard', 'get').and.returnValue(
+        undefined as unknown as Clipboard
+      );
     } else {
-      Object.defineProperty(navigator, 'clipboard', {
-        value: {
-          writeText: jasmine
-            .createSpy('writeText')
-            .and.returnValue(
-              opts.clipboardFails ? Promise.reject(new Error('x')) : Promise.resolve()
-            )
-        },
-        configurable: true
-      });
+      clipboardStub = {
+        writeText: jasmine
+          .createSpy('writeText')
+          .and.returnValue(
+            opts.clipboardFails ? Promise.reject(new Error('x')) : Promise.resolve()
+          )
+      };
+      spyOnProperty(navigator, 'clipboard', 'get').and.returnValue(
+        clipboardStub as unknown as Clipboard
+      );
     }
 
     TestBed.configureTestingModule({
@@ -612,21 +613,14 @@ describe('HomeComponent blob actions (M4b)', () => {
 
     const fixture = TestBed.createComponent(HomeComponent);
     if (opts.loaded) fixture.componentInstance.loadedBlob.set(opts.loaded);
-    const restoreClipboard = () => {
-      Object.defineProperty(navigator, 'clipboard', {
-        value: origClipboard,
-        configurable: true
-      });
-    };
-    return { fixture, stub, dialog, snack, restoreClipboard };
+    return { fixture, stub, dialog, snack, clipboardStub };
   }
 
   it('onCopyShareLink writes /s/<slug> URL to the clipboard and toasts on success', async () => {
-    const { fixture, snack, restoreClipboard } = setup({
+    const { fixture, snack } = setup({
       userId: 'owner-me',
       loaded: blob()
-    });
-    try {
+    }); 
       fixture.componentInstance.onCopyShareLink();
       // Let the clipboard promise flush.
       await Promise.resolve();
@@ -636,89 +630,65 @@ describe('HomeComponent blob actions (M4b)', () => {
         `${window.location.origin}/s/abc123`
       );
       expect(snack.open).toHaveBeenCalled();
-    } finally {
-      restoreClipboard();
-    }
   });
 
   it('onCopyShareLink toasts an error when the browser lacks clipboard API', async () => {
-    const { fixture, snack, restoreClipboard } = setup({
+    const { fixture, snack } = setup({
       userId: 'owner-me',
       loaded: blob(),
       clipboardAvailable: false
-    });
-    try {
+    }); 
       fixture.componentInstance.onCopyShareLink();
       expect(snack.open).toHaveBeenCalled();
-    } finally {
-      restoreClipboard();
-    }
   });
 
   it('onCopyShareLink is a no-op when no blob is loaded', async () => {
-    const { fixture, snack, restoreClipboard } = setup({ userId: 'owner-me' });
-    try {
+    const { fixture, snack } = setup({ userId: 'owner-me' }); 
       fixture.componentInstance.onCopyShareLink();
       expect(snack.open).not.toHaveBeenCalled();
-    } finally {
-      restoreClipboard();
-    }
   });
 
   it('onTogglePublic flips isPublic via BlobService.update and refreshes loadedBlob', async () => {
     const updated = blob({ isPublic: true });
-    const { fixture, stub, snack, restoreClipboard } = setup({
+    const { fixture, stub, snack } = setup({
       userId: 'owner-me',
       loaded: blob({ isPublic: false }),
       updateResult: updated
-    });
-    try {
+    }); 
       await fixture.componentInstance.onTogglePublic();
       expect(stub.update).toHaveBeenCalledWith('blob-1', { isPublic: true });
       expect(fixture.componentInstance.loadedBlob()?.isPublic).toBe(true);
       expect(snack.open).toHaveBeenCalled();
-    } finally {
-      restoreClipboard();
-    }
   });
 
   it('onTogglePublic toasts an error when the update fails', async () => {
-    const { fixture, snack, restoreClipboard } = setup({
+    const { fixture, snack } = setup({
       userId: 'owner-me',
       loaded: blob(),
       updateResult: new Error('nope')
     });
-    spyOn(console, 'warn');
-    try {
+    spyOn(console, 'warn'); 
       await fixture.componentInstance.onTogglePublic();
       expect(snack.open).toHaveBeenCalled();
-    } finally {
-      restoreClipboard();
-    }
   });
 
   it('onTogglePublic does nothing when the user does not own the blob', async () => {
-    const { fixture, stub, restoreClipboard } = setup({
+    const { fixture, stub } = setup({
       userId: 'someone-else',
       loaded: blob()
-    });
-    try {
+    }); 
       await fixture.componentInstance.onTogglePublic();
       expect(stub.update).not.toHaveBeenCalled();
-    } finally {
-      restoreClipboard();
-    }
   });
 
   it('onDeleteBlob confirms, deletes, clears state, and navigates home', async () => {
-    const { fixture, stub, dialog, snack, restoreClipboard } = setup({
+    const { fixture, stub, dialog, snack } = setup({
       userId: 'owner-me',
       loaded: blob({ title: 'My Config' }),
       confirm: true
     });
     const router = TestBed.inject(Router);
-    const nav = spyOn(router, 'navigate').and.resolveTo(true);
-    try {
+    const nav = spyOn(router, 'navigate').and.resolveTo(true); 
       await fixture.componentInstance.onDeleteBlob();
       expect(dialog.open).toHaveBeenCalled();
       expect(stub.delete).toHaveBeenCalledWith('blob-1');
@@ -727,41 +697,30 @@ describe('HomeComponent blob actions (M4b)', () => {
       expect(fixture.componentInstance.title()).toBe('');
       expect(nav).toHaveBeenCalledWith(['/']);
       expect(snack.open).toHaveBeenCalled();
-    } finally {
-      restoreClipboard();
-    }
   });
 
   it('onDeleteBlob does nothing when the user cancels the confirmation', async () => {
-    const { fixture, stub, restoreClipboard } = setup({
+    const { fixture, stub } = setup({
       userId: 'owner-me',
       loaded: blob(),
       confirm: false
-    });
-    try {
+    }); 
       await fixture.componentInstance.onDeleteBlob();
       expect(stub.delete).not.toHaveBeenCalled();
       expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
-    } finally {
-      restoreClipboard();
-    }
   });
 
   it('onDeleteBlob toasts an error when delete fails and preserves local state', async () => {
-    const { fixture, snack, restoreClipboard } = setup({
+    const { fixture, snack } = setup({
       userId: 'owner-me',
       loaded: blob(),
       confirm: true,
       deleteResult: new Error('boom')
     });
-    spyOn(console, 'warn');
-    try {
+    spyOn(console, 'warn'); 
       await fixture.componentInstance.onDeleteBlob();
       expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
       expect(snack.open).toHaveBeenCalled();
-    } finally {
-      restoreClipboard();
-    }
   });
 });
 
