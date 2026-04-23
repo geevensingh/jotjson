@@ -30,6 +30,13 @@ import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { firstValueFrom } from 'rxjs';
+import {
+  ConfirmDialogComponent,
+  ConfirmDialogData
+} from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 import {
   JsonParserService,
   JsonParseResult
@@ -70,6 +77,8 @@ export class HomeComponent {
   private readonly router = inject(Router);
   private readonly titleService = inject(Title);
   private readonly quota = inject(QuotaNotificationService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snack = inject(MatSnackBar);
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -436,15 +445,102 @@ export class HomeComponent {
   }
 
   onCopyShareLink(): void {
-    // Full behavior lands in the next todo (m4b-home-blob-actions).
+    const blob = this.loadedBlob();
+    if (!blob) return;
+    const url = `${window.location.origin}/s/${blob.slug}`;
+    const clipboard = navigator.clipboard;
+    const dismiss = $localize`:@@common.dismiss:Dismiss`;
+    if (!clipboard?.writeText) {
+      this.snack.open(
+        $localize`:@@share.copyLink.unsupported:Copy is not supported in this browser.`,
+        dismiss,
+        { duration: 4000 }
+      );
+      return;
+    }
+    clipboard.writeText(url).then(
+      () => {
+        this.snack.open(
+          $localize`:@@share.copyLink.success:Share link copied to clipboard.`,
+          dismiss,
+          { duration: 3000 }
+        );
+      },
+      () => {
+        this.snack.open(
+          $localize`:@@share.copyLink.failed:Failed to copy share link.`,
+          dismiss,
+          { duration: 4000 }
+        );
+      }
+    );
   }
 
-  onTogglePublic(): void {
-    // Full behavior lands in the next todo (m4b-home-blob-actions).
+  async onTogglePublic(): Promise<void> {
+    const blob = this.loadedBlob();
+    if (!blob) return;
+    const user = this.auth.user();
+    if (!user || user.id !== blob.ownerId) return;
+    const next = !blob.isPublic;
+    try {
+      const updated = await firstValueFrom(
+        this.blobs.update(blob.id, { isPublic: next })
+      );
+      this.loadedBlob.set(updated);
+      const message = updated.isPublic
+        ? $localize`:@@share.visibility.public:Blob is now public.`
+        : $localize`:@@share.visibility.private:Blob is now private.`;
+      this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, { duration: 3000 });
+    } catch (err) {
+      console.warn($localize`:@@share.visibility.failed.log:Failed to update visibility`, err);
+      this.snack.open(
+        $localize`:@@share.visibility.failed:Failed to update visibility.`,
+        $localize`:@@common.dismiss:Dismiss`,
+        { duration: 4000 }
+      );
+    }
   }
 
-  onDeleteBlob(): void {
-    // Full behavior lands in the next todo (m4b-home-blob-actions).
+  async onDeleteBlob(): Promise<void> {
+    const blob = this.loadedBlob();
+    if (!blob) return;
+    const user = this.auth.user();
+    if (!user || user.id !== blob.ownerId) return;
+
+    const label = blob.title?.trim() || blob.slug;
+    const data: ConfirmDialogData = {
+      title: $localize`:@@share.delete.title:Delete this blob?`,
+      message: $localize`:@@share.delete.message:"${label}:name:" will be permanently deleted. This cannot be undone.`,
+      confirmLabel: $localize`:@@share.delete.confirm:Delete`,
+      cancelLabel: $localize`:@@common.cancel:Cancel`,
+      destructive: true
+    };
+    const ref = this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(
+      ConfirmDialogComponent,
+      { data, width: '420px', autoFocus: 'dialog' }
+    );
+    const confirmed = await firstValueFrom(ref.afterClosed());
+    if (!confirmed) return;
+
+    try {
+      await firstValueFrom(this.blobs.delete(blob.id));
+      this.loadedBlob.set(null);
+      this.content.set('');
+      this.title.set('');
+      this.snack.open(
+        $localize`:@@share.delete.success:Blob deleted.`,
+        $localize`:@@common.dismiss:Dismiss`,
+        { duration: 3000 }
+      );
+      void this.router.navigate(['/']);
+    } catch (err) {
+      console.warn($localize`:@@share.delete.failed.log:Failed to delete blob`, err);
+      this.snack.open(
+        $localize`:@@share.delete.failed:Failed to delete blob.`,
+        $localize`:@@common.dismiss:Dismiss`,
+        { duration: 4000 }
+      );
+    }
   }
 
   focusTreeSearch(): void {

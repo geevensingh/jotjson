@@ -9,6 +9,8 @@ import { provideRouter, Router } from '@angular/router';
 import { BlobService } from '../../core/api/blob.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import type { JsonBlob } from '../../core/api/models';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
@@ -520,3 +522,246 @@ describe('HomeComponent browser-title effect (M4a)', () => {
     expect(spy).toHaveBeenCalledWith('Untitled | JotJSON');
   });
 });
+
+describe('HomeComponent blob actions (M4b)', () => {
+  const PREFS_KEY = 'jotjson.preferences.v1';
+  const DRAFT_KEY = 'jotjson.draft.v1';
+  const SPLIT_KEY = 'jotjson.splitRatio.v1';
+
+  const blob = (overrides: Partial<JsonBlob> = {}): JsonBlob => ({
+    id: 'blob-1',
+    slug: 'abc123',
+    content: '{"a":1}',
+    ownerId: 'owner-me',
+    isPublic: false,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    ...overrides
+  });
+
+  function setup(opts: {
+    userId: string;
+    loaded?: JsonBlob;
+    updateResult?: JsonBlob | Error;
+    deleteResult?: void | Error;
+    confirm?: boolean;
+    clipboardAvailable?: boolean;
+    clipboardFails?: boolean;
+  }) {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    TestBed.resetTestingModule();
+
+    const stub = {
+      create: jasmine.createSpy('create').and.returnValue(of(blob())),
+      update: jasmine.createSpy('update').and.callFake(() =>
+        opts.updateResult instanceof Error
+          ? throwError(() => opts.updateResult as Error)
+          : of(opts.updateResult ?? blob())
+      ),
+      delete: jasmine.createSpy('delete').and.callFake(() =>
+        opts.deleteResult instanceof Error
+          ? throwError(() => opts.deleteResult as Error)
+          : of(undefined)
+      ),
+      get: jasmine.createSpy('get').and.returnValue(of(blob()))
+    };
+
+    const fakeAuth: Partial<AuthService> = {
+      user: (() => ({ id: opts.userId, displayName: 'Test' })) as AuthService['user'],
+      isSignedIn: (() => true) as AuthService['isSignedIn'],
+      isConfigured: true
+    };
+
+    const dialogRef = { afterClosed: () => of(!!opts.confirm) };
+    const dialog = { open: jasmine.createSpy('open').and.returnValue(dialogRef) };
+    const snack = { open: jasmine.createSpy('open') };
+
+    // Clipboard stubbing: by default available and resolves.
+    const origClipboard = (navigator as { clipboard?: unknown }).clipboard;
+    if (opts.clipboardAvailable === false) {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: undefined,
+        configurable: true
+      });
+    } else {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {
+          writeText: jasmine
+            .createSpy('writeText')
+            .and.returnValue(
+              opts.clipboardFails ? Promise.reject(new Error('x')) : Promise.resolve()
+            )
+        },
+        configurable: true
+      });
+    }
+
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: BlobService, useValue: stub },
+        { provide: AuthService, useValue: fakeAuth },
+        { provide: MatDialog, useValue: dialog },
+        { provide: MatSnackBar, useValue: snack }
+      ]
+    });
+
+    const fixture = TestBed.createComponent(HomeComponent);
+    if (opts.loaded) fixture.componentInstance.loadedBlob.set(opts.loaded);
+    const restoreClipboard = () => {
+      Object.defineProperty(navigator, 'clipboard', {
+        value: origClipboard,
+        configurable: true
+      });
+    };
+    return { fixture, stub, dialog, snack, restoreClipboard };
+  }
+
+  it('onCopyShareLink writes /s/<slug> URL to the clipboard and toasts on success', async () => {
+    const { fixture, snack, restoreClipboard } = setup({
+      userId: 'owner-me',
+      loaded: blob()
+    });
+    try {
+      fixture.componentInstance.onCopyShareLink();
+      // Let the clipboard promise flush.
+      await Promise.resolve();
+      await Promise.resolve();
+      const writeText = (navigator.clipboard as unknown as { writeText: jasmine.Spy }).writeText;
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/s/abc123`
+      );
+      expect(snack.open).toHaveBeenCalled();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  it('onCopyShareLink toasts an error when the browser lacks clipboard API', async () => {
+    const { fixture, snack, restoreClipboard } = setup({
+      userId: 'owner-me',
+      loaded: blob(),
+      clipboardAvailable: false
+    });
+    try {
+      fixture.componentInstance.onCopyShareLink();
+      expect(snack.open).toHaveBeenCalled();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  it('onCopyShareLink is a no-op when no blob is loaded', async () => {
+    const { fixture, snack, restoreClipboard } = setup({ userId: 'owner-me' });
+    try {
+      fixture.componentInstance.onCopyShareLink();
+      expect(snack.open).not.toHaveBeenCalled();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  it('onTogglePublic flips isPublic via BlobService.update and refreshes loadedBlob', async () => {
+    const updated = blob({ isPublic: true });
+    const { fixture, stub, snack, restoreClipboard } = setup({
+      userId: 'owner-me',
+      loaded: blob({ isPublic: false }),
+      updateResult: updated
+    });
+    try {
+      await fixture.componentInstance.onTogglePublic();
+      expect(stub.update).toHaveBeenCalledWith('blob-1', { isPublic: true });
+      expect(fixture.componentInstance.loadedBlob()?.isPublic).toBe(true);
+      expect(snack.open).toHaveBeenCalled();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  it('onTogglePublic toasts an error when the update fails', async () => {
+    const { fixture, snack, restoreClipboard } = setup({
+      userId: 'owner-me',
+      loaded: blob(),
+      updateResult: new Error('nope')
+    });
+    spyOn(console, 'warn');
+    try {
+      await fixture.componentInstance.onTogglePublic();
+      expect(snack.open).toHaveBeenCalled();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  it('onTogglePublic does nothing when the user does not own the blob', async () => {
+    const { fixture, stub, restoreClipboard } = setup({
+      userId: 'someone-else',
+      loaded: blob()
+    });
+    try {
+      await fixture.componentInstance.onTogglePublic();
+      expect(stub.update).not.toHaveBeenCalled();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  it('onDeleteBlob confirms, deletes, clears state, and navigates home', async () => {
+    const { fixture, stub, dialog, snack, restoreClipboard } = setup({
+      userId: 'owner-me',
+      loaded: blob({ title: 'My Config' }),
+      confirm: true
+    });
+    const router = TestBed.inject(Router);
+    const nav = spyOn(router, 'navigate').and.resolveTo(true);
+    try {
+      await fixture.componentInstance.onDeleteBlob();
+      expect(dialog.open).toHaveBeenCalled();
+      expect(stub.delete).toHaveBeenCalledWith('blob-1');
+      expect(fixture.componentInstance.loadedBlob()).toBeNull();
+      expect(fixture.componentInstance.content()).toBe('');
+      expect(fixture.componentInstance.title()).toBe('');
+      expect(nav).toHaveBeenCalledWith(['/']);
+      expect(snack.open).toHaveBeenCalled();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  it('onDeleteBlob does nothing when the user cancels the confirmation', async () => {
+    const { fixture, stub, restoreClipboard } = setup({
+      userId: 'owner-me',
+      loaded: blob(),
+      confirm: false
+    });
+    try {
+      await fixture.componentInstance.onDeleteBlob();
+      expect(stub.delete).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
+    } finally {
+      restoreClipboard();
+    }
+  });
+
+  it('onDeleteBlob toasts an error when delete fails and preserves local state', async () => {
+    const { fixture, snack, restoreClipboard } = setup({
+      userId: 'owner-me',
+      loaded: blob(),
+      confirm: true,
+      deleteResult: new Error('boom')
+    });
+    spyOn(console, 'warn');
+    try {
+      await fixture.componentInstance.onDeleteBlob();
+      expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
+      expect(snack.open).toHaveBeenCalled();
+    } finally {
+      restoreClipboard();
+    }
+  });
+});
+
