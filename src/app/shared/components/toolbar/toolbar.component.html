@@ -122,62 +122,64 @@
     </mat-button-toggle>
   </mat-button-toggle-group>
 
-  <span class="divider" aria-hidden="true"></span>
+  @if (authConfigured && isSignedIn()) {
+    <span class="divider" aria-hidden="true"></span>
 
-  <input
-    type="text"
-    class="title-field"
-    [value]="title()"
-    placeholder="Title (optional)"
-    i18n-placeholder="@@toolbar.title.placeholder"
-    aria-label="Blob title"
-    i18n-aria-label="@@toolbar.title.aria"
-    maxlength="200"
-    (input)="onTitleInput($event)"
-    (keydown)="onTitleKeydown($event)"
-  />
+    <input
+      type="text"
+      class="title-field"
+      [value]="title()"
+      placeholder="Title (optional)"
+      i18n-placeholder="@@toolbar.title.placeholder"
+      aria-label="Blob title"
+      i18n-aria-label="@@toolbar.title.aria"
+      maxlength="200"
+      (input)="onTitleInput($event)"
+      (keydown)="onTitleKeydown($event)"
+    />
 
-  <button
-    type="button"
-    mat-icon-button
-    [matTooltip]="saveTooltip()"
-    [attr.aria-label]="saveTooltip()"
-    [disabled]="saveDisabled()"
-    (click)="save.emit()"
-  >
-    <jj-icon name="save" />
-  </button>
-
-  @if (showOverflowMenu()) {
     <button
       type="button"
       mat-icon-button
-      [matMenuTriggerFor]="blobMenu"
-      matTooltip="More actions"
-      i18n-matTooltip="@@toolbar.overflow.tooltip"
-      aria-label="More actions for this blob"
-      i18n-aria-label="@@toolbar.overflow.aria"
+      [matTooltip]="saveTooltip()"
+      [attr.aria-label]="saveTooltip()"
+      [disabled]="saveDisabled()"
+      (click)="save.emit()"
     >
-      <jj-icon name="more-vert" />
+      <jj-icon name="save" />
     </button>
-    <mat-menu #blobMenu="matMenu">
-      <button mat-menu-item type="button" (click)="copyShareLink.emit()">
-        <jj-icon name="link" />
-        <span i18n="@@toolbar.overflow.copyShareLink">Copy share link</span>
-      </button>
-      <button mat-menu-item type="button" (click)="togglePublic.emit()">
-        <jj-icon [name]="isPublic() ? 'lock' : 'globe'" />
-        <span>{{ visibilityMenuLabel() }}</span>
-      </button>
+
+    @if (showOverflowMenu()) {
       <button
-        mat-menu-item
         type="button"
-        (click)="deleteBlob.emit()"
+        mat-icon-button
+        [matMenuTriggerFor]="blobMenu"
+        matTooltip="More actions"
+        i18n-matTooltip="@@toolbar.overflow.tooltip"
+        aria-label="More actions for this blob"
+        i18n-aria-label="@@toolbar.overflow.aria"
       >
-        <jj-icon name="trash" />
-        <span i18n="@@toolbar.overflow.delete">Delete this blob</span>
+        <jj-icon name="more-vert" />
       </button>
-    </mat-menu>
+      <mat-menu #blobMenu="matMenu">
+        <button mat-menu-item type="button" (click)="copyShareLink.emit()">
+          <jj-icon name="link" />
+          <span i18n="@@toolbar.overflow.copyShareLink">Copy share link</span>
+        </button>
+        <button mat-menu-item type="button" (click)="togglePublic.emit()">
+          <jj-icon [name]="isPublic() ? 'lock' : 'globe'" />
+          <span>{{ visibilityMenuLabel() }}</span>
+        </button>
+        <button
+          mat-menu-item
+          type="button"
+          (click)="deleteBlob.emit()"
+        >
+          <jj-icon name="trash" />
+          <span i18n="@@toolbar.overflow.delete">Delete this blob</span>
+        </button>
+      </mat-menu>
+    }
   }
 
   <span class="spacer"></span>

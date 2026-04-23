@@ -2,6 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ToolbarComponent } from './toolbar.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { AuthService } from '../../../core/auth/auth.service';
+import { AuthUser } from '../../../core/auth/auth-user';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
@@ -16,14 +18,23 @@ describe('ToolbarComponent', () => {
     localStorage.removeItem(STORAGE_KEY);
   });
 
-  async function create() {
+  async function create(opts: { signedIn?: boolean } = {}) {
     await TestBed.configureTestingModule({
       imports: [ToolbarComponent],
       providers: [...provideFakeAuth(), provideRouter([])]
     }).compileComponents();
     const fixture = TestBed.createComponent(ToolbarComponent);
+    const auth = TestBed.inject(AuthService);
+    if (opts.signedIn) {
+      (auth as unknown as { userSignal: { set(v: AuthUser | null): void } })
+        .userSignal.set({
+          id: 'oid-1',
+          displayName: 'Test User',
+          email: 'user@example.com'
+        });
+    }
     fixture.detectChanges();
-    return { fixture, prefs: TestBed.inject(PreferencesService) };
+    return { fixture, prefs: TestBed.inject(PreferencesService), auth };
   }
 
   it('renders without error with default prefs', async () => {
@@ -221,7 +232,7 @@ describe('ToolbarComponent', () => {
     });
 
     it('native paste into the title input does NOT trigger the pasteRequested output (regression)', async () => {
-      const { fixture } = await create();
+      const { fixture } = await create({ signedIn: true });
       const cmp = fixture.componentInstance;
       const pasteSpy = jasmine.createSpy('pasteRequested');
       const copySpy = jasmine.createSpy('copyRequested');
@@ -277,6 +288,22 @@ describe('ToolbarComponent', () => {
       expect(copy).toHaveBeenCalledTimes(1);
       expect(toggle).toHaveBeenCalledTimes(1);
       expect(del).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('signed-out visibility (anonymous users)', () => {
+    it('does not render the title input or save button when signed out', async () => {
+      const { fixture } = await create();
+      const host: HTMLElement = fixture.nativeElement;
+      expect(host.querySelector('input.title-field')).toBeNull();
+      expect(host.querySelector('jj-icon[name="save"]')).toBeNull();
+    });
+
+    it('renders the title input and save button when signed in', async () => {
+      const { fixture } = await create({ signedIn: true });
+      const host: HTMLElement = fixture.nativeElement;
+      expect(host.querySelector('input.title-field')).toBeTruthy();
+      expect(host.querySelector('jj-icon[name="save"]')).toBeTruthy();
     });
   });
 });

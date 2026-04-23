@@ -104,9 +104,6 @@ export class ToolbarComponent {
 
   readonly saveTooltip = computed(() => {
     if (this.saveInFlight()) return $localize`:@@toolbar.save.tooltip.saving:Saving...`;
-    if (!this.authConfigured || !this.isSignedIn()) {
-      return $localize`:@@toolbar.save.tooltip.signIn:Sign in to save & share`;
-    }
     if (!this.hasContent()) return $localize`:@@toolbar.save.tooltip.empty:Nothing to save`;
     return $localize`:@@toolbar.save.tooltip.save:Save & share`;
   });
