@@ -9,8 +9,10 @@ import { IconComponent } from '../icon/icon.component';
  * Persistent app-level header. Owns the two globally-consistent pieces of
  * chrome for every route:
  *  - Brand wordmark on the left, linking back to `/`.
- *  - Auth cluster on the right (user display name + sign-in/out button, or
- *    a disabled sign-in button when auth is not configured).
+ *  - Auth affordance on the right. When signed in, shows the user's display
+ *    name as a link to `/profile` (where sign-out lives). When signed out,
+ *    shows a sign-in button, or a disabled placeholder if auth is not
+ *    configured.
  *
  * Feature pages project their own middle-slot controls via `<ng-content>`.
  * Centralizing brand + auth here prevents new routes from silently
@@ -33,9 +35,5 @@ export class AppHeaderComponent {
 
   onSignIn(): void {
     this.auth.signIn();
-  }
-
-  onSignOut(): void {
-    this.auth.signOut();
   }
 }

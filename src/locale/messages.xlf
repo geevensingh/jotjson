@@ -296,46 +296,32 @@
           <context context-type="linenumber">23,24</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="appHeader.signOut.tooltip" datatype="html">
-        <source>Sign out</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">29,30</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="appHeader.signOut.aria" datatype="html">
-        <source>Sign out</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">31,32</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="appHeader.signIn.tooltip" datatype="html">
         <source>Sign in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">41,42</context>
+          <context context-type="linenumber">30,31</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.signIn.aria" datatype="html">
         <source>Sign in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">43,44</context>
+          <context context-type="linenumber">32,33</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.signIn.notConfigured.tooltip" datatype="html">
         <source>Sign in (not configured)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">55,56</context>
+          <context context-type="linenumber">44,45</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.signIn.notConfigured.aria" datatype="html">
         <source>Sign in (not configured)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">57,58</context>
+          <context context-type="linenumber">46,47</context>
         </context-group>
       </trans-unit>
       <trans-unit id="editor.loading" datatype="html">

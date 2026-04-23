@@ -47,7 +47,7 @@ describe('AppHeaderComponent', () => {
     expect(btn.disabled).toBe(false);
   });
 
-  it('renders user display name + sign-out button when signed in', async () => {
+  it('renders user display name (linking to /profile) when signed in, with no sign-out button', async () => {
     const { fixture, auth } = await create();
     if (!auth.isConfigured) {
       return;
@@ -68,19 +68,15 @@ describe('AppHeaderComponent', () => {
     expect(userLink.textContent?.trim()).toBe('Test User');
     expect(userLink.getAttribute('href')).toBe('/profile');
 
-    const signOut = fixture.nativeElement.querySelector(
-      'button[aria-label="Sign out"]'
-    ) as HTMLButtonElement;
-    expect(signOut).toBeTruthy();
+    // Sign-out lives on the Profile page, not in the header.
+    const signOut = fixture.nativeElement.querySelector('button[aria-label="Sign out"]');
+    expect(signOut).toBeNull();
   });
 
-  it('onSignIn / onSignOut delegate to AuthService', async () => {
+  it('onSignIn delegates to AuthService', async () => {
     const { fixture, auth } = await create();
     const signInSpy = spyOn(auth, 'signIn');
-    const signOutSpy = spyOn(auth, 'signOut');
     fixture.componentInstance.onSignIn();
-    fixture.componentInstance.onSignOut();
     expect(signInSpy).toHaveBeenCalledTimes(1);
-    expect(signOutSpy).toHaveBeenCalledTimes(1);
   });
 });

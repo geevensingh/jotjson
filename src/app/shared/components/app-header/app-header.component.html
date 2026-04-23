@@ -23,17 +23,6 @@
           aria-label="View profile"
           i18n-aria-label="@@appHeader.profile.aria"
         >{{ user()?.displayName }}</a>
-        <button
-          type="button"
-          mat-icon-button
-          matTooltip="Sign out"
-          i18n-matTooltip="@@appHeader.signOut.tooltip"
-          aria-label="Sign out"
-          i18n-aria-label="@@appHeader.signOut.aria"
-          (click)="onSignOut()"
-        >
-          <jj-icon name="sign-out" />
-        </button>
       } @else {
         <button
           type="button"
