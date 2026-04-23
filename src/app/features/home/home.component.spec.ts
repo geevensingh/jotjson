@@ -8,6 +8,7 @@ import { provideFakeAuth } from '../../../testing/auth.testing';
 import { provideRouter, Router } from '@angular/router';
 import { BlobService } from '../../core/api/blob.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import type { JsonBlob } from '../../core/api/models';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
@@ -269,11 +270,21 @@ describe('HomeComponent save() branching (M4a)', () => {
     get: jasmine.Spy;
   }
 
+  interface StubQuotaService {
+    notifyAutoDeleted: jasmine.Spy;
+    notifyQuotaExceededManual: jasmine.Spy;
+  }
+
   function setup(opts: {
     userId: string | null;
-    createResult?: JsonBlob | Error;
+    createResult?: JsonBlob | Error | { [key: string]: unknown };
     updateResult?: JsonBlob | Error;
-  }): { fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>; stub: StubBlobService; router: Router } {
+  }): {
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>;
+    stub: StubBlobService;
+    quota: StubQuotaService;
+    router: Router;
+  } {
     localStorage.removeItem('jotjson.preferences.v1');
     localStorage.removeItem('jotjson.draft.v1');
     localStorage.removeItem('jotjson.splitRatio.v1');
@@ -293,6 +304,13 @@ describe('HomeComponent save() branching (M4a)', () => {
       get: jasmine.createSpy('get').and.returnValue(of(blob()))
     };
 
+    const quota: StubQuotaService = {
+      notifyAutoDeleted: jasmine.createSpy('notifyAutoDeleted').and.resolveTo(),
+      notifyQuotaExceededManual: jasmine
+        .createSpy('notifyQuotaExceededManual')
+        .and.resolveTo()
+    };
+
     const fakeAuth: Partial<AuthService> = {
       user: (() => (opts.userId ? { id: opts.userId, displayName: 'Test' } : null)) as AuthService['user'],
       isSignedIn: (() => !!opts.userId) as AuthService['isSignedIn'],
@@ -305,12 +323,13 @@ describe('HomeComponent save() branching (M4a)', () => {
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: BlobService, useValue: stub },
-        { provide: AuthService, useValue: fakeAuth }
+        { provide: AuthService, useValue: fakeAuth },
+        { provide: QuotaNotificationService, useValue: quota }
       ]
     });
 
     const fixture = TestBed.createComponent(HomeComponent);
-    return { fixture, stub, router: TestBed.inject(Router) };
+    return { fixture, stub, quota, router: TestBed.inject(Router) };
   }
 
   it('does nothing when user is not signed in', async () => {
@@ -388,6 +407,48 @@ describe('HomeComponent save() branching (M4a)', () => {
     spyOn(console, 'warn');
     fixture.componentInstance.content.set('{"a":1}');
     await fixture.componentInstance.onSave();
+    expect(fixture.componentInstance.saveError()).toBeTruthy();
+    expect(fixture.componentInstance.saveInFlight()).toBe(false);
+  });
+
+  it('create path: calls notifyAutoDeleted when the response includes autoDeleted', async () => {
+    const created = {
+      ...blob({ id: 'new-id', slug: 'newslug', ownerId: 'u1' }),
+      autoDeleted: { id: 'old-id', slug: 'oldslug', title: 'Old title' }
+    };
+    const { fixture, quota, router } = setup({ userId: 'u1', createResult: created });
+    spyOn(router, 'navigate').and.resolveTo(true);
+    fixture.componentInstance.content.set('{"a":1}');
+    await fixture.componentInstance.onSave();
+    expect(quota.notifyAutoDeleted).toHaveBeenCalledWith({
+      id: 'old-id',
+      slug: 'oldslug',
+      title: 'Old title'
+    });
+    // loadedBlob must NOT carry the autoDeleted marker.
+    expect(
+      (fixture.componentInstance.loadedBlob() as unknown as Record<string, unknown>)['autoDeleted']
+    ).toBeUndefined();
+  });
+
+  it('create path: omits notifyAutoDeleted when autoDeleted is absent', async () => {
+    const { fixture, quota, router } = setup({ userId: 'u1' });
+    spyOn(router, 'navigate').and.resolveTo(true);
+    fixture.componentInstance.content.set('{"a":1}');
+    await fixture.componentInstance.onSave();
+    expect(quota.notifyAutoDeleted).not.toHaveBeenCalled();
+  });
+
+  it('create path: opens the manual-full dialog on 409 quota_exceeded', async () => {
+    const err = Object.assign(new Error('quota'), {
+      status: 409,
+      error: { error: 'Blob quota reached', code: 'quota_exceeded' }
+    });
+    const { fixture, quota } = setup({ userId: 'u1', createResult: err });
+    spyOn(console, 'warn');
+    fixture.componentInstance.content.set('{"a":1}');
+    await fixture.componentInstance.onSave();
+    expect(quota.notifyQuotaExceededManual).toHaveBeenCalled();
     expect(fixture.componentInstance.saveError()).toBeTruthy();
     expect(fixture.componentInstance.saveInFlight()).toBe(false);
   });

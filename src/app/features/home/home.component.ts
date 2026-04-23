@@ -26,9 +26,10 @@ const SK_BLOCK_COMMENT = 13;
 const SK_EOF = 17;
 import { AuthService } from '../../core/auth/auth.service';
 import { BlobService } from '../../core/api/blob.service';
-import type { JsonBlob } from '../../core/api/models';
+import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
+import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import {
   JsonParserService,
   JsonParseResult
@@ -68,6 +69,7 @@ export class HomeComponent {
   private readonly blobs = inject(BlobService);
   private readonly router = inject(Router);
   private readonly titleService = inject(Title);
+  private readonly quota = inject(QuotaNotificationService);
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -336,16 +338,30 @@ export class HomeComponent {
         this.loadedBlob.set(updated);
         this.title.set(updated.title ?? '');
       } else {
-        const created = await new Promise<JsonBlob>((resolve, reject) => {
+        const created = await new Promise<CreateBlobResponse>((resolve, reject) => {
           this.blobs
             .create(content, titlePatch, false)
             .subscribe({ next: resolve, error: reject });
         });
-        this.loadedBlob.set(created);
-        this.title.set(created.title ?? '');
-        void this.router.navigate(['/s', created.slug]);
+        // Strip the auxiliary quota marker before we treat it as a JsonBlob
+        // so loadedBlob stays clean.
+        const { autoDeleted, ...blob } = created;
+        this.loadedBlob.set(blob);
+        this.title.set(blob.title ?? '');
+        void this.router.navigate(['/s', blob.slug]);
+        if (autoDeleted) {
+          void this.quota.notifyAutoDeleted(autoDeleted);
+        }
       }
     } catch (err) {
+      const httpErr = err as { status?: number; error?: { code?: string } };
+      if (httpErr.status === 409 && httpErr.error?.code === 'quota_exceeded') {
+        void this.quota.notifyQuotaExceededManual();
+        this.saveError.set(
+          $localize`:@@save.error.quotaExceeded:Blob limit reached - delete one from your history to save a new blob.`
+        );
+        return;
+      }
       const message = this.formatSaveError(err);
       this.saveError.set(message);
       console.warn($localize`:@@save.failed.log:Save failed`, err);
