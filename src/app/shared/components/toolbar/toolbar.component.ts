@@ -12,8 +12,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { SignedInDirective } from '../../directives/signed-in.directive';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 
 export type EditorMode = 'json' | 'jsonc';
@@ -26,7 +26,8 @@ export type EditorMode = 'json' | 'jsonc';
     MatMenuModule,
     MatTooltipModule,
     MatButtonToggleModule,
-    IconComponent
+    IconComponent,
+    SignedInDirective
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toolbar.component.html',
@@ -34,7 +35,6 @@ export type EditorMode = 'json' | 'jsonc';
 })
 export class ToolbarComponent {
   private readonly prefs = inject(PreferencesService);
-  private readonly auth = inject(AuthService);
 
   readonly mode = input<EditorMode>('json');
   readonly hasContent = input<boolean>(false);
@@ -82,9 +82,6 @@ export class ToolbarComponent {
     if (theme === 'dark') return 'moon';
     return 'system';
   });
-
-  readonly isSignedIn = this.auth.isSignedIn;
-  readonly authConfigured = this.auth.isConfigured;
 
   readonly saveDisabled = computed(
     () => !this.canSave() || !this.hasContent() || this.saveInFlight()
