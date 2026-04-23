@@ -1,0 +1,104 @@
+.history {
+  max-width: 720px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+.history-header {
+  margin-bottom: 1.5rem;
+
+  h1 {
+    font-size: 1.5rem;
+    margin: 0 0 0.25rem;
+  }
+
+  .subtitle {
+    color: rgba(127, 127, 127, 0.9);
+    margin: 0;
+    font-size: 0.9rem;
+  }
+}
+
+.status {
+  color: rgba(127, 127, 127, 0.9);
+  margin: 2rem 0;
+
+  &.status-error {
+    color: var(--mat-sys-error, #b00020);
+  }
+}
+
+.blob-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.blob-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.06);
+  transition: background 120ms ease;
+
+  &:hover {
+    background: rgba(127, 127, 127, 0.12);
+  }
+}
+
+.blob-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.blob-title {
+  font-weight: 500;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+}
+
+.blob-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: rgba(127, 127, 127, 0.9);
+  font-size: 0.8rem;
+}
+
+.blob-slug {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.blob-badge {
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.18);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.blob-dot {
+  opacity: 0.6;
+}
+
+.blob-delete {
+  flex: 0 0 auto;
+}

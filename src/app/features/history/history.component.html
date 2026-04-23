@@ -1,0 +1,61 @@
+<main class="history">
+  <header class="history-header">
+    <h1 i18n="@@history.title">Your saved blobs</h1>
+    <p class="subtitle" i18n="@@history.subtitle">
+      All blobs you have saved to your account. Click a title to open it.
+    </p>
+  </header>
+
+  @if (state() === 'loading') {
+    <p class="status" i18n="@@history.loading">Loading...</p>
+  } @else if (state() === 'error') {
+    <p class="status status-error">{{ errorMessage() }}</p>
+    <button mat-stroked-button type="button" (click)="reload()">
+      <span i18n="@@history.retry">Retry</span>
+    </button>
+  } @else if (isEmpty()) {
+    <p class="status" i18n="@@history.empty">No saved blobs yet.</p>
+  } @else {
+    <ul class="blob-list">
+      @for (blob of blobList(); track blob.id) {
+        <li class="blob-row">
+          <div class="blob-main">
+            <a
+              class="blob-title"
+              [routerLink]="['/s', blob.slug]"
+              [attr.title]="displayTitle(blob)"
+              >{{ displayTitle(blob) }}</a
+            >
+            <div class="blob-meta">
+              <span class="blob-slug">/s/{{ blob.slug }}</span>
+              <span class="blob-dot">&middot;</span>
+              <span class="blob-time">{{ relativeTime(blob.updatedAt) }}</span>
+              @if (blob.isPublic) {
+                <span class="blob-dot">&middot;</span>
+                <span
+                  class="blob-badge"
+                  i18n="@@history.public"
+                  matTooltip="Anyone with the link and search engines can see this blob."
+                  i18n-matTooltip="@@history.public.tooltip"
+                  >public</span
+                >
+              }
+            </div>
+          </div>
+          <button
+            mat-icon-button
+            type="button"
+            class="blob-delete"
+            matTooltip="Delete this blob"
+            i18n-matTooltip="@@history.delete.tooltip"
+            aria-label="Delete this blob"
+            i18n-aria-label="@@history.delete.aria"
+            (click)="deleteBlob(blob)"
+          >
+            <jj-icon name="trash" />
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</main>

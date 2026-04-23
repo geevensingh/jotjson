@@ -16,6 +16,14 @@
           <context context-type="linenumber">30</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">122</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">129</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
           <context context-type="linenumber">452</context>
         </context-group>
@@ -114,17 +122,184 @@
         </context-group>
       </trans-unit>
       <trans-unit id="history.title" datatype="html">
-        <source>History</source>
+        <source>Your saved blobs</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">8,9</context>
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">3,4</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="history.note" datatype="html">
-        <source>Implementation in Milestone 5 (History).</source>
+      <trans-unit id="history.subtitle" datatype="html">
+        <source> All blobs you have saved to your account. Click a title to open it. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">5,8</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.loading" datatype="html">
+        <source>Loading...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">10,11</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.retry" datatype="html">
+        <source>Retry</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">14,16</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.empty" datatype="html">
+        <source>No saved blobs yet.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">17,19</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.public.tooltip" datatype="html">
+        <source>Anyone with the link and search engines can see this blob.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">38,39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.public" datatype="html">
+        <source>public</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">40,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.delete.tooltip" datatype="html">
+        <source>Delete this blob</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">49,50</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.delete.aria" datatype="html">
+        <source>Delete this blob</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">51,52</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.load.failed.log" datatype="html">
+        <source>Failed to load blobs</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">9,12</context>
+          <context context-type="linenumber">69</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.load.failed" datatype="html">
+        <source>Failed to load your saved blobs.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.untitled" datatype="html">
+        <source>Untitled</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">81</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.justNow" datatype="html">
+        <source>just now</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">89</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.minutesAgo" datatype="html">
+        <source><x id="count" equiv-text="minutes"/> min ago</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">90</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.hoursAgo" datatype="html">
+        <source><x id="count" equiv-text="hours"/> h ago</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">92</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.daysAgo" datatype="html">
+        <source><x id="count" equiv-text="days"/> d ago</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">94</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.delete.title" datatype="html">
+        <source>Delete this blob?</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">105</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.delete.message" datatype="html">
+        <source>&quot;<x id="name" equiv-text="label"/>&quot; will be permanently deleted. This cannot be undone.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">106</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="share.delete.confirm" datatype="html">
+        <source>Delete</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">107</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">514</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="common.cancel" datatype="html">
+        <source>Cancel</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">108</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">515</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="share.delete.success" datatype="html">
+        <source>Blob deleted.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">121</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">531</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="share.delete.failed.log" datatype="html">
+        <source>Failed to delete blob</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">126</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">537</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="share.delete.failed" datatype="html">
+        <source>Failed to delete blob.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">128</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
+          <context context-type="linenumber">539</context>
         </context-group>
       </trans-unit>
       <trans-unit id="app.title.homepage" datatype="html">
@@ -244,41 +419,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
           <context context-type="linenumber">513</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="share.delete.confirm" datatype="html">
-        <source>Delete</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">514</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="common.cancel" datatype="html">
-        <source>Cancel</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">515</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="share.delete.success" datatype="html">
-        <source>Blob deleted.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">531</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="share.delete.failed.log" datatype="html">
-        <source>Failed to delete blob</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">537</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="share.delete.failed" datatype="html">
-        <source>Failed to delete blob.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">539</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.chars.aria" datatype="html">

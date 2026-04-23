@@ -20,6 +20,7 @@ export const routes: Routes = [
     path: 'history',
     loadComponent: () =>
       import('./features/history/history.component').then((m) => m.HistoryComponent),
+    canActivate: [authGuard],
     title: 'History - JotJSON'
   },
   {
