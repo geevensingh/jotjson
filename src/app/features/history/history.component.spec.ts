@@ -142,6 +142,39 @@ describe('HistoryComponent', () => {
     expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
   });
 
+  it('copyLink writes the absolute URL to the clipboard and toasts success', async () => {
+    const { fixture, snack } = setup();
+    const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+    // Clipboard API is read-only on navigator; stub via defineProperty.
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true
+    });
+    await fixture.componentInstance.copyLink(blob({ slug: 'abc' }));
+    expect(writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/s/abc`
+    );
+    expect(snack.open).toHaveBeenCalled();
+    const message = (snack.open.calls.mostRecent().args as unknown[])[0];
+    expect(message).toBe('Link copied to clipboard');
+  });
+
+  it('copyLink toasts a failure message when the clipboard write fails', async () => {
+    const { fixture, snack } = setup();
+    const writeText = jasmine
+      .createSpy('writeText')
+      .and.rejectWith(new Error('denied'));
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true
+    });
+    spyOn(console, 'warn');
+    await fixture.componentInstance.copyLink(blob({ slug: 'xyz' }));
+    expect(snack.open).toHaveBeenCalled();
+    const message = (snack.open.calls.mostRecent().args as unknown[])[0];
+    expect(message).toBe('Failed to copy link');
+  });
+
   it('displayTitle falls back to "Untitled" for blank titles', () => {
     const { fixture } = setup();
     expect(fixture.componentInstance.displayTitle(blob({ title: undefined }))).toBe(

@@ -99,6 +99,28 @@ export class HistoryComponent implements OnInit {
     void this.router.navigate(['/s', blob.slug]);
   }
 
+  async copyLink(blob: JsonBlob): Promise<void> {
+    const url = `${window.location.origin}/s/${blob.slug}`;
+    try {
+      await navigator.clipboard?.writeText(url);
+      this.snack.open(
+        $localize`:@@history.copyLink.success:Link copied to clipboard`,
+        $localize`:@@common.dismiss:Dismiss`,
+        { duration: 3000 }
+      );
+    } catch (err) {
+      console.warn(
+        $localize`:@@history.copyLink.failed.log:Failed to copy blob link`,
+        err
+      );
+      this.snack.open(
+        $localize`:@@history.copyLink.failed:Failed to copy link`,
+        $localize`:@@common.dismiss:Dismiss`,
+        { duration: 4000 }
+      );
+    }
+  }
+
   async deleteBlob(blob: JsonBlob): Promise<void> {
     const label = this.displayTitle(blob);
     const data: ConfirmDialogData = {

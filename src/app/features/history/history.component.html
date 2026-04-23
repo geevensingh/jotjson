@@ -45,6 +45,18 @@
           <button
             mat-icon-button
             type="button"
+            class="blob-copy-link"
+            matTooltip="Copy link"
+            i18n-matTooltip="@@history.copyLink.tooltip"
+            aria-label="Copy link to this blob"
+            i18n-aria-label="@@history.copyLink.aria"
+            (click)="copyLink(blob)"
+          >
+            <jj-icon name="copy-path" />
+          </button>
+          <button
+            mat-icon-button
+            type="button"
             class="blob-delete"
             matTooltip="Delete this blob"
             i18n-matTooltip="@@history.delete.tooltip"
