@@ -123,13 +123,36 @@ Write-Step "Launching Windows Terminal tabs"
 
 $apiDir = Join-Path $repoRoot 'api'
 
+# Make sure the API is compiled once before `func start` reads from `dist/`.
+# Without this, a fresh clone or a branch with new routes will 404 until
+# the first `tsc` run. The `npm run watch` process kicked off below keeps
+# `dist/` in sync from here on.
+Write-Step "Building API (one-shot) so func start sees the latest routes"
+Push-Location $apiDir
+try {
+  npm run build
+  if ($LASTEXITCODE -ne 0) {
+    throw "API build failed (exit $LASTEXITCODE). Fix the TypeScript errors above and rerun."
+  }
+} finally {
+  Pop-Location
+}
+
 # Each tab runs a pwsh command. We build a wt.exe argument list with
 # ';' tab separators. Using Start-Process with -ArgumentList avoids the
 # PowerShell parser choking on the semicolons.
+#
+# The api tab is horizontally split: `func start` on top runs the compiled
+# JS from `dist/`, `npm run watch` (tsc -w) on the bottom keeps `dist/` in
+# sync with src/. Without the watcher, any change to api/src/** silently
+# 404s at /api/... until the next manual build.
 $wtArgs = @(
   'new-tab',   '--title', 'web',   '-d', $repoRoot, 'pwsh', '-NoExit', '-Command', 'npm start'
   ';'
   'new-tab',   '--title', 'api',   '-d', $apiDir,   'pwsh', '-NoExit', '-Command', 'func start'
+  ';'
+  'split-pane', '-H', '-d', $apiDir,
+    'pwsh', '-NoExit', '-Command', 'npm run watch'
 )
 
 if (-not $SkipTests) {
@@ -150,7 +173,7 @@ Start-Process -FilePath 'wt.exe' -ArgumentList $wtArgs | Out-Null
 Write-Host ""
 Write-Host "Local dev environment starting:" -ForegroundColor Green
 Write-Host "  web   -> http://localhost:4200"
-Write-Host "  api   -> http://localhost:7071"
+Write-Host "  api   -> http://localhost:7071 (func start + tsc --watch split)"
 if (-not $SkipTests) {
   Write-Host "  tests -> ng test (top) + jest --watch (bottom)"
 }

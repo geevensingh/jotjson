@@ -71,6 +71,21 @@ describe('AppHeaderComponent', () => {
     // Sign-out lives on the Profile page, not in the header.
     const signOut = fixture.nativeElement.querySelector('button[aria-label="Sign out"]');
     expect(signOut).toBeNull();
+
+    // History affordance is visible only when signed in.
+    const historyLink = fixture.nativeElement.querySelector(
+      'a[aria-label="Your saved blobs"]'
+    ) as HTMLAnchorElement;
+    expect(historyLink).toBeTruthy();
+    expect(historyLink.getAttribute('href')).toBe('/history');
+  });
+
+  it('does not render the history link when signed out', async () => {
+    const { fixture } = await create();
+    const historyLink = fixture.nativeElement.querySelector(
+      'a[aria-label="Your saved blobs"]'
+    );
+    expect(historyLink).toBeNull();
   });
 
   it('onSignIn delegates to AuthService', async () => {

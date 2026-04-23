@@ -28,7 +28,8 @@ export type JjIconName =
   | 'link'
   | 'globe'
   | 'lock'
-  | 'trash';
+  | 'trash'
+  | 'history';
 
 @Component({
   selector: 'jj-icon',
@@ -164,6 +165,11 @@ export type JjIconName =
           <path d="M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2" />
           <path d="M6.5 7l.85 12a2 2 0 0 0 2 1.9h5.3a2 2 0 0 0 2-1.9L17.5 7" />
           <path d="M10 11v6M14 11v6" />
+        }
+        @case ('history') {
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.5V12l3 2" />
+          <path d="M3.5 12a8.5 8.5 0 0 1 3-6.5" />
         }
       }
     </svg>
