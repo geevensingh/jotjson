@@ -101,22 +101,41 @@ export class AuthService {
     );
   }
 
-  signOut(): void {
+  async signOut(): Promise<void> {
     if (!this.isConfigured) return;
-    void this.ensureInitialized().then(() => {
-      const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
-      return this.msal.logoutRedirect({
-        account,
-        // idTokenHint lets Entra read the subject from the signed token and
-        // skip the "which account do you want to sign out of?" picker. It's
-        // the OIDC RP-Initiated Logout recommended parameter.
-        idTokenHint: account?.idToken,
-        // loginHint is a secondary, opaque signal MSAL pre-populates on the
-        // AccountInfo object. Passing both maximizes the chance Entra can
-        // short-circuit the picker across policy configurations.
-        logoutHint: account?.loginHint,
-        postLogoutRedirectUri: environment.auth.postLogoutRedirectUri
-      });
+    await this.ensureInitialized();
+    const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
+
+    let idTokenHint = account?.idToken;
+    if (!idTokenHint && account) {
+      try {
+        const result = await this.msal.acquireTokenSilent({
+          account,
+          scopes: environment.auth.scopes
+        });
+        idTokenHint = result.idToken;
+      } catch {
+        // Silent acquire failed (interaction required, offline, token
+        // revoked). Fall through without idTokenHint; Entra will show the
+        // picker but sign-out still completes.
+      }
+    }
+
+    // TEMPORARY diagnostic (see plan.md for M7-era sign-out picker work):
+    // lets us see whether idTokenHint actually makes it through. Remove
+    // once we've confirmed Entra is honoring the hint.
+    console.info('[jotjson] signOut', {
+      hasAccount: !!account,
+      hasIdTokenHint: !!idTokenHint,
+      hasLoginHint: !!account?.loginHint,
+      username: account?.username
+    });
+
+    await this.msal.logoutRedirect({
+      account,
+      idTokenHint,
+      logoutHint: account?.loginHint,
+      postLogoutRedirectUri: environment.auth.postLogoutRedirectUri
     });
   }
 

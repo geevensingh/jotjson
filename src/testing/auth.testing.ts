@@ -22,6 +22,7 @@ export class FakeMsalClient implements Partial<IPublicClientApplication> {
   activeAccount: AccountInfo | null = null;
   redirectResult: AuthenticationResult | null = null;
   nextSilentToken: string | null = null;
+  nextSilentIdToken: string | null = null;
   silentShouldThrow: Error | null = null;
 
   loginRedirectCalls = 0;
@@ -61,6 +62,7 @@ export class FakeMsalClient implements Partial<IPublicClientApplication> {
     if (this.silentShouldThrow) return Promise.reject(this.silentShouldThrow);
     return Promise.resolve({
       accessToken: this.nextSilentToken ?? '',
+      idToken: this.nextSilentIdToken ?? '',
       account: this.activeAccount
     } as AuthenticationResult);
   }

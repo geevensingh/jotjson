@@ -25,10 +25,11 @@ describe('AuthService', () => {
       expect(auth.isSignedIn()).toBe(false);
     });
 
-    it('signIn / signOut are no-ops', () => {
+    it('signIn / signOut are no-ops', async () => {
       const auth = TestBed.inject(AuthService);
+      (auth as unknown as { isConfigured: boolean }).isConfigured = false;
       auth.signIn();
-      auth.signOut();
+      await auth.signOut();
       expect(fake.loginRedirectCalls).toBe(0);
       expect(fake.logoutRedirectCalls).toBe(0);
     });
@@ -60,9 +61,7 @@ describe('AuthService', () => {
     it('signOut calls logoutRedirect', async () => {
       const auth = configuredAuth();
       fake.accounts = [makeAccount()];
-      auth.signOut();
-      await Promise.resolve();
-      await Promise.resolve();
+      await auth.signOut();
       expect(fake.logoutRedirectCalls).toBe(1);
     });
 
@@ -74,14 +73,29 @@ describe('AuthService', () => {
           loginHint: 'opaque-hint-123'
         })
       ];
-      auth.signOut();
-      await Promise.resolve();
-      await Promise.resolve();
+      spyOn(console, 'info');
+      await auth.signOut();
       expect(fake.lastLogoutRequest?.idTokenHint).toBe('raw.id.token');
       expect(fake.lastLogoutRequest?.logoutHint).toBe('opaque-hint-123');
     });
 
-    it('signOut omits hints gracefully when the account has no cached token or loginHint', async () => {
+    it('signOut falls back to acquireTokenSilent when account.idToken is missing', async () => {
+      const auth = configuredAuth();
+      fake.accounts = [
+        makeAccount({
+          idToken: undefined,
+          loginHint: 'opaque-hint'
+        })
+      ];
+      fake.nextSilentIdToken = 'freshly-acquired.id.token';
+      spyOn(console, 'info');
+      await auth.signOut();
+      expect(fake.acquireTokenSilentCalls).toBe(1);
+      expect(fake.lastLogoutRequest?.idTokenHint).toBe('freshly-acquired.id.token');
+      expect(fake.lastLogoutRequest?.logoutHint).toBe('opaque-hint');
+    });
+
+    it('signOut omits idTokenHint gracefully when silent acquire also fails', async () => {
       const auth = configuredAuth();
       fake.accounts = [
         makeAccount({
@@ -89,11 +103,12 @@ describe('AuthService', () => {
           loginHint: undefined
         })
       ];
-      auth.signOut();
-      await Promise.resolve();
-      await Promise.resolve();
+      fake.silentShouldThrow = new Error('interaction required');
+      spyOn(console, 'info');
+      await auth.signOut();
       expect(fake.lastLogoutRequest?.idTokenHint).toBeUndefined();
       expect(fake.lastLogoutRequest?.logoutHint).toBeUndefined();
+      expect(fake.logoutRedirectCalls).toBe(1);
     });
 
     it('acquireTokenSilent returns the token when MSAL returns one', async () => {
