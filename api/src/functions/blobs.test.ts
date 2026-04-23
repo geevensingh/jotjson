@@ -20,6 +20,7 @@ jest.mock('../shared/blobs', () => ({
   listBlobsByOwner: jest.fn(),
   updateBlob: jest.fn(),
   __resetBlobsContainerForTesting: jest.fn(),
+  MAX_BLOBS_PER_USER: 100,
   BlobValidationError: class BlobValidationError extends Error {
     constructor(message: string) {
       super(message);
@@ -34,6 +35,10 @@ jest.mock('../shared/blobs', () => ({
   }
 }));
 
+jest.mock('../shared/users', () => ({
+  readUser: jest.fn()
+}));
+
 import { AuthError, requireAuth as requireAuthMock } from '../shared/auth';
 import {
   BlobValidationError,
@@ -44,10 +49,12 @@ import {
   listBlobsByOwner as listBlobsByOwnerMock,
   updateBlob as updateBlobMock
 } from '../shared/blobs';
+import { readUser as readUserMock } from '../shared/users';
 import { deleteBlob, getBlob, listBlobs, postBlob, putBlob } from './blobs';
 
 const requireAuth = requireAuthMock as unknown as jest.Mock;
 const createBlob = createBlobMock as unknown as jest.Mock;
+const readUser = readUserMock as unknown as jest.Mock;
 const deleteBlobByIdSpy = deleteBlobByIdMock as unknown as jest.Mock;
 const findBlob = findBlobMock as unknown as jest.Mock;
 const listBlobsSpy = listBlobsByOwnerMock as unknown as jest.Mock;
@@ -69,6 +76,9 @@ const ctx = { log: jest.fn(), error: jest.fn() } as unknown as InvocationContext
 beforeEach(() => {
   jest.resetAllMocks();
   requireAuth.mockResolvedValue({ id: 'u-1', displayName: 'Alice' });
+  // Default: caller is well below the blob quota. Individual tests that
+  // exercise the quota path override this mock.
+  listBlobsSpy.mockResolvedValue([]);
 });
 
 const sampleBlob = {
@@ -137,6 +147,90 @@ describe('POST /api/blobs', () => {
     createBlob.mockRejectedValueOnce(new Error('boom'));
     const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
     expect(res.status).toBe(500);
+  });
+});
+
+describe('POST /api/blobs - quota enforcement', () => {
+  function manyBlobs(count: number): unknown[] {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `existing-${i}`,
+      slug: `slug-${i}`,
+      ownerId: 'u-1',
+      content: '{}',
+      isPublic: false,
+      // Older indices are older (smaller updatedAt).
+      createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+      updatedAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+      title: i === 0 ? 'oldest title' : undefined
+    }));
+  }
+
+  it('auto-deletes the oldest blob under the auto_fifo strategy', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobs(100));
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: { blobQuotaStrategy: 'auto_fifo' }
+    });
+    deleteBlobByIdSpy.mockResolvedValueOnce(true);
+    createBlob.mockResolvedValueOnce(sampleBlob);
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(201);
+    expect(deleteBlobByIdSpy).toHaveBeenCalledWith('existing-0', 'u-1');
+    const body = res.jsonBody as Record<string, unknown>;
+    expect(body['id']).toBe('uuid-1');
+    expect(body['autoDeleted']).toEqual({
+      id: 'existing-0',
+      slug: 'slug-0',
+      title: 'oldest title'
+    });
+  });
+
+  it('defaults to auto_fifo when the user doc is missing', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobs(100));
+    readUser.mockResolvedValueOnce(null);
+    deleteBlobByIdSpy.mockResolvedValueOnce(true);
+    createBlob.mockResolvedValueOnce(sampleBlob);
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(201);
+    expect(deleteBlobByIdSpy).toHaveBeenCalled();
+  });
+
+  it('returns 409 with code quota_exceeded under the manual strategy', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobs(100));
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: { blobQuotaStrategy: 'manual' }
+    });
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(409);
+    expect((res.jsonBody as Record<string, unknown>)['code']).toBe('quota_exceeded');
+    expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
+    expect(createBlob).not.toHaveBeenCalled();
+  });
+
+  it('omits autoDeleted when the caller is well under the quota', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobs(5));
+    createBlob.mockResolvedValueOnce(sampleBlob);
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(201);
+    expect(readUser).not.toHaveBeenCalled();
+    expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
+    expect((res.jsonBody as Record<string, unknown>)['autoDeleted']).toBeUndefined();
+  });
+
+  it('returns 500 when the quota check throws', async () => {
+    listBlobsSpy.mockRejectedValueOnce(new Error('cosmos down'));
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+    expect(res.status).toBe(500);
+    expect(createBlob).not.toHaveBeenCalled();
   });
 });
 

@@ -51,6 +51,7 @@ export interface UpdateBlobPatch {
 
 export const MAX_BLOB_BYTES = 1_000_000; // 1 MB, per DESIGN_SPEC §Constraints
 export const MAX_TITLE_LENGTH = 200;
+export const MAX_BLOBS_PER_USER = 100; // free-tier quota, DESIGN_SPEC §Constraints
 export const SLUG_LENGTH = 6;
 export const MAX_SLUG_ATTEMPTS = 5;
 

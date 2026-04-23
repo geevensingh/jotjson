@@ -9,8 +9,10 @@
  * PUT    /api/blobs/{id}           -> update an owned blob in place
  * DELETE /api/blobs/{id}           -> delete an owned blob
  *
- * Quota enforcement (100-blob cap + auto-FIFO vs manual strategy) lands
- * later in M4b and plugs into `postBlob`.
+ * POST also enforces the 100-blob-per-user quota:
+ *   - "auto_fifo" strategy (default): silently deletes the caller's oldest
+ *     blob and includes `autoDeleted: { id, slug, title? }` on the response.
+ *   - "manual" strategy: returns 409 with `code: "quota_exceeded"`.
  */
 import {
   app,
@@ -21,6 +23,7 @@ import {
 import { AuthError, requireAuth } from '../shared/auth';
 import {
   BlobValidationError,
+  MAX_BLOBS_PER_USER,
   SlugGenerationError,
   createBlob,
   deleteBlobById,
@@ -28,6 +31,7 @@ import {
   listBlobsByOwner,
   updateBlob
 } from '../shared/blobs';
+import { readUser } from '../shared/users';
 
 function unauthorized(message: string): HttpResponseInit {
   return { status: 401, jsonBody: { error: message } };
@@ -78,13 +82,50 @@ export async function postBlob(
   }
   const payload = body as { content?: unknown; title?: unknown; isPublic?: unknown };
 
+  let autoDeleted: { id: string; slug: string; title?: string } | undefined;
+  try {
+    const existing = await listBlobsByOwner(principal.id);
+    if (existing.length >= MAX_BLOBS_PER_USER) {
+      const userDoc = await readUser(principal.id);
+      const strategy = userDoc?.preferences?.blobQuotaStrategy ?? 'auto_fifo';
+      if (strategy === 'manual') {
+        return {
+          status: 409,
+          jsonBody: {
+            error: `Blob quota of ${MAX_BLOBS_PER_USER} reached. Delete an existing blob and try again.`,
+            code: 'quota_exceeded'
+          }
+        };
+      }
+      // auto_fifo: drop the oldest blob (by updatedAt, then createdAt as
+      // tiebreaker - matches DESIGN_SPEC §Constraints).
+      const oldest = [...existing].sort((a, b) => {
+        if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? -1 : 1;
+        return a.createdAt < b.createdAt ? -1 : 1;
+      })[0]!;
+      const removed = await deleteBlobById(oldest.id, oldest.ownerId);
+      if (removed) {
+        autoDeleted = {
+          id: oldest.id,
+          slug: oldest.slug,
+          ...(oldest.title ? { title: oldest.title } : {})
+        };
+      }
+    }
+  } catch (err) {
+    return internalError(context, 'postBlob quota', err);
+  }
+
   try {
     const saved = await createBlob(principal.id, {
       content: payload.content as string,
       ...(payload.title !== undefined ? { title: payload.title as string } : {}),
       ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic as boolean } : {})
     });
-    return { status: 201, jsonBody: saved };
+    return {
+      status: 201,
+      jsonBody: autoDeleted ? { ...saved, autoDeleted } : saved
+    };
   } catch (err) {
     if (err instanceof BlobValidationError) return badRequest(err.message);
     if (err instanceof SlugGenerationError) {
