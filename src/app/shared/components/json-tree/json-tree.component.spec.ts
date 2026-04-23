@@ -184,4 +184,20 @@ describe('JsonTreeComponent', () => {
       expect(cmp.treeControl.isExpanded(b)).toBeFalse(); // depth 2 should NOT be expanded
     });
   });
+
+  describe('empty containers render inline', () => {
+    it('renders [] and "0 items" for an empty array leaf', async () => {
+      await createWith({ things: [] });
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('[]');
+      expect(text).toContain('0 items');
+    });
+
+    it('renders {} and "0 keys" for an empty object leaf', async () => {
+      await createWith({ meta: {} });
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('{}');
+      expect(text).toContain('0 keys');
+    });
+  });
 });

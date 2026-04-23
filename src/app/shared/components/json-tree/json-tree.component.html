@@ -66,10 +66,23 @@
             @case ('null') {
               <span class="tree-value-null">null</span>
             }
+            @case ('array') {
+              <span class="tree-value-container">
+                <span class="tree-value-brace">[]</span>
+              </span>
+            }
+            @case ('object') {
+              <span class="tree-value-container">
+                <span class="tree-value-brace">&#123;&#125;</span>
+              </span>
+            }
           }
 
           @if (showTypeBadges()) {
             <span class="tree-row-right">
+              @if (node.type === 'array' || node.type === 'object') {
+                <span class="tree-count">{{ containerCountText(node) }}</span>
+              }
               <span class="tree-type-badge">{{ node.type }}</span>
               <button
                 type="button"
@@ -85,6 +98,9 @@
             </span>
           } @else {
             <span class="tree-row-right">
+              @if (node.type === 'array' || node.type === 'object') {
+                <span class="tree-count">{{ containerCountText(node) }}</span>
+              }
               <button
                 type="button"
                 class="tree-path-pill"
