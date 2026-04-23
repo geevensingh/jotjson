@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import {
   AccountInfo,
   AuthenticationResult,
+  EndSessionRequest,
   EventMessage,
   IPublicClientApplication
 } from '@azure/msal-browser';
@@ -25,6 +26,7 @@ export class FakeMsalClient implements Partial<IPublicClientApplication> {
 
   loginRedirectCalls = 0;
   logoutRedirectCalls = 0;
+  lastLogoutRequest: EndSessionRequest | undefined;
   acquireTokenSilentCalls = 0;
   initializeCalls = 0;
 
@@ -49,8 +51,9 @@ export class FakeMsalClient implements Partial<IPublicClientApplication> {
     this.loginRedirectCalls += 1;
     return Promise.resolve();
   }
-  logoutRedirect(): Promise<void> {
+  logoutRedirect(request?: EndSessionRequest): Promise<void> {
     this.logoutRedirectCalls += 1;
+    this.lastLogoutRequest = request;
     return Promise.resolve();
   }
   acquireTokenSilent(): Promise<AuthenticationResult> {

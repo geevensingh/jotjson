@@ -105,8 +105,16 @@ export class AuthService {
     if (!this.isConfigured) return;
     void this.ensureInitialized().then(() => {
       const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
+      const claims = account?.idTokenClaims as
+        | Record<string, unknown>
+        | undefined;
+      const loginHint = typeof claims?.['login_hint'] === 'string'
+        ? (claims['login_hint'] as string)
+        : undefined;
+      const logoutHint = loginHint ?? account?.username ?? undefined;
       return this.msal.logoutRedirect({
         account,
+        logoutHint,
         postLogoutRedirectUri: environment.auth.postLogoutRedirectUri
       });
     });
