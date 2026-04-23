@@ -32,6 +32,23 @@
 .mode-toggle {
   font-family: v.$font-ui;
   font-size: 12px;
+  height: 32px;
+
+  // Material's default button-toggle is ~48 px, which made the Home toolbar
+  // row taller than the Profile header. Shrink the internal buttons so the
+  // icon-buttons (~40 px) anchor the row height consistently across routes.
+  ::ng-deep .mat-button-toggle {
+    height: 32px;
+  }
+
+  ::ng-deep .mat-button-toggle-button {
+    height: 32px;
+  }
+
+  ::ng-deep .mat-button-toggle-label-content {
+    line-height: 30px;
+    padding: 0 10px;
+  }
 }
 
 .title-field {
