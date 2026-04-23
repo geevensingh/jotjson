@@ -9,6 +9,24 @@ export interface JsonBlob {
   isPublic: boolean;
 }
 
+/**
+ * Metadata describing a blob that the server silently deleted to make room
+ * for a new one under the auto-FIFO quota strategy. Kept off JsonBlob so the
+ * shape of stored blobs stays clean.
+ */
+export interface AutoDeletedBlobInfo {
+  id: string;
+  slug: string;
+  title?: string;
+}
+
+/**
+ * The POST /api/blobs response: the newly-created blob, plus an optional
+ * `autoDeleted` marker present only when the auto-FIFO quota strategy kicked
+ * in and the server removed the caller's oldest blob.
+ */
+export type CreateBlobResponse = JsonBlob & { autoDeleted?: AutoDeletedBlobInfo };
+
 export interface User {
   id: string;
   displayName: string;
