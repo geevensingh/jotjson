@@ -46,6 +46,7 @@ export interface UserPreferences {
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
   blobQuotaStrategy: 'auto_fifo' | 'manual';
+  seenBlobQuotaModal: boolean;
   treeHighlightColors: TreeHighlightColors;
 }
 

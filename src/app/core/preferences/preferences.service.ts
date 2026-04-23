@@ -35,6 +35,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   searchRegexMode: false,
   searchScope: 'both',
   blobQuotaStrategy: 'auto_fifo',
+  seenBlobQuotaModal: false,
   treeHighlightColors: {
     dark: {
       selectionColor: '#264f78',
@@ -55,6 +56,23 @@ function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light'
   if (pref === 'dark' || pref === 'light') return pref;
   if (typeof window === 'undefined' || !window.matchMedia) return 'dark';
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+/**
+ * Fills in any missing fields on a preferences object read from the server
+ * with built-in defaults. Guards against pre-existing user docs stored
+ * before a new field was added - otherwise the next PUT would fail server
+ * validation because normalizePreferences requires all keys.
+ */
+function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
+  return {
+    ...structuredClone(DEFAULT_PREFERENCES),
+    ...remote,
+    treeHighlightColors: {
+      ...DEFAULT_PREFERENCES.treeHighlightColors,
+      ...(remote.treeHighlightColors ?? {})
+    }
+  };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -195,9 +213,12 @@ export class PreferencesService {
         next: (user) => {
           if (gen !== this.syncGen) return;
           if (user) {
-            // Remote wins: replace local state with server copy.
-            this._prefs.set(user.preferences);
-            this.lastSyncedSnapshot = JSON.stringify(user.preferences);
+            // Remote wins: replace local state with server copy (merged with
+            // defaults so pre-existing docs missing newer fields still
+            // normalize round-trip on the next write).
+            const merged = mergeWithDefaults(user.preferences);
+            this._prefs.set(merged);
+            this.lastSyncedSnapshot = JSON.stringify(merged);
             this._syncState.set('synced');
           } else {
             // First ever sign-in: seed the server with the anon user's
@@ -208,8 +229,9 @@ export class PreferencesService {
               .subscribe({
                 next: (seeded) => {
                   if (gen !== this.syncGen) return;
-                  this._prefs.set(seeded.preferences);
-                  this.lastSyncedSnapshot = JSON.stringify(seeded.preferences);
+                  const merged = mergeWithDefaults(seeded.preferences);
+                  this._prefs.set(merged);
+                  this.lastSyncedSnapshot = JSON.stringify(merged);
                   this._syncState.set('synced');
                 },
                 error: () => {

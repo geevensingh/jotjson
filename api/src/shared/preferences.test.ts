@@ -45,6 +45,17 @@ describe('normalizePreferences', () => {
     expect(() => normalizePreferences(bad)).toThrow(/editorWordWrap must be a boolean/);
   });
 
+  it('rejects a non-boolean seenBlobQuotaModal', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['seenBlobQuotaModal'] = 'nope';
+    expect(() => normalizePreferences(bad)).toThrow(/seenBlobQuotaModal must be a boolean/);
+  });
+
+  it('round-trips seenBlobQuotaModal=true', () => {
+    const input = valid() as Record<string, unknown>;
+    input['seenBlobQuotaModal'] = true;
+    expect(normalizePreferences(input).seenBlobQuotaModal).toBe(true);
+  });
   it('rejects bad hex colors', () => {
     const bad = valid() as Record<string, unknown>;
     (bad['treeHighlightColors'] as Record<string, unknown>)['dark'] = {

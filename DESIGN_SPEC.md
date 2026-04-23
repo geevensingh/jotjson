@@ -98,6 +98,7 @@ Browser (Angular SPA)
   searchRegexMode: boolean (default: false),
   searchScope: "keys" | "values" | "both" (default: "both"),
   blobQuotaStrategy: "auto_fifo" | "manual" (default: "auto_fifo" - delete oldest blob when 100-blob cap reached; "manual" blocks the save with a prompt instead),
+  seenBlobQuotaModal: boolean (default: false - flipped to true after the first-time quota explainer modal has been dismissed; synced server-side so the modal doesn't reappear on other devices),
   treeHighlightColors: TreeHighlightColors
 }
 ```

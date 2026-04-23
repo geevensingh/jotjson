@@ -35,6 +35,7 @@ export interface UserPreferences {
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
   blobQuotaStrategy: 'auto_fifo' | 'manual';
+  seenBlobQuotaModal: boolean;
   treeHighlightColors: TreeHighlightColors;
 }
 
@@ -52,6 +53,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   searchRegexMode: false,
   searchScope: 'both',
   blobQuotaStrategy: 'auto_fifo',
+  seenBlobQuotaModal: false,
   treeHighlightColors: {
     dark: {
       selectionColor: '#264f78',
@@ -105,6 +107,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'searchRegexMode',
   'searchScope',
   'blobQuotaStrategy',
+  'seenBlobQuotaModal',
   'treeHighlightColors'
 ] as const;
 
@@ -237,6 +240,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
       QUOTA_STRATEGIES,
       'blobQuotaStrategy'
     ),
+    seenBlobQuotaModal: assertBool(raw['seenBlobQuotaModal'], 'seenBlobQuotaModal'),
     treeHighlightColors: {
       dark: normalizeColorSet(colors['dark'], 'treeHighlightColors.dark'),
       light: normalizeColorSet(colors['light'], 'treeHighlightColors.light')
