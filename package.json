@@ -63,6 +63,7 @@
   },
   "overrides": {
     "serialize-javascript": "7.0.5",
-    "dompurify": "3.4.1"
+    "dompurify": "3.4.1",
+    "uuid": "^14.0.0"
   }
 }
