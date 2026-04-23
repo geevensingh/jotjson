@@ -66,35 +66,34 @@ describe('AuthService', () => {
       expect(fake.logoutRedirectCalls).toBe(1);
     });
 
-    it('signOut forwards login_hint claim as logoutHint to skip the picker', async () => {
+    it('signOut forwards idTokenHint and logoutHint to skip the picker', async () => {
       const auth = configuredAuth();
       fake.accounts = [
         makeAccount({
-          idTokenClaims: {
-            oid: 'oid-1',
-            name: 'Test User',
-            login_hint: 'opaque-hint-123'
-          } as Record<string, unknown>
+          idToken: 'raw.id.token',
+          loginHint: 'opaque-hint-123'
         })
       ];
       auth.signOut();
       await Promise.resolve();
       await Promise.resolve();
+      expect(fake.lastLogoutRequest?.idTokenHint).toBe('raw.id.token');
       expect(fake.lastLogoutRequest?.logoutHint).toBe('opaque-hint-123');
     });
 
-    it('signOut falls back to account.username when login_hint is missing', async () => {
+    it('signOut omits hints gracefully when the account has no cached token or loginHint', async () => {
       const auth = configuredAuth();
       fake.accounts = [
         makeAccount({
-          username: 'fallback@example.com',
-          idTokenClaims: { oid: 'oid-1' } as Record<string, unknown>
+          idToken: undefined,
+          loginHint: undefined
         })
       ];
       auth.signOut();
       await Promise.resolve();
       await Promise.resolve();
-      expect(fake.lastLogoutRequest?.logoutHint).toBe('fallback@example.com');
+      expect(fake.lastLogoutRequest?.idTokenHint).toBeUndefined();
+      expect(fake.lastLogoutRequest?.logoutHint).toBeUndefined();
     });
 
     it('acquireTokenSilent returns the token when MSAL returns one', async () => {

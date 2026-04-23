@@ -65,6 +65,29 @@ function setup(opts: SetupOpts = {}) {
 }
 
 describe('HistoryComponent', () => {
+  const originalClipboardDesc = Object.getOwnPropertyDescriptor(
+    navigator,
+    'clipboard'
+  );
+
+  function stubClipboard(writeText: jasmine.Spy): void {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true
+    });
+  }
+
+  afterEach(() => {
+    // Restore whatever was on `navigator.clipboard` before this spec so
+    // subsequent suites (e.g. HomeComponent) can re-spyOn it.
+    if (originalClipboardDesc) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboardDesc);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (navigator as any).clipboard;
+    }
+  });
+
   it('ngOnInit loads blobs and marks state ready', async () => {
     const { fixture } = setup({ listResult: [blob()] });
     await fixture.componentInstance.reload();
@@ -147,11 +170,7 @@ describe('HistoryComponent', () => {
   it('copyLink writes the absolute URL to the clipboard and toasts success', async () => {
     const { fixture, snack } = setup();
     const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
-    // Clipboard API is read-only on navigator; stub via defineProperty.
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true
-    });
+    stubClipboard(writeText);
     await fixture.componentInstance.copyLink(blob({ slug: 'abc' }));
     expect(writeText).toHaveBeenCalledWith(
       `${window.location.origin}/s/abc`
@@ -166,10 +185,7 @@ describe('HistoryComponent', () => {
     const writeText = jasmine
       .createSpy('writeText')
       .and.rejectWith(new Error('denied'));
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true
-    });
+    stubClipboard(writeText);
     spyOn(console, 'warn');
     await fixture.componentInstance.copyLink(blob({ slug: 'xyz' }));
     expect(snack.open).toHaveBeenCalled();

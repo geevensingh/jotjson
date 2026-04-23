@@ -105,16 +105,16 @@ export class AuthService {
     if (!this.isConfigured) return;
     void this.ensureInitialized().then(() => {
       const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
-      const claims = account?.idTokenClaims as
-        | Record<string, unknown>
-        | undefined;
-      const loginHint = typeof claims?.['login_hint'] === 'string'
-        ? (claims['login_hint'] as string)
-        : undefined;
-      const logoutHint = loginHint ?? account?.username ?? undefined;
       return this.msal.logoutRedirect({
         account,
-        logoutHint,
+        // idTokenHint lets Entra read the subject from the signed token and
+        // skip the "which account do you want to sign out of?" picker. It's
+        // the OIDC RP-Initiated Logout recommended parameter.
+        idTokenHint: account?.idToken,
+        // loginHint is a secondary, opaque signal MSAL pre-populates on the
+        // AccountInfo object. Passing both maximizes the chance Entra can
+        // short-circuit the picker across policy configurations.
+        logoutHint: account?.loginHint,
         postLogoutRedirectUri: environment.auth.postLogoutRedirectUri
       });
     });
