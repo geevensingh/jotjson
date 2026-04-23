@@ -106,6 +106,16 @@ export class AuthService {
     await this.ensureInitialized();
     const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
 
+    // Populate `id_token_hint` on the logout URL so the IdP can skip the
+    // "which account do you want to sign out of?" confirmation. If MSAL's
+    // cached `account.idToken` is empty (cache race / expiration), do a
+    // silent refresh first - `AuthenticationResult.idToken` is guaranteed
+    // non-empty on success.
+    //
+    // NOTE: Entra External ID (ciamlogin.com) currently ignores
+    // `id_token_hint` and always renders the picker. Classic B2C and
+    // workforce Entra ID both honor it. We send the hint anyway so this
+    // works the day CIAM catches up, without any code change here.
     let idTokenHint = account?.idToken;
     if (!idTokenHint && account) {
       try {
@@ -116,20 +126,10 @@ export class AuthService {
         idTokenHint = result.idToken;
       } catch {
         // Silent acquire failed (interaction required, offline, token
-        // revoked). Fall through without idTokenHint; Entra will show the
-        // picker but sign-out still completes.
+        // revoked). Fall through without idTokenHint; sign-out still
+        // completes, just with the picker.
       }
     }
-
-    // TEMPORARY diagnostic (see plan.md for M7-era sign-out picker work):
-    // lets us see whether idTokenHint actually makes it through. Remove
-    // once we've confirmed Entra is honoring the hint.
-    console.info('[jotjson] signOut', {
-      hasAccount: !!account,
-      hasIdTokenHint: !!idTokenHint,
-      hasLoginHint: !!account?.loginHint,
-      username: account?.username
-    });
 
     await this.msal.logoutRedirect({
       account,

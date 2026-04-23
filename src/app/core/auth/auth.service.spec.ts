@@ -73,7 +73,6 @@ describe('AuthService', () => {
           loginHint: 'opaque-hint-123'
         })
       ];
-      spyOn(console, 'info');
       await auth.signOut();
       expect(fake.lastLogoutRequest?.idTokenHint).toBe('raw.id.token');
       expect(fake.lastLogoutRequest?.logoutHint).toBe('opaque-hint-123');
@@ -88,7 +87,6 @@ describe('AuthService', () => {
         })
       ];
       fake.nextSilentIdToken = 'freshly-acquired.id.token';
-      spyOn(console, 'info');
       await auth.signOut();
       expect(fake.acquireTokenSilentCalls).toBe(1);
       expect(fake.lastLogoutRequest?.idTokenHint).toBe('freshly-acquired.id.token');
@@ -104,7 +102,6 @@ describe('AuthService', () => {
         })
       ];
       fake.silentShouldThrow = new Error('interaction required');
-      spyOn(console, 'info');
       await auth.signOut();
       expect(fake.lastLogoutRequest?.idTokenHint).toBeUndefined();
       expect(fake.lastLogoutRequest?.logoutHint).toBeUndefined();
