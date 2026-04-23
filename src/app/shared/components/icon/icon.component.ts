@@ -119,14 +119,16 @@ export type JjIconName =
           <path d="M6 9l6 6 6-6" />
         }
         @case ('sign-in') {
-          <path d="M15 3h3.5A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5H15" />
-          <path d="M4 12h12" />
-          <path d="M11 7l5 5-5 5" />
+          <circle cx="16" cy="8" r="2.5" />
+          <path d="M11 20c0-3 2-5 5-5s5 2 5 5" />
+          <path d="M3 12h7" />
+          <path d="M7 9l3 3-3 3" />
         }
         @case ('sign-out') {
-          <path d="M15 3h3.5A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5H15" />
-          <path d="M3 12h12" />
-          <path d="M8 7l-5 5 5 5" />
+          <circle cx="8" cy="8" r="2.5" />
+          <path d="M3 20c0-3 2-5 5-5s5 2 5 5" />
+          <path d="M14 12h7" />
+          <path d="M18 9l3 3-3 3" />
         }
         @case ('save') {
           <path d="M5 3h11l4 4v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20V4.5A1.5 1.5 0 0 1 5.5 3" />
