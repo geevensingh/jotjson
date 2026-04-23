@@ -242,3 +242,42 @@ export async function updateBlob(
     .replace<BlobDocument>(next);
   return response.resource ?? next;
 }
+
+/**
+ * Delete a blob by (id, ownerId). Returns `true` if the doc was removed,
+ * `false` if it did not exist. Callers must have already verified ownership
+ * via `findBlobByIdOrSlug` + owner check.
+ */
+export async function deleteBlobById(
+  id: string,
+  ownerId: string
+): Promise<boolean> {
+  try {
+    await getBlobsContainer().item(id, ownerId).delete();
+    return true;
+  } catch (err) {
+    const code = (err as { code?: number }).code;
+    if (code === 404) return false;
+    throw err;
+  }
+}
+
+/**
+ * List every blob owned by `ownerId`, most-recently-updated first. Uses the
+ * partition key, so this is a single-partition query (no cross-partition RU
+ * cost). Not paginated - callers are capped at 100 blobs per user by the
+ * quota enforced on insert.
+ */
+export async function listBlobsByOwner(
+  ownerId: string
+): Promise<BlobDocument[]> {
+  if (typeof ownerId !== 'string' || ownerId.length === 0) return [];
+  const { resources } = await getBlobsContainer()
+    .items.query<BlobDocument>({
+      query:
+        'SELECT * FROM c WHERE c.ownerId = @ownerId ORDER BY c.updatedAt DESC',
+      parameters: [{ name: '@ownerId', value: ownerId }]
+    })
+    .fetchAll();
+  return resources;
+}

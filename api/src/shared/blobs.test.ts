@@ -4,7 +4,9 @@ import {
   MAX_TITLE_LENGTH,
   SlugGenerationError,
   createBlob,
+  deleteBlobById,
   findBlobByIdOrSlug,
+  listBlobsByOwner,
   updateBlob,
   __resetBlobsContainerForTesting,
   type BlobDocument
@@ -44,6 +46,12 @@ jest.mock('./cosmos', () => {
                 } else if (/c\.id = @key OR c\.slug = @key/.test(query)) {
                   const key = params['@key'];
                   resources = fake.items.filter((b) => b.id === key || b.slug === key);
+                } else if (/WHERE c\.ownerId = @ownerId ORDER BY c\.updatedAt DESC/.test(query)) {
+                  const ownerId = params['@ownerId'];
+                  resources = fake.items
+                    .filter((b) => b.ownerId === ownerId)
+                    .slice()
+                    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
                 } else {
                   throw new Error(`Unexpected query in test: ${query}`);
                 }
@@ -63,6 +71,14 @@ jest.mock('./cosmos', () => {
               if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
               fake.items[idx] = doc;
               return { resource: doc };
+            },
+            delete: async () => {
+              const idx = fake.items.findIndex(
+                (b) => b.id === id && b.ownerId === partitionKey
+              );
+              if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
+              fake.items.splice(idx, 1);
+              return {};
             }
           })
         })
@@ -217,5 +233,53 @@ describe('updateBlob', () => {
     expect(updated.content).toBe(orig.content);
     expect(updated.title).toBe(orig.title);
     expect(updated.isPublic).toBe(orig.isPublic);
+  });
+});
+
+describe('deleteBlobById', () => {
+  it('removes a blob owned by the user and returns true', async () => {
+    const created = await createBlob('owner-1', { content: '{"a":1}' });
+    const ok = await deleteBlobById(created.id, 'owner-1');
+    expect(ok).toBe(true);
+    expect(fake.items).toHaveLength(0);
+  });
+
+  it('returns false when the blob does not exist', async () => {
+    const ok = await deleteBlobById('missing-id', 'owner-1');
+    expect(ok).toBe(false);
+  });
+
+  it('returns false when the owner does not match (404 from Cosmos)', async () => {
+    const created = await createBlob('owner-1', { content: '{"a":1}' });
+    const ok = await deleteBlobById(created.id, 'someone-else');
+    expect(ok).toBe(false);
+    // Original blob still present.
+    expect(fake.items).toHaveLength(1);
+  });
+});
+
+describe('listBlobsByOwner', () => {
+  it('returns only the caller\u0027s blobs, newest first', async () => {
+    const a = await createBlob('owner-a', { content: '{"a":1}', title: 'A' });
+    // Nudge timestamps so ordering is deterministic.
+    await new Promise((r) => setTimeout(r, 5));
+    const b = await createBlob('owner-a', { content: '{"b":2}', title: 'B' });
+    await new Promise((r) => setTimeout(r, 5));
+    const c = await createBlob('owner-a', { content: '{"c":3}', title: 'C' });
+    await createBlob('owner-b', { content: '{"x":9}' });
+
+    const list = await listBlobsByOwner('owner-a');
+    expect(list.map((x) => x.id)).toEqual([c.id, b.id, a.id]);
+    expect(list.every((x) => x.ownerId === 'owner-a')).toBe(true);
+  });
+
+  it('returns an empty list for an unknown owner', async () => {
+    const list = await listBlobsByOwner('nobody');
+    expect(list).toEqual([]);
+  });
+
+  it('returns an empty list when given an empty ownerId', async () => {
+    const list = await listBlobsByOwner('');
+    expect(list).toEqual([]);
   });
 });

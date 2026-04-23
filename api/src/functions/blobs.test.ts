@@ -15,7 +15,9 @@ jest.mock('../shared/auth', () => {
 
 jest.mock('../shared/blobs', () => ({
   createBlob: jest.fn(),
+  deleteBlobById: jest.fn(),
   findBlobByIdOrSlug: jest.fn(),
+  listBlobsByOwner: jest.fn(),
   updateBlob: jest.fn(),
   __resetBlobsContainerForTesting: jest.fn(),
   BlobValidationError: class BlobValidationError extends Error {
@@ -37,14 +39,18 @@ import {
   BlobValidationError,
   SlugGenerationError,
   createBlob as createBlobMock,
+  deleteBlobById as deleteBlobByIdMock,
   findBlobByIdOrSlug as findBlobMock,
+  listBlobsByOwner as listBlobsByOwnerMock,
   updateBlob as updateBlobMock
 } from '../shared/blobs';
-import { getBlob, postBlob, putBlob } from './blobs';
+import { deleteBlob, getBlob, listBlobs, postBlob, putBlob } from './blobs';
 
 const requireAuth = requireAuthMock as unknown as jest.Mock;
 const createBlob = createBlobMock as unknown as jest.Mock;
+const deleteBlobByIdSpy = deleteBlobByIdMock as unknown as jest.Mock;
 const findBlob = findBlobMock as unknown as jest.Mock;
+const listBlobsSpy = listBlobsByOwnerMock as unknown as jest.Mock;
 const updateBlob = updateBlobMock as unknown as jest.Mock;
 
 function makeRequest(opts: { body?: unknown; params?: Record<string, string> } = {}): HttpRequest {
@@ -232,5 +238,113 @@ describe('PUT /api/blobs/:id', () => {
       ctx
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/blobs (list)', () => {
+  it('returns 401 when unauthenticated', async () => {
+    requireAuth.mockRejectedValueOnce(new AuthError('nope'));
+    const res = await listBlobs(makeRequest(), ctx);
+    expect(res.status).toBe(401);
+    expect(listBlobsSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns the caller\u0027s blobs', async () => {
+    listBlobsSpy.mockResolvedValueOnce([sampleBlob]);
+    const res = await listBlobs(makeRequest(), ctx);
+    expect(res.status).toBe(200);
+    expect(res.jsonBody).toEqual([sampleBlob]);
+    expect(listBlobsSpy).toHaveBeenCalledWith('u-1');
+  });
+
+  it('returns an empty array when the caller has no blobs', async () => {
+    listBlobsSpy.mockResolvedValueOnce([]);
+    const res = await listBlobs(makeRequest(), ctx);
+    expect(res.status).toBe(200);
+    expect(res.jsonBody).toEqual([]);
+  });
+
+  it('returns 500 on unexpected errors', async () => {
+    listBlobsSpy.mockRejectedValueOnce(new Error('cosmos down'));
+    const res = await listBlobs(makeRequest(), ctx);
+    expect(res.status).toBe(500);
+  });
+});
+
+describe('DELETE /api/blobs/:id', () => {
+  it('returns 401 when unauthenticated', async () => {
+    requireAuth.mockRejectedValueOnce(new AuthError('nope'));
+    const res = await deleteBlob(
+      makeRequest({ params: { id: 'uuid-1' } }),
+      ctx
+    );
+    expect(res.status).toBe(401);
+    expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when id is missing', async () => {
+    const res = await deleteBlob(makeRequest(), ctx);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when the blob does not exist', async () => {
+    findBlob.mockResolvedValueOnce(null);
+    const res = await deleteBlob(
+      makeRequest({ params: { id: 'uuid-1' } }),
+      ctx
+    );
+    expect(res.status).toBe(404);
+    expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the path param is the slug, not a UUID', async () => {
+    findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+    const res = await deleteBlob(
+      makeRequest({ params: { id: 'abc123' } }),
+      ctx
+    );
+    expect(res.status).toBe(400);
+    expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when the caller does not own the blob', async () => {
+    findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
+    const res = await deleteBlob(
+      makeRequest({ params: { id: 'uuid-1' } }),
+      ctx
+    );
+    expect(res.status).toBe(403);
+    expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 204 on successful deletion', async () => {
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    deleteBlobByIdSpy.mockResolvedValueOnce(true);
+    const res = await deleteBlob(
+      makeRequest({ params: { id: 'uuid-1' } }),
+      ctx
+    );
+    expect(res.status).toBe(204);
+    expect(deleteBlobByIdSpy).toHaveBeenCalledWith('uuid-1', 'u-1');
+  });
+
+  it('returns 404 when the doc disappears between find and delete', async () => {
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    deleteBlobByIdSpy.mockResolvedValueOnce(false);
+    const res = await deleteBlob(
+      makeRequest({ params: { id: 'uuid-1' } }),
+      ctx
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 500 on unexpected errors', async () => {
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    deleteBlobByIdSpy.mockRejectedValueOnce(new Error('cosmos down'));
+    const res = await deleteBlob(
+      makeRequest({ params: { id: 'uuid-1' } }),
+      ctx
+    );
+    expect(res.status).toBe(500);
   });
 });

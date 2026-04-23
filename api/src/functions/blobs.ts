@@ -1,13 +1,16 @@
 /**
  * /api/blobs - JSON blob CRUD endpoints.
  *
- * POST /api/blobs                -> create a new blob owned by the caller
- * GET  /api/blobs/{idOrSlug}     -> read any blob by UUID id or NanoID slug
- *                                   (auth optional - private/unlisted blobs
- *                                   are viewable by anyone with the link)
- * PUT  /api/blobs/{id}           -> update an owned blob in place
+ * POST   /api/blobs                -> create a new blob owned by the caller
+ * GET    /api/blobs                -> list the caller's blobs (auth required)
+ * GET    /api/blobs/{idOrSlug}     -> read any blob by UUID id or NanoID slug
+ *                                     (auth optional - private/unlisted blobs
+ *                                     are viewable by anyone with the link)
+ * PUT    /api/blobs/{id}           -> update an owned blob in place
+ * DELETE /api/blobs/{id}           -> delete an owned blob
  *
- * DELETE and listing endpoints land in M4b.
+ * Quota enforcement (100-blob cap + auto-FIFO vs manual strategy) lands
+ * later in M4b and plugs into `postBlob`.
  */
 import {
   app,
@@ -20,7 +23,9 @@ import {
   BlobValidationError,
   SlugGenerationError,
   createBlob,
+  deleteBlobById,
   findBlobByIdOrSlug,
+  listBlobsByOwner,
   updateBlob
 } from '../shared/blobs';
 
@@ -105,6 +110,61 @@ export async function getBlob(
   }
 }
 
+export async function listBlobs(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  let principal;
+  try {
+    principal = await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'listBlobs auth', err);
+  }
+
+  try {
+    const blobs = await listBlobsByOwner(principal.id);
+    return { status: 200, jsonBody: blobs };
+  } catch (err) {
+    return internalError(context, 'listBlobs read', err);
+  }
+}
+
+export async function deleteBlob(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  let principal;
+  try {
+    principal = await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'deleteBlob auth', err);
+  }
+
+  const id = req.params['id'] ?? '';
+  if (!id) return badRequest('Missing id path parameter');
+
+  try {
+    const existing = await findBlobByIdOrSlug(id);
+    if (!existing) return notFound('Blob not found');
+    if (existing.id !== id) {
+      // Mirror PUT: never operate on a doc keyed by slug - forces callers
+      // to use the stable UUID so this endpoint is idempotent.
+      return badRequest('DELETE requires the blob UUID id, not the slug');
+    }
+    if (existing.ownerId !== principal.id) {
+      return forbidden('You do not own this blob');
+    }
+
+    const deleted = await deleteBlobById(existing.id, existing.ownerId);
+    if (!deleted) return notFound('Blob not found');
+    return { status: 204 };
+  } catch (err) {
+    return internalError(context, 'deleteBlob write', err);
+  }
+}
+
 export async function putBlob(
   req: HttpRequest,
   context: InvocationContext
@@ -162,6 +222,13 @@ app.http('blobs-post', {
   handler: postBlob
 });
 
+app.http('blobs-list', {
+  methods: ['GET'],
+  route: 'blobs',
+  authLevel: 'anonymous',
+  handler: listBlobs
+});
+
 app.http('blobs-get', {
   methods: ['GET'],
   route: 'blobs/{idOrSlug}',
@@ -174,4 +241,11 @@ app.http('blobs-put', {
   route: 'blobs/{id}',
   authLevel: 'anonymous',
   handler: putBlob
+});
+
+app.http('blobs-delete', {
+  methods: ['DELETE'],
+  route: 'blobs/{id}',
+  authLevel: 'anonymous',
+  handler: deleteBlob
 });
