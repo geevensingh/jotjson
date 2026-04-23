@@ -23,7 +23,12 @@ export type JjIconName =
   | 'chevron-down'
   | 'sign-in'
   | 'sign-out'
-  | 'save';
+  | 'save'
+  | 'more-vert'
+  | 'link'
+  | 'globe'
+  | 'lock'
+  | 'trash';
 
 @Component({
   selector: 'jj-icon',
@@ -134,6 +139,31 @@ export type JjIconName =
           <path d="M5 3h11l4 4v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20V4.5A1.5 1.5 0 0 1 5.5 3" />
           <path d="M8 3v5h8V3" />
           <rect x="8" y="13" width="8" height="6" rx="0.5" />
+        }
+        @case ('more-vert') {
+          <circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none" />
+        }
+        @case ('link') {
+          <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" />
+          <path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" />
+        }
+        @case ('globe') {
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M3.5 12h17" />
+          <path d="M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5" />
+          <path d="M12 3.5c-2.5 2.5-3.5 5.5-3.5 8.5s1 6 3.5 8.5" />
+        }
+        @case ('lock') {
+          <rect x="5" y="10.5" width="14" height="9" rx="1.5" />
+          <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+        }
+        @case ('trash') {
+          <path d="M4 7h16" />
+          <path d="M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2" />
+          <path d="M6.5 7l.85 12a2 2 0 0 0 2 1.9h5.3a2 2 0 0 0 2-1.9L17.5 7" />
+          <path d="M10 11v6M14 11v6" />
         }
       }
     </svg>

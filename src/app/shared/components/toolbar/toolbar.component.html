@@ -148,6 +148,38 @@
     <jj-icon name="save" />
   </button>
 
+  @if (showOverflowMenu()) {
+    <button
+      type="button"
+      mat-icon-button
+      [matMenuTriggerFor]="blobMenu"
+      matTooltip="More actions"
+      i18n-matTooltip="@@toolbar.overflow.tooltip"
+      aria-label="More actions for this blob"
+      i18n-aria-label="@@toolbar.overflow.aria"
+    >
+      <jj-icon name="more-vert" />
+    </button>
+    <mat-menu #blobMenu="matMenu">
+      <button mat-menu-item type="button" (click)="copyShareLink.emit()">
+        <jj-icon name="link" />
+        <span i18n="@@toolbar.overflow.copyShareLink">Copy share link</span>
+      </button>
+      <button mat-menu-item type="button" (click)="togglePublic.emit()">
+        <jj-icon [name]="isPublic() ? 'lock' : 'globe'" />
+        <span>{{ visibilityMenuLabel() }}</span>
+      </button>
+      <button
+        mat-menu-item
+        type="button"
+        (click)="deleteBlob.emit()"
+      >
+        <jj-icon name="trash" />
+        <span i18n="@@toolbar.overflow.delete">Delete this blob</span>
+      </button>
+    </mat-menu>
+  }
+
   <span class="spacer"></span>
 
   <button

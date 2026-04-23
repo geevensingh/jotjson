@@ -6,6 +6,8 @@
       [title]="title()"
       [canSave]="canSave()"
       [saveInFlight]="saveInFlight()"
+      [isOwner]="isOwnedBlob()"
+      [isPublic]="isBlobPublic()"
       (pasteRequested)="onPaste()"
       (copyRequested)="onCopy()"
       (copyEscaped)="onCopyEscaped()"
@@ -19,6 +21,9 @@
       (toggleTheme)="onToggleTheme()"
       (save)="onSave()"
       (titleChange)="onTitleChange($event)"
+      (copyShareLink)="onCopyShareLink()"
+      (togglePublic)="onTogglePublic()"
+      (deleteBlob)="onDeleteBlob()"
     ></jj-toolbar>
   </jj-app-header>
 

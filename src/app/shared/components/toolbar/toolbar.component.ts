@@ -9,6 +9,7 @@ import {
   viewChild
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -20,7 +21,13 @@ export type EditorMode = 'json' | 'jsonc';
 @Component({
   selector: 'jj-toolbar',
   standalone: true,
-  imports: [MatButtonModule, MatTooltipModule, MatButtonToggleModule, IconComponent],
+  imports: [
+    MatButtonModule,
+    MatMenuModule,
+    MatTooltipModule,
+    MatButtonToggleModule,
+    IconComponent
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toolbar.component.html',
   styleUrl: './toolbar.component.scss'
@@ -34,6 +41,14 @@ export class ToolbarComponent {
   readonly title = input<string>('');
   readonly canSave = input<boolean>(false);
   readonly saveInFlight = input<boolean>(false);
+  /**
+   * Set to true when a blob is loaded AND the signed-in user owns it.
+   * Controls whether the 3-dot overflow menu (copy link / toggle visibility
+   * / delete) is shown.
+   */
+  readonly isOwner = input<boolean>(false);
+  /** Current isPublic flag of the loaded blob, drives the visibility toggle label. */
+  readonly isPublic = input<boolean>(false);
 
   readonly pasteRequested = output<void>();
   readonly copyRequested = output<void>();
@@ -48,6 +63,9 @@ export class ToolbarComponent {
   readonly toggleTheme = output<void>();
   readonly save = output<void>();
   readonly titleChange = output<string>();
+  readonly copyShareLink = output<void>();
+  readonly togglePublic = output<void>();
+  readonly deleteBlob = output<void>();
 
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
@@ -70,6 +88,18 @@ export class ToolbarComponent {
 
   readonly saveDisabled = computed(
     () => !this.canSave() || !this.hasContent() || this.saveInFlight()
+  );
+
+  /**
+   * The overflow menu is visible only when the parent tells us the current
+   * signed-in user owns the loaded blob.
+   */
+  readonly showOverflowMenu = computed(() => this.isOwner());
+
+  readonly visibilityMenuLabel = computed(() =>
+    this.isPublic()
+      ? $localize`:@@toolbar.overflow.makePrivate:Make private`
+      : $localize`:@@toolbar.overflow.makePublic:Make public`
   );
 
   readonly saveTooltip = computed(() => {

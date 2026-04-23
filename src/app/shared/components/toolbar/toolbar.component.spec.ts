@@ -238,4 +238,45 @@ describe('ToolbarComponent', () => {
       expect(copySpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('overflow menu (M4b)', () => {
+    it('showOverflowMenu is false by default (isOwner=false)', async () => {
+      const { fixture } = await create();
+      expect(fixture.componentInstance.showOverflowMenu()).toBe(false);
+    });
+
+    it('showOverflowMenu is true when isOwner is true', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('isOwner', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.showOverflowMenu()).toBe(true);
+    });
+
+    it('visibilityMenuLabel flips based on isPublic', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('isPublic', false);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.visibilityMenuLabel()).toBe('Make public');
+      fixture.componentRef.setInput('isPublic', true);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.visibilityMenuLabel()).toBe('Make private');
+    });
+
+    it('copyShareLink, togglePublic, deleteBlob outputs emit when invoked', async () => {
+      const { fixture } = await create();
+      const cmp = fixture.componentInstance;
+      const copy = jasmine.createSpy('copyShareLink');
+      const toggle = jasmine.createSpy('togglePublic');
+      const del = jasmine.createSpy('deleteBlob');
+      cmp.copyShareLink.subscribe(copy);
+      cmp.togglePublic.subscribe(toggle);
+      cmp.deleteBlob.subscribe(del);
+      cmp.copyShareLink.emit();
+      cmp.togglePublic.emit();
+      cmp.deleteBlob.emit();
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(toggle).toHaveBeenCalledTimes(1);
+      expect(del).toHaveBeenCalledTimes(1);
+    });
+  });
 });

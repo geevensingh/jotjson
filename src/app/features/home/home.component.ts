@@ -104,6 +104,15 @@ export class HomeComponent {
 
   readonly canSave = computed(() => this.auth.isSignedIn() && this.hasContent());
 
+  readonly isOwnedBlob = computed(() => {
+    const blob = this.loadedBlob();
+    if (!blob) return false;
+    const user = this.auth.user();
+    return !!user && user.id === blob.ownerId;
+  });
+
+  readonly isBlobPublic = computed(() => !!this.loadedBlob()?.isPublic);
+
   private readonly homepageTitle = $localize`:@@app.title.homepage:JotJSON - JSON viewer, formatter, and tree explorer`;
 
   readonly splitRatio = signal(this.loadSplitRatio());
@@ -424,6 +433,18 @@ export class HomeComponent {
     const next =
       current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';
     this.prefs.update({ theme: next });
+  }
+
+  onCopyShareLink(): void {
+    // Full behavior lands in the next todo (m4b-home-blob-actions).
+  }
+
+  onTogglePublic(): void {
+    // Full behavior lands in the next todo (m4b-home-blob-actions).
+  }
+
+  onDeleteBlob(): void {
+    // Full behavior lands in the next todo (m4b-home-blob-actions).
   }
 
   focusTreeSearch(): void {
