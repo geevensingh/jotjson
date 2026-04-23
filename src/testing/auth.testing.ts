@@ -11,6 +11,8 @@ import {
 } from '@azure/msal-browser';
 import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import { MSAL_INSTANCE } from '../app/core/auth/msal-instance';
+import { AuthService } from '../app/core/auth/auth.service';
+import { AuthUser } from '../app/core/auth/auth-user';
 
 /**
  * Spec-side stand-in for MSAL's `PublicClientApplication`. Records calls to
@@ -108,4 +110,31 @@ export function makeAccount(overrides: Partial<AccountInfo> = {}): AccountInfo {
     },
     ...overrides
   } as AccountInfo;
+}
+
+/**
+ * Signs a fake user into the injected `AuthService`. Used by specs whose DOM
+ * assertions depend on signed-in-only UX (e.g. `*jjSignedIn`-gated elements).
+ *
+ * Forces `isConfigured = true` by default because CI copies
+ * `environment.example.ts` (empty `clientId`) over `environment.ts`, which
+ * flips `AuthService.isConfigured` to `false` at construction time. Without
+ * this override, tests that assume signed-in DOM would pass locally and fail
+ * on CI.
+ */
+export function signInFakeUser(
+  auth: AuthService,
+  opts: { user?: AuthUser; configured?: boolean } = {}
+): void {
+  const configured = opts.configured ?? true;
+  if (configured) {
+    (auth as unknown as { isConfigured: boolean }).isConfigured = true;
+  }
+  const user: AuthUser = opts.user ?? {
+    id: 'oid-1',
+    displayName: 'Test User',
+    email: 'user@example.com'
+  };
+  (auth as unknown as { userSignal: { set(v: AuthUser | null): void } })
+    .userSignal.set(user);
 }

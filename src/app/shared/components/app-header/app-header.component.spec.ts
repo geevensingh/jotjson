@@ -2,8 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AppHeaderComponent } from './app-header.component';
 import { AuthService } from '../../../core/auth/auth.service';
-import { AuthUser } from '../../../core/auth/auth-user';
-import { FakeMsalClient, provideFakeAuth } from '../../../../testing/auth.testing';
+import {
+  FakeMsalClient,
+  provideFakeAuth,
+  signInFakeUser
+} from '../../../../testing/auth.testing';
 
 describe('AppHeaderComponent', () => {
   beforeEach(() => {
@@ -15,9 +18,16 @@ describe('AppHeaderComponent', () => {
       imports: [AppHeaderComponent],
       providers: [...provideFakeAuth(client), provideRouter([])]
     }).compileComponents();
+    // Force the "configured" branch so the signed-in vs not tests are
+    // deterministic across envs (CI overwrites environment.ts with the
+    // example variant that has an empty clientId). Must be set BEFORE the
+    // component is created because AppHeader captures `isConfigured` into a
+    // readonly field during construction.
+    const auth = TestBed.inject(AuthService);
+    (auth as unknown as { isConfigured: boolean }).isConfigured = true;
     const fixture = TestBed.createComponent(AppHeaderComponent);
     fixture.detectChanges();
-    return { fixture, auth: TestBed.inject(AuthService) };
+    return { fixture, auth };
   }
 
   it('renders a brand link pointing to the home route', async () => {
@@ -29,17 +39,7 @@ describe('AppHeaderComponent', () => {
   });
 
   it('renders a sign-in button when configured and not signed in', async () => {
-    const { fixture, auth } = await create();
-    if (!auth.isConfigured) {
-      // Environment without a clientId: the "not configured" branch renders
-      // a disabled sign-in button instead.
-      const btn = fixture.nativeElement.querySelector(
-        'button[aria-label="Sign in (not configured)"]'
-      ) as HTMLButtonElement;
-      expect(btn).toBeTruthy();
-      expect(btn.disabled).toBe(true);
-      return;
-    }
+    const { fixture } = await create();
     const btn = fixture.nativeElement.querySelector(
       'button[aria-label="Sign in"]'
     ) as HTMLButtonElement;
@@ -47,19 +47,26 @@ describe('AppHeaderComponent', () => {
     expect(btn.disabled).toBe(false);
   });
 
+  it('renders a disabled placeholder when auth is not configured', async () => {
+    await TestBed.configureTestingModule({
+      imports: [AppHeaderComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    }).compileComponents();
+    const auth = TestBed.inject(AuthService);
+    (auth as unknown as { isConfigured: boolean }).isConfigured = false;
+    const fixture = TestBed.createComponent(AppHeaderComponent);
+    fixture.detectChanges();
+    const btn = fixture.nativeElement.querySelector(
+      'button[aria-label="Sign in (not configured)"]'
+    ) as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    expect(btn.disabled).toBe(true);
+  });
+
   it('renders user display name (linking to /profile) when signed in, with no sign-out button', async () => {
     const { fixture, auth } = await create();
-    if (!auth.isConfigured) {
-      return;
-    }
-    // Simulate a signed-in user via the AuthService internal signal.
-    const authAny = auth as unknown as {
-      userSignal: { set(v: AuthUser | null): void };
-    };
-    authAny.userSignal.set({
-      id: 'oid-1',
-      displayName: 'Test User',
-      email: 'user@example.com'
+    signInFakeUser(auth, {
+      user: { id: 'oid-1', displayName: 'Test User', email: 'user@example.com' }
     });
     fixture.detectChanges();
 

@@ -3,8 +3,7 @@ import { provideRouter } from '@angular/router';
 import { ToolbarComponent } from './toolbar.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { AuthService } from '../../../core/auth/auth.service';
-import { AuthUser } from '../../../core/auth/auth-user';
-import { provideFakeAuth } from '../../../../testing/auth.testing';
+import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 
@@ -26,12 +25,7 @@ describe('ToolbarComponent', () => {
     const fixture = TestBed.createComponent(ToolbarComponent);
     const auth = TestBed.inject(AuthService);
     if (opts.signedIn) {
-      (auth as unknown as { userSignal: { set(v: AuthUser | null): void } })
-        .userSignal.set({
-          id: 'oid-1',
-          displayName: 'Test User',
-          email: 'user@example.com'
-        });
+      signInFakeUser(auth);
     }
     fixture.detectChanges();
     return { fixture, prefs: TestBed.inject(PreferencesService), auth };
