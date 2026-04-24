@@ -9,6 +9,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
   viewChild
 } from '@angular/core';
 import { Router } from '@angular/router';
@@ -177,10 +178,15 @@ export class HomeComponent {
       }
     });
 
-    // Hydrate from the resolved blob when navigating to /s/:slug.
+    // Hydrate from the resolved blob when navigating to /s/:slug. We read
+    // loadedBlob via untracked() so that post-hydration mutations (e.g.
+    // onClear setting loadedBlob to null before the async router.navigate
+    // completes) don't re-trigger this effect and re-hydrate from the stale
+    // initialBlob input.
     effect(() => {
       const blob = this.initialBlob();
-      if (blob && blob.id !== this.loadedBlob()?.id) {
+      const currentId = untracked(() => this.loadedBlob()?.id);
+      if (blob && blob.id !== currentId) {
         this.loadedBlob.set(blob);
         this.content.set(blob.content);
         this.title.set(blob.title ?? '');

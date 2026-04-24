@@ -83,6 +83,38 @@ describe('HomeComponent (unit-level)', () => {
     expect(fixture.componentInstance.loadedBlob()).toBeNull();
   });
 
+  it('onClear() on /s/:slug does not re-hydrate from a resolved initialBlob (regression)', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const blob: JsonBlob = {
+      id: 'id-1',
+      slug: 'slug-1',
+      content: '{"a":1}',
+      title: 'hello',
+      ownerId: 'me',
+      isPublic: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    };
+    fixture.componentRef.setInput('initialBlob', blob);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    // Hydrated.
+    expect(fixture.componentInstance.content()).toBe('{"a":1}');
+    expect(fixture.componentInstance.title()).toBe('hello');
+    expect(fixture.componentInstance.loadedBlob()?.id).toBe('id-1');
+
+    // Simulate Clear while still on /s/:slug (navigation is async so the
+    // initialBlob input is still the resolved blob when effects re-run).
+    fixture.componentInstance.onClear();
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+
+    expect(fixture.componentInstance.content()).toBe('');
+    expect(fixture.componentInstance.title()).toBe('');
+    expect(fixture.componentInstance.loadedBlob()).toBeNull();
+    expect(TestBed.inject(DraftService).content()).toBe('');
+  });
+
   it('onValueChange() updates content', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.onValueChange('{"x":42}');
