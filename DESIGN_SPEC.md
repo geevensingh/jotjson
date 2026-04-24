@@ -99,6 +99,7 @@ Browser (Angular SPA)
   searchScope: "keys" | "values" | "both" (default: "both"),
   blobQuotaStrategy: "auto_fifo" | "manual" (default: "auto_fifo" - delete oldest blob when 100-blob cap reached; "manual" blocks the save with a prompt instead),
   seenBlobQuotaModal: boolean (default: false - flipped to true after the first-time quota explainer modal has been dismissed; synced server-side so the modal doesn't reappear on other devices),
+  seenClipboardBanner: boolean (default: false - flipped to true after the first-time paste-permission banner has been dismissed; synced server-side so the banner doesn't reappear on other devices),
   treeHighlightColors: TreeHighlightColors
 }
 ```
@@ -184,6 +185,30 @@ When the user has not overridden a color for a given theme, the app uses that th
 
 ## Features & Pages
 
+### 0. App Header (global chrome)
+
+A persistent header (`AppHeaderComponent`) renders at the top of every
+authenticated and unauthenticated page. It owns the two globally-consistent
+pieces of top-level chrome and exposes a middle slot for page-specific
+controls:
+
+- **Brand wordmark** (left) - links to `/` (home).
+- **Page content slot** (middle) - feature pages project their own controls
+  via `<ng-content>` (e.g., `HomeComponent` wraps its toolbar inside the
+  header).
+- **Auth cluster** (right):
+  - Signed-in: link to `/history` (gated by the `*jjSignedIn` directive),
+    user display name linking to `/profile`, and a sign-out affordance on
+    `/profile` itself. Anonymous users do not see the `/history` link.
+  - Signed-out (auth configured): sign-in button.
+  - Auth not configured (env missing): sign-in button rendered disabled
+    with an explanatory tooltip so local/dev builds without credentials
+    still render a consistent layout.
+
+The header sits above the page's content and owns the divider between
+itself and page content (feature-page toolbars must not add a duplicate
+bottom border).
+
 ### 1. Home / Editor Page  (`/`)
 
 The primary page. Available to **all users** (anonymous + registered).
@@ -216,6 +241,7 @@ The primary page. Available to **all users** (anonymous + registered).
 
 - **Tree View Panel** (right or bottom, depending on layout preference)
   - Renders the parsed JSON as a collapsible, interactive tree.
+  - **Empty containers** render inline on a single row: empty arrays as `[]` with a `0 items` annotation, empty objects as `{}` with a `0 keys` annotation, using the same container glyph styling as non-empty containers so that an empty structure is visually distinct from a missing value.
   - Each row layout: `[expand/collapse icon]  key: value  ................  [type label]`
   - **Type labels** - right-aligned on every row, showing the JSON type with contextual counts:
     - `string` - string values.
@@ -617,9 +643,9 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
    - ~~**M3a**: Plumbing - MSAL bootstrap, `AuthService`, sign-in/sign-out toolbar control, signed-in user signal, HTTP interceptor attaching access tokens to `/api/*` calls, auth guard available (not yet applied to any route). Tenant/app-registration config read from environment/app-settings. No user-facing protected pages yet.~~ (done)
    - ~~**M3b**: Profile page scaffold at `/profile` (display name, read-only email, sign-out button). Route is auth-guarded.~~ (done)
    - ~~**M3c**: Migrate preferences from `localStorage` to the signed-in user. On sign-in, the client calls `GET /api/me`; if the user document exists, its preferences replace the local copy (remote wins). If it does not exist (first sign-in ever), the client `POST`s the current local preferences to `/api/me` to seed the server - the anon user's customizations are preserved exactly once. Subsequent changes are mirrored to Cosmos via a debounced `PUT /api/me/preferences` while the user is signed in; anonymous usage continues to read/write `localStorage`. The server rejects unknown keys and out-of-range values on every write.~~ (done)
-4. **Persistent links** - Blob CRUD API, save & share flow, `/s/:id` route.
+4. ~~**Persistent links** - Blob CRUD API, save & share flow, `/s/:id` route.~~ (done)
    Broken into three sub-milestones:
-   - **M4a**: API + core share flow. Cosmos `blobs` container
+   - ~~**M4a**: API + core share flow. Cosmos `blobs` container
      (partition key `/ownerId`), server-side `POST /api/blobs`,
      `GET /api/blobs/:idOrSlug`, and `PUT /api/blobs/:id` with
      NanoID(6) slug generation + collision retry, zod validation,
@@ -636,14 +662,14 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
      (`"<title or 'Untitled'> | JotJSON"`) that resets to the homepage
      title when the loaded blob clears. Anonymous users can view any
      `/s/:slug` link but cannot save. `DELETE` and list endpoints are
-     deferred to M4b.
-   - **M4b**: Owner management. `DELETE /api/blobs/:id`,
+     deferred to M4b.~~ (done)
+   - ~~**M4b**: Owner management. `DELETE /api/blobs/:id`,
      `GET /api/blobs` (paginated list of the caller's blobs),
      `isPublic` toggle in the toolbar overflow menu, `/history` page
      enumerating the owner's blobs with open/edit/delete/share
      actions, and the 100-blob cap UX (auto-FIFO default with a
      one-time explainer modal, or abort-with-prompt for users who pick
-     the `manual` strategy).
+     the `manual` strategy).~~ (done)
    - ~~**M4c**: SEO + 404 polish. Open Graph meta tags on public blobs
      (`/s/:slug` where `isPublic === true`), `noindex` meta on private
      blobs, friendly "Blob not found" 404 page for invalid slugs,
@@ -651,7 +677,7 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 5. **History** - History tracking, `/history` page, management actions.
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
 7. **Polish & launch** - Each of these lands as its own step/commit:
-   - **M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).
+   - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)
    - **M7b**: Drag-and-drop file upload with full-page drop overlay (Home page §1).
    - **M7c**: Smart date/time detection + relative-time annotations in the tree view (Home page §1).
    - **M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).
