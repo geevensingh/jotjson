@@ -79,13 +79,13 @@ export type JjIconName =
         }
         @case ('minify') {
           <path d="M4 4l5 5" />
-          <path d="M9 4H4v5" />
+          <path d="M4 9h5V4" />
           <path d="M20 4l-5 5" />
-          <path d="M15 4h5v5" />
+          <path d="M15 4v5h5" />
           <path d="M4 20l5-5" />
-          <path d="M9 20H4v-5" />
+          <path d="M4 15h5v5" />
           <path d="M20 20l-5-5" />
-          <path d="M15 20h5v-5" />
+          <path d="M20 15h-5v5" />
         }
         @case ('clear') {
           <path d="M4 7h16" />
