@@ -134,15 +134,26 @@ ThemeColorSet {
 When the user has not overridden a color for a given theme, the app uses that theme's default. Switching themes swaps the active color set; overrides for the inactive theme are preserved. The "Reset to defaults" button in Profile -> Preferences restores the defaults for the **currently active theme only**.
 
 #### HistoryEntry
+
+One document per tracked user action. Entries are immutable once
+written; the only mutation path is bulk delete via
+`DELETE /api/history`.
+
 ```
 {
-  id: string,
-  userId: string,
-  blobId: string,
+  id: string (UUID),
+  userId: string (partition key),
+  blobId: string (UUID of the subject blob; may no longer resolve if the blob was deleted),
+  slug?: string (NanoID slug snapshot at record time, for rendering rows whose blob has since been deleted),
+  title?: string (title snapshot at record time, nullable when the blob had no title),
   accessedAt: DateTime,
-  action: "saved" | "viewed" | "edited" | "pasted"
+  action: "saved" | "viewed" | "edited" | "deleted" | "pasted"
 }
 ```
+
+Retention: **1,000 entries per user**, FIFO auto-delete when the cap
+is exceeded (symmetric to the 100-blob cap). `"pasted"` events are
+debounced to one entry per 60 seconds per user.
 
 #### FormattingRuleSet
 ```
@@ -304,23 +315,59 @@ Available to **registered users** (create/manage). **Anonymous users can view an
 - **Visibility**: every saved blob is **private (unlisted) by default** - the link works for anyone who has it, but the blob is not listed on any public index, has a `noindex` meta tag, and does not emit rich Open Graph previews. The owner can toggle the blob to **public**, which enables Open Graph previews on `/s/:id` and allows indexing.
 - Owner can update or delete the blob.
 
-### 3. History & My Blobs Page  (`/history`)
+### 3. My Blobs + History Pages
 
-Available to **registered users** only. Route-guarded by `authGuard`.
+Available to **registered users** only. Both routes are guarded by
+`authGuard`.
 
-- **v1 (shipped in M4b):**
-  - Lists the signed-in user's saved blobs, sorted by `updatedAt` DESC.
-  - Each row shows: title (or "Untitled" when the blob has no title) linking to `/s/:slug` to open it, the slug, a relative updated-at time (e.g., "3 hours ago"), and a `public` badge when `isPublic` is true.
-  - Per-row actions: **Copy link** (writes `https://jotjson.com/s/:slug` to the clipboard) and **Delete** (confirms via dialog, then removes the blob server-side and from the list).
-  - Loading state renders a three-row pulsing skeleton; empty state reads "You haven't saved any JSON blobs yet." with an "Open the editor" CTA.
-  - No pagination needed in v1 - the 100-blob quota keeps the list small.
+#### 3a. My Blobs page (`/blobs`, shipped in M4b)
+
+Originally lived at `/history` but renamed to `/blobs` in M5b when
+the event timeline (3b) took over that URL. The component and its
+per-row behavior are unchanged.
+
+- Lists the signed-in user's saved blobs, sorted by `updatedAt` DESC.
+- Each row shows: title (or "Untitled" when the blob has no title) linking to `/s/:slug` to open it, the slug, a relative updated-at time (e.g., "3 hours ago"), and a `public` badge when `isPublic` is true.
+- Per-row actions: **Copy link** (writes `https://jotjson.com/s/:slug` to the clipboard) and **Delete** (confirms via dialog, then removes the blob server-side and from the list).
+- Loading state renders a three-row pulsing skeleton; empty state reads "You haven't saved any JSON blobs yet." with an "Open the editor" CTA.
+- No pagination needed in v1 - the 100-blob quota keeps the list small.
 - **Future enhancements (post-v1):**
   - Fallback title: show the first ~80 characters of the JSON body when `title` is absent, instead of "Untitled".
   - Additional metadata per row: save date (absolute) and byte size.
   - Search and filter by date range or keyword.
   - Inline public/private toggle on the list row (today this lives in the toolbar overflow menu on `/s/:slug`).
   - Infinite scroll if/when quotas increase.
-- **History trigger preference**: by default, a history entry is created only on explicit save ("Save & Share"). Users can opt into recording all actions (paste, view shared link, edit) via a `historyTrackingMode` preference in Profile settings.
+
+#### 3b. History page (`/history`, M5b)
+
+The event timeline - not a blob list. Shows the signed-in user's
+recent `HistoryEntry` records, newest first.
+
+- **Shape**: grouped by day ("Today", "Yesterday", `<date>`). Each
+  row renders an action icon (saved / edited / deleted / viewed /
+  pasted), the blob's snapshotted title (falling back to the slug,
+  then to "(deleted blob)" when both are missing), an action verb
+  ("saved", "viewed", etc.), and a relative time.
+- **Click behavior**: clicking a row that still references a live
+  blob navigates to `/s/:slug`. Rows whose blob has since been
+  deleted are non-interactive.
+- **Pagination**: `GET /api/history` returns N entries with a
+  continuation token; UI loads the next page on scroll-to-bottom
+  (or a "Load more" button in v1 before M5c adds infinite scroll).
+- **Empty state**: "No activity yet - try saving or viewing a
+  shared blob."
+- **Loading state** + error toast reuse the patterns from
+  `/blobs`.
+- **Clear history** action (calls `DELETE /api/history`, confirms
+  via dialog, then returns to the empty state).
+- **What is tracked**: controlled by the `historyTrackingMode`
+  preference. `"save_only"` (default) records only creates.
+  `"all_actions"` additionally records edits, deletes, non-owner
+  views, and client-initiated paste events.
+- **What is NOT tracked**: anonymous views (no `userId` to
+  attribute), owners re-loading their own blob, and paste events
+  that arrive within 60 seconds of the previous paste record for
+  the same user.
 
 ### 4. Auth Pages
 
@@ -444,7 +491,7 @@ Available to **registered users** only.
 1. Signs in via Microsoft Entra External ID.
 2. All anonymous features plus:
    - **Save & Share**: persists the blob to Cosmos DB, generates a shareable link.
-   - **History & My Blobs**: saved blobs appear in `/history`. In v1 the management surface is open / copy-link / delete (see §3 for the full current + planned feature set).
+   - **My Blobs + History**: saved blobs appear on `/blobs` (the M4b blob list, renamed from `/history` in M5b), and the signed-in user's recent activity appears on `/history` as an event timeline (M5b). See §3 for both.
    - **Formatting Rules**: create custom highlighting rules that auto-apply to the tree view.
 3. Session state syncs to server.
 
@@ -490,8 +537,9 @@ SPA-originated calls in production.
 
 | Method | Endpoint | Auth | Planned in | Description |
 |---|---|---|---|---|
-| GET | `/api/history` | Required | M5 | Get user's history (paginated) |
-| DELETE | `/api/history` | Required | M5 | Clear history |
+| GET | `/api/history` | Required | M5a | Paginated event timeline for the caller, newest first (continuation token for pagination) |
+| DELETE | `/api/history` | Required | M5a | Clear all history entries for the caller |
+| POST | `/api/history` | Required | M5a | Record a client-initiated `"pasted"` event (debounced server-side to one entry per 60s per user) |
 | PUT | `/api/me` | Required | post-v1 | Update display name + avatar URL |
 | POST | `/api/me/export` | Required | post-v1 | Enqueue data export job (returns job ID) |
 | GET | `/api/me/export/:jobId` | Required | post-v1 | Poll export job; returns ZIP SAS URL when complete |
@@ -744,7 +792,37 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
      (`/s/:slug` where `isPublic === true`), `noindex` meta on private
      blobs, friendly "Blob not found" 404 page for invalid slugs,
      `/history` loading skeleton and empty state.~~ (done)
-5. **History** - History tracking, `/history` page, management actions.
+5. **History** - Activity tracking for signed-in users. Broken into:
+   - **M5a**: Server-side event tracking plumbing (no UI change).
+     New Cosmos `history` container (partition key `/userId`).
+     `HistoryEntry` documents written on blob mutations - `"saved"`
+     on create, `"edited"` on update, `"deleted"` on delete,
+     `"viewed"` when a non-owner authenticated user fetches a blob,
+     and `"pasted"` when the client records it via
+     `POST /api/history`. All non-save recordings are gated by the
+     `historyTrackingMode` preference (`"save_only"` vs.
+     `"all_actions"`). Each entry snapshots `slug` and `title` so
+     the timeline can still render a meaningful row after the
+     underlying blob is deleted. Retention: **1,000 entries per
+     user, FIFO** when the cap is exceeded. Paste events are
+     debounced to one entry per 60 seconds per user. Endpoints:
+     `GET /api/history` (paginated, newest first),
+     `DELETE /api/history` (clear all for the caller),
+     `POST /api/history` (client-recorded `"pasted"` events only in
+     v1).
+   - **M5b**: UI surface. Rename the M4b blob list from `/history`
+     to `/blobs` (feature folder, route, i18n message IDs,
+     app-header link label). Build a new `HistoryComponent` at
+     `/history` that renders the event timeline (grouped by day,
+     action icon + blob title/slug/"(deleted blob)" fallback,
+     click-to-open for live blobs, loading skeleton + empty state,
+     "Clear history" action hitting `DELETE /api/history`). No
+     server redirect from the old `/history` URL; the timeline is
+     a reasonable landing page for anyone who bookmarked it.
+   - **M5c**: Timeline polish (optional; land only if needed).
+     Keyword search over blob title + slug snapshots, date-range
+     filter, infinite scroll, and an action filter (e.g., "viewed
+     only").
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
 7. **Polish & launch** - Each of these lands as its own step/commit:
    - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)
