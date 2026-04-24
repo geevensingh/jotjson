@@ -18,7 +18,7 @@
 | UI Component Library | Angular Material |
 | JSON Tree View | Custom component (recursive tree built on `mat-tree`) |
 | State Management | Angular Signals / lightweight service-based state |
-| Routing | Angular Router (lazy-loaded feature modules) |
+| Routing | Angular Router (standalone components, lazy-loaded via `loadComponent`) |
 | Auth | MSAL Angular (@azure/msal-angular) for Microsoft Entra External ID |
 
 ### Backend - Azure
@@ -560,38 +560,58 @@ SPA-originated calls in production.
 
 ## Project Structure (Angular)
 
+Representative layout (not exhaustive - only load-bearing directories are
+listed):
+
 ```
 src/
 ├── app/
-│   ├── core/                  # Singleton services, guards, interceptors
-│   │   ├── auth/              # MSAL config, auth guard, auth service
-│   │   ├── api/               # HTTP services (BlobService, HistoryService)
-│   │   └── interceptors/      # Auth token interceptor, error interceptor
-│   ├── shared/                # Reusable components, pipes, directives
+│   ├── core/                    # Singleton services, guards, interceptors
+│   │   ├── api/                 # HTTP services (BlobService, MeService, etc.)
+│   │   ├── auth/                # MSAL config, auth guard, AuthService
+│   │   ├── clipboard/           # ClipboardPollingService (M7a)
+│   │   ├── interceptors/        # Auth token, error interceptors
+│   │   ├── json/                # JsonParserService (jsonc-parser wrapper)
+│   │   ├── preferences/         # PreferencesService, DraftService
+│   │   ├── quota/               # QuotaNotificationService (M4b)
+│   │   └── seo/                 # SeoService (OG / twitter / noindex tags)
+│   ├── shared/                  # Reusable UI primitives
 │   │   ├── components/
-│   │   │   ├── json-editor/   # Code editor wrapper component
-│   │   │   ├── json-tree/     # Recursive tree view component
-│   │   │   └── toolbar/       # Action buttons (format, minify, copy, share)
+│   │   │   ├── app-header/      # Global chrome (brand + auth cluster)
+│   │   │   ├── icon/            # Inline SVG icon set
+│   │   │   ├── json-editor/     # Monaco editor wrapper
+│   │   │   ├── json-tree/       # Recursive tree view
+│   │   │   └── toolbar/         # Home page action cluster
+│   │   ├── dialogs/
+│   │   │   └── confirm-dialog/  # Reusable yes/no dialog
+│   │   ├── directives/          # e.g., *jjSignedIn structural directive
 │   │   └── pipes/
-│   │       └── json-type.pipe.ts
 │   ├── features/
-│   │   ├── home/              # Main editor + tree view page
-│   │   ├── share/             # /s/:id persistent link viewer
-│   │   ├── history/           # /history page
-│   │   ├── formatting-rules/  # /formatting-rules - rule set manager + rule builder
-│   │   └── profile/           # /profile page
+│   │   ├── home/                # Main editor + tree view page
+│   │   │   ├── clipboard-banner/# First-time paste-permission banner (M7a)
+│   │   │   └── status-bar/      # Bottom-of-page stats strip (M7m)
+│   │   ├── history/             # /history page (M4b)
+│   │   ├── formatting-rules/    # /formatting-rules (future M6)
+│   │   ├── not-found/           # /404 page (M4c)
+│   │   ├── profile/             # /profile page
+│   │   └── share/               # /s/:slug resolver (no component; routes through HomeComponent)
 │   ├── app.component.ts
 │   ├── app.routes.ts
 │   └── app.config.ts
-├── assets/
 ├── environments/
-│   ├── environment.ts
-│   └── environment.prod.ts
-└── styles/
-    ├── _variables.scss
-    ├── _theme.scss
-    └── styles.scss
+│   ├── environment.ts           # Local config (gitignored-equivalent)
+│   ├── environment.prod.ts      # Build-time replacement for production
+│   ├── environment.example.ts   # Template committed to the repo
+│   └── environment.interface.ts # Shared type
+├── generated/                   # Build-time artifacts (e.g., build-info.ts)
+├── locale/                      # @angular/localize extracted messages (xlf)
+├── styles/                      # Global SCSS (tokens, theme, base styles)
+└── testing/                     # Shared test helpers (e.g., provideFakeAuth)
 ```
+
+Static public assets (favicons, manifest, etc.) live at the repo-root
+`public/` directory and are copied as-is by the Angular build (per
+`angular.json` assets config).
 
 ---
 
