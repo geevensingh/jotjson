@@ -9,7 +9,6 @@ import {
   inject,
   input,
   signal,
-  untracked,
   viewChild
 } from '@angular/core';
 import { Router } from '@angular/router';
@@ -104,6 +103,14 @@ export class HomeComponent {
   readonly saveInFlight = signal<boolean>(false);
   readonly saveError = signal<string | null>(null);
 
+  /**
+   * Tracks the id of the blob whose content we've most recently hydrated
+   * the editor from. Used by the hydration effect to avoid re-hydrating
+   * from an input that hasn't changed (even if the effect re-runs for
+   * unrelated reasons).
+   */
+  private lastHydratedInputId: string | null = null;
+
   readonly parseResult = computed<JsonParseResult>(() =>
     this.parser.parse(this.content())
   );
@@ -178,19 +185,24 @@ export class HomeComponent {
       }
     });
 
-    // Hydrate from the resolved blob when navigating to /s/:slug. We read
-    // loadedBlob via untracked() so that post-hydration mutations (e.g.
-    // onClear setting loadedBlob to null before the async router.navigate
-    // completes) don't re-trigger this effect and re-hydrate from the stale
-    // initialBlob input.
+    // Hydrate from the resolved blob when navigating to /s/:slug. We track
+    // the id of the blob we've already hydrated from in a plain instance
+    // field so that re-runs of this effect (triggered by signal writes
+    // inside the effect, or by any other reactive churn) never re-hydrate
+    // from an already-processed input. When initialBlob becomes null/undefined
+    // (e.g. onClear navigates home), we reset the guard so a future
+    // /s/:slug visit can hydrate again.
     effect(() => {
       const blob = this.initialBlob();
-      const currentId = untracked(() => this.loadedBlob()?.id);
-      if (blob && blob.id !== currentId) {
-        this.loadedBlob.set(blob);
-        this.content.set(blob.content);
-        this.title.set(blob.title ?? '');
+      if (!blob) {
+        this.lastHydratedInputId = null;
+        return;
       }
+      if (blob.id === this.lastHydratedInputId) return;
+      this.lastHydratedInputId = blob.id;
+      this.loadedBlob.set(blob);
+      this.content.set(blob.content);
+      this.title.set(blob.title ?? '');
     });
 
     // Update the browser tab title whenever the loaded blob or local title

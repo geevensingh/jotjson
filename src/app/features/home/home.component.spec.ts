@@ -115,6 +115,92 @@ describe('HomeComponent (unit-level)', () => {
     expect(TestBed.inject(DraftService).content()).toBe('');
   });
 
+  it('onClear() stays cleared across multiple hydrate/clear cycles', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const blob: JsonBlob = {
+      id: 'id-1',
+      slug: 'slug-1',
+      content: '{"a":1}',
+      title: 'hello',
+      ownerId: 'me',
+      isPublic: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    };
+
+    // --- Cycle 1: hydrate from blob, then clear.
+    fixture.componentRef.setInput('initialBlob', blob);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.content()).toBe('{"a":1}');
+
+    fixture.componentInstance.onClear();
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.content()).toBe('');
+    expect(fixture.componentInstance.loadedBlob()).toBeNull();
+
+    // Simulate leaving /s/:slug: initialBlob input becomes undefined.
+    fixture.componentRef.setInput('initialBlob', undefined);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+
+    // --- Cycle 2: user revisits /s/:slug (resolver returns a fresh blob
+    // object with the same id), hydrate should run again, then clear
+    // should stick again.
+    const blobAgain: JsonBlob = { ...blob };
+    fixture.componentRef.setInput('initialBlob', blobAgain);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.content()).toBe('{"a":1}');
+    expect(fixture.componentInstance.loadedBlob()?.id).toBe('id-1');
+
+    fixture.componentInstance.onClear();
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.content()).toBe('');
+    expect(fixture.componentInstance.title()).toBe('');
+    expect(fixture.componentInstance.loadedBlob()).toBeNull();
+    expect(TestBed.inject(DraftService).content()).toBe('');
+  });
+
+  it('hydrates from a new initialBlob when switching between /s/:slug targets', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const blob1: JsonBlob = {
+      id: 'id-1',
+      slug: 'slug-1',
+      content: '{"a":1}',
+      title: 'hello',
+      ownerId: 'me',
+      isPublic: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    };
+    const blob2: JsonBlob = {
+      id: 'id-2',
+      slug: 'slug-2',
+      content: '{"b":2}',
+      title: 'world',
+      ownerId: 'me',
+      isPublic: false,
+      createdAt: '2024-02-01T00:00:00Z',
+      updatedAt: '2024-02-01T00:00:00Z'
+    };
+
+    fixture.componentRef.setInput('initialBlob', blob1);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.loadedBlob()?.id).toBe('id-1');
+
+    // Component is reused across same-route param changes; switch inputs.
+    fixture.componentRef.setInput('initialBlob', blob2);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.loadedBlob()?.id).toBe('id-2');
+    expect(fixture.componentInstance.content()).toBe('{"b":2}');
+    expect(fixture.componentInstance.title()).toBe('world');
+  });
+
   it('onValueChange() updates content', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.onValueChange('{"x":42}');
