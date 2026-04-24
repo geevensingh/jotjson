@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   computed,
@@ -50,6 +51,8 @@ import {
   ToolbarComponent
 } from '../../shared/components/toolbar/toolbar.component';
 import { StatusBarComponent } from './status-bar/status-bar.component';
+import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
+import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.component';
 
 /**
  * Primary editor + tree experience. Home is an anonymous page - persistence
@@ -63,7 +66,8 @@ import { StatusBarComponent } from './status-bar/status-bar.component';
     JsonEditorComponent,
     JsonTreeComponent,
     ToolbarComponent,
-    StatusBarComponent
+    StatusBarComponent,
+    ClipboardBannerComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.component.html',
@@ -81,6 +85,7 @@ export class HomeComponent {
   private readonly quota = inject(QuotaNotificationService);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
+  private readonly clipboard = inject(ClipboardPollingService);
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -123,6 +128,19 @@ export class HomeComponent {
   });
 
   readonly isBlobPublic = computed(() => !!this.loadedBlob()?.isPublic);
+
+  readonly clipboardState = computed<
+    'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'
+  >(() => {
+    const state = this.clipboard.permissionState();
+    if (state === 'denied') return 'denied';
+    if (state === 'granted') {
+      return this.clipboard.hasJson() ? 'enabled-json' : 'enabled-empty';
+    }
+    return 'fallback';
+  });
+
+  readonly clipboardPreview = computed(() => this.clipboard.preview());
 
   private readonly homepageTitle = $localize`:@@app.title.homepage:JotJSON - JSON viewer, formatter, and tree explorer`;
 
@@ -201,6 +219,38 @@ export class HomeComponent {
         /* storage unavailable */
       }
     });
+
+    // Clipboard polling (M7a): initial probe + gate polling on granted +
+    // page visibility. Visibilitychange / focus listeners force a re-check
+    // when the user returns to the tab, so the Paste button updates
+    // promptly after an external copy.
+    this.clipboard.checkOnce();
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'visible') {
+        this.clipboard.checkOnce();
+      } else {
+        this.clipboard.stopPolling();
+      }
+    };
+    const onFocus = (): void => {
+      this.clipboard.checkOnce();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    inject(DestroyRef).onDestroy(() => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+      this.clipboard.stopPolling();
+    });
+
+    effect(() => {
+      const state = this.clipboard.permissionState();
+      if (state === 'granted' && document.visibilityState === 'visible') {
+        this.clipboard.startPolling();
+      } else {
+        this.clipboard.stopPolling();
+      }
+    });
   }
 
   onSplitterPointerDown(ev: PointerEvent): void {
@@ -258,18 +308,14 @@ export class HomeComponent {
   }
 
   async onPaste(): Promise<void> {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (!text || text.trim().length === 0) return;
-      const { unescaped, changed } = this.parser.tryUnescape(text);
-      this.content.set(unescaped);
-      if (changed) {
-        // Pretty-print the newly-unescaped payload so the user sees the real
-        // structure rather than a single dense line (per issue #38).
-        this.onFormat();
-      }
-    } catch {
-      // Clipboard unavailable / denied - graceful fallback: user can still Ctrl+V.
+    const text = await this.clipboard.readForPaste();
+    if (!text || text.trim().length === 0) return;
+    const { unescaped, changed } = this.parser.tryUnescape(text);
+    this.content.set(unescaped);
+    if (changed) {
+      // Pretty-print the newly-unescaped payload so the user sees the real
+      // structure rather than a single dense line (per issue #38).
+      this.onFormat();
     }
   }
 

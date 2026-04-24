@@ -2,10 +2,11 @@
   <button
     type="button"
     mat-icon-button
-    matTooltip="Paste JSON from clipboard"
-    i18n-matTooltip="@@toolbar.paste.tooltip"
+    [matTooltip]="pasteTooltip()"
     aria-label="Paste JSON from clipboard"
     i18n-aria-label="@@toolbar.paste.aria"
+    [disabled]="pasteDisabled()"
+    [class.paste-ready]="clipboardState() === 'enabled-json'"
     (click)="pasteRequested.emit()"
   >
     <jj-icon name="paste" />

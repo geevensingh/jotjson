@@ -50,6 +50,21 @@ export class ToolbarComponent {
   /** Current isPublic flag of the loaded blob, drives the visibility toggle label. */
   readonly isPublic = input<boolean>(false);
 
+  /**
+   * Clipboard UX state driving the Paste button, per DESIGN_SPEC.md §Smart
+   * Paste Button. One of:
+   * - `enabled-json`  : accent-tinted, tooltip shows the `clipboardPreview`
+   * - `enabled-empty` : disabled, "Clipboard does not contain JSON"
+   * - `denied`        : disabled with instructions to re-enable permission
+   * - `fallback`      : neutral state (clipboard API unsupported / unknown /
+   *                      not yet prompted); click path does a user-gesture
+   *                      read via `ClipboardPollingService.readForPaste`.
+   */
+  readonly clipboardState = input<
+    'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'
+  >('fallback');
+  readonly clipboardPreview = input<string>('');
+
   readonly pasteRequested = output<void>();
   readonly copyRequested = output<void>();
   readonly copyEscaped = output<void>();
@@ -103,6 +118,28 @@ export class ToolbarComponent {
     if (this.saveInFlight()) return $localize`:@@toolbar.save.tooltip.saving:Saving...`;
     if (!this.hasContent()) return $localize`:@@toolbar.save.tooltip.empty:Nothing to save`;
     return $localize`:@@toolbar.save.tooltip.save:Save & share`;
+  });
+
+  readonly pasteDisabled = computed(() => {
+    const s = this.clipboardState();
+    return s === 'enabled-empty' || s === 'denied';
+  });
+
+  readonly pasteTooltip = computed(() => {
+    switch (this.clipboardState()) {
+      case 'enabled-json': {
+        const p = this.clipboardPreview();
+        return p
+          ? $localize`:@@toolbar.paste.tooltip.ready:Paste: ${p}:PREVIEW:`
+          : $localize`:@@toolbar.paste.tooltip.readyNoPreview:Paste JSON from clipboard`;
+      }
+      case 'enabled-empty':
+        return $localize`:@@toolbar.paste.tooltip.empty:Clipboard does not contain JSON`;
+      case 'denied':
+        return $localize`:@@toolbar.paste.tooltip.denied:Clipboard access blocked - enable it in your browser settings. Ctrl+V still works.`;
+      default:
+        return $localize`:@@toolbar.paste.tooltip:Paste JSON from clipboard`;
+    }
   });
 
   onTitleInput(ev: Event): void {

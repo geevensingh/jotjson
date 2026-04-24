@@ -300,4 +300,62 @@ describe('ToolbarComponent', () => {
       expect(host.querySelector('jj-icon[name="save"]')).toBeTruthy();
     });
   });
+
+  describe('clipboard state (M7a)', () => {
+    it('fallback state: enabled, default tooltip, no ready class', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('clipboardState', 'fallback');
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      expect(cmp.pasteDisabled()).toBe(false);
+      expect(cmp.pasteTooltip()).toBe('Paste JSON from clipboard');
+      const btn = (fixture.nativeElement as HTMLElement).querySelector(
+        'button.paste-ready'
+      );
+      expect(btn).toBeNull();
+    });
+
+    it('enabled-json: enabled, ready class, tooltip includes preview', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('clipboardState', 'enabled-json');
+      fixture.componentRef.setInput('clipboardPreview', '{"a":1}');
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      expect(cmp.pasteDisabled()).toBe(false);
+      expect(cmp.pasteTooltip()).toContain('{"a":1}');
+      const btn = (fixture.nativeElement as HTMLElement).querySelector(
+        'button.paste-ready'
+      );
+      expect(btn).toBeTruthy();
+    });
+
+    it('enabled-empty: disabled, tooltip explains clipboard has no JSON', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('clipboardState', 'enabled-empty');
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      expect(cmp.pasteDisabled()).toBe(true);
+      expect(cmp.pasteTooltip()).toBe('Clipboard does not contain JSON');
+    });
+
+    it('denied: disabled with instructive tooltip', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('clipboardState', 'denied');
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      expect(cmp.pasteDisabled()).toBe(true);
+      expect(cmp.pasteTooltip()).toContain('Ctrl+V');
+    });
+
+    it('still emits pasteRequested in fallback state', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('clipboardState', 'fallback');
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      const spy = jasmine.createSpy('pasteRequested');
+      cmp.pasteRequested.subscribe(spy);
+      cmp.pasteRequested.emit();
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

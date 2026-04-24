@@ -56,6 +56,20 @@ describe('normalizePreferences', () => {
     input['seenBlobQuotaModal'] = true;
     expect(normalizePreferences(input).seenBlobQuotaModal).toBe(true);
   });
+
+  it('rejects a non-boolean seenClipboardBanner', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['seenClipboardBanner'] = 'nope';
+    expect(() => normalizePreferences(bad)).toThrow(
+      /seenClipboardBanner must be a boolean/
+    );
+  });
+
+  it('round-trips seenClipboardBanner=true', () => {
+    const input = valid() as Record<string, unknown>;
+    input['seenClipboardBanner'] = true;
+    expect(normalizePreferences(input).seenClipboardBanner).toBe(true);
+  });
   it('rejects bad hex colors', () => {
     const bad = valid() as Record<string, unknown>;
     (bad['treeHighlightColors'] as Record<string, unknown>)['dark'] = {

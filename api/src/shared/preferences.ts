@@ -36,6 +36,7 @@ export interface UserPreferences {
   searchScope: 'keys' | 'values' | 'both';
   blobQuotaStrategy: 'auto_fifo' | 'manual';
   seenBlobQuotaModal: boolean;
+  seenClipboardBanner: boolean;
   treeHighlightColors: TreeHighlightColors;
 }
 
@@ -54,6 +55,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   searchScope: 'both',
   blobQuotaStrategy: 'auto_fifo',
   seenBlobQuotaModal: false,
+  seenClipboardBanner: false,
   treeHighlightColors: {
     dark: {
       selectionColor: '#264f78',
@@ -108,6 +110,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'searchScope',
   'blobQuotaStrategy',
   'seenBlobQuotaModal',
+  'seenClipboardBanner',
   'treeHighlightColors'
 ] as const;
 
@@ -241,6 +244,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
       'blobQuotaStrategy'
     ),
     seenBlobQuotaModal: assertBool(raw['seenBlobQuotaModal'], 'seenBlobQuotaModal'),
+    seenClipboardBanner: assertBool(raw['seenClipboardBanner'], 'seenClipboardBanner'),
     treeHighlightColors: {
       dark: normalizeColorSet(colors['dark'], 'treeHighlightColors.dark'),
       light: normalizeColorSet(colors['light'], 'treeHighlightColors.light')

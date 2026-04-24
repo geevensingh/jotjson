@@ -195,7 +195,7 @@ The primary page. Available to **all users** (anonymous + registered).
   - Real-time JSON validation with inline error messages (line + column of parse error).
   - **Smart Paste Button** behavior:
     - On page load (and periodically while the page is focused), the app reads the clipboard using the **Clipboard API** (`navigator.clipboard.readText()`).
-    - The browser will prompt the user for clipboard permission on first access. The app requests this permission early via a clear banner prompt (e.g., "Allow clipboard access to enable one-click paste") shown on first page load. If the user denies permission, the button is hidden and standard `Ctrl+V` paste still works normally.
+    - The browser will prompt the user for clipboard permission on first access. The app requests this permission early via a clear banner prompt (e.g., "Allow clipboard access to enable one-click paste") shown on first page load. If the user denies permission, the button is **disabled** with a tooltip explaining that clipboard access is blocked and that standard `Ctrl+V` paste still works normally.
     - The clipboard contents are tested with a lightweight parse attempt (JSONC-aware parser). If the text is valid JSON or JSONC (or starts with `{` or `[` and is plausibly JSON), the **"Paste JSON from Clipboard"** button is **enabled** with a green/active state and a tooltip showing a preview of the first ~80 characters.
     - If the clipboard does not contain JSON-like text, the button is **disabled/grayed out** with a tooltip: "Clipboard does not contain JSON".
     - Clicking the enabled button replaces the editor contents with the clipboard JSON and triggers the tree view to render.

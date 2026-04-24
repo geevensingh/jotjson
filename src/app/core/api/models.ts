@@ -65,6 +65,7 @@ export interface UserPreferences {
   searchScope: 'keys' | 'values' | 'both';
   blobQuotaStrategy: 'auto_fifo' | 'manual';
   seenBlobQuotaModal: boolean;
+  seenClipboardBanner: boolean;
   treeHighlightColors: TreeHighlightColors;
 }
 

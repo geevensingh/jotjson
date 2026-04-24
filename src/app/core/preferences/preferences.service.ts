@@ -36,6 +36,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   searchScope: 'both',
   blobQuotaStrategy: 'auto_fifo',
   seenBlobQuotaModal: false,
+  seenClipboardBanner: false,
   treeHighlightColors: {
     dark: {
       selectionColor: '#264f78',

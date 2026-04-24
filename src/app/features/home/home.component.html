@@ -8,6 +8,8 @@
       [saveInFlight]="saveInFlight()"
       [isOwner]="isOwnedBlob()"
       [isPublic]="isBlobPublic()"
+      [clipboardState]="clipboardState()"
+      [clipboardPreview]="clipboardPreview()"
       (pasteRequested)="onPaste()"
       (copyRequested)="onCopy()"
       (copyEscaped)="onCopyEscaped()"
@@ -29,6 +31,7 @@
 
   <div class="split" [style]="splitStyle()" #splitHost>
     <section class="pane pane-editor" aria-label="JSON input">
+      <jj-clipboard-banner></jj-clipboard-banner>
       <jj-json-editor
         [value]="content()"
         [errors]="errors()"
