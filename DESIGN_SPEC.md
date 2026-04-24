@@ -84,12 +84,12 @@ Browser (Angular SPA)
 #### UserPreferences
 ```
 {
-  theme: "dark" | "light" | "system",
-  editorFontSize: number (default: 14, range: 10-24),
+  theme: "dark" | "light" | "system" (default: "system" - falls back to "dark" when OS preference is unknown),
+  editorFontSize: number (default: 14, range: 8-32),
   editorTabSize: number (default: 2, range: 2 | 4),
-  defaultTreeExpansionDepth: number (default: 3, range: 1-10),
+  defaultTreeExpansionDepth: number (default: 2, range: 1-10),
   defaultRuleSetId?: string (auto-apply this rule set on load),
-  editorWordWrap: boolean (default: false),
+  editorWordWrap: boolean (default: true),
   layoutOrientation: "horizontal" | "vertical" (default: "horizontal" - editor left, tree right; "vertical" = editor top, tree bottom),
   treeShowTypeLabels: boolean (default: true),
   treeShowDateAnnotations: boolean (default: true),
@@ -529,8 +529,13 @@ SPA-originated calls in production.
   redirect round-trip. Sign-out explicitly clears MSAL cache and the local
   preferences copy.
 - Input sanitization: JSON blobs are treated as opaque strings, never rendered as HTML.
-- CORS: allow only `jotjson.com` origins.
-- Content Security Policy headers.
+- Same-origin deployment: the SPA and `/api/*` share `jotjson.com`, so there is no cross-origin CORS preflight at the edge. If/when a separate API origin is added, CORS will be restricted to `jotjson.com` origins.
+- **Global response headers** (set in `staticwebapp.config.json` `globalHeaders`):
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Permissions-Policy: clipboard-read=(self), clipboard-write=(self)` - scopes the Clipboard API to the site's own origin so the Smart Paste polling (Home page §1) can read the clipboard without cross-origin leakage.
+- **Planned:** a full Content Security Policy header that tightens allowed script / style / connect origins. Not yet shipped.
 
 ### Scalability
 - Cosmos DB serverless scales automatically.
@@ -565,21 +570,21 @@ SPA-originated calls in production.
     - `theme_color` and `background_color` matching the app's dark/light theme.
     - Icons at standard sizes: 192x192, 512x512 (maskable + any).
     - `categories`: `["developer-tools", "utilities"]`
-    - `screenshots`: at least one wide and one narrow for richer install prompts.
   - **Service Worker** via Angular's `@angular/service-worker`, registered in `app.config.ts` with `registerWhenStable:30000` and disabled in dev mode. Configured via `ngsw-config.json` with cache-first for app-shell assets (HTML, CSS, JS, fonts, icons) so the editor/tree view load offline once the app has been visited.
+  - **Network-first cache for `/api/**`** via `ngsw-config.json` `dataGroups`: strategy `freshness`, 5-second network timeout, 1-hour `maxAge`, 100-entry `maxSize` - the SW serves fresh responses when the network is available and transparently falls back to the cached copy otherwise.
 - **Planned polish (post-v1):**
   - **Update prompt**: subscribe to `SwUpdate.versionUpdates` and surface a non-intrusive toast ("A new version is available - click to refresh") when a new build is deployed.
   - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed.
+  - **Manifest screenshots**: add at least one wide and one narrow `screenshots` entry to the manifest for richer install prompts (not yet present in `manifest.webmanifest`).
   - **Offline banner**: show a persistent banner driven by `navigator.onLine` + SW status when network is unavailable, auto-dismiss when connectivity returns.
   - **Offline fallbacks for API-dependent features** (save, share, history, formatting rules): show a "You're offline" state and queue actions for sync.
   - **Background sync**: flush queued blob saves when connectivity is restored (needs a custom SW integration on top of ngsw).
-  - **Network-first strategy for API calls** (today all `/api/*` requests pass through the default runtime cache rules in `ngsw-config.json`).
 
 ---
 
 ## UI/UX Guidelines
 
-- **Theme:** Clean, developer-friendly. Dark mode default with light mode toggle.
+- **Theme:** Clean, developer-friendly. Defaults to the system theme (follows OS `prefers-color-scheme`); falls back to dark when the OS preference is unknown. User can override via the theme toggle.
 - **Typography:** Monospace font for JSON content (e.g., JetBrains Mono, Fira Code). Sans-serif for UI chrome.
 - **Color Palette:**
   - Primary: Teal/Cyan accent (#00BCD4 family).
