@@ -9,7 +9,8 @@ jest.mock('../shared/auth', () => {
   const actual = jest.requireActual('../shared/auth');
   return {
     ...actual,
-    requireAuth: jest.fn()
+    requireAuth: jest.fn(),
+    tryAuth: jest.fn()
   };
 });
 
@@ -39,7 +40,11 @@ jest.mock('../shared/users', () => ({
   readUser: jest.fn()
 }));
 
-import { AuthError, requireAuth as requireAuthMock } from '../shared/auth';
+jest.mock('../shared/history', () => ({
+  recordEntry: jest.fn()
+}));
+
+import { AuthError, requireAuth as requireAuthMock, tryAuth as tryAuthMock } from '../shared/auth';
 import {
   BlobValidationError,
   SlugGenerationError,
@@ -49,16 +54,19 @@ import {
   listBlobsByOwner as listBlobsByOwnerMock,
   updateBlob as updateBlobMock
 } from '../shared/blobs';
+import { recordEntry as recordEntryMock } from '../shared/history';
 import { readUser as readUserMock } from '../shared/users';
 import { deleteBlob, getBlob, listBlobs, postBlob, putBlob } from './blobs';
 
 const requireAuth = requireAuthMock as unknown as jest.Mock;
+const tryAuth = tryAuthMock as unknown as jest.Mock;
 const createBlob = createBlobMock as unknown as jest.Mock;
 const readUser = readUserMock as unknown as jest.Mock;
 const deleteBlobByIdSpy = deleteBlobByIdMock as unknown as jest.Mock;
 const findBlob = findBlobMock as unknown as jest.Mock;
 const listBlobsSpy = listBlobsByOwnerMock as unknown as jest.Mock;
 const updateBlob = updateBlobMock as unknown as jest.Mock;
+const recordEntry = recordEntryMock as unknown as jest.Mock;
 
 function makeRequest(opts: { body?: unknown; params?: Record<string, string> } = {}): HttpRequest {
   return {
@@ -71,11 +79,13 @@ function makeRequest(opts: { body?: unknown; params?: Record<string, string> } =
   } as unknown as HttpRequest;
 }
 
-const ctx = { log: jest.fn(), error: jest.fn() } as unknown as InvocationContext;
+const ctx = { log: jest.fn(), error: jest.fn(), warn: jest.fn() } as unknown as InvocationContext;
 
 beforeEach(() => {
   jest.resetAllMocks();
   requireAuth.mockResolvedValue({ id: 'u-1', displayName: 'Alice' });
+  tryAuth.mockResolvedValue(null);
+  recordEntry.mockResolvedValue(undefined);
   // Default: caller is well below the blob quota. Individual tests that
   // exercise the quota path override this mock.
   listBlobsSpy.mockResolvedValue([]);
@@ -440,5 +450,167 @@ describe('DELETE /api/blobs/:id', () => {
       ctx
     );
     expect(res.status).toBe(500);
+  });
+});
+
+describe('history recording hooks', () => {
+  describe('POST /api/blobs (saved)', () => {
+    it('records a "saved" entry after a successful create', async () => {
+      createBlob.mockResolvedValueOnce({ ...sampleBlob, title: 'Notes' });
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'save_only' } });
+      const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+      expect(res.status).toBe(201);
+      expect(recordEntry).toHaveBeenCalledTimes(1);
+      expect(recordEntry).toHaveBeenCalledWith({
+        userId: 'u-1',
+        action: 'saved',
+        blobId: 'uuid-1',
+        slug: 'abc123',
+        title: 'Notes'
+      });
+    });
+
+    it('records "saved" even when historyTrackingMode is save_only (the default)', async () => {
+      createBlob.mockResolvedValueOnce(sampleBlob);
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'save_only' } });
+      await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+      expect(recordEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'saved' })
+      );
+    });
+
+    it('does not fail the create when the history write throws', async () => {
+      createBlob.mockResolvedValueOnce(sampleBlob);
+      recordEntry.mockRejectedValueOnce(new Error('cosmos hiccup'));
+      const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+      expect(res.status).toBe(201);
+    });
+  });
+
+  describe('PUT /api/blobs/{id} (edited)', () => {
+    it('records "edited" when historyTrackingMode is all_actions', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      updateBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1', title: 'New' });
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
+      const res = await putBlob(
+        makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
+        ctx
+      );
+      expect(res.status).toBe(200);
+      expect(recordEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'edited', blobId: 'uuid-1', title: 'New' })
+      );
+    });
+
+    it('does NOT record when historyTrackingMode is save_only', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      updateBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'save_only' } });
+      await putBlob(
+        makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
+        ctx
+      );
+      expect(recordEntry).not.toHaveBeenCalled();
+    });
+
+    it('treats a missing user document as save_only (no record)', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      updateBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      readUser.mockResolvedValue(null);
+      await putBlob(
+        makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
+        ctx
+      );
+      expect(recordEntry).not.toHaveBeenCalled();
+    });
+
+    it('does not fail the update when the history write throws', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      updateBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
+      recordEntry.mockRejectedValueOnce(new Error('cosmos hiccup'));
+      const res = await putBlob(
+        makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
+        ctx
+      );
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('DELETE /api/blobs/{id} (deleted)', () => {
+    it('records "deleted" when historyTrackingMode is all_actions', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1', title: 'Doomed' });
+      deleteBlobByIdSpy.mockResolvedValueOnce(true);
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
+      const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
+      expect(res.status).toBe(204);
+      expect(recordEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'deleted', blobId: 'uuid-1', title: 'Doomed' })
+      );
+    });
+
+    it('does NOT record when historyTrackingMode is save_only', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      deleteBlobByIdSpy.mockResolvedValueOnce(true);
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'save_only' } });
+      await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
+      expect(recordEntry).not.toHaveBeenCalled();
+    });
+
+    it('does not fail the delete when the history write throws', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
+      deleteBlobByIdSpy.mockResolvedValueOnce(true);
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
+      recordEntry.mockRejectedValueOnce(new Error('cosmos hiccup'));
+      const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
+      expect(res.status).toBe(204);
+    });
+  });
+
+  describe('GET /api/blobs/{idOrSlug} (viewed)', () => {
+    it('records "viewed" for a non-owner authed reader with all_actions', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else', title: 'Other' });
+      tryAuth.mockResolvedValueOnce({ id: 'u-1' });
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
+      const res = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+      expect(res.status).toBe(200);
+      expect(recordEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'viewed', userId: 'u-1', title: 'Other' })
+      );
+    });
+
+    it('does NOT record when caller is the owner', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'u-1' });
+      tryAuth.mockResolvedValueOnce({ id: 'u-1' });
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
+      await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+      expect(recordEntry).not.toHaveBeenCalled();
+    });
+
+    it('does NOT record when caller is anonymous', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
+      tryAuth.mockResolvedValueOnce(null);
+      const res = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+      expect(res.status).toBe(200);
+      expect(recordEntry).not.toHaveBeenCalled();
+      expect(readUser).not.toHaveBeenCalled();
+    });
+
+    it('does NOT record when non-owner authed caller has save_only mode', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
+      tryAuth.mockResolvedValueOnce({ id: 'u-1' });
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'save_only' } });
+      await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+      expect(recordEntry).not.toHaveBeenCalled();
+    });
+
+    it('does not fail the read when the history write throws', async () => {
+      findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
+      tryAuth.mockResolvedValueOnce({ id: 'u-1' });
+      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
+      recordEntry.mockRejectedValueOnce(new Error('cosmos hiccup'));
+      const res = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+      expect(res.status).toBe(200);
+    });
   });
 });

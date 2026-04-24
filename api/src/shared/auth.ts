@@ -211,6 +211,26 @@ export async function requireAuth(req: HttpRequest): Promise<AuthenticatedPrinci
   return verifyAccessToken(token);
 }
 
+/**
+ * Best-effort auth: returns the principal when the request carries a valid
+ * bearer token, or `null` when there is no token / the token is invalid.
+ * Used by routes that are publicly readable (e.g. GET /api/blobs/{slug}) but
+ * still want to identify the caller for side effects like history logging.
+ * Token-validation failures are swallowed so anonymous callers are never
+ * 401'd by accident; non-AuthError exceptions still propagate so genuine
+ * infrastructure problems are surfaced.
+ */
+export async function tryAuth(req: HttpRequest): Promise<AuthenticatedPrincipal | null> {
+  const token = extractBearerToken(req);
+  if (!token) return null;
+  try {
+    return await verifyAccessToken(token);
+  } catch (err) {
+    if (err instanceof AuthError) return null;
+    throw err;
+  }
+}
+
 // Re-exports retained for any pre-existing imports. Both SWA's x-ms-client-
 // principal and Entra JWT models are now valid code paths; the SWA path is
 // legacy and should not be used for new routes.
