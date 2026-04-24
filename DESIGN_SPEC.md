@@ -329,12 +329,27 @@ Available to **registered users** only. Route-guarded by `authGuard`.
 
 ### 5. Profile & Settings Page  (`/profile`)
 
-Available to **registered users** only.
+Available to **registered users** only. The route is auth-guarded.
+
+#### Shipped in v1 (M3b)
+
+- **Identity card**
+  - Display name (read-only, sourced from the Entra External ID
+    `name` / `preferred_username` claim).
+  - Email (read-only, from the identity provider; shown as "Not
+    provided by your identity provider" when the claim is absent).
+  - Sign-out button.
+
+Preferences persist server-side (M3c) but have no editing UI yet -
+they default to the values baked into `PreferencesService` and are
+updated programmatically (e.g., `seenClipboardBanner` flipped on
+dismissal).
+
+#### Planned (later milestones / post-v1)
 
 - **Account Section**
-  - Edit display name.
+  - Edit display name (today it is read-only).
   - **Upload / change avatar** - accepts **PNG, JPEG, or WebP**; client-side validation rejects other formats. Max file size: **2 MB** (toast if exceeded). Client-side crop-to-square UI, then resize to **256x256** before upload. Stored in Azure Blob Storage, URL saved to the user profile. A "Remove avatar" option reverts to a generated default (initials on a tinted background).
-  - View email address (read-only - identity managed by Entra External ID).
   - **Change password** - triggers the Entra External ID password reset flow (redirect to the self-service password reset user flow). Applies to email/password users only; hidden for social login accounts.
   - **Linked accounts** - show which social providers are connected (Google, GitHub). Allow linking/unlinking additional providers.
   - **Delete account** - confirmation dialog, then deletes user profile, all blobs, history, and rule sets. Irreversible.
@@ -349,13 +364,13 @@ Available to **registered users** only.
   - **Show type labels in tree** - toggle the type badges (string, number, etc.) on/off.
   - **Show date/time annotations** - toggle smart date detection annotations on/off.
   - **History tracking mode** - "Save only" (default) or "All actions" (records paste, view, edit events too).
-  - **Default formatting rule set** - dropdown to pick a rule set to auto-apply when viewing JSON.
+  - **Default formatting rule set** (M6) - dropdown to pick a rule set to auto-apply when viewing JSON.
   - **Search defaults**:
     - **Case sensitive** - on/off (default: off).
     - **Regex mode** - on/off (default: off).
     - **Search scope** - keys only / values only / both (default: both).
   - **Blob quota strategy** - when your 100-blob cap is reached, either auto-delete the oldest blob to make room (default) or block the save with a manual prompt.
-  - **Tree highlight colors (per theme)** - the dark and light themes each have their own set of four color pickers (the inactive theme's values are preserved when you switch themes):
+  - **Tree highlight colors (per theme)** (M7d) - the dark and light themes each have their own set of four color pickers (the inactive theme's values are preserved when you switch themes):
     - Selection color (primary) - the clicked/selected row.
     - Matching value color (secondary) - rows with the same value as the selection.
     - Ancestor color - parent nodes up to the root.
@@ -368,6 +383,10 @@ Available to **registered users** only.
   - **Clear all blobs** - delete all saved JSON blobs (with confirmation).
 
 ### 6. Landing / Marketing Elements
+
+**Planned (post-v1).** v1 opens directly into the editor - the
+homepage renders the global header + the toolbar + the editor/tree
+split pane with no marketing chrome above or below. Planned additions:
 
 - Hero section on `/` (above the editor when not yet interacting): tagline, "Paste your JSON to get started" CTA.
 - Footer: About, Privacy Policy, Terms, GitHub link.
@@ -565,7 +584,7 @@ SPA-originated calls in production.
 - **Color Palette:**
   - Primary: Teal/Cyan accent (#00BCD4 family).
   - Background: Dark (#1E1E1E) / Light (#FAFAFA).
-  - JSON types color-coded: strings=green, numbers=orange, booleans=blue, null=gray.
+  - JSON types color-coded: strings=green (`#6a8759`), numbers=orange (`#ff9800`), booleans=blue (`#2196f3`), null=gray (`#9e9e9e`), arrays=purple (`#9c27b0`), objects=teal (`#009688`). Exact values live in `src/styles/_variables.scss`.
 - **Logo:** "JotJSON" wordmark - "Jot" in regular weight, "JSON" in bold, with a `{ }` icon element.
 - **Responsive breakpoints:** Mobile (< 768px), Tablet (768-1024px), Desktop (> 1024px).
 
