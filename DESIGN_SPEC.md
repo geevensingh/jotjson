@@ -810,15 +810,16 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
      `DELETE /api/history` (clear all for the caller),
      `POST /api/history` (client-recorded `"pasted"` events only in
      v1).
-   - **M5b**: UI surface. Rename the M4b blob list from `/history`
-     to `/blobs` (feature folder, route, i18n message IDs,
-     app-header link label). Build a new `HistoryComponent` at
-     `/history` that renders the event timeline (grouped by day,
-     action icon + blob title/slug/"(deleted blob)" fallback,
-     click-to-open for live blobs, loading skeleton + empty state,
-     "Clear history" action hitting `DELETE /api/history`). No
-     server redirect from the old `/history` URL; the timeline is
-     a reasonable landing page for anyone who bookmarked it.
+   - **M5b**: UI surface. (The M4b blob list has already been moved
+     from `/history` to `/blobs` ahead of M5b - feature folder,
+     route, i18n message IDs, and app-header link label all updated.)
+     Build a new `HistoryComponent` at `/history` that renders the
+     event timeline (grouped by day, action icon + blob
+     title/slug/"(deleted blob)" fallback, click-to-open for live
+     blobs, loading skeleton + empty state, "Clear history" action
+     hitting `DELETE /api/history`). No server redirect from the old
+     `/history` URL; the timeline is a reasonable landing page for
+     anyone who bookmarked it.
    - **M5c**: Timeline polish (optional; land only if needed).
      Keyword search over blob title + slug snapshots, date-range
      filter, infinite scroll, and an action filter (e.g., "viewed

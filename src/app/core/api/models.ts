@@ -72,9 +72,11 @@ export interface UserPreferences {
 export interface HistoryEntry {
   id: string;
   userId: string;
-  blobId: string;
+  blobId?: string;
+  slug?: string;
+  title?: string;
   accessedAt: string;
-  action: 'saved' | 'viewed' | 'edited' | 'pasted';
+  action: 'saved' | 'viewed' | 'edited' | 'deleted' | 'pasted';
 }
 
 export interface FormattingStyle {
