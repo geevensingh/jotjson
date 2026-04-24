@@ -288,6 +288,12 @@ The primary page. Available to **all users** (anonymous + registered).
 
 - **Layout:** Split-pane (resizable). **Horizontal** (default): editor left, tree right. **Vertical**: editor top, tree bottom. Toggled via a layout button in the toolbar or `layoutOrientation` user preference. On mobile (< 768px), always stacks vertically regardless of preference.
 
+- **Status bar** (always-visible strip along the bottom of the page, shipped in M7m):
+  - **Left cluster** (raw text stats): byte size in UTF-8, line count, current cursor position (`Ln X, Col Y`).
+  - **Right cluster** (parsed tree stats): total node count, max depth, counts of arrays vs. objects, a JSON / JSONC mode badge, and (from M7n) a `vX.Y.Z - <shortsha>` version indicator that links to the corresponding commit on GitHub and copies the full SHA on click.
+  - Stats update reactively as the user types. No interactivity beyond the version badge in v1.
+  - On narrow viewports (< 768px) the bar collapses to a single-line summary per M7l, keeping Bytes, Lines, and the Mode badge and hiding cursor/nodes/depth/counts.
+
 ### 2. Persistent Link / Share  (`/s/:id`)
 
 Available to **registered users** (create/manage). **Anonymous users can view any shared link** they have the slug for (both unlisted and public blobs).
@@ -300,12 +306,20 @@ Available to **registered users** (create/manage). **Anonymous users can view an
 
 ### 3. History & My Blobs Page  (`/history`)
 
-Available to **registered users** only.
+Available to **registered users** only. Route-guarded by `authGuard`.
 
-- Chronological list of previously submitted/viewed JSON blobs for that user.
-- Each entry shows: title (or first 80 chars of JSON), date, size, actions (open, edit, delete, share, toggle public/private).
-- Search and filter by date range or keyword.
-- Infinite scroll (loads more entries as the user scrolls down).
+- **v1 (shipped in M4b):**
+  - Lists the signed-in user's saved blobs, sorted by `updatedAt` DESC.
+  - Each row shows: title (or "Untitled" when the blob has no title) linking to `/s/:slug` to open it, the slug, a relative updated-at time (e.g., "3 hours ago"), and a `public` badge when `isPublic` is true.
+  - Per-row actions: **Copy link** (writes `https://jotjson.com/s/:slug` to the clipboard) and **Delete** (confirms via dialog, then removes the blob server-side and from the list).
+  - Loading state renders a three-row pulsing skeleton; empty state reads "You haven't saved any JSON blobs yet." with an "Open the editor" CTA.
+  - No pagination needed in v1 - the 100-blob quota keeps the list small.
+- **Future enhancements (post-v1):**
+  - Fallback title: show the first ~80 characters of the JSON body when `title` is absent, instead of "Untitled".
+  - Additional metadata per row: save date (absolute) and byte size.
+  - Search and filter by date range or keyword.
+  - Inline public/private toggle on the list row (today this lives in the toolbar overflow menu on `/s/:slug`).
+  - Infinite scroll if/when quotas increase.
 - **History trigger preference**: by default, a history entry is created only on explicit save ("Save & Share"). Users can opt into recording all actions (paste, view shared link, edit) via a `historyTrackingMode` preference in Profile settings.
 
 ### 4. Auth Pages
@@ -464,6 +478,7 @@ SPA-originated calls in production.
 
 ### Validation Rules
 - Max blob size: **1 MB** (free tier).
+- Max blob title length: **200 characters**. The server trims surrounding whitespace before validating; a title that is empty or whitespace-only after trimming is stored as `undefined` (no title). Anything longer than 200 characters after trimming is rejected with a `BlobValidationError`.
 - Must be valid JSON or JSONC (server re-validates using JSONC-aware parser).
 - Rate limiting: 60 requests/min per IP (anonymous), 120/min (authenticated).
 - **Blob quota (free tier: 100 blobs per user)** - when a user saves their 101st blob, the server automatically deletes the **oldest** blob (by `updatedAt`, then `createdAt` as tiebreaker) to make room. The user is notified via a toast: "Deleted oldest blob '[title]' to stay within your 100-blob limit." The first time this happens per user, a one-time modal explains the auto-delete behavior and offers "OK, got it" or "Let me manage manually" (which instead aborts the save with a prompt to delete blobs from `/history`). This choice is remembered as a user preference (`blobQuotaStrategy`: `"auto_fifo"` default or `"manual"`).
