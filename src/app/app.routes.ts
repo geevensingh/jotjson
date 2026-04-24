@@ -38,5 +38,13 @@ export const routes: Routes = [
     canActivate: [authGuard],
     title: 'Profile - JotJSON'
   },
-  { path: '**', redirectTo: '' }
+  {
+    path: '404',
+    loadComponent: () =>
+      import('./features/not-found/not-found.component').then(
+        (m) => m.NotFoundComponent
+      ),
+    title: 'Not found - JotJSON'
+  },
+  { path: '**', redirectTo: '/404' }
 ];

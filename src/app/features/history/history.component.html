@@ -9,14 +9,39 @@
   </header>
 
   @if (state() === 'loading') {
-    <p class="status" i18n="@@history.loading">Loading...</p>
+    <ul class="blob-list" aria-busy="true" aria-live="polite">
+      @for (i of [0, 1, 2]; track i) {
+        <li class="blob-row skeleton" aria-hidden="true">
+          <div class="blob-main">
+            <span class="skeleton-bar skeleton-title"></span>
+            <span class="skeleton-bar skeleton-meta"></span>
+          </div>
+          <span class="skeleton-bar skeleton-action"></span>
+          <span class="skeleton-bar skeleton-action"></span>
+        </li>
+      }
+    </ul>
+    <span class="sr-only" i18n="@@history.loading">Loading...</span>
   } @else if (state() === 'error') {
     <p class="status status-error">{{ errorMessage() }}</p>
     <button mat-stroked-button type="button" (click)="reload()">
       <span i18n="@@history.retry">Retry</span>
     </button>
   } @else if (isEmpty()) {
-    <p class="status" i18n="@@history.empty">No saved blobs yet.</p>
+    <div class="empty-state">
+      <jj-icon name="save" class="empty-icon" />
+      <p
+        class="empty-message"
+        i18n="@@history.empty"
+      >You haven't saved any JSON blobs yet.</p>
+      <a
+        mat-flat-button
+        color="primary"
+        routerLink="/"
+        i18n="@@history.empty.cta"
+        >Open the editor</a
+      >
+    </div>
   } @else {
     <ul class="blob-list">
       @for (blob of blobList(); track blob.id) {

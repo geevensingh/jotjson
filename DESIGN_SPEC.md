@@ -644,10 +644,10 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
      actions, and the 100-blob cap UX (auto-FIFO default with a
      one-time explainer modal, or abort-with-prompt for users who pick
      the `manual` strategy).
-   - **M4c**: SEO + 404 polish. Open Graph meta tags on public blobs
+   - ~~**M4c**: SEO + 404 polish. Open Graph meta tags on public blobs
      (`/s/:slug` where `isPublic === true`), `noindex` meta on private
      blobs, friendly "Blob not found" 404 page for invalid slugs,
-     `/history` loading skeleton and empty state.
+     `/history` loading skeleton and empty state.~~ (done)
 5. **History** - History tracking, `/history` page, management actions.
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
 7. **Polish & launch** - Each of these lands as its own step/commit:

@@ -9,20 +9,27 @@ import type { JsonBlob } from '../../core/api/models';
  * is mounted so HomeComponent can hydrate from the resolved `initialBlob`
  * input (bound via `withComponentInputBinding()`).
  *
- * On 404 or network error, redirects to `/` so we never render a broken share
- * page. Full friendly-404 UX is deferred to M4c.
+ * On 404 or network error, navigates to `/404` (replacing URL so back button
+ * skips the share link) and passes the attempted slug through router state so
+ * NotFoundComponent can surface it in the error copy.
  */
 export const shareBlobResolver: ResolveFn<JsonBlob | null> = (route) => {
   const slug = route.paramMap.get('slug');
   const blobs = inject(BlobService);
   const router = inject(Router);
+  const goToNotFound = (attemptedSlug?: string): void => {
+    void router.navigate(['/404'], {
+      replaceUrl: true,
+      state: attemptedSlug ? { attemptedSlug } : undefined
+    });
+  };
   if (!slug) {
-    void router.navigate(['/']);
+    goToNotFound();
     return of(null);
   }
   return blobs.get(slug).pipe(
     catchError(() => {
-      void router.navigate(['/']);
+      goToNotFound(slug);
       return of(null);
     })
   );

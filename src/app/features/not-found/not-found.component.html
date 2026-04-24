@@ -1,0 +1,28 @@
+<jj-app-header />
+
+<main class="not-found">
+  <section class="content">
+    <h1 class="code" i18n="@@notFound.code">404</h1>
+    @if (attemptedSlug) {
+      <h2 class="headline" i18n="@@notFound.blob.headline">
+        Blob "{{ attemptedSlug }}" not found
+      </h2>
+      <p class="detail" i18n="@@notFound.blob.detail">
+        The share link you followed does not point to a saved blob. It may have
+        been deleted, or the link may be mistyped.
+      </p>
+    } @else {
+      <h2 class="headline" i18n="@@notFound.generic.headline">Page not found</h2>
+      <p class="detail" i18n="@@notFound.generic.detail">
+        We could not find the page you were looking for.
+      </p>
+    }
+    <a
+      mat-flat-button
+      color="primary"
+      routerLink="/"
+      i18n="@@notFound.cta"
+      >Back to the editor</a
+    >
+  </section>
+</main>

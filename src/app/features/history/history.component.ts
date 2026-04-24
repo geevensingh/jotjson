@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { BlobService } from '../../core/api/blob.service';
 import type { JsonBlob } from '../../core/api/models';
+import { SeoService } from '../../core/seo/seo.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import {
@@ -44,6 +45,7 @@ export class HistoryComponent implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
   private readonly router = inject(Router);
+  private readonly seo = inject(SeoService);
 
   readonly state = signal<LoadState>('loading');
   readonly blobList = signal<JsonBlob[]>([]);
@@ -54,6 +56,8 @@ export class HistoryComponent implements OnInit {
   );
 
   ngOnInit(): void {
+    this.seo.clearBlobTags();
+    this.seo.setNoindex(true);
     void this.reload();
   }
 

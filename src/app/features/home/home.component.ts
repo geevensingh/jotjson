@@ -28,6 +28,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BlobService } from '../../core/api/blob.service';
 import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
+import { SeoService } from '../../core/seo/seo.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -76,6 +77,7 @@ export class HomeComponent {
   private readonly blobs = inject(BlobService);
   private readonly router = inject(Router);
   private readonly titleService = inject(Title);
+  private readonly seo = inject(SeoService);
   private readonly quota = inject(QuotaNotificationService);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
@@ -174,6 +176,7 @@ export class HomeComponent {
       const title = this.title();
       if (!blob) {
         this.titleService.setTitle(this.homepageTitle);
+        this.seo.clearBlobTags();
         return;
       }
       const label =
@@ -181,6 +184,12 @@ export class HomeComponent {
           ? title.trim()
           : $localize`:@@app.title.untitled:Untitled`;
       this.titleService.setTitle(`${label} | JotJSON`);
+      if (blob.isPublic) {
+        this.seo.setOpenGraphForBlob(blob);
+      } else {
+        this.seo.clearBlobTags();
+        this.seo.setNoindex(true);
+      }
     });
 
     // Persist split ratio to localStorage (local-only; not synced via prefs).

@@ -52,14 +52,17 @@ describe('shareBlobResolver', () => {
     expect(navSpy).not.toHaveBeenCalled();
   });
 
-  it('redirects to / and returns null on error', async () => {
+  it('navigates to /404 with attemptedSlug and returns null on error', async () => {
     getSpy.and.returnValue(throwError(() => ({ status: 404 })));
     const result = await runResolver('missing');
     expect(result).toBeNull();
-    expect(navSpy).toHaveBeenCalledWith(['/']);
+    expect(navSpy).toHaveBeenCalledWith(['/404'], {
+      replaceUrl: true,
+      state: { attemptedSlug: 'missing' }
+    });
   });
 
-  it('redirects to / and returns null when slug is empty', async () => {
+  it('navigates to /404 (no state) and returns null when slug is empty', async () => {
     const route = {
       paramMap: convertToParamMap({})
     } as unknown as ActivatedRouteSnapshot;
@@ -71,7 +74,10 @@ describe('shareBlobResolver', () => {
       ? ((await firstValueFrom(out)) as JsonBlob | null)
       : ((await Promise.resolve(out)) as JsonBlob | null);
     expect(result).toBeNull();
-    expect(navSpy).toHaveBeenCalledWith(['/']);
+    expect(navSpy).toHaveBeenCalledWith(['/404'], {
+      replaceUrl: true,
+      state: undefined
+    });
     expect(getSpy).not.toHaveBeenCalled();
   });
 });
