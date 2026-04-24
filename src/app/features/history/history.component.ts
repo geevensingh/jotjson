@@ -6,7 +6,7 @@ import {
   inject,
   signal
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
@@ -29,13 +29,12 @@ type LoadState = 'loading' | 'ready' | 'error';
   selector: 'app-history',
   standalone: true,
   imports: [
-    CommonModule,
     RouterLink,
     MatButtonModule,
     MatTooltipModule,
     AppHeaderComponent,
     IconComponent
-  ],
+],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './history.component.html',
   styleUrl: './history.component.scss'
