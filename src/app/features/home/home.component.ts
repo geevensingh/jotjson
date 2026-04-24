@@ -392,6 +392,11 @@ export class HomeComponent {
     this.content.set('');
     this.title.set('');
     this.loadedBlob.set(null);
+    // Clear the draft synchronously. The `content` -> draft effect is async
+    // and may be cancelled when this component is destroyed by the
+    // subsequent router.navigate below, leaving stale blob content in the
+    // draft that the next HomeComponent would re-read on mount.
+    this.draft.set('');
     if (this.router.url !== '/') {
       void this.router.navigate(['/']);
     }

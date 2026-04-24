@@ -201,6 +201,39 @@ describe('HomeComponent (unit-level)', () => {
     expect(fixture.componentInstance.title()).toBe('world');
   });
 
+  it('after onClear, destroying the component and remounting starts empty (regression)', () => {
+    // Mirrors the real browser flow: /s/:slug component hydrates from blob,
+    // user clicks Clear (which navigates to /), the /s/:slug component is
+    // destroyed, a fresh / component is created. The fresh component must
+    // NOT read blob content from a stale draft.
+    const first = TestBed.createComponent(HomeComponent);
+    const blob: JsonBlob = {
+      id: 'id-1',
+      slug: 'slug-1',
+      content: '{"a":1}',
+      title: 'hello',
+      ownerId: 'me',
+      isPublic: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    };
+    first.componentRef.setInput('initialBlob', blob);
+    first.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    // (We deliberately do not flush effects again here - we want to prove
+    // that onClear works even if the component's draft-save effect is
+    // cancelled by teardown before it flushes.)
+    first.componentInstance.onClear();
+    first.destroy();
+
+    // Fresh HomeComponent at /, no initialBlob.
+    const second = TestBed.createComponent(HomeComponent);
+    expect(second.componentInstance.content()).toBe('');
+    expect(second.componentInstance.title()).toBe('');
+    expect(second.componentInstance.loadedBlob()).toBeNull();
+    expect(TestBed.inject(DraftService).content()).toBe('');
+  });
+
   it('onValueChange() updates content', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.onValueChange('{"x":42}');
