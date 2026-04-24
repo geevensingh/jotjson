@@ -1,9 +1,9 @@
 <jj-app-header />
 
-<main class="history">
-  <header class="history-header">
-    <h1 i18n="@@history.title">Your saved blobs</h1>
-    <p class="subtitle" i18n="@@history.subtitle">
+<main class="blobs">
+  <header class="blobs-header">
+    <h1 i18n="@@blobs.title">Blobs</h1>
+    <p class="subtitle" i18n="@@blobs.subtitle">
       All blobs you have saved to your account. Click a title to open it.
     </p>
   </header>
@@ -21,24 +21,24 @@
         </li>
       }
     </ul>
-    <span class="sr-only" i18n="@@history.loading">Loading...</span>
+    <span class="sr-only" i18n="@@blobs.loading">Loading...</span>
   } @else if (state() === 'error') {
     <p class="status status-error">{{ errorMessage() }}</p>
     <button mat-stroked-button type="button" (click)="reload()">
-      <span i18n="@@history.retry">Retry</span>
+      <span i18n="@@blobs.retry">Retry</span>
     </button>
   } @else if (isEmpty()) {
     <div class="empty-state">
       <jj-icon name="save" class="empty-icon" />
       <p
         class="empty-message"
-        i18n="@@history.empty"
+        i18n="@@blobs.empty"
       >You haven't saved any JSON blobs yet.</p>
       <a
         mat-flat-button
         color="primary"
         routerLink="/"
-        i18n="@@history.empty.cta"
+        i18n="@@blobs.empty.cta"
         >Open the editor</a
       >
     </div>
@@ -61,9 +61,9 @@
                 <span class="blob-dot">&middot;</span>
                 <span
                   class="blob-badge"
-                  i18n="@@history.public"
+                  i18n="@@blobs.public"
                   matTooltip="Anyone with the link and search engines can see this blob."
-                  i18n-matTooltip="@@history.public.tooltip"
+                  i18n-matTooltip="@@blobs.public.tooltip"
                   >public</span
                 >
               }
@@ -74,9 +74,9 @@
             type="button"
             class="blob-copy-link"
             matTooltip="Copy link"
-            i18n-matTooltip="@@history.copyLink.tooltip"
+            i18n-matTooltip="@@blobs.copyLink.tooltip"
             aria-label="Copy link to this blob"
-            i18n-aria-label="@@history.copyLink.aria"
+            i18n-aria-label="@@blobs.copyLink.aria"
             (click)="copyLink(blob)"
           >
             <jj-icon name="copy-path" />
@@ -86,9 +86,9 @@
             type="button"
             class="blob-delete"
             matTooltip="Delete this blob"
-            i18n-matTooltip="@@history.delete.tooltip"
+            i18n-matTooltip="@@blobs.delete.tooltip"
             aria-label="Delete this blob"
-            i18n-aria-label="@@history.delete.aria"
+            i18n-aria-label="@@blobs.delete.aria"
             (click)="deleteBlob(blob)"
           >
             <jj-icon name="trash" />

@@ -454,7 +454,7 @@ export class HomeComponent {
       if (httpErr.status === 409 && httpErr.error?.code === 'quota_exceeded') {
         void this.quota.notifyQuotaExceededManual();
         this.saveError.set(
-          $localize`:@@save.error.quotaExceeded:Blob limit reached - delete one from your history to save a new blob.`
+          $localize`:@@save.error.quotaExceeded:Blob limit reached - delete one from your saved blobs to save a new blob.`
         );
         return;
       }

@@ -17,11 +17,11 @@ export const routes: Routes = [
     title: 'Shared JSON - JotJSON'
   },
   {
-    path: 'history',
+    path: 'blobs',
     loadComponent: () =>
-      import('./features/history/history.component').then((m) => m.HistoryComponent),
+      import('./features/blobs/blobs.component').then((m) => m.BlobsComponent),
     canActivate: [authGuard],
-    title: 'History - JotJSON'
+    title: 'Blobs - JotJSON'
   },
   {
     path: 'formatting-rules',

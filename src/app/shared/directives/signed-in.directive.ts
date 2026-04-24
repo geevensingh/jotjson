@@ -14,7 +14,7 @@ import { AuthService } from '../../core/auth/auth.service';
  * `AuthService` themselves.
  *
  * Usage:
- *   <a *jjSignedIn routerLink="/history">History</a>
+ *   <a *jjSignedIn routerLink="/blobs">Blobs</a>
  *   <ng-container *jjSignedIn>
  *     <input class="title-field" ... />
  *     <button mat-icon-button ...>Save</button>

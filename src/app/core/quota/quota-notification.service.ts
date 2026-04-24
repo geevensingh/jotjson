@@ -16,7 +16,7 @@ import { PreferencesService } from '../preferences/preferences.service';
  *
  * - `notifyQuotaExceededManual`: the server rejected the save (`manual`
  *   strategy, 409 `quota_exceeded`). We open a modal pointing the user at
- *   `/history` to delete old blobs, or let them opt back into auto-FIFO.
+ *   `/blobs` to delete old blobs, or let them opt back into auto-FIFO.
  */
 @Injectable({ providedIn: 'root' })
 export class QuotaNotificationService {
@@ -74,7 +74,7 @@ type QuotaFirstTimeChoice = 'keep_auto' | 'switch_to_manual';
       </p>
       <p i18n="@@quota.firstTime.body2">
         Prefer to manage the list yourself? Switch to manual mode - saves past the limit
-        will fail until you delete something from your history. You can change this
+        will fail until you delete something from your saved blobs. You can change this
         later in Settings.
       </p>
     </mat-dialog-content>
@@ -116,7 +116,7 @@ type QuotaManualFullChoice = 'dismiss' | 'switch_to_auto';
     <mat-dialog-content>
       <p i18n="@@quota.manualFull.body">
         You've hit the 100-blob limit and manual quota management is on. Delete a blob
-        from your history to make room, or switch back to automatic cleanup of the
+        from your saved blobs to make room, or switch back to automatic cleanup of the
         oldest blob.
       </p>
     </mat-dialog-content>

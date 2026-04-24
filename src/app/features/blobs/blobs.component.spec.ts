@@ -3,7 +3,7 @@ import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { HistoryComponent } from './history.component';
+import { BlobsComponent } from './blobs.component';
 import { BlobService } from '../../core/api/blob.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import type { JsonBlob } from '../../core/api/models';
@@ -50,7 +50,7 @@ function setup(opts: SetupOpts = {}) {
   const snack = { open: jasmine.createSpy('open') };
 
   TestBed.configureTestingModule({
-    imports: [HistoryComponent],
+    imports: [BlobsComponent],
     providers: [
       ...provideFakeAuth(),
       provideRouter([]),
@@ -60,11 +60,11 @@ function setup(opts: SetupOpts = {}) {
     ]
   });
 
-  const fixture = TestBed.createComponent(HistoryComponent);
+  const fixture = TestBed.createComponent(BlobsComponent);
   return { fixture, stub, dialog, snack };
 }
 
-describe('HistoryComponent', () => {
+describe('BlobsComponent', () => {
   const originalClipboardDesc = Object.getOwnPropertyDescriptor(
     navigator,
     'clipboard'

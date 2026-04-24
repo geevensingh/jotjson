@@ -79,20 +79,20 @@ describe('AppHeaderComponent', () => {
     const signOut = fixture.nativeElement.querySelector('button[aria-label="Sign out"]');
     expect(signOut).toBeNull();
 
-    // History affordance is visible only when signed in.
-    const historyLink = fixture.nativeElement.querySelector(
+    // Blobs affordance is visible only when signed in.
+    const blobsLink = fixture.nativeElement.querySelector(
       'a[aria-label="Your saved blobs"]'
     ) as HTMLAnchorElement;
-    expect(historyLink).toBeTruthy();
-    expect(historyLink.getAttribute('href')).toBe('/history');
+    expect(blobsLink).toBeTruthy();
+    expect(blobsLink.getAttribute('href')).toBe('/blobs');
   });
 
-  it('does not render the history link when signed out', async () => {
+  it('does not render the Blobs link when signed out', async () => {
     const { fixture } = await create();
-    const historyLink = fixture.nativeElement.querySelector(
+    const blobsLink = fixture.nativeElement.querySelector(
       'a[aria-label="Your saved blobs"]'
     );
-    expect(historyLink).toBeNull();
+    expect(blobsLink).toBeNull();
   });
 
   it('onSignIn delegates to AuthService', async () => {

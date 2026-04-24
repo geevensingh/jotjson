@@ -26,7 +26,7 @@ import {
 type LoadState = 'loading' | 'ready' | 'error';
 
 @Component({
-  selector: 'app-history',
+  selector: 'app-blobs',
   standalone: true,
   imports: [
     RouterLink,
@@ -36,10 +36,10 @@ type LoadState = 'loading' | 'ready' | 'error';
     IconComponent
 ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './history.component.html',
-  styleUrl: './history.component.scss'
+  templateUrl: './blobs.component.html',
+  styleUrl: './blobs.component.scss'
 })
-export class HistoryComponent implements OnInit {
+export class BlobsComponent implements OnInit {
   private readonly blobs = inject(BlobService);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
@@ -71,9 +71,9 @@ export class HistoryComponent implements OnInit {
       this.blobList.set(sorted);
       this.state.set('ready');
     } catch (err) {
-      console.warn($localize`:@@history.load.failed.log:Failed to load blobs`, err);
+      console.warn($localize`:@@blobs.load.failed.log:Failed to load blobs`, err);
       this.errorMessage.set(
-        $localize`:@@history.load.failed:Failed to load your saved blobs.`
+        $localize`:@@blobs.load.failed:Failed to load your saved blobs.`
       );
       this.state.set('error');
     }
@@ -83,7 +83,7 @@ export class HistoryComponent implements OnInit {
     const t = blob.title?.trim();
     return t && t.length > 0
       ? t
-      : $localize`:@@history.untitled:Untitled`;
+      : $localize`:@@blobs.untitled:Untitled`;
   }
 
   relativeTime(iso: string): string {
@@ -91,12 +91,12 @@ export class HistoryComponent implements OnInit {
     if (!Number.isFinite(then)) return '';
     const diff = Date.now() - then;
     const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return $localize`:@@history.justNow:just now`;
-    if (minutes < 60) return $localize`:@@history.minutesAgo:${minutes}:count: min ago`;
+    if (minutes < 1) return $localize`:@@blobs.justNow:just now`;
+    if (minutes < 60) return $localize`:@@blobs.minutesAgo:${minutes}:count: min ago`;
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return $localize`:@@history.hoursAgo:${hours}:count: h ago`;
+    if (hours < 24) return $localize`:@@blobs.hoursAgo:${hours}:count: h ago`;
     const days = Math.floor(hours / 24);
-    if (days < 30) return $localize`:@@history.daysAgo:${days}:count: d ago`;
+    if (days < 30) return $localize`:@@blobs.daysAgo:${days}:count: d ago`;
     return new Date(iso).toLocaleDateString();
   }
 
@@ -109,17 +109,17 @@ export class HistoryComponent implements OnInit {
     try {
       await navigator.clipboard?.writeText(url);
       this.snack.open(
-        $localize`:@@history.copyLink.success:Link copied to clipboard`,
+        $localize`:@@blobs.copyLink.success:Link copied to clipboard`,
         $localize`:@@common.dismiss:Dismiss`,
         { duration: 3000 }
       );
     } catch (err) {
       console.warn(
-        $localize`:@@history.copyLink.failed.log:Failed to copy blob link`,
+        $localize`:@@blobs.copyLink.failed.log:Failed to copy blob link`,
         err
       );
       this.snack.open(
-        $localize`:@@history.copyLink.failed:Failed to copy link`,
+        $localize`:@@blobs.copyLink.failed:Failed to copy link`,
         $localize`:@@common.dismiss:Dismiss`,
         { duration: 4000 }
       );
@@ -129,8 +129,8 @@ export class HistoryComponent implements OnInit {
   async deleteBlob(blob: JsonBlob): Promise<void> {
     const label = this.displayTitle(blob);
     const data: ConfirmDialogData = {
-      title: $localize`:@@history.delete.title:Delete this blob?`,
-      message: $localize`:@@history.delete.message:"${label}:name:" will be permanently deleted. This cannot be undone.`,
+      title: $localize`:@@blobs.delete.title:Delete this blob?`,
+      message: $localize`:@@blobs.delete.message:"${label}:name:" will be permanently deleted. This cannot be undone.`,
       confirmLabel: $localize`:@@share.delete.confirm:Delete`,
       cancelLabel: $localize`:@@common.cancel:Cancel`,
       destructive: true

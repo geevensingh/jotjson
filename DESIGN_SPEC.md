@@ -315,12 +315,12 @@ Available to **registered users** (create/manage). **Anonymous users can view an
 - **Visibility**: every saved blob is **private (unlisted) by default** - the link works for anyone who has it, but the blob is not listed on any public index, has a `noindex` meta tag, and does not emit rich Open Graph previews. The owner can toggle the blob to **public**, which enables Open Graph previews on `/s/:id` and allows indexing.
 - Owner can update or delete the blob.
 
-### 3. My Blobs + History Pages
+### 3. Blobs + History Pages
 
 Available to **registered users** only. Both routes are guarded by
 `authGuard`.
 
-#### 3a. My Blobs page (`/blobs`, shipped in M4b)
+#### 3a. Blobs page (`/blobs`, shipped in M4b)
 
 Originally lived at `/history` but renamed to `/blobs` in M5b when
 the event timeline (3b) took over that URL. The component and its
@@ -491,7 +491,7 @@ Available to **registered users** only.
 1. Signs in via Microsoft Entra External ID.
 2. All anonymous features plus:
    - **Save & Share**: persists the blob to Cosmos DB, generates a shareable link.
-   - **My Blobs + History**: saved blobs appear on `/blobs` (the M4b blob list, renamed from `/history` in M5b), and the signed-in user's recent activity appears on `/history` as an event timeline (M5b). See §3 for both.
+   - **Blobs + History**: saved blobs appear on `/blobs` (the M4b blob list, renamed from `/history` in M5b), and the signed-in user's recent activity appears on `/history` as an event timeline (M5b). See §3 for both.
    - **Formatting Rules**: create custom highlighting rules that auto-apply to the tree view.
 3. Session state syncs to server.
 
