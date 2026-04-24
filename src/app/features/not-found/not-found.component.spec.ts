@@ -48,9 +48,12 @@ describe('NotFoundComponent', () => {
 
   it('Back-to-editor CTA routes to /', async () => {
     const { fixture } = await create();
+    // Angular 20 removed ng-reflect-* attributes; check the href the
+    // RouterLink directive populates on the anchor instead.
     const anchor = (fixture.nativeElement as HTMLElement).querySelector(
       'a[routerLink]'
     ) as HTMLAnchorElement | null;
-    expect(anchor?.getAttribute('ng-reflect-router-link')).toBe('/');
+    expect(anchor).toBeTruthy();
+    expect(anchor?.getAttribute('href')).toBe('/');
   });
 });
