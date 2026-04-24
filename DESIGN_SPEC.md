@@ -425,7 +425,7 @@ Available to **registered users** only.
 1. Signs in via Microsoft Entra External ID.
 2. All anonymous features plus:
    - **Save & Share**: persists the blob to Cosmos DB, generates a shareable link.
-   - **History & My Blobs**: all saved blobs appear in `/history` with full management (edit, delete, share, toggle public/private).
+   - **History & My Blobs**: saved blobs appear in `/history`. In v1 the management surface is open / copy-link / delete (see §3 for the full current + planned feature set).
    - **Formatting Rules**: create custom highlighting rules that auto-apply to the tree view.
 3. Session state syncs to server.
 
@@ -453,28 +453,37 @@ header:
 convention.** Do not rely on the standard `Authorization` header for
 SPA-originated calls in production.
 
+### Shipped endpoints (v1)
+
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
+| GET | `/api/health` | None | Liveness probe |
 | POST | `/api/blobs` | Required | Create a new JSON blob |
-| GET | `/api/blobs/:id` | Optional* | Get a blob by UUID or slug (*no auth required for private/unlisted or public blobs; owner auth only needed for blobs explicitly set to owner-only, a post-v1 feature) |
-| PUT | `/api/blobs/:id` | Required (owner) | Update a blob |
+| GET | `/api/blobs` | Required | List caller's blobs (newest first) |
+| GET | `/api/blobs/:id` | Optional | Get a blob by UUID or slug. Public / unlisted blobs do not require auth; owner-only blobs (post-v1) will. |
+| PUT | `/api/blobs/:id` | Required (owner) | Update a blob's content, title, or `isPublic` flag |
 | DELETE | `/api/blobs/:id` | Required (owner) | Delete a blob |
-| GET | `/api/blobs` | Required | List user's blobs (paginated) |
-| GET | `/api/history` | Required | Get user's history (paginated) |
-| DELETE | `/api/history` | Required | Clear history |
-| GET | `/api/me` | Required | Get current user profile |
-| PUT | `/api/me` | Required | Update display name, avatar |
-| PUT | `/api/me/preferences` | Required | Update user preferences |
-| POST | `/api/me/export` | Required | Enqueue data export job (returns job ID) |
-| GET | `/api/me/export/:jobId` | Required | Poll export job status; returns ZIP download URL when complete |
-| DELETE | `/api/me` | Required | Delete account and all associated data |
-| POST | `/api/rule-sets` | Required | Create a formatting rule set |
-| GET | `/api/rule-sets` | Required | List user's rule sets |
-| GET | `/api/rule-sets/:id` | Required (owner) | Get a rule set by ID |
-| PUT | `/api/rule-sets/:id` | Required (owner) | Update a rule set |
-| DELETE | `/api/rule-sets/:id` | Required (owner) | Delete a rule set |
-| GET | `/api/rule-sets/presets` | Required | List built-in preset rule sets |
-| POST | `/api/rule-sets/presets/:id/clone` | Required | Clone a preset into user's rule sets |
+| GET | `/api/me` | Required | Read the current user document. Returns 404 if not yet seeded. |
+| POST | `/api/me` | Required | First-time seed: create the user document from the request body (typically the anon user's local preferences). Idempotent; 409 if already seeded. |
+| PUT | `/api/me/preferences` | Required | Replace the preferences object with a validated + normalized copy. Returns the normalized preferences. |
+
+### Planned endpoints (later milestones / post-v1)
+
+| Method | Endpoint | Auth | Planned in | Description |
+|---|---|---|---|---|
+| GET | `/api/history` | Required | M5 | Get user's history (paginated) |
+| DELETE | `/api/history` | Required | M5 | Clear history |
+| PUT | `/api/me` | Required | post-v1 | Update display name + avatar URL |
+| POST | `/api/me/export` | Required | post-v1 | Enqueue data export job (returns job ID) |
+| GET | `/api/me/export/:jobId` | Required | post-v1 | Poll export job; returns ZIP SAS URL when complete |
+| DELETE | `/api/me` | Required | post-v1 | Delete account and all associated data |
+| POST | `/api/rule-sets` | Required | M6 | Create a formatting rule set |
+| GET | `/api/rule-sets` | Required | M6 | List user's rule sets |
+| GET | `/api/rule-sets/:id` | Required (owner) | M6 | Get a rule set by ID |
+| PUT | `/api/rule-sets/:id` | Required (owner) | M6 | Update a rule set |
+| DELETE | `/api/rule-sets/:id` | Required (owner) | M6 | Delete a rule set |
+| GET | `/api/rule-sets/presets` | Required | M6 | List built-in preset rule sets |
+| POST | `/api/rule-sets/presets/:id/clone` | Required | M6 | Clone a preset into the user's rule sets |
 
 ### Validation Rules
 - Max blob size: **1 MB** (free tier).
@@ -529,21 +538,23 @@ SPA-originated calls in production.
 
 ### Progressive Web App (PWA)
 - The site is installable as a **browser app** (PWA) on desktop and mobile.
-- **Web App Manifest** (`manifest.webmanifest`):
-  - `name`: "JotJSON", `short_name`: "JotJSON"
-  - `display`: `standalone` (runs without browser chrome).
-  - `start_url`: `/`
-  - `theme_color` and `background_color` matching the app's dark/light theme.
-  - Icons at standard sizes: 192x192, 512x512 (maskable + any).
-  - `categories`: `["developer-tools", "utilities"]`
-  - `screenshots`: at least one wide and one narrow for richer install prompts.
-- **Service Worker** (using Angular's `@angular/service-worker`):
-  - Caches the app shell (HTML, CSS, JS, fonts, icons) for offline loading.
-  - Offline mode: the editor and tree view work fully offline with `localStorage` data. API-dependent features (save, share, history, formatting rules) show a "You're offline" banner and queue actions for sync when reconnected.
-  - Cache-first strategy for static assets; network-first for API calls.
-  - Background sync for queued blob saves when connectivity is restored.
-  - Automatic update prompt: when a new version is deployed, users see a non-intrusive toast ("A new version is available - click to refresh").
-- **Install prompt**: a subtle "Install JotJSON" button in the toolbar/header, shown when the browser fires the `beforeinstallprompt` event. Hidden once installed.
+- **Shipped in v1:**
+  - **Web App Manifest** (`public/manifest.webmanifest`, linked from `index.html`):
+    - `name`: "JotJSON", `short_name`: "JotJSON"
+    - `display`: `standalone` (runs without browser chrome).
+    - `start_url`: `/`
+    - `theme_color` and `background_color` matching the app's dark/light theme.
+    - Icons at standard sizes: 192x192, 512x512 (maskable + any).
+    - `categories`: `["developer-tools", "utilities"]`
+    - `screenshots`: at least one wide and one narrow for richer install prompts.
+  - **Service Worker** via Angular's `@angular/service-worker`, registered in `app.config.ts` with `registerWhenStable:30000` and disabled in dev mode. Configured via `ngsw-config.json` with cache-first for app-shell assets (HTML, CSS, JS, fonts, icons) so the editor/tree view load offline once the app has been visited.
+- **Planned polish (post-v1):**
+  - **Update prompt**: subscribe to `SwUpdate.versionUpdates` and surface a non-intrusive toast ("A new version is available - click to refresh") when a new build is deployed.
+  - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed.
+  - **Offline banner**: show a persistent banner driven by `navigator.onLine` + SW status when network is unavailable, auto-dismiss when connectivity returns.
+  - **Offline fallbacks for API-dependent features** (save, share, history, formatting rules): show a "You're offline" state and queue actions for sync.
+  - **Background sync**: flush queued blob saves when connectivity is restored (needs a custom SW integration on top of ngsw).
+  - **Network-first strategy for API calls** (today all `/api/*` requests pass through the default runtime cache rules in `ngsw-config.json`).
 
 ---
 
@@ -636,7 +647,7 @@ Static public assets (favicons, manifest, etc.) live at the repo-root
 |---|---|---|
 | Azure Static Web Apps | Free (dev) -> Standard (launch) | Hosts SPA + proxies to Functions. Start Free, upgrade to Standard before launch for SLA + 5 GB storage. |
 | Azure Functions | Consumption | Serverless API |
-| Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (partitionKey: `/ownerId`), `users` (`/id`), `history` (`/userId`), `rule-sets` (`/userId`) |
+| Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (partitionKey: `/ownerId`) and `users` (`/id`) in v1. Planned: `history` (`/userId`, M5) and `rule-sets` (`/userId`, M6). |
 | Microsoft Entra External ID | Free (50k MAU) | Identity |
 | Azure Blob Storage | Standard LRS | User avatars + export ZIP artifacts (SAS-linked, 1-hour TTL) |
 | Azure Front Door | *(deferred post-v1)* | Add for WAF / advanced routing if needed |
