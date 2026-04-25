@@ -230,7 +230,13 @@ export class HomeComponent {
       }
     });
 
-    // Persist split ratio to localStorage (local-only; not synced via prefs).
+    // Persist split ratio to localStorage under `jotjson.splitRatio.v1`.
+    // Intentionally local-only (not part of UserPreferences / Cosmos roaming):
+    // viewport-dependent, couples with layoutOrientation, transient UI state,
+    // and updates on every pointermove during a drag. See DESIGN_SPEC.md
+    // "UserPreferences -> Intentionally not roamed" for the full rationale.
+    // If we ever roam this, it needs per-orientation (and ideally
+    // per-viewport-class) storage plus a multi-second write debounce.
     effect(() => {
       const r = this.splitRatio();
       try {
