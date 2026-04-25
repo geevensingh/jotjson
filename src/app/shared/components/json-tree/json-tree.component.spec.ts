@@ -55,6 +55,24 @@ describe('JsonTreeComponent', () => {
     expect(body.style.getPropertyValue('--tree-font-size').trim()).toBe('19px');
   });
 
+  it('scales the type badge font-size with treeFontSize', async () => {
+    await createWith({ a: 1, b: 2 });
+    prefs.update({ treeFontSize: 26, treeShowTypeLabels: true });
+    fixture.detectChanges();
+    document.body.appendChild(fixture.nativeElement);
+    try {
+      const badge = (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-type-badge'
+      ) as HTMLElement;
+      expect(badge).withContext('expected a .tree-type-badge to be rendered').toBeTruthy();
+      const fs = Number.parseFloat(getComputedStyle(badge).fontSize);
+      // 0.77em of 26px ≈ 20.02px — assert clearly larger than the default 10px.
+      expect(fs).toBeGreaterThan(15);
+    } finally {
+      document.body.removeChild(fixture.nativeElement);
+    }
+  });
+
   it('overrides Material tree-node font-size so large treeFontSize values actually render', async () => {
     await createWith({ a: 1, b: 2 });
     prefs.update({ treeFontSize: 28 });
