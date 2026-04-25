@@ -398,8 +398,8 @@ Available to **registered users** only. The route is auth-guarded.
   through to the existing debounced server PUT for signed-in users.
   - **Editor**: font size (8-32 px, clamped), tab size (2 / 4),
     word wrap toggle.
-  - **Tree**: default expansion depth (1-10, clamped), show type
-    labels toggle.
+  - **Tree**: font size (8-32 px, clamped), default expansion depth
+    (1-10, clamped), show type labels toggle.
   - **Search**: scope (keys / values / keys and values), case
     sensitive toggle, regex mode toggle.
   - **History & storage**: history tracking mode (save only /

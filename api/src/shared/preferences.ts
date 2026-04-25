@@ -28,6 +28,7 @@ export interface UserPreferences {
   defaultRuleSetId?: string;
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
+  treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
   historyTrackingMode: 'save_only' | 'all_actions';
@@ -47,6 +48,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   defaultTreeExpansionDepth: 2,
   editorWordWrap: true,
   layoutOrientation: 'horizontal',
+  treeFontSize: 13,
   treeShowTypeLabels: true,
   treeShowDateAnnotations: true,
   historyTrackingMode: 'save_only',
@@ -102,6 +104,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'defaultRuleSetId',
   'editorWordWrap',
   'layoutOrientation',
+  'treeFontSize',
   'treeShowTypeLabels',
   'treeShowDateAnnotations',
   'historyTrackingMode',
@@ -228,6 +231,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     ),
     editorWordWrap: assertBool(raw['editorWordWrap'], 'editorWordWrap'),
     layoutOrientation: assertEnum(raw['layoutOrientation'], LAYOUTS, 'layoutOrientation'),
+    treeFontSize: assertInt(raw['treeFontSize'], 'treeFontSize', 8, 32),
     treeShowTypeLabels: assertBool(raw['treeShowTypeLabels'], 'treeShowTypeLabels'),
     treeShowDateAnnotations: assertBool(raw['treeShowDateAnnotations'], 'treeShowDateAnnotations'),
     historyTrackingMode: assertEnum(

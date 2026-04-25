@@ -57,6 +57,7 @@ export interface UserPreferences {
   defaultRuleSetId?: string;
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
+  treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
   historyTrackingMode: 'save_only' | 'all_actions';

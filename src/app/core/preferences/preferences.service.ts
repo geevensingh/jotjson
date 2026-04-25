@@ -28,6 +28,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   defaultTreeExpansionDepth: 2,
   editorWordWrap: true,
   layoutOrientation: 'horizontal',
+  treeFontSize: 13,
   treeShowTypeLabels: true,
   treeShowDateAnnotations: true,
   historyTrackingMode: 'save_only',

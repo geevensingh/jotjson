@@ -184,6 +184,24 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().treeShowTypeLabels).toBe(true);
   });
 
+  it('writes tree font size and clamps to the supported range', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onTreeFontSizeChange(18);
+    expect(prefs.prefs().treeFontSize).toBe(18);
+    fixture.componentInstance.onTreeFontSizeChange(2);
+    expect(prefs.prefs().treeFontSize).toBe(8);
+    fixture.componentInstance.onTreeFontSizeChange(99);
+    expect(prefs.prefs().treeFontSize).toBe(32);
+    const before = prefs.prefs().treeFontSize;
+    fixture.componentInstance.onTreeFontSizeChange(null);
+    expect(prefs.prefs().treeFontSize).toBe(before);
+    fixture.componentInstance.onTreeFontSizeChange('not-a-number');
+    expect(prefs.prefs().treeFontSize).toBe(before);
+  });
+
   it('writes searchCaseSensitive when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },

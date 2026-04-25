@@ -73,6 +73,7 @@ export class JsonTreeComponent {
   });
 
   readonly showTypeBadges = computed(() => this.prefs.prefs().treeShowTypeLabels);
+  readonly treeFontSize = computed(() => this.prefs.prefs().treeFontSize);
 
   readonly searchHits = computed<ReadonlySet<string>>(() => {
     const q = this.search().trim();

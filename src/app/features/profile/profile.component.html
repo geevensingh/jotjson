@@ -93,6 +93,21 @@
         </h3>
 
         <div class="pref-row">
+          <label for="pref-tree-font-size" i18n="@@profile.prefs.tree.fontSize">Font size</label>
+          <input
+            id="pref-tree-font-size"
+            type="number"
+            class="pref-number"
+            [min]="fontSizeMin"
+            [max]="fontSizeMax"
+            step="1"
+            [ngModel]="treeFontSize()"
+            (ngModelChange)="onTreeFontSizeChange($event)"
+          />
+          <span class="pref-suffix" aria-hidden="true">px</span>
+        </div>
+
+        <div class="pref-row">
           <label for="pref-expansion-depth" i18n="@@profile.prefs.tree.expansionDepth">
             Default expansion depth
           </label>

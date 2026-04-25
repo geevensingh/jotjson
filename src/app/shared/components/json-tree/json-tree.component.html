@@ -37,7 +37,7 @@
   </button>
 </div>
 
-<div class="tree-body">
+<div class="tree-body" [style.--tree-font-size.px]="treeFontSize()">
   @if (root()) {
     <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
       <!-- Leaf nodes -->

@@ -39,6 +39,18 @@ describe('normalizePreferences', () => {
     expect(() => normalizePreferences(bad)).toThrow(/editorFontSize/);
   });
 
+  it('rejects out-of-range treeFontSize', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeFontSize'] = 99;
+    expect(() => normalizePreferences(bad)).toThrow(/treeFontSize/);
+  });
+
+  it('rejects non-integer treeFontSize', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeFontSize'] = 13.5;
+    expect(() => normalizePreferences(bad)).toThrow(/treeFontSize/);
+  });
+
   it('rejects non-boolean booleans', () => {
     const bad = valid() as Record<string, unknown>;
     bad['editorWordWrap'] = 'yes';

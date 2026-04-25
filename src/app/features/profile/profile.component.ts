@@ -44,6 +44,7 @@ export class ProfileComponent {
   readonly editorWordWrap = computed(() => this.prefs().editorWordWrap);
   readonly defaultTreeExpansionDepth = computed(() => this.prefs().defaultTreeExpansionDepth);
   readonly treeShowTypeLabels = computed(() => this.prefs().treeShowTypeLabels);
+  readonly treeFontSize = computed(() => this.prefs().treeFontSize);
 
   readonly searchCaseSensitive = computed(() => this.prefs().searchCaseSensitive);
   readonly searchRegexMode = computed(() => this.prefs().searchRegexMode);
@@ -88,6 +89,11 @@ export class ProfileComponent {
       this.defaultTreeExpansionDepth()
     );
     this.prefsService.update({ defaultTreeExpansionDepth: n });
+  }
+
+  onTreeFontSizeChange(value: number | string | null): void {
+    const n = this.clampNumber(value, FONT_SIZE_MIN, FONT_SIZE_MAX, this.treeFontSize());
+    this.prefsService.update({ treeFontSize: n });
   }
 
   onTreeShowTypeLabelsChange(value: boolean): void {
