@@ -68,6 +68,7 @@ describe('JsonTreeComponent', () => {
       expect(node).withContext('expected a mat-nested-tree-node to be rendered').toBeTruthy();
       const fs = Number.parseFloat(getComputedStyle(node).fontSize);
       expect(fs).toBe(28);
+      expect(getComputedStyle(node).fontFamily).toMatch(/JetBrains Mono/i);
     } finally {
       document.body.removeChild(fixture.nativeElement);
     }
