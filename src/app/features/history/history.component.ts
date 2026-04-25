@@ -435,6 +435,12 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     const t = entry.title?.trim();
     if (t && t.length > 0) return t;
     if (entry.slug) return `/s/${entry.slug}`;
+    // Paste events are intentionally blob-less (api/src/shared/history.ts:
+    // "absent for pasted events"), so the generic "(deleted blob)" label
+    // would be misleading. Use a dedicated label for the no-slug paste case.
+    if (entry.action === 'pasted') {
+      return $localize`:@@history.pastedContent:Pasted content`;
+    }
     return $localize`:@@history.deletedBlob:(deleted blob)`;
   }
 

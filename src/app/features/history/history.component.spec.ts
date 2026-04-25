@@ -217,11 +217,14 @@ describe('HistoryComponent', () => {
     expect(c.hasLink(entry({ slug: undefined, action: 'pasted' }))).toBe(false);
   });
 
-  it('displayLabel prefers title, then slug, then "(deleted blob)"', () => {
+  it('displayLabel prefers title, then slug, then action-specific fallback', () => {
     const { fixture } = setup();
     const c = fixture.componentInstance;
     expect(c.displayLabel(entry({ title: 'Hi' }))).toBe('Hi');
     expect(c.displayLabel(entry({ title: '  ', slug: 'abc' }))).toBe('/s/abc');
+    expect(
+      c.displayLabel(entry({ title: undefined, slug: undefined, action: 'pasted' }))
+    ).toBe('Pasted content');
     expect(c.displayLabel(entry({ title: undefined, slug: undefined }))).toBe(
       '(deleted blob)'
     );
