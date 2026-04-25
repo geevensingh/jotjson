@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
@@ -245,5 +245,84 @@ describe('HistoryComponent', () => {
     expect(c.actionLabel('deleted')).toBe('Deleted');
     expect(c.actionLabel('viewed')).toBe('Viewed');
     expect(c.actionLabel('pasted')).toBe('Pasted');
+  });
+
+  it('applySearchTerm updates the search term and reloads with q', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [entry()] } });
+    await fixture.componentInstance.reload();
+    stub.list.calls.reset();
+    fixture.componentInstance.applySearchTerm('  Auth  ');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fixture.componentInstance.searchTerm()).toBe('Auth');
+    expect(stub.list).toHaveBeenCalledWith({ pageSize: 50, q: 'Auth' });
+  });
+
+  it('applySearchTerm is a no-op when the trimmed term is unchanged', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [entry()] } });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.applySearchTerm('foo');
+    await Promise.resolve();
+    await Promise.resolve();
+    stub.list.calls.reset();
+    fixture.componentInstance.applySearchTerm('  foo  ');
+    await Promise.resolve();
+    expect(stub.list).not.toHaveBeenCalled();
+  });
+
+  it('onSearchInput pipes through a 300ms debounce', fakeAsync(() => {
+    const { fixture, stub } = setup({ listResult: { entries: [entry()] } });
+    fixture.componentInstance.reload();
+    tick();
+    stub.list.calls.reset();
+
+    fixture.componentInstance.onSearchInput('foo');
+    tick(299);
+    expect(stub.list).not.toHaveBeenCalled();
+    tick(2);
+    expect(stub.list).toHaveBeenCalledWith({ pageSize: 50, q: 'foo' });
+  }));
+
+  it('clearSearch resets the search term and reloads immediately', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [entry()] } });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.applySearchTerm('foo');
+    await Promise.resolve();
+    await Promise.resolve();
+    stub.list.calls.reset();
+
+    fixture.componentInstance.clearSearch();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fixture.componentInstance.searchTerm()).toBe('');
+    expect(stub.list).toHaveBeenCalledWith({ pageSize: 50 });
+  });
+
+  it('loadMore forwards the active search term as q', async () => {
+    const { fixture, stub } = setup({
+      listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' }
+    });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.applySearchTerm('foo');
+    await Promise.resolve();
+    await Promise.resolve();
+    stub.list.calls.reset();
+    stub.list.and.returnValue(of({ entries: [entry({ id: 'b' })] }));
+    await fixture.componentInstance.loadMore();
+    expect(stub.list).toHaveBeenCalledWith({
+      pageSize: 50,
+      continuationToken: 'tok',
+      q: 'foo'
+    });
+  });
+
+  it('hasActiveFilters reflects the trimmed search term', () => {
+    const { fixture } = setup();
+    const c = fixture.componentInstance;
+    expect(c.hasActiveFilters()).toBe(false);
+    c.searchTerm.set('foo');
+    expect(c.hasActiveFilters()).toBe(true);
+    c.searchTerm.set('   ');
+    expect(c.hasActiveFilters()).toBe(false);
   });
 });

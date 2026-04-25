@@ -1,17 +1,19 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   OnInit,
   computed,
   inject,
   signal
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { firstValueFrom } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, firstValueFrom } from 'rxjs';
 import { HistoryService } from '../../core/api/history.service';
 import type { HistoryEntry } from '../../core/api/models';
 import { SeoService } from '../../core/seo/seo.service';
@@ -58,12 +60,44 @@ export class HistoryComponent implements OnInit {
   readonly continuationToken = signal<string | undefined>(undefined);
   readonly loadingMore = signal(false);
   readonly errorMessage = signal<string | null>(null);
+  readonly searchTerm = signal('');
+  /** Mirrors the input element's value so the field stays controlled. */
+  readonly searchInputValue = signal('');
+
+  private readonly searchInput$ = new Subject<string>();
 
   readonly isEmpty = computed(
     () => this.state() === 'ready' && this.entries().length === 0
   );
 
   readonly hasMore = computed(() => !!this.continuationToken());
+
+  readonly hasActiveFilters = computed(
+    () => this.searchTerm().trim().length > 0
+  );
+
+  constructor() {
+    inject(DestroyRef);
+    this.searchInput$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        takeUntilDestroyed()
+      )
+      .subscribe((value) => this.applySearchTerm(value));
+  }
+
+  /**
+   * Apply a search term immediately (post-debounce). Public so tests can
+   * exercise the search-driven reload without dealing with rxjs scheduler
+   * timing inside Angular's zone.
+   */
+  applySearchTerm(value: string): void {
+    const trimmed = value.trim();
+    if (trimmed === this.searchTerm()) return;
+    this.searchTerm.set(trimmed);
+    void this.reload();
+  }
 
   /**
    * Group entries into per-day buckets in display order. We use the user's
@@ -113,8 +147,11 @@ export class HistoryComponent implements OnInit {
     this.state.set('loading');
     this.entries.set([]);
     this.continuationToken.set(undefined);
+    const q = this.searchTerm();
     try {
-      const page = await firstValueFrom(this.history.list({ pageSize: 50 }));
+      const page = await firstValueFrom(
+        this.history.list({ pageSize: 50, ...(q ? { q } : {}) })
+      );
       this.entries.set(page.entries);
       this.continuationToken.set(page.continuationToken);
       this.state.set('ready');
@@ -134,9 +171,14 @@ export class HistoryComponent implements OnInit {
     const token = this.continuationToken();
     if (!token || this.loadingMore()) return;
     this.loadingMore.set(true);
+    const q = this.searchTerm();
     try {
       const page = await firstValueFrom(
-        this.history.list({ pageSize: 50, continuationToken: token })
+        this.history.list({
+          pageSize: 50,
+          continuationToken: token,
+          ...(q ? { q } : {})
+        })
       );
       this.entries.update((current) => [...current, ...page.entries]);
       this.continuationToken.set(page.continuationToken);
@@ -196,6 +238,19 @@ export class HistoryComponent implements OnInit {
   openEntry(entry: HistoryEntry): void {
     if (!entry.slug || entry.action === 'deleted') return;
     void this.router.navigate(['/s', entry.slug]);
+  }
+
+  onSearchInput(value: string): void {
+    this.searchInputValue.set(value);
+    this.searchInput$.next(value);
+  }
+
+  clearSearch(): void {
+    this.searchInputValue.set('');
+    this.searchInput$.next('');
+    // Apply immediately too so that callers (and tests) don't have to wait
+    // for the debounce window when the input is being reset programmatically.
+    this.applySearchTerm('');
   }
 
   hasLink(entry: HistoryEntry): boolean {

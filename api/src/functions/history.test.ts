@@ -103,6 +103,27 @@ describe('GET /api/history', () => {
     expect(listEntries).not.toHaveBeenCalled();
   });
 
+  it('forwards a trimmed q to listEntries', async () => {
+    listEntries.mockResolvedValueOnce({ entries: [] });
+    await getHistory(makeRequest({ query: { q: '  Auth  ' } }), ctx);
+    expect(listEntries).toHaveBeenCalledWith('u-1', { q: 'Auth' });
+  });
+
+  it('drops an empty q so the server returns the unfiltered timeline', async () => {
+    listEntries.mockResolvedValueOnce({ entries: [] });
+    await getHistory(makeRequest({ query: { q: '   ' } }), ctx);
+    expect(listEntries).toHaveBeenCalledWith('u-1', {});
+  });
+
+  it('rejects q longer than 100 characters', async () => {
+    const res = await getHistory(
+      makeRequest({ query: { q: 'a'.repeat(101) } }),
+      ctx
+    );
+    expect(res.status).toBe(400);
+    expect(listEntries).not.toHaveBeenCalled();
+  });
+
   it('returns 500 when Cosmos blows up', async () => {
     listEntries.mockRejectedValueOnce(new Error('boom'));
     const res = await getHistory(makeRequest(), ctx);

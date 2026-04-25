@@ -69,11 +69,26 @@ export async function getHistory(
     return badRequest('pageSize must be an integer');
   }
   const continuationToken = req.query.get('continuationToken') ?? undefined;
+  const qRaw = req.query.get('q');
+  let q: string | undefined;
+  if (qRaw !== null && qRaw !== undefined) {
+    const trimmed = qRaw.trim();
+    if (trimmed.length === 0) {
+      // Treat ?q= and ?q= as "no filter" rather than a 400; this keeps
+      // the client free to send the current input value verbatim.
+      q = undefined;
+    } else if (trimmed.length > 100) {
+      return badRequest('q must be 100 characters or fewer');
+    } else {
+      q = trimmed;
+    }
+  }
 
   try {
     const result = await listEntries(principal.id, {
       ...(pageSize !== undefined ? { pageSize } : {}),
-      ...(continuationToken ? { continuationToken } : {})
+      ...(continuationToken ? { continuationToken } : {}),
+      ...(q !== undefined ? { q } : {})
     });
     return { status: 200, jsonBody: result };
   } catch (err) {

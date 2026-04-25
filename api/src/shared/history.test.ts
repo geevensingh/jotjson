@@ -65,8 +65,18 @@ jest.mock('./cosmos', () => ({
                 throw new Error(`Unexpected fetchAll query: ${query}`);
               },
               fetchNext: async () => {
-                if (/SELECT \* FROM c WHERE c\.userId = @uid ORDER BY c\.accessedAt DESC/.test(query)) {
-                  const sorted = [...matches()].sort((a, b) =>
+                if (/SELECT \* FROM c WHERE c\.userId = @uid/.test(query)) {
+                  let rows = matches();
+                  const q = params['@q'];
+                  if (typeof q === 'string') {
+                    const needle = q.toLowerCase();
+                    rows = rows.filter((e) => {
+                      const t = (e.title ?? '').toLowerCase();
+                      const s = (e.slug ?? '').toLowerCase();
+                      return t.includes(needle) || s.includes(needle);
+                    });
+                  }
+                  const sorted = [...rows].sort((a, b) =>
                     a.accessedAt < b.accessedAt ? 1 : a.accessedAt > b.accessedAt ? -1 : 0
                   );
                   return { resources: sorted, continuationToken: undefined };
@@ -261,6 +271,31 @@ describe('listEntries', () => {
 
   it('returns an empty array when the user has no entries', async () => {
     expect(await listEntries('u-1')).toEqual({ entries: [] });
+  });
+
+  it('filters by q against title and slug, case-insensitively', async () => {
+    preload([
+      { id: 'a', title: 'Auth payload', accessedAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', slug: 'AuthDemo', accessedAt: '2026-02-01T00:00:00Z' },
+      { id: 'c', title: 'Cart', accessedAt: '2026-03-01T00:00:00Z' }
+    ]);
+    const result = await listEntries('u-1', { q: 'auth' });
+    expect(result.entries.map((e) => e.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('treats an empty/whitespace q as no filter', async () => {
+    preload([
+      { id: 'a', title: 'Hello' },
+      { id: 'b', title: 'World' }
+    ]);
+    const result = await listEntries('u-1', { q: '   ' });
+    expect(result.entries.length).toBe(2);
+  });
+
+  it('returns no entries when q matches nothing', async () => {
+    preload([{ id: 'a', title: 'Hello' }]);
+    const result = await listEntries('u-1', { q: 'zzz' });
+    expect(result.entries).toEqual([]);
   });
 });
 

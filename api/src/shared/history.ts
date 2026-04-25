@@ -47,6 +47,12 @@ export interface RecordEntryInput {
 export interface ListEntriesOptions {
   pageSize?: number;
   continuationToken?: string;
+  /**
+   * Case-insensitive substring filter applied to `title` and `slug`. The
+   * caller is expected to have already trimmed and lower-cased the value;
+   * empty strings are treated as "no filter".
+   */
+  q?: string;
 }
 
 export interface ListEntriesResult {
@@ -176,10 +182,24 @@ export async function listEntries(
     Math.max(1, options.pageSize ?? DEFAULT_PAGE_SIZE),
     MAX_PAGE_SIZE
   );
+  const q = typeof options.q === 'string' ? options.q.trim() : '';
+  // Lower-case once on the server so the Cosmos call doesn't have to
+  // recompute LOWER(@q) per row. The query side wraps the column values
+  // in LOWER(...) so the comparison stays case-insensitive.
+  const qLower = q.toLowerCase();
+  const parameters: { name: string; value: string | number }[] = [
+    { name: '@uid', value: userId }
+  ];
+  let where = 'c.userId = @uid';
+  if (qLower) {
+    where +=
+      ' AND (CONTAINS(LOWER(c.title), @q) OR CONTAINS(LOWER(c.slug), @q))';
+    parameters.push({ name: '@q', value: qLower });
+  }
   const iterator = getHistoryContainer().items.query<HistoryDocument>(
     {
-      query: 'SELECT * FROM c WHERE c.userId = @uid ORDER BY c.accessedAt DESC',
-      parameters: [{ name: '@uid', value: userId }]
+      query: `SELECT * FROM c WHERE ${where} ORDER BY c.accessedAt DESC`,
+      parameters
     },
     {
       partitionKey: userId,

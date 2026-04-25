@@ -32,7 +32,8 @@ export type JjIconName =
   | 'edit'
   | 'eye'
   | 'folder'
-  | 'history';
+  | 'history'
+  | 'search';
 
 @Component({
   selector: 'jj-icon',
@@ -184,6 +185,10 @@ export type JjIconName =
         }
         @case ('folder') {
           <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+        }
+        @case ('search') {
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="M16 16l4 4" />
         }
       }
     </svg>

@@ -17,6 +17,35 @@
     }
   </header>
 
+  <div class="history-controls">
+    <label class="search-field">
+      <jj-icon name="search" class="search-icon" aria-hidden="true" />
+      <input
+        type="search"
+        class="search-input"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="searchInputValue()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Search title or slug"
+        i18n-placeholder="@@history.search.placeholder"
+        aria-label="Search history"
+        i18n-aria-label="@@history.search.aria"
+      />
+      @if (searchInputValue()) {
+        <button
+          type="button"
+          class="search-clear"
+          (click)="clearSearch()"
+          aria-label="Clear search"
+          i18n-aria-label="@@history.search.clear"
+        >
+          <jj-icon name="clear" />
+        </button>
+      }
+    </label>
+  </div>
+
   @if (state() === 'loading') {
     <ul class="entry-list" aria-busy="true" aria-live="polite">
       @for (i of [0, 1, 2, 3]; track i) {
@@ -36,20 +65,36 @@
       <span i18n="@@history.retry">Retry</span>
     </button>
   } @else if (isEmpty()) {
-    <div class="empty-state">
-      <jj-icon name="history" class="empty-icon" />
-      <p
-        class="empty-message"
-        i18n="@@history.empty"
-      >No activity yet. As you save, edit, or paste JSON, it will appear here.</p>
-      <a
-        mat-flat-button
-        color="primary"
-        routerLink="/"
-        i18n="@@history.empty.cta"
-        >Open the editor</a
-      >
-    </div>
+    @if (hasActiveFilters()) {
+      <div class="empty-state">
+        <jj-icon name="search" class="empty-icon" />
+        <p
+          class="empty-message"
+          i18n="@@history.empty.search"
+        >No history entries match your search.</p>
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="clearSearch()"
+          i18n="@@history.search.clearAction"
+        >Clear search</button>
+      </div>
+    } @else {
+      <div class="empty-state">
+        <jj-icon name="history" class="empty-icon" />
+        <p
+          class="empty-message"
+          i18n="@@history.empty"
+        >No activity yet. As you save, edit, or paste JSON, it will appear here.</p>
+        <a
+          mat-flat-button
+          color="primary"
+          routerLink="/"
+          i18n="@@history.empty.cta"
+          >Open the editor</a
+        >
+      </div>
+    }
   } @else {
     @for (group of dayGroups(); track group.dayKey) {
       <section class="day-group">
