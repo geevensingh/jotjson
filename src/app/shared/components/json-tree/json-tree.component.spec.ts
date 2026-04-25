@@ -66,7 +66,7 @@ describe('JsonTreeComponent', () => {
       ) as HTMLElement;
       expect(badge).withContext('expected a .tree-type-badge to be rendered').toBeTruthy();
       const fs = Number.parseFloat(getComputedStyle(badge).fontSize);
-      // 0.77em of 26px ≈ 20.02px — assert clearly larger than the default 10px.
+      // 0.77em of 26px is ~20px -- assert clearly larger than the default 10px.
       expect(fs).toBeGreaterThan(15);
     } finally {
       document.body.removeChild(fixture.nativeElement);
