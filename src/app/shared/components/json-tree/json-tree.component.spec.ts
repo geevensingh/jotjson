@@ -46,6 +46,15 @@ describe('JsonTreeComponent', () => {
       .toEqual([]);
   });
 
+  it('applies treeFontSize to the .tree-body element as a CSS custom property', async () => {
+    await createWith({ a: 1 });
+    prefs.update({ treeFontSize: 19 });
+    fixture.detectChanges();
+    const body = (fixture.nativeElement as HTMLElement).querySelector('.tree-body') as HTMLElement;
+    expect(body).toBeTruthy();
+    expect(body.style.getPropertyValue('--tree-font-size').trim()).toBe('19px');
+  });
+
   describe('root() and path formatting', () => {
     it('returns undefined when no value is set', async () => {
       await createWith(undefined);
