@@ -183,4 +183,41 @@ describe('ProfileComponent', () => {
     fixture.componentInstance.onTreeShowTypeLabelsChange(true);
     expect(prefs.prefs().treeShowTypeLabels).toBe(true);
   });
+
+  it('writes searchCaseSensitive when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onSearchCaseSensitiveChange(true);
+    expect(prefs.prefs().searchCaseSensitive).toBe(true);
+    fixture.componentInstance.onSearchCaseSensitiveChange(false);
+    expect(prefs.prefs().searchCaseSensitive).toBe(false);
+  });
+
+  it('writes searchRegexMode when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onSearchRegexModeChange(true);
+    expect(prefs.prefs().searchRegexMode).toBe(true);
+    fixture.componentInstance.onSearchRegexModeChange(false);
+    expect(prefs.prefs().searchRegexMode).toBe(false);
+  });
+
+  it('writes searchScope for valid values and ignores invalid ones', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onSearchScopeChange('keys');
+    expect(prefs.prefs().searchScope).toBe('keys');
+    fixture.componentInstance.onSearchScopeChange('values');
+    expect(prefs.prefs().searchScope).toBe('values');
+    fixture.componentInstance.onSearchScopeChange('both');
+    expect(prefs.prefs().searchScope).toBe('both');
+    fixture.componentInstance.onSearchScopeChange('garbage');
+    expect(prefs.prefs().searchScope).toBe('both');
+  });
 });

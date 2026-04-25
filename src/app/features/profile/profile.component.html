@@ -125,6 +125,40 @@
         <h3 id="prefs-search" class="group-title" i18n="@@profile.prefs.search.title">
           Search
         </h3>
+
+        <div class="pref-row">
+          <label for="pref-search-scope" i18n="@@profile.prefs.search.scope">
+            Search scope
+          </label>
+          <select
+            id="pref-search-scope"
+            class="pref-select"
+            [ngModel]="searchScope()"
+            (ngModelChange)="onSearchScopeChange($event)"
+          >
+            <option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</option>
+            <option value="values" i18n="@@profile.prefs.search.scope.values">Values</option>
+            <option value="both" i18n="@@profile.prefs.search.scope.both">Keys and values</option>
+          </select>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="searchCaseSensitive()"
+            (change)="onSearchCaseSensitiveChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.search.caseSensitive">Case sensitive</span>
+          </mat-slide-toggle>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="searchRegexMode()"
+            (change)="onSearchRegexModeChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.search.regexMode">Regular expression mode</span>
+          </mat-slide-toggle>
+        </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-history">

@@ -45,6 +45,10 @@ export class ProfileComponent {
   readonly defaultTreeExpansionDepth = computed(() => this.prefs().defaultTreeExpansionDepth);
   readonly treeShowTypeLabels = computed(() => this.prefs().treeShowTypeLabels);
 
+  readonly searchCaseSensitive = computed(() => this.prefs().searchCaseSensitive);
+  readonly searchRegexMode = computed(() => this.prefs().searchRegexMode);
+  readonly searchScope = computed(() => this.prefs().searchScope);
+
   readonly fontSizeMin = FONT_SIZE_MIN;
   readonly fontSizeMax = FONT_SIZE_MAX;
   readonly expansionDepthMin = EXPANSION_DEPTH_MIN;
@@ -83,6 +87,20 @@ export class ProfileComponent {
 
   onTreeShowTypeLabelsChange(value: boolean): void {
     this.prefsService.update({ treeShowTypeLabels: value });
+  }
+
+  onSearchCaseSensitiveChange(value: boolean): void {
+    this.prefsService.update({ searchCaseSensitive: value });
+  }
+
+  onSearchRegexModeChange(value: boolean): void {
+    this.prefsService.update({ searchRegexMode: value });
+  }
+
+  onSearchScopeChange(value: string): void {
+    if (value === 'keys' || value === 'values' || value === 'both') {
+      this.prefsService.update({ searchScope: value });
+    }
   }
 
   private clampNumber(

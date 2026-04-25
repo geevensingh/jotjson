@@ -108,6 +108,16 @@ dl {
   font: inherit;
 }
 
+.pref-select {
+  padding: 0.35rem 0.5rem;
+  background: var(--mat-sys-surface, transparent);
+  color: var(--mat-sys-on-surface, inherit);
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
+  border-radius: 4px;
+  font: inherit;
+  min-width: 12rem;
+}
+
 .pref-suffix {
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-size: 0.875rem;
