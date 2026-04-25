@@ -83,4 +83,24 @@ describe('ProfileComponent', () => {
     fixture.componentInstance.onSignOut();
     expect(authStub.signOut).toHaveBeenCalled();
   });
+
+  it('renders the preferences card with all group headings when signed in', async () => {
+    const { fixture } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Preferences');
+    expect(text).toContain('Editor');
+    expect(text).toContain('Tree');
+    expect(text).toContain('Search');
+    expect(text).toContain('History & storage');
+    expect(text).toContain('Appearance');
+  });
+
+  it('does not render the preferences card when signed out', async () => {
+    const { fixture } = await create({ user: null, isConfigured: true });
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Preferences');
+  });
 });
