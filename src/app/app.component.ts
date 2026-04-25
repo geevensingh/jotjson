@@ -1,6 +1,5 @@
 import { Component, OnInit, inject, Injector } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { AuthService } from './core/auth/auth.service';
 
 @Component({
   selector: 'app-root',
@@ -11,14 +10,14 @@ import { AuthService } from './core/auth/auth.service';
 export class AppComponent implements OnInit {
   readonly title = 'JotJSON';
 
-  private readonly auth = inject(AuthService);
   private readonly injector = inject(Injector);
 
   ngOnInit(): void {
-    // Process a returning sign-in redirect (if any) and prime the user
-    // signal from the MSAL cache. Standalone Angular apps must do this
-    // themselves - `MsalRedirectComponent` is an NgModule-era construct.
-    void this.auth.initializeFromRedirect();
+    // Note: returning-redirect handling and `AuthService.userSignal`
+    // hydration are driven from `provideAppInitializer` in `app.config.ts`
+    // so the router waits for MSAL before activating routes (otherwise
+    // resolvers race the bearer token).
+    //
     // Lazy-load the SW update listener so Material snackbar + the
     // service-worker client runtime stay out of the initial bundle.
     // There is no user-visible work happening in the first few seconds
