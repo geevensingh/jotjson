@@ -29,6 +29,8 @@ export type JjIconName =
   | 'globe'
   | 'lock'
   | 'trash'
+  | 'edit'
+  | 'eye'
   | 'history';
 
 @Component({
@@ -170,6 +172,14 @@ export type JjIconName =
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 7.5V12l3 2" />
           <path d="M3.5 12a8.5 8.5 0 0 1 3-6.5" />
+        }
+        @case ('edit') {
+          <path d="M4 20h4l10.5-10.5a2 2 0 0 0-2.83-2.83L5 17.17V20z" />
+          <path d="M14 7l3 3" />
+        }
+        @case ('eye') {
+          <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
+          <circle cx="12" cy="12" r="3" />
         }
       }
     </svg>

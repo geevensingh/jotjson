@@ -557,7 +557,7 @@ SPA-originated calls in production.
 - Max blob title length: **200 characters**. The server trims surrounding whitespace before validating; a title that is empty or whitespace-only after trimming is stored as `undefined` (no title). Anything longer than 200 characters after trimming is rejected with a `BlobValidationError`.
 - Must be valid JSON or JSONC (server re-validates using JSONC-aware parser).
 - Rate limiting: 60 requests/min per IP (anonymous), 120/min (authenticated).
-- **Blob quota (free tier: 100 blobs per user)** - when a user saves their 101st blob, the server automatically deletes the **oldest** blob (by `updatedAt`, then `createdAt` as tiebreaker) to make room. The user is notified via a toast: "Deleted oldest blob '[title]' to stay within your 100-blob limit." The first time this happens per user, a one-time modal explains the auto-delete behavior and offers "OK, got it" or "Let me manage manually" (which instead aborts the save with a prompt to delete blobs from `/history`). This choice is remembered as a user preference (`blobQuotaStrategy`: `"auto_fifo"` default or `"manual"`).
+- **Blob quota (free tier: 100 blobs per user)** - when a user saves their 101st blob, the server automatically deletes the **oldest** blob (by `updatedAt`, then `createdAt` as tiebreaker) to make room. The user is notified via a toast: "Deleted oldest blob '[title]' to stay within your 100-blob limit." The first time this happens per user, a one-time modal explains the auto-delete behavior and offers "OK, got it" or "Let me manage manually" (which instead aborts the save with a prompt to delete blobs from `/blobs`). This choice is remembered as a user preference (`blobQuotaStrategy`: `"auto_fifo"` default or `"manual"`).
 
 ---
 
@@ -688,7 +688,8 @@ src/
 │   │   ├── home/                # Main editor + tree view page
 │   │   │   ├── clipboard-banner/# First-time paste-permission banner (M7a)
 │   │   │   └── status-bar/      # Bottom-of-page stats strip (M7m)
-│   │   ├── history/             # /history page (M4b)
+│   │   ├── blobs/               # /blobs blob list page (M4b)
+│   │   ├── history/             # /history activity timeline (M5b)
 │   │   ├── formatting-rules/    # /formatting-rules (future M6)
 │   │   ├── not-found/           # /404 page (M4c)
 │   │   ├── profile/             # /profile page
@@ -810,16 +811,18 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
      `DELETE /api/history` (clear all for the caller),
      `POST /api/history` (client-recorded `"pasted"` events only in
      v1).
-   - **M5b**: UI surface. (The M4b blob list has already been moved
-     from `/history` to `/blobs` ahead of M5b - feature folder,
-     route, i18n message IDs, and app-header link label all updated.)
-     Build a new `HistoryComponent` at `/history` that renders the
-     event timeline (grouped by day, action icon + blob
-     title/slug/"(deleted blob)" fallback, click-to-open for live
-     blobs, loading skeleton + empty state, "Clear history" action
-     hitting `DELETE /api/history`). No server redirect from the old
-     `/history` URL; the timeline is a reasonable landing page for
-     anyone who bookmarked it.
+   - ~~**M5b**: UI surface. (The M4b blob list was moved from
+     `/history` to `/blobs` ahead of M5b - feature folder, route,
+     i18n message IDs, and app-header link label all updated.) A new
+     `HistoryComponent` at `/history` renders the event timeline
+     (grouped by day with Today/Yesterday/locale-date headers, action
+     icon + blob title/slug/"(deleted blob)" fallback, click-to-open
+     for live blobs, loading skeleton + empty state, "Load more"
+     pagination, and a "Clear history" action hitting
+     `DELETE /api/history`). HomeComponent fires
+     `POST /api/history` on paste for signed-in users only. No server
+     redirect from the old `/history` URL; the timeline is a
+     reasonable landing page for anyone who bookmarked it.~~ (done)
    - **M5c**: Timeline polish (optional; land only if needed).
      Keyword search over blob title + slug snapshots, date-range
      filter, infinite scroll, and an action filter (e.g., "viewed

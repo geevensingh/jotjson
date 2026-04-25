@@ -27,6 +27,7 @@ const SK_BLOCK_COMMENT = 13;
 const SK_EOF = 17;
 import { AuthService } from '../../core/auth/auth.service';
 import { BlobService } from '../../core/api/blob.service';
+import { HistoryService } from '../../core/api/history.service';
 import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
 import { SeoService } from '../../core/seo/seo.service';
@@ -79,6 +80,7 @@ export class HomeComponent {
   private readonly parser = inject(JsonParserService);
   private readonly auth = inject(AuthService);
   private readonly blobs = inject(BlobService);
+  private readonly history = inject(HistoryService);
   private readonly router = inject(Router);
   private readonly titleService = inject(Title);
   private readonly seo = inject(SeoService);
@@ -334,6 +336,21 @@ export class HomeComponent {
       // Pretty-print the newly-unescaped payload so the user sees the real
       // structure rather than a single dense line (per issue #38).
       this.onFormat();
+    }
+    // Best-effort history record. Server enforces a 60s per-user debounce,
+    // so this is safe to fire on every paste. Only call when the caller is
+    // signed in - otherwise the request would 401 and produce nothing but
+    // log noise. Errors are swallowed: history bookkeeping must never
+    // disrupt the paste flow.
+    if (this.auth.isConfigured && this.auth.isSignedIn()) {
+      this.history.recordPaste().subscribe({
+        error: (err) => {
+          console.warn(
+            $localize`:@@history.recordPaste.failed.log:Failed to record paste in history`,
+            err
+          );
+        }
+      });
     }
   }
 

@@ -1,0 +1,99 @@
+<jj-app-header />
+
+<main class="history">
+  <header class="history-header">
+    <h1 i18n="@@history.title">History</h1>
+    <p class="subtitle" i18n="@@history.subtitle">
+      Your recent JotJSON activity. Click an entry to open the blob.
+    </p>
+    @if (!isEmpty() && state() === 'ready') {
+      <button
+        mat-stroked-button
+        type="button"
+        class="clear-button"
+        (click)="clearHistory()"
+        i18n="@@history.clear.action"
+      >Clear history</button>
+    }
+  </header>
+
+  @if (state() === 'loading') {
+    <ul class="entry-list" aria-busy="true" aria-live="polite">
+      @for (i of [0, 1, 2, 3]; track i) {
+        <li class="entry-row skeleton" aria-hidden="true">
+          <span class="skeleton-bar skeleton-icon"></span>
+          <div class="entry-main">
+            <span class="skeleton-bar skeleton-title"></span>
+            <span class="skeleton-bar skeleton-meta"></span>
+          </div>
+        </li>
+      }
+    </ul>
+    <span class="sr-only" i18n="@@history.loading">Loading...</span>
+  } @else if (state() === 'error') {
+    <p class="status status-error">{{ errorMessage() }}</p>
+    <button mat-stroked-button type="button" (click)="reload()">
+      <span i18n="@@history.retry">Retry</span>
+    </button>
+  } @else if (isEmpty()) {
+    <div class="empty-state">
+      <jj-icon name="history" class="empty-icon" />
+      <p
+        class="empty-message"
+        i18n="@@history.empty"
+      >No activity yet. As you save, edit, or paste JSON, it will appear here.</p>
+      <a
+        mat-flat-button
+        color="primary"
+        routerLink="/"
+        i18n="@@history.empty.cta"
+        >Open the editor</a
+      >
+    </div>
+  } @else {
+    @for (group of dayGroups(); track group.dayKey) {
+      <section class="day-group">
+        <h2 class="day-header">{{ group.label }}</h2>
+        <ul class="entry-list">
+          @for (entry of group.entries; track entry.id) {
+            <li class="entry-row" [class.entry-clickable]="hasLink(entry)">
+              <jj-icon
+                [name]="iconFor(entry.action)"
+                class="entry-icon"
+                [matTooltip]="actionLabel(entry.action)"
+              />
+              <div class="entry-main">
+                @if (hasLink(entry)) {
+                  <a
+                    class="entry-title"
+                    [routerLink]="['/s', entry.slug]"
+                    [attr.title]="displayLabel(entry)"
+                    >{{ displayLabel(entry) }}</a
+                  >
+                } @else {
+                  <span class="entry-title entry-title-static">{{ displayLabel(entry) }}</span>
+                }
+                <div class="entry-meta">
+                  <span class="entry-action">{{ actionLabel(entry.action) }}</span>
+                  <span class="entry-dot">&middot;</span>
+                  <span class="entry-time">{{ formatTime(entry.accessedAt) }}</span>
+                </div>
+              </div>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+    @if (hasMore()) {
+      <div class="load-more">
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="loadingMore()"
+          (click)="loadMore()"
+          i18n="@@history.loadMore"
+        >Load more</button>
+      </div>
+    }
+  }
+</main>

@@ -24,6 +24,15 @@ export const routes: Routes = [
     title: 'Blobs - JotJSON'
   },
   {
+    path: 'history',
+    loadComponent: () =>
+      import('./features/history/history.component').then(
+        (m) => m.HistoryComponent
+      ),
+    canActivate: [authGuard],
+    title: 'History - JotJSON'
+  },
+  {
     path: 'formatting-rules',
     loadComponent: () =>
       import('./features/formatting-rules/formatting-rules.component').then(
