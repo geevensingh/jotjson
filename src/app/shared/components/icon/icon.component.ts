@@ -31,6 +31,7 @@ export type JjIconName =
   | 'trash'
   | 'edit'
   | 'eye'
+  | 'folder'
   | 'history';
 
 @Component({
@@ -180,6 +181,9 @@ export type JjIconName =
         @case ('eye') {
           <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
           <circle cx="12" cy="12" r="3" />
+        }
+        @case ('folder') {
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
         }
       }
     </svg>
