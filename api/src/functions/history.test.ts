@@ -162,6 +162,61 @@ describe('GET /api/history', () => {
     expect(listEntries).toHaveBeenCalledWith('u-1', {});
   });
 
+  it('forwards from and to ISO timestamps', async () => {
+    listEntries.mockResolvedValueOnce({ entries: [] });
+    await getHistory(
+      makeRequest({
+        query: {
+          from: '2024-01-01T00:00:00Z',
+          to: '2024-01-31T23:59:59Z'
+        }
+      }),
+      ctx
+    );
+    expect(listEntries).toHaveBeenCalledWith('u-1', {
+      from: '2024-01-01T00:00:00Z',
+      to: '2024-01-31T23:59:59Z'
+    });
+  });
+
+  it('rejects a malformed from value', async () => {
+    const res = await getHistory(
+      makeRequest({ query: { from: 'not-a-date' } }),
+      ctx
+    );
+    expect(res.status).toBe(400);
+    expect(listEntries).not.toHaveBeenCalled();
+  });
+
+  it('rejects a bare-date from value', async () => {
+    const res = await getHistory(
+      makeRequest({ query: { from: '2024-01-01' } }),
+      ctx
+    );
+    expect(res.status).toBe(400);
+    expect(listEntries).not.toHaveBeenCalled();
+  });
+
+  it('rejects from after to', async () => {
+    const res = await getHistory(
+      makeRequest({
+        query: {
+          from: '2024-02-01T00:00:00Z',
+          to: '2024-01-01T00:00:00Z'
+        }
+      }),
+      ctx
+    );
+    expect(res.status).toBe(400);
+    expect(listEntries).not.toHaveBeenCalled();
+  });
+
+  it('treats an empty from/to as no filter', async () => {
+    listEntries.mockResolvedValueOnce({ entries: [] });
+    await getHistory(makeRequest({ query: { from: '', to: '' } }), ctx);
+    expect(listEntries).toHaveBeenCalledWith('u-1', {});
+  });
+
   it('returns 500 when Cosmos blows up', async () => {
     listEntries.mockRejectedValueOnce(new Error('boom'));
     const res = await getHistory(makeRequest(), ctx);

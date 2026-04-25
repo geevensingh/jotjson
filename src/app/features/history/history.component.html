@@ -63,6 +63,35 @@
         </button>
       }
     </div>
+    <div class="date-range">
+      <label class="date-field">
+        <span class="date-label" i18n="@@history.filter.date.from">From</span>
+        <input
+          type="date"
+          [value]="fromDate()"
+          (change)="onFromDateChange($any($event.target).value)"
+        />
+      </label>
+      <label class="date-field">
+        <span class="date-label" i18n="@@history.filter.date.to">To</span>
+        <input
+          type="date"
+          [value]="toDate()"
+          (change)="onToDateChange($any($event.target).value)"
+        />
+      </label>
+      @if (fromDate() || toDate()) {
+        <button
+          type="button"
+          class="date-clear"
+          (click)="clearDateRange()"
+          i18n="@@history.filter.date.clear"
+        >Clear dates</button>
+      }
+    </div>
+    @if (dateRangeError()) {
+      <p class="date-error" role="alert">{{ dateRangeError() }}</p>
+    }
   </div>
 
   @if (state() === 'loading') {
@@ -89,14 +118,14 @@
         <jj-icon name="search" class="empty-icon" />
         <p
           class="empty-message"
-          i18n="@@history.empty.search"
-        >No history entries match your search.</p>
+          i18n="@@history.empty.filters"
+        >No history entries match your filters.</p>
         <button
           mat-stroked-button
           type="button"
-          (click)="clearSearch()"
-          i18n="@@history.search.clearAction"
-        >Clear search</button>
+          (click)="clearAllFilters()"
+          i18n="@@history.filters.clearAction"
+        >Clear filters</button>
       </div>
     } @else {
       <div class="empty-state">

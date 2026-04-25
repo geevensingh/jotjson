@@ -80,6 +80,14 @@ jest.mock('./cosmos', () => ({
                   if (Array.isArray(actions) && actions.length > 0) {
                     rows = rows.filter((e) => actions.includes(e.action));
                   }
+                  const from = params['@from'];
+                  if (typeof from === 'string') {
+                    rows = rows.filter((e) => e.accessedAt >= from);
+                  }
+                  const to = params['@to'];
+                  if (typeof to === 'string') {
+                    rows = rows.filter((e) => e.accessedAt <= to);
+                  }
                   const sorted = [...rows].sort((a, b) =>
                     a.accessedAt < b.accessedAt ? 1 : a.accessedAt > b.accessedAt ? -1 : 0
                   );
@@ -326,6 +334,42 @@ describe('listEntries', () => {
     preload([{ id: 'a', action: 'saved' }, { id: 'b', action: 'pasted' }]);
     const result = await listEntries('u-1', { actions: [] });
     expect(result.entries.length).toBe(2);
+  });
+
+  it('filters by from (inclusive lower bound)', async () => {
+    preload([
+      { id: 'a', accessedAt: '2024-01-01T00:00:00Z' },
+      { id: 'b', accessedAt: '2024-02-01T00:00:00Z' },
+      { id: 'c', accessedAt: '2024-03-01T00:00:00Z' }
+    ]);
+    const result = await listEntries('u-1', { from: '2024-02-01T00:00:00Z' });
+    expect(result.entries.map((e) => e.id)).toEqual(['c', 'b']);
+  });
+
+  it('filters by to (inclusive upper bound)', async () => {
+    preload([
+      { id: 'a', accessedAt: '2024-01-01T00:00:00Z' },
+      { id: 'b', accessedAt: '2024-02-01T00:00:00Z' },
+      { id: 'c', accessedAt: '2024-03-01T00:00:00Z' }
+    ]);
+    const result = await listEntries('u-1', { to: '2024-02-01T00:00:00Z' });
+    expect(result.entries.map((e) => e.id)).toEqual(['b', 'a']);
+  });
+
+  it('combines from, to, q, and actions', async () => {
+    preload([
+      { id: 'a', title: 'Auth', action: 'saved', accessedAt: '2024-01-15T00:00:00Z' },
+      { id: 'b', title: 'Auth', action: 'pasted', accessedAt: '2024-02-15T00:00:00Z' },
+      { id: 'c', title: 'Auth', action: 'saved', accessedAt: '2024-03-15T00:00:00Z' },
+      { id: 'd', title: 'Cart', action: 'saved', accessedAt: '2024-02-15T00:00:00Z' }
+    ]);
+    const result = await listEntries('u-1', {
+      q: 'auth',
+      actions: ['saved'],
+      from: '2024-02-01T00:00:00Z',
+      to: '2024-03-31T23:59:59Z'
+    });
+    expect(result.entries.map((e) => e.id)).toEqual(['c']);
   });
 });
 

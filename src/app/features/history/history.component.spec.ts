@@ -387,4 +387,91 @@ describe('HistoryComponent', () => {
       actions: ['pasted']
     });
   });
+
+  it('onFromDateChange forwards UTC start-of-day ISO as from', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [] } });
+    await fixture.componentInstance.reload();
+    stub.list.calls.reset();
+    stub.list.and.returnValue(of({ entries: [] }));
+    fixture.componentInstance.onFromDateChange('2024-02-15');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(stub.list).toHaveBeenCalledWith({
+      pageSize: 50,
+      from: '2024-02-15T00:00:00Z'
+    });
+  });
+
+  it('onToDateChange forwards UTC end-of-day ISO as to', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [] } });
+    await fixture.componentInstance.reload();
+    stub.list.calls.reset();
+    stub.list.and.returnValue(of({ entries: [] }));
+    fixture.componentInstance.onToDateChange('2024-02-15');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(stub.list).toHaveBeenCalledWith({
+      pageSize: 50,
+      to: '2024-02-15T23:59:59.999Z'
+    });
+  });
+
+  it('blocks reload when the from date is after the to date', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [] } });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.onFromDateChange('2024-03-01');
+    await Promise.resolve();
+    await Promise.resolve();
+    stub.list.calls.reset();
+    fixture.componentInstance.onToDateChange('2024-02-01');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(stub.list).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.dateRangeError()).toBeTruthy();
+  });
+
+  it('clearDateRange resets both inputs and reloads', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [] } });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.onFromDateChange('2024-02-01');
+    fixture.componentInstance.onToDateChange('2024-02-28');
+    await Promise.resolve();
+    await Promise.resolve();
+    stub.list.calls.reset();
+    stub.list.and.returnValue(of({ entries: [] }));
+    fixture.componentInstance.clearDateRange();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fixture.componentInstance.fromDate()).toBe('');
+    expect(fixture.componentInstance.toDate()).toBe('');
+    expect(stub.list).toHaveBeenCalledWith({ pageSize: 50 });
+  });
+
+  it('clearAllFilters resets search, actions, and dates', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [] } });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.applySearchTerm('foo');
+    fixture.componentInstance.toggleAction('saved');
+    fixture.componentInstance.onFromDateChange('2024-02-01');
+    await Promise.resolve();
+    await Promise.resolve();
+    stub.list.calls.reset();
+    stub.list.and.returnValue(of({ entries: [] }));
+    fixture.componentInstance.clearAllFilters();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fixture.componentInstance.hasActiveFilters()).toBe(false);
+    expect(stub.list).toHaveBeenCalledWith({ pageSize: 50 });
+  });
+
+  it('hasActiveFilters reflects date filters', () => {
+    const { fixture } = setup();
+    const c = fixture.componentInstance;
+    expect(c.hasActiveFilters()).toBe(false);
+    c.fromDate.set('2024-01-01');
+    expect(c.hasActiveFilters()).toBe(true);
+    c.fromDate.set('');
+    c.toDate.set('2024-01-01');
+    expect(c.hasActiveFilters()).toBe(true);
+  });
 });

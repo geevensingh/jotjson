@@ -42,6 +42,18 @@ function badRequest(message: string): HttpResponseInit {
   return { status: 400, jsonBody: { error: message } };
 }
 
+function isIsoTimestamp(value: string): boolean {
+  // Require a full ISO 8601 date-time so that we don't silently accept
+  // bare dates (which Cosmos would compare lexicographically as e.g.
+  // '2024-01-01' < '2024-01-01T00:00:00Z'). The `T` separator and a
+  // numeric timezone or `Z` are mandatory.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/.test(value)) {
+    return false;
+  }
+  const t = Date.parse(value);
+  return Number.isFinite(t);
+}
+
 function internalError(
   context: InvocationContext,
   where: string,
@@ -100,13 +112,34 @@ export async function getHistory(
     const dedup = Array.from(new Set(parts)) as HistoryAction[];
     if (dedup.length > 0) actions = dedup;
   }
+  const fromRaw = req.query.get('from');
+  let from: string | undefined;
+  if (fromRaw !== null && fromRaw !== undefined && fromRaw.length > 0) {
+    if (!isIsoTimestamp(fromRaw)) {
+      return badRequest('from must be a valid ISO 8601 timestamp');
+    }
+    from = fromRaw;
+  }
+  const toRaw = req.query.get('to');
+  let to: string | undefined;
+  if (toRaw !== null && toRaw !== undefined && toRaw.length > 0) {
+    if (!isIsoTimestamp(toRaw)) {
+      return badRequest('to must be a valid ISO 8601 timestamp');
+    }
+    to = toRaw;
+  }
+  if (from !== undefined && to !== undefined && from > to) {
+    return badRequest('from must be on or before to');
+  }
 
   try {
     const result = await listEntries(principal.id, {
       ...(pageSize !== undefined ? { pageSize } : {}),
       ...(continuationToken ? { continuationToken } : {}),
       ...(q !== undefined ? { q } : {}),
-      ...(actions !== undefined ? { actions } : {})
+      ...(actions !== undefined ? { actions } : {}),
+      ...(from !== undefined ? { from } : {}),
+      ...(to !== undefined ? { to } : {})
     });
     return { status: 200, jsonBody: result };
   } catch (err) {

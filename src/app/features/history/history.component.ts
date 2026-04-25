@@ -73,6 +73,10 @@ export class HistoryComponent implements OnInit {
   readonly searchInputValue = signal('');
   readonly actionFilter = signal<ReadonlySet<HistoryAction>>(new Set());
   readonly allActions: readonly HistoryAction[] = ALL_ACTIONS;
+  /** YYYY-MM-DD strings from the date inputs (or '' when unset). */
+  readonly fromDate = signal('');
+  readonly toDate = signal('');
+  readonly dateRangeError = signal<string | null>(null);
 
   private readonly searchInput$ = new Subject<string>();
 
@@ -83,7 +87,11 @@ export class HistoryComponent implements OnInit {
   readonly hasMore = computed(() => !!this.continuationToken());
 
   readonly hasActiveFilters = computed(
-    () => this.searchTerm().trim().length > 0 || this.actionFilter().size > 0
+    () =>
+      this.searchTerm().trim().length > 0 ||
+      this.actionFilter().size > 0 ||
+      this.fromDate().length > 0 ||
+      this.toDate().length > 0
   );
 
   constructor() {
@@ -207,15 +215,48 @@ export class HistoryComponent implements OnInit {
     }
   }
 
-  private buildListOptions(): { q?: string; actions?: HistoryAction[] } {
-    const out: { q?: string; actions?: HistoryAction[] } = {};
+  private buildListOptions(): {
+    q?: string;
+    actions?: HistoryAction[];
+    from?: string;
+    to?: string;
+  } {
+    const out: {
+      q?: string;
+      actions?: HistoryAction[];
+      from?: string;
+      to?: string;
+    } = {};
     const q = this.searchTerm();
     if (q) out.q = q;
     const actions = this.actionFilter();
     if (actions.size > 0) {
       out.actions = ALL_ACTIONS.filter((a) => actions.has(a));
     }
+    const from = this.fromIsoStart();
+    if (from) out.from = from;
+    const to = this.toIsoEnd();
+    if (to) out.to = to;
     return out;
+  }
+
+  /**
+   * Convert the YYYY-MM-DD `from` input to UTC start-of-day ISO. Empty
+   * values pass through as undefined. Invalid strings yield undefined so
+   * the request still succeeds (validation surfaces via dateRangeError).
+   */
+  private fromIsoStart(): string | undefined {
+    const v = this.fromDate();
+    if (!v) return undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
+    return `${v}T00:00:00Z`;
+  }
+
+  private toIsoEnd(): string | undefined {
+    const v = this.toDate();
+    if (!v) return undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
+    return `${v}T23:59:59.999Z`;
   }
 
   isActionSelected(action: HistoryAction): boolean {
@@ -228,6 +269,52 @@ export class HistoryComponent implements OnInit {
     else next.add(action);
     this.actionFilter.set(next);
     void this.reload();
+  }
+
+  onFromDateChange(value: string): void {
+    this.fromDate.set(value);
+    if (this.validateDateRange()) {
+      void this.reload();
+    }
+  }
+
+  onToDateChange(value: string): void {
+    this.toDate.set(value);
+    if (this.validateDateRange()) {
+      void this.reload();
+    }
+  }
+
+  clearDateRange(): void {
+    this.fromDate.set('');
+    this.toDate.set('');
+    this.dateRangeError.set(null);
+    void this.reload();
+  }
+
+  clearAllFilters(): void {
+    this.searchInputValue.set('');
+    this.searchInput$.next('');
+    this.searchTerm.set('');
+    this.actionFilter.set(new Set());
+    this.fromDate.set('');
+    this.toDate.set('');
+    this.dateRangeError.set(null);
+    void this.reload();
+  }
+
+  /** Returns true when the range is valid (or empty). */
+  private validateDateRange(): boolean {
+    const from = this.fromDate();
+    const to = this.toDate();
+    if (from && to && from > to) {
+      this.dateRangeError.set(
+        $localize`:@@history.filter.date.invalid:From date must be on or before To date.`
+      );
+      return false;
+    }
+    this.dateRangeError.set(null);
+    return true;
   }
 
   async clearHistory(): Promise<void> {

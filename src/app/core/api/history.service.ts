@@ -30,6 +30,8 @@ export class HistoryService {
     continuationToken?: string;
     q?: string;
     actions?: HistoryAction[];
+    from?: string;
+    to?: string;
   } = {}): Observable<HistoryPage> {
     let params = new HttpParams();
     if (opts.pageSize !== undefined) {
@@ -44,6 +46,8 @@ export class HistoryService {
     if (opts.actions && opts.actions.length > 0) {
       params = params.set('actions', opts.actions.join(','));
     }
+    if (opts.from) params = params.set('from', opts.from);
+    if (opts.to) params = params.set('to', opts.to);
     return this.http.get<HistoryPage>(this.base, { params });
   }
 

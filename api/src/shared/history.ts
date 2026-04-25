@@ -67,6 +67,13 @@ export interface ListEntriesOptions {
    * trusts the array.
    */
   actions?: HistoryAction[];
+  /**
+   * Inclusive lower bound on accessedAt (ISO string). Caller validates
+   * format; this accessor passes the value through verbatim.
+   */
+  from?: string;
+  /** Inclusive upper bound on accessedAt (ISO string). */
+  to?: string;
 }
 
 export interface ListEntriesResult {
@@ -216,6 +223,14 @@ export async function listEntries(
   if (actions.length > 0) {
     where += ' AND ARRAY_CONTAINS(@actions, c.action)';
     parameters.push({ name: '@actions', value: actions });
+  }
+  if (typeof options.from === 'string' && options.from.length > 0) {
+    where += ' AND c.accessedAt >= @from';
+    parameters.push({ name: '@from', value: options.from });
+  }
+  if (typeof options.to === 'string' && options.to.length > 0) {
+    where += ' AND c.accessedAt <= @to';
+    parameters.push({ name: '@to', value: options.to });
   }
   const iterator = getHistoryContainer().items.query<HistoryDocument>(
     {
