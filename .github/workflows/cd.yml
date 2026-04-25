@@ -1,7 +1,9 @@
 name: Deploy (SWA)
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -17,6 +19,15 @@ jobs:
   deploy:
     name: Build and deploy to Azure Static Web Apps
     runs-on: ubuntu-latest
+    # Only deploy when CI succeeded for a push to main, or when a human
+    # triggers a manual redeploy. PR-triggered CI runs (workflow_run.event
+    # == 'pull_request') are explicitly excluded so opening a PR never
+    # ships to production.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     steps:
       - name: Check for deploy token
         id: check
@@ -33,6 +44,9 @@ jobs:
       - uses: actions/checkout@v6
         if: steps.check.outputs.have_token == 'true'
         with:
+          # Deploy the exact commit that passed CI when triggered via
+          # workflow_run; fall back to github.sha for workflow_dispatch.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           submodules: true
           lfs: false
 
