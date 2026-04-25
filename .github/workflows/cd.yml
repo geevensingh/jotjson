@@ -5,7 +5,7 @@ name: Deploy (SWA)
 # pull the head commit message from the upstream CI run; for manual
 # dispatches we fall back to the SHA.
 run-name: >-
-  ${{ github.event.workflow_run.head_commit.message
+  ${{ github.event.workflow_run.display_title
       || github.event.head_commit.message
       || github.sha }}
 
