@@ -179,6 +179,7 @@
     }
     @if (hasMore()) {
       <div class="load-more">
+        <div #loadMoreSentinel class="load-more-sentinel" aria-hidden="true"></div>
         <button
           mat-stroked-button
           type="button"

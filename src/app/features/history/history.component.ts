@@ -1,9 +1,14 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  OnDestroy,
   OnInit,
+  ViewChild,
   computed,
+  effect,
   inject,
   signal
 } from '@angular/core';
@@ -56,7 +61,7 @@ interface DayGroup {
   templateUrl: './history.component.html',
   styleUrl: './history.component.scss'
 })
-export class HistoryComponent implements OnInit {
+export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly history = inject(HistoryService);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
@@ -103,6 +108,16 @@ export class HistoryComponent implements OnInit {
         takeUntilDestroyed()
       )
       .subscribe((value) => this.applySearchTerm(value));
+    // Re-observe the sentinel whenever the page state changes; the
+    // sentinel only renders when there's another page (hasMore()) and its
+    // DOM element is recreated each time the @if branch toggles, so we
+    // need to re-attach the observer.
+    effect(() => {
+      // Track signals so the effect re-runs when they change.
+      this.hasMore();
+      this.entries();
+      queueMicrotask(() => this.refreshSentinelObservation());
+    });
   }
 
   /**
@@ -160,6 +175,44 @@ export class HistoryComponent implements OnInit {
     this.seo.setNoindex(true);
     void this.reload();
   }
+
+  /**
+   * Wire up the IntersectionObserver after the view exists. We watch a
+   * sentinel `<div>` rendered just above the Load more button; as soon as
+   * it scrolls into view we trigger another page. The Load more button
+   * stays visible as a keyboard-accessible fallback - users who prefer
+   * explicit pagination (or whose browsers don't support IO) still have a
+   * way to advance.
+   */
+  ngAfterViewInit(): void {
+    if (typeof IntersectionObserver === 'undefined') return;
+    this.intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && this.hasMore() && !this.loadingMore()) {
+            void this.loadMore();
+          }
+        }
+      },
+      { rootMargin: '200px 0px' }
+    );
+    this.refreshSentinelObservation();
+  }
+
+  ngOnDestroy(): void {
+    this.intersectionObserver?.disconnect();
+  }
+
+  private refreshSentinelObservation(): void {
+    const obs = this.intersectionObserver;
+    if (!obs) return;
+    obs.disconnect();
+    const el = this.sentinel?.nativeElement;
+    if (el) obs.observe(el);
+  }
+
+  @ViewChild('loadMoreSentinel') sentinel?: ElementRef<HTMLElement>;
+  private intersectionObserver?: IntersectionObserver;
 
   async reload(): Promise<void> {
     this.state.set('loading');

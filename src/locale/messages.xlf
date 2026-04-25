@@ -33,15 +33,15 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">150</context>
+          <context context-type="linenumber">263</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">179</context>
+          <context context-type="linenumber">394</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">189</context>
+          <context context-type="linenumber">404</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
@@ -314,7 +314,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">163</context>
+          <context context-type="linenumber">378</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
@@ -389,165 +389,235 @@
           <context context-type="linenumber">16,20</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="history.search.placeholder" datatype="html">
+        <source>Search title or slug</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">30,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.search.aria" datatype="html">
+        <source>Search history</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">32,33</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.search.clear" datatype="html">
+        <source>Clear search</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">40,41</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.filter.action.aria" datatype="html">
+        <source>Filter by action</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">50,51</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.filter.date.from" datatype="html">
+        <source>From</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">68,70</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.filter.date.to" datatype="html">
+        <source>To</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">76,78</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.filter.date.clear" datatype="html">
+        <source>Clear dates</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">89,92</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="history.loading" datatype="html">
         <source>Loading...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">32,33</context>
+          <context context-type="linenumber">109,110</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.retry" datatype="html">
         <source>Retry</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">36,38</context>
+          <context context-type="linenumber">113,115</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.empty.filters" datatype="html">
+        <source>No history entries match your filters.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">122,124</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.filters.clearAction" datatype="html">
+        <source>Clear filters</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">128,131</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.empty" datatype="html">
         <source>No activity yet. As you save, edit, or paste JSON, it will appear here.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">44,46</context>
+          <context context-type="linenumber">136,138</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.empty.cta" datatype="html">
         <source>Open the editor</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">50,53</context>
+          <context context-type="linenumber">142,145</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.loadMore" datatype="html">
         <source>Load more</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">95,97</context>
+          <context context-type="linenumber">189,191</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.day.today" datatype="html">
         <source>Today</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">92</context>
+          <context context-type="linenumber">159</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.day.yesterday" datatype="html">
         <source>Yesterday</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">94</context>
+          <context context-type="linenumber">161</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.load.failed.log" datatype="html">
         <source>Failed to load history</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">123</context>
+          <context context-type="linenumber">231</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.load.failed" datatype="html">
         <source>Failed to load your history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">127</context>
+          <context context-type="linenumber">235</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.loadMore.failed.log" datatype="html">
         <source>Failed to load more history</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">145</context>
+          <context context-type="linenumber">258</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.loadMore.failed" datatype="html">
         <source>Failed to load more history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">149</context>
+          <context context-type="linenumber">262</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.filter.date.invalid" datatype="html">
+        <source>From date must be on or before To date.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
+          <context context-type="linenumber">365</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.title" datatype="html">
         <source>Clear all history?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">160</context>
+          <context context-type="linenumber">375</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.message" datatype="html">
         <source>Every entry in your activity history will be permanently removed. The blobs themselves are not affected.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">161</context>
+          <context context-type="linenumber">376</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.confirm" datatype="html">
         <source>Clear history</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">162</context>
+          <context context-type="linenumber">377</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.success" datatype="html">
         <source>History cleared.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">178</context>
+          <context context-type="linenumber">393</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.failed.log" datatype="html">
         <source>Failed to clear history</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">184</context>
+          <context context-type="linenumber">399</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.failed" datatype="html">
         <source>Failed to clear history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">188</context>
+          <context context-type="linenumber">403</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.deletedBlob" datatype="html">
         <source>(deleted blob)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">210</context>
+          <context context-type="linenumber">438</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.action.saved" datatype="html">
         <source>Saved</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">231</context>
+          <context context-type="linenumber">459</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.action.edited" datatype="html">
         <source>Edited</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">233</context>
+          <context context-type="linenumber">461</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.action.deleted" datatype="html">
         <source>Deleted</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">235</context>
+          <context context-type="linenumber">463</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.action.viewed" datatype="html">
         <source>Viewed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">237</context>
+          <context context-type="linenumber">465</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.action.pasted" datatype="html">
         <source>Pasted</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">239</context>
+          <context context-type="linenumber">467</context>
         </context-group>
       </trans-unit>
       <trans-unit id="clipboard.banner.body" datatype="html">

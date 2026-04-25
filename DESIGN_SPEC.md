@@ -351,9 +351,15 @@ recent `HistoryEntry` records, newest first.
 - **Click behavior**: clicking a row that still references a live
   blob navigates to `/s/:slug`. Rows whose blob has since been
   deleted are non-interactive.
-- **Pagination**: `GET /api/history` returns N entries with a
-  continuation token; UI loads the next page on scroll-to-bottom
-  (or a "Load more" button in v1 before M5c adds infinite scroll).
+- **Pagination**: `GET /api/history` returns a page of entries with a
+  Cosmos continuation token; the UI uses an IntersectionObserver to
+  auto-load the next page and exposes a "Load more" button as an
+  a11y/keyboard fallback.
+- **Filters**: timeline supports `?q=` (case-insensitive substring
+  match on title/slug), `?actions=` (CSV whitelist of
+  saved/edited/deleted/viewed/pasted), and `?from=`/`?to=` (ISO
+  timestamps, inclusive). Combined client-side via a debounced search
+  field, action chips, and a date range row.
 - **Empty state**: "No activity yet - try saving or viewing a
   shared blob."
 - **Loading state** + error toast reuse the patterns from
@@ -823,10 +829,12 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
      `POST /api/history` on paste for signed-in users only. No server
      redirect from the old `/history` URL; the timeline is a
      reasonable landing page for anyone who bookmarked it.~~ (done)
-   - **M5c**: Timeline polish (optional; land only if needed).
-     Keyword search over blob title + slug snapshots, date-range
-     filter, infinite scroll, and an action filter (e.g., "viewed
-     only").
+   - ~~**M5c**: Timeline polish. Keyword search over blob title + slug
+     snapshots (`?q=`), action chip filter (`?actions=`), date-range
+     filter (`?from=`/`?to=`), and IntersectionObserver-driven infinite
+     scroll with the "Load more" button retained as an a11y/keyboard
+     fallback. All filters are server-side; the continuation token
+     round-trips Cosmos's opaque page cursor.~~ (done)
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
 7. **Polish & launch** - Each of these lands as its own step/commit:
    - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)

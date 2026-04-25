@@ -474,4 +474,87 @@ describe('HistoryComponent', () => {
     c.toDate.set('2024-01-01');
     expect(c.hasActiveFilters()).toBe(true);
   });
+
+  it('IntersectionObserver triggers loadMore when sentinel intersects', async () => {
+    let observerCallback: (entries: { isIntersecting: boolean }[]) => void = () => {};
+    const observe = jasmine.createSpy('observe');
+    const disconnect = jasmine.createSpy('disconnect');
+    const originalIO = (globalThis as { IntersectionObserver?: unknown })
+      .IntersectionObserver;
+    class FakeIO {
+      constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+        observerCallback = cb;
+      }
+      observe = observe;
+      disconnect = disconnect;
+      unobserve = jasmine.createSpy('unobserve');
+      takeRecords = () => [];
+      root: Element | null = null;
+      rootMargin = '';
+      thresholds: ReadonlyArray<number> = [];
+    }
+    (globalThis as { IntersectionObserver: unknown }).IntersectionObserver =
+      FakeIO as unknown as typeof IntersectionObserver;
+    try {
+      const { fixture, stub } = setup({
+        listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' },
+        listSecondResult: { entries: [entry({ id: 'b' })] }
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(observe).toHaveBeenCalled();
+      stub.list.calls.reset();
+      stub.list.and.returnValue(of({ entries: [entry({ id: 'b' })] }));
+      observerCallback([{ isIntersecting: true }]);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(stub.list).toHaveBeenCalledWith({
+        pageSize: 50,
+        continuationToken: 'tok'
+      });
+      fixture.destroy();
+      expect(disconnect).toHaveBeenCalled();
+    } finally {
+      (globalThis as { IntersectionObserver: unknown }).IntersectionObserver =
+        originalIO as typeof IntersectionObserver;
+    }
+  });
+
+  it('IntersectionObserver does not trigger loadMore when there is no next page', async () => {
+    let observerCallback: (entries: { isIntersecting: boolean }[]) => void = () => {};
+    const originalIO = (globalThis as { IntersectionObserver?: unknown })
+      .IntersectionObserver;
+    class FakeIO {
+      constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+        observerCallback = cb;
+      }
+      observe = jasmine.createSpy('observe');
+      disconnect = jasmine.createSpy('disconnect');
+      unobserve = jasmine.createSpy('unobserve');
+      takeRecords = () => [];
+      root: Element | null = null;
+      rootMargin = '';
+      thresholds: ReadonlyArray<number> = [];
+    }
+    (globalThis as { IntersectionObserver: unknown }).IntersectionObserver =
+      FakeIO as unknown as typeof IntersectionObserver;
+    try {
+      const { fixture, stub } = setup({
+        listResult: { entries: [entry({ id: 'a' })] }
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await Promise.resolve();
+      stub.list.calls.reset();
+      observerCallback([{ isIntersecting: true }]);
+      await Promise.resolve();
+      expect(stub.list).not.toHaveBeenCalled();
+    } finally {
+      (globalThis as { IntersectionObserver: unknown }).IntersectionObserver =
+        originalIO as typeof IntersectionObserver;
+    }
+  });
 });
