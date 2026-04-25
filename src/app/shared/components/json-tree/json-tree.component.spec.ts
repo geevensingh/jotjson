@@ -55,6 +55,24 @@ describe('JsonTreeComponent', () => {
     expect(body.style.getPropertyValue('--tree-font-size').trim()).toBe('19px');
   });
 
+  it('overrides Material tree-node font-size so large treeFontSize values actually render', async () => {
+    await createWith({ a: 1, b: 2 });
+    prefs.update({ treeFontSize: 28 });
+    fixture.detectChanges();
+    // Attach to the live document so getComputedStyle resolves correctly.
+    document.body.appendChild(fixture.nativeElement);
+    try {
+      const node = (fixture.nativeElement as HTMLElement).querySelector(
+        'mat-nested-tree-node, .mat-nested-tree-node'
+      ) as HTMLElement;
+      expect(node).withContext('expected a mat-nested-tree-node to be rendered').toBeTruthy();
+      const fs = Number.parseFloat(getComputedStyle(node).fontSize);
+      expect(fs).toBe(28);
+    } finally {
+      document.body.removeChild(fixture.nativeElement);
+    }
+  });
+
   describe('root() and path formatting', () => {
     it('returns undefined when no value is set', async () => {
       await createWith(undefined);
