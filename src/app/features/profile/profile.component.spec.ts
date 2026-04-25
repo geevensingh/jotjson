@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 import { ProfileComponent } from './profile.component';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthUser } from '../../core/auth/auth-user';
+import { PreferencesService } from '../../core/preferences/preferences.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import { signal } from '@angular/core';
 
@@ -31,7 +32,8 @@ describe('ProfileComponent', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(ProfileComponent);
     fixture.detectChanges();
-    return { fixture, authStub };
+    const prefs = TestBed.inject(PreferencesService);
+    return { fixture, authStub, prefs };
   }
 
   it('renders the signed-out card when user is anonymous', async () => {
@@ -102,5 +104,83 @@ describe('ProfileComponent', () => {
     const { fixture } = await create({ user: null, isConfigured: true });
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).not.toContain('Preferences');
+  });
+
+  it('writes editor font size through PreferencesService when changed', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onEditorFontSizeChange(20);
+    expect(prefs.prefs().editorFontSize).toBe(20);
+  });
+
+  it('clamps editor font size to the supported range', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onEditorFontSizeChange(2);
+    expect(prefs.prefs().editorFontSize).toBe(8);
+    fixture.componentInstance.onEditorFontSizeChange(99);
+    expect(prefs.prefs().editorFontSize).toBe(32);
+  });
+
+  it('rejects non-numeric editor font size and keeps the prior value', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    const before = prefs.prefs().editorFontSize;
+    fixture.componentInstance.onEditorFontSizeChange('not-a-number');
+    expect(prefs.prefs().editorFontSize).toBe(before);
+    fixture.componentInstance.onEditorFontSizeChange(null);
+    expect(prefs.prefs().editorFontSize).toBe(before);
+  });
+
+  it('writes editor tab size through PreferencesService when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onEditorTabSizeChange(4);
+    expect(prefs.prefs().editorTabSize).toBe(4);
+    fixture.componentInstance.onEditorTabSizeChange(2);
+    expect(prefs.prefs().editorTabSize).toBe(2);
+  });
+
+  it('writes editor word wrap through PreferencesService when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onEditorWordWrapChange(false);
+    expect(prefs.prefs().editorWordWrap).toBe(false);
+    fixture.componentInstance.onEditorWordWrapChange(true);
+    expect(prefs.prefs().editorWordWrap).toBe(true);
+  });
+
+  it('writes default tree expansion depth and clamps to range', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onDefaultTreeExpansionDepthChange(5);
+    expect(prefs.prefs().defaultTreeExpansionDepth).toBe(5);
+    fixture.componentInstance.onDefaultTreeExpansionDepthChange(0);
+    expect(prefs.prefs().defaultTreeExpansionDepth).toBe(1);
+    fixture.componentInstance.onDefaultTreeExpansionDepthChange(99);
+    expect(prefs.prefs().defaultTreeExpansionDepth).toBe(10);
+  });
+
+  it('writes treeShowTypeLabels through PreferencesService when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onTreeShowTypeLabelsChange(false);
+    expect(prefs.prefs().treeShowTypeLabels).toBe(false);
+    fixture.componentInstance.onTreeShowTypeLabelsChange(true);
+    expect(prefs.prefs().treeShowTypeLabels).toBe(true);
   });
 });

@@ -49,12 +49,76 @@
         <h3 id="prefs-editor" class="group-title" i18n="@@profile.prefs.editor.title">
           Editor
         </h3>
+
+        <div class="pref-row">
+          <label for="pref-font-size" i18n="@@profile.prefs.editor.fontSize">Font size</label>
+          <input
+            id="pref-font-size"
+            type="number"
+            class="pref-number"
+            [min]="fontSizeMin"
+            [max]="fontSizeMax"
+            step="1"
+            [ngModel]="editorFontSize()"
+            (ngModelChange)="onEditorFontSizeChange($event)"
+          />
+          <span class="pref-suffix" aria-hidden="true">px</span>
+        </div>
+
+        <div class="pref-row">
+          <span id="pref-tab-size-label" i18n="@@profile.prefs.editor.tabSize">Tab size</span>
+          <mat-button-toggle-group
+            aria-labelledby="pref-tab-size-label"
+            [value]="editorTabSize()"
+            (change)="onEditorTabSizeChange($event.value)"
+          >
+            <mat-button-toggle [value]="2">2</mat-button-toggle>
+            <mat-button-toggle [value]="4">4</mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="editorWordWrap()"
+            (change)="onEditorWordWrapChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.editor.wordWrap">Word wrap</span>
+          </mat-slide-toggle>
+        </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-tree">
         <h3 id="prefs-tree" class="group-title" i18n="@@profile.prefs.tree.title">
           Tree
         </h3>
+
+        <div class="pref-row">
+          <label for="pref-expansion-depth" i18n="@@profile.prefs.tree.expansionDepth">
+            Default expansion depth
+          </label>
+          <input
+            id="pref-expansion-depth"
+            type="number"
+            class="pref-number"
+            [min]="expansionDepthMin"
+            [max]="expansionDepthMax"
+            step="1"
+            [ngModel]="defaultTreeExpansionDepth()"
+            (ngModelChange)="onDefaultTreeExpansionDepthChange($event)"
+          />
+          <span class="pref-help" i18n="@@profile.prefs.tree.expansionDepth.help">
+            How deep the tree starts expanded when a blob loads.
+          </span>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="treeShowTypeLabels()"
+            (change)="onTreeShowTypeLabelsChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.tree.showTypeLabels">Show type labels</span>
+          </mat-slide-toggle>
+        </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-search">

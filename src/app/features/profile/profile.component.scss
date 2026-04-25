@@ -82,6 +82,48 @@ dl {
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
 }
 
+.pref-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+  min-height: 2.25rem;
+
+  label,
+  > span:first-child {
+    flex: 0 0 auto;
+    min-width: 12rem;
+    color: var(--mat-sys-on-surface, inherit);
+  }
+}
+
+.pref-number {
+  width: 5.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--mat-sys-surface, transparent);
+  color: var(--mat-sys-on-surface, inherit);
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
+  border-radius: 4px;
+  font: inherit;
+}
+
+.pref-suffix {
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-size: 0.875rem;
+}
+
+.pref-help {
+  flex: 1 1 100%;
+  margin-left: 12rem;
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-size: 0.8125rem;
+
+  @media (max-width: 540px) {
+    margin-left: 0;
+  }
+}
+
 .actions {
   display: flex;
   gap: 0.75rem;
