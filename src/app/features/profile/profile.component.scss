@@ -1,7 +1,19 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
 .profile {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
   max-width: 720px;
   margin: 3rem auto;
   padding: 0 1.5rem;
+  box-sizing: border-box;
 
   h1 {
     margin: 0 0 1.5rem;
