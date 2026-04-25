@@ -625,8 +625,9 @@ SPA-originated calls in production.
     - `categories`: `["developer-tools", "utilities"]`
   - **Service Worker** via Angular's `@angular/service-worker`, registered in `app.config.ts` with `registerWhenStable:30000` and disabled in dev mode. Configured via `ngsw-config.json` with cache-first for app-shell assets (HTML, CSS, JS, fonts, icons) so the editor/tree view load offline once the app has been visited.
   - **Network-first cache for `/api/**`** via `ngsw-config.json` `dataGroups`: strategy `freshness`, 5-second network timeout, 1-hour `maxAge`, 100-entry `maxSize` - the SW serves fresh responses when the network is available and transparently falls back to the cached copy otherwise.
+  - **Update prompt**: `AppUpdateService` (in `core/update/`) subscribes to `SwUpdate.versionUpdates` and surfaces a non-dismissing Material snackbar ("A new version of JotJSON is available.") with a Reload action when a new build is deployed. Also subscribes to `SwUpdate.unrecoverable` and hard-reloads with a cache-busting query so a mid-deploy CDN race on a force-refresh cannot leave the user on a stalled page.
+  - **Deployment cache headers**: `staticwebapp.config.json` sets `Cache-Control: no-cache, must-revalidate` on `/index.html` and `/ngsw.json` so browsers revalidate the shell + SW manifest on every load, shrinking the window where stale references can collide with a new build.
 - **Planned polish (post-v1):**
-  - **Update prompt**: subscribe to `SwUpdate.versionUpdates` and surface a non-intrusive toast ("A new version is available - click to refresh") when a new build is deployed.
   - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed.
   - **Manifest screenshots**: add at least one wide and one narrow `screenshots` entry to the manifest for richer install prompts (not yet present in `manifest.webmanifest`).
   - **Offline banner**: show a persistent banner driven by `navigator.onLine` + SW status when network is unavailable, auto-dismiss when connectivity returns.
