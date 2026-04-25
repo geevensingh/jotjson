@@ -165,12 +165,88 @@
         <h3 id="prefs-history" class="group-title" i18n="@@profile.prefs.history.title">
           History &amp; storage
         </h3>
+
+        <div class="pref-row">
+          <label for="pref-history-mode" i18n="@@profile.prefs.history.trackingMode">
+            History tracking
+          </label>
+          <select
+            id="pref-history-mode"
+            class="pref-select"
+            [ngModel]="historyTrackingMode()"
+            (ngModelChange)="onHistoryTrackingModeChange($event)"
+          >
+            <option value="save_only" i18n="@@profile.prefs.history.trackingMode.saveOnly">
+              Save only
+            </option>
+            <option value="all_actions" i18n="@@profile.prefs.history.trackingMode.allActions">
+              All actions
+            </option>
+          </select>
+          <span class="pref-help" i18n="@@profile.prefs.history.trackingMode.help">
+            Choose whether your history records only saved blobs or every view, edit, and paste.
+          </span>
+        </div>
+
+        <div class="pref-row">
+          <label for="pref-quota-strategy" i18n="@@profile.prefs.history.quotaStrategy">
+            When you reach the saved blob limit
+          </label>
+          <select
+            id="pref-quota-strategy"
+            class="pref-select"
+            [ngModel]="blobQuotaStrategy()"
+            (ngModelChange)="onBlobQuotaStrategyChange($event)"
+          >
+            <option value="auto_fifo" i18n="@@profile.prefs.history.quotaStrategy.autoFifo">
+              Automatically delete the oldest
+            </option>
+            <option value="manual" i18n="@@profile.prefs.history.quotaStrategy.manual">
+              Ask me to choose
+            </option>
+          </select>
+        </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-appearance">
         <h3 id="prefs-appearance" class="group-title" i18n="@@profile.prefs.appearance.title">
           Appearance
         </h3>
+
+        <div class="pref-row">
+          <label for="pref-theme" i18n="@@profile.prefs.appearance.theme">Theme</label>
+          <select
+            id="pref-theme"
+            class="pref-select"
+            [ngModel]="theme()"
+            (ngModelChange)="onThemeChange($event)"
+          >
+            <option value="dark" i18n="@@profile.prefs.appearance.theme.dark">Dark</option>
+            <option value="light" i18n="@@profile.prefs.appearance.theme.light">Light</option>
+            <option value="system" i18n="@@profile.prefs.appearance.theme.system">
+              Match system
+            </option>
+          </select>
+        </div>
+
+        <div class="pref-row">
+          <label for="pref-layout" i18n="@@profile.prefs.appearance.layout">
+            Layout orientation
+          </label>
+          <select
+            id="pref-layout"
+            class="pref-select"
+            [ngModel]="layoutOrientation()"
+            (ngModelChange)="onLayoutOrientationChange($event)"
+          >
+            <option value="horizontal" i18n="@@profile.prefs.appearance.layout.horizontal">
+              Horizontal
+            </option>
+            <option value="vertical" i18n="@@profile.prefs.appearance.layout.vertical">
+              Vertical
+            </option>
+          </select>
+        </div>
       </section>
     </section>
   } @else {

@@ -49,6 +49,11 @@ export class ProfileComponent {
   readonly searchRegexMode = computed(() => this.prefs().searchRegexMode);
   readonly searchScope = computed(() => this.prefs().searchScope);
 
+  readonly historyTrackingMode = computed(() => this.prefs().historyTrackingMode);
+  readonly blobQuotaStrategy = computed(() => this.prefs().blobQuotaStrategy);
+  readonly theme = computed(() => this.prefs().theme);
+  readonly layoutOrientation = computed(() => this.prefs().layoutOrientation);
+
   readonly fontSizeMin = FONT_SIZE_MIN;
   readonly fontSizeMax = FONT_SIZE_MAX;
   readonly expansionDepthMin = EXPANSION_DEPTH_MIN;
@@ -100,6 +105,30 @@ export class ProfileComponent {
   onSearchScopeChange(value: string): void {
     if (value === 'keys' || value === 'values' || value === 'both') {
       this.prefsService.update({ searchScope: value });
+    }
+  }
+
+  onHistoryTrackingModeChange(value: string): void {
+    if (value === 'save_only' || value === 'all_actions') {
+      this.prefsService.update({ historyTrackingMode: value });
+    }
+  }
+
+  onBlobQuotaStrategyChange(value: string): void {
+    if (value === 'auto_fifo' || value === 'manual') {
+      this.prefsService.update({ blobQuotaStrategy: value });
+    }
+  }
+
+  onThemeChange(value: string): void {
+    if (value === 'dark' || value === 'light' || value === 'system') {
+      this.prefsService.update({ theme: value });
+    }
+  }
+
+  onLayoutOrientationChange(value: string): void {
+    if (value === 'horizontal' || value === 'vertical') {
+      this.prefsService.update({ layoutOrientation: value });
     }
   }
 

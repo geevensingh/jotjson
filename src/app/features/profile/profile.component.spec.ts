@@ -220,4 +220,58 @@ describe('ProfileComponent', () => {
     fixture.componentInstance.onSearchScopeChange('garbage');
     expect(prefs.prefs().searchScope).toBe('both');
   });
+
+  it('writes historyTrackingMode for valid values', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onHistoryTrackingModeChange('all_actions');
+    expect(prefs.prefs().historyTrackingMode).toBe('all_actions');
+    fixture.componentInstance.onHistoryTrackingModeChange('save_only');
+    expect(prefs.prefs().historyTrackingMode).toBe('save_only');
+    fixture.componentInstance.onHistoryTrackingModeChange('garbage');
+    expect(prefs.prefs().historyTrackingMode).toBe('save_only');
+  });
+
+  it('writes blobQuotaStrategy for valid values', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onBlobQuotaStrategyChange('manual');
+    expect(prefs.prefs().blobQuotaStrategy).toBe('manual');
+    fixture.componentInstance.onBlobQuotaStrategyChange('auto_fifo');
+    expect(prefs.prefs().blobQuotaStrategy).toBe('auto_fifo');
+    fixture.componentInstance.onBlobQuotaStrategyChange('garbage');
+    expect(prefs.prefs().blobQuotaStrategy).toBe('auto_fifo');
+  });
+
+  it('writes theme for valid values', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onThemeChange('light');
+    expect(prefs.prefs().theme).toBe('light');
+    fixture.componentInstance.onThemeChange('dark');
+    expect(prefs.prefs().theme).toBe('dark');
+    fixture.componentInstance.onThemeChange('system');
+    expect(prefs.prefs().theme).toBe('system');
+    fixture.componentInstance.onThemeChange('garbage');
+    expect(prefs.prefs().theme).toBe('system');
+  });
+
+  it('writes layoutOrientation for valid values', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onLayoutOrientationChange('vertical');
+    expect(prefs.prefs().layoutOrientation).toBe('vertical');
+    fixture.componentInstance.onLayoutOrientationChange('horizontal');
+    expect(prefs.prefs().layoutOrientation).toBe('horizontal');
+    fixture.componentInstance.onLayoutOrientationChange('garbage');
+    expect(prefs.prefs().layoutOrientation).toBe('horizontal');
+  });
 });

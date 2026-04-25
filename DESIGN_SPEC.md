@@ -384,19 +384,31 @@ recent `HistoryEntry` records, newest first.
 
 Available to **registered users** only. The route is auth-guarded.
 
-#### Shipped in v1 (M3b)
+#### Shipped in v1 (M3b, M5d)
 
-- **Identity card**
+- **Identity card** (M3b)
   - Display name (read-only, sourced from the Entra External ID
     `name` / `preferred_username` claim).
   - Email (read-only, from the identity provider; shown as "Not
     provided by your identity provider" when the claim is absent).
   - Sign-out button.
 
-Preferences persist server-side (M3c) but have no editing UI yet -
-they default to the values baked into `PreferencesService` and are
-updated programmatically (e.g., `seenClipboardBanner` flipped on
-dismissal).
+- **Preferences card** (M5d) - changes auto-apply via
+  `PreferencesService.update()`; no Save button. Each control writes
+  through to the existing debounced server PUT for signed-in users.
+  - **Editor**: font size (8-32 px, clamped), tab size (2 / 4),
+    word wrap toggle.
+  - **Tree**: default expansion depth (1-10, clamped), show type
+    labels toggle.
+  - **Search**: scope (keys / values / keys and values), case
+    sensitive toggle, regex mode toggle.
+  - **History & storage**: history tracking mode (save only /
+    all actions), blob quota strategy (auto-delete oldest /
+    ask me to choose).
+  - **Appearance**: theme (dark / light / match system), layout
+    orientation (horizontal / vertical). The header theme toggle
+    and toolbar layout button continue to work; all surfaces share
+    `PreferencesService` state.
 
 #### Planned (later milestones / post-v1)
 
@@ -407,22 +419,9 @@ dismissal).
   - **Linked accounts** - show which social providers are connected (Google, GitHub). Allow linking/unlinking additional providers.
   - **Delete account** - confirmation dialog, then deletes user profile, all blobs, history, and rule sets. Irreversible.
 
-- **Preferences Section** (persisted to `UserPreferences` in Cosmos DB)
-  - **Theme** - dark / light / system (follows OS preference).
-  - **Editor font size** - dropdown (10, 12, 14, 16, 18, 20, 22, 24px).
-  - **Editor tab size** - 2 or 4 spaces.
-  - **Editor word wrap** - on/off toggle.
-  - **Layout orientation** - horizontal (editor left, tree right) or vertical (editor top, tree bottom). A toolbar button also provides quick toggling.
-  - **Default tree expansion depth** - how many levels to auto-expand (1-10).
-  - **Show type labels in tree** - toggle the type badges (string, number, etc.) on/off.
-  - **Show date/time annotations** - toggle smart date detection annotations on/off.
-  - **History tracking mode** - "Save only" (default) or "All actions" (records paste, view, edit events too).
+- **Preferences Section - deferred items**
+  - **Show date/time annotations** (M7c) - toggle smart date detection annotations on/off.
   - **Default formatting rule set** (M6) - dropdown to pick a rule set to auto-apply when viewing JSON.
-  - **Search defaults**:
-    - **Case sensitive** - on/off (default: off).
-    - **Regex mode** - on/off (default: off).
-    - **Search scope** - keys only / values only / both (default: both).
-  - **Blob quota strategy** - when your 100-blob cap is reached, either auto-delete the oldest blob to make room (default) or block the save with a manual prompt.
   - **Tree highlight colors (per theme)** (M7d) - the dark and light themes each have their own set of four color pickers (the inactive theme's values are preserved when you switch themes):
     - Selection color (primary) - the clicked/selected row.
     - Matching value color (secondary) - rows with the same value as the selection.
@@ -837,6 +836,17 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
      scroll with the "Load more" button retained as an a11y/keyboard
      fallback. All filters are server-side; the continuation token
      round-trips Cosmos's opaque page cursor.~~ (done)
+   - ~~**M5d**: Profile preferences UI. Add a Preferences card on
+     `/profile` covering every persisted `UserPreferences` field whose
+     backing feature is wired today: editor (font size, tab size, word
+     wrap), tree (default expansion depth, type labels), search (scope,
+     case sensitive, regex), history & storage (history tracking mode,
+     blob quota strategy), and appearance (theme, layout orientation -
+     mirroring the existing header/toolbar controls). Changes
+     auto-apply via `PreferencesService.update()` (no Save button).
+     `treeShowDateAnnotations`, `defaultRuleSetId`, and
+     `treeHighlightColors` stay deferred to M7c, M6, and M7d
+     respectively.~~ (done)
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
 7. **Polish & launch** - Each of these lands as its own step/commit:
    - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)
