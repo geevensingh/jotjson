@@ -104,6 +104,29 @@ Browser (Angular SPA)
 }
 ```
 
+**Intentionally not roamed.** A handful of UI-state values are
+persisted per device in `localStorage` rather than as fields on
+`UserPreferences`. The most notable is `splitRatio` - the editor
+vs. tree pane ratio on `/` - stored under `jotjson.splitRatio.v1`
+as a number in `[0.1, 0.9]`. We keep it local-only because:
+
+- It is viewport-dependent. A 70/30 split that feels right on a
+  4K monitor is cramped on a 13" laptop, so roaming the same
+  number across devices actively hurts UX.
+- It couples with `layoutOrientation` (which *is* roamed). One
+  scalar can't sensibly serve both horizontal and vertical
+  layouts.
+- It is transient layout state, closer in spirit to scroll
+  position or window size than to declarative preferences like
+  theme or tab size.
+- It updates on every `pointermove` during a drag, which would
+  generate Cosmos write churn even with debouncing.
+
+If we ever decide to roam this, the right shape is
+per-orientation (and ideally per-viewport-class) values plus a
+multi-second write debounce - not a single number written on
+every pointer move.
+
 #### TreeHighlightColors
 
 Stored per-theme: users customize dark-theme and light-theme colors independently so each scheme looks correct on its own background. The app applies `dark` or `light` at runtime based on the active theme (including when `theme = "system"` resolves). Registered users override individual values via color pickers in Profile -> Preferences.
