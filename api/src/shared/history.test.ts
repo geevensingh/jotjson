@@ -76,6 +76,10 @@ jest.mock('./cosmos', () => ({
                       return t.includes(needle) || s.includes(needle);
                     });
                   }
+                  const actions = params['@actions'];
+                  if (Array.isArray(actions) && actions.length > 0) {
+                    rows = rows.filter((e) => actions.includes(e.action));
+                  }
                   const sorted = [...rows].sort((a, b) =>
                     a.accessedAt < b.accessedAt ? 1 : a.accessedAt > b.accessedAt ? -1 : 0
                   );
@@ -296,6 +300,32 @@ describe('listEntries', () => {
     preload([{ id: 'a', title: 'Hello' }]);
     const result = await listEntries('u-1', { q: 'zzz' });
     expect(result.entries).toEqual([]);
+  });
+
+  it('filters by actions whitelist', async () => {
+    preload([
+      { id: 'a', action: 'saved' },
+      { id: 'b', action: 'edited' },
+      { id: 'c', action: 'pasted' }
+    ]);
+    const result = await listEntries('u-1', { actions: ['saved', 'pasted'] });
+    expect(result.entries.map((e) => e.id).sort()).toEqual(['a', 'c']);
+  });
+
+  it('combines q and actions filters', async () => {
+    preload([
+      { id: 'a', title: 'Auth payload', action: 'saved' },
+      { id: 'b', title: 'Auth payload', action: 'pasted' },
+      { id: 'c', title: 'Cart', action: 'saved' }
+    ]);
+    const result = await listEntries('u-1', { q: 'auth', actions: ['saved'] });
+    expect(result.entries.map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('treats an empty actions array as no filter', async () => {
+    preload([{ id: 'a', action: 'saved' }, { id: 'b', action: 'pasted' }]);
+    const result = await listEntries('u-1', { actions: [] });
+    expect(result.entries.length).toBe(2);
   });
 });
 

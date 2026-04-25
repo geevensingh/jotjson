@@ -69,6 +69,8 @@ export interface UserPreferences {
   treeHighlightColors: TreeHighlightColors;
 }
 
+export type HistoryAction = 'saved' | 'viewed' | 'edited' | 'deleted' | 'pasted';
+
 export interface HistoryEntry {
   id: string;
   userId: string;
@@ -76,7 +78,7 @@ export interface HistoryEntry {
   slug?: string;
   title?: string;
   accessedAt: string;
-  action: 'saved' | 'viewed' | 'edited' | 'deleted' | 'pasted';
+  action: HistoryAction;
 }
 
 export interface FormattingStyle {

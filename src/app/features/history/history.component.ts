@@ -15,7 +15,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Subject, debounceTime, distinctUntilChanged, firstValueFrom } from 'rxjs';
 import { HistoryService } from '../../core/api/history.service';
-import type { HistoryEntry } from '../../core/api/models';
+import type { HistoryAction, HistoryEntry } from '../../core/api/models';
 import { SeoService } from '../../core/seo/seo.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent, JjIconName } from '../../shared/components/icon/icon.component';
@@ -25,6 +25,14 @@ import {
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 
 type LoadState = 'loading' | 'ready' | 'error';
+
+const ALL_ACTIONS: readonly HistoryAction[] = [
+  'saved',
+  'edited',
+  'deleted',
+  'viewed',
+  'pasted'
+];
 
 interface DayGroup {
   /** Stable sort key: YYYY-MM-DD in the user's local timezone. */
@@ -63,6 +71,8 @@ export class HistoryComponent implements OnInit {
   readonly searchTerm = signal('');
   /** Mirrors the input element's value so the field stays controlled. */
   readonly searchInputValue = signal('');
+  readonly actionFilter = signal<ReadonlySet<HistoryAction>>(new Set());
+  readonly allActions: readonly HistoryAction[] = ALL_ACTIONS;
 
   private readonly searchInput$ = new Subject<string>();
 
@@ -73,7 +83,7 @@ export class HistoryComponent implements OnInit {
   readonly hasMore = computed(() => !!this.continuationToken());
 
   readonly hasActiveFilters = computed(
-    () => this.searchTerm().trim().length > 0
+    () => this.searchTerm().trim().length > 0 || this.actionFilter().size > 0
   );
 
   constructor() {
@@ -147,10 +157,10 @@ export class HistoryComponent implements OnInit {
     this.state.set('loading');
     this.entries.set([]);
     this.continuationToken.set(undefined);
-    const q = this.searchTerm();
+    const opts = this.buildListOptions();
     try {
       const page = await firstValueFrom(
-        this.history.list({ pageSize: 50, ...(q ? { q } : {}) })
+        this.history.list({ pageSize: 50, ...opts })
       );
       this.entries.set(page.entries);
       this.continuationToken.set(page.continuationToken);
@@ -171,13 +181,13 @@ export class HistoryComponent implements OnInit {
     const token = this.continuationToken();
     if (!token || this.loadingMore()) return;
     this.loadingMore.set(true);
-    const q = this.searchTerm();
+    const opts = this.buildListOptions();
     try {
       const page = await firstValueFrom(
         this.history.list({
           pageSize: 50,
           continuationToken: token,
-          ...(q ? { q } : {})
+          ...opts
         })
       );
       this.entries.update((current) => [...current, ...page.entries]);
@@ -195,6 +205,29 @@ export class HistoryComponent implements OnInit {
     } finally {
       this.loadingMore.set(false);
     }
+  }
+
+  private buildListOptions(): { q?: string; actions?: HistoryAction[] } {
+    const out: { q?: string; actions?: HistoryAction[] } = {};
+    const q = this.searchTerm();
+    if (q) out.q = q;
+    const actions = this.actionFilter();
+    if (actions.size > 0) {
+      out.actions = ALL_ACTIONS.filter((a) => actions.has(a));
+    }
+    return out;
+  }
+
+  isActionSelected(action: HistoryAction): boolean {
+    return this.actionFilter().has(action);
+  }
+
+  toggleAction(action: HistoryAction): void {
+    const next = new Set(this.actionFilter());
+    if (next.has(action)) next.delete(action);
+    else next.add(action);
+    this.actionFilter.set(next);
+    void this.reload();
   }
 
   async clearHistory(): Promise<void> {

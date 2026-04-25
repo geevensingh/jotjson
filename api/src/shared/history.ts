@@ -26,6 +26,14 @@ import { getCosmos } from './cosmos';
 
 export type HistoryAction = 'viewed' | 'saved' | 'edited' | 'deleted' | 'pasted';
 
+export const HISTORY_ACTIONS: ReadonlySet<HistoryAction> = new Set<HistoryAction>([
+  'viewed',
+  'saved',
+  'edited',
+  'deleted',
+  'pasted'
+]);
+
 export interface HistoryDocument {
   id: string;
   userId: string;
@@ -53,6 +61,12 @@ export interface ListEntriesOptions {
    * empty strings are treated as "no filter".
    */
   q?: string;
+  /**
+   * Whitelist of actions to include. When omitted or empty, all actions
+   * pass. Values are validated by the caller (HTTP layer) - this accessor
+   * trusts the array.
+   */
+  actions?: HistoryAction[];
 }
 
 export interface ListEntriesResult {
@@ -187,7 +201,7 @@ export async function listEntries(
   // recompute LOWER(@q) per row. The query side wraps the column values
   // in LOWER(...) so the comparison stays case-insensitive.
   const qLower = q.toLowerCase();
-  const parameters: { name: string; value: string | number }[] = [
+  const parameters: { name: string; value: string | number | string[] }[] = [
     { name: '@uid', value: userId }
   ];
   let where = 'c.userId = @uid';
@@ -195,6 +209,13 @@ export async function listEntries(
     where +=
       ' AND (CONTAINS(LOWER(c.title), @q) OR CONTAINS(LOWER(c.slug), @q))';
     parameters.push({ name: '@q', value: qLower });
+  }
+  const actions = Array.isArray(options.actions)
+    ? Array.from(new Set(options.actions))
+    : [];
+  if (actions.length > 0) {
+    where += ' AND ARRAY_CONTAINS(@actions, c.action)';
+    parameters.push({ name: '@actions', value: actions });
   }
   const iterator = getHistoryContainer().items.query<HistoryDocument>(
     {

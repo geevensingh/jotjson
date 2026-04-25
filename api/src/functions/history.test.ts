@@ -15,6 +15,7 @@ jest.mock('../shared/auth', () => {
 
 jest.mock('../shared/history', () => ({
   PASTE_DEBOUNCE_SECONDS: 60,
+  HISTORY_ACTIONS: new Set(['viewed', 'saved', 'edited', 'deleted', 'pasted']),
   listEntries: jest.fn(),
   clearAll: jest.fn(),
   recordEntry: jest.fn(),
@@ -122,6 +123,43 @@ describe('GET /api/history', () => {
     );
     expect(res.status).toBe(400);
     expect(listEntries).not.toHaveBeenCalled();
+  });
+
+  it('forwards a parsed actions list to listEntries', async () => {
+    listEntries.mockResolvedValueOnce({ entries: [] });
+    await getHistory(
+      makeRequest({ query: { actions: 'saved,pasted' } }),
+      ctx
+    );
+    expect(listEntries).toHaveBeenCalledWith('u-1', {
+      actions: ['saved', 'pasted']
+    });
+  });
+
+  it('dedupes actions and ignores empty segments', async () => {
+    listEntries.mockResolvedValueOnce({ entries: [] });
+    await getHistory(
+      makeRequest({ query: { actions: 'saved,, saved , pasted' } }),
+      ctx
+    );
+    expect(listEntries).toHaveBeenCalledWith('u-1', {
+      actions: ['saved', 'pasted']
+    });
+  });
+
+  it('rejects an unknown action', async () => {
+    const res = await getHistory(
+      makeRequest({ query: { actions: 'saved,bogus' } }),
+      ctx
+    );
+    expect(res.status).toBe(400);
+    expect(listEntries).not.toHaveBeenCalled();
+  });
+
+  it('treats an empty actions param as no filter', async () => {
+    listEntries.mockResolvedValueOnce({ entries: [] });
+    await getHistory(makeRequest({ query: { actions: '' } }), ctx);
+    expect(listEntries).toHaveBeenCalledWith('u-1', {});
   });
 
   it('returns 500 when Cosmos blows up', async () => {

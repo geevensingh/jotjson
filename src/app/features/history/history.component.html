@@ -44,6 +44,25 @@
         </button>
       }
     </label>
+    <div
+      class="action-filter"
+      role="group"
+      aria-label="Filter by action"
+      i18n-aria-label="@@history.filter.action.aria"
+    >
+      @for (action of allActions; track action) {
+        <button
+          type="button"
+          class="action-chip"
+          [class.action-chip-selected]="isActionSelected(action)"
+          [attr.aria-pressed]="isActionSelected(action)"
+          (click)="toggleAction(action)"
+        >
+          <jj-icon [name]="iconFor(action)" aria-hidden="true" />
+          <span>{{ actionLabel(action) }}</span>
+        </button>
+      }
+    </div>
   </div>
 
   @if (state() === 'loading') {

@@ -25,7 +25,9 @@ import {
 } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
 import {
+  HISTORY_ACTIONS,
   PASTE_DEBOUNCE_SECONDS,
+  type HistoryAction,
   clearAll,
   getRecentPasteAt,
   listEntries,
@@ -74,8 +76,6 @@ export async function getHistory(
   if (qRaw !== null && qRaw !== undefined) {
     const trimmed = qRaw.trim();
     if (trimmed.length === 0) {
-      // Treat ?q= and ?q= as "no filter" rather than a 400; this keeps
-      // the client free to send the current input value verbatim.
       q = undefined;
     } else if (trimmed.length > 100) {
       return badRequest('q must be 100 characters or fewer');
@@ -83,12 +83,30 @@ export async function getHistory(
       q = trimmed;
     }
   }
+  const actionsRaw = req.query.get('actions');
+  let actions: HistoryAction[] | undefined;
+  if (actionsRaw !== null && actionsRaw !== undefined) {
+    const parts = actionsRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (const part of parts) {
+      if (!HISTORY_ACTIONS.has(part as HistoryAction)) {
+        return badRequest(
+          `actions contains an unknown value: ${part}`
+        );
+      }
+    }
+    const dedup = Array.from(new Set(parts)) as HistoryAction[];
+    if (dedup.length > 0) actions = dedup;
+  }
 
   try {
     const result = await listEntries(principal.id, {
       ...(pageSize !== undefined ? { pageSize } : {}),
       ...(continuationToken ? { continuationToken } : {}),
-      ...(q !== undefined ? { q } : {})
+      ...(q !== undefined ? { q } : {}),
+      ...(actions !== undefined ? { actions } : {})
     });
     return { status: 200, jsonBody: result };
   } catch (err) {

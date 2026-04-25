@@ -33,6 +33,47 @@
 
 .history-controls {
   margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.action-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  background: transparent;
+  color: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+
+  jj-icon {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  &:hover { background: rgba(127, 127, 127, 0.12); }
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary, #1976d2);
+    outline-offset: 2px;
+  }
+}
+
+.action-chip-selected {
+  background: var(--mat-sys-primary, #1976d2);
+  border-color: var(--mat-sys-primary, #1976d2);
+  color: var(--mat-sys-on-primary, #fff);
+  &:hover { filter: brightness(0.95); }
 }
 
 .search-field {

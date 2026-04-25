@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import type { HistoryEntry } from './models';
+import type { HistoryAction, HistoryEntry } from './models';
 
 export interface HistoryPage {
   entries: HistoryEntry[];
@@ -25,7 +25,12 @@ export class HistoryService {
   private readonly http = inject(HttpClient);
   private readonly base = `${environment.apiBaseUrl}/history`;
 
-  list(opts: { pageSize?: number; continuationToken?: string; q?: string } = {}): Observable<HistoryPage> {
+  list(opts: {
+    pageSize?: number;
+    continuationToken?: string;
+    q?: string;
+    actions?: HistoryAction[];
+  } = {}): Observable<HistoryPage> {
     let params = new HttpParams();
     if (opts.pageSize !== undefined) {
       params = params.set('pageSize', String(opts.pageSize));
@@ -35,6 +40,9 @@ export class HistoryService {
     }
     if (opts.q !== undefined && opts.q.trim().length > 0) {
       params = params.set('q', opts.q);
+    }
+    if (opts.actions && opts.actions.length > 0) {
+      params = params.set('actions', opts.actions.join(','));
     }
     return this.http.get<HistoryPage>(this.base, { params });
   }

@@ -316,13 +316,75 @@ describe('HistoryComponent', () => {
     });
   });
 
-  it('hasActiveFilters reflects the trimmed search term', () => {
+  it('toggleAction forwards the joined actions filter on reload', async () => {
+    const { fixture, stub } = setup({
+      listResult: { entries: [entry({ id: 'a' })] }
+    });
+    await fixture.componentInstance.reload();
+    stub.list.calls.reset();
+    stub.list.and.returnValue(of({ entries: [] }));
+    fixture.componentInstance.toggleAction('saved');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(stub.list).toHaveBeenCalledWith({
+      pageSize: 50,
+      actions: ['saved']
+    });
+    expect(fixture.componentInstance.isActionSelected('saved')).toBe(true);
+  });
+
+  it('toggleAction combines multiple actions in canonical order', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [] } });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.toggleAction('viewed');
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.componentInstance.toggleAction('saved');
+    await Promise.resolve();
+    await Promise.resolve();
+    const lastArgs = stub.list.calls.mostRecent().args[0];
+    expect(lastArgs.actions).toEqual(['saved', 'viewed']);
+  });
+
+  it('toggleAction twice clears the filter for that action', async () => {
+    const { fixture, stub } = setup({ listResult: { entries: [] } });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.toggleAction('saved');
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.componentInstance.toggleAction('saved');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fixture.componentInstance.isActionSelected('saved')).toBe(false);
+    const lastArgs = stub.list.calls.mostRecent().args[0];
+    expect(lastArgs.actions).toBeUndefined();
+  });
+
+  it('hasActiveFilters reflects the action filter set', () => {
     const { fixture } = setup();
     const c = fixture.componentInstance;
     expect(c.hasActiveFilters()).toBe(false);
-    c.searchTerm.set('foo');
+    c.actionFilter.set(new Set(['viewed']));
     expect(c.hasActiveFilters()).toBe(true);
-    c.searchTerm.set('   ');
+    c.actionFilter.set(new Set());
     expect(c.hasActiveFilters()).toBe(false);
+  });
+
+  it('loadMore forwards the active actions filter', async () => {
+    const { fixture, stub } = setup({
+      listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' }
+    });
+    await fixture.componentInstance.reload();
+    fixture.componentInstance.toggleAction('pasted');
+    await Promise.resolve();
+    await Promise.resolve();
+    stub.list.calls.reset();
+    stub.list.and.returnValue(of({ entries: [] }));
+    await fixture.componentInstance.loadMore();
+    expect(stub.list).toHaveBeenCalledWith({
+      pageSize: 50,
+      continuationToken: 'tok',
+      actions: ['pasted']
+    });
   });
 });
