@@ -1,5 +1,14 @@
 name: Deploy (SWA)
 
+# Title each run with the deployed commit's message so the Actions list is
+# scannable (matches CI's default behavior). For workflow_run triggers we
+# pull the head commit message from the upstream CI run; for manual
+# dispatches we fall back to the SHA.
+run-name: >-
+  ${{ github.event.workflow_run.head_commit.message
+      || github.event.head_commit.message
+      || github.sha }}
+
 on:
   workflow_run:
     workflows: [CI]
