@@ -37,6 +37,7 @@
         [errors]="errors()"
         (valueChange)="onValueChange($event)"
         (cursorPositionChange)="onCursorChange($event)"
+        (pasteOccurred)="onEditorPaste()"
       ></jj-json-editor>
     </section>
 

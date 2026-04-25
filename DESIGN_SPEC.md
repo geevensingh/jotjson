@@ -826,7 +826,9 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
      for live blobs, loading skeleton + empty state, "Load more"
      pagination, and a "Clear history" action hitting
      `DELETE /api/history`). HomeComponent fires
-     `POST /api/history` on paste for signed-in users only. No server
+     `POST /api/history` on paste for signed-in users only - both the
+     toolbar Paste button and direct in-editor paste (Ctrl/Cmd+V) trigger
+     the call. No server
      redirect from the old `/history` URL; the timeline is a
      reasonable landing page for anyone who bookmarked it.~~ (done)
    - ~~**M5c**: Timeline polish. Keyword search over blob title + slug

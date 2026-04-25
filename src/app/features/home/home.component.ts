@@ -337,21 +337,36 @@ export class HomeComponent {
       // structure rather than a single dense line (per issue #38).
       this.onFormat();
     }
-    // Best-effort history record. Server enforces a 60s per-user debounce,
-    // so this is safe to fire on every paste. Only call when the caller is
-    // signed in - otherwise the request would 401 and produce nothing but
-    // log noise. Errors are swallowed: history bookkeeping must never
-    // disrupt the paste flow.
-    if (this.auth.isConfigured && this.auth.isSignedIn()) {
-      this.history.recordPaste().subscribe({
-        error: (err) => {
-          console.warn(
-            $localize`:@@history.recordPaste.failed.log:Failed to record paste in history`,
-            err
-          );
-        }
-      });
-    }
+    this.recordPasteIfSignedIn();
+  }
+
+  /**
+   * Fires when the user pastes directly into the Monaco editor (e.g. via
+   * Ctrl/Cmd+V). The toolbar Paste button uses `onPaste()` instead, which
+   * goes through the input signal and does NOT trigger Monaco's onDidPaste,
+   * so both paths are needed to cover all paste gestures.
+   */
+  onEditorPaste(): void {
+    this.recordPasteIfSignedIn();
+  }
+
+  /**
+   * Best-effort history record. Server enforces a 60s per-user debounce,
+   * so this is safe to fire on every paste. Only call when the caller is
+   * signed in - otherwise the request would 401 and produce nothing but
+   * log noise. Errors are swallowed: history bookkeeping must never
+   * disrupt the paste flow.
+   */
+  private recordPasteIfSignedIn(): void {
+    if (!this.auth.isConfigured || !this.auth.isSignedIn()) return;
+    this.history.recordPaste().subscribe({
+      error: (err) => {
+        console.warn(
+          $localize`:@@history.recordPaste.failed.log:Failed to record paste in history`,
+          err
+        );
+      }
+    });
   }
 
   async onCopy(): Promise<void> {

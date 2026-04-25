@@ -402,6 +402,44 @@ describe('HomeComponent (unit-level)', () => {
     await expectAsync(fixture.componentInstance.onPaste()).toBeResolved();
   });
 
+  it('onEditorPaste does NOT call HistoryService.recordPaste when signed out', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const history = TestBed.inject(
+      (await import('../../core/api/history.service')).HistoryService
+    );
+    const spy = spyOn(history, 'recordPaste').and.returnValue(of(null));
+    fixture.componentInstance.onEditorPaste();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('onEditorPaste calls HistoryService.recordPaste once when signed in', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const auth = TestBed.inject(AuthService);
+    const { signInFakeUser } = await import('../../../testing/auth.testing');
+    signInFakeUser(auth);
+    const history = TestBed.inject(
+      (await import('../../core/api/history.service')).HistoryService
+    );
+    const spy = spyOn(history, 'recordPaste').and.returnValue(of(null));
+    fixture.componentInstance.onEditorPaste();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('onEditorPaste swallows HistoryService.recordPaste errors', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const auth = TestBed.inject(AuthService);
+    const { signInFakeUser } = await import('../../../testing/auth.testing');
+    signInFakeUser(auth);
+    const history = TestBed.inject(
+      (await import('../../core/api/history.service')).HistoryService
+    );
+    spyOn(history, 'recordPaste').and.returnValue(
+      throwError(() => new Error('boom'))
+    );
+    spyOn(console, 'warn');
+    expect(() => fixture.componentInstance.onEditorPaste()).not.toThrow();
+  });
+
   it('onCopyEscaped writes JSON.stringify of content to clipboard', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1}');
