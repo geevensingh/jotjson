@@ -2,13 +2,27 @@
   <button
     type="button"
     mat-icon-button
-    matTooltip="Paste JSON from clipboard"
-    i18n-matTooltip="@@toolbar.paste.tooltip"
+    [matTooltip]="pasteTooltip()"
     aria-label="Paste JSON from clipboard"
     i18n-aria-label="@@toolbar.paste.aria"
-    (click)="paste.emit()"
+    [disabled]="pasteDisabled()"
+    [class.paste-ready]="clipboardState() === 'enabled-json'"
+    (click)="pasteRequested.emit()"
   >
     <jj-icon name="paste" />
+  </button>
+
+  <button
+    type="button"
+    mat-icon-button
+    matTooltip="Copy editor contents to clipboard (hold Alt to copy as escaped JSON string)"
+    i18n-matTooltip="@@toolbar.copy.tooltip"
+    aria-label="Copy editor contents to clipboard"
+    i18n-aria-label="@@toolbar.copy.aria"
+    [disabled]="!hasContent()"
+    (click)="onCopyClick($event)"
+  >
+    <jj-icon name="copy" />
   </button>
 
   <button
@@ -108,6 +122,66 @@
       <ng-container i18n="@@toolbar.mode.jsonc.label">JSONC</ng-container>
     </mat-button-toggle>
   </mat-button-toggle-group>
+
+  <ng-container *jjSignedIn>
+    <span class="divider" aria-hidden="true"></span>
+
+    <input
+      type="text"
+      class="title-field"
+      [value]="title()"
+      placeholder="Title (optional)"
+      i18n-placeholder="@@toolbar.title.placeholder"
+      aria-label="Blob title"
+      i18n-aria-label="@@toolbar.title.aria"
+      maxlength="200"
+      (input)="onTitleInput($event)"
+      (keydown)="onTitleKeydown($event)"
+    />
+
+    <button
+      type="button"
+      mat-icon-button
+      [matTooltip]="saveTooltip()"
+      [attr.aria-label]="saveTooltip()"
+      [disabled]="saveDisabled()"
+      (click)="save.emit()"
+    >
+      <jj-icon name="save" />
+    </button>
+
+    @if (showOverflowMenu()) {
+      <button
+        type="button"
+        mat-icon-button
+        [matMenuTriggerFor]="blobMenu"
+        matTooltip="More actions"
+        i18n-matTooltip="@@toolbar.overflow.tooltip"
+        aria-label="More actions for this blob"
+        i18n-aria-label="@@toolbar.overflow.aria"
+      >
+        <jj-icon name="more-vert" />
+      </button>
+      <mat-menu #blobMenu="matMenu">
+        <button mat-menu-item type="button" (click)="copyShareLink.emit()">
+          <jj-icon name="link" />
+          <span i18n="@@toolbar.overflow.copyShareLink">Copy share link</span>
+        </button>
+        <button mat-menu-item type="button" (click)="togglePublic.emit()">
+          <jj-icon [name]="isPublic() ? 'lock' : 'globe'" />
+          <span>{{ visibilityMenuLabel() }}</span>
+        </button>
+        <button
+          mat-menu-item
+          type="button"
+          (click)="deleteBlob.emit()"
+        >
+          <jj-icon name="trash" />
+          <span i18n="@@toolbar.overflow.delete">Delete this blob</span>
+        </button>
+      </mat-menu>
+    }
+  </ng-container>
 
   <span class="spacer"></span>
 

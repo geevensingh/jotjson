@@ -1,4 +1,4 @@
-# Agent Instructions — JotJSON
+# Agent Instructions - JotJSON
 
 These are the default instructions for any AI coding agent (Copilot CLI, Copilot
 coding agent, Cursor, Claude Code, etc.) working in this repository. Follow them
@@ -17,7 +17,7 @@ unless a task explicitly overrides a specific rule.
 - **Frontend:** Angular (latest LTS), standalone components, Angular Signals for
   state, Angular Material for UI, Angular Router with lazy-loaded features,
   MSAL Angular for auth, SCSS for styles.
-- **Editor:** Monaco (lazy-loaded). JSON/JSONC parsing via `jsonc-parser` — do
+- **Editor:** Monaco (lazy-loaded). JSON/JSONC parsing via `jsonc-parser` - do
   **not** use native `JSON.parse` for user input.
 - **Backend:** Azure Functions in **TypeScript (Node)**. No other languages.
 - **Data:** Azure Cosmos DB (NoSQL, serverless). Respect container partition
@@ -31,7 +31,7 @@ frameworks, or cloud services without explicit approval.
 
 ## 3. Repository Layout
 
-Follow the Angular layout in `DESIGN_SPEC.md` → *Project Structure*:
+Follow the Angular layout in `DESIGN_SPEC.md` -> *Project Structure*:
 
 ```
 src/app/{core,shared,features}/...
@@ -41,15 +41,15 @@ api/                   # Azure Functions (TypeScript)
 ```
 
 Place new code in the correct bucket:
-- Singleton services / guards / interceptors → `core/`
-- Reusable UI / pipes / directives → `shared/`
-- Page-level features → `features/<name>/`
+- Singleton services / guards / interceptors -> `core/`
+- Reusable UI / pipes / directives -> `shared/`
+- Page-level features -> `features/<name>/`
 
 ## 4. Coding Conventions
 
 ### TypeScript (frontend + functions)
 - `strict: true`, `noImplicitAny`, `noUncheckedIndexedAccess`. Never disable
-  with `any` — use `unknown` + narrowing.
+  with `any` - use `unknown` + narrowing.
 - Prefer `type` for unions/aliases, `interface` for object contracts that may be
   extended.
 - No default exports in app code (except Angular-required cases).
@@ -62,9 +62,9 @@ Place new code in the correct bucket:
   routing, events).
 - Use `inject()` over constructor DI for new code.
 - Components: `OnPush` change detection by default.
-- Template logic stays trivial — push branching into the component or a pipe.
+- Template logic stays trivial - push branching into the component or a pipe.
 - Styles are component-scoped SCSS. Global tokens live in `src/styles/`.
-- Theming uses the `TreeHighlightColors` / theme tokens from the spec — do not
+- Theming uses the `TreeHighlightColors` / theme tokens from the spec - do not
   hardcode colors in components.
 
 ### Internationalization (i18n)
@@ -76,7 +76,7 @@ Place new code in the correct bucket:
   use `i18n-<attrname>="@@id"`.
 - TS/Runtime strings (toast messages, logs that are visible to users, aria
   labels bound via expressions) use `$localize` tagged template literals with
-  a stable ID, e.g., ``$localize`:@@upload.tooLarge:File too large — max 5 MB` ``.
+  a stable ID, e.g., ``$localize`:@@upload.tooLarge:File too large - max 5 MB` ``.
 - Stable ID convention: `<area>.<element>.<purpose>` in camelCase / dot
   segments (e.g., `@@tree.search.placeholder`, `@@home.empty`).
 - Never use plain strings in templates or `console.warn`/`toast` calls when
@@ -89,7 +89,7 @@ Place new code in the correct bucket:
 - Validate all inputs (zod or equivalent schema validation).
 - Return typed JSON responses with explicit status codes. Never leak stack
   traces.
-- Auth: validate B2C-issued JWTs on every protected route.
+- Auth: validate Entra External ID-issued JWTs on every protected route.
 
 ### Naming
 - Files: `kebab-case.ts`. Angular: `thing.component.ts`, `thing.service.ts`,
@@ -97,11 +97,23 @@ Place new code in the correct bucket:
 - Classes: `PascalCase`. Variables/functions: `camelCase`. Constants: `UPPER_SNAKE`.
 - Test files: co-located as `*.spec.ts`.
 
+### ASCII-only repository
+- Tracked source files **must be ASCII** unless the codepoint is explicitly
+  allowlisted in `scripts/check-ascii.mjs`. Use `-` for em/en-dash, `...` for
+  ellipsis, `->` for right-arrow, `<=` / `!=` / `x` for math, `[x]` for check
+  marks, etc. i18n-extractable strings go through Angular's i18n pipeline,
+  not inline Unicode typography.
+- CI runs `npm run check:ascii` on every push and PR. If you genuinely need a
+  new non-ASCII codepoint (e.g., a UI glyph), add it to the `ALLOWED` set in
+  `scripts/check-ascii.mjs` with an inline comment explaining why.
+
 ## 5. Testing
 
 - **Always add/update tests** for logic changes. No test = not done.
-- Frontend: Jest (or Karma if already configured) for units; test components
-  with Angular Testing Library patterns.
+- Frontend: **Karma + Jasmine** (configured via `karma.conf.js` with a
+  `ChromeHeadlessCI` launcher for GitHub Actions). Run with `npm test`
+  locally and `npm run test:ci` in CI (adds `--code-coverage`). Co-locate
+  specs as `*.spec.ts` alongside the unit under test.
 - Functions: Jest with mocked Cosmos / Blob clients.
 - Test names describe behavior: `it('returns 404 when blob slug is unknown')`.
 - Run the full lint + test + build suite before declaring completion (see §7).
@@ -115,7 +127,8 @@ Place new code in the correct bucket:
   100-blob cap, etc.). Enforce on both client and server.
 - Sanitize any user-provided strings rendered as HTML. Prefer Angular's default
   interpolation/binding over `innerHTML`.
-- All API routes that mutate or read user data require a valid B2C token except
+- All API routes that mutate or read user data require a valid Entra External ID
+  token except
   the explicitly-public blob read path.
 
 ## 7. Definition of Done
@@ -124,11 +137,13 @@ Before finishing a task:
 1. `npm run lint` passes (frontend and `api/`).
 2. `npm test` passes (frontend and `api/`).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
-4. Only run the suites that exist — do not introduce new toolchains to satisfy
+4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the
+   allowlist in `scripts/check-ascii.mjs`).
+5. Only run the suites that exist - do not introduce new toolchains to satisfy
    this checklist. If a suite isn't set up yet and the task is scaffolding,
    set it up per the spec.
-5. No new TypeScript errors, ESLint errors, or console warnings introduced.
-6. Spec is updated if behavior or architecture changed.
+6. No new TypeScript errors, ESLint errors, or console warnings introduced.
+7. Spec is updated if behavior or architecture changed.
 
 ## 8. Git & PR Hygiene
 

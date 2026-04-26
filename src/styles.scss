@@ -6,6 +6,12 @@ html,
 body {
   height: 100%;
   margin: 0;
+  overflow: hidden;
+}
+
+app-root {
+  display: block;
+  height: 100%;
 }
 
 body {
