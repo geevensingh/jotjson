@@ -14,8 +14,9 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
-    "lint": "tsc --noEmit -p tsconfig.app.json && node scripts/check-ascii.mjs",
+    "lint": "tsc --noEmit -p tsconfig.app.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs",
     "check:ascii": "node scripts/check-ascii.mjs",
+    "check:spec-patterns": "node scripts/check-spec-patterns.mjs",
     "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf",
     "build:info": "node scripts/write-build-info.mjs",
     "prestart": "node scripts/write-build-info.mjs",
@@ -60,6 +61,8 @@
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
+    "karma-junit-reporter": "^2.0.1",
+    "karma-spec-reporter": "^0.0.36",
     "typescript": "~5.9.3"
   },
   "overrides": {
