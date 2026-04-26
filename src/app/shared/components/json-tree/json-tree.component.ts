@@ -188,6 +188,20 @@ export class JsonTreeComponent {
   readonly searchHitCount = computed<number>(() => this.searchHitPaths().length);
 
   /**
+   * 1-indexed position of `selectedPath()` within `searchHitPaths()`,
+   * or `0` when the current selection is not one of the hits (or
+   * nothing is selected). Used by `searchCountLabel` to render
+   * "N / Total matches" while the user is positioned on a hit.
+   */
+  readonly currentMatchIndex = computed<number>(() => {
+    const sp = this.selectedPath();
+    if (sp === null) return 0;
+    if (!this.searchHits().has(sp)) return 0;
+    const idx = this.searchHitPaths().indexOf(sp);
+    return idx >= 0 ? idx + 1 : 0;
+  });
+
+  /**
    * Whether the current search query (when in regex mode) compiles
    * to a valid regular expression. Used purely for visual feedback;
    * `searchHits` already swallows regex errors and returns no hits.
@@ -213,6 +227,10 @@ export class JsonTreeComponent {
     if (!this.search().trim()) return '';
     const n = this.searchHitCount();
     if (n === 0) return $localize`:@@tree.search.count.none:No matches`;
+    const pos = this.currentMatchIndex();
+    if (pos > 0) {
+      return $localize`:@@tree.search.count.position:${pos}:position: / ${n}:count: matches`;
+    }
     if (n === 1) return $localize`:@@tree.search.count.one:1 match`;
     return $localize`:@@tree.search.count.other:${n}:count: matches`;
   });
@@ -477,7 +495,9 @@ export class JsonTreeComponent {
     const i = this.activeHitIndex();
     const next = i < 0 ? 0 : (i + 1) % paths.length;
     this.activeHitIndex.set(next);
-    this.revealHit(paths[next] as string);
+    const path = paths[next] as string;
+    this.selectedPath.set(path);
+    this.revealHit(path);
   }
 
   goToPrevMatch(): void {
@@ -486,7 +506,9 @@ export class JsonTreeComponent {
     const i = this.activeHitIndex();
     const prev = i <= 0 ? paths.length - 1 : i - 1;
     this.activeHitIndex.set(prev);
-    this.revealHit(paths[prev] as string);
+    const path = paths[prev] as string;
+    this.selectedPath.set(path);
+    this.revealHit(path);
   }
 
   /**

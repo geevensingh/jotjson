@@ -712,6 +712,54 @@ describe('JsonTreeComponent', () => {
         const el = fixture.nativeElement.querySelector('.tree-search-count');
         expect(el?.textContent?.trim()).toBe('3 matches');
       });
+
+      it('renders "P / N matches" when the selection is on a hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set(paths[1] as string);
+        fixture.detectChanges();
+        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        expect(el?.textContent?.trim()).toBe('2 / 3 matches');
+      });
+
+      it('falls back to total when selection is not a hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, beta: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        c.selectedPath.set('$.beta');
+        fixture.detectChanges();
+        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        expect(el?.textContent?.trim()).toBe('2 matches');
+      });
+
+      it('falls back to total when nothing is selected', async () => {
+        await createWith({ alpha: 1, alphabet: 2 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        c.selectedPath.set(null);
+        fixture.detectChanges();
+        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        expect(el?.textContent?.trim()).toBe('2 matches');
+      });
+
+      it('updates the position label as goToNextMatch advances', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        // After the search-change effect, activeHitIndex resets to 0; first
+        // Next advances to index 1.
+        c.goToNextMatch();
+        fixture.detectChanges();
+        let el = fixture.nativeElement.querySelector('.tree-search-count');
+        expect(el?.textContent?.trim()).toBe('2 / 3 matches');
+        c.goToNextMatch();
+        fixture.detectChanges();
+        el = fixture.nativeElement.querySelector('.tree-search-count');
+        expect(el?.textContent?.trim()).toBe('3 / 3 matches');
+        expect(c.selectedPath()).toBe(c.searchHitPaths()[2] as string);
+      });
     });
 
     describe('Escape clears the search', () => {
