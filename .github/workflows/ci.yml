@@ -59,7 +59,7 @@ jobs:
         with:
           name: API test results
           path: api/test-results/api/junit.xml
-          reporter: jest-junit
+          reporter: java-junit
           fail-on-error: false
 
   bicep:
@@ -117,5 +117,5 @@ jobs:
         with:
           name: Web test results
           path: test-results/web/junit.xml
-          reporter: jest-junit
+          reporter: java-junit
           fail-on-error: false
