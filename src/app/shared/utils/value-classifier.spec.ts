@@ -25,7 +25,54 @@ describe('value-classifier', () => {
     });
 
     it('rejects a UUID without dashes', () => {
-      expect(classifyValue('string', '550e8400e29b41d4a716446655440000')).toBe('string');
+      expect(classifyValue('string', '550e8400e29b41d4a716446655440000')).toBe('uuid');
+    });
+
+    it('accepts the .NET "N" form (32 hex chars no hyphens)', () => {
+      expect(classifyValue('string', '0e3999429fef4f579f22ef64d960624e')).toBe('uuid');
+    });
+
+    it('accepts the .NET "N" form with mixed case', () => {
+      expect(classifyValue('string', '0E3999429FEF4f579F22EF64D960624E')).toBe('uuid');
+    });
+
+    it('rejects 31 hex chars (too short for "N" form)', () => {
+      expect(classifyValue('string', '0e3999429fef4f579f22ef64d960624')).toBe('string');
+    });
+
+    it('rejects 33 hex chars (too long for "N" form)', () => {
+      expect(classifyValue('string', '0e3999429fef4f579f22ef64d960624ee')).toBe('string');
+    });
+
+    it('rejects 32 chars containing a non-hex character', () => {
+      expect(classifyValue('string', '0e3999429fef4f579f22ef64d960624z')).toBe('string');
+    });
+
+    it('accepts the .NET "B" form (braces)', () => {
+      expect(classifyValue('string', '{0e399942-9fef-4f57-9f22-ef64d960624e}')).toBe('uuid');
+    });
+
+    it('accepts the .NET "P" form (parens)', () => {
+      expect(classifyValue('string', '(0e399942-9fef-4f57-9f22-ef64d960624e)')).toBe('uuid');
+    });
+
+    it('rejects mismatched delimiters', () => {
+      expect(classifyValue('string', '{0e399942-9fef-4f57-9f22-ef64d960624e)')).toBe('string');
+      expect(classifyValue('string', '(0e399942-9fef-4f57-9f22-ef64d960624e}')).toBe('string');
+    });
+
+    it('accepts the urn:uuid: form', () => {
+      expect(classifyValue('string', 'urn:uuid:0e399942-9fef-4f57-9f22-ef64d960624e')).toBe('uuid');
+    });
+
+    it('accepts the urn:uuid: form with mixed case prefix', () => {
+      expect(classifyValue('string', 'URN:UUID:0e399942-9fef-4f57-9f22-ef64d960624e')).toBe('uuid');
+    });
+
+    it('rejects a UUID embedded in a longer string', () => {
+      expect(
+        classifyValue('string', 'see 550e8400-e29b-41d4-a716-446655440000 here'),
+      ).toBe('string');
     });
 
     it('rejects a UUID with wrong segment lengths', () => {
