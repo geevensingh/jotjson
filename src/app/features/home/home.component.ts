@@ -30,6 +30,7 @@ import { BlobService } from '../../core/api/blob.service';
 import { HistoryService } from '../../core/api/history.service';
 import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
+import { LoggerService } from '../../core/telemetry/logger.service';
 import { SeoService } from '../../core/seo/seo.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
@@ -88,6 +89,7 @@ export class HomeComponent {
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
   private readonly clipboard = inject(ClipboardPollingService);
+  private readonly logger = inject(LoggerService);
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -367,10 +369,8 @@ export class HomeComponent {
     if (!this.auth.isConfigured || !this.auth.isSignedIn()) return;
     this.history.recordPaste().subscribe({
       error: (err) => {
-        console.warn(
-          $localize`:@@history.recordPaste.failed.log:Failed to record paste in history`,
-          err
-        );
+        this.logger.warn('history.recordPaste.failed');
+        void err;
       }
     });
   }
@@ -405,7 +405,7 @@ export class HomeComponent {
   async onUpload(file: File): Promise<void> {
     const MAX = 5 * 1024 * 1024;
     if (file.size > MAX) {
-      console.warn($localize`:@@upload.tooLarge.log:File too large (max 5 MB)`);
+      this.logger.warn('home.upload.tooLarge', { size: file.size });
       return;
     }
     const text = await file.text();
@@ -498,7 +498,8 @@ export class HomeComponent {
       }
       const message = this.formatSaveError(err);
       this.saveError.set(message);
-      console.warn($localize`:@@save.failed.log:Save failed`, err);
+      this.logger.warn('home.save.failed');
+      void err;
     } finally {
       this.saveInFlight.set(false);
     }
@@ -608,7 +609,8 @@ export class HomeComponent {
         : $localize`:@@share.visibility.private:Blob is now private.`;
       this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, { duration: 3000 });
     } catch (err) {
-      console.warn($localize`:@@share.visibility.failed.log:Failed to update visibility`, err);
+      this.logger.warn('share.visibility.failed');
+      void err;
       this.snack.open(
         $localize`:@@share.visibility.failed:Failed to update visibility.`,
         $localize`:@@common.dismiss:Dismiss`,
@@ -650,7 +652,8 @@ export class HomeComponent {
       );
       void this.router.navigate(['/']);
     } catch (err) {
-      console.warn($localize`:@@share.delete.failed.log:Failed to delete blob`, err);
+      this.logger.warn('share.delete.failed');
+      void err;
       this.snack.open(
         $localize`:@@share.delete.failed:Failed to delete blob.`,
         $localize`:@@common.dismiss:Dismiss`,

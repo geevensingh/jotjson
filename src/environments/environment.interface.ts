@@ -18,4 +18,10 @@ export interface Environment {
      */
     scopes: string[];
   };
+  /**
+   * Application Insights connection string. When empty, telemetry is
+   * disabled (typical for local development and CI). Production builds
+   * receive this via CD secret substitution into `environment.prod.ts`.
+   */
+  appInsightsConnectionString?: string;
 }

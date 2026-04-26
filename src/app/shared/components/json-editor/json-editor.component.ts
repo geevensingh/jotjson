@@ -17,6 +17,7 @@ import {
 import type * as MonacoNS from 'monaco-editor';
 import { JsonParseError, JsonParserService } from '../../../core/json/json-parser.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
 import { loadMonaco } from './monaco-loader';
 
 @Component({
@@ -31,6 +32,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   private readonly parser = inject(JsonParserService);
   private readonly zone = inject(NgZone);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly logger = inject(LoggerService);
 
   readonly value = input<string>('');
   readonly errors = input<JsonParseError[]>([]);
@@ -89,7 +91,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     try {
       monaco = await loadMonaco();
     } catch (err) {
-      console.error('JotJSON: Monaco failed to load', err);
+      this.logger.error('monaco.loadFailed', err);
       return;
     }
     this.monaco = monaco;

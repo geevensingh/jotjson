@@ -12,6 +12,7 @@ import { filter } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { AuthUser } from './auth-user';
 import { MSAL_INSTANCE } from './msal-instance';
+import { TelemetryService } from '../telemetry/telemetry.service';
 
 /**
  * Entry point for identity in the app.
@@ -32,6 +33,7 @@ import { MSAL_INSTANCE } from './msal-instance';
 export class AuthService {
   private readonly msal = inject<IPublicClientApplication>(MSAL_INSTANCE);
   private readonly broadcast = inject(MsalBroadcastService, { optional: true });
+  private readonly telemetry = inject(TelemetryService);
 
   private readonly userSignal = signal<AuthUser | null>(null);
   private initPromise: Promise<void> | null = null;
@@ -56,6 +58,7 @@ export class AuthService {
         }
         if (msg.eventType === EventType.LOGOUT_SUCCESS) {
           this.userSignal.set(null);
+          this.telemetry.setUser(null);
         }
       });
   }
@@ -184,7 +187,10 @@ export class AuthService {
   private refreshFromCache(): void {
     const account =
       this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0] ?? null;
-    this.userSignal.set(account ? this.toAuthUser(account) : null);
+    const user = account ? this.toAuthUser(account) : null;
+    this.userSignal.set(user);
+    // Telemetry: identify by Entra `oid` only - never email or username.
+    this.telemetry.setUser(user ? user.id : null);
   }
 
   private toAuthUser(a: AccountInfo): AuthUser {

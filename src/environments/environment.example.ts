@@ -15,5 +15,6 @@ export const environment: Environment = {
     redirectUri: 'http://localhost:4200/',
     postLogoutRedirectUri: 'http://localhost:4200/',
     scopes: []
-  }
+  },
+  appInsightsConnectionString: ''
 };

@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
 import { filter } from 'rxjs/operators';
+import { LoggerService } from '../telemetry/logger.service';
 
 /**
  * Reacts to Angular service worker events so that a deploy-in-progress
@@ -25,6 +26,7 @@ import { filter } from 'rxjs/operators';
 export class AppUpdateService {
   private readonly swUpdate = inject(SwUpdate);
   private readonly snack = inject(MatSnackBar);
+  private readonly logger = inject(LoggerService);
   private initialized = false;
 
   initialize(): void {
@@ -41,10 +43,7 @@ export class AppUpdateService {
       .subscribe(() => this.promptReload());
 
     this.swUpdate.unrecoverable.subscribe((event) => {
-      console.warn(
-        $localize`:@@update.unrecoverable.log:Service worker entered unrecoverable state; hard-reloading`,
-        event.reason
-      );
+      this.logger.warn('update.unrecoverable', { reason: event.reason });
       this.hardReload();
     });
   }
@@ -66,10 +65,8 @@ export class AppUpdateService {
     } catch (err) {
       // Fall through to reload anyway - the fresh fetch will re-run the
       // install flow and any partial cache will be discarded.
-      console.warn(
-        $localize`:@@update.activate.failed.log:Failed to activate service worker update`,
-        err
-      );
+      this.logger.warn('update.activate.failed');
+      void err;
     }
     this.reload();
   }

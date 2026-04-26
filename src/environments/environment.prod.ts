@@ -10,5 +10,6 @@ export const environment: Environment = {
     redirectUri: 'https://jotjson.com/',
     postLogoutRedirectUri: 'https://jotjson.com/',
     scopes: []
-  }
+  },
+  appInsightsConnectionString: ''
 };

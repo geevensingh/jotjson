@@ -33,7 +33,18 @@ const ALLOWED = new Set([
 const BINARY_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.woff', '.woff2']);
 
 function listTrackedFiles() {
-  const out = execFileSync('git', ['ls-files', '-z'], { encoding: 'buffer' });
+  // `--cached` = files in the index (tracked).
+  // `--others --exclude-standard` = untracked files not covered by
+  //   .gitignore / .git/info/exclude / global excludes.
+  // Together: every file git is willing to track. This makes the local
+  // run match CI: a developer who runs `npm run check:ascii` BEFORE
+  // staging a new file still sees violations from that file, instead
+  // of the file being silently skipped because it is untracked.
+  const out = execFileSync(
+    'git',
+    ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+    { encoding: 'buffer' }
+  );
   // -z emits NUL-terminated paths to survive unusual filenames.
   return out
     .toString('utf8')
