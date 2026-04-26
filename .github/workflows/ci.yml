@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: read
+  checks: write
+  pull-requests: write
 
 jobs:
   web:
@@ -42,6 +44,23 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Run tests
+        run: npm test
+      - name: Upload api JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-junit
+          path: api/test-results/api/junit.xml
+          if-no-files-found: ignore
+      - name: Publish api test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: API test results
+          path: api/test-results/api/junit.xml
+          reporter: jest-junit
+          fail-on-error: false
 
   bicep:
     name: Bicep validate
@@ -85,3 +104,18 @@ jobs:
           name: web-coverage
           path: coverage/jotjson
           if-no-files-found: ignore
+      - name: Upload web JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-junit
+          path: test-results/web/junit.xml
+          if-no-files-found: ignore
+      - name: Publish web test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: Web test results
+          path: test-results/web/junit.xml
+          reporter: jest-junit
+          fail-on-error: false
