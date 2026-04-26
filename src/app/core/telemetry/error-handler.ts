@@ -8,7 +8,7 @@ import { LoggerService } from './logger.service';
  *
  * Reentrancy guard: if `logger.error()` itself throws (e.g. because
  * telemetry blew up mid-dispatch), we swallow the throw and DO NOT
- * re-enter — otherwise an Angular `ErrorHandler` recursion can lock
+ * re-enter - otherwise an Angular `ErrorHandler` recursion can lock
  * the page.
  */
 @Injectable({ providedIn: 'root' })

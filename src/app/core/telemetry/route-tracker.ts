@@ -12,7 +12,7 @@ import { TelemetryService } from './telemetry.service';
  *
  * Subscribes to the router and emits `trackPageView` calls using the
  * matched route's `path` template (e.g. `s/:slug`) instead of the raw
- * URL — this prevents the telemetry stream from fragmenting into one
+ * URL - this prevents the telemetry stream from fragmenting into one
  * series per blob slug.
  *
  * Because telemetry is connected lazily from `AppComponent.ngOnInit`,

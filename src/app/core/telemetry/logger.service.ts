@@ -26,11 +26,11 @@ interface PendingEntry {
 }
 
 /**
- * Public façade for application logging. All call sites should use this
+ * Public facade for application logging. All call sites should use this
  * service rather than `console.*` directly. Two parallel sinks:
  *
- * - `console.*` — always (so DevTools shows everything in dev).
- * - App Insights — once `TelemetryService.connect()` resolves.
+ * - `console.*` - always (so DevTools shows everything in dev).
+ * - App Insights - once `TelemetryService.connect()` resolves.
  *
  * Calls made before telemetry connects are buffered (FIFO, cap 100,
  * oldest dropped on overflow) and replayed on connect. If telemetry
