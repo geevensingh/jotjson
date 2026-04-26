@@ -85,6 +85,7 @@ jobs:
           ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
           ENTRA_KNOWN_AUTHORITY: ${{ secrets.ENTRA_KNOWN_AUTHORITY }}
           ENTRA_API_SCOPE: ${{ secrets.ENTRA_API_SCOPE }}
+          APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.APP_INSIGHTS_CONNECTION_STRING }}
         run: |
           # SWA-hosted site is reachable at both the SWA default hostname and
           # the custom domain (jotjson.com) once bound. MSAL only allows one
@@ -102,7 +103,8 @@ jobs:
               redirectUri: 'https://jotjson.com/',
               postLogoutRedirectUri: 'https://jotjson.com/',
               scopes: ['__ENTRA_API_SCOPE__']
-            }
+            },
+            appInsightsConnectionString: '__APP_INSIGHTS_CONNECTION_STRING__'
           };
           EOF
           # The heredoc above preserves the indentation we use in YAML, so
@@ -110,16 +112,34 @@ jobs:
           # emitted file still type-checks either way, but cleaner diffs in
           # deploy logs help debugging.
           sed -i 's/^          //' src/environments/environment.prod.ts
-          # Substitute secrets. Fail the build if any are still empty so we
-          # never ship an unconfigured production bundle.
+          # Substitute secrets. Fail the build if any of the ENTRA_* values
+          # are still empty so we never ship an unconfigured production
+          # bundle. App Insights is intentionally optional - an empty
+          # connection string just disables telemetry for that build.
           sed -i "s|__ENTRA_SPA_CLIENT_ID__|${ENTRA_SPA_CLIENT_ID}|g" src/environments/environment.prod.ts
           sed -i "s|__ENTRA_AUTHORITY__|${ENTRA_AUTHORITY}|g" src/environments/environment.prod.ts
           sed -i "s|__ENTRA_KNOWN_AUTHORITY__|${ENTRA_KNOWN_AUTHORITY}|g" src/environments/environment.prod.ts
           sed -i "s|__ENTRA_API_SCOPE__|${ENTRA_API_SCOPE}|g" src/environments/environment.prod.ts
+          # `|` delimiter for AI because the connection string contains `=`
+          # but no `|`.
+          sed -i "s|__APP_INSIGHTS_CONNECTION_STRING__|${APP_INSIGHTS_CONNECTION_STRING}|g" src/environments/environment.prod.ts
           if grep -q "__ENTRA_" src/environments/environment.prod.ts; then
             echo "::error::One or more ENTRA_* secrets are missing - aborting deploy."
             exit 1
           fi
+
+      - name: Strip production sourcemaps before SWA upload
+        if: steps.check.outputs.have_token == 'true'
+        # We build with `sourceMap: { hidden: true }` so the JS bundles
+        # have no `sourceMappingURL` comment, but the .map files are
+        # still emitted to the output directory. Delete them so they
+        # are never uploaded to the public SWA origin. Symbolication
+        # for App Insights will be done out-of-band (see DESIGN_SPEC
+        # Telemetry). Until then, prod stack traces are minified -
+        # acceptable trade-off vs leaking source.
+        run: |
+          find dist/jotjson/browser -name '*.map' -type f -delete
+          echo "Stripped $(find dist/jotjson/browser -name '*.map' | wc -l) sourcemap files (should be 0)"
 
       - name: Deploy to Azure Static Web Apps
         if: steps.check.outputs.have_token == 'true'

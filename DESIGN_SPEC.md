@@ -783,6 +783,123 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 
 ---
 
+## Telemetry & Logging
+
+JotJSON uses **Azure Application Insights** for both the SPA and the
+Azure Functions backend. The resource is provisioned in
+`infra/modules/appInsights.bicep` and shared between the two.
+
+### Connection-string flow
+
+- **Functions**: connection string injected as an app setting
+  (`APPLICATIONINSIGHTS_CONNECTION_STRING`) by Bicep; the Functions
+  runtime auto-instruments via `host.json`.
+- **SPA**: connection string is baked into `environment.prod.ts` at CD
+  time from the `APP_INSIGHTS_CONNECTION_STRING` GitHub secret. Empty
+  value -> telemetry disabled in that build (no SDK chunk loaded). The
+  CD step intentionally does NOT fail-closed when the secret is empty,
+  so a deploy still succeeds without telemetry.
+
+### What we collect (SPA)
+
+Manual instrumentation, driven through `core/telemetry/LoggerService`:
+
+- **Page views** - emitted by `route-tracker` on `NavigationEnd`, using
+  the matched Angular route template (e.g. `/s/:slug`, `/blobs`),
+  never the raw URL. Auto route tracking is **off**.
+- **Exceptions** - captured by `TelemetryErrorHandler` (registered as
+  Angular `ErrorHandler`). Every error goes through `normalizeError`,
+  which returns a strict whitelist (`status/method/pathTemplate/
+  backendCode` for HTTP, `name/message/stack` for `Error`, redacted
+  and truncated). Auto exception tracking is **off** to avoid
+  duplicates.
+- **Traces** - structured warnings from migrated `console.warn` sites
+  (`api.error`, `home.save.failed`, `share.delete.failed`, etc.). All
+  message IDs come from a frozen literal-union in
+  `telemetry-message-ids.ts` so typos fail at compile time.
+- **Dependencies (XHR/fetch)** - **on**, for SPA <-> Functions
+  correlation. URLs are sanitized in a telemetry initializer (query
+  string and fragment stripped). Ajax error response bodies are **off**
+  (`enableAjaxErrorStatusText: false`).
+- **Browser perf timings** - on (no PII).
+
+### What we deliberately do NOT collect
+
+- **Editor or clipboard content.** The `LoggerService` API does not
+  accept arbitrary user text, only structured `messageId + props` and
+  normalized errors.
+- **URL query strings or fragments.** History search (`q`,
+  `continuationToken`, `from`, `to`) and slug-bearing share links
+  never reach App Insights.
+- **HTTP request or response bodies.**
+- **Authorization headers.** Redacted in the privacy initializer as
+  defense in depth.
+- **Cookies.** `disableCookiesUsage: true`.
+- **Email, UPN, display name, or any free-form user identifier.** The
+  only identifier we send is the Entra `oid` via
+  `setAuthenticatedUserContext`. `redactPii` scrubs anything that looks
+  like an email or UPN out of free-text fields (Error messages, MSAL
+  log lines, stack frames).
+- **Click analytics.** The clickanalytics plugin is not loaded.
+
+### Bootstrap-failure path
+
+If `bootstrapApplication` rejects before Angular comes up, `main.ts`
+writes a sanitized record to `sessionStorage['jotjson.bootErr']`.
+`LoggerService.connect()` reads, clears, and replays it as a
+`boot.failed` exception once telemetry comes online.
+
+### MSAL log forwarding
+
+`createMsalInstance()` runs as a factory before Angular DI. It cannot
+inject `LoggerService` directly, so it publishes through a
+module-scoped `msalBridge` that buffers the most recent error-level
+messages. `LoggerService` attaches a consumer in its constructor; the
+buffer is drained on attach. Only `LogLevel.Error` messages are
+forwarded; PII messages are dropped at the source by MSAL.
+
+### Sampling
+
+- Functions: SDK default (adaptive sampling).
+- SPA: 100% in v1.
+
+### Sourcemaps
+
+Production builds emit **hidden** sourcemaps
+(`sourceMap: { scripts: true, hidden: true }` in `angular.json`).
+Hidden = no `sourceMappingURL` comment in the bundle, so sourcemaps
+are never fetched by browsers. The CD pipeline deletes the `.map`
+files before SWA upload so they are not exposed at the public origin.
+Out-of-band symbol upload to App Insights is a follow-up; until then,
+production stack traces are minified.
+
+### Local development
+
+- `environment.appInsightsConnectionString` is empty in
+  `environment.example.ts`/`environment.ts`.
+- `LoggerService` mirrors all calls to `console.*` regardless, so
+  DevTools shows the full log in dev.
+- `TelemetryService.connect()` short-circuits to `disabled` on empty
+  connection string; the `applicationinsights-web` chunk is not
+  fetched.
+
+### CSP allowlist (for future hardening)
+
+If/when a Content Security Policy is enforced, App Insights ingestion
+needs:
+
+- `*.in.applicationinsights.azure.com` (telemetry ingestion)
+- `*.livediagnostics.monitor.azure.com` (live metrics)
+- `js.monitor.azure.com` (CDN, only if we ever switch the SDK to a
+  CDN load - we currently bundle it via npm)
+
+### Data residency
+
+The App Insights resource is currently provisioned in **West US 2**.
+EU users would need a regional resource - out of scope for v1.
+
+---
+
 ## Milestones
 
 1. ~~**Project scaffolding** - Angular app, Azure Functions project, Cosmos DB setup, CI/CD pipeline.~~ (done)
