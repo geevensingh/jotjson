@@ -14,7 +14,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
-    "lint": "tsc --noEmit -p tsconfig.app.json",
+    "lint": "tsc --noEmit -p tsconfig.app.json && node scripts/check-ascii.mjs",
     "check:ascii": "node scripts/check-ascii.mjs",
     "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf",
     "build:info": "node scripts/write-build-info.mjs",
