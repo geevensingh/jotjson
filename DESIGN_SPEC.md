@@ -780,6 +780,16 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
   - Azure Functions -> deployed as Static Web Apps managed functions (bundled with the SPA in a single deployment).
   - Staging slot for preview on PRs (Static Web Apps preview environments).
 - **Infrastructure** - Bicep templates applied via a separate workflow on changes to `/infra` directory.
+- **Workflow lint** - `actionlint` runs against `.github/workflows/` in CI.
+- **Spec-pattern lint** - `scripts/check-spec-patterns.mjs` runs in CI's lint job and fails on known-fragile testing idioms (e.g. `spyOnProperty(navigator, 'clipboard', ...)` which silently passes on Windows headless Chrome but throws on the Linux runner). New rules are added as we encounter cross-platform test failures.
+
+### Pre-v1 readiness review
+
+Items to revisit before declaring v1 complete (deliberately deferred so they do not slow current development velocity):
+
+- **PR-by-default for code changes.** Today, code changes can land directly on `main`. Decide whether v1 should require code changes to land via a PR with green CI before merging, with CD/workflow hotfixes remaining as the only sanctioned direct-to-`main` path. Rationale for deferring now: keeps iteration velocity high; CI on `push: main` still runs, just after merge.
+- **Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.
+- **Production sourcemap upload to App Insights.** Currently no sourcemaps in production. Decide whether to wire symbol upload (would also require switching the SWA deploy to runner-side build via `skip_app_build: true`).
 
 ---
 
