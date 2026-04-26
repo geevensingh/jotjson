@@ -865,13 +865,13 @@ forwarded; PII messages are dropped at the source by MSAL.
 
 ### Sourcemaps
 
-Production builds emit **hidden** sourcemaps
-(`sourceMap: { scripts: true, hidden: true }` in `angular.json`).
-Hidden = no `sourceMappingURL` comment in the bundle, so sourcemaps
-are never fetched by browsers. The CD pipeline deletes the `.map`
-files before SWA upload so they are not exposed at the public origin.
-Out-of-band symbol upload to App Insights is a follow-up; until then,
-production stack traces are minified.
+Production builds do **not** emit sourcemaps today (Angular default
+for the `production` configuration). Production stack traces in App
+Insights are therefore minified. Out-of-band symbol upload to App
+Insights is a planned follow-up; when it lands, the SWA build
+topology will switch to runner-side build (`skip_app_build: true`)
+so the CI job controls the artifacts and can upload symbols before
+deploy.
 
 ### Local development
 

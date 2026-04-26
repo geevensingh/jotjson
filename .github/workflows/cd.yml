@@ -128,19 +128,6 @@ jobs:
             exit 1
           fi
 
-      - name: Strip production sourcemaps before SWA upload
-        if: steps.check.outputs.have_token == 'true'
-        # We build with `sourceMap: { hidden: true }` so the JS bundles
-        # have no `sourceMappingURL` comment, but the .map files are
-        # still emitted to the output directory. Delete them so they
-        # are never uploaded to the public SWA origin. Symbolication
-        # for App Insights will be done out-of-band (see DESIGN_SPEC
-        # Telemetry). Until then, prod stack traces are minified -
-        # acceptable trade-off vs leaking source.
-        run: |
-          find dist/jotjson/browser -name '*.map' -type f -delete
-          echo "Stripped $(find dist/jotjson/browser -name '*.map' | wc -l) sourcemap files (should be 0)"
-
       - name: Deploy to Azure Static Web Apps
         if: steps.check.outputs.have_token == 'true'
         uses: Azure/static-web-apps-deploy@v1
