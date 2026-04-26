@@ -23,6 +23,25 @@ import {
   formatDateAnnotation,
   parseAsDate
 } from '../../utils/date-detect';
+import { classifyValue, ValueClassification } from '../../utils/value-classifier';
+
+const TYPE_LABELS: Record<ValueClassification, string> = {
+  date: $localize`:@@tree.type.date:date`,
+  'date/time': $localize`:@@tree.type.dateTime:date/time`,
+  uuid: $localize`:@@tree.type.uuid:uuid`,
+  url: $localize`:@@tree.type.url:url`,
+  email: $localize`:@@tree.type.email:email`,
+  ipv4: $localize`:@@tree.type.ipv4:ipv4`,
+  ipv6: $localize`:@@tree.type.ipv6:ipv6`,
+  integer: $localize`:@@tree.type.integer:integer`,
+  number: $localize`:@@tree.type.number:number`,
+  string: $localize`:@@tree.type.string:string`,
+  boolean: $localize`:@@tree.type.boolean:boolean`,
+  null: $localize`:@@tree.type.null:null`,
+  array: $localize`:@@tree.type.array:array`,
+  object: $localize`:@@tree.type.object:object`,
+  undefined: $localize`:@@tree.type.undefined:undefined`
+};
 
 interface TreeNode {
   segment: string | number | undefined;
@@ -369,6 +388,23 @@ export class JsonTreeComponent {
     });
     if (!parsed) return null;
     return formatDateAnnotation(parsed, new Date(this.nowSignal()));
+  }
+
+  /**
+   * Localized label for the type-badge. Returns a richer descriptor
+   * than the raw JSON type when we can detect one (uuid, url, email,
+   * ipv4, ipv6, integer, date, date/time). Date detection is gated by
+   * the `treeShowDateAnnotations` master toggle so the badge text stays
+   * in sync with the annotation visibility.
+   */
+  typeLabel(node: TreeNode): string {
+    const prefs = this.prefs.prefs();
+    const classification = classifyValue(node.type, node.value, {
+      detectDates: prefs.treeShowDateAnnotations,
+      assumeUtcForIsoDateTime: prefs.treeAssumeUtcForIsoDateTime,
+      assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly
+    });
+    return TYPE_LABELS[classification];
   }
 
   containerSummary(node: TreeNode): string {

@@ -618,4 +618,60 @@ describe('JsonTreeComponent', () => {
       }
     });
   });
+
+  describe('type badge labels', () => {
+    function badges(): string[] {
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-type-badge')
+      ).map((el) => (el.textContent ?? '').trim());
+    }
+
+    it('renders date/time for an ISO date+time string', async () => {
+      await createWith({ when: '2024-11-05T18:30:00Z' });
+      expect(badges()).toContain('date/time');
+    });
+
+    it('renders date for an ISO date-only string', async () => {
+      await createWith({ when: '2024-11-05' });
+      expect(badges()).toContain('date');
+    });
+
+    it('falls back to string when the master annotations toggle is off', async () => {
+      await createWith({ when: '2024-11-05T18:30:00Z' });
+      prefs.update({ treeShowDateAnnotations: false });
+      fixture.detectChanges();
+      const labels = badges();
+      expect(labels).toContain('string');
+      expect(labels).not.toContain('date/time');
+    });
+
+    it('renders integer for a whole number and number for a fractional one', async () => {
+      await createWith({ a: 1, b: 1.5 });
+      const labels = badges();
+      expect(labels).toContain('integer');
+      expect(labels).toContain('number');
+    });
+
+    it('renders uuid for a canonical UUID string', async () => {
+      await createWith({ id: '550e8400-e29b-41d4-a716-446655440000' });
+      expect(badges()).toContain('uuid');
+    });
+
+    it('renders url for an https string', async () => {
+      await createWith({ link: 'https://example.com' });
+      expect(badges()).toContain('url');
+    });
+
+    it('renders email for a typical email string', async () => {
+      await createWith({ contact: 'a@example.com' });
+      expect(badges()).toContain('email');
+    });
+
+    it('renders ipv4 and ipv6 for the respective formats', async () => {
+      await createWith({ a: '192.168.0.1', b: '::1' });
+      const labels = badges();
+      expect(labels).toContain('ipv4');
+      expect(labels).toContain('ipv6');
+    });
+  });
 });

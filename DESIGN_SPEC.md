@@ -279,13 +279,15 @@ The primary page. Available to **all users** (anonymous + registered).
   - Renders the parsed JSON as a collapsible, interactive tree.
   - **Empty containers** render inline on a single row: empty arrays as `[]` with a `0 items` annotation, empty objects as `{}` with a `0 keys` annotation, using the same container glyph styling as non-empty containers so that an empty structure is visually distinct from a missing value.
   - Each row layout: `[expand/collapse icon]  key: value  ................  [type label]`
-  - **Type labels** - right-aligned on every row, showing the JSON type with contextual counts:
-    - `string` - string values.
-    - `number` - numeric values.
+  - **Type labels** - right-aligned on every row, showing the richest known descriptor for the value:
+    - `string` - string values that don't match a more specific classifier.
+    - `number` - numeric values with a fractional part.
+    - `integer` - numeric values that are whole numbers.
     - `boolean` - true/false values.
     - `null` - null values.
     - `array:N` - arrays, where N is the number of direct items (e.g., `array:5`).
     - `json:X` - objects, where X is the total number of nodes in the subtree rooted at that object (recursive count of all descendant keys). E.g., a nested object containing 3 keys, one of which is itself an object with 2 keys, displays `json:5`.
+    - String values are additionally classified into more specific labels when the content matches: `date` and `date/time` (parseable ISO 8601, RFC 2822, or slash-form date - gated by `treeShowDateAnnotations` so the badge stays in sync with the annotation visibility), `uuid`, `url`, `email`, `ipv4`, `ipv6`. Detection is conservative; ambiguous strings fall back to `string`.
   - Type labels are styled with a muted/subdued color and a small monospace font so they don't compete with the key/value content. Type labels use a single muted color rather than per-type coloring - leaf values themselves already carry semantic color (strings, numbers, booleans, null), so coloring the type badge too would be visual noise.
   - Type labels can be toggled on/off via the "Show type labels" preference in user settings.
   - **Expansion controls** (toolbar above the tree):

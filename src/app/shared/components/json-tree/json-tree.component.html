@@ -111,7 +111,7 @@
               @if (node.type === 'array' || node.type === 'object') {
                 <span class="tree-count">{{ containerCountText(node) }}</span>
               }
-              <span class="tree-type-badge">{{ node.type }}</span>
+              <span class="tree-type-badge">{{ typeLabel(node) }}</span>
               <button
                 type="button"
                 class="tree-path-pill"
@@ -185,7 +185,7 @@
           <span class="tree-row-right">
             <span class="tree-count">{{ containerCountText(node) }}</span>
             @if (showTypeBadges()) {
-              <span class="tree-type-badge">{{ node.type }}</span>
+              <span class="tree-type-badge">{{ typeLabel(node) }}</span>
             }
             <button
               type="button"
