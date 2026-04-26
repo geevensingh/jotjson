@@ -1,0 +1,392 @@
+<jj-app-header />
+<main class="profile">
+  <h1 i18n="@@profile.title">Profile</h1>
+
+  @if (isSignedIn()) {
+    <section class="card" aria-labelledby="profile-identity">
+      <h2 id="profile-identity" class="card-title" i18n="@@profile.identity.title">
+        Identity
+      </h2>
+
+      <dl>
+        <dt i18n="@@profile.displayName.label">Display name</dt>
+        <dd class="value">{{ user()?.displayName }}</dd>
+
+        <dt i18n="@@profile.email.label">Email</dt>
+        <dd class="value">
+          @if (user()?.email) {
+            <span>{{ user()?.email }}</span>
+          } @else {
+            <span class="muted" i18n="@@profile.email.notProvided">
+              Not provided by your identity provider
+            </span>
+          }
+        </dd>
+      </dl>
+
+      <div class="actions">
+        <button
+          type="button"
+          mat-stroked-button
+          color="warn"
+          (click)="onSignOut()"
+        >
+          <jj-icon name="sign-out" />
+          <span i18n="@@profile.signOut">Sign out</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="card prefs-card" aria-labelledby="profile-prefs">
+      <h2 id="profile-prefs" class="card-title" i18n="@@profile.prefs.title">
+        Preferences
+      </h2>
+      <p class="card-subtitle" i18n="@@profile.prefs.subtitle">
+        Changes save automatically.
+      </p>
+
+      <section class="prefs-group" aria-labelledby="prefs-editor">
+        <h3 id="prefs-editor" class="group-title" i18n="@@profile.prefs.editor.title">
+          Editor
+        </h3>
+
+        <div class="pref-row">
+          <label for="pref-font-size" i18n="@@profile.prefs.editor.fontSize">Font size</label>
+          <input
+            id="pref-font-size"
+            type="number"
+            class="pref-number"
+            [min]="fontSizeMin"
+            [max]="fontSizeMax"
+            step="1"
+            [ngModel]="editorFontSize()"
+            (ngModelChange)="onEditorFontSizeChange($event)"
+          />
+          <span class="pref-suffix" aria-hidden="true">px</span>
+        </div>
+
+        <div class="pref-row">
+          <span id="pref-tab-size-label" i18n="@@profile.prefs.editor.tabSize">Tab size</span>
+          <mat-button-toggle-group
+            aria-labelledby="pref-tab-size-label"
+            [value]="editorTabSize()"
+            (change)="onEditorTabSizeChange($event.value)"
+          >
+            <mat-button-toggle [value]="2">2</mat-button-toggle>
+            <mat-button-toggle [value]="4">4</mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="editorWordWrap()"
+            (change)="onEditorWordWrapChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.editor.wordWrap">Word wrap</span>
+          </mat-slide-toggle>
+        </div>
+      </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-tree">
+        <h3 id="prefs-tree" class="group-title" i18n="@@profile.prefs.tree.title">
+          Tree
+        </h3>
+
+        <div class="pref-row">
+          <label for="pref-tree-font-size" i18n="@@profile.prefs.tree.fontSize">Font size</label>
+          <input
+            id="pref-tree-font-size"
+            type="number"
+            class="pref-number"
+            [min]="fontSizeMin"
+            [max]="fontSizeMax"
+            step="1"
+            [ngModel]="treeFontSize()"
+            (ngModelChange)="onTreeFontSizeChange($event)"
+          />
+          <span class="pref-suffix" aria-hidden="true">px</span>
+        </div>
+
+        <div class="pref-row">
+          <label for="pref-expansion-depth" i18n="@@profile.prefs.tree.expansionDepth">
+            Default expansion depth
+          </label>
+          <input
+            id="pref-expansion-depth"
+            type="number"
+            class="pref-number"
+            [min]="expansionDepthMin"
+            [max]="expansionDepthMax"
+            step="1"
+            [ngModel]="defaultTreeExpansionDepth()"
+            (ngModelChange)="onDefaultTreeExpansionDepthChange($event)"
+          />
+          <span class="pref-help" i18n="@@profile.prefs.tree.expansionDepth.help">
+            How deep the tree starts expanded when a blob loads.
+          </span>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="treeShowTypeLabels()"
+            (change)="onTreeShowTypeLabelsChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.tree.showTypeLabels">Show type labels</span>
+          </mat-slide-toggle>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="treeShowDateAnnotations()"
+            (change)="onTreeShowDateAnnotationsChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.tree.showDateAnnotations">
+              Show date annotations
+            </span>
+          </mat-slide-toggle>
+        </div>
+      </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-search">
+        <h3 id="prefs-search" class="group-title" i18n="@@profile.prefs.search.title">
+          Search
+        </h3>
+
+        <div class="pref-row">
+          <label for="pref-search-scope" i18n="@@profile.prefs.search.scope">
+            Search scope
+          </label>
+          <select
+            id="pref-search-scope"
+            class="pref-select"
+            [ngModel]="searchScope()"
+            (ngModelChange)="onSearchScopeChange($event)"
+          >
+            <option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</option>
+            <option value="values" i18n="@@profile.prefs.search.scope.values">Values</option>
+            <option value="both" i18n="@@profile.prefs.search.scope.both">Keys and values</option>
+          </select>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="searchCaseSensitive()"
+            (change)="onSearchCaseSensitiveChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.search.caseSensitive">Case sensitive</span>
+          </mat-slide-toggle>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="searchRegexMode()"
+            (change)="onSearchRegexModeChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.search.regexMode">Regular expression mode</span>
+          </mat-slide-toggle>
+        </div>
+      </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-history">
+        <h3 id="prefs-history" class="group-title" i18n="@@profile.prefs.history.title">
+          History &amp; storage
+        </h3>
+
+        <div class="pref-row">
+          <label for="pref-history-mode" i18n="@@profile.prefs.history.trackingMode">
+            History tracking
+          </label>
+          <select
+            id="pref-history-mode"
+            class="pref-select"
+            [ngModel]="historyTrackingMode()"
+            (ngModelChange)="onHistoryTrackingModeChange($event)"
+          >
+            <option value="save_only" i18n="@@profile.prefs.history.trackingMode.saveOnly">
+              Save only
+            </option>
+            <option value="all_actions" i18n="@@profile.prefs.history.trackingMode.allActions">
+              All actions
+            </option>
+          </select>
+          <span class="pref-help" i18n="@@profile.prefs.history.trackingMode.help">
+            Choose whether your history records only saved blobs or every view, edit, and paste.
+          </span>
+        </div>
+
+        <div class="pref-row">
+          <label for="pref-quota-strategy" i18n="@@profile.prefs.history.quotaStrategy">
+            When you reach the saved blob limit
+          </label>
+          <select
+            id="pref-quota-strategy"
+            class="pref-select"
+            [ngModel]="blobQuotaStrategy()"
+            (ngModelChange)="onBlobQuotaStrategyChange($event)"
+          >
+            <option value="auto_fifo" i18n="@@profile.prefs.history.quotaStrategy.autoFifo">
+              Automatically delete the oldest
+            </option>
+            <option value="manual" i18n="@@profile.prefs.history.quotaStrategy.manual">
+              Ask me to choose
+            </option>
+          </select>
+        </div>
+      </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-appearance">
+        <h3 id="prefs-appearance" class="group-title" i18n="@@profile.prefs.appearance.title">
+          Appearance
+        </h3>
+
+        <div class="pref-row">
+          <label for="pref-theme" i18n="@@profile.prefs.appearance.theme">Theme</label>
+          <select
+            id="pref-theme"
+            class="pref-select"
+            [ngModel]="theme()"
+            (ngModelChange)="onThemeChange($event)"
+          >
+            <option value="dark" i18n="@@profile.prefs.appearance.theme.dark">Dark</option>
+            <option value="light" i18n="@@profile.prefs.appearance.theme.light">Light</option>
+            <option value="system" i18n="@@profile.prefs.appearance.theme.system">
+              Match system
+            </option>
+          </select>
+        </div>
+
+        <div class="pref-row">
+          <label for="pref-layout" i18n="@@profile.prefs.appearance.layout">
+            Layout orientation
+          </label>
+          <select
+            id="pref-layout"
+            class="pref-select"
+            [ngModel]="layoutOrientation()"
+            (ngModelChange)="onLayoutOrientationChange($event)"
+          >
+            <option value="horizontal" i18n="@@profile.prefs.appearance.layout.horizontal">
+              Horizontal
+            </option>
+            <option value="vertical" i18n="@@profile.prefs.appearance.layout.vertical">
+              Vertical
+            </option>
+          </select>
+        </div>
+      </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-highlight-colors">
+        <h3
+          id="prefs-highlight-colors"
+          class="group-title"
+          i18n="@@profile.prefs.highlightColors.title"
+        >
+          Tree highlight colors
+        </h3>
+        <p class="group-help" i18n="@@profile.prefs.highlightColors.help">
+          Pick colors used to highlight selected nodes, ancestors of the
+          selection, matching values, and search hits. Each theme has its
+          own set; only the currently active theme is shown live.
+        </p>
+
+        @for (theme of highlightThemes; track theme) {
+          <div class="highlight-panel" [class.active]="isActiveTheme(theme)">
+            <div class="highlight-panel-title">
+              @if (theme === 'dark') {
+                <span i18n="@@profile.prefs.highlightColors.darkTheme">Dark theme</span>
+              } @else {
+                <span i18n="@@profile.prefs.highlightColors.lightTheme">Light theme</span>
+              }
+              @if (isActiveTheme(theme)) {
+                <span
+                  class="active-tag"
+                  i18n="@@profile.prefs.highlightColors.activeTag"
+                  >(active)</span
+                >
+              }
+            </div>
+
+            @for (field of highlightFields; track field.key) {
+              <div class="pref-row highlight-row">
+                <label [attr.for]="field.inputId(theme)">
+                  @switch (field.key) {
+                    @case ('selectionColor') {
+                      <span i18n="@@profile.prefs.highlightColors.selection">
+                        Selection
+                      </span>
+                    }
+                    @case ('matchingValueColor') {
+                      <span i18n="@@profile.prefs.highlightColors.matching">
+                        Matching values
+                      </span>
+                    }
+                    @case ('ancestorColor') {
+                      <span i18n="@@profile.prefs.highlightColors.ancestor">
+                        Ancestors
+                      </span>
+                    }
+                    @case ('searchHighlightColor') {
+                      <span i18n="@@profile.prefs.highlightColors.search">
+                        Search highlight
+                      </span>
+                    }
+                  }
+                </label>
+                <input
+                  type="color"
+                  class="pref-color"
+                  [id]="field.inputId(theme)"
+                  [value]="treeHighlightColors()[theme][field.key]"
+                  (input)="
+                    onHighlightColorChange(
+                      theme,
+                      field.key,
+                      $any($event.target).value
+                    )
+                  "
+                />
+                <span
+                  class="pref-color-swatch"
+                  [style.background]="treeHighlightColors()[theme][field.key]"
+                  aria-hidden="true"
+                ></span>
+                <code class="pref-color-hex">{{
+                  treeHighlightColors()[theme][field.key]
+                }}</code>
+              </div>
+            }
+          </div>
+        }
+
+        <div class="pref-row">
+          <button type="button" mat-stroked-button (click)="onResetActiveThemeColors()">
+            <span i18n="@@profile.prefs.highlightColors.resetActive">
+              Reset active theme to defaults
+            </span>
+          </button>
+        </div>
+      </section>
+    </section>
+  } @else {
+    <section class="card" aria-labelledby="profile-signed-out">
+      <h2 id="profile-signed-out" class="card-title" i18n="@@profile.signedOut.title">
+        You are signed out
+      </h2>
+      <p i18n="@@profile.signedOut.body">
+        Sign in to view your profile, save persistent links, and keep history
+        across devices.
+      </p>
+      @if (isConfigured) {
+        <button type="button" mat-flat-button color="primary" (click)="onSignIn()">
+          <jj-icon name="sign-in" />
+          <span i18n="@@profile.signIn">Sign in</span>
+        </button>
+      } @else {
+        <button type="button" mat-flat-button color="primary" disabled>
+          <jj-icon name="sign-in" />
+          <span i18n="@@profile.signIn.notConfigured">Sign in (not configured)</span>
+        </button>
+      }
+    </section>
+  }
+</main>

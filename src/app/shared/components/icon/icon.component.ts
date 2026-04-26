@@ -7,6 +7,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  */
 export type JjIconName =
   | 'paste'
+  | 'copy'
   | 'upload'
   | 'download'
   | 'format'
@@ -17,7 +18,22 @@ export type JjIconName =
   | 'sun'
   | 'moon'
   | 'system'
-  | 'copy-path';
+  | 'copy-path'
+  | 'chevron-right'
+  | 'chevron-down'
+  | 'sign-in'
+  | 'sign-out'
+  | 'save'
+  | 'more-vert'
+  | 'link'
+  | 'globe'
+  | 'lock'
+  | 'trash'
+  | 'edit'
+  | 'eye'
+  | 'folder'
+  | 'history'
+  | 'search';
 
 @Component({
   selector: 'jj-icon',
@@ -44,6 +60,10 @@ export type JjIconName =
           <path d="M16 5h2.5A1.5 1.5 0 0 1 20 6.5v13A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5v-13A1.5 1.5 0 0 1 5.5 5H8" />
           <path d="M8.5 12h7M8.5 15.5h7M8.5 18.5h4" />
         }
+        @case ('copy') {
+          <rect x="9" y="3" width="12" height="14" rx="2" />
+          <path d="M15 17v2.5A1.5 1.5 0 0 1 13.5 21h-9A1.5 1.5 0 0 1 3 19.5v-12A1.5 1.5 0 0 1 4.5 6H7" />
+        }
         @case ('upload') {
           <path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8l-5-5z" />
           <path d="M14 3v5h5" />
@@ -63,13 +83,13 @@ export type JjIconName =
         }
         @case ('minify') {
           <path d="M4 4l5 5" />
-          <path d="M9 4H4v5" />
+          <path d="M4 9h5V4" />
           <path d="M20 4l-5 5" />
-          <path d="M15 4h5v5" />
+          <path d="M15 4v5h5" />
           <path d="M4 20l5-5" />
-          <path d="M9 20H4v-5" />
+          <path d="M4 15h5v5" />
           <path d="M20 20l-5-5" />
-          <path d="M15 20h5v-5" />
+          <path d="M20 15h-5v5" />
         }
         @case ('clear') {
           <path d="M4 7h16" />
@@ -99,12 +119,76 @@ export type JjIconName =
           <path d="M12 16.5V20" />
         }
         @case ('copy-path') {
-          <circle cx="3.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
-          <circle cx="7" cy="12" r="1.1" fill="currentColor" stroke="none" />
-          <circle cx="10.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
-          <rect x="14.5" y="6.5" width="7" height="13" rx="1.25" />
-          <rect x="16.5" y="4.5" width="3" height="3" rx="0.5" />
-          <path d="M16.5 12h3M16.5 14.5h3M16.5 17h2" />
+          <path d="M10 14a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
+          <path d="M14 10a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" />
+        }
+        @case ('chevron-right') {
+          <path d="M9 6l6 6-6 6" />
+        }
+        @case ('chevron-down') {
+          <path d="M6 9l6 6 6-6" />
+        }
+        @case ('sign-in') {
+          <circle cx="16" cy="9" r="3" />
+          <path d="M11 20v-1a5 5 0 0 1 10 0v1" />
+          <path d="M3 13h7" />
+          <path d="M7 10l3 3-3 3" />
+        }
+        @case ('sign-out') {
+          <circle cx="8" cy="9" r="3" />
+          <path d="M3 20v-1a5 5 0 0 1 10 0v1" />
+          <path d="M14 13h7" />
+          <path d="M18 10l3 3-3 3" />
+        }
+        @case ('save') {
+          <path d="M5 3h11l4 4v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20V4.5A1.5 1.5 0 0 1 5.5 3" />
+          <path d="M8 3v5h8V3" />
+          <rect x="8" y="13" width="8" height="6" rx="0.5" />
+        }
+        @case ('more-vert') {
+          <circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none" />
+        }
+        @case ('link') {
+          <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" />
+          <path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" />
+        }
+        @case ('globe') {
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M3.5 12h17" />
+          <path d="M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5" />
+          <path d="M12 3.5c-2.5 2.5-3.5 5.5-3.5 8.5s1 6 3.5 8.5" />
+        }
+        @case ('lock') {
+          <rect x="5" y="10.5" width="14" height="9" rx="1.5" />
+          <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+        }
+        @case ('trash') {
+          <path d="M4 7h16" />
+          <path d="M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2" />
+          <path d="M6.5 7l.85 12a2 2 0 0 0 2 1.9h5.3a2 2 0 0 0 2-1.9L17.5 7" />
+          <path d="M10 11v6M14 11v6" />
+        }
+        @case ('history') {
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.5V12l3 2" />
+          <path d="M3.5 12a8.5 8.5 0 0 1 3-6.5" />
+        }
+        @case ('edit') {
+          <path d="M4 20h4l10.5-10.5a2 2 0 0 0-2.83-2.83L5 17.17V20z" />
+          <path d="M14 7l3 3" />
+        }
+        @case ('eye') {
+          <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
+          <circle cx="12" cy="12" r="3" />
+        }
+        @case ('folder') {
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+        }
+        @case ('search') {
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="M16 16l4 4" />
         }
       }
     </svg>

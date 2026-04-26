@@ -6,28 +6,18 @@ on:
     paths:
       - 'infra/**'
       - '.github/workflows/infra.yml'
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: Environment to deploy
-        required: true
-        default: dev
-        type: choice
-        options: [dev, prod]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
   id-token: write
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     name: Bicep build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build main.bicep
         run: az bicep build --file infra/main.bicep
 
@@ -35,41 +25,72 @@ jobs:
     name: Bicep what-if
     runs-on: ubuntu-latest
     needs: build
-    # Only run what-if when Azure credentials are configured in the repo.
-    if: ${{ vars.AZURE_CLIENT_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: What-if (dev)
-        if: github.event_name == 'push' || github.event.inputs.environment == 'dev'
+      - name: Ensure resource group exists
+        run: |
+          az group create \
+            --name rg-jotjson-dev \
+            --location ${{ vars.AZURE_LOCATION || 'eastus2' }}
+      - name: What-if
+        env:
+          ENTRA_TENANT_ID: ${{ secrets.ENTRA_TENANT_ID }}
+          ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
+          ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
+          ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
+          ENTRA_API_AUDIENCE: ${{ secrets.ENTRA_API_AUDIENCE }}
         run: |
           az deployment group what-if \
             --resource-group rg-jotjson-dev \
             --template-file infra/main.bicep \
-            --parameters infra/parameters/dev.bicepparam
+            --parameters infra/parameters/dev.bicepparam \
+            --parameters \
+              entraTenantId="${ENTRA_TENANT_ID}" \
+              entraAuthority="${ENTRA_AUTHORITY}" \
+              entraSpaClientId="${ENTRA_SPA_CLIENT_ID}" \
+              entraApiClientId="${ENTRA_API_CLIENT_ID}" \
+              entraApiAudience="${ENTRA_API_AUDIENCE}"
 
   deploy:
     name: Deploy
-    needs: validate
+    needs: [build, validate]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
+    environment: dev
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/login@v2
+      - uses: actions/checkout@v6
+      - uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Ensure resource group exists
+        run: |
+          az group create \
+            --name rg-jotjson-dev \
+            --location ${{ vars.AZURE_LOCATION || 'eastus2' }}
       - name: Deploy Bicep
+        env:
+          ENTRA_TENANT_ID: ${{ secrets.ENTRA_TENANT_ID }}
+          ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
+          ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
+          ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
+          ENTRA_API_AUDIENCE: ${{ secrets.ENTRA_API_AUDIENCE }}
         run: |
           az deployment group create \
-            --resource-group rg-jotjson-${{ github.event.inputs.environment }} \
+            --resource-group rg-jotjson-dev \
             --template-file infra/main.bicep \
-            --parameters infra/parameters/${{ github.event.inputs.environment }}.bicepparam
+            --parameters infra/parameters/dev.bicepparam \
+            --parameters \
+              entraTenantId="${ENTRA_TENANT_ID}" \
+              entraAuthority="${ENTRA_AUTHORITY}" \
+              entraSpaClientId="${ENTRA_SPA_CLIENT_ID}" \
+              entraApiClientId="${ENTRA_API_CLIENT_ID}" \
+              entraApiAudience="${ENTRA_API_AUDIENCE}"
 

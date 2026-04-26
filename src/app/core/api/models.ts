@@ -9,6 +9,24 @@ export interface JsonBlob {
   isPublic: boolean;
 }
 
+/**
+ * Metadata describing a blob that the server silently deleted to make room
+ * for a new one under the auto-FIFO quota strategy. Kept off JsonBlob so the
+ * shape of stored blobs stays clean.
+ */
+export interface AutoDeletedBlobInfo {
+  id: string;
+  slug: string;
+  title?: string;
+}
+
+/**
+ * The POST /api/blobs response: the newly-created blob, plus an optional
+ * `autoDeleted` marker present only when the auto-FIFO quota strategy kicked
+ * in and the server removed the caller's oldest blob.
+ */
+export type CreateBlobResponse = JsonBlob & { autoDeleted?: AutoDeletedBlobInfo };
+
 export interface User {
   id: string;
   displayName: string;
@@ -39,6 +57,7 @@ export interface UserPreferences {
   defaultRuleSetId?: string;
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
+  treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
   historyTrackingMode: 'save_only' | 'all_actions';
@@ -46,15 +65,21 @@ export interface UserPreferences {
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
   blobQuotaStrategy: 'auto_fifo' | 'manual';
+  seenBlobQuotaModal: boolean;
+  seenClipboardBanner: boolean;
   treeHighlightColors: TreeHighlightColors;
 }
+
+export type HistoryAction = 'saved' | 'viewed' | 'edited' | 'deleted' | 'pasted';
 
 export interface HistoryEntry {
   id: string;
   userId: string;
-  blobId: string;
+  blobId?: string;
+  slug?: string;
+  title?: string;
   accessedAt: string;
-  action: 'saved' | 'viewed' | 'edited' | 'pasted';
+  action: HistoryAction;
 }
 
 export interface FormattingStyle {

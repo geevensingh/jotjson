@@ -20,6 +20,12 @@ updates:
     commit-message:
       prefix: deps(web)
       include: scope
+    # @types/node tracks the Node runtime major. We are pinned to Node 24
+    # (.nvmrc, engines.node, setup-node steps in CI/CD), so block major
+    # bumps for @types/node. Revisit when we move to the next LTS.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       angular:
         patterns:
@@ -49,6 +55,12 @@ updates:
     commit-message:
       prefix: deps(api)
       include: scope
+    # @types/node tracks the Node runtime major. We are pinned to Node 24
+    # (.nvmrc, engines.node, setup-node steps in CI/CD), so block major
+    # bumps for @types/node. Revisit when we move to the next LTS.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       azure-sdk:
         patterns:

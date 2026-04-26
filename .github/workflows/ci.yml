@@ -8,22 +8,24 @@ on:
 
 permissions:
   contents: read
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  checks: write
+  pull-requests: write
 
 jobs:
   web:
     name: Web build & type-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Materialize environment.ts
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
       - run: npm run lint
+      - run: npm run check:ascii
       - run: npm run build -- --configuration=production
 
   api:
@@ -33,8 +35,8 @@ jobs:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -42,13 +44,78 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Run tests
+        run: npm test
+      - name: Upload api JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-junit
+          path: api/test-results/api/junit.xml
+          if-no-files-found: ignore
+      - name: Publish api test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: API test results
+          path: api/test-results/api/junit.xml
+          reporter: java-junit
+          fail-on-error: false
 
   bicep:
     name: Bicep validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Bicep
         run: az bicep install
       - name: Build main.bicep
         run: az bicep build --file infra/main.bicep
+
+  workflows-lint:
+    name: Workflows lint (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: Run actionlint
+        run: actionlint -color
+
+  web-tests:
+    name: Web unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Materialize environment.ts
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
+      - run: npm run test:ci
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-coverage
+          path: coverage/jotjson
+          if-no-files-found: ignore
+      - name: Upload web JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-junit
+          path: test-results/web/junit.xml
+          if-no-files-found: ignore
+      - name: Publish web test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: Web test results
+          path: test-results/web/junit.xml
+          reporter: java-junit
+          fail-on-error: false

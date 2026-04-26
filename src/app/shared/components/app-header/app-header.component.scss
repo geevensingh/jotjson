@@ -1,0 +1,81 @@
+@use '../../../../styles/variables' as v;
+
+:host {
+  display: block;
+  flex: 0 0 auto;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  background: rgba(127, 127, 127, 0.04);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  min-height: 36px;
+}
+
+.slot {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.auth {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.user-name {
+  font-family: v.$font-ui;
+  font-size: 12px;
+  padding: 0 8px;
+  opacity: 0.85;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 4px;
+  line-height: 28px;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+    text-decoration: underline;
+    outline: none;
+  }
+}
+
+.brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  color: inherit;
+  text-decoration: none;
+  font-family: v.$font-ui;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 4px;
+  padding: 2px 4px;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(127, 127, 127, 0.1);
+    outline: none;
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.6);
+  }
+}
+
+.brand-name {
+  color: v.$color-primary;
+}
