@@ -18,6 +18,7 @@ pin. Windows, macOS, and Linux steps are listed where they diverge.
 | Bicep                       | latest  | Authoring + deploying `infra/` |
 | Git                         | 2.30+   | Everything            |
 | A Chromium-based browser    | latest  | `npm test` (Karma `ChromeHeadlessCI`) |
+| Windows Terminal (`wt`)     | latest  | `scripts/dev.ps1` (Windows only) |
 | VS Code (optional)          | latest  | Shipped debug configs in `.vscode/` |
 
 ---
@@ -270,7 +271,31 @@ npm test            # web unit tests
 
 ---
 
-## 6. VS Code (optional, but recommended)
+## 6. Windows Terminal (Windows only, for `scripts/dev.ps1`)
+
+`scripts/dev.ps1` opens multiple terminal tabs via `wt.exe` to run the
+web dev server, the Functions host, and the test watchers side by side.
+If you skip the helper script and run things manually, you don't need
+Windows Terminal at all.
+
+Install via winget:
+
+```powershell
+winget install Microsoft.WindowsTerminal
+```
+
+Or grab it from the Microsoft Store. macOS / Linux contributors run the
+manual two-terminal flow documented in [README.md § Running locally](README.md#running-locally).
+
+### Verify
+
+```powershell
+wt --version
+```
+
+---
+
+## 7. VS Code (optional, but recommended)
 
 The repo ships VS Code launch configs in `.vscode/` that Just Work:
 
@@ -289,7 +314,7 @@ extensions:
 
 ---
 
-## 7. Environment files
+## 8. Environment files
 
 These aren't tools, but they're part of first-time setup. See
 [README.md § Setup](README.md#setup) for the exact commands. You'll need

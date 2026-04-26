@@ -6,6 +6,9 @@
   Spins up three Windows Terminal tabs:
     1. "web"   - ng serve on http://localhost:4200 (proxies /api to :7071)
     2. "api"   - func start in api/  on http://localhost:7071
+                 split horizontally with `npm run watch` (tsc -w) so
+                 `dist/` stays in sync with `src/` after the initial
+                 one-shot build below; manual rebuilds aren't needed.
     3. "tests" - ng test (Karma watch) + jest --watch for the API,
                  split vertically in the same tab.
 
@@ -16,6 +19,14 @@
       missing.
     - Checks that the gitignored env files exist and warns (but does not
       create them) if they don't.
+
+  Alternatives:
+    - For a debugger-attach workflow (breakpoints, step-through), prefer
+      VS Code's F5: `.vscode/launch.json` + `.vscode/tasks.json` wire
+      up `ng serve`, `ng test`, and `func: host start` with the right
+      preLaunchTasks. See README.md "Debugging in VS Code".
+    - Non-Windows contributors run the two-terminal manual flow
+      documented in README.md "Running locally".
 
 .PARAMETER SkipTests
   Don't open the tests tab. Useful if you only want to run the app.
