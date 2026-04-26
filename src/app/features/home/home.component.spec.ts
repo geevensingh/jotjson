@@ -764,6 +764,24 @@ describe('HomeComponent blob actions (M4b)', () => {
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
 
+  // setup() installs a stubbed navigator.clipboard via Object.defineProperty
+  // because spyOnProperty requires `clipboard` to already be an accessor,
+  // which is true on Windows headless Chrome but not on Linux headless
+  // Chrome (the CI runner). We capture the original descriptor here and
+  // restore it after each test so the unrelated copy/paste specs above
+  // (which spyOn the real navigator.clipboard) keep working.
+  let originalClipboardDesc: PropertyDescriptor | undefined;
+  beforeEach(() => {
+    originalClipboardDesc = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  });
+  afterEach(() => {
+    if (originalClipboardDesc) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboardDesc);
+    } else {
+      delete (navigator as { clipboard?: Clipboard }).clipboard;
+    }
+  });
+
   const blob = (overrides: Partial<JsonBlob> = {}): JsonBlob => ({
     id: 'blob-1',
     slug: 'abc123',
@@ -814,14 +832,16 @@ describe('HomeComponent blob actions (M4b)', () => {
     const dialog = { open: jasmine.createSpy('open').and.returnValue(dialogRef) };
     const snack = { open: jasmine.createSpy('open') };
 
-    // Clipboard stubbing via spyOnProperty so jasmine auto-restores between
-    // tests. Replacing navigator.clipboard with Object.defineProperty would
-    // leak into the HomeComponent copy/paste specs that spyOn the real one.
+    // Stub navigator.clipboard via Object.defineProperty (afterEach above
+    // restores the original descriptor). spyOnProperty would be more
+    // ergonomic but it requires `clipboard` to already exist as an
+    // accessor, which is not the case on Linux headless Chrome.
     let clipboardStub: { writeText: jasmine.Spy } | undefined;
     if (opts.clipboardAvailable === false) {
-      spyOnProperty(navigator, 'clipboard', 'get').and.returnValue(
-        undefined as unknown as Clipboard
-      );
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        get: () => undefined as unknown as Clipboard
+      });
     } else {
       clipboardStub = {
         writeText: jasmine
@@ -830,9 +850,10 @@ describe('HomeComponent blob actions (M4b)', () => {
             opts.clipboardFails ? Promise.reject(new Error('x')) : Promise.resolve()
           )
       };
-      spyOnProperty(navigator, 'clipboard', 'get').and.returnValue(
-        clipboardStub as unknown as Clipboard
-      );
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        get: () => clipboardStub as unknown as Clipboard
+      });
     }
 
     TestBed.configureTestingModule({
