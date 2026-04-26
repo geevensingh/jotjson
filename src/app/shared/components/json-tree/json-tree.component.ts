@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   computed,
@@ -17,6 +18,11 @@ import { NestedTreeControl } from '@angular/cdk/tree';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
+import {
+  ParsedDate,
+  formatDateAnnotation,
+  parseAsDate
+} from '../../utils/date-detect';
 
 interface TreeNode {
   segment: string | number | undefined;
@@ -43,6 +49,7 @@ interface TreeNode {
 export class JsonTreeComponent {
   private readonly prefs = inject(PreferencesService);
   private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly value = input<unknown>(undefined);
 
@@ -86,8 +93,19 @@ export class JsonTreeComponent {
   });
 
   readonly showTypeBadges = computed(() => this.prefs.prefs().treeShowTypeLabels);
+  readonly showDateAnnotations = computed(
+    () => this.prefs.prefs().treeShowDateAnnotations
+  );
   readonly treeFontSize = computed(() => this.prefs.prefs().treeFontSize);
   readonly treeFontSizePx = computed(() => `${this.treeFontSize()}px`);
+
+  /**
+   * Tick signal used to refresh relative-time annotations. Updated every
+   * 60s while the component is alive. Fine-grained enough for "5 minutes
+   * ago" -> "6 minutes ago"; cheap enough that it does not show up on a
+   * profile.
+   */
+  private readonly nowSignal = signal(Date.now());
 
   readonly searchHits = computed<ReadonlySet<string>>(() => {
     const q = this.search().trim();
@@ -202,6 +220,10 @@ export class JsonTreeComponent {
   private hasInitializedExpansion = false;
 
   constructor() {
+    const NOW_TICK_MS = 60_000;
+    const handle = setInterval(() => this.nowSignal.set(Date.now()), NOW_TICK_MS);
+    this.destroyRef.onDestroy(() => clearInterval(handle));
+
     effect(() => {
       const r = this.root();
       this.dataSource.data = r ? [r] : [];
@@ -328,6 +350,21 @@ export class JsonTreeComponent {
       default:
         return '';
     }
+  }
+
+  /**
+   * Returns the parenthetical body for the date annotation, or null if
+   * the node's value is not a recognized date string. Reads `nowSignal`
+   * so the relative-time portion refreshes on each 60s tick.
+   *
+   * Intentionally does NOT participate in `renderLeaf`: search must match
+   * the raw value, not the localized annotation.
+   */
+  dateAnnotation(node: TreeNode): string | null {
+    if (node.type !== 'string') return null;
+    const parsed: ParsedDate | null = parseAsDate(node.value);
+    if (!parsed) return null;
+    return formatDateAnnotation(parsed, new Date(this.nowSignal()));
   }
 
   containerSummary(node: TreeNode): string {

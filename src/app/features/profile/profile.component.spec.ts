@@ -184,6 +184,17 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().treeShowTypeLabels).toBe(true);
   });
 
+  it('writes treeShowDateAnnotations through PreferencesService when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onTreeShowDateAnnotationsChange(false);
+    expect(prefs.prefs().treeShowDateAnnotations).toBe(false);
+    fixture.componentInstance.onTreeShowDateAnnotationsChange(true);
+    expect(prefs.prefs().treeShowDateAnnotations).toBe(true);
+  });
+
   it('writes tree font size and clamps to the supported range', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },

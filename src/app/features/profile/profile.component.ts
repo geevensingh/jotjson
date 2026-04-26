@@ -80,6 +80,9 @@ export class ProfileComponent {
   readonly editorWordWrap = computed(() => this.prefs().editorWordWrap);
   readonly defaultTreeExpansionDepth = computed(() => this.prefs().defaultTreeExpansionDepth);
   readonly treeShowTypeLabels = computed(() => this.prefs().treeShowTypeLabels);
+  readonly treeShowDateAnnotations = computed(
+    () => this.prefs().treeShowDateAnnotations
+  );
   readonly treeFontSize = computed(() => this.prefs().treeFontSize);
 
   readonly searchCaseSensitive = computed(() => this.prefs().searchCaseSensitive);
@@ -139,6 +142,10 @@ export class ProfileComponent {
 
   onTreeShowTypeLabelsChange(value: boolean): void {
     this.prefsService.update({ treeShowTypeLabels: value });
+  }
+
+  onTreeShowDateAnnotationsChange(value: boolean): void {
+    this.prefsService.update({ treeShowDateAnnotations: value });
   }
 
   onSearchCaseSensitiveChange(value: boolean): void {

@@ -522,4 +522,68 @@ describe('JsonTreeComponent', () => {
       expect(xRow.classList.contains('is-search-hit')).toBeTrue();
     });
   });
+
+  describe('date annotations', () => {
+    function getAnnotationSpans(): HTMLElement[] {
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-date-annotation')
+      );
+    }
+
+    it('renders an annotation span for ISO date strings when the pref is on', async () => {
+      await createWith({ created: '2024-11-05T18:30:00Z' });
+      // default pref is true
+      const spans = getAnnotationSpans();
+      expect(spans.length).toBe(1);
+      expect(spans[0].textContent ?? '').toContain('(');
+      expect(spans[0].textContent ?? '').toContain(')');
+    });
+
+    it('does not render an annotation when the pref is false', async () => {
+      await createWith({ created: '2024-11-05T18:30:00Z' });
+      prefs.update({ treeShowDateAnnotations: false });
+      fixture.detectChanges();
+      expect(getAnnotationSpans().length).toBe(0);
+    });
+
+    it('does not annotate non-date strings', async () => {
+      await createWith({ message: 'hello world', code: '12345' });
+      expect(getAnnotationSpans().length).toBe(0);
+    });
+
+    it('does not annotate numeric values (Unix timestamps)', async () => {
+      await createWith({ epoch: 1730831400 });
+      expect(getAnnotationSpans().length).toBe(0);
+    });
+
+    it('search does not match the annotation text', async () => {
+      // Annotation will contain "ago" or "in" + month names; search for the
+      // literal hex em-dash and assert the value-row is NOT a search hit.
+      await createWith({ created: '2024-11-05T18:30:00Z' });
+      cmp.search.set('\u2014');
+      fixture.detectChanges();
+      const hits = (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '.tree-row.is-search-hit'
+      );
+      expect(hits.length).toBe(0);
+    });
+
+    it('relative-time portion refreshes when the now signal ticks', async () => {
+      jasmine.clock().install();
+      try {
+        const baseNow = new Date('2024-11-05T18:30:30Z').getTime();
+        jasmine.clock().mockDate(new Date(baseNow));
+        await createWith({ created: '2024-11-05T18:30:00Z' });
+        const before = getAnnotationSpans()[0]?.textContent ?? '';
+        // Advance the wall clock by 65s and tick the timer.
+        jasmine.clock().mockDate(new Date(baseNow + 65_000));
+        jasmine.clock().tick(61_000);
+        fixture.detectChanges();
+        const after = getAnnotationSpans()[0]?.textContent ?? '';
+        expect(after).not.toBe(before);
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+  });
 });

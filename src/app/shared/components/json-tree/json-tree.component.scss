@@ -165,6 +165,13 @@
   word-break: break-word;
 }
 
+.tree-date-annotation {
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-style: italic;
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+
 .tree-value-number {
   color: #ff9b30;
 }

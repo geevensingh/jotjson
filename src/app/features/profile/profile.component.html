@@ -134,6 +134,17 @@
             <span i18n="@@profile.prefs.tree.showTypeLabels">Show type labels</span>
           </mat-slide-toggle>
         </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="treeShowDateAnnotations()"
+            (change)="onTreeShowDateAnnotationsChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.tree.showDateAnnotations">
+              Show date annotations
+            </span>
+          </mat-slide-toggle>
+        </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-search">

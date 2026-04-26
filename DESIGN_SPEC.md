@@ -443,14 +443,7 @@ Available to **registered users** only. The route is auth-guarded.
   - **Delete account** - confirmation dialog, then deletes user profile, all blobs, history, and rule sets. Irreversible.
 
 - **Preferences Section - deferred items**
-  - **Show date/time annotations** (M7c) - toggle smart date detection annotations on/off.
   - **Default formatting rule set** (M6) - dropdown to pick a rule set to auto-apply when viewing JSON.
-  - **Tree highlight colors (per theme)** (M7d) - the dark and light themes each have their own set of four color pickers (the inactive theme's values are preserved when you switch themes):
-    - Selection color (primary) - the clicked/selected row.
-    - Matching value color (secondary) - rows with the same value as the selection.
-    - Ancestor color - parent nodes up to the root.
-    - Search highlight color - rows matching the search query.
-    - A "Reset to defaults" button restores the defaults for the currently active theme.
 
 - **Data & Privacy Section**
   - **Export my data** - enqueues a background job to generate a ZIP of all blobs, history, and rule sets. User receives a download link when ready (polled via `GET /api/me/export/:jobId`). The download URL is a pre-signed Azure Blob Storage SAS link valid for **1 hour** from generation; if it expires, the user can re-request a new export. Avoids Azure Functions timeout limits.
@@ -1002,8 +995,8 @@ EU users would need a regional resource - out of scope for v1.
 7. **Polish & launch** - Each of these lands as its own step/commit:
    - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)
    - **M7b**: Drag-and-drop file upload with full-page drop overlay (Home page §1).
-   - **M7c**: Smart date/time detection + relative-time annotations in the tree view (Home page §1).
-   - **M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).
+   - ~~**M7c**: Smart date/time detection + relative-time annotations in the tree view (Home page §1).~~ (done)
+   - ~~**M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).~~ (done)
    - ~~**M7e**: Custom domain (`jotjson.com`).~~ (done)
    - **M7f**: Dark/light theme polish.
    - **M7g**: Accessibility audit.

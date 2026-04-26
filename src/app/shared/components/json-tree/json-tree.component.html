@@ -73,6 +73,17 @@
           @switch (node.type) {
             @case ('string') {
               <span class="tree-value-string">{{ renderLeaf(node.value, node.type) }}</span>
+              @if (showDateAnnotations()) {
+                @let ann = dateAnnotation(node);
+                @if (ann) {
+                  <span
+                    class="tree-date-annotation"
+                    aria-label="Date annotation"
+                    i18n-aria-label="@@tree.dateAnnotation.aria"
+                    >&nbsp;({{ ann }})</span
+                  >
+                }
+              }
             }
             @case ('number') {
               <span class="tree-value-number">{{ renderLeaf(node.value, node.type) }}</span>
