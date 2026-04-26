@@ -5,6 +5,7 @@ import {
 } from '@azure/msal-browser';
 import { MSAL_INSTANCE } from '@azure/msal-angular';
 import { environment } from '../../../environments/environment';
+import { msalBridge } from '../telemetry/msal-bridge';
 
 /**
  * Re-export msal-angular's `MSAL_INSTANCE` token so application code has a
@@ -45,8 +46,16 @@ export function createMsalInstance(): IPublicClientApplication {
     },
     system: {
       loggerOptions: {
-        loggerCallback: () => void 0,
-        logLevel: LogLevel.Warning,
+        loggerCallback: (level, message, containsPii) => {
+          // Only forward Errors. Drop anything MSAL flags as PII even
+          // though `piiLoggingEnabled: false` should already prevent
+          // those messages from being emitted; defense in depth.
+          if (level !== LogLevel.Error || containsPii) {
+            return;
+          }
+          msalBridge.publish(message);
+        },
+        logLevel: LogLevel.Error,
         piiLoggingEnabled: false
       }
     }

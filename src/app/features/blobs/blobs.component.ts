@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { BlobService } from '../../core/api/blob.service';
 import type { JsonBlob } from '../../core/api/models';
+import { LoggerService } from '../../core/telemetry/logger.service';
 import { SeoService } from '../../core/seo/seo.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
@@ -45,6 +46,7 @@ export class BlobsComponent implements OnInit {
   private readonly snack = inject(MatSnackBar);
   private readonly router = inject(Router);
   private readonly seo = inject(SeoService);
+  private readonly logger = inject(LoggerService);
 
   readonly state = signal<LoadState>('loading');
   readonly blobList = signal<JsonBlob[]>([]);
@@ -71,7 +73,8 @@ export class BlobsComponent implements OnInit {
       this.blobList.set(sorted);
       this.state.set('ready');
     } catch (err) {
-      console.warn($localize`:@@blobs.load.failed.log:Failed to load blobs`, err);
+      this.logger.warn('blobs.load.failed');
+      void err;
       this.errorMessage.set(
         $localize`:@@blobs.load.failed:Failed to load your saved blobs.`
       );
@@ -114,10 +117,8 @@ export class BlobsComponent implements OnInit {
         { duration: 3000 }
       );
     } catch (err) {
-      console.warn(
-        $localize`:@@blobs.copyLink.failed.log:Failed to copy blob link`,
-        err
-      );
+      this.logger.warn('blobs.copyLink.failed');
+      void err;
       this.snack.open(
         $localize`:@@blobs.copyLink.failed:Failed to copy link`,
         $localize`:@@common.dismiss:Dismiss`,
@@ -150,7 +151,8 @@ export class BlobsComponent implements OnInit {
         { duration: 3000 }
       );
     } catch (err) {
-      console.warn($localize`:@@share.delete.failed.log:Failed to delete blob`, err);
+      this.logger.warn('share.delete.failed');
+      void err;
       this.snack.open(
         $localize`:@@share.delete.failed:Failed to delete blob.`,
         $localize`:@@common.dismiss:Dismiss`,

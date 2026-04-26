@@ -1,5 +1,6 @@
 import {
   ApplicationConfig,
+  ErrorHandler,
   inject,
   isDevMode,
   provideAppInitializer,
@@ -16,6 +17,7 @@ import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { AuthService } from './core/auth/auth.service';
 import { MSAL_INSTANCE, createMsalInstance } from './core/auth/msal-instance';
+import { TelemetryErrorHandler } from './core/telemetry/error-handler';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -31,6 +33,7 @@ export const appConfig: ApplicationConfig = {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000'
     }),
+    { provide: ErrorHandler, useClass: TelemetryErrorHandler },
     // MSAL wiring - deliberately NOT using `MsalRedirectComponent` or the
     // `MSAL_GUARD_CONFIG`/`MSAL_INTERCEPTOR_CONFIG` bundles, which assume an
     // NgModule bootstrap. Standalone apps drive redirect handling themselves

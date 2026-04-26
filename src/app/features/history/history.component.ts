@@ -21,6 +21,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { Subject, debounceTime, distinctUntilChanged, firstValueFrom } from 'rxjs';
 import { HistoryService } from '../../core/api/history.service';
 import type { HistoryAction, HistoryEntry } from '../../core/api/models';
+import { LoggerService } from '../../core/telemetry/logger.service';
 import { SeoService } from '../../core/seo/seo.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent, JjIconName } from '../../shared/components/icon/icon.component';
@@ -67,6 +68,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly snack = inject(MatSnackBar);
   private readonly router = inject(Router);
   private readonly seo = inject(SeoService);
+  private readonly logger = inject(LoggerService);
 
   readonly state = signal<LoadState>('loading');
   readonly entries = signal<HistoryEntry[]>([]);
@@ -227,10 +229,8 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.continuationToken.set(page.continuationToken);
       this.state.set('ready');
     } catch (err) {
-      console.warn(
-        $localize`:@@history.load.failed.log:Failed to load history`,
-        err
-      );
+      this.logger.warn('history.load.failed');
+      void err;
       this.errorMessage.set(
         $localize`:@@history.load.failed:Failed to load your history.`
       );
@@ -254,10 +254,8 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.entries.update((current) => [...current, ...page.entries]);
       this.continuationToken.set(page.continuationToken);
     } catch (err) {
-      console.warn(
-        $localize`:@@history.loadMore.failed.log:Failed to load more history`,
-        err
-      );
+      this.logger.warn('history.loadMore.failed');
+      void err;
       this.snack.open(
         $localize`:@@history.loadMore.failed:Failed to load more history.`,
         $localize`:@@common.dismiss:Dismiss`,
@@ -395,10 +393,8 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
         { duration: 3000 }
       );
     } catch (err) {
-      console.warn(
-        $localize`:@@history.clear.failed.log:Failed to clear history`,
-        err
-      );
+      this.logger.warn('history.clear.failed');
+      void err;
       this.snack.open(
         $localize`:@@history.clear.failed:Failed to clear history.`,
         $localize`:@@common.dismiss:Dismiss`,

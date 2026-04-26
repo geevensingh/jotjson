@@ -18,10 +18,22 @@ export class AppComponent implements OnInit {
     // so the router waits for MSAL before activating routes (otherwise
     // resolvers race the bearer token).
     //
-    // Lazy-load the SW update listener so Material snackbar + the
-    // service-worker client runtime stay out of the initial bundle.
-    // There is no user-visible work happening in the first few seconds
-    // of a page load, so a deferred load is fine.
+    // Lazy-load telemetry + SW update listener so the App Insights SDK
+    // and Material snackbar stay out of the initial bundle. There is
+    // no user-visible work happening in the first few seconds of a
+    // page load, so a deferred load is fine.
+    void Promise.all([
+      import('./core/telemetry/logger.service'),
+      import('./core/telemetry/route-tracker')
+    ]).then(async ([logger, tracker]) => {
+      const t = this.injector.get(tracker.RouteTracker);
+      // Start subscribing to NavigationEnd before connect() resolves so
+      // the bootstrap navigation is captured even though it fires
+      // before telemetry is ready.
+      t.start();
+      await this.injector.get(logger.LoggerService).connect();
+      t.flushPending();
+    });
     void import('./core/update/app-update.service').then(({ AppUpdateService }) => {
       this.injector.get(AppUpdateService).initialize();
     });
