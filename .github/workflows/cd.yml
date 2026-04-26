@@ -1,7 +1,42 @@
 name: Deploy (SWA)
 
+# ----------------------------------------------------------------------
+# Build topology (READ BEFORE EDITING)
+#
+# This workflow uses Azure/static-web-apps-deploy@v1 with
+# `app_location: '/'`, which builds the SPA INSIDE the action's Oryx
+# container, not on the GitHub Actions runner host. That means:
+#
+#   * The runner host filesystem does NOT contain `dist/` at any point
+#     in this job. Steps cannot `find`, `cp`, `rm`, or `tar` build
+#     artifacts on the host.
+#   * Pre-build host steps (e.g. `sed` on environment.prod.ts) are fine
+#     because they mutate sources before Oryx checks them out.
+#   * Post-build artifact manipulation (sourcemap stripping, asset
+#     hashing, sentry/app-insights symbol upload, etc.) requires
+#     switching the deploy to runner-side build:
+#         with:
+#           skip_app_build: true
+#       and adding an explicit `npm run build` step before the deploy.
+#
+# If you add a step that touches `dist/`, switch the build topology in
+# the same change. CI's `workflows-lint` job catches structural issues
+# but NOT this filesystem expectation - a runtime-only failure mode.
+# ----------------------------------------------------------------------
+
+# Title each run with the deployed commit's message so the Actions list is
+# scannable (matches CI's default behavior). For workflow_run triggers we
+# pull the head commit message from the upstream CI run; for manual
+# dispatches we fall back to the SHA.
+run-name: >-
+  ${{ github.event.workflow_run.display_title
+      || github.event.head_commit.message
+      || github.sha }}
+
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -13,13 +48,19 @@ permissions:
   contents: read
   id-token: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   deploy:
     name: Build and deploy to Azure Static Web Apps
     runs-on: ubuntu-latest
+    # Only deploy when CI succeeded for a push to main, or when a human
+    # triggers a manual redeploy. PR-triggered CI runs (workflow_run.event
+    # == 'pull_request') are explicitly excluded so opening a PR never
+    # ships to production.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     steps:
       - name: Check for deploy token
         id: check
@@ -27,19 +68,22 @@ jobs:
           SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
         run: |
           if [ -z "$SWA_TOKEN" ]; then
-            echo "AZURE_STATIC_WEB_APPS_API_TOKEN not set — skipping deploy."
+            echo "AZURE_STATIC_WEB_APPS_API_TOKEN not set - skipping deploy."
             echo "have_token=false" >> "$GITHUB_OUTPUT"
           else
             echo "have_token=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.check.outputs.have_token == 'true'
         with:
+          # Deploy the exact commit that passed CI when triggered via
+          # workflow_run; fall back to github.sha for workflow_dispatch.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           submodules: true
           lfs: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.check.outputs.have_token == 'true'
         with:
           node-version: 24
@@ -53,6 +97,60 @@ jobs:
         if: steps.check.outputs.have_token == 'true'
         working-directory: api
         run: npm ci
+
+      - name: Materialize environment.ts
+        if: steps.check.outputs.have_token == 'true'
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
+
+      - name: Bake production auth config into environment.prod.ts
+        if: steps.check.outputs.have_token == 'true'
+        env:
+          ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
+          ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
+          ENTRA_KNOWN_AUTHORITY: ${{ secrets.ENTRA_KNOWN_AUTHORITY }}
+          ENTRA_API_SCOPE: ${{ secrets.ENTRA_API_SCOPE }}
+          APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.APP_INSIGHTS_CONNECTION_STRING }}
+        run: |
+          # SWA-hosted site is reachable at both the SWA default hostname and
+          # the custom domain (jotjson.com) once bound. MSAL only allows one
+          # redirectUri in its config, so we pick the canonical custom domain.
+          cat > src/environments/environment.prod.ts <<'EOF'
+          import { Environment } from './environment.interface';
+
+          export const environment: Environment = {
+            production: true,
+            apiBaseUrl: '/api',
+            auth: {
+              clientId: '__ENTRA_SPA_CLIENT_ID__',
+              authority: '__ENTRA_AUTHORITY__',
+              knownAuthorities: ['__ENTRA_KNOWN_AUTHORITY__'],
+              redirectUri: 'https://jotjson.com/',
+              postLogoutRedirectUri: 'https://jotjson.com/',
+              scopes: ['__ENTRA_API_SCOPE__']
+            },
+            appInsightsConnectionString: '__APP_INSIGHTS_CONNECTION_STRING__'
+          };
+          EOF
+          # The heredoc above preserves the indentation we use in YAML, so
+          # strip the 10-space leading indent to produce idiomatic TS. The
+          # emitted file still type-checks either way, but cleaner diffs in
+          # deploy logs help debugging.
+          sed -i 's/^          //' src/environments/environment.prod.ts
+          # Substitute secrets. Fail the build if any of the ENTRA_* values
+          # are still empty so we never ship an unconfigured production
+          # bundle. App Insights is intentionally optional - an empty
+          # connection string just disables telemetry for that build.
+          sed -i "s|__ENTRA_SPA_CLIENT_ID__|${ENTRA_SPA_CLIENT_ID}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_AUTHORITY__|${ENTRA_AUTHORITY}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_KNOWN_AUTHORITY__|${ENTRA_KNOWN_AUTHORITY}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_API_SCOPE__|${ENTRA_API_SCOPE}|g" src/environments/environment.prod.ts
+          # `|` delimiter for AI because the connection string contains `=`
+          # but no `|`.
+          sed -i "s|__APP_INSIGHTS_CONNECTION_STRING__|${APP_INSIGHTS_CONNECTION_STRING}|g" src/environments/environment.prod.ts
+          if grep -q "__ENTRA_" src/environments/environment.prod.ts; then
+            echo "::error::One or more ENTRA_* secrets are missing - aborting deploy."
+            exit 1
+          fi
 
       - name: Deploy to Azure Static Web Apps
         if: steps.check.outputs.have_token == 'true'

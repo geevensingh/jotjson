@@ -5,9 +5,9 @@ both humans and AI agents. Please read these before opening a PR.
 
 ## Before You Start
 
-1. Read [`DESIGN_SPEC.md`](DESIGN_SPEC.md) — it is the source of truth for
+1. Read [`DESIGN_SPEC.md`](DESIGN_SPEC.md) - it is the source of truth for
    product behavior, architecture, entities, and limits.
-2. Read [`AGENTS.md`](AGENTS.md) — it is the authoritative coding, testing,
+2. Read [`AGENTS.md`](AGENTS.md) - it is the authoritative coding, testing,
    security, and workflow guide. Everything below is a summary; `AGENTS.md`
    wins on any conflict.
 
@@ -27,20 +27,27 @@ frameworks, or cloud services without prior approval.
 
 1. **Branch** off `main`: `git checkout -b feat/<short-slug>` or
    `fix/<short-slug>`.
-2. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
+2. **First-time setup**: copy
+   `src/environments/environment.example.ts` to
+   `src/environments/environment.ts`. The real file is gitignored - fill in
+   your local Microsoft Entra External ID values for sign-in to work
+   (`infra/README.md` -> "Auth setup" walks through provisioning). Leaving the
+   placeholders in place is fine if you don't need to exercise auth locally;
+   the toolbar will show a disabled "Sign in (not configured)" button.
+3. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
    `inject()`, Signals, kebab-case filenames, co-located `*.spec.ts`).
-3. **Test** — add or update tests for any logic change. No test = not done.
-4. **Validate** locally:
+4. **Test** - add or update tests for any logic change. No test = not done.
+5. **Validate** locally:
    - `npm run lint` (frontend and `api/`)
    - `npm test` (frontend and `api/`)
    - `npm run build` / `ng build --configuration production`
-5. **Commit** in small, focused commits with imperative subjects
+6. **Commit** in small, focused commits with imperative subjects
    (e.g., `Add slug collision check to BlobService`).
-6. **Open a PR** using the template. Fill in all sections.
+7. **Open a PR** using the template. Fill in all sections.
 
 ## Commit Messages
 
-- Imperative mood, sentence case, ≤ 72 chars for the subject.
+- Imperative mood, sentence case, <= 72 chars for the subject.
 - Body explains **why**, not just **what**, when non-obvious.
 - If the commit was authored with AI assistance, include this trailer:
 
@@ -50,7 +57,7 @@ frameworks, or cloud services without prior approval.
 
 ## Pull Requests
 
-- Keep PRs focused — one logical change per PR.
+- Keep PRs focused - one logical change per PR.
 - Link the relevant issue or spec section.
 - Update `DESIGN_SPEC.md` in the same PR if behavior or architecture changes.
 - CI (lint, test, build for both frontend and Functions) must be green.
@@ -64,7 +71,7 @@ frameworks, or cloud services without prior approval.
   requires. Clipboard/file reads are client-side only.
 - Enforce spec limits (1 MB saved blob, 5 MB upload, 100-blob cap) on both
   client and server.
-- Validate and authenticate every mutating API route with a B2C-issued JWT.
+- Validate and authenticate every mutating API route with an Entra External ID-issued JWT.
 
 ## Reporting Issues
 

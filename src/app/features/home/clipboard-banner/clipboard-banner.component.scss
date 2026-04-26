@@ -1,0 +1,28 @@
+:host {
+  display: block;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(25, 118, 210, 0.08);
+  border: 1px solid rgba(25, 118, 210, 0.35);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin: 0 0 8px 0;
+  flex-wrap: wrap;
+}
+
+.banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.banner-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}

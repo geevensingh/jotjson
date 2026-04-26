@@ -14,6 +14,9 @@ resource swa 'Microsoft.Web/staticSites@2023-12-01' = {
   name: name
   location: location
   tags: tags
+  identity: {
+    type: 'SystemAssigned'
+  }
   sku: {
     name: sku
     tier: sku
@@ -43,3 +46,4 @@ resource domain 'Microsoft.Web/staticSites/customDomains@2023-12-01' = if (!empt
 
 output defaultHostname string = swa.properties.defaultHostname
 output resourceId string = swa.id
+output principalId string = swa.identity.principalId

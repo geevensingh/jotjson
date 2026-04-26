@@ -1,4 +1,4 @@
-# Cursor Rules — JotJSON
+# Cursor Rules - JotJSON
 
 The authoritative instructions for this repo are in `AGENTS.md` at the root.
 Always read and follow `AGENTS.md` and `DESIGN_SPEC.md` before making changes.
@@ -9,7 +9,7 @@ The summary below is for quick reference; `AGENTS.md` wins on any conflict.
 - `DESIGN_SPEC.md` is the source of truth. Flag conflicts before implementing.
 - Stack is fixed: Angular (latest LTS) + Signals + Material, Azure Functions in
   TypeScript, Cosmos DB (serverless), Azure Static Web Apps, Bicep in `/infra`.
-- Use `jsonc-parser` for all user JSON/JSONC — never `JSON.parse`.
+- Use `jsonc-parser` for all user JSON/JSONC - never `JSON.parse`.
 - Strict TypeScript. No `any`; use `unknown` + narrowing.
 - Standalone Angular components, `OnPush`, `inject()`, Signals for state, RxJS
   only at I/O boundaries.

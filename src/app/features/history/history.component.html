@@ -1,0 +1,193 @@
+<jj-app-header />
+
+<main class="history">
+  <header class="history-header">
+    <h1 i18n="@@history.title">History</h1>
+    <p class="subtitle" i18n="@@history.subtitle">
+      Your recent JotJSON activity. Click an entry to open the blob.
+    </p>
+    @if (!isEmpty() && state() === 'ready') {
+      <button
+        mat-stroked-button
+        type="button"
+        class="clear-button"
+        (click)="clearHistory()"
+        i18n="@@history.clear.action"
+      >Clear history</button>
+    }
+  </header>
+
+  <div class="history-controls">
+    <label class="search-field">
+      <jj-icon name="search" class="search-icon" aria-hidden="true" />
+      <input
+        type="search"
+        class="search-input"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="searchInputValue()"
+        (input)="onSearchInput($any($event.target).value)"
+        placeholder="Search title or slug"
+        i18n-placeholder="@@history.search.placeholder"
+        aria-label="Search history"
+        i18n-aria-label="@@history.search.aria"
+      />
+      @if (searchInputValue()) {
+        <button
+          type="button"
+          class="search-clear"
+          (click)="clearSearch()"
+          aria-label="Clear search"
+          i18n-aria-label="@@history.search.clear"
+        >
+          <jj-icon name="clear" />
+        </button>
+      }
+    </label>
+    <div
+      class="action-filter"
+      role="group"
+      aria-label="Filter by action"
+      i18n-aria-label="@@history.filter.action.aria"
+    >
+      @for (action of allActions; track action) {
+        <button
+          type="button"
+          class="action-chip"
+          [class.action-chip-selected]="isActionSelected(action)"
+          [attr.aria-pressed]="isActionSelected(action)"
+          (click)="toggleAction(action)"
+        >
+          <jj-icon [name]="iconFor(action)" aria-hidden="true" />
+          <span>{{ actionLabel(action) }}</span>
+        </button>
+      }
+    </div>
+    <div class="date-range">
+      <label class="date-field">
+        <span class="date-label" i18n="@@history.filter.date.from">From</span>
+        <input
+          type="date"
+          [value]="fromDate()"
+          (change)="onFromDateChange($any($event.target).value)"
+        />
+      </label>
+      <label class="date-field">
+        <span class="date-label" i18n="@@history.filter.date.to">To</span>
+        <input
+          type="date"
+          [value]="toDate()"
+          (change)="onToDateChange($any($event.target).value)"
+        />
+      </label>
+      @if (fromDate() || toDate()) {
+        <button
+          type="button"
+          class="date-clear"
+          (click)="clearDateRange()"
+          i18n="@@history.filter.date.clear"
+        >Clear dates</button>
+      }
+    </div>
+    @if (dateRangeError()) {
+      <p class="date-error" role="alert">{{ dateRangeError() }}</p>
+    }
+  </div>
+
+  @if (state() === 'loading') {
+    <ul class="entry-list" aria-busy="true" aria-live="polite">
+      @for (i of [0, 1, 2, 3]; track i) {
+        <li class="entry-row skeleton" aria-hidden="true">
+          <span class="skeleton-bar skeleton-icon"></span>
+          <div class="entry-main">
+            <span class="skeleton-bar skeleton-title"></span>
+            <span class="skeleton-bar skeleton-meta"></span>
+          </div>
+        </li>
+      }
+    </ul>
+    <span class="sr-only" i18n="@@history.loading">Loading...</span>
+  } @else if (state() === 'error') {
+    <p class="status status-error">{{ errorMessage() }}</p>
+    <button mat-stroked-button type="button" (click)="reload()">
+      <span i18n="@@history.retry">Retry</span>
+    </button>
+  } @else if (isEmpty()) {
+    @if (hasActiveFilters()) {
+      <div class="empty-state">
+        <jj-icon name="search" class="empty-icon" />
+        <p
+          class="empty-message"
+          i18n="@@history.empty.filters"
+        >No history entries match your filters.</p>
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="clearAllFilters()"
+          i18n="@@history.filters.clearAction"
+        >Clear filters</button>
+      </div>
+    } @else {
+      <div class="empty-state">
+        <jj-icon name="history" class="empty-icon" />
+        <p
+          class="empty-message"
+          i18n="@@history.empty"
+        >No activity yet. As you save, edit, or paste JSON, it will appear here.</p>
+        <a
+          mat-flat-button
+          color="primary"
+          routerLink="/"
+          i18n="@@history.empty.cta"
+          >Open the editor</a
+        >
+      </div>
+    }
+  } @else {
+    @for (group of dayGroups(); track group.dayKey) {
+      <section class="day-group">
+        <h2 class="day-header">{{ group.label }}</h2>
+        <ul class="entry-list">
+          @for (entry of group.entries; track entry.id) {
+            <li class="entry-row" [class.entry-clickable]="hasLink(entry)">
+              <jj-icon
+                [name]="iconFor(entry.action)"
+                class="entry-icon"
+                [matTooltip]="actionLabel(entry.action)"
+              />
+              <div class="entry-main">
+                @if (hasLink(entry)) {
+                  <a
+                    class="entry-title"
+                    [routerLink]="['/s', entry.slug]"
+                    [attr.title]="displayLabel(entry)"
+                    >{{ displayLabel(entry) }}</a
+                  >
+                } @else {
+                  <span class="entry-title entry-title-static">{{ displayLabel(entry) }}</span>
+                }
+                <div class="entry-meta">
+                  <span class="entry-action">{{ actionLabel(entry.action) }}</span>
+                  <span class="entry-dot">&middot;</span>
+                  <span class="entry-time">{{ formatTime(entry.accessedAt) }}</span>
+                </div>
+              </div>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+    @if (hasMore()) {
+      <div class="load-more">
+        <div #loadMoreSentinel class="load-more-sentinel" aria-hidden="true"></div>
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="loadingMore()"
+          (click)="loadMore()"
+          i18n="@@history.loadMore"
+        >Load more</button>
+      </div>
+    }
+  }
+</main>

@@ -1,0 +1,27 @@
+@if (visible()) {
+  <div class="banner" role="status">
+    <span class="banner-text" i18n="@@clipboard.banner.body"
+      >Allow clipboard access to enable one-click paste of JSON from the
+      clipboard.</span
+    >
+    <span class="banner-actions">
+      <button
+        type="button"
+        mat-button
+        color="primary"
+        (click)="onAllow()"
+        i18n="@@clipboard.banner.allow"
+      >
+        Allow clipboard access
+      </button>
+      <button
+        type="button"
+        mat-button
+        (click)="onDismiss()"
+        i18n="@@clipboard.banner.dismiss"
+      >
+        Not now
+      </button>
+    </span>
+  </div>
+}
