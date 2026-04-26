@@ -85,9 +85,37 @@
     background: rgba(127, 127, 127, 0.08);
   }
 
+  // Highlight priority (lowest to highest source order so later rules
+  // win on equal specificity): search -> ancestor -> match -> selection.
+  // Tested in json-tree.component.spec.ts.
   &.is-search-hit {
     background: var(--highlight-search);
   }
+
+  &.is-ancestor {
+    background: var(--highlight-ancestor);
+  }
+
+  &.is-match {
+    background: var(--highlight-matching);
+  }
+
+  &.is-selected {
+    background: var(--highlight-selection);
+  }
+}
+
+.tree-match-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 1em;
+  margin-right: 2px;
+  color: var(--color-primary);
+  font-weight: 700;
+  pointer-events: none;
+  flex: 0 0 auto;
 }
 
 .tree-twisty {

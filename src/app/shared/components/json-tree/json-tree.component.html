@@ -8,6 +8,7 @@
     i18n-aria-label="@@tree.search.aria"
     [value]="search()"
     (input)="onSearchInput($event)"
+    (keydown.escape)="onSearchEsc()"
   />
   <button
     type="button"
@@ -42,8 +43,24 @@
     <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
       <!-- Leaf nodes -->
       <mat-nested-tree-node *matTreeNodeDef="let node">
-        <div class="tree-row" [class.is-search-hit]="searchHits().has(node.pathString)">
-          <span class="tree-twisty tree-spacer" aria-hidden="true">·</span>
+        <div
+          class="tree-row"
+          [class.is-search-hit]="searchHits().has(node.pathString)"
+          [class.is-ancestor]="ancestorPaths().has(node.pathString)"
+          [class.is-match]="matchingPaths().has(node.pathString)"
+          [class.is-selected]="selectedPath() === node.pathString"
+          [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
+          (click)="onSelect(node, $event)"
+        >
+          @if (matchingPaths().has(node.pathString)) {
+            <span
+              class="tree-match-badge"
+              [attr.aria-label]="matchingValueAriaLabel"
+              i18n-aria-label="@@tree.matchValue.aria"
+              >&middot;</span
+            >
+          }
+          <span class="tree-twisty tree-spacer" aria-hidden="true">&middot;</span>
 
           @if (node.segment !== undefined) {
             @if (segmentIsIndex(node)) {
@@ -119,7 +136,15 @@
 
       <!-- Container nodes -->
       <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
-        <div class="tree-row" [class.is-search-hit]="searchHits().has(node.pathString)">
+        <div
+          class="tree-row"
+          [class.is-search-hit]="searchHits().has(node.pathString)"
+          [class.is-ancestor]="ancestorPaths().has(node.pathString)"
+          [class.is-match]="matchingPaths().has(node.pathString)"
+          [class.is-selected]="selectedPath() === node.pathString"
+          [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
+          (click)="onSelect(node, $event)"
+        >
           <button
             type="button"
             class="tree-twisty"

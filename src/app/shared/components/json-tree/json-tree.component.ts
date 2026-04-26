@@ -1,11 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  HostListener,
   computed,
   effect,
   inject,
   input,
-  signal
+  signal,
+  untracked
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
@@ -39,15 +42,25 @@ interface TreeNode {
 })
 export class JsonTreeComponent {
   private readonly prefs = inject(PreferencesService);
+  private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly value = input<unknown>(undefined);
 
   readonly search = signal('');
 
+  /**
+   * Path of the currently-selected tree row, or `null` for no selection.
+   * Stored as `pathString` (display form) so the value survives mat-tree
+   * re-renders that recreate node objects. We never reverse-parse it - all
+   * lookups go through `nodeIndex`.
+   */
+  readonly selectedPath = signal<string | null>(null);
+
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
 
   readonly expandMenuButtonLabel = $localize`:@@tree.expand.menu.button:Expand to...`;
+  readonly matchingValueAriaLabel = $localize`:@@tree.matchValue.aria:Matches the selected value`;
 
   readonly treeControl = new NestedTreeControl<TreeNode, string>(
     (n) => n.children ?? [],
@@ -110,6 +123,82 @@ export class JsonTreeComponent {
     return matches;
   });
 
+  /**
+   * `pathString -> TreeNode` map rebuilt whenever the tree root changes.
+   * Used as the only safe way to resolve `selectedPath()` back to a node;
+   * `pathString` is a display form (`$.foo["a.b"]`) and ambiguous to
+   * reverse-parse, so we lookup instead.
+   */
+  private readonly nodeIndex = computed<ReadonlyMap<string, TreeNode>>(() => {
+    const map = new Map<string, TreeNode>();
+    const walk = (node: TreeNode | undefined): void => {
+      if (!node) return;
+      map.set(node.pathString, node);
+      node.children?.forEach(walk);
+    };
+    walk(this.root());
+    return map;
+  });
+
+  /**
+   * Paths of all rows that share the selected row's primitive value
+   * (type-aware: `1 !== "1"`). Empty when nothing is selected, when the
+   * selected node is missing from the index, or when it's a container or
+   * `undefined`. Excludes the selected node itself.
+   *
+   * Per spec: container selections (object/array) do not compute matches.
+   */
+  readonly matchingPaths = computed<ReadonlySet<string>>(() => {
+    const sp = this.selectedPath();
+    if (sp === null) return new Set();
+    const selected = this.nodeIndex().get(sp);
+    if (!selected) return new Set();
+    if (selected.type === 'object' || selected.type === 'array' || selected.type === 'undefined') {
+      return new Set();
+    }
+    const targetType = selected.type;
+    const targetValue = selected.value;
+    const matches = new Set<string>();
+    const walk = (node: TreeNode | undefined): void => {
+      if (!node) return;
+      if (
+        node.pathString !== sp &&
+        node.type === targetType &&
+        node.value === targetValue
+      ) {
+        matches.add(node.pathString);
+      }
+      node.children?.forEach(walk);
+    };
+    walk(this.root());
+    return matches;
+  });
+
+  /**
+   * Paths of every ancestor of the selected row, root inclusive. Empty
+   * when the root itself is selected (root never self-highlights as its
+   * own ancestor).
+   */
+  readonly ancestorPaths = computed<ReadonlySet<string>>(() => {
+    const sp = this.selectedPath();
+    if (sp === null) return new Set();
+    const selected = this.nodeIndex().get(sp);
+    if (!selected) return new Set();
+    const ancestors = new Set<string>();
+    const partial: (string | number)[] = [];
+    // Always include the synthetic root path '$' as an ancestor of any
+    // non-root selection. Root has empty `path[]` so the loop below adds
+    // nothing in that case, leaving the set empty.
+    if (selected.path.length > 0) {
+      ancestors.add('$');
+    }
+    for (let i = 0; i < selected.path.length - 1; i++) {
+      partial.push(selected.path[i] as string | number);
+      ancestors.add(this.formatPath(partial));
+    }
+    return ancestors;
+  });
+
   private hasInitializedExpansion = false;
 
   constructor() {
@@ -118,17 +207,75 @@ export class JsonTreeComponent {
       this.dataSource.data = r ? [r] : [];
       if (!r) {
         this.hasInitializedExpansion = false;
+        // Use untracked to avoid creating a dependency on selectedPath
+        // here - we only want to react to value changes.
+        untracked(() => this.selectedPath.set(null));
         return;
       }
       if (!this.hasInitializedExpansion) {
         this.hasInitializedExpansion = true;
         this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth);
       }
+      // Whenever the underlying value changes (and the resulting tree
+      // root re-renders), drop any stale selection. Predictable, no
+      // zombie state.
+      untracked(() => this.selectedPath.set(null));
     });
   }
 
   hasChild = (_: number, node: TreeNode): boolean =>
     !!node.children && node.children.length > 0;
+
+  /**
+   * Click handler for `.tree-row`. Selects the row unless the click
+   * target is an interactive child (twisty toggle, copy-path button,
+   * etc.) in which case the child's own handler takes precedence.
+   */
+  onSelect(node: TreeNode, event: Event): void {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')) {
+      return;
+    }
+    this.selectedPath.set(node.pathString);
+    event.stopPropagation();
+  }
+
+  clearSelection(): void {
+    this.selectedPath.set(null);
+  }
+
+  /**
+   * Outside-click clear. Fires on every document click; ignores clicks
+   * that landed inside this component or inside any open CDK overlay
+   * (mat-menu, future popovers) - those interactions should preserve
+   * the user's selection.
+   */
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (this.selectedPath() === null) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (this.host.nativeElement.contains(target)) return;
+    if (target.closest('.cdk-overlay-container')) return;
+    this.clearSelection();
+  }
+
+  /**
+   * Escape clears the active selection. We do not call preventDefault()
+   * so the search input's own Esc binding can also clear the search
+   * query when it has focus - one Esc press exits both at once.
+   */
+  @HostListener('document:keydown.escape')
+  onDocumentEscape(): void {
+    if (this.selectedPath() !== null) {
+      this.clearSelection();
+    }
+  }
+
+  onSearchEsc(): void {
+    this.search.set('');
+  }
 
   expandAll(): void {
     const walk = (node: TreeNode | undefined): void => {
