@@ -54,6 +54,18 @@ interface TreeNode {
 }
 
 /**
+ * Escapes a value for use in a CSS attribute selector. Falls back to
+ * a manual escape when the platform `CSS.escape` is unavailable
+ * (older browsers / SSR).
+ */
+function cssEscape(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value);
+  }
+  return value.replace(/["\\]/g, '\\$&');
+}
+
+/**
  * Interactive tree viewer for parsed JSON, built on Angular Material's
  * mat-tree (nested variant). JsonParserService is the source of the value.
  */
@@ -87,6 +99,17 @@ export class JsonTreeComponent {
 
   readonly expandMenuButtonLabel = $localize`:@@tree.expand.menu.button:Expand to...`;
   readonly matchingValueAriaLabel = $localize`:@@tree.matchValue.aria:Matches the selected value`;
+
+  readonly searchCaseSensitiveLabel = $localize`:@@tree.search.caseSensitive.label:Aa`;
+  readonly searchCaseSensitiveTooltip = $localize`:@@tree.search.caseSensitive.tooltip:Match case`;
+  readonly searchRegexLabel = $localize`:@@tree.search.regex.label:.*`;
+  readonly searchRegexTooltip = $localize`:@@tree.search.regex.tooltip:Regular expression`;
+  readonly searchScopeTooltip = $localize`:@@tree.search.scope.tooltip:Search in`;
+  readonly searchScopeKeysLabel = $localize`:@@tree.search.scope.keys:Keys`;
+  readonly searchScopeValuesLabel = $localize`:@@tree.search.scope.values:Values`;
+  readonly searchScopeBothLabel = $localize`:@@tree.search.scope.both:Both`;
+  readonly searchPrevTooltip = $localize`:@@tree.search.prev.tooltip:Previous match`;
+  readonly searchNextTooltip = $localize`:@@tree.search.next.tooltip:Next match`;
 
   readonly treeControl = new NestedTreeControl<TreeNode, string>(
     (n) => n.children ?? [],
@@ -127,8 +150,99 @@ export class JsonTreeComponent {
   private readonly nowSignal = signal(Date.now());
 
   readonly searchHits = computed<ReadonlySet<string>>(() => {
+    return this.searchHitData().set;
+  });
+
+  /**
+   * Ordered list of paths matching the current query in document
+   * order. Backs prev/next navigation and the displayed match count.
+   */
+  readonly searchHitPaths = computed<readonly string[]>(() => {
+    return this.searchHitData().order;
+  });
+
+  /**
+   * Whether the current search query (when in regex mode) compiles
+   * to a valid regular expression. Used purely for visual feedback;
+   * `searchHits` already swallows regex errors and returns no hits.
+   */
+  /**
+   * Index into `searchHitPaths()` of the "active" match - the one
+   * Next/Prev navigation centers on. `-1` when there are no hits.
+   * Resets to `0` whenever the hit list changes (different query,
+   * scope, or value).
+   */
+  readonly activeHitIndex = signal<number>(-1);
+
+  /**
+   * Path of the currently-active match, or `null` when there is no
+   * active match. Used by the template to apply a stronger highlight
+   * to the active row.
+   */
+  readonly activeHitPath = computed<string | null>(() => {
+    const i = this.activeHitIndex();
+    const list = this.searchHitPaths();
+    return i >= 0 && i < list.length ? (list[i] ?? null) : null;
+  });
+
+  readonly searchHitCount = computed<number>(() => this.searchHitPaths().length);
+
+  /**
+   * Whether the current search query (when in regex mode) compiles
+   * to a valid regular expression. Used purely for visual feedback;
+   * `searchHits` already swallows regex errors and returns no hits.
+   */
+  readonly searchRegexInvalid = computed<boolean>(() => {
+    if (!this.prefs.prefs().searchRegexMode) return false;
     const q = this.search().trim();
-    if (!q) return new Set();
+    if (!q) return false;
+    try {
+      new RegExp(q);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+
+  /**
+   * Localized "12 matches" / "1 match" / "No matches" string for the
+   * counter beside the search input. Returns the empty string when
+   * the search input is empty so the counter can be hidden.
+   */
+  readonly searchCountLabel = computed<string>(() => {
+    if (!this.search().trim()) return '';
+    const n = this.searchHitCount();
+    if (n === 0) return $localize`:@@tree.search.count.none:No matches`;
+    if (n === 1) return $localize`:@@tree.search.count.one:1 match`;
+    return $localize`:@@tree.search.count.other:${n}:count: matches`;
+  });
+
+  scopeLabel(scope: 'keys' | 'values' | 'both'): string {
+    switch (scope) {
+      case 'keys':
+        return this.searchScopeKeysLabel;
+      case 'values':
+        return this.searchScopeValuesLabel;
+      default:
+        return this.searchScopeBothLabel;
+    }
+  }
+
+  readonly searchScope = computed(() => this.prefs.prefs().searchScope);
+  readonly searchCaseSensitive = computed(() => this.prefs.prefs().searchCaseSensitive);
+  readonly searchRegexMode = computed(() => this.prefs.prefs().searchRegexMode);
+
+  readonly searchScopeButtonLabel = computed(() => this.scopeLabel(this.searchScope()));
+
+  readonly searchPrevDisabled = computed(() => this.searchHitCount() === 0);
+  readonly searchNextDisabled = computed(() => this.searchHitCount() === 0);
+
+  private readonly searchHitData = computed<{
+    set: ReadonlySet<string>;
+    order: readonly string[];
+  }>(() => {
+    const q = this.search().trim();
+    if (!q) return { set: new Set(), order: [] };
     const scope = this.prefs.prefs().searchScope;
     const caseSensitive = this.prefs.prefs().searchCaseSensitive;
     const regexMode = this.prefs.prefs().searchRegexMode;
@@ -138,26 +252,32 @@ export class JsonTreeComponent {
       try {
         regex = new RegExp(q, caseSensitive ? '' : 'i');
       } catch {
-        return new Set();
+        return { set: new Set(), order: [] };
       }
     }
-    const matches = new Set<string>();
+    const matchSet = new Set<string>();
+    const matchOrder: string[] = [];
     const test = (hay: string): boolean =>
       regex ? regex.test(hay) : (caseSensitive ? hay : hay.toLowerCase()).includes(needle);
+    const record = (path: string): void => {
+      if (matchSet.has(path)) return;
+      matchSet.add(path);
+      matchOrder.push(path);
+    };
     const walk = (node: TreeNode | undefined): void => {
       if (!node) return;
       if (node.segment !== undefined && (scope === 'keys' || scope === 'both')) {
-        if (test(String(node.segment))) matches.add(node.pathString);
+        if (test(String(node.segment))) record(node.pathString);
       }
       if (scope === 'values' || scope === 'both') {
         if (node.type !== 'object' && node.type !== 'array') {
-          if (test(this.renderLeaf(node.value, node.type))) matches.add(node.pathString);
+          if (test(this.renderLeaf(node.value, node.type))) record(node.pathString);
         }
       }
       node.children?.forEach(walk);
     };
     walk(this.root());
-    return matches;
+    return { set: matchSet, order: matchOrder };
   });
 
   /**
@@ -262,6 +382,15 @@ export class JsonTreeComponent {
       // zombie state.
       untracked(() => this.selectedPath.set(null));
     });
+
+    // Reset the active-match index whenever the hit list changes
+    // (different query, scope, or value). Empty -> -1; non-empty -> 0.
+    effect(() => {
+      const paths = this.searchHitPaths();
+      untracked(() => {
+        this.activeHitIndex.set(paths.length > 0 ? 0 : -1);
+      });
+    });
   }
 
   hasChild = (_: number, node: TreeNode): boolean =>
@@ -314,8 +443,89 @@ export class JsonTreeComponent {
     }
   }
 
-  onSearchEsc(): void {
+  /**
+   * Escape inside the search input clears the search. We
+   * `preventDefault` to swallow browser-level Esc handling (e.g.,
+   * cancelling a surrounding form), but deliberately do not call
+   * `stopPropagation` so the component-level document Escape
+   * handler can still clear the active selection in the same press.
+   */
+  onSearchEsc(ev?: Event): void {
+    ev?.preventDefault();
     this.search.set('');
+  }
+
+  setSearchScope(scope: 'keys' | 'values' | 'both'): void {
+    this.prefs.update({ searchScope: scope });
+  }
+
+  toggleSearchCaseSensitive(): void {
+    this.prefs.update({
+      searchCaseSensitive: !this.prefs.prefs().searchCaseSensitive
+    });
+  }
+
+  toggleSearchRegexMode(): void {
+    this.prefs.update({
+      searchRegexMode: !this.prefs.prefs().searchRegexMode
+    });
+  }
+
+  goToNextMatch(): void {
+    const paths = this.searchHitPaths();
+    if (paths.length === 0) return;
+    const i = this.activeHitIndex();
+    const next = i < 0 ? 0 : (i + 1) % paths.length;
+    this.activeHitIndex.set(next);
+    this.revealHit(paths[next] as string);
+  }
+
+  goToPrevMatch(): void {
+    const paths = this.searchHitPaths();
+    if (paths.length === 0) return;
+    const i = this.activeHitIndex();
+    const prev = i <= 0 ? paths.length - 1 : i - 1;
+    this.activeHitIndex.set(prev);
+    this.revealHit(paths[prev] as string);
+  }
+
+  /**
+   * Search-input Enter / Shift+Enter shortcut. Enter advances to the
+   * next match; Shift+Enter to the previous. preventDefault so the
+   * surrounding form (if any) does not submit.
+   */
+  onSearchEnter(ev: Event): void {
+    if (this.searchHitCount() === 0) return;
+    ev.preventDefault();
+    const keyEvent = ev as KeyboardEvent;
+    if (keyEvent.shiftKey) {
+      this.goToPrevMatch();
+    } else {
+      this.goToNextMatch();
+    }
+  }
+
+  /**
+   * Expand all ancestors of the given path and scroll the row into
+   * view. No-op when the path is unknown to `nodeIndex`.
+   */
+  private revealHit(path: string): void {
+    const node = this.nodeIndex().get(path);
+    if (!node) return;
+    // Walk up the path to expand each ancestor container.
+    const partial: (string | number)[] = [];
+    for (let i = 0; i < node.path.length - 1; i++) {
+      partial.push(node.path[i] as string | number);
+      const ancestor = this.nodeIndex().get(this.formatPath(partial));
+      if (ancestor) this.treeControl.expand(ancestor);
+    }
+    // Defer scroll until after Angular renders the expansion.
+    queueMicrotask(() => {
+      const el = this.host.nativeElement.querySelector(
+        `[data-path="${cssEscape(path)}"]`
+      ) as HTMLElement | null;
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
   }
 
   expandAll(): void {

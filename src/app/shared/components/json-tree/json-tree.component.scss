@@ -32,6 +32,39 @@
     outline: none;
     border-color: var(--color-primary);
   }
+
+  &.tree-search--invalid,
+  &.tree-search--invalid:focus {
+    border-color: #d73a4a;
+  }
+}
+
+.tree-search-toggle {
+  font-family: v.$font-mono;
+  min-width: 32px;
+  text-align: center;
+
+  &.is-active {
+    background: rgba(127, 127, 127, 0.18);
+    border-color: var(--color-primary);
+  }
+}
+
+.tree-search-nav {
+  min-width: 28px;
+  padding-left: 8px;
+  padding-right: 8px;
+
+  &[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.tree-search-count {
+  font-size: 12px;
+  color: rgba(127, 127, 127, 0.9);
+  white-space: nowrap;
 }
 
 .tree-btn,
@@ -102,6 +135,14 @@
 
   &.is-selected {
     background: var(--highlight-selection);
+  }
+
+  // Active match - drawn as a focus ring on top of any background
+  // highlight so a row that is both a search hit and the active hit
+  // remains visually distinct.
+  &.is-active-match {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
   }
 }
 

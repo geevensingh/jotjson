@@ -674,4 +674,187 @@ describe('JsonTreeComponent', () => {
       expect(labels).toContain('ipv6');
     });
   });
+
+  describe('search controls polish', () => {
+    function input(): HTMLInputElement {
+      return fixture.nativeElement.querySelector('input.tree-search') as HTMLInputElement;
+    }
+    function setSearch(text: string): void {
+      const el = input();
+      el.value = text;
+      el.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    }
+
+    describe('match count', () => {
+      it('hides the counter when the search is empty', async () => {
+        await createWith({ a: 1, b: 2 });
+        expect(fixture.nativeElement.querySelector('.tree-search-count')).toBeNull();
+      });
+
+      it('renders "No matches" when nothing matches', async () => {
+        await createWith({ alpha: 1 });
+        setSearch('zzz');
+        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        expect(el?.textContent?.trim()).toBe('No matches');
+      });
+
+      it('renders "1 match" for exactly one hit', async () => {
+        await createWith({ alpha: 1, beta: 2 });
+        setSearch('alpha');
+        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        expect(el?.textContent?.trim()).toBe('1 match');
+      });
+
+      it('renders "N matches" for multiple hits', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        expect(el?.textContent?.trim()).toBe('3 matches');
+      });
+    });
+
+    describe('Escape clears the search', () => {
+      it('clears the search and prevents default on Escape keydown', async () => {
+        await createWith({ a: 1 });
+        setSearch('a');
+        expect(fixture.componentInstance.search()).toBe('a');
+        const ev = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true, bubbles: true });
+        spyOn(ev, 'preventDefault').and.callThrough();
+        input().dispatchEvent(ev);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.search()).toBe('');
+        expect(ev.preventDefault).toHaveBeenCalled();
+      });
+    });
+
+    describe('case sensitive / regex / scope toggles', () => {
+      it('toggles case-sensitive preference and updates aria-pressed', async () => {
+        await createWith({ a: 1 });
+        const btn = fixture.nativeElement.querySelectorAll('.tree-search-toggle')[0] as HTMLButtonElement;
+        expect(btn.getAttribute('aria-pressed')).toBe('false');
+        btn.click();
+        fixture.detectChanges();
+        expect(prefs.prefs().searchCaseSensitive).toBe(true);
+        expect(btn.getAttribute('aria-pressed')).toBe('true');
+      });
+
+      it('toggles regex-mode preference', async () => {
+        await createWith({ a: 1 });
+        const btn = fixture.nativeElement.querySelectorAll('.tree-search-toggle')[1] as HTMLButtonElement;
+        btn.click();
+        fixture.detectChanges();
+        expect(prefs.prefs().searchRegexMode).toBe(true);
+      });
+
+      it('setSearchScope updates the preference', async () => {
+        await createWith({ a: 1 });
+        fixture.componentInstance.setSearchScope('keys');
+        fixture.detectChanges();
+        expect(prefs.prefs().searchScope).toBe('keys');
+      });
+
+      it('marks the search input invalid when regex mode + uncompilable pattern', async () => {
+        await createWith({ a: 1 });
+        prefs.update({ searchRegexMode: true });
+        setSearch('[unclosed');
+        expect(fixture.componentInstance.searchRegexInvalid()).toBe(true);
+        expect(input().classList.contains('tree-search--invalid')).toBe(true);
+      });
+
+      it('does not mark invalid when regex mode is off, even with bracket patterns', async () => {
+        await createWith({ a: 1 });
+        setSearch('[unclosed');
+        expect(fixture.componentInstance.searchRegexInvalid()).toBe(false);
+      });
+    });
+
+    describe('Prev / Next navigation', () => {
+      it('cycles forward through hits and wraps to the first', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        expect(c.searchHitCount()).toBe(3);
+        // Initial active index resets to 0 (first hit).
+        expect(c.activeHitIndex()).toBe(0);
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(1);
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(2);
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('cycles backward through hits and wraps to the last', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        c.goToPrevMatch();
+        expect(c.activeHitIndex()).toBe(2);
+        c.goToPrevMatch();
+        expect(c.activeHitIndex()).toBe(1);
+      });
+
+      it('Enter advances to the next match; Shift+Enter to the previous', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true, bubbles: true });
+        input().dispatchEvent(enter);
+        fixture.detectChanges();
+        expect(c.activeHitIndex()).toBe(1);
+        const shiftEnter = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          shiftKey: true,
+          cancelable: true,
+          bubbles: true
+        });
+        input().dispatchEvent(shiftEnter);
+        fixture.detectChanges();
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('expands ancestors of the active hit', async () => {
+        await createWith({ outer: { inner: { needle: 1 } } });
+        const c = fixture.componentInstance;
+        c.collapseAll();
+        fixture.detectChanges();
+        setSearch('needle');
+        // Initial reveal triggered by the index reset to 0 should expand
+        // the path from root through `outer` and `inner`.
+        c.goToNextMatch();
+        c.goToNextMatch(); // wrap (single hit)
+        const outer = c.treeControl.dataNodes?.find((n) => n.segment === 'outer') ?? null;
+        // dataNodes may be undefined for nested control; fall back to
+        // direct lookup via the index.
+        const root = c.root();
+        const outerNode = root?.children?.[0];
+        const innerNode = outerNode?.children?.[0];
+        expect(outerNode && c.treeControl.isExpanded(outerNode)).toBe(true);
+        expect(innerNode && c.treeControl.isExpanded(innerNode)).toBe(true);
+        // Silence unused-variable warning for the dataNodes lookup.
+        void outer;
+      });
+
+      it('disables prev/next buttons when there are no hits', async () => {
+        await createWith({ a: 1 });
+        setSearch('zzz');
+        const navButtons = fixture.nativeElement.querySelectorAll(
+          '.tree-search-nav'
+        ) as NodeListOf<HTMLButtonElement>;
+        expect(navButtons[0].disabled).toBe(true);
+        expect(navButtons[1].disabled).toBe(true);
+      });
+
+      it('resets the active index when the query changes', async () => {
+        await createWith({ alpha: 1, alphabet: 2 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(1);
+        setSearch('alpha');
+        expect(c.activeHitIndex()).toBe(0);
+      });
+    });
+  });
 });
