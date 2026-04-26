@@ -362,7 +362,11 @@ export class JsonTreeComponent {
    */
   dateAnnotation(node: TreeNode): string | null {
     if (node.type !== 'string') return null;
-    const parsed: ParsedDate | null = parseAsDate(node.value);
+    const prefs = this.prefs.prefs();
+    const parsed: ParsedDate | null = parseAsDate(node.value, undefined, {
+      assumeUtcForIsoDateTime: prefs.treeAssumeUtcForIsoDateTime,
+      assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly
+    });
     if (!parsed) return null;
     return formatDateAnnotation(parsed, new Date(this.nowSignal()));
   }

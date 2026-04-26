@@ -145,6 +145,37 @@
             </span>
           </mat-slide-toggle>
         </div>
+
+        <div class="pref-row pref-row--indented">
+          <mat-slide-toggle
+            [checked]="treeAssumeUtcForIsoDateTime()"
+            [disabled]="!treeShowDateAnnotations()"
+            (change)="onTreeAssumeUtcForIsoDateTimeChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.tree.assumeUtcDateTime">
+              Treat ISO date-time without timezone as UTC
+            </span>
+          </mat-slide-toggle>
+        </div>
+
+        <div class="pref-row pref-row--indented">
+          <mat-slide-toggle
+            [checked]="treeAssumeUtcForIsoDateOnly()"
+            [disabled]="!treeShowDateAnnotations()"
+            (change)="onTreeAssumeUtcForIsoDateOnlyChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.tree.assumeUtcDateOnly">
+              Treat ISO date-only as UTC midnight
+            </span>
+          </mat-slide-toggle>
+        </div>
+
+        <div class="pref-row pref-row--indented">
+          <span class="pref-hint" i18n="@@profile.prefs.tree.assumeUtcHint">
+            Avoids local-timezone shifts for log timestamps and other
+            timezone-less ISO 8601 values.
+          </span>
+        </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-search">

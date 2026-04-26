@@ -110,22 +110,57 @@ export interface ParsedDate {
   hasTime: boolean;
 }
 
+export interface ParseOptions {
+  /**
+   * When true, ISO 8601 date-time strings without an explicit `Z` or
+   * `+/-HH:MM` offset are interpreted as UTC instead of local. Defaults
+   * to false to preserve native `Date` parsing semantics.
+   */
+  assumeUtcForIsoDateTime?: boolean;
+  /**
+   * When true, ISO 8601 date-only strings (e.g. `2026-01-31`) are
+   * interpreted as UTC midnight instead of local midnight. Defaults to
+   * false.
+   */
+  assumeUtcForIsoDateOnly?: boolean;
+}
+
+const ISO_TZ_SUFFIX = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
 /**
  * Returns the parsed date plus a `hasTime` flag, or null if `raw` does not
  * match one of the accepted shapes or falls outside the supported range.
  */
-export function parseAsDate(raw: unknown, locale?: string): ParsedDate | null {
+export function parseAsDate(
+  raw: unknown,
+  locale?: string,
+  opts?: ParseOptions
+): ParsedDate | null {
   if (typeof raw !== 'string') return null;
   const s = raw.trim();
   if (s.length < 8 || s.length > 40) return null;
 
   if (ISO_WITH_TIME.test(s)) {
-    const d = new Date(s);
+    const hasTz = ISO_TZ_SUFFIX.test(s);
+    const source = !hasTz && opts?.assumeUtcForIsoDateTime ? `${s}Z` : s;
+    const d = new Date(source);
     return isInRange(d) ? { date: d, hasTime: true } : null;
   }
 
   if (ISO_DATE_ONLY.test(s)) {
     const [y, m, d] = s.split('-').map((p) => Number(p));
+    if (opts?.assumeUtcForIsoDateOnly) {
+      if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+      const utc = new Date(Date.UTC(y, m - 1, d));
+      if (
+        utc.getUTCFullYear() !== y ||
+        utc.getUTCMonth() !== m - 1 ||
+        utc.getUTCDate() !== d
+      ) {
+        return null;
+      }
+      return isInRange(utc) ? { date: utc, hasTime: false } : null;
+    }
     const built = tryConstructFromYmd(y, m, d);
     return built ? { date: built, hasTime: false } : null;
   }

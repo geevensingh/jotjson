@@ -195,6 +195,22 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().treeShowDateAnnotations).toBe(true);
   });
 
+  it('writes treeAssumeUtcForIsoDateTime/Only through PreferencesService when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onTreeAssumeUtcForIsoDateTimeChange(false);
+    expect(prefs.prefs().treeAssumeUtcForIsoDateTime).toBe(false);
+    fixture.componentInstance.onTreeAssumeUtcForIsoDateTimeChange(true);
+    expect(prefs.prefs().treeAssumeUtcForIsoDateTime).toBe(true);
+
+    fixture.componentInstance.onTreeAssumeUtcForIsoDateOnlyChange(false);
+    expect(prefs.prefs().treeAssumeUtcForIsoDateOnly).toBe(false);
+    fixture.componentInstance.onTreeAssumeUtcForIsoDateOnlyChange(true);
+    expect(prefs.prefs().treeAssumeUtcForIsoDateOnly).toBe(true);
+  });
+
   it('writes tree font size and clamps to the supported range', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },

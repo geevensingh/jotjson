@@ -83,6 +83,12 @@ export class ProfileComponent {
   readonly treeShowDateAnnotations = computed(
     () => this.prefs().treeShowDateAnnotations
   );
+  readonly treeAssumeUtcForIsoDateTime = computed(
+    () => this.prefs().treeAssumeUtcForIsoDateTime
+  );
+  readonly treeAssumeUtcForIsoDateOnly = computed(
+    () => this.prefs().treeAssumeUtcForIsoDateOnly
+  );
   readonly treeFontSize = computed(() => this.prefs().treeFontSize);
 
   readonly searchCaseSensitive = computed(() => this.prefs().searchCaseSensitive);
@@ -146,6 +152,14 @@ export class ProfileComponent {
 
   onTreeShowDateAnnotationsChange(value: boolean): void {
     this.prefsService.update({ treeShowDateAnnotations: value });
+  }
+
+  onTreeAssumeUtcForIsoDateTimeChange(value: boolean): void {
+    this.prefsService.update({ treeAssumeUtcForIsoDateTime: value });
+  }
+
+  onTreeAssumeUtcForIsoDateOnlyChange(value: boolean): void {
+    this.prefsService.update({ treeAssumeUtcForIsoDateOnly: value });
   }
 
   onSearchCaseSensitiveChange(value: boolean): void {

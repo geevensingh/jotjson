@@ -60,6 +60,8 @@ export interface UserPreferences {
   treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
+  treeAssumeUtcForIsoDateTime: boolean;
+  treeAssumeUtcForIsoDateOnly: boolean;
   historyTrackingMode: 'save_only' | 'all_actions';
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;

@@ -167,4 +167,88 @@ describe('date-detect', () => {
       expect(out).toMatch(/in /);
     });
   });
+
+  describe('parseAsDate - assumeUtcForIsoDateTime', () => {
+    it('parses timezone-less ISO date-time as UTC when opt is true', () => {
+      const withOpt = parseAsDate('2026-01-31T23:59:59.999', undefined, {
+        assumeUtcForIsoDateTime: true
+      })!;
+      const reference = new Date('2026-01-31T23:59:59.999Z');
+      expect(withOpt.date.getTime()).toBe(reference.getTime());
+    });
+
+    it('parses timezone-less ISO date-time as local when opt is false (default)', () => {
+      const local = parseAsDate('2026-01-31T23:59:59.999')!;
+      const expected = new Date('2026-01-31T23:59:59.999');
+      expect(local.date.getTime()).toBe(expected.getTime());
+    });
+
+    it('does not modify ISO strings that already have Z', () => {
+      const parsed = parseAsDate('2026-01-31T23:59:59Z', undefined, {
+        assumeUtcForIsoDateTime: true
+      })!;
+      expect(parsed.date.getTime()).toBe(new Date('2026-01-31T23:59:59Z').getTime());
+    });
+
+    it('does not modify ISO strings that already have a positive offset', () => {
+      const parsed = parseAsDate('2026-01-31T23:59:59+05:00', undefined, {
+        assumeUtcForIsoDateTime: true
+      })!;
+      expect(parsed.date.getTime()).toBe(new Date('2026-01-31T23:59:59+05:00').getTime());
+    });
+
+    it('does not modify ISO strings that already have a negative offset', () => {
+      const parsed = parseAsDate('2026-01-31T23:59:59-08:00', undefined, {
+        assumeUtcForIsoDateTime: true
+      })!;
+      expect(parsed.date.getTime()).toBe(new Date('2026-01-31T23:59:59-08:00').getTime());
+    });
+
+    it('handles 7-digit fractional seconds (.NET round-trip) as UTC', () => {
+      const parsed = parseAsDate('2026-01-31T23:59:59.9999999', undefined, {
+        assumeUtcForIsoDateTime: true
+      })!;
+      // JS truncates beyond ms; the parsed instant matches the millisecond-precision UTC equivalent.
+      expect(parsed.date.getTime()).toBe(new Date('2026-01-31T23:59:59.999Z').getTime());
+    });
+  });
+
+  describe('parseAsDate - assumeUtcForIsoDateOnly', () => {
+    it('parses YYYY-MM-DD as UTC midnight when opt is true', () => {
+      const parsed = parseAsDate('2026-01-31', undefined, {
+        assumeUtcForIsoDateOnly: true
+      })!;
+      expect(parsed.date.getTime()).toBe(Date.UTC(2026, 0, 31));
+      expect(parsed.hasTime).toBe(false);
+    });
+
+    it('parses YYYY-MM-DD as local midnight when opt is false (default)', () => {
+      const parsed = parseAsDate('2026-01-31')!;
+      expect(parsed.date.getTime()).toBe(new Date(2026, 0, 31).getTime());
+    });
+
+    it('rejects calendar overflow when opt is true', () => {
+      expect(parseAsDate('2024-02-30', undefined, { assumeUtcForIsoDateOnly: true })).toBeNull();
+    });
+
+    it('rejects out-of-range month when opt is true', () => {
+      expect(parseAsDate('2024-13-01', undefined, { assumeUtcForIsoDateOnly: true })).toBeNull();
+    });
+  });
+
+  describe('parseAsDate - assumeUtc opts do not affect non-ISO formats', () => {
+    const opts = { assumeUtcForIsoDateTime: true, assumeUtcForIsoDateOnly: true };
+
+    it('does not change slash-format parsing', () => {
+      const a = parseAsDate('11/05/2024', 'en-US')!;
+      const b = parseAsDate('11/05/2024', 'en-US', opts)!;
+      expect(a.date.getTime()).toBe(b.date.getTime());
+    });
+
+    it('does not change RFC 2822 / human parsing', () => {
+      const a = parseAsDate('Nov 5, 2024')!;
+      const b = parseAsDate('Nov 5, 2024', undefined, opts)!;
+      expect(a.date.getTime()).toBe(b.date.getTime());
+    });
+  });
 });

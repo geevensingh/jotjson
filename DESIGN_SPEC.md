@@ -93,6 +93,8 @@ Browser (Angular SPA)
   layoutOrientation: "horizontal" | "vertical" (default: "horizontal" - editor left, tree right; "vertical" = editor top, tree bottom),
   treeShowTypeLabels: boolean (default: true),
   treeShowDateAnnotations: boolean (default: true),
+  treeAssumeUtcForIsoDateTime: boolean (default: true - timezone-less ISO 8601 date-time strings are interpreted as UTC instead of local; matches the conventional reading of log timestamps and other machine-emitted ISO values),
+  treeAssumeUtcForIsoDateOnly: boolean (default: true - YYYY-MM-DD strings are interpreted as UTC midnight instead of local midnight),
   historyTrackingMode: "save_only" | "all_actions" (default: "save_only"),
   searchCaseSensitive: boolean (default: false),
   searchRegexMode: boolean (default: false),
@@ -301,6 +303,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - Detection heuristics: ISO 8601, RFC 2822, and common formats like `YYYY-MM-DD`, `MM/DD/YYYY`. Uses a conservative parser - ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates. Numeric values (e.g., Unix timestamps) are **not** annotated - only string values are eligible.
     - Relative time updates live (e.g., "3 minutes ago" -> "4 minutes ago") while the page is open.
     - This feature can be toggled on/off via a tree toolbar toggle or the `treeShowDateAnnotations` user preference.
+    - Two related preferences (`treeAssumeUtcForIsoDateTime`, `treeAssumeUtcForIsoDateOnly`, both default `true`) control whether ISO 8601 strings without an explicit timezone designator are interpreted as UTC. Defaults match the conventional reading of machine-emitted timestamps (logs, .NET round-trips, etc.); turn off either setting to fall back to native `Date` semantics (date-time as local, date-only as local midnight). The displayed absolute date is always in the user's local timezone via `Intl.DateTimeFormat` - these settings only change what instant the source string represents.
   - **Selection highlighting** - clicking a row in the tree activates three highlight layers (colors below reference the active theme's values from `TreeHighlightColors`):
     - **Selected row** - highlighted in the user's **primary selection color**. Only one row is selected at a time.
     - **Matching value rows** - all other rows whose value is identical to the selected row's value are highlighted in the **secondary color**. Matching compares the raw JSON value (type-aware: `"1"` != `1`). A small badge icon appears on each matching row to make them easy to spot.

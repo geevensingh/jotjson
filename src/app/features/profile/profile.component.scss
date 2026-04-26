@@ -108,6 +108,17 @@ dl {
     min-width: 12rem;
     color: var(--mat-sys-on-surface, inherit);
   }
+
+  &--indented {
+    padding-left: 1.5rem;
+  }
+}
+
+.pref-hint {
+  flex: 1 1 100%;
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-size: 0.8125rem;
+  font-style: italic;
 }
 
 .pref-number {

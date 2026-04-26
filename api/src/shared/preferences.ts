@@ -31,6 +31,8 @@ export interface UserPreferences {
   treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
+  treeAssumeUtcForIsoDateTime: boolean;
+  treeAssumeUtcForIsoDateOnly: boolean;
   historyTrackingMode: 'save_only' | 'all_actions';
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
@@ -51,6 +53,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeFontSize: 13,
   treeShowTypeLabels: true,
   treeShowDateAnnotations: true,
+  treeAssumeUtcForIsoDateTime: true,
+  treeAssumeUtcForIsoDateOnly: true,
   historyTrackingMode: 'save_only',
   searchCaseSensitive: false,
   searchRegexMode: false,
@@ -107,6 +111,8 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'treeFontSize',
   'treeShowTypeLabels',
   'treeShowDateAnnotations',
+  'treeAssumeUtcForIsoDateTime',
+  'treeAssumeUtcForIsoDateOnly',
   'historyTrackingMode',
   'searchCaseSensitive',
   'searchRegexMode',
@@ -234,6 +240,14 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     treeFontSize: assertInt(raw['treeFontSize'], 'treeFontSize', 8, 32),
     treeShowTypeLabels: assertBool(raw['treeShowTypeLabels'], 'treeShowTypeLabels'),
     treeShowDateAnnotations: assertBool(raw['treeShowDateAnnotations'], 'treeShowDateAnnotations'),
+    treeAssumeUtcForIsoDateTime: assertBool(
+      raw['treeAssumeUtcForIsoDateTime'],
+      'treeAssumeUtcForIsoDateTime'
+    ),
+    treeAssumeUtcForIsoDateOnly: assertBool(
+      raw['treeAssumeUtcForIsoDateOnly'],
+      'treeAssumeUtcForIsoDateOnly'
+    ),
     historyTrackingMode: assertEnum(
       raw['historyTrackingMode'],
       HISTORY_MODES,

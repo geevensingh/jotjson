@@ -585,5 +585,37 @@ describe('JsonTreeComponent', () => {
         jasmine.clock().uninstall();
       }
     });
+
+    it('treats timezone-less ISO date-time as UTC when the pref is true', async () => {
+      // Default treeAssumeUtcForIsoDateTime is true. The same instant must
+      // produce identical relative-time output whether or not the source
+      // string carries a "Z" suffix.
+      await createWith({
+        a: '2024-11-05T18:30:00',
+        b: '2024-11-05T18:30:00Z'
+      });
+      const spans = getAnnotationSpans();
+      expect(spans.length).toBe(2);
+      const aText = spans[0]?.textContent ?? '';
+      const bText = spans[1]?.textContent ?? '';
+      expect(aText).toBe(bText);
+    });
+
+    it('treats timezone-less ISO date-time as local when the pref is false', async () => {
+      await createWith({
+        a: '2024-11-05T18:30:00',
+        b: '2024-11-05T18:30:00Z'
+      });
+      prefs.update({ treeAssumeUtcForIsoDateTime: false });
+      fixture.detectChanges();
+      const spans = getAnnotationSpans();
+      expect(spans.length).toBe(2);
+      // Unless the test runner happens to be in UTC, the two parsed instants
+      // differ by the local offset, so the rendered annotations differ.
+      const offsetMin = new Date('2024-11-05T18:30:00').getTimezoneOffset();
+      if (offsetMin !== 0) {
+        expect(spans[0]?.textContent).not.toBe(spans[1]?.textContent);
+      }
+    });
   });
 });

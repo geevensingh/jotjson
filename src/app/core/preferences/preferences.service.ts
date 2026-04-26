@@ -31,6 +31,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeFontSize: 13,
   treeShowTypeLabels: true,
   treeShowDateAnnotations: true,
+  treeAssumeUtcForIsoDateTime: true,
+  treeAssumeUtcForIsoDateOnly: true,
   historyTrackingMode: 'save_only',
   searchCaseSensitive: false,
   searchRegexMode: false,

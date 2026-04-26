@@ -1008,263 +1008,284 @@
           <context context-type="linenumber">144,146</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="profile.prefs.tree.assumeUtcDateTime" datatype="html">
+        <source> Treat ISO date-time without timezone as UTC </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
+          <context context-type="linenumber">156,158</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="profile.prefs.tree.assumeUtcDateOnly" datatype="html">
+        <source> Treat ISO date-only as UTC midnight </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
+          <context context-type="linenumber">168,170</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="profile.prefs.tree.assumeUtcHint" datatype="html">
+        <source> Avoids local-timezone shifts for log timestamps and other timezone-less ISO 8601 values. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
+          <context context-type="linenumber">175,178</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="profile.prefs.search.title" datatype="html">
         <source> Search </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">152,155</context>
+          <context context-type="linenumber">183,186</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.search.scope" datatype="html">
         <source> Search scope </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">157,159</context>
+          <context context-type="linenumber">188,190</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.search.scope.keys" datatype="html">
         <source>Keys</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">165,166</context>
+          <context context-type="linenumber">196,197</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.search.scope.values" datatype="html">
         <source>Values</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">166,167</context>
+          <context context-type="linenumber">197,198</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.search.scope.both" datatype="html">
         <source>Keys and values</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">167,169</context>
+          <context context-type="linenumber">198,200</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.search.caseSensitive" datatype="html">
         <source>Case sensitive</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">176,178</context>
+          <context context-type="linenumber">207,209</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.search.regexMode" datatype="html">
         <source>Regular expression mode</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">185,187</context>
+          <context context-type="linenumber">216,218</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.title" datatype="html">
         <source> History &amp; storage </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">192,195</context>
+          <context context-type="linenumber">223,226</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.trackingMode" datatype="html">
         <source> History tracking </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">197,199</context>
+          <context context-type="linenumber">228,230</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.trackingMode.saveOnly" datatype="html">
         <source> Save only </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">206,208</context>
+          <context context-type="linenumber">237,239</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.trackingMode.allActions" datatype="html">
         <source> All actions </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">209,212</context>
+          <context context-type="linenumber">240,243</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.trackingMode.help" datatype="html">
         <source> Choose whether your history records only saved blobs or every view, edit, and paste. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">213,217</context>
+          <context context-type="linenumber">244,248</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.quotaStrategy" datatype="html">
         <source> When you reach the saved blob limit </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">219,221</context>
+          <context context-type="linenumber">250,252</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.quotaStrategy.autoFifo" datatype="html">
         <source> Automatically delete the oldest </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">228,230</context>
+          <context context-type="linenumber">259,261</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.quotaStrategy.manual" datatype="html">
         <source> Ask me to choose </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">231,233</context>
+          <context context-type="linenumber">262,264</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.title" datatype="html">
         <source> Appearance </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">239,242</context>
+          <context context-type="linenumber">270,273</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.theme" datatype="html">
         <source>Theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">243,245</context>
+          <context context-type="linenumber">274,276</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.theme.dark" datatype="html">
         <source>Dark</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">250,251</context>
+          <context context-type="linenumber">281,282</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.theme.light" datatype="html">
         <source>Light</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">251,252</context>
+          <context context-type="linenumber">282,283</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.theme.system" datatype="html">
         <source> Match system </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">253,255</context>
+          <context context-type="linenumber">284,286</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.layout" datatype="html">
         <source> Layout orientation </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">260,262</context>
+          <context context-type="linenumber">291,293</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.layout.horizontal" datatype="html">
         <source> Horizontal </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">269,271</context>
+          <context context-type="linenumber">300,302</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.layout.vertical" datatype="html">
         <source> Vertical </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">272,274</context>
+          <context context-type="linenumber">303,305</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.title" datatype="html">
         <source> Tree highlight colors </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">284,286</context>
+          <context context-type="linenumber">315,317</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.help" datatype="html">
         <source> Pick colors used to highlight selected nodes, ancestors of the selection, matching values, and search hits. Each theme has its own set; only the currently active theme is shown live. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">287,291</context>
+          <context context-type="linenumber">318,322</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.darkTheme" datatype="html">
         <source>Dark theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">296,298</context>
+          <context context-type="linenumber">327,329</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.lightTheme" datatype="html">
         <source>Light theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">298,300</context>
+          <context context-type="linenumber">329,331</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.activeTag" datatype="html">
         <source>(active)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">304,307</context>
+          <context context-type="linenumber">335,338</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.selection" datatype="html">
         <source> Selection </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">315,316</context>
+          <context context-type="linenumber">346,347</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.matching" datatype="html">
         <source> Matching values </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">320,321</context>
+          <context context-type="linenumber">351,352</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.ancestor" datatype="html">
         <source> Ancestors </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">325,326</context>
+          <context context-type="linenumber">356,357</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.search" datatype="html">
         <source> Search highlight </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">330,331</context>
+          <context context-type="linenumber">361,362</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.resetActive" datatype="html">
         <source> Reset active theme to defaults </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">364,366</context>
+          <context context-type="linenumber">395,397</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.signedOut.title" datatype="html">
         <source> You are signed out </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">373,375</context>
+          <context context-type="linenumber">404,406</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.signedOut.body" datatype="html">
         <source> Sign in to view your profile, save persistent links, and keep history across devices. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">376,379</context>
+          <context context-type="linenumber">407,410</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.signIn" datatype="html">
         <source>Sign in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">382,384</context>
+          <context context-type="linenumber">413,415</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.signIn.notConfigured" datatype="html">
         <source>Sign in (not configured)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">387,390</context>
+          <context context-type="linenumber">418,421</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.brand.aria" datatype="html">
