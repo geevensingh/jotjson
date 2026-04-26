@@ -329,7 +329,7 @@ The primary page. Available to **all users** (anonymous + registered).
 
 - **Status bar** (always-visible strip along the bottom of the page, shipped in M7m):
   - **Left cluster** (raw text stats): byte size in UTF-8, line count, current cursor position (`Ln X, Col Y`).
-  - **Right cluster** (parsed tree stats): total node count, max depth, counts of arrays vs. objects, a JSON / JSONC mode badge, and (from M7n) a `vX.Y.Z - <shortsha>` version indicator that links to the corresponding commit on GitHub and copies the full SHA on click.
+  - **Right cluster** (parsed tree stats): total node count, max depth, counts of arrays vs. objects, a JSON / JSONC mode badge, and a build indicator. The build indicator currently shows the local-git short SHA (with a `*` suffix when the working tree was dirty) sourced from a build-time generated module, as a short-term placeholder pending M7n; M7n replaces it with a CI-authoritative `vX.Y.Z - <shortsha>` badge that links to the commit on GitHub and copies the full SHA on click.
   - Stats update reactively as the user types. No interactivity beyond the version badge in v1.
   - On narrow viewports (< 768px) the bar collapses to a single-line summary per M7l, keeping Bytes, Lines, and the Mode badge and hiding cursor/nodes/depth/counts.
 
@@ -947,8 +947,8 @@ EU users would need a regional resource - out of scope for v1.
      (`/s/:slug` where `isPublic === true`), `noindex` meta on private
      blobs, friendly "Blob not found" 404 page for invalid slugs,
      `/history` loading skeleton and empty state.~~ (done)
-5. **History** - Activity tracking for signed-in users. Broken into:
-   - **M5a**: Server-side event tracking plumbing (no UI change).
+5. ~~**History** - Activity tracking for signed-in users.~~ (done) Broken into:
+   - ~~**M5a**: Server-side event tracking plumbing (no UI change).
      New Cosmos `history` container (partition key `/userId`).
      `HistoryEntry` documents written on blob mutations - `"saved"`
      on create, `"edited"` on update, `"deleted"` on delete,
@@ -964,7 +964,7 @@ EU users would need a regional resource - out of scope for v1.
      `GET /api/history` (paginated, newest first),
      `DELETE /api/history` (clear all for the caller),
      `POST /api/history` (client-recorded `"pasted"` events only in
-     v1).
+     v1).~~ (done)
    - ~~**M5b**: UI surface. (The M4b blob list was moved from
      `/history` to `/blobs` ahead of M5b - feature folder, route,
      i18n message IDs, and app-header link label all updated.) A new
