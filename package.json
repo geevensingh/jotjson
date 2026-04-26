@@ -1,7 +1,7 @@
 {
   "name": "jotjson",
   "version": "0.1.0",
-  "description": "JotJSON — input, store, and display JSON (Angular SPA).",
+  "description": "JotJSON - input, store, and display JSON (Angular SPA).",
   "private": true,
   "engines": {
     "node": ">=24.0.0"
@@ -13,21 +13,35 @@
     "build:prod": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
-    "lint": "tsc --noEmit -p tsconfig.app.json",
-    "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf"
+    "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
+    "lint": "tsc --noEmit -p tsconfig.app.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs",
+    "check:ascii": "node scripts/check-ascii.mjs",
+    "check:spec-patterns": "node scripts/check-spec-patterns.mjs",
+    "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf",
+    "build:info": "node scripts/write-build-info.mjs",
+    "prestart": "node scripts/write-build-info.mjs",
+    "prebuild": "node scripts/write-build-info.mjs",
+    "prebuild:prod": "node scripts/write-build-info.mjs",
+    "prewatch": "node scripts/write-build-info.mjs",
+    "prelint": "node scripts/write-build-info.mjs",
+    "pretest": "node scripts/write-build-info.mjs",
+    "pretest:ci": "node scripts/write-build-info.mjs"
   },
   "dependencies": {
-    "@angular/animations": "^19.2.0",
-    "@angular/cdk": "^19.2.0",
-    "@angular/common": "^19.2.0",
-    "@angular/compiler": "^19.2.0",
-    "@angular/core": "^19.2.0",
-    "@angular/forms": "^19.2.0",
-    "@angular/material": "^19.2.0",
-    "@angular/platform-browser": "^19.2.0",
-    "@angular/platform-browser-dynamic": "^19.2.0",
-    "@angular/router": "^19.2.0",
-    "@angular/service-worker": "^19.2.0",
+    "@angular/animations": "^21.2.10",
+    "@angular/cdk": "^21.2.8",
+    "@angular/common": "^21.2.10",
+    "@angular/compiler": "^21.2.10",
+    "@angular/core": "^21.2.10",
+    "@angular/forms": "^21.2.10",
+    "@angular/material": "^21.2.8",
+    "@angular/platform-browser": "^21.2.10",
+    "@angular/platform-browser-dynamic": "^21.2.10",
+    "@angular/router": "^21.2.10",
+    "@angular/service-worker": "^21.2.10",
+    "@azure/msal-angular": "^5.2.0",
+    "@azure/msal-browser": "^5.7.0",
+    "@microsoft/applicationinsights-web": "^3.4.1",
     "jsonc-parser": "^3.3.1",
     "monaco-editor": "^0.55.1",
     "rxjs": "~7.8.0",
@@ -35,17 +49,24 @@
     "zone.js": "~0.15.0"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^19.2.24",
-    "@angular/cli": "^19.2.24",
-    "@angular/compiler-cli": "^19.2.0",
-    "@angular/localize": "^19.2.21",
+    "@angular-devkit/build-angular": "^21.2.8",
+    "@angular/cli": "^21.2.8",
+    "@angular/compiler-cli": "^21.2.10",
+    "@angular/localize": "^21.2.10",
     "@types/jasmine": "~5.1.0",
+    "@types/node": "^24.0.0",
     "jasmine-core": "~5.6.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
-    "typescript": "~5.7.2"
+    "karma-junit-reporter": "^2.0.1",
+    "karma-spec-reporter": "^0.0.36",
+    "typescript": "~5.9.3"
+  },
+  "overrides": {
+    "dompurify": "3.4.1",
+    "uuid": "^14.0.0"
   }
 }

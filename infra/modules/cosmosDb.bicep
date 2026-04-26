@@ -38,7 +38,7 @@ resource db 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' = {
 }
 
 var containers = [
-  { name: 'blobs', partitionKey: '/ownerId', ttl: 2592000 }
+  { name: 'blobs', partitionKey: '/ownerId', ttl: -1 }
   { name: 'users', partitionKey: '/id', ttl: -1 }
   { name: 'history', partitionKey: '/userId', ttl: -1 }
   { name: 'rule-sets', partitionKey: '/userId', ttl: -1 }
@@ -66,4 +66,5 @@ resource containerResources 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
 
 output endpoint string = account.properties.documentEndpoint
 output accountName string = account.name
+output accountId string = account.id
 output databaseName string = db.name

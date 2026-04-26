@@ -1,7 +1,7 @@
 # Azure Functions build output
 dist/
 
-# Local settings — contains secrets
+# Local settings - contains secrets
 local.settings.json
 
 # Node modules

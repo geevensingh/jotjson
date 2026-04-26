@@ -1,0 +1,73 @@
+<header class="app-header" role="banner">
+  <a
+    class="brand"
+    routerLink="/"
+    aria-label="JotJSON - back to editor"
+    i18n-aria-label="@@appHeader.brand.aria"
+  >
+    <span class="brand-name">JotJSON</span>
+  </a>
+
+  <div class="slot">
+    <ng-content></ng-content>
+  </div>
+
+  <div class="auth">
+    @if (authConfigured) {
+      @if (isSignedIn()) {
+        <a
+          mat-icon-button
+          routerLink="/blobs"
+          matTooltip="Your saved blobs"
+          i18n-matTooltip="@@appHeader.blobs.tooltip"
+          aria-label="Your saved blobs"
+          i18n-aria-label="@@appHeader.blobs.aria"
+        >
+          <jj-icon name="folder" />
+        </a>
+        <a
+          mat-icon-button
+          routerLink="/history"
+          matTooltip="Activity history"
+          i18n-matTooltip="@@appHeader.history.tooltip"
+          aria-label="Activity history"
+          i18n-aria-label="@@appHeader.history.aria"
+        >
+          <jj-icon name="history" />
+        </a>
+        <a
+          class="user-name"
+          routerLink="/profile"
+          matTooltip="View profile"
+          i18n-matTooltip="@@appHeader.profile.tooltip"
+          aria-label="View profile"
+          i18n-aria-label="@@appHeader.profile.aria"
+        >{{ user()?.displayName }}</a>
+      } @else {
+        <button
+          type="button"
+          mat-icon-button
+          matTooltip="Sign in"
+          i18n-matTooltip="@@appHeader.signIn.tooltip"
+          aria-label="Sign in"
+          i18n-aria-label="@@appHeader.signIn.aria"
+          (click)="onSignIn()"
+        >
+          <jj-icon name="sign-in" />
+        </button>
+      }
+    } @else {
+      <button
+        type="button"
+        mat-icon-button
+        disabled
+        matTooltip="Sign in (not configured)"
+        i18n-matTooltip="@@appHeader.signIn.notConfigured.tooltip"
+        aria-label="Sign in (not configured)"
+        i18n-aria-label="@@appHeader.signIn.notConfigured.aria"
+      >
+        <jj-icon name="sign-in" />
+      </button>
+    }
+  </div>
+</header>

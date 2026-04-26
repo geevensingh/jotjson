@@ -2,11 +2,11 @@
  * Lazy AMD-loader bootstrap for Monaco.
  *
  * Monaco's minified distribution lives at /vs/ (copied from
- * node_modules/monaco-editor/min/vs by the build — see angular.json assets).
+ * node_modules/monaco-editor/min/vs by the build - see angular.json assets).
  * We load the AMD loader script on first use, then require editor.main.
  *
  * By keeping Monaco out of the Angular esbuild graph we preserve the 1MB
- * initial-bundle budget — Monaco only downloads when the editor mounts.
+ * initial-bundle budget - Monaco only downloads when the editor mounts.
  */
 import type * as MonacoNS from 'monaco-editor';
 

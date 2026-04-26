@@ -1,31 +1,63 @@
 <div class="home" [class.vertical]="layoutOrientation() === 'vertical'">
-  <jj-toolbar
-    [mode]="mode()"
-    [hasContent]="hasContent()"
-    (paste)="onPaste()"
-    (upload)="onUpload($event)"
-    (download)="onDownload()"
-    (clear)="onClear()"
-    (format)="onFormat()"
-    (minify)="onMinify()"
-    (modeChange)="onModeChange($event)"
-    (toggleLayout)="onToggleLayout()"
-    (toggleTheme)="onToggleTheme()"
-  ></jj-toolbar>
+  <jj-app-header>
+    <jj-toolbar
+      [mode]="mode()"
+      [hasContent]="hasContent()"
+      [title]="title()"
+      [canSave]="canSave()"
+      [saveInFlight]="saveInFlight()"
+      [isOwner]="isOwnedBlob()"
+      [isPublic]="isBlobPublic()"
+      [clipboardState]="clipboardState()"
+      [clipboardPreview]="clipboardPreview()"
+      (pasteRequested)="onPaste()"
+      (copyRequested)="onCopy()"
+      (copyEscaped)="onCopyEscaped()"
+      (upload)="onUpload($event)"
+      (download)="onDownload()"
+      (clear)="onClear()"
+      (format)="onFormat()"
+      (minify)="onMinify()"
+      (modeChange)="onModeChange($event)"
+      (toggleLayout)="onToggleLayout()"
+      (toggleTheme)="onToggleTheme()"
+      (save)="onSave()"
+      (titleChange)="onTitleChange($event)"
+      (copyShareLink)="onCopyShareLink()"
+      (togglePublic)="onTogglePublic()"
+      (deleteBlob)="onDeleteBlob()"
+    ></jj-toolbar>
+  </jj-app-header>
 
-  <div class="split">
+  <div class="split" [style]="splitStyle()" #splitHost>
     <section class="pane pane-editor" aria-label="JSON input">
+      <jj-clipboard-banner></jj-clipboard-banner>
       <jj-json-editor
         [value]="content()"
         [errors]="errors()"
         (valueChange)="onValueChange($event)"
+        (cursorPositionChange)="onCursorChange($event)"
+        (pasteOccurred)="onEditorPaste()"
       ></jj-json-editor>
     </section>
 
-    <div class="splitter" role="separator" aria-hidden="true"></div>
+    <div
+      class="splitter"
+      role="separator"
+      aria-orientation="vertical"
+      tabindex="-1"
+      (pointerdown)="onSplitterPointerDown($event)"
+    ></div>
 
     <section class="pane pane-tree" aria-label="Tree view" #treeHost>
       <jj-json-tree [value]="treeValue()"></jj-json-tree>
     </section>
   </div>
+
+  <jj-status-bar
+    [text]="content()"
+    [mode]="mode()"
+    [parseResult]="parseResult()"
+    [cursor]="cursor()"
+  ></jj-status-bar>
 </div>
