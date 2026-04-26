@@ -1,5 +1,29 @@
 name: Deploy (SWA)
 
+# ----------------------------------------------------------------------
+# Build topology (READ BEFORE EDITING)
+#
+# This workflow uses Azure/static-web-apps-deploy@v1 with
+# `app_location: '/'`, which builds the SPA INSIDE the action's Oryx
+# container, not on the GitHub Actions runner host. That means:
+#
+#   * The runner host filesystem does NOT contain `dist/` at any point
+#     in this job. Steps cannot `find`, `cp`, `rm`, or `tar` build
+#     artifacts on the host.
+#   * Pre-build host steps (e.g. `sed` on environment.prod.ts) are fine
+#     because they mutate sources before Oryx checks them out.
+#   * Post-build artifact manipulation (sourcemap stripping, asset
+#     hashing, sentry/app-insights symbol upload, etc.) requires
+#     switching the deploy to runner-side build:
+#         with:
+#           skip_app_build: true
+#       and adding an explicit `npm run build` step before the deploy.
+#
+# If you add a step that touches `dist/`, switch the build topology in
+# the same change. CI's `workflows-lint` job catches structural issues
+# but NOT this filesystem expectation - a runtime-only failure mode.
+# ----------------------------------------------------------------------
+
 # Title each run with the deployed commit's message so the Actions list is
 # scannable (matches CI's default behavior). For workflow_run triggers we
 # pull the head commit message from the upstream CI run; for manual
