@@ -9,9 +9,11 @@ import {
   viewChild
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { SignedInDirective } from '../../directives/signed-in.directive';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 
 export type EditorMode = 'json' | 'jsonc';
@@ -19,7 +21,14 @@ export type EditorMode = 'json' | 'jsonc';
 @Component({
   selector: 'jj-toolbar',
   standalone: true,
-  imports: [MatButtonModule, MatTooltipModule, MatButtonToggleModule, IconComponent],
+  imports: [
+    MatButtonModule,
+    MatMenuModule,
+    MatTooltipModule,
+    MatButtonToggleModule,
+    IconComponent,
+    SignedInDirective
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toolbar.component.html',
   styleUrl: './toolbar.component.scss'
@@ -29,8 +38,36 @@ export class ToolbarComponent {
 
   readonly mode = input<EditorMode>('json');
   readonly hasContent = input<boolean>(false);
+  readonly title = input<string>('');
+  readonly canSave = input<boolean>(false);
+  readonly saveInFlight = input<boolean>(false);
+  /**
+   * Set to true when a blob is loaded AND the signed-in user owns it.
+   * Controls whether the 3-dot overflow menu (copy link / toggle visibility
+   * / delete) is shown.
+   */
+  readonly isOwner = input<boolean>(false);
+  /** Current isPublic flag of the loaded blob, drives the visibility toggle label. */
+  readonly isPublic = input<boolean>(false);
 
-  readonly paste = output<void>();
+  /**
+   * Clipboard UX state driving the Paste button, per DESIGN_SPEC.md §Smart
+   * Paste Button. One of:
+   * - `enabled-json`  : accent-tinted, tooltip shows the `clipboardPreview`
+   * - `enabled-empty` : disabled, "Clipboard does not contain JSON"
+   * - `denied`        : disabled with instructions to re-enable permission
+   * - `fallback`      : neutral state (clipboard API unsupported / unknown /
+   *                      not yet prompted); click path does a user-gesture
+   *                      read via `ClipboardPollingService.readForPaste`.
+   */
+  readonly clipboardState = input<
+    'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'
+  >('fallback');
+  readonly clipboardPreview = input<string>('');
+
+  readonly pasteRequested = output<void>();
+  readonly copyRequested = output<void>();
+  readonly copyEscaped = output<void>();
   readonly upload = output<File>();
   readonly download = output<void>();
   readonly clear = output<void>();
@@ -39,6 +76,11 @@ export class ToolbarComponent {
   readonly modeChange = output<EditorMode>();
   readonly toggleLayout = output<void>();
   readonly toggleTheme = output<void>();
+  readonly save = output<void>();
+  readonly titleChange = output<string>();
+  readonly copyShareLink = output<void>();
+  readonly togglePublic = output<void>();
+  readonly deleteBlob = output<void>();
 
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
@@ -56,6 +98,62 @@ export class ToolbarComponent {
     return 'system';
   });
 
+  readonly saveDisabled = computed(
+    () => !this.canSave() || !this.hasContent() || this.saveInFlight()
+  );
+
+  /**
+   * The overflow menu is visible only when the parent tells us the current
+   * signed-in user owns the loaded blob.
+   */
+  readonly showOverflowMenu = computed(() => this.isOwner());
+
+  readonly visibilityMenuLabel = computed(() =>
+    this.isPublic()
+      ? $localize`:@@toolbar.overflow.makePrivate:Make private`
+      : $localize`:@@toolbar.overflow.makePublic:Make public`
+  );
+
+  readonly saveTooltip = computed(() => {
+    if (this.saveInFlight()) return $localize`:@@toolbar.save.tooltip.saving:Saving...`;
+    if (!this.hasContent()) return $localize`:@@toolbar.save.tooltip.empty:Nothing to save`;
+    return $localize`:@@toolbar.save.tooltip.save:Save & share`;
+  });
+
+  readonly pasteDisabled = computed(() => {
+    const s = this.clipboardState();
+    return s === 'enabled-empty' || s === 'denied';
+  });
+
+  readonly pasteTooltip = computed(() => {
+    switch (this.clipboardState()) {
+      case 'enabled-json': {
+        const p = this.clipboardPreview();
+        return p
+          ? $localize`:@@toolbar.paste.tooltip.ready:Paste: ${p}:PREVIEW:`
+          : $localize`:@@toolbar.paste.tooltip.readyNoPreview:Paste JSON from clipboard`;
+      }
+      case 'enabled-empty':
+        return $localize`:@@toolbar.paste.tooltip.empty:Clipboard does not contain JSON`;
+      case 'denied':
+        return $localize`:@@toolbar.paste.tooltip.denied:Clipboard access blocked - enable it in your browser settings. Ctrl+V still works.`;
+      default:
+        return $localize`:@@toolbar.paste.tooltip:Paste JSON from clipboard`;
+    }
+  });
+
+  onTitleInput(ev: Event): void {
+    const value = (ev.target as HTMLInputElement).value;
+    this.titleChange.emit(value);
+  }
+
+  onTitleKeydown(ev: KeyboardEvent): void {
+    if (ev.key === 'Enter' && !this.saveDisabled()) {
+      ev.preventDefault();
+      this.save.emit();
+    }
+  }
+
   triggerFilePicker(): void {
     this.fileInput().nativeElement.click();
   }
@@ -70,4 +168,17 @@ export class ToolbarComponent {
   onModeChange(next: EditorMode): void {
     this.modeChange.emit(next);
   }
+
+  /**
+   * Click handler for the Copy button. Alt-click is a power-user affordance
+   * that copies the editor contents as a JSON-string-literal (see issue #38).
+   */
+  onCopyClick(ev: MouseEvent): void {
+    if (ev.altKey) {
+      this.copyEscaped.emit();
+    } else {
+      this.copyRequested.emit();
+    }
+  }
 }
+

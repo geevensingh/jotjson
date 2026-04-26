@@ -15,8 +15,9 @@ import {
   viewChild
 } from '@angular/core';
 import type * as MonacoNS from 'monaco-editor';
-import { JsonParseError } from '../../../core/json/json-parser.service';
+import { JsonParseError, JsonParserService } from '../../../core/json/json-parser.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
 import { loadMonaco } from './monaco-loader';
 
 @Component({
@@ -28,12 +29,16 @@ import { loadMonaco } from './monaco-loader';
 })
 export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   private readonly prefs = inject(PreferencesService);
+  private readonly parser = inject(JsonParserService);
   private readonly zone = inject(NgZone);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly logger = inject(LoggerService);
 
   readonly value = input<string>('');
   readonly errors = input<JsonParseError[]>([]);
   readonly valueChange = output<string>();
+  readonly cursorPositionChange = output<{ line: number; column: number }>();
+  readonly pasteOccurred = output<void>();
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
@@ -86,7 +91,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     try {
       monaco = await loadMonaco();
     } catch (err) {
-      console.error('JotJSON: Monaco failed to load', err);
+      this.logger.error('monaco.loadFailed', err);
       return;
     }
     this.monaco = monaco;
@@ -116,19 +121,8 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         bracketPairColorization: { enabled: true }
       });
 
-      // JotJSON is JSONC — defer validation to our parser.
-      const jsonLang = (monaco.languages as unknown as {
-        json: {
-          jsonDefaults: {
-            setDiagnosticsOptions: (opts: {
-              validate?: boolean;
-              allowComments?: boolean;
-              trailingCommas?: 'error' | 'warning' | 'ignore';
-            }) => void;
-          };
-        };
-      }).json;
-      jsonLang.jsonDefaults.setDiagnosticsOptions({
+      // JotJSON is JSONC - defer validation to our parser.
+      monaco.json.jsonDefaults.setDiagnosticsOptions({
         validate: false,
         allowComments: true,
         trailingCommas: 'ignore'
@@ -138,6 +132,42 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         if (this.suppressChange) return;
         const v = editor.getValue();
         this.zone.run(() => this.valueChange.emit(v));
+      });
+
+      editor.onDidChangeCursorPosition((e) => {
+        const pos = { line: e.position.lineNumber, column: e.position.column };
+        this.zone.run(() => this.cursorPositionChange.emit(pos));
+      });
+
+      // Auto-unescape pasted JSON (issue #38). Only rewrite when the pasted
+      // region is itself an escaped JSON document AND unescaping it leaves the
+      // full buffer parseable - prevents us from rewriting legitimate string
+      // values that happen to contain escape sequences.
+      editor.onDidPaste((e) => {
+        const model = editor.getModel();
+        if (!model) return;
+        const pasted = model.getValueInRange(e.range);
+        if (!pasted) return;
+        // Notify the host that a real (non-empty) user paste occurred so it
+        // can record history. Emit before any auto-unescape rewrite so the
+        // host sees one event per user gesture regardless of outcome.
+        this.zone.run(() => this.pasteOccurred.emit());
+        const { unescaped, changed } = this.parser.tryUnescape(pasted);
+        if (!changed) return;
+        const full = model.getValue();
+        const before = model.getValueInRange({
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: e.range.startLineNumber,
+          endColumn: e.range.startColumn
+        });
+        const after = full.substring(before.length + pasted.length);
+        const hypothetical = before + unescaped + after;
+        if (!this.parser.parse(hypothetical).errors.length) {
+          editor.executeEdits('jotjson-unescape-paste', [
+            { range: e.range, text: unescaped, forceMoveMarkers: true }
+          ]);
+        }
       });
 
       this.editor = editor;

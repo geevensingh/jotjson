@@ -1,0 +1,232 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.profile {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 720px;
+  margin: 3rem auto;
+  padding: 0 1.5rem;
+  box-sizing: border-box;
+
+  h1 {
+    margin: 0 0 1.5rem;
+    font-weight: 500;
+  }
+}
+
+.card {
+  padding: 1.5rem;
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.08));
+}
+
+.card-title {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1.5rem;
+  row-gap: 0.75rem;
+  margin: 0 0 1.5rem;
+
+  dt {
+    color: var(--mat-sys-on-surface-variant, #9aa0a6);
+    font-size: 0.875rem;
+    align-self: center;
+  }
+
+  dd {
+    margin: 0;
+  }
+}
+
+.value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-style: italic;
+  font-family: inherit;
+}
+
+.card + .card {
+  margin-top: 1.5rem;
+}
+
+.card-subtitle {
+  margin: -0.5rem 0 1.25rem;
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-size: 0.875rem;
+}
+
+.prefs-group {
+  padding: 1rem 0;
+  border-top: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.08));
+
+  &:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  &:last-of-type {
+    padding-bottom: 0;
+  }
+}
+
+.group-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+}
+
+.pref-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+  min-height: 2.25rem;
+
+  label,
+  > span:first-child {
+    flex: 0 0 auto;
+    min-width: 12rem;
+    color: var(--mat-sys-on-surface, inherit);
+  }
+}
+
+.pref-number {
+  width: 5.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--mat-sys-surface, transparent);
+  color: var(--mat-sys-on-surface, inherit);
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
+  border-radius: 4px;
+  font: inherit;
+}
+
+.pref-select {
+  padding: 0.35rem 0.5rem;
+  background: var(--mat-sys-surface, transparent);
+  color: var(--mat-sys-on-surface, inherit);
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
+  border-radius: 4px;
+  font: inherit;
+  min-width: 12rem;
+}
+
+.pref-suffix {
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-size: 0.875rem;
+}
+
+.pref-help {
+  flex: 1 1 100%;
+  margin-left: 12rem;
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-size: 0.8125rem;
+
+  @media (max-width: 540px) {
+    margin-left: 0;
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    > * {
+      line-height: 1;
+    }
+  }
+}
+
+.card button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  > * {
+    line-height: 1;
+  }
+}
+
+.group-help {
+  margin: -0.25rem 0 1rem;
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-size: 0.8125rem;
+}
+
+.highlight-panel {
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+
+  &.active {
+    border-color: var(--mat-sys-primary, #6c8eff);
+  }
+}
+
+.highlight-panel-title {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+
+  .active-tag {
+    margin-left: 0.5rem;
+    color: var(--mat-sys-primary, #6c8eff);
+    font-size: 0.8125rem;
+    font-weight: 400;
+  }
+}
+
+.highlight-row {
+  margin: 0.35rem 0;
+
+  label {
+    min-width: 11rem;
+  }
+}
+
+.pref-color {
+  width: 3rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pref-color-swatch {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 3px;
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
+}
+
+.pref-color-hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+}

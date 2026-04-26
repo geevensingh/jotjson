@@ -13,10 +13,21 @@ import { Component } from '@angular/core';
   `,
   styles: [
     `
+      :host {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+      }
       main {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        width: 100%;
         max-width: 720px;
         margin: 4rem auto;
         padding: 0 1.5rem;
+        box-sizing: border-box;
         font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       }
       .note {

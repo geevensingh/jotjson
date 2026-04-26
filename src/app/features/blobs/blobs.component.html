@@ -1,0 +1,100 @@
+<jj-app-header />
+
+<main class="blobs">
+  <header class="blobs-header">
+    <h1 i18n="@@blobs.title">Blobs</h1>
+    <p class="subtitle" i18n="@@blobs.subtitle">
+      All blobs you have saved to your account. Click a title to open it.
+    </p>
+  </header>
+
+  @if (state() === 'loading') {
+    <ul class="blob-list" aria-busy="true" aria-live="polite">
+      @for (i of [0, 1, 2]; track i) {
+        <li class="blob-row skeleton" aria-hidden="true">
+          <div class="blob-main">
+            <span class="skeleton-bar skeleton-title"></span>
+            <span class="skeleton-bar skeleton-meta"></span>
+          </div>
+          <span class="skeleton-bar skeleton-action"></span>
+          <span class="skeleton-bar skeleton-action"></span>
+        </li>
+      }
+    </ul>
+    <span class="sr-only" i18n="@@blobs.loading">Loading...</span>
+  } @else if (state() === 'error') {
+    <p class="status status-error">{{ errorMessage() }}</p>
+    <button mat-stroked-button type="button" (click)="reload()">
+      <span i18n="@@blobs.retry">Retry</span>
+    </button>
+  } @else if (isEmpty()) {
+    <div class="empty-state">
+      <jj-icon name="save" class="empty-icon" />
+      <p
+        class="empty-message"
+        i18n="@@blobs.empty"
+      >You haven't saved any JSON blobs yet.</p>
+      <a
+        mat-flat-button
+        color="primary"
+        routerLink="/"
+        i18n="@@blobs.empty.cta"
+        >Open the editor</a
+      >
+    </div>
+  } @else {
+    <ul class="blob-list">
+      @for (blob of blobList(); track blob.id) {
+        <li class="blob-row">
+          <div class="blob-main">
+            <a
+              class="blob-title"
+              [routerLink]="['/s', blob.slug]"
+              [attr.title]="displayTitle(blob)"
+              >{{ displayTitle(blob) }}</a
+            >
+            <div class="blob-meta">
+              <span class="blob-slug">/s/{{ blob.slug }}</span>
+              <span class="blob-dot">&middot;</span>
+              <span class="blob-time">{{ relativeTime(blob.updatedAt) }}</span>
+              @if (blob.isPublic) {
+                <span class="blob-dot">&middot;</span>
+                <span
+                  class="blob-badge"
+                  i18n="@@blobs.public"
+                  matTooltip="Anyone with the link and search engines can see this blob."
+                  i18n-matTooltip="@@blobs.public.tooltip"
+                  >public</span
+                >
+              }
+            </div>
+          </div>
+          <button
+            mat-icon-button
+            type="button"
+            class="blob-copy-link"
+            matTooltip="Copy link"
+            i18n-matTooltip="@@blobs.copyLink.tooltip"
+            aria-label="Copy link to this blob"
+            i18n-aria-label="@@blobs.copyLink.aria"
+            (click)="copyLink(blob)"
+          >
+            <jj-icon name="copy-path" />
+          </button>
+          <button
+            mat-icon-button
+            type="button"
+            class="blob-delete"
+            matTooltip="Delete this blob"
+            i18n-matTooltip="@@blobs.delete.tooltip"
+            aria-label="Delete this blob"
+            i18n-aria-label="@@blobs.delete.aria"
+            (click)="deleteBlob(blob)"
+          >
+            <jj-icon name="trash" />
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</main>
