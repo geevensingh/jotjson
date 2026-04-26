@@ -67,12 +67,20 @@ function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light'
  * validation because normalizePreferences requires all keys.
  */
 function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
+  const remoteColors: Partial<UserPreferences['treeHighlightColors']> =
+    remote.treeHighlightColors ?? {};
   return {
     ...structuredClone(DEFAULT_PREFERENCES),
     ...remote,
     treeHighlightColors: {
-      ...DEFAULT_PREFERENCES.treeHighlightColors,
-      ...(remote.treeHighlightColors ?? {})
+      dark: {
+        ...DEFAULT_PREFERENCES.treeHighlightColors.dark,
+        ...(remoteColors.dark ?? {})
+      },
+      light: {
+        ...DEFAULT_PREFERENCES.treeHighlightColors.light,
+        ...(remoteColors.light ?? {})
+      }
     }
   };
 }
@@ -118,6 +126,17 @@ export class PreferencesService {
         document.body.classList.remove('theme-dark', 'theme-light', 'theme-system');
         document.body.classList.add(`theme-${theme}`);
       }
+    });
+
+    effect(() => {
+      const theme = this.effectiveTheme();
+      const colors = this._prefs().treeHighlightColors[theme];
+      if (typeof document === 'undefined' || !document.body) return;
+      const style = document.body.style;
+      style.setProperty('--highlight-selection', colors.selectionColor);
+      style.setProperty('--highlight-matching', colors.matchingValueColor);
+      style.setProperty('--highlight-ancestor', colors.ancestorColor);
+      style.setProperty('--highlight-search', colors.searchHighlightColor);
     });
 
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -175,12 +194,20 @@ export class PreferencesService {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return structuredClone(DEFAULT_PREFERENCES);
       const parsed = JSON.parse(raw) as Partial<UserPreferences>;
+      const parsedColors: Partial<UserPreferences['treeHighlightColors']> =
+        parsed.treeHighlightColors ?? {};
       return {
         ...structuredClone(DEFAULT_PREFERENCES),
         ...parsed,
         treeHighlightColors: {
-          ...DEFAULT_PREFERENCES.treeHighlightColors,
-          ...(parsed.treeHighlightColors ?? {})
+          dark: {
+            ...DEFAULT_PREFERENCES.treeHighlightColors.dark,
+            ...(parsedColors.dark ?? {})
+          },
+          light: {
+            ...DEFAULT_PREFERENCES.treeHighlightColors.light,
+            ...(parsedColors.light ?? {})
+          }
         }
       };
     } catch {

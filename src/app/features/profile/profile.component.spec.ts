@@ -292,4 +292,67 @@ describe('ProfileComponent', () => {
     fixture.componentInstance.onLayoutOrientationChange('garbage');
     expect(prefs.prefs().layoutOrientation).toBe('horizontal');
   });
+
+  describe('tree highlight colors', () => {
+    async function createSignedIn() {
+      return create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+    }
+
+    it('renders 8 color inputs (4 per theme)', async () => {
+      const { fixture } = await createSignedIn();
+      const inputs = (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'input[type="color"]'
+      );
+      expect(inputs.length).toBe(8);
+    });
+
+    it('changes only the targeted field and preserves the other dark/light fields', async () => {
+      const { fixture, prefs } = await createSignedIn();
+      const before = prefs.prefs().treeHighlightColors;
+      fixture.componentInstance.onHighlightColorChange('dark', 'selectionColor', '#abcdef');
+      const after = prefs.prefs().treeHighlightColors;
+      expect(after.dark.selectionColor).toBe('#abcdef');
+      expect(after.dark.matchingValueColor).toBe(before.dark.matchingValueColor);
+      expect(after.dark.ancestorColor).toBe(before.dark.ancestorColor);
+      expect(after.dark.searchHighlightColor).toBe(before.dark.searchHighlightColor);
+      expect(after.light).toEqual(before.light);
+    });
+
+    it('rejects malformed hex values without changing prefs', async () => {
+      const { fixture, prefs } = await createSignedIn();
+      const before = prefs.prefs().treeHighlightColors;
+      fixture.componentInstance.onHighlightColorChange('dark', 'selectionColor', 'red');
+      fixture.componentInstance.onHighlightColorChange('dark', 'selectionColor', '#zzzzzz');
+      fixture.componentInstance.onHighlightColorChange('dark', 'selectionColor', '');
+      expect(prefs.prefs().treeHighlightColors).toEqual(before);
+    });
+
+    it('isActiveTheme follows effectiveTheme on explicit theme change', async () => {
+      const { fixture, prefs } = await createSignedIn();
+      prefs.update({ theme: 'dark' });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isActiveTheme('dark')).toBe(true);
+      expect(fixture.componentInstance.isActiveTheme('light')).toBe(false);
+      prefs.update({ theme: 'light' });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isActiveTheme('dark')).toBe(false);
+      expect(fixture.componentInstance.isActiveTheme('light')).toBe(true);
+    });
+
+    it('reset restores only the active theme to defaults; inactive theme overrides are preserved', async () => {
+      const { fixture, prefs } = await createSignedIn();
+      prefs.update({ theme: 'dark' });
+      fixture.componentInstance.onHighlightColorChange('dark', 'selectionColor', '#111111');
+      fixture.componentInstance.onHighlightColorChange('light', 'selectionColor', '#222222');
+      fixture.componentInstance.onResetActiveThemeColors();
+      const colors = prefs.prefs().treeHighlightColors;
+      // Dark restored
+      expect(colors.dark.selectionColor).not.toBe('#111111');
+      // Light override preserved
+      expect(colors.light.selectionColor).toBe('#222222');
+    });
+  });
 });

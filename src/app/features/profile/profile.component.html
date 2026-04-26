@@ -263,6 +263,98 @@
           </select>
         </div>
       </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-highlight-colors">
+        <h3
+          id="prefs-highlight-colors"
+          class="group-title"
+          i18n="@@profile.prefs.highlightColors.title"
+        >
+          Tree highlight colors
+        </h3>
+        <p class="group-help" i18n="@@profile.prefs.highlightColors.help">
+          Pick colors used to highlight selected nodes, ancestors of the
+          selection, matching values, and search hits. Each theme has its
+          own set; only the currently active theme is shown live.
+        </p>
+
+        @for (theme of highlightThemes; track theme) {
+          <div class="highlight-panel" [class.active]="isActiveTheme(theme)">
+            <div class="highlight-panel-title">
+              @if (theme === 'dark') {
+                <span i18n="@@profile.prefs.highlightColors.darkTheme">Dark theme</span>
+              } @else {
+                <span i18n="@@profile.prefs.highlightColors.lightTheme">Light theme</span>
+              }
+              @if (isActiveTheme(theme)) {
+                <span
+                  class="active-tag"
+                  i18n="@@profile.prefs.highlightColors.activeTag"
+                  >(active)</span
+                >
+              }
+            </div>
+
+            @for (field of highlightFields; track field.key) {
+              <div class="pref-row highlight-row">
+                <label [attr.for]="field.inputId(theme)">
+                  @switch (field.key) {
+                    @case ('selectionColor') {
+                      <span i18n="@@profile.prefs.highlightColors.selection">
+                        Selection
+                      </span>
+                    }
+                    @case ('matchingValueColor') {
+                      <span i18n="@@profile.prefs.highlightColors.matching">
+                        Matching values
+                      </span>
+                    }
+                    @case ('ancestorColor') {
+                      <span i18n="@@profile.prefs.highlightColors.ancestor">
+                        Ancestors
+                      </span>
+                    }
+                    @case ('searchHighlightColor') {
+                      <span i18n="@@profile.prefs.highlightColors.search">
+                        Search highlight
+                      </span>
+                    }
+                  }
+                </label>
+                <input
+                  type="color"
+                  class="pref-color"
+                  [id]="field.inputId(theme)"
+                  [value]="treeHighlightColors()[theme][field.key]"
+                  (input)="
+                    onHighlightColorChange(
+                      theme,
+                      field.key,
+                      $any($event.target).value
+                    )
+                  "
+                />
+                <span
+                  class="pref-color-swatch"
+                  [style.background]="treeHighlightColors()[theme][field.key]"
+                  aria-hidden="true"
+                ></span>
+                <code class="pref-color-hex">{{
+                  treeHighlightColors()[theme][field.key]
+                }}</code>
+              </div>
+            }
+          </div>
+        }
+
+        <div class="pref-row">
+          <button type="button" mat-stroked-button (click)="onResetActiveThemeColors()">
+            <span i18n="@@profile.prefs.highlightColors.resetActive">
+              Reset active theme to defaults
+            </span>
+          </button>
+        </div>
+      </section>
     </section>
   } @else {
     <section class="card" aria-labelledby="profile-signed-out">

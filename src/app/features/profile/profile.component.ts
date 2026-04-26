@@ -4,8 +4,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { AuthService } from '../../core/auth/auth.service';
-import { PreferencesService } from '../../core/preferences/preferences.service';
-import { UserPreferences } from '../../core/api/models';
+import {
+  DEFAULT_PREFERENCES,
+  PreferencesService
+} from '../../core/preferences/preferences.service';
+import { ThemeColorSet, UserPreferences } from '../../core/api/models';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 
@@ -13,6 +16,39 @@ const FONT_SIZE_MIN = 8;
 const FONT_SIZE_MAX = 32;
 const EXPANSION_DEPTH_MIN = 1;
 const EXPANSION_DEPTH_MAX = 10;
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+type ThemeName = 'dark' | 'light';
+type ColorKey = keyof ThemeColorSet;
+
+interface HighlightFieldDescriptor {
+  readonly key: ColorKey;
+  readonly inputId: (theme: ThemeName) => string;
+  readonly i18nId: string;
+}
+
+const HIGHLIGHT_FIELDS: readonly HighlightFieldDescriptor[] = [
+  {
+    key: 'selectionColor',
+    inputId: (t) => `pref-highlight-${t}-selection`,
+    i18nId: '@@profile.prefs.highlightColors.selection'
+  },
+  {
+    key: 'matchingValueColor',
+    inputId: (t) => `pref-highlight-${t}-matching`,
+    i18nId: '@@profile.prefs.highlightColors.matching'
+  },
+  {
+    key: 'ancestorColor',
+    inputId: (t) => `pref-highlight-${t}-ancestor`,
+    i18nId: '@@profile.prefs.highlightColors.ancestor'
+  },
+  {
+    key: 'searchHighlightColor',
+    inputId: (t) => `pref-highlight-${t}-search`,
+    i18nId: '@@profile.prefs.highlightColors.search'
+  }
+];
 
 @Component({
   selector: 'app-profile',
@@ -54,6 +90,11 @@ export class ProfileComponent {
   readonly blobQuotaStrategy = computed(() => this.prefs().blobQuotaStrategy);
   readonly theme = computed(() => this.prefs().theme);
   readonly layoutOrientation = computed(() => this.prefs().layoutOrientation);
+
+  readonly effectiveTheme = this.prefsService.effectiveTheme;
+  readonly treeHighlightColors = computed(() => this.prefs().treeHighlightColors);
+  readonly highlightFields = HIGHLIGHT_FIELDS;
+  readonly highlightThemes: readonly ThemeName[] = ['dark', 'light'];
 
   readonly fontSizeMin = FONT_SIZE_MIN;
   readonly fontSizeMax = FONT_SIZE_MAX;
@@ -136,6 +177,36 @@ export class ProfileComponent {
     if (value === 'horizontal' || value === 'vertical') {
       this.prefsService.update({ layoutOrientation: value });
     }
+  }
+
+  onHighlightColorChange(theme: ThemeName, key: ColorKey, value: string): void {
+    const normalized = (value ?? '').toLowerCase();
+    if (!HEX_COLOR_RE.test(normalized)) return;
+    const current = this.prefs().treeHighlightColors;
+    this.prefsService.update({
+      treeHighlightColors: {
+        ...current,
+        [theme]: {
+          ...current[theme],
+          [key]: normalized
+        }
+      }
+    });
+  }
+
+  onResetActiveThemeColors(): void {
+    const active = this.effectiveTheme();
+    const current = this.prefs().treeHighlightColors;
+    this.prefsService.update({
+      treeHighlightColors: {
+        ...current,
+        [active]: { ...DEFAULT_PREFERENCES.treeHighlightColors[active] }
+      }
+    });
+  }
+
+  isActiveTheme(theme: ThemeName): boolean {
+    return this.effectiveTheme() === theme;
   }
 
   private clampNumber(

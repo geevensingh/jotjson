@@ -135,8 +135,162 @@ describe('PreferencesService', () => {
     );
     const svc = TestBed.inject(PreferencesService);
     const colors = svc.prefs().treeHighlightColors;
-    expect(colors.dark).toBeTruthy();
+    expect(colors.dark.selectionColor).toBe('#123456');
+    // Backfilled dark fields - regression for shallow-merge bug.
+    expect(colors.dark.matchingValueColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.matchingValueColor
+    );
+    expect(colors.dark.ancestorColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.ancestorColor
+    );
+    expect(colors.dark.searchHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.searchHighlightColor
+    );
     expect(colors.light).toEqual(DEFAULT_PREFERENCES.treeHighlightColors.light);
+  });
+
+  it('backfills partial nested treeHighlightColors from the server', async () => {
+    const partial: UserPreferences = {
+      ...DEFAULT_PREFERENCES,
+      treeHighlightColors: {
+        // Cast through unknown - the server may legitimately return a
+        // partial object for older user docs that predate a new field.
+        dark: { selectionColor: '#abcdef' },
+        light: { ancestorColor: '#fefefe' }
+      } as UserPreferences['treeHighlightColors']
+    };
+    const svc = TestBed.inject(PreferencesService);
+    api.getMe.and.returnValue(of(makeUser(partial)));
+    auth.signInAs('u-1');
+    TestBed.flushEffects();
+    await svc.__waitForSync();
+    const colors = svc.prefs().treeHighlightColors;
+    expect(colors.dark.selectionColor).toBe('#abcdef');
+    expect(colors.dark.matchingValueColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.matchingValueColor
+    );
+    expect(colors.light.ancestorColor).toBe('#fefefe');
+    expect(colors.light.selectionColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.light.selectionColor
+    );
+  });
+
+  describe('runtime --highlight-* projection on document.body', () => {
+    function readBodyVar(name: string): string {
+      return document.body.style.getPropertyValue(name).trim();
+    }
+
+    it('writes the active theme colors to body inline CSS variables', () => {
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark' });
+      TestBed.flushEffects();
+      expect(readBodyVar('--highlight-selection')).toBe(
+        DEFAULT_PREFERENCES.treeHighlightColors.dark.selectionColor
+      );
+      svc.update({
+        treeHighlightColors: {
+          ...svc.prefs().treeHighlightColors,
+          dark: {
+            ...svc.prefs().treeHighlightColors.dark,
+            selectionColor: '#aabbcc'
+          }
+        }
+      });
+      TestBed.flushEffects();
+      expect(readBodyVar('--highlight-selection')).toBe('#aabbcc');
+    });
+
+    it('editing the inactive theme does not change the body variables', () => {
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark' });
+      TestBed.flushEffects();
+      const before = readBodyVar('--highlight-selection');
+      svc.update({
+        treeHighlightColors: {
+          ...svc.prefs().treeHighlightColors,
+          light: {
+            ...svc.prefs().treeHighlightColors.light,
+            selectionColor: '#ff0000'
+          }
+        }
+      });
+      TestBed.flushEffects();
+      expect(readBodyVar('--highlight-selection')).toBe(before);
+    });
+
+    it('switching the active theme rewrites all four body variables', () => {
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark' });
+      TestBed.flushEffects();
+      svc.update({ theme: 'light' });
+      TestBed.flushEffects();
+      const light = DEFAULT_PREFERENCES.treeHighlightColors.light;
+      expect(readBodyVar('--highlight-selection')).toBe(light.selectionColor);
+      expect(readBodyVar('--highlight-matching')).toBe(light.matchingValueColor);
+      expect(readBodyVar('--highlight-ancestor')).toBe(light.ancestorColor);
+      expect(readBodyVar('--highlight-search')).toBe(light.searchHighlightColor);
+    });
+
+    it('sign-out projects default colors back onto body', async () => {
+      const svc = TestBed.inject(PreferencesService);
+      const customized: UserPreferences = {
+        ...DEFAULT_PREFERENCES,
+        theme: 'dark',
+        treeHighlightColors: {
+          ...DEFAULT_PREFERENCES.treeHighlightColors,
+          dark: {
+            ...DEFAULT_PREFERENCES.treeHighlightColors.dark,
+            selectionColor: '#deadbe'
+          }
+        }
+      };
+      api.getMe.and.returnValue(of(makeUser(customized)));
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      await svc.__waitForSync();
+      TestBed.flushEffects();
+      expect(readBodyVar('--highlight-selection')).toBe('#deadbe');
+      auth.signOut();
+      TestBed.flushEffects();
+      // After sign-out the prefs reset to DEFAULT_PREFERENCES (theme 'system').
+      const effective = svc.effectiveTheme();
+      expect(readBodyVar('--highlight-selection')).toBe(
+        DEFAULT_PREFERENCES.treeHighlightColors[effective].selectionColor
+      );
+    });
+
+    it('coalesces rapid highlight-color updates into a single PUT', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUser()));
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        api.putPreferences.calls.reset();
+        const base = svc.prefs().treeHighlightColors;
+        svc.update({
+          treeHighlightColors: {
+            ...base,
+            dark: { ...base.dark, selectionColor: '#111111' }
+          }
+        });
+        svc.update({
+          treeHighlightColors: {
+            ...svc.prefs().treeHighlightColors,
+            dark: { ...svc.prefs().treeHighlightColors.dark, selectionColor: '#222222' }
+          }
+        });
+        TestBed.flushEffects();
+        expect(api.putPreferences).not.toHaveBeenCalled();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences).toHaveBeenCalledTimes(1);
+        const sent = api.putPreferences.calls.mostRecent().args[0] as UserPreferences;
+        expect(sent.treeHighlightColors.dark.selectionColor).toBe('#222222');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
   });
 
   describe('sync lifecycle', () => {
