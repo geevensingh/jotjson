@@ -20,7 +20,8 @@
 import type {
   FormattingIcon,
   FormattingRule,
-  FormattingRuleSet
+  FormattingRuleSet,
+  FormattingStyle
 } from '../../../core/api/models';
 
 /**
@@ -67,25 +68,40 @@ export interface RuleEngineResult {
 }
 
 /**
- * Single tree node, normalized for the engine. `valueText` is the
- * **rendered** text the user sees in the tree (so a JSON number `200`
- * arrives here as `'200'`); per F8 in M6a.5 this is what rules match
- * against. Container nodes pass `valueText: null` so value-target
- * rules skip them.
+ * Single tree node, normalized for the engine.
+ *
+ * **`valueText` contract (F8 in M6a.5):** the **unquoted, normalized
+ * display text** for the node's value. Rules compare against this
+ * string with no further processing, so the producer is responsible
+ * for stripping JSON-syntax noise:
+ *   - strings: the raw string contents - **no surrounding quotes,
+ *     no JSON-escape sequences re-encoded**. The string `"200"` and
+ *     the number `200` both arrive here as `'200'` so a single
+ *     `value exact "200"` rule matches both (this is the F8
+ *     guarantee).
+ *   - numbers / booleans: the rendered form (`'200'`, `'true'`).
+ *   - null: the literal `'null'`.
+ *   - containers (`{}`, `[]`): `null`, plus `isContainer: true`.
+ *
+ * Distinct from the tree component's existing `renderLeaf`, which
+ * returns quoted JSON for strings to drive search. Search and
+ * formatting have different match contracts; the producer must
+ * not reuse `renderLeaf` for engine input.
  */
 export interface RuleEngineNode {
   /** The node's key, or null for the root and array elements. */
   key: string | null;
-  /** Rendered value text, or null when the node is a container. */
+  /** Unquoted display text per the contract above; null for containers. */
   valueText: string | null;
   /** True when the node is `{}` or `[]` (excluded from value-target rules). */
   isContainer: boolean;
 }
 
 /**
- * Frozen empty result. Returned by the M6a.75 stub and reused by
- * downstream callers as a "no formatting" sentinel so we don't
- * allocate per-row.
+ * Frozen "no formatting" sentinel. Returned by `evaluateFormattingRules`
+ * whenever zero rules match a node, so downstream consumers can
+ * short-circuit on identity (`result === EMPTY_RULE_RESULT`) without
+ * allocating per-row.
  */
 export const EMPTY_RULE_RESULT: RuleEngineResult = Object.freeze({
   rowStyle: Object.freeze({}) as RuleRowStyle,
@@ -95,27 +111,188 @@ export const EMPTY_RULE_RESULT: RuleEngineResult = Object.freeze({
 }) as RuleEngineResult;
 
 /**
- * Evaluate the active rule sets against a single tree node.
+ * Allowed `target` values. A rule whose `target` is not one of these
+ * is structurally invalid (see DESIGN_SPEC.md §Features 7 line 539-540)
+ * and silently skipped at evaluation time.
+ */
+const VALID_TARGETS: ReadonlySet<FormattingRule['target']> = new Set([
+  'key',
+  'value',
+  'key_and_value'
+]);
+
+/**
+ * Allowed `matchType` values. Rules with any other matchType are
+ * silently skipped (defends against future enum additions reaching
+ * older clients, and the spec-mandated "skip structurally invalid
+ * rules" rule). Note: `regex` is intentionally absent - deferred to
+ * v1.1 per the spec.
+ */
+const VALID_MATCH_TYPES: ReadonlySet<FormattingRule['matchType']> = new Set([
+  'exact',
+  'contains',
+  'starts_with',
+  'ends_with'
+]);
+
+/**
+ * Test a single string against a rule's match config. Pulled out of
+ * the main evaluation loop for testability and so we can fold
+ * case-insensitive normalization into one place.
+ */
+function matchString(
+  candidate: string,
+  matchType: FormattingRule['matchType'],
+  matchValue: string,
+  caseSensitive: boolean
+): boolean {
+  // Case-insensitive matching folds both sides to lowercase. We pay
+  // two `.toLowerCase()` calls per match attempt - acceptable because
+  // matchValue could be normalized once at validation time in a
+  // future optimization, and node keys/values are short by JSON
+  // standards. Per-attempt allocation is the only realistic
+  // alternative and isn't measurably faster for v1 scales.
+  const a = caseSensitive ? candidate : candidate.toLowerCase();
+  const b = caseSensitive ? matchValue : matchValue.toLowerCase();
+  switch (matchType) {
+    case 'exact':
+      return a === b;
+    case 'contains':
+      return a.includes(b);
+    case 'starts_with':
+      return a.startsWith(b);
+    case 'ends_with':
+      return a.endsWith(b);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Project a rule's `style` onto a `RuleStyleProjection` (the
+ * per-target inline style). Mutates `target` in place. Skips
+ * properties whose value is `undefined` so a rule that doesn't
+ * specify (e.g.) `bold` can't erase a previously-set `bold`. Each
+ * defined property overwrites the existing value - that includes
+ * explicit `false` deliberately clobbering an earlier `true` (the
+ * documented expected behaviour, plan.md M6f spec tests).
+ */
+function projectInlineStyle(
+  target: RuleStyleProjection,
+  style: FormattingStyle
+): void {
+  if (style.textColor !== undefined) target.color = style.textColor;
+  if (style.bold !== undefined) target.bold = style.bold;
+  if (style.italic !== undefined) target.italic = style.italic;
+  if (style.underline !== undefined) target.underline = style.underline;
+  if (style.icon !== undefined) target.icon = style.icon;
+}
+
+/**
+ * Project a rule's row-level style (`backgroundColor` / `borderColor`)
+ * onto a `RuleRowStyle`. These properties always paint the row,
+ * regardless of `target`. Same overwrite-on-defined semantics as
+ * `projectInlineStyle`.
+ */
+function projectRowStyle(target: RuleRowStyle, style: FormattingStyle): void {
+  if (style.backgroundColor !== undefined) target.backgroundColor = style.backgroundColor;
+  if (style.borderColor !== undefined) target.borderColor = style.borderColor;
+}
+
+/**
+ * Evaluate the active rule sets against a single tree node and
+ * return the merged formatting projection.
  *
- * **M6a.75 stub:** always returns `EMPTY_RULE_RESULT`. The real
- * implementation lands in M6f and will:
- *   - iterate `activeSets` in array order (caller passes them in
- *     `createdAt` order per F2),
- *   - within each set iterate rules in array order,
- *   - skip rules whose target excludes the node's role (key vs value),
- *   - skip value-target rules on container nodes,
- *   - merge later matches over earlier ones for conflicting per-target
- *     properties, and
- *   - return the accumulated result with `matchedRules` listing every
- *     contributing rule for tooltip rendering.
+ * Algorithm (matches DESIGN_SPEC.md §Features 7 line 524-540 and
+ * F1/F8 in M6a.5):
+ *
+ * 1. Iterate `activeSets` in array order. The caller orders them by
+ *    `createdAt ASC` per F2 - that's the documented precedence sort
+ *    and we trust it here rather than re-sorting per-node.
+ * 2. Within each set, iterate `rules` in array order.
+ * 3. Skip structurally invalid rules (unknown target, unknown
+ *    matchType, empty matchValue) per spec line 539-540.
+ * 4. For each rule, decide whether the **key side** and **value
+ *    side** independently match:
+ *      - `target=key` -> only the key side is eligible
+ *      - `target=value` -> only the value side is eligible (and
+ *        skipped entirely on container nodes per F8)
+ *      - `target=key_and_value` -> BOTH sides are eligible; either
+ *        or both can match independently. On a container, only the
+ *        key side is eligible.
+ * 5. If at least one side matched, project the rule's style:
+ *      - row-level (`backgroundColor`, `borderColor`) always projects
+ *        onto `rowStyle`.
+ *      - inline (`textColor`, `bold`, `italic`, `underline`, `icon`)
+ *        projects onto `keyStyle` if the key side matched, and onto
+ *        `valueStyle` if the value side matched. **A side that did
+ *        not match is not styled** - this is the one big nuance for
+ *        `target=key_and_value`.
+ * 6. Append a single `MatchedRuleRef` per matched rule to
+ *    `matchedRules`, regardless of how many sides matched.
+ * 7. Properties merge by overwrite-when-defined: later rules clobber
+ *    earlier ones for any property they explicitly set, including
+ *    `false`. Properties they leave undefined are preserved.
+ * 8. If no rules matched any node, return the shared frozen
+ *    `EMPTY_RULE_RESULT` sentinel by identity so downstream
+ *    consumers can short-circuit cheaply.
  */
 export function evaluateFormattingRules(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   activeSets: readonly FormattingRuleSet[],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   node: RuleEngineNode
 ): RuleEngineResult {
-  return EMPTY_RULE_RESULT;
+  const rowStyle: RuleRowStyle = {};
+  const keyStyle: RuleStyleProjection = {};
+  const valueStyle: RuleStyleProjection = {};
+  const matchedRules: MatchedRuleRef[] = [];
+
+  for (const set of activeSets) {
+    for (const rule of set.rules) {
+      if (!VALID_TARGETS.has(rule.target)) continue;
+      if (!VALID_MATCH_TYPES.has(rule.matchType)) continue;
+      if (typeof rule.matchValue !== 'string' || rule.matchValue.length === 0) continue;
+
+      // Determine which sides this rule can match against, given the
+      // node's role and the rule's target. Containers exclude the
+      // value side regardless of target.
+      const tryKey =
+        (rule.target === 'key' || rule.target === 'key_and_value') &&
+        node.key !== null;
+      const tryValue =
+        (rule.target === 'value' || rule.target === 'key_and_value') &&
+        !node.isContainer &&
+        node.valueText !== null;
+
+      if (!tryKey && !tryValue) continue;
+
+      const keyMatched =
+        tryKey &&
+        matchString(node.key as string, rule.matchType, rule.matchValue, rule.caseSensitive);
+      const valueMatched =
+        tryValue &&
+        matchString(
+          node.valueText as string,
+          rule.matchType,
+          rule.matchValue,
+          rule.caseSensitive
+        );
+
+      if (!keyMatched && !valueMatched) continue;
+
+      projectRowStyle(rowStyle, rule.style);
+      if (keyMatched) projectInlineStyle(keyStyle, rule.style);
+      if (valueMatched) projectInlineStyle(valueStyle, rule.style);
+
+      matchedRules.push({
+        setId: set.id,
+        ruleId: rule.id,
+        label: describeRule(rule)
+      });
+    }
+  }
+
+  if (matchedRules.length === 0) return EMPTY_RULE_RESULT;
+  return { rowStyle, keyStyle, valueStyle, matchedRules };
 }
 
 /**
