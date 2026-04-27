@@ -42,11 +42,18 @@ const DEFAULT_UNSUPPORTED_MS = 4000;
 export class ClipboardCopyService {
   private readonly snack = inject(MatSnackBar);
 
-  copyWithToast(
+  /**
+   * Copies `text` to the clipboard and opens a snackbar describing the
+   * outcome. Resolves to `true` when the write succeeded, `false` when the
+   * environment is unsupported or `writeText` rejected. Most callers can
+   * `void` the return value; the boolean exists so future callers can chain
+   * follow-up UI on success without re-plumbing the API.
+   */
+  async copyWithToast(
     text: string,
     messages: CopyToastMessages,
     durations: CopyToastDurations = {}
-  ): void {
+  ): Promise<boolean> {
     const dismiss = $localize`:@@common.dismiss:Dismiss`;
     const successMs = durations.successDurationMs ?? DEFAULT_SUCCESS_MS;
     const failedMs = durations.failedDurationMs ?? DEFAULT_FAILED_MS;
@@ -58,15 +65,15 @@ export class ClipboardCopyService {
     // older browsers; writeText may also be missing on partial polyfills.
     if (!clipboard?.writeText) {
       this.snack.open(messages.unsupported, dismiss, { duration: unsupportedMs });
-      return;
+      return false;
     }
-    clipboard.writeText(text).then(
-      () => {
-        this.snack.open(messages.success, dismiss, { duration: successMs });
-      },
-      () => {
-        this.snack.open(messages.failed, dismiss, { duration: failedMs });
-      }
-    );
+    try {
+      await clipboard.writeText(text);
+      this.snack.open(messages.success, dismiss, { duration: successMs });
+      return true;
+    } catch {
+      this.snack.open(messages.failed, dismiss, { duration: failedMs });
+      return false;
+    }
   }
 }

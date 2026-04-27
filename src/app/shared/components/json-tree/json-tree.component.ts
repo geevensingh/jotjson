@@ -701,7 +701,7 @@ export class JsonTreeComponent {
       node.pathString,
       this.prefs.prefs().treePathRoot
     );
-    this.clipboardCopy.copyWithToast(path, {
+    void this.clipboardCopy.copyWithToast(path, {
       success: $localize`:@@tree.copyPath.success:Path copied to clipboard.`,
       failed: $localize`:@@tree.copyPath.failed:Failed to copy path.`,
       unsupported: $localize`:@@tree.copyPath.unsupported:Copy is not supported in this browser.`

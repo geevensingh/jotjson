@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ClipboardCopyService } from './clipboard-copy.service';
 
@@ -43,62 +43,71 @@ describe('ClipboardCopyService', () => {
     unsupported: 'Copy is not supported in this browser.'
   };
 
-  it('opens the unsupported snackbar when navigator.clipboard is missing', () => {
+  it('opens the unsupported snackbar and resolves false when navigator.clipboard is missing', fakeAsync(() => {
     setClipboard(undefined);
-    service.copyWithToast('hello', messages);
+    let result: boolean | undefined;
+    void service.copyWithToast('hello', messages).then((r) => (result = r));
+    flushMicrotasks();
+    expect(result).toBeFalse();
     expect(snackOpen).toHaveBeenCalledTimes(1);
     expect(snackOpen.calls.mostRecent().args[0]).toBe(messages.unsupported);
     expect(snackOpen.calls.mostRecent().args[2]).toEqual({ duration: 4000 });
-  });
+  }));
 
-  it('opens the unsupported snackbar when writeText is missing on the clipboard', () => {
+  it('opens the unsupported snackbar when writeText is missing on the clipboard', fakeAsync(() => {
     setClipboard({});
-    service.copyWithToast('hello', messages);
+    let result: boolean | undefined;
+    void service.copyWithToast('hello', messages).then((r) => (result = r));
+    flushMicrotasks();
+    expect(result).toBeFalse();
     expect(snackOpen).toHaveBeenCalledTimes(1);
     expect(snackOpen.calls.mostRecent().args[0]).toBe(messages.unsupported);
-  });
+  }));
 
-  it('writes text and opens the success snackbar when writeText resolves', async () => {
+  it('writes text, passes the Dismiss action label, and resolves true on success', fakeAsync(() => {
     const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
     setClipboard({ writeText });
-    service.copyWithToast('hello', messages);
-    await Promise.resolve();
-    await Promise.resolve();
+    let result: boolean | undefined;
+    void service.copyWithToast('hello', messages).then((r) => (result = r));
+    flushMicrotasks();
+    expect(result).toBeTrue();
     expect(writeText).toHaveBeenCalledWith('hello');
     expect(snackOpen).toHaveBeenCalledTimes(1);
     expect(snackOpen.calls.mostRecent().args[0]).toBe(messages.success);
+    expect(snackOpen.calls.mostRecent().args[1]).toBe('Dismiss');
     expect(snackOpen.calls.mostRecent().args[2]).toEqual({ duration: 3000 });
-  });
+  }));
 
-  it('opens the failure snackbar when writeText rejects', async () => {
+  it('opens the failure snackbar and resolves false when writeText rejects', fakeAsync(() => {
     const writeText = jasmine
       .createSpy('writeText')
       .and.rejectWith(new Error('denied'));
     setClipboard({ writeText });
-    service.copyWithToast('hello', messages);
-    await Promise.resolve();
-    await Promise.resolve();
+    let result: boolean | undefined;
+    void service.copyWithToast('hello', messages).then((r) => (result = r));
+    flushMicrotasks();
+    expect(result).toBeFalse();
     expect(snackOpen).toHaveBeenCalledTimes(1);
     expect(snackOpen.calls.mostRecent().args[0]).toBe(messages.failed);
     expect(snackOpen.calls.mostRecent().args[2]).toEqual({ duration: 4000 });
-  });
+  }));
 
-  it('honors custom durations when provided', async () => {
+  it('honors custom durations when provided', fakeAsync(() => {
     const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
     setClipboard({ writeText });
-    service.copyWithToast('hello', messages, {
+    void service.copyWithToast('hello', messages, {
       successDurationMs: 1234,
       failedDurationMs: 5678,
       unsupportedDurationMs: 9012
     });
-    await Promise.resolve();
-    await Promise.resolve();
+    flushMicrotasks();
     expect(snackOpen.calls.mostRecent().args[2]).toEqual({ duration: 1234 });
-  });
+  }));
 
-  it('honors custom unsupportedDurationMs when clipboard is missing', () => {
+  it('honors custom unsupportedDurationMs when clipboard is missing', fakeAsync(() => {
     setClipboard(undefined);
-    service.copyWithToast('hello', messages, { unsupportedDurationMs: 7777 });
+    void service.copyWithToast('hello', messages, { unsupportedDurationMs: 7777 });
+    flushMicrotasks();
     expect(snackOpen.calls.mostRecent().args[2]).toEqual({ duration: 7777 });
-  });
+  }));
 });

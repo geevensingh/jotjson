@@ -527,7 +527,7 @@ export class HomeComponent {
     const blob = this.loadedBlob();
     if (!blob) return;
     const url = `${window.location.origin}/s/${blob.slug}`;
-    this.clipboardCopy.copyWithToast(url, {
+    void this.clipboardCopy.copyWithToast(url, {
       success: $localize`:@@share.copyLink.success:Share link copied to clipboard.`,
       failed: $localize`:@@share.copyLink.failed:Failed to copy share link.`,
       unsupported: $localize`:@@share.copyLink.unsupported:Copy is not supported in this browser.`
