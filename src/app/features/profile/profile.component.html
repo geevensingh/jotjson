@@ -23,18 +23,6 @@
           }
         </dd>
       </dl>
-
-      <div class="actions">
-        <button
-          type="button"
-          mat-stroked-button
-          color="warn"
-          (click)="onSignOut()"
-        >
-          <jj-icon name="sign-out" />
-          <span i18n="@@profile.signOut">Sign out</span>
-        </button>
-      </div>
     </section>
 
     <section class="card prefs-card" aria-labelledby="profile-prefs">
@@ -44,6 +32,47 @@
       <p class="card-subtitle" i18n="@@profile.prefs.subtitle">
         Changes save automatically.
       </p>
+
+      <section class="prefs-group" aria-labelledby="prefs-appearance">
+        <h3 id="prefs-appearance" class="group-title" i18n="@@profile.prefs.appearance.title">
+          Appearance
+        </h3>
+
+        <div class="pref-row">
+          <label for="pref-theme" i18n="@@profile.prefs.appearance.theme">Theme</label>
+          <select
+            id="pref-theme"
+            class="pref-select"
+            [ngModel]="theme()"
+            (ngModelChange)="onThemeChange($event)"
+          >
+            <option value="dark" i18n="@@profile.prefs.appearance.theme.dark">Dark</option>
+            <option value="light" i18n="@@profile.prefs.appearance.theme.light">Light</option>
+            <option value="system" i18n="@@profile.prefs.appearance.theme.system">
+              Match system
+            </option>
+          </select>
+        </div>
+
+        <div class="pref-row">
+          <label for="pref-layout" i18n="@@profile.prefs.appearance.layout">
+            Layout orientation
+          </label>
+          <select
+            id="pref-layout"
+            class="pref-select"
+            [ngModel]="layoutOrientation()"
+            (ngModelChange)="onLayoutOrientationChange($event)"
+          >
+            <option value="horizontal" i18n="@@profile.prefs.appearance.layout.horizontal">
+              Horizontal
+            </option>
+            <option value="vertical" i18n="@@profile.prefs.appearance.layout.vertical">
+              Vertical
+            </option>
+          </select>
+        </div>
+      </section>
 
       <section class="prefs-group" aria-labelledby="prefs-editor">
         <h3 id="prefs-editor" class="group-title" i18n="@@profile.prefs.editor.title">
@@ -107,20 +136,26 @@
           <span class="pref-suffix" aria-hidden="true">px</span>
         </div>
 
-        <div class="pref-row">
+        <div class="pref-row pref-row--slider">
           <label for="pref-expansion-depth" i18n="@@profile.prefs.tree.expansionDepth">
             Default expansion depth
           </label>
-          <input
-            id="pref-expansion-depth"
-            type="number"
-            class="pref-number"
+          <mat-slider
+            class="pref-slider"
             [min]="expansionDepthMin"
             [max]="expansionDepthMax"
             step="1"
-            [ngModel]="defaultTreeExpansionDepth()"
-            (ngModelChange)="onDefaultTreeExpansionDepthChange($event)"
-          />
+            discrete
+            showTickMarks
+          >
+            <input
+              matSliderThumb
+              id="pref-expansion-depth"
+              [ngModel]="defaultTreeExpansionDepth()"
+              (ngModelChange)="onDefaultTreeExpansionDepthChange($event)"
+            />
+          </mat-slider>
+          <span class="pref-suffix" aria-hidden="true">{{ defaultTreeExpansionDepth() }}</span>
           <span class="pref-help" i18n="@@profile.prefs.tree.expansionDepth.help">
             How deep the tree starts expanded when a blob loads.
           </span>
@@ -146,35 +181,37 @@
           </mat-slide-toggle>
         </div>
 
-        <div class="pref-row pref-row--indented">
-          <mat-slide-toggle
-            [checked]="treeAssumeUtcForIsoDateTime()"
-            [disabled]="!treeShowDateAnnotations()"
-            (change)="onTreeAssumeUtcForIsoDateTimeChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.tree.assumeUtcDateTime">
-              Treat ISO date-time without timezone as UTC
-            </span>
-          </mat-slide-toggle>
-        </div>
+        <div class="pref-substack">
+          <div class="pref-row pref-row--indented">
+            <mat-slide-toggle
+              [checked]="treeAssumeUtcForIsoDateTime()"
+              [disabled]="!treeShowDateAnnotations()"
+              (change)="onTreeAssumeUtcForIsoDateTimeChange($event.checked)"
+            >
+              <span i18n="@@profile.prefs.tree.assumeUtcDateTime">
+                Treat ISO date-time without timezone as UTC
+              </span>
+            </mat-slide-toggle>
+          </div>
 
-        <div class="pref-row pref-row--indented">
-          <mat-slide-toggle
-            [checked]="treeAssumeUtcForIsoDateOnly()"
-            [disabled]="!treeShowDateAnnotations()"
-            (change)="onTreeAssumeUtcForIsoDateOnlyChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.tree.assumeUtcDateOnly">
-              Treat ISO date-only as UTC midnight
-            </span>
-          </mat-slide-toggle>
-        </div>
+          <div class="pref-row pref-row--indented">
+            <mat-slide-toggle
+              [checked]="treeAssumeUtcForIsoDateOnly()"
+              [disabled]="!treeShowDateAnnotations()"
+              (change)="onTreeAssumeUtcForIsoDateOnlyChange($event.checked)"
+            >
+              <span i18n="@@profile.prefs.tree.assumeUtcDateOnly">
+                Treat ISO date-only as UTC midnight
+              </span>
+            </mat-slide-toggle>
+          </div>
 
-        <div class="pref-row pref-row--indented">
-          <span class="pref-hint" i18n="@@profile.prefs.tree.assumeUtcHint">
-            Avoids local-timezone shifts for log timestamps and other
-            timezone-less ISO 8601 values.
-          </span>
+          <div class="pref-row pref-row--indented">
+            <span class="pref-hint" i18n="@@profile.prefs.tree.assumeUtcHint">
+              Avoids local-timezone shifts for log timestamps and other
+              timezone-less ISO 8601 values.
+            </span>
+          </div>
         </div>
 
         <div class="pref-row">
@@ -198,133 +235,13 @@
         </div>
       </section>
 
-      <section class="prefs-group" aria-labelledby="prefs-search">
-        <h3 id="prefs-search" class="group-title" i18n="@@profile.prefs.search.title">
-          Search
-        </h3>
-
-        <div class="pref-row">
-          <label for="pref-search-scope" i18n="@@profile.prefs.search.scope">
-            Search scope
-          </label>
-          <select
-            id="pref-search-scope"
-            class="pref-select"
-            [ngModel]="searchScope()"
-            (ngModelChange)="onSearchScopeChange($event)"
-          >
-            <option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</option>
-            <option value="values" i18n="@@profile.prefs.search.scope.values">Values</option>
-            <option value="both" i18n="@@profile.prefs.search.scope.both">Keys and values</option>
-          </select>
-        </div>
-
-        <div class="pref-row">
-          <mat-slide-toggle
-            [checked]="searchCaseSensitive()"
-            (change)="onSearchCaseSensitiveChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.search.caseSensitive">Case sensitive</span>
-          </mat-slide-toggle>
-        </div>
-
-        <div class="pref-row">
-          <mat-slide-toggle
-            [checked]="searchRegexMode()"
-            (change)="onSearchRegexModeChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.search.regexMode">Regular expression mode</span>
-          </mat-slide-toggle>
-        </div>
-      </section>
-
-      <section class="prefs-group" aria-labelledby="prefs-history">
-        <h3 id="prefs-history" class="group-title" i18n="@@profile.prefs.history.title">
-          History &amp; storage
-        </h3>
-
-        <div class="pref-row">
-          <label for="pref-recently-viewed" i18n="@@profile.prefs.recentlyViewed.label">
-            Track recently viewed blobs
-          </label>
-          <mat-slide-toggle
-            id="pref-recently-viewed"
-            [checked]="recentlyViewedEnabled()"
-            (change)="onRecentlyViewedEnabledChange($event.checked)"
-          ></mat-slide-toggle>
-          <span class="pref-help" i18n="@@profile.prefs.recentlyViewed.help">
-            When on, JotJSON remembers which shared blobs you have opened so you can find them again on the Recently viewed page.
-          </span>
-        </div>
-
-        <div class="pref-row">
-          <label for="pref-quota-strategy" i18n="@@profile.prefs.history.quotaStrategy">
-            When you reach the saved blob limit
-          </label>
-          <select
-            id="pref-quota-strategy"
-            class="pref-select"
-            [ngModel]="blobQuotaStrategy()"
-            (ngModelChange)="onBlobQuotaStrategyChange($event)"
-          >
-            <option value="auto_fifo" i18n="@@profile.prefs.history.quotaStrategy.autoFifo">
-              Automatically delete the oldest
-            </option>
-            <option value="manual" i18n="@@profile.prefs.history.quotaStrategy.manual">
-              Ask me to choose
-            </option>
-          </select>
-        </div>
-      </section>
-
-      <section class="prefs-group" aria-labelledby="prefs-appearance">
-        <h3 id="prefs-appearance" class="group-title" i18n="@@profile.prefs.appearance.title">
-          Appearance
-        </h3>
-
-        <div class="pref-row">
-          <label for="pref-theme" i18n="@@profile.prefs.appearance.theme">Theme</label>
-          <select
-            id="pref-theme"
-            class="pref-select"
-            [ngModel]="theme()"
-            (ngModelChange)="onThemeChange($event)"
-          >
-            <option value="dark" i18n="@@profile.prefs.appearance.theme.dark">Dark</option>
-            <option value="light" i18n="@@profile.prefs.appearance.theme.light">Light</option>
-            <option value="system" i18n="@@profile.prefs.appearance.theme.system">
-              Match system
-            </option>
-          </select>
-        </div>
-
-        <div class="pref-row">
-          <label for="pref-layout" i18n="@@profile.prefs.appearance.layout">
-            Layout orientation
-          </label>
-          <select
-            id="pref-layout"
-            class="pref-select"
-            [ngModel]="layoutOrientation()"
-            (ngModelChange)="onLayoutOrientationChange($event)"
-          >
-            <option value="horizontal" i18n="@@profile.prefs.appearance.layout.horizontal">
-              Horizontal
-            </option>
-            <option value="vertical" i18n="@@profile.prefs.appearance.layout.vertical">
-              Vertical
-            </option>
-          </select>
-        </div>
-      </section>
-
       <section class="prefs-group" aria-labelledby="prefs-highlight-colors">
         <h3
           id="prefs-highlight-colors"
           class="group-title"
           i18n="@@profile.prefs.highlightColors.title"
         >
-          Tree highlight colors
+          Highlights
         </h3>
         <p class="group-help" i18n="@@profile.prefs.highlightColors.help">
           Pick colors used to highlight selected nodes, ancestors of the
@@ -409,6 +326,106 @@
           </button>
         </div>
       </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-search">
+        <h3 id="prefs-search" class="group-title" i18n="@@profile.prefs.search.title">
+          Search
+        </h3>
+
+        <div class="pref-row">
+          <label for="pref-search-scope" i18n="@@profile.prefs.search.scope">
+            Search scope
+          </label>
+          <select
+            id="pref-search-scope"
+            class="pref-select"
+            [ngModel]="searchScope()"
+            (ngModelChange)="onSearchScopeChange($event)"
+          >
+            <option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</option>
+            <option value="values" i18n="@@profile.prefs.search.scope.values">Values</option>
+            <option value="both" i18n="@@profile.prefs.search.scope.both">Keys and values</option>
+          </select>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="searchCaseSensitive()"
+            (change)="onSearchCaseSensitiveChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.search.caseSensitive">Case sensitive</span>
+          </mat-slide-toggle>
+        </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            [checked]="searchRegexMode()"
+            (change)="onSearchRegexModeChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.search.regexMode">Regular expression mode</span>
+          </mat-slide-toggle>
+        </div>
+      </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-history">
+        <h3 id="prefs-history" class="group-title" i18n="@@profile.prefs.history.title">
+          Storage
+        </h3>
+
+        <div class="pref-row">
+          <label for="pref-recently-viewed" i18n="@@profile.prefs.recentlyViewed.label">
+            Track recently viewed blobs
+          </label>
+          <mat-slide-toggle
+            id="pref-recently-viewed"
+            [checked]="recentlyViewedEnabled()"
+            (change)="onRecentlyViewedEnabledChange($event.checked)"
+          ></mat-slide-toggle>
+          <span class="pref-help" i18n="@@profile.prefs.recentlyViewed.help">
+            When on, JotJSON remembers which shared blobs you have opened so you can find them again on the Recently viewed page.
+          </span>
+        </div>
+
+        <div class="pref-row">
+          <label for="pref-quota-strategy" i18n="@@profile.prefs.history.quotaStrategy">
+            When you reach the saved blob limit
+          </label>
+          <select
+            id="pref-quota-strategy"
+            class="pref-select"
+            [ngModel]="blobQuotaStrategy()"
+            (ngModelChange)="onBlobQuotaStrategyChange($event)"
+          >
+            <option value="auto_fifo" i18n="@@profile.prefs.history.quotaStrategy.autoFifo">
+              Automatically delete the oldest
+            </option>
+            <option value="manual" i18n="@@profile.prefs.history.quotaStrategy.manual">
+              Ask me to choose
+            </option>
+          </select>
+        </div>
+      </section>
+    </section>
+
+    <section class="card actions-card" aria-labelledby="profile-account-actions">
+      <h2
+        id="profile-account-actions"
+        class="card-title"
+        i18n="@@profile.accountActions.title"
+      >
+        Account
+      </h2>
+      <div class="actions">
+        <button
+          type="button"
+          mat-stroked-button
+          color="warn"
+          (click)="onSignOut()"
+        >
+          <jj-icon name="sign-out" />
+          <span i18n="@@profile.signOut">Sign out</span>
+        </button>
+      </div>
     </section>
   } @else {
     <section class="card" aria-labelledby="profile-signed-out">

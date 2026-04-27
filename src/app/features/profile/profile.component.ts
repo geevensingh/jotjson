@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatSliderModule } from '@angular/material/slider';
 import { AuthService } from '../../core/auth/auth.service';
 import {
   DEFAULT_PREFERENCES,
@@ -59,6 +60,7 @@ const HIGHLIGHT_FIELDS: readonly HighlightFieldDescriptor[] = [
     MatButtonModule,
     MatButtonToggleModule,
     MatSlideToggleModule,
+    MatSliderModule,
     IconComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

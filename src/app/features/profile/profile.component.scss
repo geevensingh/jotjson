@@ -111,9 +111,19 @@ dl {
     color: var(--mat-sys-on-surface, inherit);
   }
 
-  &--indented {
-    padding-left: 1.5rem;
+  &--indented { padding-left: 0.25rem; }
+
+  &--slider .pref-slider {
+    flex: 1 1 16rem;
+    min-width: 12rem;
+    max-width: 22rem;
   }
+}
+
+.pref-substack {
+  margin: 0.25rem 0 0.75rem 0.75rem;
+  padding-left: 0.875rem;
+  border-left: 2px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
 }
 
 .pref-hint {

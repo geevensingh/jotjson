@@ -96,7 +96,7 @@ describe('ProfileComponent', () => {
     expect(text).toContain('Editor');
     expect(text).toContain('Tree');
     expect(text).toContain('Search');
-    expect(text).toContain('History & storage');
+    expect(text).toContain('Storage');
     expect(text).toContain('Appearance');
   });
 
