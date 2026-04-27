@@ -32,6 +32,7 @@ const TYPE_LABELS: Record<ValueClassification, string> = {
   uuid: $localize`:@@tree.type.uuid:uuid`,
   url: $localize`:@@tree.type.url:url`,
   email: $localize`:@@tree.type.email:email`,
+  path: $localize`:@@tree.type.path:path`,
   ipv4: $localize`:@@tree.type.ipv4:ipv4`,
   ipv6: $localize`:@@tree.type.ipv6:ipv6`,
   integer: $localize`:@@tree.type.integer:integer`,

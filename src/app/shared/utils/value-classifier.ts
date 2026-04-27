@@ -17,6 +17,7 @@ export type ValueClassification =
   | 'uuid'
   | 'url'
   | 'email'
+  | 'path'
   | 'ipv4'
   | 'ipv6'
   | 'integer'
@@ -45,6 +46,53 @@ const URL_RE =
 // Local + @ + domain with at least one dot + 2+ alpha TLD.
 const EMAIL_RE =
   /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
+
+// Path detector: identifies absolute and relative URL-style paths
+// (RFC 3986 path component, optionally with `?query` and `#fragment`).
+// Conservative - intended to label cloud resource IDs, REST hyperlinks,
+// and unix-style file paths without flagging arbitrary slashed prose.
+const PATH_SEGMENT_CHARS = "A-Za-z0-9._~%!$&'()*+,;=:@\\-";
+const PATH_PATH_RE = new RegExp(`^[/${PATH_SEGMENT_CHARS}]+$`);
+const PATH_QUERY_FRAGMENT_RE = new RegExp(`^[/?#${PATH_SEGMENT_CHARS}]*$`);
+const FILENAME_EXT_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9]{1,8}$/;
+
+function isPath(s: string): boolean {
+  if (s.length < 4 || s.length > 2048) return false;
+  if (/[\s\\\u0000-\u001f\u007f]/.test(s)) return false;
+  if (s.includes('://')) return false;
+
+  // Split off optional ?query and #fragment.
+  let pathPart = s;
+  let rest = '';
+  const hashIdx = s.indexOf('#');
+  const qIdx = s.indexOf('?');
+  const splitIdx = qIdx >= 0 && (hashIdx < 0 || qIdx < hashIdx) ? qIdx : hashIdx;
+  if (splitIdx >= 0) {
+    pathPart = s.slice(0, splitIdx);
+    rest = s.slice(splitIdx);
+  }
+  if (pathPart.length === 0) return false;
+  if (!PATH_PATH_RE.test(pathPart)) return false;
+  // Validate query/fragment portion (skip the leading `?`/`#`).
+  if (rest.length > 0 && !PATH_QUERY_FRAGMENT_RE.test(rest.slice(1))) {
+    return false;
+  }
+
+  if (pathPart.startsWith('/')) {
+    if (pathPart.startsWith('//')) return false;
+    const segments = pathPart.slice(1).split('/').filter((seg) => seg.length > 0);
+    return segments.length >= 2;
+  }
+  // Relative path: must not start with ? or # (already handled), and
+  // must satisfy >=3 segments OR >=2 segments + filename-ext last segment.
+  const segments = pathPart.split('/');
+  if (segments.some((seg) => seg.length === 0)) return false;
+  if (segments.length >= 3) return true;
+  if (segments.length === 2) {
+    return FILENAME_EXT_RE.test(segments[1]);
+  }
+  return false;
+}
 
 function isIpv4(s: string): boolean {
   if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s)) return false;
@@ -89,6 +137,7 @@ function classifyString(value: string, opts?: ClassifyOptions): ValueClassificat
   if (UUID_RE.test(trimmed)) return 'uuid';
   if (URL_RE.test(trimmed)) return 'url';
   if (EMAIL_RE.test(trimmed)) return 'email';
+  if (isPath(trimmed)) return 'path';
   if (isIpv4(trimmed)) return 'ipv4';
   if (isIpv6(trimmed)) return 'ipv6';
   return 'string';
