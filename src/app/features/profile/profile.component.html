@@ -224,24 +224,16 @@
         </h3>
 
         <div class="pref-row">
-          <label for="pref-history-mode" i18n="@@profile.prefs.history.trackingMode">
-            History tracking
+          <label for="pref-recently-viewed" i18n="@@profile.prefs.recentlyViewed.label">
+            Track recently viewed blobs
           </label>
-          <select
-            id="pref-history-mode"
-            class="pref-select"
-            [ngModel]="historyTrackingMode()"
-            (ngModelChange)="onHistoryTrackingModeChange($event)"
-          >
-            <option value="save_only" i18n="@@profile.prefs.history.trackingMode.saveOnly">
-              Save only
-            </option>
-            <option value="all_actions" i18n="@@profile.prefs.history.trackingMode.allActions">
-              All actions
-            </option>
-          </select>
-          <span class="pref-help" i18n="@@profile.prefs.history.trackingMode.help">
-            Choose whether your history records only saved blobs or every view, edit, and paste.
+          <mat-slide-toggle
+            id="pref-recently-viewed"
+            [checked]="recentlyViewedEnabled()"
+            (change)="onRecentlyViewedEnabledChange($event.checked)"
+          ></mat-slide-toggle>
+          <span class="pref-help" i18n="@@profile.prefs.recentlyViewed.help">
+            When on, JotJSON remembers which shared blobs you have opened so you can find them again on the Recently viewed page.
           </span>
         </div>
 

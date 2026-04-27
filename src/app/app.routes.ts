@@ -30,7 +30,7 @@ export const routes: Routes = [
         (m) => m.HistoryComponent
       ),
     canActivate: [authGuard],
-    title: 'History - JotJSON'
+    title: 'Recently viewed - JotJSON'
   },
   {
     path: 'formatting-rules',

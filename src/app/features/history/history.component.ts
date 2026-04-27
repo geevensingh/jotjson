@@ -20,25 +20,17 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Subject, debounceTime, distinctUntilChanged, firstValueFrom } from 'rxjs';
 import { HistoryService } from '../../core/api/history.service';
-import type { HistoryAction, HistoryEntry } from '../../core/api/models';
+import type { HistoryEntry } from '../../core/api/models';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { SeoService } from '../../core/seo/seo.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
-import { IconComponent, JjIconName } from '../../shared/components/icon/icon.component';
+import { IconComponent } from '../../shared/components/icon/icon.component';
 import {
   ConfirmDialogComponent,
   ConfirmDialogData
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 
 type LoadState = 'loading' | 'ready' | 'error';
-
-const ALL_ACTIONS: readonly HistoryAction[] = [
-  'saved',
-  'edited',
-  'deleted',
-  'viewed',
-  'pasted'
-];
 
 interface DayGroup {
   /** Stable sort key: YYYY-MM-DD in the user's local timezone. */
@@ -78,8 +70,6 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly searchTerm = signal('');
   /** Mirrors the input element's value so the field stays controlled. */
   readonly searchInputValue = signal('');
-  readonly actionFilter = signal<ReadonlySet<HistoryAction>>(new Set());
-  readonly allActions: readonly HistoryAction[] = ALL_ACTIONS;
   /** YYYY-MM-DD strings from the date inputs (or '' when unset). */
   readonly fromDate = signal('');
   readonly toDate = signal('');
@@ -96,7 +86,6 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly hasActiveFilters = computed(
     () =>
       this.searchTerm().trim().length > 0 ||
-      this.actionFilter().size > 0 ||
       this.fromDate().length > 0 ||
       this.toDate().length > 0
   );
@@ -268,22 +257,16 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private buildListOptions(): {
     q?: string;
-    actions?: HistoryAction[];
     from?: string;
     to?: string;
   } {
     const out: {
       q?: string;
-      actions?: HistoryAction[];
       from?: string;
       to?: string;
     } = {};
     const q = this.searchTerm();
     if (q) out.q = q;
-    const actions = this.actionFilter();
-    if (actions.size > 0) {
-      out.actions = ALL_ACTIONS.filter((a) => actions.has(a));
-    }
     const from = this.fromIsoStart();
     if (from) out.from = from;
     const to = this.toIsoEnd();
@@ -308,18 +291,6 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!v) return undefined;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
     return `${v}T23:59:59.999Z`;
-  }
-
-  isActionSelected(action: HistoryAction): boolean {
-    return this.actionFilter().has(action);
-  }
-
-  toggleAction(action: HistoryAction): void {
-    const next = new Set(this.actionFilter());
-    if (next.has(action)) next.delete(action);
-    else next.add(action);
-    this.actionFilter.set(next);
-    void this.reload();
   }
 
   onFromDateChange(value: string): void {
@@ -347,7 +318,6 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.searchInputValue.set('');
     this.searchInput$.next('');
     this.searchTerm.set('');
-    this.actionFilter.set(new Set());
     this.fromDate.set('');
     this.toDate.set('');
     this.dateRangeError.set(null);
@@ -405,7 +375,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Click on a row - navigates to /s/<slug> when one is available. */
   openEntry(entry: HistoryEntry): void {
-    if (!entry.slug || entry.action === 'deleted') return;
+    if (!entry.slug) return;
     void this.router.navigate(['/s', entry.slug]);
   }
 
@@ -423,7 +393,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   hasLink(entry: HistoryEntry): boolean {
-    return !!entry.slug && entry.action !== 'deleted';
+    return !!entry.slug;
   }
 
   /** Display label: prefer title, fall back to slug, then "(deleted blob)". */
@@ -431,43 +401,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     const t = entry.title?.trim();
     if (t && t.length > 0) return t;
     if (entry.slug) return `/s/${entry.slug}`;
-    // Paste events are intentionally blob-less (api/src/shared/history.ts:
-    // "absent for pasted events"), so the generic "(deleted blob)" label
-    // would be misleading. Use a dedicated label for the no-slug paste case.
-    if (entry.action === 'pasted') {
-      return $localize`:@@history.pastedContent:Pasted content`;
-    }
     return $localize`:@@history.deletedBlob:(deleted blob)`;
-  }
-
-  iconFor(action: HistoryEntry['action']): JjIconName {
-    switch (action) {
-      case 'saved':
-        return 'save';
-      case 'edited':
-        return 'edit';
-      case 'deleted':
-        return 'trash';
-      case 'viewed':
-        return 'eye';
-      case 'pasted':
-        return 'paste';
-    }
-  }
-
-  actionLabel(action: HistoryEntry['action']): string {
-    switch (action) {
-      case 'saved':
-        return $localize`:@@history.action.saved:Saved`;
-      case 'edited':
-        return $localize`:@@history.action.edited:Edited`;
-      case 'deleted':
-        return $localize`:@@history.action.deleted:Deleted`;
-      case 'viewed':
-        return $localize`:@@history.action.viewed:Viewed`;
-      case 'pasted':
-        return $localize`:@@history.action.pasted:Pasted`;
-    }
   }
 
   formatTime(iso: string): string {

@@ -23,7 +23,11 @@ import {
   InvocationContext
 } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
-import { PreferenceValidationError, normalizePreferences } from '../shared/preferences';
+import {
+  PreferenceValidationError,
+  normalizePreferences,
+  normalizeStoredPreferences
+} from '../shared/preferences';
 import { readUser, upsertUser, UserDocument } from '../shared/users';
 
 function unauthorized(message: string): HttpResponseInit {
@@ -50,7 +54,17 @@ export async function getMe(
   try {
     const doc = await readUser(principal.id);
     if (!doc) return { status: 404, jsonBody: { error: 'User not seeded' } };
-    return { status: 200, jsonBody: doc };
+    // Coerce any legacy `historyTrackingMode` field into the new
+    // `recentlyViewedEnabled` boolean so clients never see the old
+    // shape. TODO(remove next release): no longer needed once all
+    // stored docs have been re-saved.
+    const normalized: UserDocument = {
+      ...doc,
+      preferences: normalizeStoredPreferences(
+        doc.preferences as unknown as Record<string, unknown>
+      ) as unknown as UserDocument['preferences']
+    };
+    return { status: 200, jsonBody: normalized };
   } catch (err) {
     context.error('getMe read error', err);
     return { status: 500, jsonBody: { error: 'Internal error' } };

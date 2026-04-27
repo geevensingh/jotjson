@@ -33,7 +33,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeShowDateAnnotations: true,
   treeAssumeUtcForIsoDateTime: true,
   treeAssumeUtcForIsoDateOnly: true,
-  historyTrackingMode: 'save_only',
+  recentlyViewedEnabled: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
   searchScope: 'both',
@@ -71,9 +71,17 @@ function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light'
 function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   const remoteColors: Partial<UserPreferences['treeHighlightColors']> =
     remote.treeHighlightColors ?? {};
+  // Coerce legacy historyTrackingMode -> recentlyViewedEnabled. Both old
+  // values map to true (the new default and strictly less invasive than
+  // either old mode). New field wins if both happen to be present.
+  const { historyTrackingMode: legacy, ...rest } = remote;
+  const coerced: Partial<UserPreferences> = { ...rest };
+  if (rest.recentlyViewedEnabled === undefined && legacy !== undefined) {
+    coerced.recentlyViewedEnabled = true;
+  }
   return {
     ...structuredClone(DEFAULT_PREFERENCES),
-    ...remote,
+    ...coerced,
     treeHighlightColors: {
       dark: {
         ...DEFAULT_PREFERENCES.treeHighlightColors.dark,
@@ -196,22 +204,7 @@ export class PreferencesService {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return structuredClone(DEFAULT_PREFERENCES);
       const parsed = JSON.parse(raw) as Partial<UserPreferences>;
-      const parsedColors: Partial<UserPreferences['treeHighlightColors']> =
-        parsed.treeHighlightColors ?? {};
-      return {
-        ...structuredClone(DEFAULT_PREFERENCES),
-        ...parsed,
-        treeHighlightColors: {
-          dark: {
-            ...DEFAULT_PREFERENCES.treeHighlightColors.dark,
-            ...(parsedColors.dark ?? {})
-          },
-          light: {
-            ...DEFAULT_PREFERENCES.treeHighlightColors.light,
-            ...(parsedColors.light ?? {})
-          }
-        }
-      };
+      return mergeWithDefaults(parsed);
     } catch {
       return structuredClone(DEFAULT_PREFERENCES);
     }

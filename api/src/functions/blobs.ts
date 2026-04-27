@@ -31,7 +31,7 @@ import {
   listBlobsByOwner,
   updateBlob
 } from '../shared/blobs';
-import { recordEntry, type HistoryAction } from '../shared/history';
+import { getRecentViewAt, recordEntry, VIEW_DEBOUNCE_SECONDS } from '../shared/history';
 import { readUser } from '../shared/users';
 
 function unauthorized(message: string): HttpResponseInit {
@@ -66,40 +66,56 @@ function internalError(
  * doubles can assert it happened, but every failure is swallowed with a
  * warning.
  */
-async function recordHistorySafely(
+async function recordViewedSafely(
   context: InvocationContext,
   input: {
     userId: string;
-    action: HistoryAction;
-    blobId?: string;
+    blobId: string;
     slug?: string;
     title?: string;
   }
 ): Promise<void> {
   try {
-    await recordEntry(input);
+    await recordEntry({ ...input, action: 'viewed' });
   } catch (err) {
-    context.warn('history record failed', { action: input.action, error: err });
+    context.warn('history record failed', { action: 'viewed', error: err });
   }
 }
 
 /**
- * Look up the caller's `historyTrackingMode` preference. Defaults to
- * `"save_only"` when the user document or preference is missing - matches
- * `DEFAULT_PREFERENCES` in shared/preferences.ts. Errors reading the user
- * doc fall through as `"save_only"` so a transient Cosmos error never
- * accidentally upgrades a user to `"all_actions"` tracking.
+ * Read whether the caller has the "Recently viewed" tracking enabled.
+ *
+ * - Missing user doc / missing field -> default `true` (new-user
+ *   default; the feature is on unless explicitly turned off).
+ * - Legacy `historyTrackingMode` field (any value) -> coerced to
+ *   `true`. Both old modes (`save_only` / `all_actions`) map to the
+ *   new default; the narrowed feature is strictly less invasive than
+ *   either old mode.
+ *   TODO(remove next release): drop legacy handling once all stored
+ *   docs have been re-saved.
+ * - Read failure -> `false` (fail closed). A transient Cosmos hiccup
+ *   must never silently turn tracking on for a user who opted out.
  */
-async function readHistoryMode(
+async function readRecentlyViewedEnabled(
   context: InvocationContext,
   userId: string
-): Promise<'save_only' | 'all_actions'> {
+): Promise<boolean> {
   try {
     const user = await readUser(userId);
-    return user?.preferences?.historyTrackingMode ?? 'save_only';
+    const prefs = user?.preferences as
+      | (Record<string, unknown> & { recentlyViewedEnabled?: unknown })
+      | undefined;
+    if (typeof prefs?.recentlyViewedEnabled === 'boolean') {
+      return prefs.recentlyViewedEnabled;
+    }
+    if (typeof prefs?.['historyTrackingMode'] === 'string') {
+      // Both legacy values coerce to true.
+      return true;
+    }
+    return true;
   } catch (err) {
-    context.warn('history pref read failed', err);
-    return 'save_only';
+    context.warn('recentlyViewedEnabled read failed; failing closed', err);
+    return false;
   }
 }
 
@@ -167,17 +183,6 @@ export async function postBlob(
       ...(payload.title !== undefined ? { title: payload.title as string } : {}),
       ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic as boolean } : {})
     });
-    // "saved" is always recorded regardless of historyTrackingMode - it is
-    // the minimum surface a user needs to find their blobs in M5b. The
-    // auto_fifo eviction above is intentionally NOT recorded as "deleted":
-    // it is system-driven, not user-initiated.
-    await recordHistorySafely(context, {
-      userId: principal.id,
-      action: 'saved',
-      blobId: saved.id,
-      slug: saved.slug,
-      ...(saved.title ? { title: saved.title } : {})
-    });
     return {
       status: 201,
       jsonBody: autoDeleted ? { ...saved, autoDeleted } : saved
@@ -202,22 +207,32 @@ export async function getBlob(
     const blob = await findBlobByIdOrSlug(idOrSlug);
     if (!blob) return notFound('Blob not found');
     // Record a "viewed" entry only when the caller is authenticated, is
-    // NOT the owner, and has opted into all_actions tracking. Anonymous
-    // public-link viewers are never tracked. Owner reads (e.g. opening
-    // their own saved link) are noise. Auth on this route is optional, so
-    // tryAuth never throws on missing/invalid tokens.
+    // NOT the owner, has the "Recently viewed" tracking enabled, and has
+    // not already recorded a view for this same blob within
+    // VIEW_DEBOUNCE_SECONDS. Anonymous public-link viewers are never
+    // tracked. Owner reads (e.g. opening their own saved link) are noise.
+    // Auth on this route is optional, so tryAuth never throws on
+    // missing/invalid tokens.
     try {
       const principal = await tryAuth(req);
       if (principal && principal.id !== blob.ownerId) {
-        const mode = await readHistoryMode(context, principal.id);
-        if (mode === 'all_actions') {
-          await recordHistorySafely(context, {
-            userId: principal.id,
-            action: 'viewed',
-            blobId: blob.id,
-            slug: blob.slug,
-            ...(blob.title ? { title: blob.title } : {})
-          });
+        const enabled = await readRecentlyViewedEnabled(context, principal.id);
+        if (enabled) {
+          const recent = await getRecentViewAt(principal.id, blob.id);
+          let withinDebounce = false;
+          if (recent) {
+            const ageMs = Date.now() - new Date(recent).getTime();
+            withinDebounce =
+              Number.isFinite(ageMs) && ageMs < VIEW_DEBOUNCE_SECONDS * 1000;
+          }
+          if (!withinDebounce) {
+            await recordViewedSafely(context, {
+              userId: principal.id,
+              blobId: blob.id,
+              slug: blob.slug,
+              ...(blob.title ? { title: blob.title } : {})
+            });
+          }
         }
       }
     } catch (err) {
@@ -280,15 +295,6 @@ export async function deleteBlob(
 
     const deleted = await deleteBlobById(existing.id, existing.ownerId);
     if (!deleted) return notFound('Blob not found');
-    if ((await readHistoryMode(context, principal.id)) === 'all_actions') {
-      await recordHistorySafely(context, {
-        userId: principal.id,
-        action: 'deleted',
-        blobId: existing.id,
-        slug: existing.slug,
-        ...(existing.title ? { title: existing.title } : {})
-      });
-    }
     return { status: 204 };
   } catch (err) {
     return internalError(context, 'deleteBlob write', err);
@@ -338,15 +344,6 @@ export async function putBlob(
       ...(patch.title !== undefined ? { title: patch.title as string } : {}),
       ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic as boolean } : {})
     });
-    if ((await readHistoryMode(context, principal.id)) === 'all_actions') {
-      await recordHistorySafely(context, {
-        userId: principal.id,
-        action: 'edited',
-        blobId: saved.id,
-        slug: saved.slug,
-        ...(saved.title ? { title: saved.title } : {})
-      });
-    }
     return { status: 200, jsonBody: saved };
   } catch (err) {
     if (err instanceof BlobValidationError) return badRequest(err.message);

@@ -33,7 +33,16 @@ export interface UserPreferences {
   treeShowDateAnnotations: boolean;
   treeAssumeUtcForIsoDateTime: boolean;
   treeAssumeUtcForIsoDateOnly: boolean;
-  historyTrackingMode: 'save_only' | 'all_actions';
+  /**
+   * When true, JotJSON records a `viewed` history entry each time the
+   * user opens a shared blob they don't own (debounced 5 minutes per
+   * (user, blob) server-side). Default true.
+   *
+   * Replaces the legacy `historyTrackingMode: 'save_only' | 'all_actions'`
+   * preference. Both legacy values coerce to `true` on read - the
+   * narrowed feature is strictly less invasive than either old mode.
+   */
+  recentlyViewedEnabled: boolean;
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
@@ -55,7 +64,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeShowDateAnnotations: true,
   treeAssumeUtcForIsoDateTime: true,
   treeAssumeUtcForIsoDateOnly: true,
-  historyTrackingMode: 'save_only',
+  recentlyViewedEnabled: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
   searchScope: 'both',
@@ -90,17 +99,32 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 const THEMES: readonly UserPreferences['theme'][] = ['dark', 'light', 'system'] as const;
 const LAYOUTS: readonly UserPreferences['layoutOrientation'][] = ['horizontal', 'vertical'] as const;
-const HISTORY_MODES: readonly UserPreferences['historyTrackingMode'][] = [
-  'save_only',
-  'all_actions'
-] as const;
+/**
+ * Legacy history tracking mode values. Accepted on the wire for one
+ * release of stale-client tolerance and coerced to
+ * `recentlyViewedEnabled: true` (both old modes map to true since the
+ * narrowed feature is strictly less invasive than either).
+ *
+ * TODO(remove next release): drop legacy acceptance once stale clients
+ * have refreshed.
+ */
+const LEGACY_HISTORY_MODES = ['save_only', 'all_actions'] as const;
+type LegacyHistoryMode = (typeof LEGACY_HISTORY_MODES)[number];
 const SEARCH_SCOPES: readonly UserPreferences['searchScope'][] = ['keys', 'values', 'both'] as const;
 const QUOTA_STRATEGIES: readonly UserPreferences['blobQuotaStrategy'][] = [
   'auto_fifo',
   'manual'
 ] as const;
 
-const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
+/**
+ * Whitelist of accepted preference keys on the wire.
+ *
+ * Includes `historyTrackingMode` for one-release legacy tolerance even
+ * though it is no longer part of `UserPreferences`. The string literal
+ * union is widened accordingly. TODO(remove next release): drop
+ * `'historyTrackingMode'` once stale clients have refreshed.
+ */
+const TOP_LEVEL_KEYS: readonly (keyof UserPreferences | 'historyTrackingMode')[] = [
   'theme',
   'editorFontSize',
   'editorTabSize',
@@ -113,6 +137,9 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'treeShowDateAnnotations',
   'treeAssumeUtcForIsoDateTime',
   'treeAssumeUtcForIsoDateOnly',
+  'recentlyViewedEnabled',
+  // Legacy field accepted on the wire and coerced to `recentlyViewedEnabled`
+  // for one release of stale-client tolerance. TODO(remove next release).
   'historyTrackingMode',
   'searchCaseSensitive',
   'searchRegexMode',
@@ -132,6 +159,64 @@ const COLOR_SET_KEYS: readonly (keyof ThemeColorSet)[] = [
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Accept either `recentlyViewedEnabled` (new) or `historyTrackingMode`
+ * (legacy) on the wire and return the boolean value. New field wins
+ * when both are present. Both legacy values map to `true` since the
+ * narrowed feature is strictly less invasive than either old mode.
+ *
+ * TODO(remove next release): drop legacy acceptance once stale clients
+ * have refreshed.
+ */
+function coerceRecentlyViewedEnabled(raw: Record<string, unknown>): boolean {
+  if (raw['recentlyViewedEnabled'] !== undefined) {
+    return assertBool(raw['recentlyViewedEnabled'], 'recentlyViewedEnabled');
+  }
+  if (raw['historyTrackingMode'] !== undefined) {
+    const legacy = raw['historyTrackingMode'];
+    if (
+      typeof legacy !== 'string' ||
+      !(LEGACY_HISTORY_MODES as readonly string[]).includes(legacy)
+    ) {
+      throw new PreferenceValidationError(
+        `historyTrackingMode must be one of ${LEGACY_HISTORY_MODES.join(', ')}`
+      );
+    }
+    return true;
+  }
+  throw new PreferenceValidationError('recentlyViewedEnabled is required');
+}
+
+/**
+ * Lenient read-side coercion for stored user docs. Accepts a possibly
+ * legacy `preferences` blob (one with `historyTrackingMode` instead of
+ * `recentlyViewedEnabled`) and returns a normalized copy with only the
+ * new field.
+ *
+ * Unlike `normalizePreferences`, this does NOT throw on unknown keys or
+ * out-of-range values - stored docs were validated when written, and a
+ * read-time validation failure must never break `GET /api/me`. We only
+ * patch the one field that changed shape.
+ */
+export function normalizeStoredPreferences<T extends Record<string, unknown>>(
+  prefs: T
+): T & { recentlyViewedEnabled: boolean } {
+  const out: Record<string, unknown> = { ...prefs };
+  if (typeof out['recentlyViewedEnabled'] === 'boolean') {
+    // New field already present; drop the legacy one if it lingers.
+    delete out['historyTrackingMode'];
+    return out as T & { recentlyViewedEnabled: boolean };
+  }
+  const legacy = out['historyTrackingMode'];
+  // Both legacy values coerce to true. Anything else (missing or
+  // malformed) falls back to the new default of true.
+  out['recentlyViewedEnabled'] =
+    typeof legacy !== 'string' ||
+    (LEGACY_HISTORY_MODES as readonly string[]).includes(legacy);
+  delete out['historyTrackingMode'];
+  return out as T & { recentlyViewedEnabled: boolean };
 }
 
 function assertEnum<T extends string>(
@@ -248,11 +333,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
       raw['treeAssumeUtcForIsoDateOnly'],
       'treeAssumeUtcForIsoDateOnly'
     ),
-    historyTrackingMode: assertEnum(
-      raw['historyTrackingMode'],
-      HISTORY_MODES,
-      'historyTrackingMode'
-    ),
+    recentlyViewedEnabled: coerceRecentlyViewedEnabled(raw),
     searchCaseSensitive: assertBool(raw['searchCaseSensitive'], 'searchCaseSensitive'),
     searchRegexMode: assertBool(raw['searchRegexMode'], 'searchRegexMode'),
     searchScope: assertEnum(raw['searchScope'], SEARCH_SCOPES, 'searchScope'),

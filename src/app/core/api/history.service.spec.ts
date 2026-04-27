@@ -42,23 +42,4 @@ describe('HistoryService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush(null, { status: 204, statusText: 'No Content' });
   });
-
-  it('POSTs a paste event with action="pasted"', () => {
-    service.recordPaste({ slug: 'abc', title: 'Notes' }).subscribe();
-    const req = httpMock.expectOne(base);
-    expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({
-      action: 'pasted',
-      slug: 'abc',
-      title: 'Notes'
-    });
-    req.flush({ id: 'h-1' });
-  });
-
-  it('omits optional fields from the POST body when not provided', () => {
-    service.recordPaste().subscribe();
-    const req = httpMock.expectOne(base);
-    expect(req.request.body).toEqual({ action: 'pasted' });
-    req.flush(null, { status: 204, statusText: 'No Content' });
-  });
 });

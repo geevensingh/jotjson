@@ -266,17 +266,16 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().searchScope).toBe('both');
   });
 
-  it('writes historyTrackingMode for valid values', async () => {
+  it('writes recentlyViewedEnabled when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
       isConfigured: true
     });
-    fixture.componentInstance.onHistoryTrackingModeChange('all_actions');
-    expect(prefs.prefs().historyTrackingMode).toBe('all_actions');
-    fixture.componentInstance.onHistoryTrackingModeChange('save_only');
-    expect(prefs.prefs().historyTrackingMode).toBe('save_only');
-    fixture.componentInstance.onHistoryTrackingModeChange('garbage');
-    expect(prefs.prefs().historyTrackingMode).toBe('save_only');
+    expect(prefs.prefs().recentlyViewedEnabled).toBe(true);
+    fixture.componentInstance.onRecentlyViewedEnabledChange(false);
+    expect(prefs.prefs().recentlyViewedEnabled).toBe(false);
+    fixture.componentInstance.onRecentlyViewedEnabledChange(true);
+    expect(prefs.prefs().recentlyViewedEnabled).toBe(true);
   });
 
   it('writes blobQuotaStrategy for valid values', async () => {

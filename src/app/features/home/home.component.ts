@@ -27,7 +27,6 @@ const SK_BLOCK_COMMENT = 13;
 const SK_EOF = 17;
 import { AuthService } from '../../core/auth/auth.service';
 import { BlobService } from '../../core/api/blob.service';
-import { HistoryService } from '../../core/api/history.service';
 import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
 import { LoggerService } from '../../core/telemetry/logger.service';
@@ -81,7 +80,6 @@ export class HomeComponent {
   private readonly parser = inject(JsonParserService);
   private readonly auth = inject(AuthService);
   private readonly blobs = inject(BlobService);
-  private readonly history = inject(HistoryService);
   private readonly router = inject(Router);
   private readonly titleService = inject(Title);
   private readonly seo = inject(SeoService);
@@ -345,34 +343,6 @@ export class HomeComponent {
       // structure rather than a single dense line (per issue #38).
       this.onFormat();
     }
-    this.recordPasteIfSignedIn();
-  }
-
-  /**
-   * Fires when the user pastes directly into the Monaco editor (e.g. via
-   * Ctrl/Cmd+V). The toolbar Paste button uses `onPaste()` instead, which
-   * goes through the input signal and does NOT trigger Monaco's onDidPaste,
-   * so both paths are needed to cover all paste gestures.
-   */
-  onEditorPaste(): void {
-    this.recordPasteIfSignedIn();
-  }
-
-  /**
-   * Best-effort history record. Server enforces a 60s per-user debounce,
-   * so this is safe to fire on every paste. Only call when the caller is
-   * signed in - otherwise the request would 401 and produce nothing but
-   * log noise. Errors are swallowed: history bookkeeping must never
-   * disrupt the paste flow.
-   */
-  private recordPasteIfSignedIn(): void {
-    if (!this.auth.isConfigured || !this.auth.isSignedIn()) return;
-    this.history.recordPaste().subscribe({
-      error: (err) => {
-        this.logger.warn('history.recordPaste.failed');
-        void err;
-      }
-    });
   }
 
   async onCopy(): Promise<void> {

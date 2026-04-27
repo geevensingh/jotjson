@@ -38,7 +38,6 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   readonly errors = input<JsonParseError[]>([]);
   readonly valueChange = output<string>();
   readonly cursorPositionChange = output<{ line: number; column: number }>();
-  readonly pasteOccurred = output<void>();
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
@@ -148,10 +147,6 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         if (!model) return;
         const pasted = model.getValueInRange(e.range);
         if (!pasted) return;
-        // Notify the host that a real (non-empty) user paste occurred so it
-        // can record history. Emit before any auto-unescape rewrite so the
-        // host sees one event per user gesture regardless of outcome.
-        this.zone.run(() => this.pasteOccurred.emit());
         const { unescaped, changed } = this.parser.tryUnescape(pasted);
         if (!changed) return;
         const full = model.getValue();

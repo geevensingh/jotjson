@@ -16,7 +16,7 @@ function entry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
     slug: 'slug1',
     title: 'My Blob',
     accessedAt: '2024-01-01T00:00:00Z',
-    action: 'saved',
+    action: 'viewed',
     ...overrides
   };
 }
@@ -45,8 +45,7 @@ function setup(opts: SetupOpts = {}) {
       opts.clearResult instanceof Error
         ? throwError(() => opts.clearResult as Error)
         : of(undefined)
-    ),
-    recordPaste: jasmine.createSpy('recordPaste').and.returnValue(of(null))
+    )
   };
   const dialogRef = { afterClosed: () => of(!!opts.confirm) };
   const dialog = { open: jasmine.createSpy('open').and.returnValue(dialogRef) };
@@ -193,61 +192,29 @@ describe('HistoryComponent', () => {
     expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
   });
 
-  it('openEntry is a no-op for deleted entries', () => {
-    const { fixture } = setup();
-    const router = TestBed.inject(Router);
-    const spy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.openEntry(entry({ slug: 'abc', action: 'deleted' }));
-    expect(spy).not.toHaveBeenCalled();
-  });
-
   it('openEntry is a no-op when slug is missing', () => {
     const { fixture } = setup();
     const router = TestBed.inject(Router);
     const spy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.openEntry(entry({ slug: undefined, action: 'pasted' }));
+    fixture.componentInstance.openEntry(entry({ slug: undefined }));
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('hasLink is true only for non-deleted entries with a slug', () => {
+  it('hasLink is true only for entries with a slug', () => {
     const { fixture } = setup();
     const c = fixture.componentInstance;
-    expect(c.hasLink(entry({ slug: 'abc', action: 'saved' }))).toBe(true);
-    expect(c.hasLink(entry({ slug: 'abc', action: 'deleted' }))).toBe(false);
-    expect(c.hasLink(entry({ slug: undefined, action: 'pasted' }))).toBe(false);
+    expect(c.hasLink(entry({ slug: 'abc' }))).toBe(true);
+    expect(c.hasLink(entry({ slug: undefined }))).toBe(false);
   });
 
-  it('displayLabel prefers title, then slug, then action-specific fallback', () => {
+  it('displayLabel prefers title, then slug, then deleted-blob fallback', () => {
     const { fixture } = setup();
     const c = fixture.componentInstance;
     expect(c.displayLabel(entry({ title: 'Hi' }))).toBe('Hi');
     expect(c.displayLabel(entry({ title: '  ', slug: 'abc' }))).toBe('/s/abc');
-    expect(
-      c.displayLabel(entry({ title: undefined, slug: undefined, action: 'pasted' }))
-    ).toBe('Pasted content');
     expect(c.displayLabel(entry({ title: undefined, slug: undefined }))).toBe(
       '(deleted blob)'
     );
-  });
-
-  it('iconFor maps every action to a JjIconName', () => {
-    const { fixture } = setup();
-    const c = fixture.componentInstance;
-    expect(c.iconFor('saved')).toBe('save');
-    expect(c.iconFor('edited')).toBe('edit');
-    expect(c.iconFor('deleted')).toBe('trash');
-    expect(c.iconFor('viewed')).toBe('eye');
-    expect(c.iconFor('pasted')).toBe('paste');
-  });
-
-  it('actionLabel returns localized copy for every action', () => {
-    const { fixture } = setup();
-    const c = fixture.componentInstance;
-    expect(c.actionLabel('saved')).toBe('Saved');
-    expect(c.actionLabel('edited')).toBe('Edited');
-    expect(c.actionLabel('deleted')).toBe('Deleted');
-    expect(c.actionLabel('viewed')).toBe('Viewed');
-    expect(c.actionLabel('pasted')).toBe('Pasted');
   });
 
   it('applySearchTerm updates the search term and reloads with q', async () => {
@@ -319,78 +286,6 @@ describe('HistoryComponent', () => {
     });
   });
 
-  it('toggleAction forwards the joined actions filter on reload', async () => {
-    const { fixture, stub } = setup({
-      listResult: { entries: [entry({ id: 'a' })] }
-    });
-    await fixture.componentInstance.reload();
-    stub.list.calls.reset();
-    stub.list.and.returnValue(of({ entries: [] }));
-    fixture.componentInstance.toggleAction('saved');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(stub.list).toHaveBeenCalledWith({
-      pageSize: 50,
-      actions: ['saved']
-    });
-    expect(fixture.componentInstance.isActionSelected('saved')).toBe(true);
-  });
-
-  it('toggleAction combines multiple actions in canonical order', async () => {
-    const { fixture, stub } = setup({ listResult: { entries: [] } });
-    await fixture.componentInstance.reload();
-    fixture.componentInstance.toggleAction('viewed');
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.componentInstance.toggleAction('saved');
-    await Promise.resolve();
-    await Promise.resolve();
-    const lastArgs = stub.list.calls.mostRecent().args[0];
-    expect(lastArgs.actions).toEqual(['saved', 'viewed']);
-  });
-
-  it('toggleAction twice clears the filter for that action', async () => {
-    const { fixture, stub } = setup({ listResult: { entries: [] } });
-    await fixture.componentInstance.reload();
-    fixture.componentInstance.toggleAction('saved');
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.componentInstance.toggleAction('saved');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(fixture.componentInstance.isActionSelected('saved')).toBe(false);
-    const lastArgs = stub.list.calls.mostRecent().args[0];
-    expect(lastArgs.actions).toBeUndefined();
-  });
-
-  it('hasActiveFilters reflects the action filter set', () => {
-    const { fixture } = setup();
-    const c = fixture.componentInstance;
-    expect(c.hasActiveFilters()).toBe(false);
-    c.actionFilter.set(new Set(['viewed']));
-    expect(c.hasActiveFilters()).toBe(true);
-    c.actionFilter.set(new Set());
-    expect(c.hasActiveFilters()).toBe(false);
-  });
-
-  it('loadMore forwards the active actions filter', async () => {
-    const { fixture, stub } = setup({
-      listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' }
-    });
-    await fixture.componentInstance.reload();
-    fixture.componentInstance.toggleAction('pasted');
-    await Promise.resolve();
-    await Promise.resolve();
-    stub.list.calls.reset();
-    stub.list.and.returnValue(of({ entries: [] }));
-    await fixture.componentInstance.loadMore();
-    expect(stub.list).toHaveBeenCalledWith({
-      pageSize: 50,
-      continuationToken: 'tok',
-      actions: ['pasted']
-    });
-  });
-
   it('onFromDateChange forwards UTC start-of-day ISO as from', async () => {
     const { fixture, stub } = setup({ listResult: { entries: [] } });
     await fixture.componentInstance.reload();
@@ -450,11 +345,10 @@ describe('HistoryComponent', () => {
     expect(stub.list).toHaveBeenCalledWith({ pageSize: 50 });
   });
 
-  it('clearAllFilters resets search, actions, and dates', async () => {
+  it('clearAllFilters resets search and dates', async () => {
     const { fixture, stub } = setup({ listResult: { entries: [] } });
     await fixture.componentInstance.reload();
     fixture.componentInstance.applySearchTerm('foo');
-    fixture.componentInstance.toggleAction('saved');
     fixture.componentInstance.onFromDateChange('2024-02-01');
     await Promise.resolve();
     await Promise.resolve();

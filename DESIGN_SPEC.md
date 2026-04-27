@@ -95,7 +95,7 @@ Browser (Angular SPA)
   treeShowDateAnnotations: boolean (default: true),
   treeAssumeUtcForIsoDateTime: boolean (default: true - timezone-less ISO 8601 date-time strings are interpreted as UTC instead of local; matches the conventional reading of log timestamps and other machine-emitted ISO values),
   treeAssumeUtcForIsoDateOnly: boolean (default: true - YYYY-MM-DD strings are interpreted as UTC midnight instead of local midnight),
-  historyTrackingMode: "save_only" | "all_actions" (default: "save_only"),
+  recentlyViewedEnabled: boolean (default: true - records `viewed` history entries when signed-in users open shared blobs they don't own; controls the `/history` "Recently viewed" timeline),
   searchCaseSensitive: boolean (default: false),
   searchRegexMode: boolean (default: false),
   searchScope: "keys" | "values" | "both" (default: "both"),
@@ -172,13 +172,19 @@ written; the only mutation path is bulk delete via
   slug?: string (NanoID slug snapshot at record time, for rendering rows whose blob has since been deleted),
   title?: string (title snapshot at record time, nullable when the blob had no title),
   accessedAt: DateTime,
-  action: "saved" | "viewed" | "edited" | "deleted" | "pasted"
+  action: "viewed"
 }
 ```
 
-Retention: **1,000 entries per user**, FIFO auto-delete when the cap
-is exceeded (symmetric to the 100-blob cap). `"pasted"` events are
-debounced to one entry per 60 seconds per user.
+In v1 only `"viewed"` events are recorded, written server-side when a
+signed-in user opens a shared blob they don't own. Writes are
+debounced to one entry per `(user, blob)` per 5 minutes and gated by
+the `recentlyViewedEnabled` user preference (default on). Retention:
+**1,000 entries per user**, FIFO auto-delete when the cap is
+exceeded (symmetric to the 100-blob cap). Legacy rows of other
+action types (`saved`/`edited`/`deleted`/`pasted`) written before
+the v1 narrowing are filtered out on read and age out via FIFO; see
+M5 milestone notes.
 
 #### FormattingRuleSet
 ```
@@ -366,16 +372,16 @@ per-row behavior are unchanged.
   - Inline public/private toggle on the list row (today this lives in the toolbar overflow menu on `/s/:slug`).
   - Infinite scroll if/when quotas increase.
 
-#### 3b. History page (`/history`, M5b)
+#### 3b. Recently viewed page (`/history`, M5b - narrowed in v1)
 
-The event timeline - not a blob list. Shows the signed-in user's
-recent `HistoryEntry` records, newest first.
+The "Recently viewed" timeline. Shows shared blobs the signed-in
+user has recently opened. URL preserved at `/history` for backward
+compatibility.
 
 - **Shape**: grouped by day ("Today", "Yesterday", `<date>`). Each
-  row renders an action icon (saved / edited / deleted / viewed /
-  pasted), the blob's snapshotted title (falling back to the slug,
-  then to "(deleted blob)" when both are missing), an action verb
-  ("saved", "viewed", etc.), and a relative time.
+  row renders an eye icon, the blob's snapshotted title (falling
+  back to the slug, then to "(deleted blob)" when both are missing),
+  the verb "Viewed", and a relative time.
 - **Click behavior**: clicking a row that still references a live
   blob navigates to `/s/:slug`. Rows whose blob has since been
   deleted are non-interactive.
@@ -384,24 +390,23 @@ recent `HistoryEntry` records, newest first.
   auto-load the next page and exposes a "Load more" button as an
   a11y/keyboard fallback.
 - **Filters**: timeline supports `?q=` (case-insensitive substring
-  match on title/slug), `?actions=` (CSV whitelist of
-  saved/edited/deleted/viewed/pasted), and `?from=`/`?to=` (ISO
-  timestamps, inclusive). Combined client-side via a debounced search
-  field, action chips, and a date range row.
-- **Empty state**: "No activity yet - try saving or viewing a
-  shared blob."
+  match on title/slug) and `?from=`/`?to=` (ISO timestamps,
+  inclusive). Combined client-side via a debounced search field and
+  a date range row. The v1 narrowing removed the action-filter
+  chips - only `viewed` rows are surfaced.
+- **Empty state**: "No recently viewed blobs yet."
 - **Loading state** + error toast reuse the patterns from
   `/blobs`.
 - **Clear history** action (calls `DELETE /api/history`, confirms
   via dialog, then returns to the empty state).
-- **What is tracked**: controlled by the `historyTrackingMode`
-  preference. `"save_only"` (default) records only creates.
-  `"all_actions"` additionally records edits, deletes, non-owner
-  views, and client-initiated paste events.
+- **What is tracked**: controlled by the `recentlyViewedEnabled`
+  preference (default on). When on, opening a shared blob owned by
+  another user records one `viewed` entry, debounced to one entry
+  per `(user, blob)` per 5 minutes.
 - **What is NOT tracked**: anonymous views (no `userId` to
-  attribute), owners re-loading their own blob, and paste events
-  that arrive within 60 seconds of the previous paste record for
-  the same user.
+  attribute), owners re-loading their own blob, the user's own
+  saves / edits / deletes (those already live on `/blobs`), and
+  paste events.
 
 ### 4. Auth Pages
 
@@ -430,8 +435,9 @@ Available to **registered users** only. The route is auth-guarded.
     (1-10, clamped), show type labels toggle.
   - **Search**: scope (keys / values / keys and values), case
     sensitive toggle, regex mode toggle.
-  - **History & storage**: history tracking mode (save only /
-    all actions), blob quota strategy (auto-delete oldest /
+  - **History & storage**: recently-viewed tracking toggle (records
+    `viewed` entries when you open shared blobs you don't own; on
+    by default), blob quota strategy (auto-delete oldest /
     ask me to choose).
   - **Appearance**: theme (dark / light / match system), layout
     orientation (horizontal / vertical). The header theme toggle
@@ -563,9 +569,9 @@ SPA-originated calls in production.
 
 | Method | Endpoint | Auth | Planned in | Description |
 |---|---|---|---|---|
-| GET | `/api/history` | Required | M5a | Paginated event timeline for the caller, newest first (continuation token for pagination) |
+| GET | `/api/history` | Required | M5a | Paginated `viewed` timeline for the caller, newest first (continuation token for pagination). Legacy non-`viewed` rows are filtered out on read. |
 | DELETE | `/api/history` | Required | M5a | Clear all history entries for the caller |
-| POST | `/api/history` | Required | M5a | Record a client-initiated `"pasted"` event (debounced server-side to one entry per 60s per user) |
+| POST | `/api/history` | Required | M5a | Legacy no-op (returns 204). Kept for one release of stale-client tolerance after the v1 narrowing; auth is still enforced. Removable in a follow-up. |
 | PUT | `/api/me` | Required | post-v1 | Update display name + avatar URL |
 | POST | `/api/me/export` | Required | post-v1 | Enqueue data export job (returns job ID) |
 | GET | `/api/me/export/:jobId` | Required | post-v1 | Poll export job; returns ZIP SAS URL when complete |
@@ -996,6 +1002,25 @@ EU users would need a regional resource - out of scope for v1.
      `treeShowDateAnnotations`, `defaultRuleSetId`, and
      `treeHighlightColors` stay deferred to M7c, M6, and M7d
      respectively.~~ (done)
+   - **v1 narrowing (post-M5d audit)**: an audit of the shipped
+     timeline found that `saved` / `edited` rows duplicated `/blobs`
+     and that `deleted` / `pasted` rows were dead-end tombstones. v1
+     narrows the feature to `viewed` rows only, with a 5 minute
+     server-side debounce per `(user, blob)`. The page is rebranded
+     "Recently viewed" (URL preserved at `/history`). The
+     `historyTrackingMode` preference is replaced by
+     `recentlyViewedEnabled` (boolean, default on; both legacy
+     `'save_only'` and `'all_actions'` coerce to `true` since the
+     narrowed feature is strictly less invasive than either old
+     mode). `POST /api/history` becomes a no-op 204 for one release
+     of stale-client tolerance, then removable. `PUT /api/me/preferences`
+     accepts the legacy `historyTrackingMode` field for the same
+     window and translates it to the new boolean server-side.
+     Existing Cosmos rows of other action types are filtered out on
+     read (`c.action = "viewed"` in `listEntries`); they age out via
+     FIFO. The editor's `pasteOccurred` output and the
+     `HistoryService.recordPaste` method are removed; the
+     native-paste auto-unescape behavior is preserved.
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
 7. **Polish & launch** - Each of these lands as its own step/commit:
    - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)

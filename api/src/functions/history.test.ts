@@ -14,28 +14,20 @@ jest.mock('../shared/auth', () => {
 });
 
 jest.mock('../shared/history', () => ({
-  PASTE_DEBOUNCE_SECONDS: 60,
-  HISTORY_ACTIONS: new Set(['viewed', 'saved', 'edited', 'deleted', 'pasted']),
   listEntries: jest.fn(),
-  clearAll: jest.fn(),
-  recordEntry: jest.fn(),
-  getRecentPasteAt: jest.fn()
+  clearAll: jest.fn()
 }));
 
 import { AuthError, requireAuth as requireAuthMock } from '../shared/auth';
 import {
   clearAll as clearAllMock,
-  getRecentPasteAt as getRecentPasteAtMock,
-  listEntries as listEntriesMock,
-  recordEntry as recordEntryMock
+  listEntries as listEntriesMock
 } from '../shared/history';
 import { deleteHistory, getHistory, postHistory } from './history';
 
 const requireAuth = requireAuthMock as unknown as jest.Mock;
 const listEntries = listEntriesMock as unknown as jest.Mock;
 const clearAll = clearAllMock as unknown as jest.Mock;
-const recordEntry = recordEntryMock as unknown as jest.Mock;
-const getRecentPasteAt = getRecentPasteAtMock as unknown as jest.Mock;
 
 function makeRequest(opts: {
   body?: unknown;
@@ -74,13 +66,13 @@ describe('GET /api/history', () => {
 
   it('returns the paged result from listEntries', async () => {
     listEntries.mockResolvedValueOnce({
-      entries: [{ id: 'h-1', userId: 'u-1', action: 'saved', accessedAt: '2026-01-01T00:00:00Z' }],
+      entries: [{ id: 'h-1', userId: 'u-1', action: 'viewed', accessedAt: '2026-01-01T00:00:00Z' }],
       continuationToken: 'next'
     });
     const res = await getHistory(makeRequest(), ctx);
     expect(res.status).toBe(200);
     expect(res.jsonBody).toEqual({
-      entries: [{ id: 'h-1', userId: 'u-1', action: 'saved', accessedAt: '2026-01-01T00:00:00Z' }],
+      entries: [{ id: 'h-1', userId: 'u-1', action: 'viewed', accessedAt: '2026-01-01T00:00:00Z' }],
       continuationToken: 'next'
     });
     expect(listEntries).toHaveBeenCalledWith('u-1', {});
@@ -125,40 +117,14 @@ describe('GET /api/history', () => {
     expect(listEntries).not.toHaveBeenCalled();
   });
 
-  it('forwards a parsed actions list to listEntries', async () => {
+  it('ignores legacy actions query string for stale-client tolerance', async () => {
     listEntries.mockResolvedValueOnce({ entries: [] });
     await getHistory(
       makeRequest({ query: { actions: 'saved,pasted' } }),
       ctx
     );
-    expect(listEntries).toHaveBeenCalledWith('u-1', {
-      actions: ['saved', 'pasted']
-    });
-  });
-
-  it('dedupes actions and ignores empty segments', async () => {
-    listEntries.mockResolvedValueOnce({ entries: [] });
-    await getHistory(
-      makeRequest({ query: { actions: 'saved,, saved , pasted' } }),
-      ctx
-    );
-    expect(listEntries).toHaveBeenCalledWith('u-1', {
-      actions: ['saved', 'pasted']
-    });
-  });
-
-  it('rejects an unknown action', async () => {
-    const res = await getHistory(
-      makeRequest({ query: { actions: 'saved,bogus' } }),
-      ctx
-    );
-    expect(res.status).toBe(400);
-    expect(listEntries).not.toHaveBeenCalled();
-  });
-
-  it('treats an empty actions param as no filter', async () => {
-    listEntries.mockResolvedValueOnce({ entries: [] });
-    await getHistory(makeRequest({ query: { actions: '' } }), ctx);
+    // The v1 narrowing collapses history to "viewed" only; the actions
+    // filter is silently dropped, never forwarded to listEntries.
     expect(listEntries).toHaveBeenCalledWith('u-1', {});
   });
 
@@ -246,98 +212,31 @@ describe('DELETE /api/history', () => {
   });
 });
 
-describe('POST /api/history', () => {
+describe('POST /api/history (legacy no-op)', () => {
   it('returns 401 when unauthenticated', async () => {
     requireAuth.mockRejectedValueOnce(new AuthError('Missing bearer token'));
     const res = await postHistory(makeRequest({ body: { action: 'pasted' } }), ctx);
     expect(res.status).toBe(401);
-    expect(recordEntry).not.toHaveBeenCalled();
   });
 
-  it('returns 400 when the body is not JSON', async () => {
-    const res = await postHistory(makeRequest(), ctx);
-    expect(res.status).toBe(400);
-  });
-
-  it('returns 400 when action is missing or wrong', async () => {
-    expect((await postHistory(makeRequest({ body: {} }), ctx)).status).toBe(400);
-    expect((await postHistory(makeRequest({ body: { action: 'saved' } }), ctx)).status).toBe(400);
-    expect(recordEntry).not.toHaveBeenCalled();
-  });
-
-  it('returns 400 when slug is the wrong type', async () => {
-    const res = await postHistory(
-      makeRequest({ body: { action: 'pasted', slug: 123 } }),
-      ctx
-    );
-    expect(res.status).toBe(400);
-    expect(recordEntry).not.toHaveBeenCalled();
-  });
-
-  it('returns 400 when title is the wrong type', async () => {
-    const res = await postHistory(
-      makeRequest({ body: { action: 'pasted', title: ['no'] } }),
-      ctx
-    );
-    expect(res.status).toBe(400);
-  });
-
-  it('records a paste when there is no recent paste', async () => {
-    getRecentPasteAt.mockResolvedValueOnce(null);
-    recordEntry.mockResolvedValueOnce({
-      id: 'h-1',
-      userId: 'u-1',
-      action: 'pasted',
-      accessedAt: '2026-01-01T00:00:00Z'
-    });
+  it('returns 204 for any authed body (legacy paste shape)', async () => {
     const res = await postHistory(
       makeRequest({ body: { action: 'pasted', slug: 'abc', title: 'Notes' } }),
       ctx
     );
-    expect(res.status).toBe(201);
-    expect(recordEntry).toHaveBeenCalledWith({
-      userId: 'u-1',
-      action: 'pasted',
-      slug: 'abc',
-      title: 'Notes'
-    });
+    expect(res.status).toBe(204);
   });
 
-  it('debounces a second paste within 60s and returns 204 with no record', async () => {
-    const recent = new Date(Date.now() - 5_000).toISOString();
-    getRecentPasteAt.mockResolvedValueOnce(recent);
+  it('returns 204 even when the body is missing', async () => {
+    const res = await postHistory(makeRequest(), ctx);
+    expect(res.status).toBe(204);
+  });
+
+  it('returns 204 even for unrecognized action values', async () => {
     const res = await postHistory(
-      makeRequest({ body: { action: 'pasted' } }),
+      makeRequest({ body: { action: 'whatever' } }),
       ctx
     );
     expect(res.status).toBe(204);
-    expect(recordEntry).not.toHaveBeenCalled();
-  });
-
-  it('records a paste when the previous paste is older than the debounce window', async () => {
-    const recent = new Date(Date.now() - 120_000).toISOString();
-    getRecentPasteAt.mockResolvedValueOnce(recent);
-    recordEntry.mockResolvedValueOnce({
-      id: 'h-2',
-      userId: 'u-1',
-      action: 'pasted',
-      accessedAt: '2026-01-01T00:02:00Z'
-    });
-    const res = await postHistory(
-      makeRequest({ body: { action: 'pasted' } }),
-      ctx
-    );
-    expect(res.status).toBe(201);
-    expect(recordEntry).toHaveBeenCalled();
-  });
-
-  it('returns 500 when recordEntry throws', async () => {
-    getRecentPasteAt.mockResolvedValueOnce(null);
-    recordEntry.mockRejectedValueOnce(new Error('boom'));
-    const res = await postHistory(
-      makeRequest({ body: { action: 'pasted' } }),
-      ctx
-    );
-    expect(res.status).toBe(500);
   });
 });

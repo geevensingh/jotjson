@@ -33,35 +33,35 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">261</context>
+          <context context-type="linenumber">250</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">392</context>
+          <context context-type="linenumber">362</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">400</context>
+          <context context-type="linenumber">370</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">569</context>
+          <context context-type="linenumber">539</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">610</context>
+          <context context-type="linenumber">580</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">616</context>
+          <context context-type="linenumber">586</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">650</context>
+          <context context-type="linenumber">620</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">659</context>
+          <context context-type="linenumber">629</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.firstTime.title" datatype="html">
@@ -303,7 +303,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">632</context>
+          <context context-type="linenumber">602</context>
         </context-group>
       </trans-unit>
       <trans-unit id="common.cancel" datatype="html">
@@ -314,11 +314,11 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">376</context>
+          <context context-type="linenumber">346</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">633</context>
+          <context context-type="linenumber">603</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.success" datatype="html">
@@ -329,7 +329,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">649</context>
+          <context context-type="linenumber">619</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.failed" datatype="html">
@@ -340,7 +340,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">658</context>
+          <context context-type="linenumber">628</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.title" datatype="html">
@@ -358,14 +358,14 @@
         </context-group>
       </trans-unit>
       <trans-unit id="history.title" datatype="html">
-        <source>History</source>
+        <source>Recently viewed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
           <context context-type="linenumber">5,6</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.subtitle" datatype="html">
-        <source> Your recent JotJSON activity. Click an entry to open the blob. </source>
+        <source> Shared blobs you have recently opened. Click an entry to open it again. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
           <context context-type="linenumber">7,9</context>
@@ -399,200 +399,162 @@
           <context context-type="linenumber">40,41</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="history.filter.action.aria" datatype="html">
-        <source>Filter by action</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">50,51</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="history.filter.date.from" datatype="html">
         <source>From</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">68,70</context>
+          <context context-type="linenumber">49,51</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.filter.date.to" datatype="html">
         <source>To</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">76,78</context>
+          <context context-type="linenumber">57,59</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.filter.date.clear" datatype="html">
         <source>Clear dates</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">89,92</context>
+          <context context-type="linenumber">70,73</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.loading" datatype="html">
         <source>Loading...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">109,110</context>
+          <context context-type="linenumber">90,91</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.retry" datatype="html">
         <source>Retry</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">113,115</context>
+          <context context-type="linenumber">94,96</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.empty.filters" datatype="html">
         <source>No history entries match your filters.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">122,124</context>
+          <context context-type="linenumber">103,105</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.filters.clearAction" datatype="html">
         <source>Clear filters</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">128,131</context>
+          <context context-type="linenumber">109,112</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.empty" datatype="html">
-        <source>No activity yet. As you save, edit, or paste JSON, it will appear here.</source>
+        <source>No recently viewed blobs yet. Open a shared link to see it appear here.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">136,138</context>
+          <context context-type="linenumber">117,119</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.empty.cta" datatype="html">
         <source>Open the editor</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">142,145</context>
+          <context context-type="linenumber">123,126</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="history.action.viewed" datatype="html">
+        <source>Viewed</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">138</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/history/history.component.html</context>
+          <context context-type="linenumber">152,153</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.loadMore" datatype="html">
         <source>Load more</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.html</context>
-          <context context-type="linenumber">189,191</context>
+          <context context-type="linenumber">171,173</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.day.today" datatype="html">
         <source>Today</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">161</context>
+          <context context-type="linenumber">150</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.day.yesterday" datatype="html">
         <source>Yesterday</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">163</context>
+          <context context-type="linenumber">152</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.load.failed" datatype="html">
         <source>Failed to load your history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">235</context>
+          <context context-type="linenumber">224</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.loadMore.failed" datatype="html">
         <source>Failed to load more history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">260</context>
+          <context context-type="linenumber">249</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.filter.date.invalid" datatype="html">
         <source>From date must be on or before To date.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">363</context>
+          <context context-type="linenumber">333</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.title" datatype="html">
         <source>Clear all history?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">373</context>
+          <context context-type="linenumber">343</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.message" datatype="html">
         <source>Every entry in your activity history will be permanently removed. The blobs themselves are not affected.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">374</context>
+          <context context-type="linenumber">344</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.confirm" datatype="html">
         <source>Clear history</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">375</context>
+          <context context-type="linenumber">345</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.success" datatype="html">
         <source>History cleared.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">391</context>
+          <context context-type="linenumber">361</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.failed" datatype="html">
         <source>Failed to clear history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">399</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="history.pastedContent" datatype="html">
-        <source>Pasted content</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">438</context>
+          <context context-type="linenumber">369</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.deletedBlob" datatype="html">
         <source>(deleted blob)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">440</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="history.action.saved" datatype="html">
-        <source>Saved</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">461</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="history.action.edited" datatype="html">
-        <source>Edited</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">463</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="history.action.deleted" datatype="html">
-        <source>Deleted</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">465</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="history.action.viewed" datatype="html">
-        <source>Viewed</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">467</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="history.action.pasted" datatype="html">
-        <source>Pasted</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">469</context>
+          <context context-type="linenumber">404</context>
         </context-group>
       </trans-unit>
       <trans-unit id="clipboard.banner.body" datatype="html">
@@ -620,98 +582,98 @@
         <source>JotJSON - JSON viewer, formatter, and tree explorer</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">157</context>
+          <context context-type="linenumber">155</context>
         </context-group>
       </trans-unit>
       <trans-unit id="app.title.untitled" datatype="html">
         <source>Untitled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">225</context>
+          <context context-type="linenumber">223</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.quotaExceeded" datatype="html">
         <source>Blob limit reached - delete one from your saved blobs to save a new blob.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">495</context>
+          <context context-type="linenumber">465</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.signIn" datatype="html">
         <source>Please sign in to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">513</context>
+          <context context-type="linenumber">483</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.forbidden" datatype="html">
         <source>You do not own this blob</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">516</context>
+          <context context-type="linenumber">486</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.generic" datatype="html">
         <source>Could not save - please try again</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">518</context>
+          <context context-type="linenumber">488</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.unsupported" datatype="html">
         <source>Copy is not supported in this browser.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">572</context>
+          <context context-type="linenumber">542</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.success" datatype="html">
         <source>Share link copied to clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">581</context>
+          <context context-type="linenumber">551</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.failed" datatype="html">
         <source>Failed to copy share link.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">588</context>
+          <context context-type="linenumber">558</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.public" datatype="html">
         <source>Blob is now public.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">608</context>
+          <context context-type="linenumber">578</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.private" datatype="html">
         <source>Blob is now private.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">609</context>
+          <context context-type="linenumber">579</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.failed" datatype="html">
         <source>Failed to update visibility.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">615</context>
+          <context context-type="linenumber">585</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.title" datatype="html">
         <source>Delete this blob?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">630</context>
+          <context context-type="linenumber">600</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.message" datatype="html">
         <source>&quot;<x id="name" equiv-text="label"/>&quot; will be permanently deleted. This cannot be undone.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">631</context>
+          <context context-type="linenumber">601</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.chars.aria" datatype="html">
@@ -1085,207 +1047,193 @@
           <context context-type="linenumber">223,226</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="profile.prefs.history.trackingMode" datatype="html">
-        <source> History tracking </source>
+      <trans-unit id="profile.prefs.recentlyViewed.label" datatype="html">
+        <source> Track recently viewed blobs </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
           <context context-type="linenumber">228,230</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="profile.prefs.history.trackingMode.saveOnly" datatype="html">
-        <source> Save only </source>
+      <trans-unit id="profile.prefs.recentlyViewed.help" datatype="html">
+        <source> When on, JotJSON remembers which shared blobs you have opened so you can find them again on the Recently viewed page. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">237,239</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="profile.prefs.history.trackingMode.allActions" datatype="html">
-        <source> All actions </source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">240,243</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="profile.prefs.history.trackingMode.help" datatype="html">
-        <source> Choose whether your history records only saved blobs or every view, edit, and paste. </source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">244,248</context>
+          <context context-type="linenumber">236,238</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.quotaStrategy" datatype="html">
         <source> When you reach the saved blob limit </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">250,252</context>
+          <context context-type="linenumber">242,244</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.quotaStrategy.autoFifo" datatype="html">
         <source> Automatically delete the oldest </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">259,261</context>
+          <context context-type="linenumber">251,253</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.history.quotaStrategy.manual" datatype="html">
         <source> Ask me to choose </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">262,264</context>
+          <context context-type="linenumber">254,256</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.title" datatype="html">
         <source> Appearance </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">270,273</context>
+          <context context-type="linenumber">262,265</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.theme" datatype="html">
         <source>Theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">274,276</context>
+          <context context-type="linenumber">266,268</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.theme.dark" datatype="html">
         <source>Dark</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">281,282</context>
+          <context context-type="linenumber">273,274</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.theme.light" datatype="html">
         <source>Light</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">282,283</context>
+          <context context-type="linenumber">274,275</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.theme.system" datatype="html">
         <source> Match system </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">284,286</context>
+          <context context-type="linenumber">276,278</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.layout" datatype="html">
         <source> Layout orientation </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">291,293</context>
+          <context context-type="linenumber">283,285</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.layout.horizontal" datatype="html">
         <source> Horizontal </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">300,302</context>
+          <context context-type="linenumber">292,294</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.appearance.layout.vertical" datatype="html">
         <source> Vertical </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">303,305</context>
+          <context context-type="linenumber">295,297</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.title" datatype="html">
         <source> Tree highlight colors </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">315,317</context>
+          <context context-type="linenumber">307,309</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.help" datatype="html">
         <source> Pick colors used to highlight selected nodes, ancestors of the selection, matching values, and search hits. Each theme has its own set; only the currently active theme is shown live. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">318,322</context>
+          <context context-type="linenumber">310,314</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.darkTheme" datatype="html">
         <source>Dark theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">327,329</context>
+          <context context-type="linenumber">319,321</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.lightTheme" datatype="html">
         <source>Light theme</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">329,331</context>
+          <context context-type="linenumber">321,323</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.activeTag" datatype="html">
         <source>(active)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">335,338</context>
+          <context context-type="linenumber">327,330</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.selection" datatype="html">
         <source> Selection </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">346,347</context>
+          <context context-type="linenumber">338,339</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.matching" datatype="html">
         <source> Matching values </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">351,352</context>
+          <context context-type="linenumber">343,344</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.ancestor" datatype="html">
         <source> Ancestors </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">356,357</context>
+          <context context-type="linenumber">348,349</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.search" datatype="html">
         <source> Search highlight </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">361,362</context>
+          <context context-type="linenumber">353,354</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.prefs.highlightColors.resetActive" datatype="html">
         <source> Reset active theme to defaults </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">395,397</context>
+          <context context-type="linenumber">387,389</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.signedOut.title" datatype="html">
         <source> You are signed out </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">404,406</context>
+          <context context-type="linenumber">396,398</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.signedOut.body" datatype="html">
         <source> Sign in to view your profile, save persistent links, and keep history across devices. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">407,410</context>
+          <context context-type="linenumber">399,402</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.signIn" datatype="html">
         <source>Sign in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">413,415</context>
+          <context context-type="linenumber">405,407</context>
         </context-group>
       </trans-unit>
       <trans-unit id="profile.signIn.notConfigured" datatype="html">
         <source>Sign in (not configured)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/profile/profile.component.html</context>
-          <context context-type="linenumber">418,421</context>
+          <context context-type="linenumber">410,413</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.brand.aria" datatype="html">
@@ -1310,14 +1258,14 @@
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.history.tooltip" datatype="html">
-        <source>Activity history</source>
+        <source>Recently viewed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
           <context context-type="linenumber">31,32</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.history.aria" datatype="html">
-        <source>Activity history</source>
+        <source>Recently viewed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
           <context context-type="linenumber">33,34</context>

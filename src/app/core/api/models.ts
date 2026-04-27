@@ -62,7 +62,8 @@ export interface UserPreferences {
   treeShowDateAnnotations: boolean;
   treeAssumeUtcForIsoDateTime: boolean;
   treeAssumeUtcForIsoDateOnly: boolean;
-  historyTrackingMode: 'save_only' | 'all_actions';
+  historyTrackingMode?: 'save_only' | 'all_actions';
+  recentlyViewedEnabled: boolean;
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
@@ -72,7 +73,7 @@ export interface UserPreferences {
   treeHighlightColors: TreeHighlightColors;
 }
 
-export type HistoryAction = 'saved' | 'viewed' | 'edited' | 'deleted' | 'pasted';
+export type HistoryAction = 'viewed';
 
 export interface HistoryEntry {
   id: string;

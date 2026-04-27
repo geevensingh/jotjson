@@ -95,7 +95,7 @@ export class ProfileComponent {
   readonly searchRegexMode = computed(() => this.prefs().searchRegexMode);
   readonly searchScope = computed(() => this.prefs().searchScope);
 
-  readonly historyTrackingMode = computed(() => this.prefs().historyTrackingMode);
+  readonly recentlyViewedEnabled = computed(() => this.prefs().recentlyViewedEnabled);
   readonly blobQuotaStrategy = computed(() => this.prefs().blobQuotaStrategy);
   readonly theme = computed(() => this.prefs().theme);
   readonly layoutOrientation = computed(() => this.prefs().layoutOrientation);
@@ -176,10 +176,8 @@ export class ProfileComponent {
     }
   }
 
-  onHistoryTrackingModeChange(value: string): void {
-    if (value === 'save_only' || value === 'all_actions') {
-      this.prefsService.update({ historyTrackingMode: value });
-    }
+  onRecentlyViewedEnabledChange(value: boolean): void {
+    this.prefsService.update({ recentlyViewedEnabled: value });
   }
 
   onBlobQuotaStrategyChange(value: string): void {
