@@ -760,7 +760,7 @@ Static public assets (favicons, manifest, etc.) live at the repo-root
 
 | Resource | SKU / Tier | Notes |
 |---|---|---|
-| Azure Static Web Apps | Free (dev) -> Standard (launch) | Hosts SPA + proxies to Functions. Start Free, upgrade to Standard before launch for SLA + 5 GB storage. |
+| Azure Static Web Apps | Standard | Hosts SPA + proxies to managed Functions. Upgraded from Free to Standard during M7e (apex custom-domain binding requires Standard). Standard also enables the Cosmos-via-managed-identity path planned in M7o (bring-your-own Functions). |
 | Azure Functions | Consumption | Serverless API |
 | Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (partitionKey: `/ownerId`) and `users` (`/id`) in v1. Planned: `history` (`/userId`, M5) and `rule-sets` (`/userId`, M6). |
 | Microsoft Entra External ID | Free (50k MAU) | Identity |
@@ -1100,11 +1100,12 @@ EU users would need a regional resource - out of scope for v1.
    - **M7g**: Accessibility audit.
    - **M7h**: SEO (pre-rendering + OG tags).
    - **M7i**: Monitoring (App Insights dashboards & alerts).
-   - **M7j**: Static Web Apps upgrade to Standard tier.
+   - ~~**M7j**: Static Web Apps upgrade to Standard tier - flipped during M7e (commit 1ba34e1) because apex custom-domain binding requires Standard. See M7o for the BYO Functions follow-up.~~ (done)
    - **M7k**: Surface JSONC comments in the tree view (e.g., attach leading/trailing comments from `jsonc-parser` to the nearest node and render them as dimmed annotations or a hover affordance).
    - **M7l**: Responsive layout - on viewports narrower than 768px, force the editor/tree split to stack vertically (editor on top, tree below) regardless of the user's `layoutOrientation` preference, per Home page §Layout. Also collapse the status bar (M7m) to a single-line summary - keep Bytes, Lines, and Mode; hide cursor, nodes, depth, and object/array counts.
    - ~~**M7m**: Status bar - a slim, always-visible strip along the bottom of the Home page that surfaces at-a-glance stats about the current document. Left cluster covers the raw text (character count, line count, byte size in UTF-8, current cursor line/column); right cluster covers the parsed tree (total node count, max depth, array vs. object counts, JSON vs. JSONC mode indicator). Stats update reactively as the user types. Hidden or collapsed to a single-line summary on narrow viewports (see M7l). No interactivity required in v1 - purely informational.~~ (done)
    - **M7n**: Version & commit surfacing - replace the short-term `dev`/local-git SHA indicator with a CI-authoritative version badge. Build tooling injects `{ version, sha, builtAt, branch }` from `package.json` + `GITHUB_SHA` / `GITHUB_REF_NAME` env vars into a generated module (no local `git` dependency). Status bar (right cluster, after the mode badge) shows `vX.Y.Z - abc1234`, clickable to copy the full SHA to the clipboard and linking to the corresponding commit on GitHub. Also emit a one-line `console.info` banner on app start so the version lands in bug-report consoles. Release discipline: bump `package.json` `version` on user-visible releases (via `npm version`). Future follow-up (not part of this step): a `GET /api/version` endpoint so the frontend can also surface the backend SHA and flag skew.
+   - **M7o**: Bring-your-own Functions migration. Move the API off SWA managed Functions onto a standalone Azure Function App (Consumption plan) linked to the SWA via Standard-tier linked backends. Enables Cosmos DB authentication via the Function App's system-assigned managed identity (eliminating the `COSMOS_KEY` primary-key fallback in `api/src/shared/cosmos.ts`), and removes the SWA managed-Functions `Authorization`-header rewrite quirk along with the `X-Jotjson-Authorization` workaround in `verifyAccessToken`. Out of scope for v1 unless we add a second Azure resource that needs MI auth (e.g., Blob Storage for avatars/exports in §Profile post-v1).
 
 ---
 
