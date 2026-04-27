@@ -14,6 +14,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { BlobService } from '../../core/api/blob.service';
+import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
 import type { JsonBlob } from '../../core/api/models';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { SeoService } from '../../core/seo/seo.service';
@@ -42,6 +43,7 @@ type LoadState = 'loading' | 'ready' | 'error';
 })
 export class BlobsComponent implements OnInit {
   private readonly blobs = inject(BlobService);
+  private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
   private readonly router = inject(Router);
@@ -109,21 +111,13 @@ export class BlobsComponent implements OnInit {
 
   async copyLink(blob: JsonBlob): Promise<void> {
     const url = `${window.location.origin}/s/${blob.slug}`;
-    try {
-      await navigator.clipboard?.writeText(url);
-      this.snack.open(
-        $localize`:@@blobs.copyLink.success:Link copied to clipboard`,
-        $localize`:@@common.dismiss:Dismiss`,
-        { duration: 3000 }
-      );
-    } catch (err) {
+    const copied = await this.clipboardCopy.copyWithToast(url, {
+      success: $localize`:@@blobs.copyLink.success:Link copied to clipboard`,
+      failed: $localize`:@@blobs.copyLink.failed:Failed to copy link`,
+      unsupported: $localize`:@@blobs.copyLink.unsupported:Copy is not supported in this browser.`
+    });
+    if (!copied) {
       this.logger.warn('blobs.copyLink.failed');
-      void err;
-      this.snack.open(
-        $localize`:@@blobs.copyLink.failed:Failed to copy link`,
-        $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 }
-      );
     }
   }
 

@@ -193,6 +193,19 @@ describe('BlobsComponent', () => {
     expect(message).toBe('Failed to copy link');
   });
 
+  it('copyLink toasts the unsupported message when navigator.clipboard is missing', async () => {
+    const { fixture, snack } = setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      configurable: true
+    });
+    spyOn(console, 'warn');
+    await fixture.componentInstance.copyLink(blob({ slug: 'no-perm' }));
+    expect(snack.open).toHaveBeenCalled();
+    const message = (snack.open.calls.mostRecent().args as unknown[])[0];
+    expect(message).toBe('Copy is not supported in this browser.');
+  });
+
   it('displayTitle falls back to "Untitled" for blank titles', () => {
     const { fixture } = setup();
     expect(fixture.componentInstance.displayTitle(blob({ title: undefined }))).toBe(
