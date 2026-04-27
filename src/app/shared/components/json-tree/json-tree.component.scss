@@ -126,6 +126,19 @@
   border-radius: 3px;
   cursor: default;
 
+  // Formatting-rules CSS-var seam (M6a.75). When a row participates in
+  // a matched formatting rule, the engine sets these custom properties
+  // inline on the row element. Defaults paint nothing - so unset rows
+  // render exactly as before. The row-background var sits BELOW the
+  // priority highlights below (search/ancestor/match/selection) so a
+  // selection still wins over a formatting-rule background, per the
+  // priority order documented in DESIGN_SPEC.md §Features 7.
+  background: var(--tree-row-format-bg, transparent);
+  // 4px left-edge accent strip carries the rule's optional
+  // `borderColor`, mirroring the `.pref-substack` pattern on /profile
+  // so the strip does not collide with the selection outline below.
+  box-shadow: inset 4px 0 0 var(--tree-row-format-border, transparent);
+
   &:hover {
     background: rgba(127, 127, 127, 0.08);
   }
@@ -196,8 +209,14 @@
 }
 
 .tree-key {
-  color: var(--fg);
-  font-weight: 600;
+  // CSS-var seam (M6a.75): defaults preserve the legacy color/weight.
+  // The formatting-rules engine sets `--tree-key-color` etc. inline
+  // on the row element when a key-target rule matches. See
+  // formatting-rules-engine.ts.
+  color: var(--tree-key-color, var(--fg));
+  font-weight: var(--tree-key-weight, 600);
+  font-style: var(--tree-key-style, normal);
+  text-decoration: var(--tree-key-decoration, none);
 
   &::after {
     content: ': ';
@@ -213,7 +232,14 @@
 }
 
 .tree-value-string {
-  color: #6a8759;
+  // CSS-var seam (M6a.75): default preserves the legacy string color.
+  // The engine sets `--tree-value-color` etc. on the row when a
+  // value-target rule matches. Bold/italic/underline get their own
+  // vars so a rule can flip them per node without specificity wars.
+  color: var(--tree-value-color, #6a8759);
+  font-weight: var(--tree-value-weight, normal);
+  font-style: var(--tree-value-style, normal);
+  text-decoration: var(--tree-value-decoration, none);
   word-break: break-word;
 }
 
@@ -225,11 +251,17 @@
 }
 
 .tree-value-number {
-  color: #ff9b30;
+  color: var(--tree-value-color, #ff9b30);
+  font-weight: var(--tree-value-weight, normal);
+  font-style: var(--tree-value-style, normal);
+  text-decoration: var(--tree-value-decoration, none);
 }
 
 .tree-value-boolean {
-  color: #3fa1f3;
+  color: var(--tree-value-color, #3fa1f3);
+  font-weight: var(--tree-value-weight, normal);
+  font-style: var(--tree-value-style, normal);
+  text-decoration: var(--tree-value-decoration, none);
 }
 
 .tree-value-null {

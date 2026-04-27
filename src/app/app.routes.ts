@@ -38,6 +38,7 @@ export const routes: Routes = [
       import('./features/formatting-rules/formatting-rules.component').then(
         (m) => m.FormattingRulesComponent
       ),
+    canActivate: [authGuard],
     title: 'Formatting Rules - JotJSON'
   },
   {

@@ -26,6 +26,13 @@ export interface UserPreferences {
   editorTabSize: 2 | 4;
   defaultTreeExpansionDepth: number;
   defaultRuleSetId?: string;
+  /**
+   * Rule sets currently toggled on in the tree-view formatting toolbar.
+   * Persisted server-side so toolbar state survives across sessions
+   * and devices. IDs that no longer resolve to an owned rule set are
+   * filtered out at read time. See DESIGN_SPEC.md §Features 7.
+   */
+  activeRuleSetIds: string[];
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
   treeFontSize: number;
@@ -103,6 +110,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeShowDateAnnotations: true,
   treeAssumeUtcForIsoDateTime: true,
   treeAssumeUtcForIsoDateOnly: true,
+  activeRuleSetIds: [],
   recentlyViewedEnabled: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
@@ -195,6 +203,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences | 'historyTrackingMode')[]
   'editorTabSize',
   'defaultTreeExpansionDepth',
   'defaultRuleSetId',
+  'activeRuleSetIds',
   'editorWordWrap',
   'layoutOrientation',
   'treeFontSize',
@@ -283,6 +292,15 @@ export function normalizeStoredPreferences(
       (LEGACY_HISTORY_MODES as readonly string[]).includes(legacy);
   }
   delete view.historyTrackingMode;
+  // Stored docs written before M6a.75 won't have `activeRuleSetIds`.
+  // The DEFAULT_PREFERENCES merge in the frontend handles the missing
+  // field on the wire, but normalizeStoredPreferences may be called on
+  // its own on the API side - default it to `[]` here so the next PUT
+  // round-trip succeeds without the client having to know about the
+  // legacy gap.
+  if (!Array.isArray(view.activeRuleSetIds)) {
+    view.activeRuleSetIds = [];
+  }
   return view;
 }
 
@@ -420,7 +438,8 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     treeHighlightColors: {
       dark: normalizeColorSet(colors['dark'], 'treeHighlightColors.dark'),
       light: normalizeColorSet(colors['light'], 'treeHighlightColors.light')
-    }
+    },
+    activeRuleSetIds: normalizeActiveRuleSetIds(raw['activeRuleSetIds'])
   };
 
   if (raw['defaultRuleSetId'] !== undefined) {
@@ -437,4 +456,42 @@ export function normalizePreferences(raw: unknown): UserPreferences {
   }
 
   return normalized;
+}
+
+/**
+ * `activeRuleSetIds` was added alongside the M6 formatting-rules
+ * feature. Accept missing-on-the-wire as `[]` for one release of
+ * stale-client tolerance (clients shipped before this field will
+ * omit it on every PUT). When present it must be a flat array of
+ * non-empty strings each <= 64 chars; we cap the array at 32 entries
+ * (well above the 20-rule-sets-per-user limit) to bound payload size
+ * and dedupe while preserving order.
+ */
+function normalizeActiveRuleSetIds(value: unknown): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new PreferenceValidationError('activeRuleSetIds must be an array of strings');
+  }
+  if (value.length > 32) {
+    throw new PreferenceValidationError('activeRuleSetIds has too many entries');
+  }
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry.length === 0) {
+      throw new PreferenceValidationError(
+        'activeRuleSetIds entries must be non-empty strings'
+      );
+    }
+    if (entry.length > 64) {
+      throw new PreferenceValidationError('activeRuleSetIds entry is too long');
+    }
+    if (!seen.has(entry)) {
+      seen.add(entry);
+      result.push(entry);
+    }
+  }
+  return result;
 }

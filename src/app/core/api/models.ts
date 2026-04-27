@@ -55,6 +55,13 @@ export interface UserPreferences {
   editorTabSize: 2 | 4;
   defaultTreeExpansionDepth: number;
   defaultRuleSetId?: string;
+  /**
+   * Rule sets currently toggled on in the tree-view formatting toolbar.
+   * Persisted server-side so the active set survives across sessions and
+   * devices. IDs that no longer resolve to an owned rule set are
+   * filtered out at read time. See DESIGN_SPEC.md §Features 7.
+   */
+  activeRuleSetIds: string[];
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
   treeFontSize: number;
@@ -123,6 +130,30 @@ export interface HistoryEntry {
   action: HistoryAction;
 }
 
+/**
+ * Closed whitelist of icon identifiers a formatting rule may attach to
+ * a matched key/value. New icons require a spec amendment, not a
+ * user-supplied free-form string. See DESIGN_SPEC.md §Features 7.
+ */
+export type FormattingIcon =
+  | 'warning'
+  | 'check'
+  | 'star'
+  | 'info'
+  | 'error'
+  | 'flag'
+  | 'bookmark';
+
+export const FORMATTING_ICONS: readonly FormattingIcon[] = [
+  'warning',
+  'check',
+  'star',
+  'info',
+  'error',
+  'flag',
+  'bookmark'
+] as const;
+
 export interface FormattingStyle {
   backgroundColor?: string;
   textColor?: string;
@@ -130,13 +161,24 @@ export interface FormattingStyle {
   italic?: boolean;
   underline?: boolean;
   borderColor?: string;
-  icon?: string;
+  icon?: FormattingIcon;
 }
+
+/**
+ * Match-type union for v1. The `regex` option is deferred to v1.1
+ * pending a safe-evaluation strategy (see DESIGN_SPEC.md §Features 7,
+ * "Regex policy"). Add `'regex'` back here when M6+ ships it.
+ */
+export type FormattingRuleMatchType =
+  | 'exact'
+  | 'contains'
+  | 'starts_with'
+  | 'ends_with';
 
 export interface FormattingRule {
   id: string;
   target: 'key' | 'value' | 'key_and_value';
-  matchType: 'exact' | 'contains' | 'regex' | 'starts_with' | 'ends_with';
+  matchType: FormattingRuleMatchType;
   matchValue: string;
   caseSensitive: boolean;
   style: FormattingStyle;
@@ -147,6 +189,12 @@ export interface FormattingRuleSet {
   userId: string;
   name: string;
   rules: FormattingRule[];
+  /**
+   * Monotonically incremented on every successful PUT. Surfaced as the
+   * `ETag` response header and required via `If-Match` on PUT for
+   * optimistic concurrency. See DESIGN_SPEC.md §Features 7.
+   */
+  version: number;
   createdAt: string;
   updatedAt: string;
 }

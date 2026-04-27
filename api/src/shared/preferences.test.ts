@@ -170,6 +170,48 @@ describe('normalizePreferences', () => {
     expect(() => normalizePreferences(bad)).toThrow(/defaultRuleSetId/);
   });
 
+  it('defaults activeRuleSetIds to [] when missing on the wire (stale-client tolerance)', () => {
+    const input = valid() as Record<string, unknown>;
+    delete input['activeRuleSetIds'];
+    expect(normalizePreferences(input).activeRuleSetIds).toEqual([]);
+  });
+
+  it('preserves activeRuleSetIds when set', () => {
+    const input = valid() as Record<string, unknown>;
+    input['activeRuleSetIds'] = ['rs-1', 'rs-2'];
+    expect(normalizePreferences(input).activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
+  });
+
+  it('deduplicates activeRuleSetIds while preserving order', () => {
+    const input = valid() as Record<string, unknown>;
+    input['activeRuleSetIds'] = ['a', 'b', 'a', 'c', 'b'];
+    expect(normalizePreferences(input).activeRuleSetIds).toEqual(['a', 'b', 'c']);
+  });
+
+  it('rejects activeRuleSetIds that is not an array', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['activeRuleSetIds'] = 'rs-1';
+    expect(() => normalizePreferences(bad)).toThrow(/activeRuleSetIds must be an array/);
+  });
+
+  it('rejects activeRuleSetIds entries that are not non-empty strings', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['activeRuleSetIds'] = ['ok', ''];
+    expect(() => normalizePreferences(bad)).toThrow(/non-empty strings/);
+  });
+
+  it('rejects activeRuleSetIds entries longer than 64 chars', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['activeRuleSetIds'] = ['x'.repeat(65)];
+    expect(() => normalizePreferences(bad)).toThrow(/too long/);
+  });
+
+  it('rejects activeRuleSetIds with more than 32 entries', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['activeRuleSetIds'] = Array.from({ length: 33 }, (_, i) => `rs-${i}`);
+    expect(() => normalizePreferences(bad)).toThrow(/too many entries/);
+  });
+
   it('round-trips searchValueType=all (default)', () => {
     expect(normalizePreferences(valid()).searchValueType).toBe('all');
   });

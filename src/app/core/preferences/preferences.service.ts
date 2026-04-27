@@ -33,6 +33,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeShowDateAnnotations: true,
   treeAssumeUtcForIsoDateTime: true,
   treeAssumeUtcForIsoDateOnly: true,
+  activeRuleSetIds: [],
   recentlyViewedEnabled: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
