@@ -30,10 +30,10 @@ describe('ClipboardCopyService', () => {
     if (originalDescriptor) {
       Object.defineProperty(navigator, 'clipboard', originalDescriptor);
     } else {
-      Object.defineProperty(navigator, 'clipboard', {
-        configurable: true,
-        value: undefined
-      });
+      // navigator.clipboard lives on Navigator.prototype in real Chrome; if
+      // there was no own-property before this spec, restore that state by
+      // deleting the override rather than masking the prototype with undefined.
+      delete (navigator as unknown as { clipboard?: Clipboard }).clipboard;
     }
   });
 
