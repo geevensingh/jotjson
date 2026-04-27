@@ -88,7 +88,8 @@ Browser (Angular SPA)
   editorFontSize: number (default: 14, range: 8-32),
   editorTabSize: number (default: 2, range: 2 | 4),
   defaultTreeExpansionDepth: number (default: 2, range: 1-10),
-  defaultRuleSetId?: string (auto-apply this rule set on load),
+  defaultRuleSetId?: string (auto-apply this rule set on load; auto-cleared server-side when the referenced set is deleted, see §Features 7),
+  activeRuleSetIds: string[] (default: [] - rule sets currently toggled on via the tree-view formatting toolbar; persisted server-side so the active set survives across sessions and devices. Seeded with `[defaultRuleSetId]` for first-time users when a default exists. IDs that no longer resolve to an owned rule set are filtered out on read),
   editorWordWrap: boolean (default: true),
   layoutOrientation: "horizontal" | "vertical" (default: "horizontal" - editor left, tree right; "vertical" = editor top, tree bottom),
   treeShowTypeLabels: boolean (default: true),
@@ -193,9 +194,10 @@ M5 milestone notes.
 {
   id: string,
   userId: string,
-  name: string,                    # e.g., "Error Highlighter", "API Response Theme"
-  rules: FormattingRule[],
-  createdAt: DateTime,
+  name: string,                    # e.g., "Error Highlighter", "API Response Theme"; max 80 chars
+  rules: FormattingRule[],         # max 50 entries
+  version: number,                 # monotonically incremented on every successful PUT; surfaced as the response ETag and required via `If-Match` on PUT (concurrency control, see §Features 7)
+  createdAt: DateTime,             # used for stable sort order in the user's list (precedence order; see §Features 7)
   updatedAt: DateTime
 }
 ```
@@ -210,12 +212,19 @@ a set are atomic and reads are single-document. The 50-rule cap (see
 {
   id: string,
   target: "key" | "value" | "key_and_value",
-  matchType: "exact" | "contains" | "regex" | "starts_with" | "ends_with",
-  matchValue: string,              # the pattern to match (e.g., "error", "^err_.*")
+  matchType: "exact" | "contains" | "starts_with" | "ends_with",  # `regex` deferred to v1.1; see §Features 7
+  matchValue: string,              # the literal to match (e.g., "error", "200"); max 200 chars
   caseSensitive: boolean,
   style: FormattingStyle
 }
 ```
+
+The rule's user-visible label (shown in hover tooltips and the editor's
+matched-rule list) is auto-generated from its match config -
+e.g. `key contains "error"`, `value exact "200"`. Rules have no
+human-edited `name` field in v1; this keeps the model and editor
+simpler and avoids untranslatable user-supplied strings in the
+hover-tooltip flow.
 
 #### FormattingStyle
 ```
@@ -226,7 +235,7 @@ a set are atomic and reads are single-document. The 50-rule cap (see
   italic?: boolean,
   underline?: boolean,
   borderColor?: string,            # outline/border highlight color
-  icon?: string                    # optional icon identifier (e.g., "warning", "check", "star")
+  icon?: "warning" | "check" | "star" | "info" | "error" | "flag" | "bookmark"  # closed whitelist; new icons require a spec amendment, not user input
 }
 ```
 
@@ -485,36 +494,121 @@ Available to **registered users** only.
   - Each rule set contains one or more formatting rules.
   - Users can switch between rule sets or apply multiple simultaneously.
   - A "default" rule set is auto-applied if set by the user.
+  - **List ordering / precedence:** rule sets are sorted by `createdAt`
+    (oldest first) everywhere they're listed - the user's
+    `/formatting-rules` page, the active-set toolbar above the tree,
+    and the engine's evaluation order. `createdAt` is immutable, so
+    precedence is stable across edits and renames. Drag-to-reorder is
+    a post-v1 follow-up that introduces an explicit `position` field.
 
 - **Rule Builder UI** - for each rule:
   - **Target:** pick whether the rule applies to keys, values, or both.
-  - **Match type:** exact match, contains, starts with, ends with, or regex.
-  - **Match value:** the string or pattern to match against.
+  - **Match type:** exact match, contains, starts with, or ends with.
+    (`regex` is **deferred to v1.1**; see "Regex policy" below.)
+  - **Match value:** the literal string to match against (max 200 chars).
   - **Case sensitivity** toggle.
   - **Style picker:** visual controls for:
     - Background color (color swatch picker).
     - Text color.
     - Bold / italic / underline toggles.
     - Border/outline color.
-    - Optional icon badge (warning, check, star, etc.).
+    - Optional icon badge - closed whitelist (`warning`, `check`,
+      `star`, `info`, `error`, `flag`, `bookmark`).
   - **Live preview** - a sample JSON snippet updates in real time as the user configures the rule, showing how matches will look.
+  - **Field-length caps:** rule-set `name` <= 80 chars, rule
+    `matchValue` <= 200 chars. Enforced in `api/src/shared/limits.ts`
+    and validated server-side; the editor surfaces the cap inline.
+  - **Valid-only autosave:** the editor maintains a local draft and
+    only fires the debounced PUT when the draft passes structural
+    validation (required fields present, hex colors well-formed,
+    matchValue within length cap). Invalid drafts surface an inline
+    error and an "Invalid - fix to save" status indicator instead of
+    spamming 400s.
+
+- **Match semantics:**
+  - Rules match the **rendered text** the user sees in the tree, not
+    the underlying JSON literal. So a `value contains "200"` rule
+    matches the JSON number `200` (rendered as `200`), the JSON string
+    `"200"` (rendered as `"200"` - the quotes are styling, not part of
+    the matched text), `null`/`true`/`false` (rendered as their literal
+    text). This keeps the user's mental model "what I see is what
+    matches".
+  - **Container nodes** (object `{}` and array `[]` rows) are excluded
+    from value-target rules - they have no scalar value text to match.
+    They remain eligible for key-target rules via their property name.
+  - Rules whose match config is structurally invalid (empty
+    `matchValue`, unknown enum, etc.) are skipped at evaluation time.
+
+- **Regex policy (v1):** the `regex` match type is **not shipped in
+  v1**. Native JavaScript regex has no execution timeout, and a
+  user-supplied pathological pattern run across every node of a 5 MB
+  tree is a real DoS surface for our own client. Shipping
+  `exact / contains / starts_with / ends_with` covers the common cases
+  in the built-in presets and most user requests; pulling regex back
+  in is planned for v1.1 alongside a `safe-regex`-style guard and a
+  compile-once cache.
+
+- **Concurrency:** every rule set carries a numeric `version` field
+  that the API increments on every successful `PUT`. The API surfaces
+  `version` as a strong `ETag` response header on `GET` and
+  `POST`/`PUT` responses; clients echo it via `If-Match` on the next
+  `PUT`. A mismatched `If-Match` returns **412 Precondition Failed**;
+  the editor surfaces a "This rule set was changed in another tab -
+  reload to keep editing" banner and disables further autosaves until
+  the user resolves it. This avoids silent multi-tab clobbering.
+
+- **Update payload:** `PUT /api/rule-sets/:id` is a **full replace** of
+  the rule-set document body (`name` + `rules`), matching
+  `PUT /api/blobs/:id` semantics. Unknown top-level fields are
+  rejected (consistent with the `me.ts` PUT pattern).
+
+- **`defaultRuleSetId` referential integrity:** when the user's default
+  rule set is deleted, the `DELETE /api/rule-sets/:id` handler
+  auto-clears `defaultRuleSetId` on the user document in the same
+  request. The same handler also strips the deleted ID from
+  `activeRuleSetIds`. Clients refresh local prefs after a successful
+  delete.
+
+- **Engine output / `target` projection:** the formatting-rules engine
+  is a pure function `evaluate(activeSets, node) -> RuleEngineResult`
+  with shape:
+  ```
+  {
+    rowStyle: { backgroundColor?, borderColor? },
+    keyStyle: { color?, bold?, italic?, underline?, icon? },
+    valueStyle: { color?, bold?, italic?, underline?, icon? },
+    matchedRules: { setId, ruleId, label }[]
+  }
+  ```
+  - Rules with `target=key` produce `keyStyle` only;
+    `target=value` -> `valueStyle`; `target=key_and_value` -> both.
+  - `backgroundColor` and `borderColor` always project onto `rowStyle`
+    (they paint the row, not the inline tokens).
+  - Within a set: rules merged in array order; later rules override
+    earlier on conflicting per-target properties.
+  - Across active sets: sets evaluated in user-list (`createdAt`)
+    order; later sets override earlier.
+  - The tree row applies the result via CSS custom properties
+    (`--tree-row-bg`, `--tree-key-color`, etc.) so it composes cleanly
+    with the existing `tree-value-string` / `tree-key` token classes
+    rather than fighting them via specificity.
 
 - **How it works in the Tree View:**
   - When a rule set is active, the tree view scans each node's key and value.
   - Matching nodes receive the configured inline styles (background, text color, font weight, etc.).
   - **Within a rule set:** multiple rules can match the same node - styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
-  - **Across active rule sets:** sets are evaluated in the order they appear in the user's saved list on `/formatting-rules`, then in-set order. Later evaluations override earlier ones for conflicting style properties. Drag-to-reorder of active sets is a post-v1 follow-up.
+  - **Across active rule sets:** sets are evaluated in `createdAt` order (oldest first) - the same order they appear in the user's saved list and the active-set toolbar. Later evaluations override earlier ones for conflicting style properties. Drag-to-reorder of active sets is a post-v1 follow-up.
   - The optional `borderColor` style renders as a 4px left-edge accent strip on the affected row (consistent with the `.pref-substack` pattern on the profile page) so it does not collide with the selection outline or ancestor highlights.
-  - A tooltip on hover shows which rule(s) matched a given node (keeps the tree visually clean).
+  - A tooltip on hover shows which rule(s) matched a given node (keeps the tree visually clean). Tooltip labels are auto-generated from each rule's match config.
   - **Highlight priority** (highest to lowest): selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
-  - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply.
+  - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply. Toolbar state is the user's `activeRuleSetIds` preference and persists across sessions and devices.
 
 - **Built-in Presets** - ship a few starter rule sets users can clone and customize. Preset IDs are stable kebab-case slugs (not UUIDs) so the clone endpoint URLs are human-readable and stable across rebuilds; user-created rule sets always get UUIDs.
   - `error-detection` ("Error Detection") - highlights keys like `error`, `err`, `exception`, `fault` in red.
-  - `status-codes` ("Status Codes") - color-codes values like `200` (green), `400` (yellow), `500` (red).
+  - `status-codes` ("Status Codes") - color-codes a fixed list of common HTTP response code values via `exact` matches: `200`, `201`, `204` (green); `400`, `401`, `403`, `404` (amber); `500`, `502`, `503` (red). Individual rules per code rather than a single regex - a documented v1 trade-off until the regex match type lands in v1.1.
   - `null-finder` ("Null Finder") - highlights all `null` values with a yellow background.
 
-- **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set. Enforced server-side as hardcoded constants in `api/src/shared/limits.ts` (mirrors the 100-blob cap pattern); raising them later is one edit.
+- **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set, rule-set name <= 80 chars, rule matchValue <= 200 chars. Enforced server-side as hardcoded constants in `api/src/shared/limits.ts` (mirrors the 100-blob cap pattern); raising them later is one edit.
 
 ---
 
@@ -585,11 +679,11 @@ SPA-originated calls in production.
 | POST | `/api/me/export` | Required | post-v1 | Enqueue data export job (returns job ID) |
 | GET | `/api/me/export/:jobId` | Required | post-v1 | Poll export job; returns ZIP SAS URL when complete |
 | DELETE | `/api/me` | Required | post-v1 | Delete account and all associated data |
-| POST | `/api/rule-sets` | Required | M6 | Create a formatting rule set |
-| GET | `/api/rule-sets` | Required | M6 | List user's rule sets |
-| GET | `/api/rule-sets/:id` | Required (owner) | M6 | Get a rule set by ID |
-| PUT | `/api/rule-sets/:id` | Required (owner) | M6 | Update a rule set |
-| DELETE | `/api/rule-sets/:id` | Required (owner) | M6 | Delete a rule set |
+| POST | `/api/rule-sets` | Required | M6 | Create a formatting rule set; response includes `version: 1` and an `ETag` header |
+| GET | `/api/rule-sets` | Required | M6 | List user's rule sets (sorted by `createdAt` ascending) |
+| GET | `/api/rule-sets/:id` | Required (owner) | M6 | Get a rule set by ID; response includes `ETag` header. Owner mismatch returns 403; missing ID returns 404 |
+| PUT | `/api/rule-sets/:id` | Required (owner) | M6 | Update a rule set (full replace of `name` + `rules`). Requires `If-Match: <version>`; mismatch returns 412 Precondition Failed. Owner mismatch returns 403 |
+| DELETE | `/api/rule-sets/:id` | Required (owner) | M6 | Delete a rule set. Auto-clears the user's `defaultRuleSetId` and removes the ID from `activeRuleSetIds` if matching. Owner mismatch returns 403 |
 | GET | `/api/rule-sets/presets` | Required | M6 | List built-in preset rule sets |
 | POST | `/api/rule-sets/presets/:id/clone` | Required | M6 | Clone a preset into the user's rule sets |
 
@@ -1030,64 +1124,109 @@ EU users would need a regional resource - out of scope for v1.
      FIFO. The editor's `pasteOccurred` output and the
      `HistoryService.recordPaste` method are removed; the
      native-paste auto-unescape behavior is preserved.
-6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets. Broken into seven sub-milestones:
-   - **M6a**: Spec finalization. Close cross-cutting design questions
-     (storage shape, limits config, preset ID format, `borderColor`
-     rendering, multi-set precedence) and document the answers in
-     `DESIGN_SPEC.md`. No code changes.
+6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets. Broken into nine sub-milestones:
+   - **M6a**: Spec finalization (round 1). Close the first batch of
+     cross-cutting design questions (storage shape, limits config,
+     preset ID format, `borderColor` rendering, multi-set precedence)
+     and document the answers in `DESIGN_SPEC.md`. No code changes.
+   - **M6a.5**: Spec finalization (round 2). Close the deeper design
+     questions surfaced by the rubber-duck pass: rule labelling
+     (auto-generated, no `name` field), rule-set ordering (by
+     `createdAt`), engine output shape (`{ rowStyle, keyStyle,
+     valueStyle, matchedRules }`), field-length caps, icon whitelist
+     enum, regex-policy decision (defer `regex` match type to v1.1),
+     `defaultRuleSetId` auto-clear on delete, match semantics for
+     non-string values, active-set persistence
+     (`activeRuleSetIds` on `UserPreferences`), concurrency model
+     (`version` field + `If-Match` + 412), and update payload shape
+     (full replace). Spec-only commit; no code.
+   - **M6a.75**: Prerequisite code refactors. Engine contract stub
+     (`formatting-rules-engine.ts` returning the M6a.5 result shape
+     with no callers), tree-row CSS-custom-property seam (no visual
+     change - existing colors become CSS-var defaults), model field
+     additions per M6a.5 (icon whitelist, `version` field,
+     `activeRuleSetIds`), and applying `authGuard` to the
+     `/formatting-rules` route (currently unguarded).
    - **M6b**: API CRUD foundation. Validators (`assertRuleSet`,
      `assertRule`, `assertStyle`) following the `assertEnum` /
      `assertInt` / `assertHex` pattern, Cosmos repository
      (`ruleSetRepository.ts`), and the five owner-scoped functions
      (`createRuleSet`, `listRuleSets`, `getRuleSet`, `updateRuleSet`,
-     `deleteRuleSet`). Limit enforcement (20 sets/user, 50 rules/set)
-     via hardcoded constants in `api/src/shared/limits.ts`. Owner
-     mismatch returns 404 (consistent with `getBlob`). Jest specs for
-     validators, repo, and each handler.
+     `deleteRuleSet`) registered in a single
+     `api/src/functions/ruleSets.ts` file (mirrors
+     `api/src/functions/blobs.ts`, not one folder per function).
+     Limit enforcement (20 sets/user, 50 rules/set, name <= 80,
+     matchValue <= 200) via hardcoded constants in
+     `api/src/shared/limits.ts`. **Owner mismatch returns 403** via
+     the existing `forbidden()` helper (consistent with `blobs.ts`
+     PUT/DELETE); missing IDs return 404. PUT enforces `If-Match`
+     against the stored `version`; mismatch returns 412. DELETE
+     auto-clears `defaultRuleSetId` and prunes `activeRuleSetIds`.
+     Jest specs for validators, repo, and each handler.
    - **M6c**: Built-in presets. Define the three preset rule sets in
      `api/src/shared/ruleSetPresets.ts` with stable kebab-case IDs
-     (`error-detection`, `status-codes`, `null-finder`). Add
-     `GET /api/rule-sets/presets` and
+     (`error-detection`, `status-codes`, `null-finder`). The
+     `status-codes` preset ships as individual `exact`-match rules
+     per common code (200/201/204 green; 400/401/403/404 amber;
+     500/502/503 red) since the `regex` match type is deferred to
+     v1.1. Add `GET /api/rule-sets/presets` and
      `POST /api/rule-sets/presets/:id/clone` endpoints; the clone
      endpoint creates a user-owned UUID copy and reuses the
      limit-enforcement path.
-   - **M6d**: Frontend service + page CRUD UI. New
-     `RuleSetsService` (signals + optimistic update, mirrors
-     `BlobsService` shape) and the registered-user-only
-     `/formatting-rules` page: list cards (one per set), empty state
-     with "Create your first rule set" CTA, create / rename /
-     duplicate / delete actions, and a "Clone preset" affordance.
-     Anonymous users hit the existing `signedInGuard`. No rule
-     builder yet - cards link to a stub editor.
-   - **M6e**: Rule builder UI with live preview.
+   - **M6d**: Rule builder UI with valid-only autosave.
      `RuleEditorComponent` exposing every spec'd control: target
      (key / value / both), match type (exact / contains /
-     starts_with / ends_with / regex), match value, case-sensitivity,
-     and full style picker (background, text, bold/italic/underline,
-     border, optional icon). Live preview renders a sample JSON
-     snippet through the production tree renderer with the
-     in-progress rule applied. Auto-save (debounced 500 ms) via
-     `PUT /api/rule-sets/:id`, consistent with the profile
-     preferences pattern.
-   - **M6f**: Tree-view integration. Pure
-     `formatting-rules-engine.ts` taking active `FormattingRuleSet[]`
-     plus a tree node and returning a merged `FormattingStyle`.
-     Implements within-set rule-list order, cross-set list order
-     (later overrides earlier), and the highlight-priority
-     suppression rule (selection -> match-value -> ancestor -> search
-     -> formatting rules). Memoization keyed on
-     `(activeSetIds, key, value, type)` so a 5 MB tree (perf NFR
-     §Non-Functional Requirements) does not re-evaluate on
-     unrelated state changes. Active-set toolbar above the tree
-     (chip list to toggle which sets apply on this session). Profile
-     page gets the deferred "Default formatting rule set" dropdown
-     wired to `defaultRuleSetId` (closes the M5d-deferred item on
-     line 459).
+     starts_with / ends_with - no regex in v1), match value,
+     case-sensitivity, and full style picker (background, text,
+     bold/italic/underline, border, optional icon from the
+     whitelist). Live preview renders a sample JSON snippet through
+     the production tree renderer with the in-progress rule applied.
+     **Valid-only autosave**: a local draft fires the debounced
+     500 ms `PUT /api/rule-sets/:id` only when structurally valid
+     (required fields present, hex colors well-formed, matchValue
+     within length cap). Status indicator surfaces `Editing`,
+     `Saving...`, `Saved`, `Save failed - retry`, and `Invalid - fix
+     to save`. Concurrency: editor sends `If-Match` with the
+     last-known `version`; on 412 it surfaces a "changed in another
+     tab" banner and pauses autosaves. Reordered ahead of the list
+     page so each phase ships a usable increment.
+   - **M6e**: List page wraps the editor. Registered-user-only
+     `/formatting-rules` page: list cards (one per set, sorted by
+     `createdAt`), empty state with "Create your first rule set"
+     CTA, create / rename / duplicate / delete actions, and a
+     "Clone preset" affordance that calls
+     `POST /api/rule-sets/presets/:id/clone` and navigates into the
+     M6d editor for the new set. Anonymous users hit the
+     `authGuard` (applied to the route in M6a.75). New
+     `RuleSetsService` (signals + optimistic update, mirrors
+     `BlobsService` shape) lands here as the list page's first
+     consumer, and also owns `activeRuleSetIds` round-trips.
+   - **M6f**: Tree-view integration. Implement the engine in
+     `formatting-rules-engine.ts` (contract sketched in M6a.75)
+     taking active `FormattingRuleSet[]` plus a tree node and
+     returning the M6a.5 `RuleEngineResult`. Implements within-set
+     rule-list order, cross-set `createdAt` order (later overrides
+     earlier), and the highlight-priority suppression rule
+     (selection -> match-value -> ancestor -> search -> formatting
+     rules). Memoization keyed on
+     `(activeSetIds, ruleSetVersionBitmap, key, value, type)` so a
+     5 MB tree (perf NFR §Non-Functional Requirements) does not
+     re-evaluate on unrelated state changes. Tree row applies the
+     result via the CSS-var seam introduced in M6a.75, not via
+     ngStyle vs class specificity. Active-set toolbar above the
+     tree (chip list to toggle which sets apply) bound to
+     `activeRuleSetIds`. Profile page gets the deferred "Default
+     formatting rule set" dropdown wired to `defaultRuleSetId`
+     (closes the M5d-deferred item on line 459).
    - **M6g**: Polish. Telemetry events
      (rule-set created/updated/deleted/applied via `LoggerService`,
      no user content), a11y pass (keyboard nav, screen-reader labels
-     on every color picker, focus management on add/delete), empty
-     and offline state polish per existing patterns, and final
+     on every color picker, focus management on add/delete),
+     WCAG-AA color-contrast warning in the editor preview when the
+     chosen `textColor` x `backgroundColor` pair fails in either
+     theme (non-blocking), a minimal offline pattern for the
+     rule-set service (cached reads + queued writes - documented in
+     `AGENTS.md` as the pattern for later features), and final
      `DESIGN_SPEC.md` + `AGENTS.md` updates capturing any
      conventions that emerged.
 7. **Polish & launch** - Each of these lands as its own step/commit:
