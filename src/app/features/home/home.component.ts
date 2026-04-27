@@ -53,6 +53,7 @@ import {
   ToolbarComponent
 } from '../../shared/components/toolbar/toolbar.component';
 import { StatusBarComponent } from './status-bar/status-bar.component';
+import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
 import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
 import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.component';
 
@@ -88,6 +89,7 @@ export class HomeComponent {
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
   private readonly clipboard = inject(ClipboardPollingService);
+  private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly logger = inject(LoggerService);
 
   /**
@@ -525,32 +527,11 @@ export class HomeComponent {
     const blob = this.loadedBlob();
     if (!blob) return;
     const url = `${window.location.origin}/s/${blob.slug}`;
-    const clipboard = navigator.clipboard;
-    const dismiss = $localize`:@@common.dismiss:Dismiss`;
-    if (!clipboard?.writeText) {
-      this.snack.open(
-        $localize`:@@share.copyLink.unsupported:Copy is not supported in this browser.`,
-        dismiss,
-        { duration: 4000 }
-      );
-      return;
-    }
-    clipboard.writeText(url).then(
-      () => {
-        this.snack.open(
-          $localize`:@@share.copyLink.success:Share link copied to clipboard.`,
-          dismiss,
-          { duration: 3000 }
-        );
-      },
-      () => {
-        this.snack.open(
-          $localize`:@@share.copyLink.failed:Failed to copy share link.`,
-          dismiss,
-          { duration: 4000 }
-        );
-      }
-    );
+    this.clipboardCopy.copyWithToast(url, {
+      success: $localize`:@@share.copyLink.success:Share link copied to clipboard.`,
+      failed: $localize`:@@share.copyLink.failed:Failed to copy share link.`,
+      unsupported: $localize`:@@share.copyLink.unsupported:Copy is not supported in this browser.`
+    });
   }
 
   async onTogglePublic(): Promise<void> {

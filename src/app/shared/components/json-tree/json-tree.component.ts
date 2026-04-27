@@ -13,9 +13,9 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
+import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { persistedStringSignal } from '../../../core/preferences/persisted-signal';
 import { JsonParserService } from '../../../core/json/json-parser.service';
@@ -117,7 +117,7 @@ export class JsonTreeComponent {
   private readonly prefs = inject(PreferencesService);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly snack = inject(MatSnackBar);
+  private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly jsonParser = inject(JsonParserService);
 
   readonly value = input<unknown>(undefined);
@@ -697,38 +697,15 @@ export class JsonTreeComponent {
   }
 
   copyPath(node: TreeNode): void {
-    const dismiss = $localize`:@@common.dismiss:Dismiss`;
-    const clipboard = navigator.clipboard;
-    // clipboard is undefined on HTTP / file:// (insecure contexts) and in older browsers
-    if (!clipboard?.writeText) {
-      this.snack.open(
-        $localize`:@@tree.copyPath.unsupported:Copy is not supported in this browser.`,
-        dismiss,
-        { duration: 4000 }
-      );
-      return;
-    }
-    clipboard.writeText(
-      this.jsonParser.formatPathForClipboard(
-        node.pathString,
-        this.prefs.prefs().treePathRoot
-      )
-    ).then(
-      () => {
-        this.snack.open(
-          $localize`:@@tree.copyPath.success:Path copied to clipboard.`,
-          dismiss,
-          { duration: 3000 }
-        );
-      },
-      () => {
-        this.snack.open(
-          $localize`:@@tree.copyPath.failed:Failed to copy path.`,
-          dismiss,
-          { duration: 4000 }
-        );
-      }
+    const path = this.jsonParser.formatPathForClipboard(
+      node.pathString,
+      this.prefs.prefs().treePathRoot
     );
+    this.clipboardCopy.copyWithToast(path, {
+      success: $localize`:@@tree.copyPath.success:Path copied to clipboard.`,
+      failed: $localize`:@@tree.copyPath.failed:Failed to copy path.`,
+      unsupported: $localize`:@@tree.copyPath.unsupported:Copy is not supported in this browser.`
+    });
   }
 
   renderLeaf(value: unknown, type: JsonValueType): string {
