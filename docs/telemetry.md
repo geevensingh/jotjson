@@ -289,6 +289,59 @@ The path segment is the AI resource's **App ID** GUID (visible on the AI
 overview blade as "Application ID"), not the Azure resource ID. The value
 above is for `appi-jotjson-dev`.
 
+### Cross-tenant gotcha (read this if "wrong issuer" hits you)
+
+The JotJson subscription lives in the JotJson Entra tenant
+(`68fa6d3c-ab3e-4eea-97bb-f0376ea54cba`). If you also have access to other
+Entra directories (work, MSA / personal, customer tenants), most of these
+tools default to whichever tenant your browser or CLI is currently signed
+in to, which may not be JotJson's. The proxy cluster will then reject
+your token with:
+
+```
+Failed to fetch schema: The access token is from the wrong issuer
+'https://sts.windows.net/<other-tenant>/'. It must match the tenant
+'https://sts.windows.net/68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/'
+associated with this subscription.
+```
+
+Fix per tool:
+
+- **ADX Web UI** -- click your profile icon (top right) -> **Switch
+  directory** -> pick the JotJson directory and reload. Or open the UI
+  with an explicit tenant hint:
+
+  ```
+  https://dataexplorer.azure.com/?tenantId=68fa6d3c-ab3e-4eea-97bb-f0376ea54cba
+  ```
+
+- **Kusto Explorer (desktop)** -- in the **Add Connection** dialog set
+  **AAD authority** / **Tenant** to
+  `68fa6d3c-ab3e-4eea-97bb-f0376ea54cba`
+  (or `https://login.microsoftonline.com/68fa6d3c-ab3e-4eea-97bb-f0376ea54cba`)
+  before saving.
+
+- **VS Code Kusto extension** -- run **Kusto: Sign Out**, then
+  **Kusto: Sign In** and pick the JotJson account / tenant in the picker.
+
+- **az CLI** --
+
+  ```sh
+  az login --tenant 68fa6d3c-ab3e-4eea-97bb-f0376ea54cba
+  az account set --subscription db5e75e4-b980-486d-a11e-fe9327a52031
+  ```
+
+- **PowerShell (`Az`)** --
+
+  ```powershell
+  Connect-AzAccount -Tenant 68fa6d3c-ab3e-4eea-97bb-f0376ea54cba
+  Set-AzContext -Subscription db5e75e4-b980-486d-a11e-fe9327a52031
+  ```
+
+- **REST** -- request the bearer token from
+  `https://login.microsoftonline.com/68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/oauth2/v2.0/token`
+  with scope `https://api.applicationinsights.io/.default`.
+
 ---
 
 ## Starter KQL query catalog
