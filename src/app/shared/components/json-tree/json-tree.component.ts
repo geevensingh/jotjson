@@ -72,7 +72,7 @@ const TYPE_LABELS: Record<ValueClassification, string> = {
   undefined: $localize`:@@tree.type.undefined:undefined`
 };
 
-interface TreeNode {
+export interface TreeNode {
   segment: string | number | undefined;
   path: (string | number)[];
   pathString: string;
@@ -697,6 +697,7 @@ export class JsonTreeComponent {
   copyPath(node: TreeNode): void {
     const dismiss = $localize`:@@common.dismiss:Dismiss`;
     const clipboard = navigator.clipboard;
+    // clipboard is undefined on HTTP / file:// (insecure contexts) and in older browsers
     if (!clipboard?.writeText) {
       this.snack.open(
         $localize`:@@tree.copyPath.unsupported:Copy is not supported in this browser.`,
@@ -710,7 +711,7 @@ export class JsonTreeComponent {
         this.snack.open(
           $localize`:@@tree.copyPath.success:Path copied to clipboard.`,
           dismiss,
-          { duration: 2000 }
+          { duration: 3000 }
         );
       },
       () => {

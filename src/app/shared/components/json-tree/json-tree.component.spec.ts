@@ -1,8 +1,9 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { JsonTreeComponent } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
+import type { TreeNode } from './json-tree.component';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
@@ -19,17 +20,15 @@ describe('JsonTreeComponent', () => {
   let fixture: ComponentFixture<JsonTreeComponent>;
   let cmp: JsonTreeComponent;
   let prefs: PreferencesService;
-  let snackOpen: jasmine.Spy;
 
-  async function createWith(value: unknown): Promise<void> {
+  async function createWith(value: unknown, extraProviders: unknown[] = []): Promise<void> {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
-    snackOpen = jasmine.createSpy('snackOpen');
     await TestBed.configureTestingModule({
       imports: [JsonTreeComponent],
       providers: [
         ...provideFakeAuth(),
-        { provide: MatSnackBar, useValue: { open: snackOpen } }
+        ...extraProviders
       ]
     }).compileComponents();
     fixture = TestBed.createComponent(JsonTreeComponent);
@@ -663,6 +662,15 @@ describe('JsonTreeComponent', () => {
   });
 
   describe('copyPath', () => {
+    let snackOpen: jasmine.Spy;
+
+    const nodeFixture = (path: string) => ({ pathString: path }) as unknown as TreeNode;
+
+    beforeEach(async () => {
+      snackOpen = jasmine.createSpy('snackOpen');
+      await createWith({ a: 1 }, [{ provide: MatSnackBar, useValue: { open: snackOpen } }]);
+    });
+
     function withClipboard<T>(
       stub: { writeText?: jasmine.Spy } | undefined,
       run: () => T
@@ -686,38 +694,33 @@ describe('JsonTreeComponent', () => {
       }
     }
 
-    it('opens a success snackbar after writeText resolves', async () => {
-      await createWith({ a: 1 });
+    it('opens a success snackbar after writeText resolves', fakeAsync(() => {
       const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
-      await withClipboard({ writeText }, async () => {
-        cmp.copyPath({ pathString: '$.a' } as never);
-        await Promise.resolve();
-        await Promise.resolve();
+      withClipboard({ writeText }, () => {
+        cmp.copyPath(nodeFixture('$.a'));
       });
+      flushMicrotasks();
       expect(writeText).toHaveBeenCalledWith('$.a');
       expect(snackOpen).toHaveBeenCalled();
       const message = snackOpen.calls.mostRecent().args[0] as string;
       expect(message).toContain('copied');
-    });
+    }));
 
-    it('opens a failure snackbar when writeText rejects', async () => {
-      await createWith({ a: 1 });
+    it('opens a failure snackbar when writeText rejects', fakeAsync(() => {
       const writeText = jasmine.createSpy('writeText').and.rejectWith(new Error('denied'));
-      await withClipboard({ writeText }, async () => {
-        cmp.copyPath({ pathString: '$.a' } as never);
-        await Promise.resolve();
-        await Promise.resolve();
+      withClipboard({ writeText }, () => {
+        cmp.copyPath(nodeFixture('$.a'));
       });
+      flushMicrotasks();
       expect(writeText).toHaveBeenCalled();
       expect(snackOpen).toHaveBeenCalled();
       const message = snackOpen.calls.mostRecent().args[0] as string;
       expect(message).toContain('Failed');
-    });
+    }));
 
-    it('opens an unsupported snackbar when navigator.clipboard is missing', async () => {
-      await createWith({ a: 1 });
+    it('opens an unsupported snackbar when navigator.clipboard is missing', () => {
       withClipboard(undefined, () => {
-        cmp.copyPath({ pathString: '$.a' } as never);
+        cmp.copyPath(nodeFixture('$.a'));
       });
       expect(snackOpen).toHaveBeenCalled();
       const message = snackOpen.calls.mostRecent().args[0] as string;
