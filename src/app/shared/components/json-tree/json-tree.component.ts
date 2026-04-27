@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
@@ -115,6 +116,7 @@ export class JsonTreeComponent {
   private readonly prefs = inject(PreferencesService);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly snack = inject(MatSnackBar);
 
   readonly value = input<unknown>(undefined);
 
@@ -693,11 +695,33 @@ export class JsonTreeComponent {
   }
 
   copyPath(node: TreeNode): void {
-    try {
-      void navigator.clipboard?.writeText(node.pathString);
-    } catch {
-      /* ignore */
+    const dismiss = $localize`:@@common.dismiss:Dismiss`;
+    const clipboard = navigator.clipboard;
+    // clipboard is undefined on HTTP / file:// (insecure contexts) and in older browsers
+    if (!clipboard?.writeText) {
+      this.snack.open(
+        $localize`:@@tree.copyPath.unsupported:Copy is not supported in this browser.`,
+        dismiss,
+        { duration: 4000 }
+      );
+      return;
     }
+    clipboard.writeText(node.pathString).then(
+      () => {
+        this.snack.open(
+          $localize`:@@tree.copyPath.success:Path copied to clipboard.`,
+          dismiss,
+          { duration: 3000 }
+        );
+      },
+      () => {
+        this.snack.open(
+          $localize`:@@tree.copyPath.failed:Failed to copy path.`,
+          dismiss,
+          { duration: 4000 }
+        );
+      }
+    );
   }
 
   renderLeaf(value: unknown, type: JsonValueType): string {

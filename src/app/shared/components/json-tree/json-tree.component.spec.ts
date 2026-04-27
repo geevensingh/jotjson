@@ -1,4 +1,5 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { JsonTreeComponent } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
@@ -18,13 +19,18 @@ describe('JsonTreeComponent', () => {
   let fixture: ComponentFixture<JsonTreeComponent>;
   let cmp: JsonTreeComponent;
   let prefs: PreferencesService;
+  let snackOpen: jasmine.Spy;
 
   async function createWith(value: unknown): Promise<void> {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
+    snackOpen = jasmine.createSpy('snackOpen');
     await TestBed.configureTestingModule({
       imports: [JsonTreeComponent],
-      providers: [...provideFakeAuth()]
+      providers: [
+        ...provideFakeAuth(),
+        { provide: MatSnackBar, useValue: { open: snackOpen } }
+      ]
     }).compileComponents();
     fixture = TestBed.createComponent(JsonTreeComponent);
     prefs = TestBed.inject(PreferencesService);
@@ -653,6 +659,68 @@ describe('JsonTreeComponent', () => {
       ) as HTMLElement;
       expect(xRow.classList.contains('is-selected')).toBeTrue();
       expect(xRow.classList.contains('is-search-hit')).toBeTrue();
+    });
+  });
+
+  describe('copyPath', () => {
+    beforeEach(async () => {
+      await createWith({ a: 1 });
+    });
+
+    function withClipboard<T>(
+      stub: { writeText?: jasmine.Spy } | undefined,
+      run: () => T
+    ): T {
+      const original = (navigator as { clipboard?: Clipboard }).clipboard;
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
+      try {
+        return run();
+      } finally {
+        if (original) {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: original
+          });
+        } else {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: undefined
+          });
+        }
+      }
+    }
+
+    it('opens a success snackbar after writeText resolves', fakeAsync(() => {
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        cmp.copyPath({ pathString: '$.a' } as never);
+      });
+      flushMicrotasks();
+      expect(writeText).toHaveBeenCalledWith('$.a');
+      expect(snackOpen).toHaveBeenCalled();
+      const message = snackOpen.calls.mostRecent().args[0] as string;
+      expect(message).toContain('copied');
+    }));
+
+    it('opens a failure snackbar when writeText rejects', fakeAsync(() => {
+      const writeText = jasmine.createSpy('writeText').and.rejectWith(new Error('denied'));
+      withClipboard({ writeText }, () => {
+        cmp.copyPath({ pathString: '$.a' } as never);
+      });
+      flushMicrotasks();
+      expect(writeText).toHaveBeenCalled();
+      expect(snackOpen).toHaveBeenCalled();
+      const message = snackOpen.calls.mostRecent().args[0] as string;
+      expect(message).toContain('Failed');
+    }));
+
+    it('opens an unsupported snackbar when navigator.clipboard is missing', () => {
+      withClipboard(undefined, () => {
+        cmp.copyPath({ pathString: '$.a' } as never);
+      });
+      expect(snackOpen).toHaveBeenCalled();
+      const message = snackOpen.calls.mostRecent().args[0] as string;
+      expect(message).toContain('not supported');
     });
   });
 
