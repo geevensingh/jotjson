@@ -266,6 +266,24 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().searchScope).toBe('both');
   });
 
+  it('writes treePathRoot for valid values and ignores invalid ones', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    expect(prefs.prefs().treePathRoot).toBe('jsonpath');
+    fixture.componentInstance.onTreePathRootChange('none');
+    expect(prefs.prefs().treePathRoot).toBe('none');
+    fixture.componentInstance.onTreePathRootChange('root');
+    expect(prefs.prefs().treePathRoot).toBe('root');
+    fixture.componentInstance.onTreePathRootChange('data');
+    expect(prefs.prefs().treePathRoot).toBe('data');
+    fixture.componentInstance.onTreePathRootChange('jsonpath');
+    expect(prefs.prefs().treePathRoot).toBe('jsonpath');
+    fixture.componentInstance.onTreePathRootChange('garbage');
+    expect(prefs.prefs().treePathRoot).toBe('jsonpath');
+  });
+
   it('writes recentlyViewedEnabled when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },

@@ -41,6 +41,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   blobQuotaStrategy: 'auto_fifo',
   seenBlobQuotaModal: false,
   seenClipboardBanner: false,
+  treePathRoot: 'jsonpath',
   treeHighlightColors: {
     dark: {
       selectionColor: '#264f78',

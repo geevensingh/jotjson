@@ -18,6 +18,7 @@ import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { persistedStringSignal } from '../../../core/preferences/persisted-signal';
+import { JsonParserService } from '../../../core/json/json-parser.service';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
 import {
@@ -117,6 +118,7 @@ export class JsonTreeComponent {
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly destroyRef = inject(DestroyRef);
   private readonly snack = inject(MatSnackBar);
+  private readonly jsonParser = inject(JsonParserService);
 
   readonly value = input<unknown>(undefined);
 
@@ -706,7 +708,12 @@ export class JsonTreeComponent {
       );
       return;
     }
-    clipboard.writeText(node.pathString).then(
+    clipboard.writeText(
+      this.jsonParser.formatPathForClipboard(
+        node.pathString,
+        this.prefs.prefs().treePathRoot
+      )
+    ).then(
       () => {
         this.snack.open(
           $localize`:@@tree.copyPath.success:Path copied to clipboard.`,

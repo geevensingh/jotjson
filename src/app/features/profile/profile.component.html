@@ -176,6 +176,26 @@
             timezone-less ISO 8601 values.
           </span>
         </div>
+
+        <div class="pref-row">
+          <label for="pref-tree-path-root" i18n="@@profile.prefs.tree.pathRoot">
+            Copied path root
+          </label>
+          <select
+            id="pref-tree-path-root"
+            class="pref-select"
+            [ngModel]="treePathRoot()"
+            (ngModelChange)="onTreePathRootChange($event)"
+          >
+            <option value="jsonpath" i18n="@@profile.prefs.tree.pathRoot.jsonpath">JSONPath ($)</option>
+            <option value="none" i18n="@@profile.prefs.tree.pathRoot.none">None</option>
+            <option value="root" i18n="@@profile.prefs.tree.pathRoot.root">root</option>
+            <option value="data" i18n="@@profile.prefs.tree.pathRoot.data">Data</option>
+          </select>
+          <span class="pref-help" i18n="@@profile.prefs.tree.pathRoot.help">
+            Prefix used when copying a tree row's path to the clipboard.
+          </span>
+        </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-search">

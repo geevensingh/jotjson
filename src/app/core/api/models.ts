@@ -97,6 +97,17 @@ export interface UserPreferences {
   blobQuotaStrategy: 'auto_fifo' | 'manual';
   seenBlobQuotaModal: boolean;
   seenClipboardBanner: boolean;
+  /**
+   * Display prefix used when copying a tree row's path to the clipboard.
+   * Internal/canonical `pathString` always uses the JSONPath sentinel `$`;
+   * only the clipboard text is rewritten per this preference.
+   *
+   * - `jsonpath`: `$.foo[0]` (default)
+   * - `none`:     `foo[0]` (lodash-style; leading dot stripped)
+   * - `root`:     `root.foo[0]`
+   * - `data`:     `Data.foo[0]` (capital D)
+   */
+  treePathRoot: 'jsonpath' | 'none' | 'root' | 'data';
   treeHighlightColors: TreeHighlightColors;
 }
 

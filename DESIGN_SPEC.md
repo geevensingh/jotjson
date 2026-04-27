@@ -103,6 +103,7 @@ Browser (Angular SPA)
   blobQuotaStrategy: "auto_fifo" | "manual" (default: "auto_fifo" - delete oldest blob when 100-blob cap reached; "manual" blocks the save with a prompt instead),
   seenBlobQuotaModal: boolean (default: false - flipped to true after the first-time quota explainer modal has been dismissed; synced server-side so the modal doesn't reappear on other devices),
   seenClipboardBanner: boolean (default: false - flipped to true after the first-time paste-permission banner has been dismissed; synced server-side so the banner doesn't reappear on other devices),
+  treePathRoot: "jsonpath" | "none" | "root" | "data" (default: "jsonpath" - display prefix used when copying a tree row's path to the clipboard. Internal/canonical pathString always starts with `$`; only the clipboard text is rewritten. `jsonpath` -> `$.foo[0]`; `none` -> `foo[0]` (lodash-style, leading dot stripped); `root` -> `root.foo[0]`; `data` -> `Data.foo[0]` with capital D),
   treeHighlightColors: TreeHighlightColors
 }
 ```
@@ -303,7 +304,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Expand to Level** - a dropdown (values 1-10) that expands nodes down to the chosen depth and collapses everything deeper. E.g., "Level 2" expands the root and its immediate children but collapses grandchildren.
     - The current expansion level is displayed and persists across re-renders of the same blob.
     - Keyboard shortcuts: `Ctrl+Shift+[` (collapse all), `Ctrl+Shift+]` (expand all), `Alt+1` through `Alt+9` (expand to level N - uses Alt to avoid conflicting with browser tab shortcuts).
-  - Click-to-copy path (e.g., `$.users[0].name`).
+  - Click-to-copy path (e.g., `$.users[0].name`). The root prefix is configurable per user via `treePathRoot` (default `$`; also `none` for lodash-style `users[0].name`, `root.users[0].name`, or `Data.users[0].name`).
   - **Smart date/time detection** - when a string value is parseable as a date/time, the tree displays:
     - The raw original string as-is (e.g., `"2024-11-05T18:30:00Z"`).
     - Followed by a parenthetical annotation showing: the parsed date/time in the user's local format and an approximate relative time.

@@ -77,6 +77,17 @@ export interface UserPreferences {
   blobQuotaStrategy: 'auto_fifo' | 'manual';
   seenBlobQuotaModal: boolean;
   seenClipboardBanner: boolean;
+  /**
+   * Display prefix used when copying a tree row's path to the clipboard.
+   * Internal/canonical `pathString` always uses the JSONPath sentinel `$`;
+   * only the clipboard text is rewritten per this preference.
+   *
+   * - `jsonpath`: `$.foo[0]` (default)
+   * - `none`:     `foo[0]` (lodash-style; leading dot stripped)
+   * - `root`:     `root.foo[0]`
+   * - `data`:     `Data.foo[0]` (capital D)
+   */
+  treePathRoot: 'jsonpath' | 'none' | 'root' | 'data';
   treeHighlightColors: TreeHighlightColors;
 }
 
@@ -100,6 +111,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   blobQuotaStrategy: 'auto_fifo',
   seenBlobQuotaModal: false,
   seenClipboardBanner: false,
+  treePathRoot: 'jsonpath',
   treeHighlightColors: {
     dark: {
       selectionColor: '#264f78',
@@ -162,6 +174,12 @@ const QUOTA_STRATEGIES: readonly UserPreferences['blobQuotaStrategy'][] = [
   'auto_fifo',
   'manual'
 ] as const;
+const TREE_PATH_ROOTS: readonly UserPreferences['treePathRoot'][] = [
+  'jsonpath',
+  'none',
+  'root',
+  'data'
+] as const;
 
 /**
  * Whitelist of accepted preference keys on the wire.
@@ -195,6 +213,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences | 'historyTrackingMode')[]
   'blobQuotaStrategy',
   'seenBlobQuotaModal',
   'seenClipboardBanner',
+  'treePathRoot',
   'treeHighlightColors'
 ] as const;
 
@@ -397,6 +416,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     ),
     seenBlobQuotaModal: assertBool(raw['seenBlobQuotaModal'], 'seenBlobQuotaModal'),
     seenClipboardBanner: assertBool(raw['seenClipboardBanner'], 'seenClipboardBanner'),
+    treePathRoot: assertEnum(raw['treePathRoot'], TREE_PATH_ROOTS, 'treePathRoot'),
     treeHighlightColors: {
       dark: normalizeColorSet(colors['dark'], 'treeHighlightColors.dark'),
       light: normalizeColorSet(colors['light'], 'treeHighlightColors.light')

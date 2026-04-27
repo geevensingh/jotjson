@@ -98,6 +98,35 @@ describe('JsonParserService', () => {
     });
   });
 
+  describe('formatPathForClipboard', () => {
+    it('returns the canonical form unchanged for jsonpath mode', () => {
+      expect(svc.formatPathForClipboard('$', 'jsonpath')).toBe('$');
+      expect(svc.formatPathForClipboard('$.foo[0].bar', 'jsonpath')).toBe('$.foo[0].bar');
+      expect(svc.formatPathForClipboard('$["a.b"]', 'jsonpath')).toBe('$["a.b"]');
+    });
+
+    it('replaces leading $ with root for root mode', () => {
+      expect(svc.formatPathForClipboard('$', 'root')).toBe('root');
+      expect(svc.formatPathForClipboard('$.foo[0].bar', 'root')).toBe('root.foo[0].bar');
+      expect(svc.formatPathForClipboard('$["a.b"]', 'root')).toBe('root["a.b"]');
+      expect(svc.formatPathForClipboard('$[0]', 'root')).toBe('root[0]');
+    });
+
+    it('replaces leading $ with capitalized Data for data mode', () => {
+      expect(svc.formatPathForClipboard('$', 'data')).toBe('Data');
+      expect(svc.formatPathForClipboard('$.foo[0].bar', 'data')).toBe('Data.foo[0].bar');
+      expect(svc.formatPathForClipboard('$["a.b"]', 'data')).toBe('Data["a.b"]');
+    });
+
+    it('strips $ and following dot for none mode (lodash-style)', () => {
+      expect(svc.formatPathForClipboard('$', 'none')).toBe('');
+      expect(svc.formatPathForClipboard('$.foo', 'none')).toBe('foo');
+      expect(svc.formatPathForClipboard('$.foo[0].bar', 'none')).toBe('foo[0].bar');
+      expect(svc.formatPathForClipboard('$["a.b"]', 'none')).toBe('["a.b"]');
+      expect(svc.formatPathForClipboard('$[0]', 'none')).toBe('[0]');
+    });
+  });
+
   describe('offsetToPosition', () => {
     it('returns 1/1 for offset 0', () => {
       expect(svc.offsetToPosition('abc', 0)).toEqual({ line: 1, column: 1 });

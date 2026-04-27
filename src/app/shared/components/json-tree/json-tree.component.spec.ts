@@ -722,6 +722,45 @@ describe('JsonTreeComponent', () => {
       const message = snackOpen.calls.mostRecent().args[0] as string;
       expect(message).toContain('not supported');
     });
+
+    it('writes the canonical $-prefixed path by default (jsonpath mode)', fakeAsync(() => {
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        cmp.copyPath({ pathString: '$.foo[0].bar' } as never);
+      });
+      flushMicrotasks();
+      expect(writeText).toHaveBeenCalledWith('$.foo[0].bar');
+    }));
+
+    it('writes a lodash-style path when treePathRoot is "none"', fakeAsync(() => {
+      prefs.update({ treePathRoot: 'none' });
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        cmp.copyPath({ pathString: '$.foo[0].bar' } as never);
+      });
+      flushMicrotasks();
+      expect(writeText).toHaveBeenCalledWith('foo[0].bar');
+    }));
+
+    it('writes a root-prefixed path when treePathRoot is "root"', fakeAsync(() => {
+      prefs.update({ treePathRoot: 'root' });
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        cmp.copyPath({ pathString: '$.foo[0].bar' } as never);
+      });
+      flushMicrotasks();
+      expect(writeText).toHaveBeenCalledWith('root.foo[0].bar');
+    }));
+
+    it('writes a Data-prefixed path with capital D when treePathRoot is "data"', fakeAsync(() => {
+      prefs.update({ treePathRoot: 'data' });
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        cmp.copyPath({ pathString: '$.foo[0].bar' } as never);
+      });
+      flushMicrotasks();
+      expect(writeText).toHaveBeenCalledWith('Data.foo[0].bar');
+    }));
   });
 
   describe('date annotations', () => {

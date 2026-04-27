@@ -86,6 +86,43 @@ export class JsonParserService {
     return out;
   }
 
+  /**
+   * Rewrites the canonical (`$`-prefixed) path string into the user's
+   * preferred clipboard form. Internal usage of `pathString` keeps the
+   * canonical form everywhere; only the text written to the clipboard
+   * passes through this transform.
+   *
+   * - `jsonpath`: unchanged (e.g. `$.foo[0]`).
+   * - `none`:     strip the leading `$` and any following `.` so dotted
+   *               paths become bare identifiers (lodash-style):
+   *               `$.foo[0]` -> `foo[0]`, `$["a.b"]` -> `["a.b"]`.
+   * - `root`:     replace leading `$` with `root` -> `root.foo[0]`.
+   * - `data`:     replace leading `$` with `Data` (capital D) ->
+   *               `Data.foo[0]`.
+   *
+   * Callers should always pass a string produced by `pathToString` (or
+   * the equivalent in-tree formatter) so the leading `$` invariant
+   * holds.
+   */
+  formatPathForClipboard(
+    canonical: string,
+    mode: 'jsonpath' | 'none' | 'root' | 'data'
+  ): string {
+    switch (mode) {
+      case 'jsonpath':
+        return canonical;
+      case 'root':
+        return canonical.replace(/^\$/, 'root');
+      case 'data':
+        return canonical.replace(/^\$/, 'Data');
+      case 'none':
+        // Strip the `$` and a single following `.` if present, so
+        // `$.foo` -> `foo` while `$["a.b"]` -> `["a.b"]` and
+        // `$[0]` -> `[0]`.
+        return canonical.replace(/^\$\.?/, '');
+    }
+  }
+
   pathForNode(node: JsoncNode): (string | number)[] {
     return [...getNodePath(node)];
   }

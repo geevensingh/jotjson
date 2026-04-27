@@ -90,6 +90,7 @@ export class ProfileComponent {
     () => this.prefs().treeAssumeUtcForIsoDateOnly
   );
   readonly treeFontSize = computed(() => this.prefs().treeFontSize);
+  readonly treePathRoot = computed(() => this.prefs().treePathRoot);
 
   readonly searchCaseSensitive = computed(() => this.prefs().searchCaseSensitive);
   readonly searchRegexMode = computed(() => this.prefs().searchRegexMode);
@@ -160,6 +161,12 @@ export class ProfileComponent {
 
   onTreeAssumeUtcForIsoDateOnlyChange(value: boolean): void {
     this.prefsService.update({ treeAssumeUtcForIsoDateOnly: value });
+  }
+
+  onTreePathRootChange(value: string): void {
+    if (value === 'jsonpath' || value === 'none' || value === 'root' || value === 'data') {
+      this.prefsService.update({ treePathRoot: value });
+    }
   }
 
   onSearchCaseSensitiveChange(value: boolean): void {

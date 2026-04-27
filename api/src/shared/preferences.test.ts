@@ -82,6 +82,26 @@ describe('normalizePreferences', () => {
     input['seenClipboardBanner'] = true;
     expect(normalizePreferences(input).seenClipboardBanner).toBe(true);
   });
+
+  it('accepts each valid treePathRoot value', () => {
+    for (const mode of ['jsonpath', 'none', 'root', 'data'] as const) {
+      const input = valid() as Record<string, unknown>;
+      input['treePathRoot'] = mode;
+      expect(normalizePreferences(input).treePathRoot).toBe(mode);
+    }
+  });
+
+  it('rejects an unknown treePathRoot value', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treePathRoot'] = 'jsonpath2';
+    expect(() => normalizePreferences(bad)).toThrow(/treePathRoot must be one of/);
+  });
+
+  it('rejects a missing treePathRoot value', () => {
+    const bad = valid() as Record<string, unknown>;
+    delete bad['treePathRoot'];
+    expect(() => normalizePreferences(bad)).toThrow(/treePathRoot must be one of/);
+  });
   it('rejects bad hex colors', () => {
     const bad = valid() as Record<string, unknown>;
     (bad['treeHighlightColors'] as Record<string, unknown>)['dark'] = {
