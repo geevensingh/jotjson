@@ -158,6 +158,15 @@ Place new code in the correct bucket:
 - Files: `kebab-case.ts`. Angular: `thing.component.ts`, `thing.service.ts`,
   `thing.pipe.ts`, `thing.guard.ts`.
 - Classes: `PascalCase`. Variables/functions: `camelCase`. Constants: `UPPER_SNAKE`.
+- **Use descriptive names.** Variables, parameters, and functions must
+  use whole-word, intention-revealing names - not single letters or
+  ad-hoc abbreviations like `a`, `b`, `x`, `y`, `tmp`, `val`, `data2`.
+  Prefer `accountId` over `aId`, `nextNode` over `n`, `timeoutMs` over
+  `t`. The single-letter exception is **numeric loop counters**: `i`,
+  `j`, `k` are acceptable in a `for (let i = 0; ...)` loop. Anywhere
+  else (including `forEach`/`map` callbacks, destructured tuples,
+  arrow-function parameters, generic type parameters that carry
+  meaning), use a real word.
 - Test files: co-located as `*.spec.ts`. **Exception:** the `api/`
   workspace currently uses `*.test.ts` (Jest convention). New api/
   test files should still use `*.test.ts` until the workspace is
