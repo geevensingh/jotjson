@@ -1,4 +1,5 @@
 @use '../../../../styles/variables' as v;
+@use '../../../../styles/scrollbars' as sb;
 
 :host {
   display: flex;
@@ -103,6 +104,8 @@
   font-family: v.$font-mono;
   font-size: var(--tree-font-size, 13px);
   line-height: 1.55;
+
+  @include sb.themed-scrollbar;
 }
 
 .tree-empty {

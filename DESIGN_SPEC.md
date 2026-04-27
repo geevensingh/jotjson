@@ -673,6 +673,7 @@ SPA-originated calls in production.
   - Primary: Teal/Cyan accent (#00BCD4 family).
   - Background: Dark (#1E1E1E) / Light (#FAFAFA).
   - JSON types color-coded: strings=green (`#6a8759`), numbers=orange (`#ff9800`), booleans=blue (`#2196f3`), null=gray (`#9e9e9e`), arrays=purple (`#9c27b0`), objects=teal (`#009688`). Exact values live in `src/styles/_variables.scss`.
+  - **Scrollbars**: non-Monaco scrollable surfaces (e.g., the JSON tree pane, the editor's inline error list) use the themed `--scrollbar-thumb` / `--scrollbar-thumb-hover` / `--scrollbar-track` tokens defined in `src/styles/_theme.scss`, applied via the `themed-scrollbar` mixin in `src/styles/_scrollbars.scss`. The styling matches Monaco's overlay scrollbar (thin, no arrow buttons, semi-transparent thumb that strengthens on hover) so the editor and tree look visually unified.
 - **Logo:** "JotJSON" wordmark - "Jot" in regular weight, "JSON" in bold, with a `{ }` icon element.
 - **Responsive breakpoints:** Mobile (< 768px), Tablet (768-1024px), Desktop (> 1024px).
 
