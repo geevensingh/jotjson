@@ -46,6 +46,34 @@ export interface UserPreferences {
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
+  /**
+   * When not `'all'`, the tree search restricts candidate nodes to
+   * those whose classified value type matches; the existing
+   * `searchScope` rules then decide whether key text and/or value
+   * text are eligible for the text match. Empty query + non-`'all'`
+   * lists every node of that type as a navigator.
+   *
+   * The string union mirrors `ValueClassification` in
+   * `src/app/shared/utils/value-classifier.ts` minus `'undefined'`
+   * (no JSON `undefined`). Default `'all'`.
+   */
+  searchValueType:
+    | 'all'
+    | 'date'
+    | 'date/time'
+    | 'uuid'
+    | 'url'
+    | 'email'
+    | 'path'
+    | 'ipv4'
+    | 'ipv6'
+    | 'integer'
+    | 'number'
+    | 'string'
+    | 'boolean'
+    | 'null'
+    | 'array'
+    | 'object';
   blobQuotaStrategy: 'auto_fifo' | 'manual';
   seenBlobQuotaModal: boolean;
   seenClipboardBanner: boolean;
@@ -68,6 +96,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   searchCaseSensitive: false,
   searchRegexMode: false,
   searchScope: 'both',
+  searchValueType: 'all',
   blobQuotaStrategy: 'auto_fifo',
   seenBlobQuotaModal: false,
   seenClipboardBanner: false,
@@ -111,6 +140,24 @@ const LAYOUTS: readonly UserPreferences['layoutOrientation'][] = ['horizontal', 
 const LEGACY_HISTORY_MODES = ['save_only', 'all_actions'] as const;
 type LegacyHistoryMode = (typeof LEGACY_HISTORY_MODES)[number];
 const SEARCH_SCOPES: readonly UserPreferences['searchScope'][] = ['keys', 'values', 'both'] as const;
+const SEARCH_VALUE_TYPES: readonly UserPreferences['searchValueType'][] = [
+  'all',
+  'date',
+  'date/time',
+  'uuid',
+  'url',
+  'email',
+  'path',
+  'ipv4',
+  'ipv6',
+  'integer',
+  'number',
+  'string',
+  'boolean',
+  'null',
+  'array',
+  'object'
+] as const;
 const QUOTA_STRATEGIES: readonly UserPreferences['blobQuotaStrategy'][] = [
   'auto_fifo',
   'manual'
@@ -144,6 +191,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences | 'historyTrackingMode')[]
   'searchCaseSensitive',
   'searchRegexMode',
   'searchScope',
+  'searchValueType',
   'blobQuotaStrategy',
   'seenBlobQuotaModal',
   'seenClipboardBanner',
@@ -337,6 +385,11 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     searchCaseSensitive: assertBool(raw['searchCaseSensitive'], 'searchCaseSensitive'),
     searchRegexMode: assertBool(raw['searchRegexMode'], 'searchRegexMode'),
     searchScope: assertEnum(raw['searchScope'], SEARCH_SCOPES, 'searchScope'),
+    searchValueType: assertEnum(
+      raw['searchValueType'],
+      SEARCH_VALUE_TYPES,
+      'searchValueType'
+    ),
     blobQuotaStrategy: assertEnum(
       raw['blobQuotaStrategy'],
       QUOTA_STRATEGIES,

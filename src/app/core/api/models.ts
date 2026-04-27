@@ -67,6 +67,33 @@ export interface UserPreferences {
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
+  /**
+   * Restricts tree search to nodes whose classified value type matches.
+   * `'all'` means no type filter. When set to a specific type, the
+   * existing `searchScope` rules still decide whether key text and/or
+   * value text are eligible for the text match. Empty query +
+   * non-`'all'` lists every node of that type as a navigator.
+   *
+   * Mirrors `ValueClassification` from
+   * `src/app/shared/utils/value-classifier.ts` minus `'undefined'`.
+   */
+  searchValueType:
+    | 'all'
+    | 'date'
+    | 'date/time'
+    | 'uuid'
+    | 'url'
+    | 'email'
+    | 'path'
+    | 'ipv4'
+    | 'ipv6'
+    | 'integer'
+    | 'number'
+    | 'string'
+    | 'boolean'
+    | 'null'
+    | 'array'
+    | 'object';
   blobQuotaStrategy: 'auto_fifo' | 'manual';
   seenBlobQuotaModal: boolean;
   seenClipboardBanner: boolean;

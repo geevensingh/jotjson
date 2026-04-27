@@ -77,6 +77,30 @@
   </mat-menu>
   <button
     type="button"
+    class="tree-select tree-search-type"
+    [class.is-active]="searchValueType() !== 'all'"
+    [matMenuTriggerFor]="typeMenu"
+    [title]="searchValueTypeTooltip"
+    [attr.aria-label]="searchValueTypeTooltip"
+    aria-haspopup="menu"
+  >
+    {{ searchValueTypeButtonLabel() }}
+  </button>
+  <mat-menu #typeMenu="matMenu">
+    @for (t of searchValueTypes; track t) {
+      <button
+        type="button"
+        mat-menu-item
+        [attr.aria-checked]="searchValueType() === t"
+        role="menuitemradio"
+        (click)="setSearchValueType(t)"
+      >
+        {{ valueTypeLabel(t) }}
+      </button>
+    }
+  </mat-menu>
+  <button
+    type="button"
     class="tree-btn tree-search-nav"
     [disabled]="searchPrevDisabled()"
     [title]="searchPrevTooltip"
