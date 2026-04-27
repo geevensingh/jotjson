@@ -1,0 +1,377 @@
+/**
+ * /api/rule-sets - formatting rule-set CRUD endpoints (M6).
+ *
+ * POST   /api/rule-sets             -> create a new rule set; 201 + ETag
+ * GET    /api/rule-sets             -> list caller's rule sets, sorted by createdAt
+ * GET    /api/rule-sets/{id}        -> read one rule set; 200 + ETag, 403 if not owner
+ * PUT    /api/rule-sets/{id}        -> full replace; requires `If-Match: <version>`,
+ *                                       412 on mismatch, 403 if not owner
+ * DELETE /api/rule-sets/{id}        -> remove the rule set + clean up the user's
+ *                                       `defaultRuleSetId` / `activeRuleSetIds`
+ *                                       references; 204, 403 if not owner
+ *
+ * Concurrency: each rule set carries an integer `version` field that is
+ * surfaced to clients as a strong ETag and required via `If-Match` on
+ * PUT. A mismatched `If-Match` returns 412 Precondition Failed (see
+ * DESIGN_SPEC.md §Features 7, "Concurrency"). The client uses this to
+ * detect cross-tab clobbering.
+ *
+ * Owner mismatch returns 403 (not 404) via the `forbidden()` helper
+ * for parity with `blobs.ts`. We deliberately do NOT obscure the
+ * existence of someone else's rule set - the URLs are server-issued
+ * UUIDs and never user-discoverable.
+ */
+import {
+  app,
+  HttpRequest,
+  HttpResponseInit,
+  InvocationContext
+} from '@azure/functions';
+import { AuthError, requireAuth } from '../shared/auth';
+import {
+  MAX_RULE_SETS_PER_USER,
+  RuleSetValidationError,
+  RuleSetVersionConflictError,
+  assertRuleSetPayload,
+  createRuleSet,
+  deleteRuleSetById,
+  findRuleSetById,
+  listRuleSetsByOwner,
+  readRuleSet,
+  replaceRuleSet,
+  type RuleSetDocument
+} from '../shared/ruleSets';
+import { readUser, upsertUser } from '../shared/users';
+
+function unauthorized(message: string): HttpResponseInit {
+  return { status: 401, jsonBody: { error: message } };
+}
+
+function badRequest(message: string): HttpResponseInit {
+  return { status: 400, jsonBody: { error: message } };
+}
+
+function notFound(message: string): HttpResponseInit {
+  return { status: 404, jsonBody: { error: message } };
+}
+
+function forbidden(message: string): HttpResponseInit {
+  return { status: 403, jsonBody: { error: message } };
+}
+
+function preconditionFailed(message: string): HttpResponseInit {
+  return { status: 412, jsonBody: { error: message } };
+}
+
+function internalError(
+  context: InvocationContext,
+  where: string,
+  err: unknown
+): HttpResponseInit {
+  context.error(`${where} error`, err);
+  return { status: 500, jsonBody: { error: 'Internal error' } };
+}
+
+/**
+ * Build a Cosmos response with the rule set's `version` echoed as a
+ * strong ETag. Clients use the value as the `If-Match` header on
+ * subsequent PUTs. We emit a strong validator (no `W/` prefix)
+ * because the value identifies a specific bytewise revision of the
+ * resource - any change to `name` or `rules` increments `version`.
+ */
+function withEtag(status: number, doc: RuleSetDocument): HttpResponseInit {
+  return {
+    status,
+    headers: { ETag: `"${doc.version}"` },
+    jsonBody: doc
+  };
+}
+
+/**
+ * Parse an `If-Match` request header into the integer version it
+ * encodes. Accepts both quoted (`"3"`) and unquoted (`3`) forms;
+ * rejects weak validators (`W/"3"`) since our resource semantics
+ * mandate strong matches. Returns null when the header is absent or
+ * malformed; the caller decides whether to 400 or 412.
+ */
+function parseIfMatch(headerValue: string | null | undefined): number | null {
+  if (typeof headerValue !== 'string') return null;
+  const trimmed = headerValue.trim();
+  if (trimmed.length === 0 || trimmed.startsWith('W/')) return null;
+  const unquoted = trimmed.replace(/^"|"$/g, '');
+  if (!/^\d+$/.test(unquoted)) return null;
+  const value = Number.parseInt(unquoted, 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export async function postRuleSet(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  let principal;
+  try {
+    principal = await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'postRuleSet auth', err);
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return badRequest('Request body must be JSON');
+  }
+
+  let payload;
+  try {
+    payload = assertRuleSetPayload(body);
+  } catch (err) {
+    if (err instanceof RuleSetValidationError) return badRequest(err.message);
+    return internalError(context, 'postRuleSet validate', err);
+  }
+
+  try {
+    const existing = await listRuleSetsByOwner(principal.id);
+    if (existing.length >= MAX_RULE_SETS_PER_USER) {
+      return {
+        status: 409,
+        jsonBody: {
+          error: `Rule set quota of ${MAX_RULE_SETS_PER_USER} reached. Delete an existing set and try again.`,
+          code: 'quota_exceeded'
+        }
+      };
+    }
+    const created = await createRuleSet(principal.id, payload);
+    return withEtag(201, created);
+  } catch (err) {
+    if (err instanceof RuleSetValidationError) return badRequest(err.message);
+    return internalError(context, 'postRuleSet write', err);
+  }
+}
+
+export async function listRuleSets(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  let principal;
+  try {
+    principal = await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'listRuleSets auth', err);
+  }
+  try {
+    const items = await listRuleSetsByOwner(principal.id);
+    return { status: 200, jsonBody: items };
+  } catch (err) {
+    return internalError(context, 'listRuleSets read', err);
+  }
+}
+
+export async function getRuleSet(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  let principal;
+  try {
+    principal = await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'getRuleSet auth', err);
+  }
+
+  const id = req.params['id'] ?? '';
+  if (!id) return badRequest('Missing id path parameter');
+
+  try {
+    // Cross-partition lookup so we can distinguish "doesn't exist"
+    // from "exists but you're not the owner". The latter must return
+    // 403 per the spec.
+    const found = await findRuleSetById(id);
+    if (!found) return notFound('Rule set not found');
+    if (found.userId !== principal.id) {
+      return forbidden('You do not own this rule set');
+    }
+    return withEtag(200, found);
+  } catch (err) {
+    return internalError(context, 'getRuleSet read', err);
+  }
+}
+
+export async function putRuleSet(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  let principal;
+  try {
+    principal = await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'putRuleSet auth', err);
+  }
+
+  const id = req.params['id'] ?? '';
+  if (!id) return badRequest('Missing id path parameter');
+
+  const expectedVersion = parseIfMatch(req.headers.get('If-Match'));
+  if (expectedVersion === null) {
+    return badRequest('PUT requires a valid If-Match header carrying the rule set version');
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return badRequest('Request body must be JSON');
+  }
+  let payload;
+  try {
+    payload = assertRuleSetPayload(body);
+  } catch (err) {
+    if (err instanceof RuleSetValidationError) return badRequest(err.message);
+    return internalError(context, 'putRuleSet validate', err);
+  }
+
+  try {
+    const found = await findRuleSetById(id);
+    if (!found) return notFound('Rule set not found');
+    if (found.userId !== principal.id) {
+      return forbidden('You do not own this rule set');
+    }
+    if (found.version !== expectedVersion) {
+      return preconditionFailed(
+        `Rule set was modified by another writer (expected version ${expectedVersion}, found ${found.version})`
+      );
+    }
+    const next = await replaceRuleSet(found, payload, expectedVersion);
+    return withEtag(200, next);
+  } catch (err) {
+    if (err instanceof RuleSetValidationError) return badRequest(err.message);
+    if (err instanceof RuleSetVersionConflictError) {
+      // Race: someone else replaced the doc between our read and write.
+      return preconditionFailed(err.message);
+    }
+    return internalError(context, 'putRuleSet write', err);
+  }
+}
+
+export async function deleteRuleSet(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  let principal;
+  try {
+    principal = await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'deleteRuleSet auth', err);
+  }
+
+  const id = req.params['id'] ?? '';
+  if (!id) return badRequest('Missing id path parameter');
+
+  try {
+    // Use the partitioned read first so we don't pay cross-partition RU
+    // for the common owner-deletes-own-set path. Only fall back to the
+    // cross-partition lookup if the owner-scoped read returns nothing
+    // (could be missing, or could be in someone else's partition).
+    let found = await readRuleSet(id, principal.id);
+    if (!found) {
+      const cross = await findRuleSetById(id);
+      if (!cross) return notFound('Rule set not found');
+      if (cross.userId !== principal.id) {
+        return forbidden('You do not own this rule set');
+      }
+      found = cross;
+    }
+
+    const removed = await deleteRuleSetById(found.id, found.userId);
+    if (!removed) return notFound('Rule set not found');
+
+    // Best-effort cleanup of the user's preference references. A
+    // failure here must not roll back the delete - the rule set is
+    // already gone, and a stale `defaultRuleSetId` that points at a
+    // missing set is harmless because the frontend filters unknown
+    // IDs at read time. We log and move on.
+    try {
+      await cleanupUserReferences(principal.id, found.id);
+    } catch (err) {
+      context.warn('deleteRuleSet cleanup failed', err);
+    }
+
+    return { status: 204 };
+  } catch (err) {
+    return internalError(context, 'deleteRuleSet write', err);
+  }
+}
+
+/**
+ * Strip references to the deleted rule set from the owner's user
+ * document. Clears `defaultRuleSetId` if it pointed at this set and
+ * filters the deleted ID out of `activeRuleSetIds`. Performs a
+ * single upsert when (and only when) at least one of those values
+ * actually changes - we don't churn `updatedAt` for users who never
+ * referenced the set.
+ */
+async function cleanupUserReferences(userId: string, deletedSetId: string): Promise<void> {
+  const user = await readUser(userId);
+  if (!user) return;
+  const prefs = user.preferences as
+    | (typeof user.preferences & { activeRuleSetIds?: string[] })
+    | undefined;
+  if (!prefs) return;
+
+  let changed = false;
+  const nextPrefs = { ...prefs };
+  if (prefs.defaultRuleSetId === deletedSetId) {
+    delete nextPrefs.defaultRuleSetId;
+    changed = true;
+  }
+  if (Array.isArray(prefs.activeRuleSetIds) && prefs.activeRuleSetIds.includes(deletedSetId)) {
+    nextPrefs.activeRuleSetIds = prefs.activeRuleSetIds.filter((id) => id !== deletedSetId);
+    changed = true;
+  }
+  if (!changed) return;
+
+  await upsertUser({
+    ...user,
+    preferences: nextPrefs,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+app.http('rule-sets-post', {
+  methods: ['POST'],
+  route: 'rule-sets',
+  authLevel: 'anonymous',
+  handler: postRuleSet
+});
+
+app.http('rule-sets-list', {
+  methods: ['GET'],
+  route: 'rule-sets',
+  authLevel: 'anonymous',
+  handler: listRuleSets
+});
+
+app.http('rule-sets-get', {
+  methods: ['GET'],
+  route: 'rule-sets/{id}',
+  authLevel: 'anonymous',
+  handler: getRuleSet
+});
+
+app.http('rule-sets-put', {
+  methods: ['PUT'],
+  route: 'rule-sets/{id}',
+  authLevel: 'anonymous',
+  handler: putRuleSet
+});
+
+app.http('rule-sets-delete', {
+  methods: ['DELETE'],
+  route: 'rule-sets/{id}',
+  authLevel: 'anonymous',
+  handler: deleteRuleSet
+});
