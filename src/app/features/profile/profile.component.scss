@@ -1,3 +1,5 @@
+@use '../../../styles/material-density' as md;
+
 :host {
   display: flex;
   flex-direction: column;
@@ -203,19 +205,7 @@ dl {
   }
 
   .mat-button-toggle-group {
-    --mat-button-toggle-height: 28px;
-    --mat-button-toggle-label-text-size: 13px;
-    --mat-button-toggle-label-text-line-height: 28px;
-
-    .mat-button-toggle-button {
-      padding: 0;
-    }
-
-    .mat-button-toggle-label-content {
-      padding: 0 14px;
-      line-height: 28px;
-      font-size: 13px;
-    }
+    @include md.compact-mat-button-toggle(28px, 13px);
   }
 }
 
