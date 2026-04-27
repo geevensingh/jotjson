@@ -48,8 +48,26 @@ Place new code in the correct bucket:
 ## 4. Coding Conventions
 
 ### TypeScript (frontend + functions)
-- `strict: true`, `noImplicitAny`, `noUncheckedIndexedAccess`. Never disable
+- `strict: true`, `noImplicitAny`. Never disable
   with `any` - use `unknown` + narrowing.
+- Frontend `tsconfig.json` adds `noImplicitOverride`,
+  `noPropertyAccessFromIndexSignature`, `noImplicitReturns`,
+  `noFallthroughCasesInSwitch`, plus Angular's `strictTemplates`.
+- `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are not yet
+  on. Treat them as aspirational; do not introduce code that would break
+  if they are turned on (e.g., always guard `arr[i]` for possible
+  `undefined`).
+- Production code must have **zero** `as unknown as ...` casts. If you
+  hit a structural mismatch, change the function signature or write a
+  narrow adapter object instead. Test files may use `as unknown as X`
+  for partial framework stubs (`HttpRequest`, `Router`, `SwUpdate`,
+  `MatSnackBarRef`, etc.) -- prefer `jasmine.SpyObj<T>` or
+  `Partial<T>` intermediaries when feasible.
+- Production code must have **zero** `as any`. The single test-file
+  occurrence is grandfathered; do not add more.
+- Test-only seams on production classes use the `__<verb>ForTesting`
+  prefix (e.g., `__setJwksClientForTesting` in `api/src/shared/auth.ts`).
+  Production callers must never reference these.
 - Prefer `type` for unions/aliases, `interface` for object contracts that may be
   extended.
 - No default exports in app code (except Angular-required cases).
@@ -60,12 +78,24 @@ Place new code in the correct bucket:
 - **Standalone components** only; no `NgModule`s for new code.
 - Use **Signals** for component state; RxJS only at I/O boundaries (HTTP,
   routing, events).
+- `computed()` for derived state; `effect()` only for syncing a signal to
+  an external system (e.g., `localStorage`, `document.title`). Never use
+  `effect()` for state derivation.
+- Every `.subscribe(...)` in a component or non-singleton service must
+  be paired with `takeUntilDestroyed()` (preferred) or an explicit
+  `Subscription` cleanup in `ngOnDestroy`. Singleton (root-provided)
+  services may subscribe without cleanup since they live for the app
+  lifetime, but flag this in a code comment.
 - Use `inject()` over constructor DI for new code.
 - Components: `OnPush` change detection by default.
 - Template logic stays trivial - push branching into the component or a pipe.
 - Styles are component-scoped SCSS. Global tokens live in `src/styles/`.
 - Theming uses the `TreeHighlightColors` / theme tokens from the spec - do not
   hardcode colors in components.
+- Logging: use `LoggerService` (`src/app/core/telemetry/logger.service.ts`)
+  for any log a developer might consult. Direct `console.*` calls are
+  permitted only in `src/app/core/telemetry/` and `src/main.ts` (early-
+  boot bootstrap errors).
 
 ### Internationalization (i18n)
 - v1 ships in English only, but **all user-facing strings must be extractable**
@@ -86,16 +116,32 @@ Place new code in the correct bucket:
 
 ### Azure Functions
 - One function per folder. Keep handlers thin; put logic in `src/lib/`.
-- Validate all inputs (zod or equivalent schema validation).
+- Validate all inputs with hand-written `assert<Shape>(value: unknown): Shape`
+  guards (see `assertEnum` / `assertInt` in `api/src/shared/preferences.ts`
+  for the pattern). Throw a typed validation error and translate to
+  `400 Bad Request` at the handler edge. (We do not use zod -- the
+  hand-rolled approach keeps the deployed bundle small.)
 - Return typed JSON responses with explicit status codes. Never leak stack
-  traces.
+  traces. Status code conventions:
+  - `200` read or update success, `201` create success.
+  - `400` request-shape validation failed.
+  - `401` missing or invalid auth (token expired, signature failed).
+  - `403` authenticated but not allowed (e.g., not the blob owner).
+  - `404` resource does not exist or caller cannot see it.
+  - `409` idempotent-create conflict.
+  - `429` rate / quota exceeded.
+  - `500` server error - log full detail; respond with a generic
+    message.
 - Auth: validate Entra External ID-issued JWTs on every protected route.
 
 ### Naming
 - Files: `kebab-case.ts`. Angular: `thing.component.ts`, `thing.service.ts`,
   `thing.pipe.ts`, `thing.guard.ts`.
 - Classes: `PascalCase`. Variables/functions: `camelCase`. Constants: `UPPER_SNAKE`.
-- Test files: co-located as `*.spec.ts`.
+- Test files: co-located as `*.spec.ts`. **Exception:** the `api/`
+  workspace currently uses `*.test.ts` (Jest convention). New api/
+  test files should still use `*.test.ts` until the workspace is
+  migrated. Do not mix conventions within a workspace.
 
 ### ASCII-only repository
 - Tracked source files **must be ASCII** unless the codepoint is explicitly
@@ -134,7 +180,9 @@ Place new code in the correct bucket:
 ## 7. Definition of Done
 
 Before finishing a task:
-1. `npm run lint` passes (frontend and `api/`).
+1. `npm run lint` passes (frontend and `api/`). Lint is currently
+   `tsc --noEmit` plus `check-ascii.mjs` and `check-spec-patterns.mjs`;
+   ESLint is not yet installed.
 2. `npm test` passes (frontend and `api/`).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
 4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the
@@ -142,7 +190,7 @@ Before finishing a task:
 5. Only run the suites that exist - do not introduce new toolchains to satisfy
    this checklist. If a suite isn't set up yet and the task is scaffolding,
    set it up per the spec.
-6. No new TypeScript errors, ESLint errors, or console warnings introduced.
+6. No new TypeScript errors or console warnings introduced.
 7. Spec is updated if behavior or architecture changed.
 
 ## 8. Git & PR Hygiene
