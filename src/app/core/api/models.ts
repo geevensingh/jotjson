@@ -198,3 +198,25 @@ export interface FormattingRuleSet {
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Server-defined built-in preset returned by `GET /api/rule-sets/presets`.
+ * Cloned into a user-owned rule set via
+ * `POST /api/rule-sets/presets/:id/clone`. See DESIGN_SPEC.md §Features 7
+ * "Built-in Presets".
+ */
+export interface RuleSetPreset {
+  id: string;
+  name: string;
+  rules: FormattingRule[];
+}
+
+/**
+ * Wire payload accepted by POST `/api/rule-sets` and PUT
+ * `/api/rule-sets/{id}`. The server assigns `id`, `userId`, `version`,
+ * `createdAt`, and `updatedAt`; only `name` + `rules` are caller-supplied.
+ */
+export interface RuleSetPayload {
+  name: string;
+  rules: FormattingRule[];
+}
