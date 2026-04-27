@@ -7,12 +7,13 @@ unless a task explicitly overrides a specific rule.
 ## 1. Source of Truth
 
 - **`DESIGN_SPEC.md` is the authoritative product & architecture spec.** Read
-  the relevant sections before making non-trivial changes. If a request
-  contradicts the spec, flag the conflict before implementing.
-- Do not silently deviate from the spec (entities, routes, SKUs, limits,
-  defaults). Before deviating, give a detailed written explanation of
-  why and ask for explicit permission. If approved, update
-  `DESIGN_SPEC.md` in the same PR as the code change.
+  the relevant sections before making non-trivial changes.
+- **Never silently deviate from the spec** (entities, routes, SKUs, limits,
+  defaults). If a request contradicts the spec, or you believe a deviation
+  is warranted, give a detailed written explanation of why and ask for
+  explicit permission before implementing.
+- If a deviation is approved, update `DESIGN_SPEC.md` in the same PR as
+  the code change.
 
 ## 2. Tech Stack (non-negotiable defaults)
 
@@ -66,8 +67,6 @@ Place new code in the correct bucket:
   may use `as unknown as X` for partial framework stubs (`HttpRequest`,
   `Router`, `SwUpdate`, `MatSnackBarRef`, etc.) -- prefer
   `jasmine.SpyObj<T>` or `Partial<T>` intermediaries when feasible.
-  Tier-2 lint rules will treat `src/testing/**` and `*.testing.ts` as
-  test code, not production.
 - Production code must have **zero** `as any`. The single test-file
   occurrence is grandfathered; do not add more.
 - Test-only seams on production classes use the `__<verb>ForTesting`
@@ -105,10 +104,10 @@ Place new code in the correct bucket:
   `src/app/features/profile/profile.component.scss` are reference
   examples.
 - Logging: use `LoggerService` (`src/app/core/telemetry/logger.service.ts`)
-  for any log a developer might consult. Direct `console.*` calls are
-  permitted only in `src/app/core/telemetry/` and `src/main.ts` (early-
-  boot bootstrap errors). This is convention-only today; a Tier-2 lint
-  rule in `check-spec-patterns.mjs` will enforce it.
+  for any log a developer might consult. Direct `console.*` calls in
+  production code are permitted only in `src/app/core/telemetry/` and
+  `src/main.ts` (early-boot bootstrap errors). Test files (`*.spec.ts`,
+  `*.test.ts`) may reference `console.*` for spies and expectations.
 
 ### Internationalization (i18n)
 - v1 ships in English only, but **all user-facing strings must be extractable**
