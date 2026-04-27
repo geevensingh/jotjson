@@ -29,6 +29,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { BlobService } from '../../core/api/blob.service';
 import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
+import { persistedSignal } from '../../core/preferences/persisted-signal';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { SeoService } from '../../core/seo/seo.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
@@ -154,7 +155,16 @@ export class HomeComponent {
 
   private readonly homepageTitle = $localize`:@@app.title.homepage:JotJSON - JSON viewer, formatter, and tree explorer`;
 
-  readonly splitRatio = signal(this.loadSplitRatio());
+  readonly splitRatio = persistedSignal<number>({
+    key: 'jotjson.splitRatio.v1',
+    defaultValue: 0.5,
+    parse: (raw) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return 0.5;
+      return Math.min(0.9, Math.max(0.1, n));
+    },
+    serialize: (n) => String(n)
+  });
 
   readonly splitStyle = computed(() => {
     const r = this.splitRatio();
@@ -230,21 +240,13 @@ export class HomeComponent {
       }
     });
 
-    // Persist split ratio to localStorage under `jotjson.splitRatio.v1`.
-    // Intentionally local-only (not part of UserPreferences / Cosmos roaming):
-    // viewport-dependent, couples with layoutOrientation, transient UI state,
-    // and updates on every pointermove during a drag. See DESIGN_SPEC.md
-    // "UserPreferences -> Intentionally not roamed" for the full rationale.
-    // If we ever roam this, it needs per-orientation (and ideally
-    // per-viewport-class) storage plus a multi-second write debounce.
-    effect(() => {
-      const r = this.splitRatio();
-      try {
-        localStorage.setItem('jotjson.splitRatio.v1', String(r));
-      } catch {
-        /* storage unavailable */
-      }
-    });
+    // splitRatio is persisted via persistedSignal at the field declaration
+    // above. Intentionally local-only (not part of UserPreferences / Cosmos
+    // roaming): viewport-dependent, couples with layoutOrientation, transient
+    // UI state, and updates on every pointermove during a drag. See
+    // DESIGN_SPEC.md "UserPreferences -> Intentionally not roamed" for the
+    // full rationale. If we ever roam this, it needs per-orientation (and
+    // ideally per-viewport-class) storage plus a multi-second write debounce.
 
     // Clipboard polling (M7a): initial probe + gate polling on granted +
     // page visibility. Visibilitychange / focus listeners force a re-check
@@ -311,18 +313,6 @@ export class HomeComponent {
     target.addEventListener('pointermove', move);
     target.addEventListener('pointerup', end);
     target.addEventListener('pointercancel', end);
-  }
-
-  private loadSplitRatio(): number {
-    try {
-      const raw = localStorage.getItem('jotjson.splitRatio.v1');
-      if (!raw) return 0.5;
-      const n = Number(raw);
-      if (!Number.isFinite(n)) return 0.5;
-      return Math.min(0.9, Math.max(0.1, n));
-    } catch {
-      return 0.5;
-    }
   }
 
   onValueChange(next: string): void {

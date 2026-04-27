@@ -16,6 +16,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { persistedStringSignal } from '../../../core/preferences/persisted-signal';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
 import {
@@ -67,18 +68,9 @@ function cssEscape(value: string): string {
 
 /**
  * localStorage key for the persisted tree-search term. Per-device,
- * never synced to the server. Mirrors the `splitRatio` / draft pattern.
+ * never synced to the server. Mirrors the splitRatio / draft pattern.
  */
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
-
-function readPersistedSearch(): string {
-  try {
-    const raw = localStorage.getItem(TREE_SEARCH_STORAGE_KEY);
-    return typeof raw === 'string' ? raw : '';
-  } catch {
-    return '';
-  }
-}
 
 /**
  * Interactive tree viewer for parsed JSON, built on Angular Material's
@@ -99,7 +91,7 @@ export class JsonTreeComponent {
 
   readonly value = input<unknown>(undefined);
 
-  readonly search = signal(readPersistedSearch());
+  readonly search = persistedStringSignal(TREE_SEARCH_STORAGE_KEY);
 
   /**
    * Path of the currently-selected tree row, or `null` for no selection.
@@ -439,22 +431,9 @@ export class JsonTreeComponent {
       });
     });
 
-    // Persist the search term to localStorage so it survives page
-    // reloads. Per-device, never sent to the server. Empty string
-    // removes the key. Storage failures (private mode / quota) are
-    // swallowed - the in-memory signal is still authoritative.
-    effect(() => {
-      const term = this.search();
-      try {
-        if (term.length === 0) {
-          localStorage.removeItem(TREE_SEARCH_STORAGE_KEY);
-        } else {
-          localStorage.setItem(TREE_SEARCH_STORAGE_KEY, term);
-        }
-      } catch {
-        /* ignore storage errors */
-      }
-    });
+    // search() is persisted via persistedStringSignal at the field
+    // declaration above (key: TREE_SEARCH_STORAGE_KEY). Per-device,
+    // never sent to the server.
   }
 
   hasChild = (_: number, node: TreeNode): boolean =>
