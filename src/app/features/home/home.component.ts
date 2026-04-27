@@ -123,8 +123,8 @@ export class HomeComponent {
   readonly errors = computed(() => this.parseResult().errors);
 
   readonly treeValue = computed<unknown>(() => {
-    const r = this.parseResult();
-    return r.empty ? undefined : r.value;
+    const result = this.parseResult();
+    return result.empty ? undefined : result.value;
   });
 
   readonly layoutOrientation = computed(() => this.prefs.prefs().layoutOrientation);
@@ -161,20 +161,20 @@ export class HomeComponent {
     key: 'jotjson.splitRatio.v1',
     defaultValue: 0.5,
     parse: (raw) => {
-      const n = Number(raw);
-      if (!Number.isFinite(n)) return 0.5;
-      return Math.min(0.9, Math.max(0.1, n));
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) return 0.5;
+      return Math.min(0.9, Math.max(0.1, parsed));
     },
     serialize: (n) => String(n)
   });
 
   readonly splitStyle = computed(() => {
-    const r = this.splitRatio();
-    const a = `${(r * 100).toFixed(3)}%`;
-    const b = `${((1 - r) * 100).toFixed(3)}%`;
+    const ratio = this.splitRatio();
+    const leftPct = `${(ratio * 100).toFixed(3)}%`;
+    const rightPct = `${((1 - ratio) * 100).toFixed(3)}%`;
     return this.layoutOrientation() === 'vertical'
-      ? { 'grid-template-rows': `${a} var(--splitter-size) ${b}` }
-      : { 'grid-template-columns': `${a} var(--splitter-size) ${b}` };
+      ? { 'grid-template-rows': `${leftPct} var(--splitter-size) ${rightPct}` }
+      : { 'grid-template-columns': `${leftPct} var(--splitter-size) ${rightPct}` };
   });
 
   private readonly splitHost =
@@ -379,12 +379,12 @@ export class HomeComponent {
     const ext = this.mode() === 'jsonc' ? 'jsonc' : 'json';
     const blob = new Blob([text], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `jotjson-untitled.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `jotjson-untitled.${ext}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
     URL.revokeObjectURL(url);
   }
 
@@ -449,32 +449,32 @@ export class HomeComponent {
           void this.quota.notifyAutoDeleted(autoDeleted);
         }
       }
-    } catch (err) {
-      const httpErr = err as { status?: number; error?: { code?: string } };
-      if (httpErr.status === 409 && httpErr.error?.code === 'quota_exceeded') {
+    } catch (error) {
+      const httpError = error as { status?: number; error?: { code?: string } };
+      if (httpError.status === 409 && httpError.error?.code === 'quota_exceeded') {
         void this.quota.notifyQuotaExceededManual();
         this.saveError.set(
           $localize`:@@save.error.quotaExceeded:Blob limit reached - delete one from your saved blobs to save a new blob.`
         );
         return;
       }
-      const message = this.formatSaveError(err);
+      const message = this.formatSaveError(error);
       this.saveError.set(message);
       this.logger.warn('home.save.failed');
-      void err;
+      void error;
     } finally {
       this.saveInFlight.set(false);
     }
   }
 
-  private formatSaveError(err: unknown): string {
-    const httpErr = err as { status?: number; error?: { error?: string } };
-    const body = httpErr.error?.error;
+  private formatSaveError(error: unknown): string {
+    const httpError = error as { status?: number; error?: { error?: string } };
+    const body = httpError.error?.error;
     if (body) return body;
-    if (httpErr.status === 401) {
+    if (httpError.status === 401) {
       return $localize`:@@save.error.signIn:Please sign in to save`;
     }
-    if (httpErr.status === 403) {
+    if (httpError.status === 403) {
       return $localize`:@@save.error.forbidden:You do not own this blob`;
     }
     return $localize`:@@save.error.generic:Could not save - please try again`;
@@ -549,9 +549,9 @@ export class HomeComponent {
         ? $localize`:@@share.visibility.public:Blob is now public.`
         : $localize`:@@share.visibility.private:Blob is now private.`;
       this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, { duration: 3000 });
-    } catch (err) {
+    } catch (error) {
       this.logger.warn('share.visibility.failed');
-      void err;
+      void error;
       this.snack.open(
         $localize`:@@share.visibility.failed:Failed to update visibility.`,
         $localize`:@@common.dismiss:Dismiss`,
@@ -592,9 +592,9 @@ export class HomeComponent {
         { duration: 3000 }
       );
       void this.router.navigate(['/']);
-    } catch (err) {
+    } catch (error) {
       this.logger.warn('share.delete.failed');
-      void err;
+      void error;
       this.snack.open(
         $localize`:@@share.delete.failed:Failed to delete blob.`,
         $localize`:@@common.dismiss:Dismiss`,

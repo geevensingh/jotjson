@@ -162,11 +162,32 @@ Place new code in the correct bucket:
   use whole-word, intention-revealing names - not single letters or
   ad-hoc abbreviations like `a`, `b`, `x`, `y`, `tmp`, `val`, `data2`.
   Prefer `accountId` over `aId`, `nextNode` over `n`, `timeoutMs` over
-  `t`. The single-letter exception is **numeric loop counters**: `i`,
-  `j`, `k` are acceptable in a `for (let i = 0; ...)` loop. Anywhere
-  else (including `forEach`/`map` callbacks, destructured tuples,
-  arrow-function parameters, generic type parameters that carry
-  meaning), use a real word.
+  `t`. **Prefer the full word over a shortened form**: write `index`
+  not `idx`, `error` not `err`, `request` not `req`, `response` not
+  `res`, `length` not `len`, `count` not `cnt`, `previous` not `prev`,
+  `current` not `cur`, `temporary` not `tmp`, `value` not `val`. The
+  only generally-accepted abbreviations are well-established
+  three-or-more-letter terms (`url`, `id`, `db`, `api`, `http`,
+  `json`, `lhs`/`rhs`, `min`/`max`). Single-letter names are only
+  acceptable in these specific idiomatic cases:
+  - **Numeric loop counters**: `i`, `j`, `k` in `for (let i = 0; ...)`
+    or equivalent `while` counters.
+  - **Sort comparators**: `[].sort((a, b) => ...)` -- canonical JS
+    idiom; do not rename.
+  - **Angular Router lazy-load callbacks**: `import('./x').then((m) =>
+    m.Foo)` -- framework convention.
+  - **Destructured domain components**: `const [y, m, d] =
+    isoDate.split('-')` and similar where the letters map to a
+    well-known mnemonic (year/month/day, x/y/z coordinates).
+  - **Trivial one-liner identity-style lambdas**:
+    `arr.map((p) => p.id)`, `arr.filter((b) => b.active)`. Acceptable
+    when the lambda body is a single property access or comparison and
+    the source array's element type is obvious from context. Anything
+    more complex (multi-line body, multiple references to the param)
+    must use a real word.
+  Anywhere outside these exceptions - including persistent local
+  variables, function parameters, generic type parameters that carry
+  meaning, and non-trivial callback bodies - use a real word.
 - Test files: co-located as `*.spec.ts`. **Exception:** the `api/`
   workspace currently uses `*.test.ts` (Jest convention). New api/
   test files should still use `*.test.ts` until the workspace is
@@ -260,3 +281,37 @@ Before finishing a task:
   or away. Never assume an answer or proceed autonomously with a plan
   based on a guess.**
 - Prefer the simpler, spec-aligned option over a clever alternative.
+
+## 11. Critical Thinking & Proactive Feedback
+
+- Treat user suggestions as proposals, not orders. Think critically
+  about each one before acting.
+- When the user proposes an approach, evaluate whether it is sound,
+  complete, and consistent with the codebase, the spec, and prior
+  decisions. If you spot a flaw, a missed case, a simpler alternative,
+  a better-fitting pattern, or a risk the user may not have weighed,
+  **say so before implementing**.
+- Offer suggestions and alternatives proactively, not only when asked.
+  Examples of things worth raising unprompted:
+  - Edge cases or failure modes the proposal does not handle.
+  - Cheaper or simpler approaches that achieve the same goal.
+  - Conflicts with `DESIGN_SPEC.md`, `AGENTS.md`, or existing
+    conventions.
+  - Hidden costs (perf, accessibility, i18n extraction, telemetry,
+    test surface, blast radius).
+  - Naming, API shape, or signature improvements.
+  - Scope concerns: things being included that should be split out,
+    or things being omitted that should be folded in.
+- Be direct and specific. Vague hedging ("might want to consider...")
+  is less useful than a concrete recommendation with a reason. Say
+  what you think the right call is, and why.
+- Disagree when you have a reason to. Do not silently comply with a
+  request that you believe is wrong, incomplete, or risky -- raise
+  the concern, explain it, and let the user decide. After the user
+  decides, follow their decision unless they ask you to push back
+  again.
+- Critical thinking applies to your own prior recommendations too.
+  If new evidence (test output, file contents, a rubber-duck review,
+  a user correction) suggests an earlier suggestion was wrong,
+  acknowledge it explicitly and revise.
+

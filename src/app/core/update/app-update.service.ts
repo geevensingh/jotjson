@@ -62,11 +62,11 @@ export class AppUpdateService {
   private async activateAndReload(): Promise<void> {
     try {
       await this.swUpdate.activateUpdate();
-    } catch (err) {
+    } catch (error) {
       // Fall through to reload anyway - the fresh fetch will re-run the
       // install flow and any partial cache will be discarded.
       this.logger.warn('update.activate.failed');
-      void err;
+      void error;
     }
     this.reload();
   }

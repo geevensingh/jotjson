@@ -58,10 +58,10 @@ export function __resetLocaleOrderCacheForTesting(): void {
   cachedLocaleOrder = null;
 }
 
-function isInRange(d: Date): boolean {
-  if (Number.isNaN(d.getTime())) return false;
-  const y = d.getFullYear();
-  return y >= MIN_YEAR && y <= MAX_YEAR;
+function isInRange(date: Date): boolean {
+  if (Number.isNaN(date.getTime())) return false;
+  const year = date.getFullYear();
+  return year >= MIN_YEAR && year <= MAX_YEAR;
 }
 
 function tryConstructFromYmd(
@@ -77,16 +77,16 @@ function tryConstructFromYmd(
   if (hour < 0 || hour > 23) return null;
   if (minute < 0 || minute > 59) return null;
   if (second < 0 || second > 60) return null;
-  const d = new Date(year, month - 1, day, hour, minute, second);
+  const date = new Date(year, month - 1, day, hour, minute, second);
   // Reject calendar overflow (e.g. Feb 30 -> Mar 2).
   if (
-    d.getFullYear() !== year ||
-    d.getMonth() !== month - 1 ||
-    d.getDate() !== day
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
   ) {
     return null;
   }
-  return isInRange(d) ? d : null;
+  return isInRange(date) ? date : null;
 }
 
 const MONTH_NAMES: Record<string, number> = {
@@ -137,18 +137,18 @@ export function parseAsDate(
   opts?: ParseOptions
 ): ParsedDate | null {
   if (typeof raw !== 'string') return null;
-  const s = raw.trim();
-  if (s.length < 8 || s.length > 40) return null;
+  const trimmed = raw.trim();
+  if (trimmed.length < 8 || trimmed.length > 40) return null;
 
-  if (ISO_WITH_TIME.test(s)) {
-    const hasTz = ISO_TZ_SUFFIX.test(s);
-    const source = !hasTz && opts?.assumeUtcForIsoDateTime ? `${s}Z` : s;
-    const d = new Date(source);
-    return isInRange(d) ? { date: d, hasTime: true } : null;
+  if (ISO_WITH_TIME.test(trimmed)) {
+    const hasTz = ISO_TZ_SUFFIX.test(trimmed);
+    const source = !hasTz && opts?.assumeUtcForIsoDateTime ? `${trimmed}Z` : trimmed;
+    const date = new Date(source);
+    return isInRange(date) ? { date, hasTime: true } : null;
   }
 
-  if (ISO_DATE_ONLY.test(s)) {
-    const [y, m, d] = s.split('-').map((p) => Number(p));
+  if (ISO_DATE_ONLY.test(trimmed)) {
+    const [y, m, d] = trimmed.split('-').map((part) => Number(part));
     if (opts?.assumeUtcForIsoDateOnly) {
       if (m < 1 || m > 12 || d < 1 || d > 31) return null;
       const utc = new Date(Date.UTC(y, m - 1, d));
@@ -165,10 +165,10 @@ export function parseAsDate(
     return built ? { date: built, hasTime: false } : null;
   }
 
-  const slash = SLASH_DATE.exec(s);
+  const slash = SLASH_DATE.exec(trimmed);
   if (slash) {
-    const a = Number(slash[1]);
-    const b = Number(slash[2]);
+    const first = Number(slash[1]);
+    const second = Number(slash[2]);
     const year = Number(slash[3]);
     const hh = slash[4] !== undefined ? Number(slash[4]) : undefined;
     const mm = slash[5] !== undefined ? Number(slash[5]) : undefined;
@@ -177,17 +177,17 @@ export function parseAsDate(
     let month: number;
     let day: number;
     if (order === 'dmy') {
-      day = a;
-      month = b;
+      day = first;
+      month = second;
     } else {
-      month = a;
-      day = b;
+      month = first;
+      day = second;
     }
     const built = tryConstructFromYmd(year, month, day, hh ?? 0, mm ?? 0, ss ?? 0);
     return built ? { date: built, hasTime: hh !== undefined } : null;
   }
 
-  const rfc = RFC2822_ISH.exec(s);
+  const rfc = RFC2822_ISH.exec(trimmed);
   if (rfc) {
     const dayA = rfc[1];
     const monA = rfc[2];
@@ -217,8 +217,8 @@ const REL_UNITS: Array<{ unit: Intl.RelativeTimeFormatUnit; ms: number }> = [
   { unit: 'second', ms: 1000 }
 ];
 
-function formatRelative(d: Date, now: Date, locale?: string): string {
-  const deltaMs = d.getTime() - now.getTime();
+function formatRelative(date: Date, now: Date, locale?: string): string {
+  const deltaMs = date.getTime() - now.getTime();
   const abs = Math.abs(deltaMs);
   const sign = deltaMs < 0 ? -1 : 1;
   const choice = REL_UNITS.find(({ ms }) => abs >= ms) ?? REL_UNITS[REL_UNITS.length - 1];

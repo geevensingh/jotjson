@@ -70,10 +70,10 @@ export class TelemetryService {
       return this.connectPromise;
     }
     this.state = 'connecting';
-    this.connectPromise = this.loadAndInit(cs).catch((err) => {
+    this.connectPromise = this.loadAndInit(cs).catch((error) => {
       this.state = 'disabled';
       // eslint-disable-next-line no-console
-      console.warn('[telemetry] connect failed; telemetry disabled', err);
+      console.warn('[telemetry] connect failed; telemetry disabled', error);
     });
     return this.connectPromise;
   }
@@ -168,10 +168,10 @@ export class TelemetryService {
     const data = item.data ?? {};
     // Sanitize any uri-like field that the SDK populates.
     const fields: Array<keyof typeof data> = ['uri', 'refUri', 'url'];
-    for (const f of fields) {
-      const v = data[f];
-      if (typeof v === 'string') {
-        data[f] = sanitizePath(v);
+    for (const field of fields) {
+      const fieldValue = data[field];
+      if (typeof fieldValue === 'string') {
+        data[field] = sanitizePath(fieldValue);
       }
     }
     if (item.baseData) {
@@ -190,9 +190,9 @@ export class TelemetryService {
       // means a query slipped past us. Drop the envelope rather than
       // ship it.
       const dropFields: string[] = ['uri', 'name', 'url'];
-      for (const f of dropFields) {
-        const v = bd[f];
-        if (typeof v === 'string' && v.includes('?')) {
+      for (const field of dropFields) {
+        const fieldValue = bd[field];
+        if (typeof fieldValue === 'string' && fieldValue.includes('?')) {
           return false;
         }
       }
@@ -233,48 +233,48 @@ export class TelemetryService {
       return undefined;
     }
     const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(props)) {
-      if (v === undefined) {
+    for (const [key, value] of Object.entries(props)) {
+      if (value === undefined) {
         continue;
       }
-      out[k] = String(v);
+      out[key] = String(value);
     }
     return out;
   }
 
-  private toSyntheticError(err: NormalizedError): Error {
-    if (err.kind === 'http') {
-      const e = new Error(
-        `HTTP ${err.status} ${err.method ?? ''} ${err.pathTemplate ?? ''}`.trim()
+  private toSyntheticError(normalized: NormalizedError): Error {
+    if (normalized.kind === 'http') {
+      const error = new Error(
+        `HTTP ${normalized.status} ${normalized.method ?? ''} ${normalized.pathTemplate ?? ''}`.trim()
       );
-      e.name = 'HttpError';
-      return e;
+      error.name = 'HttpError';
+      return error;
     }
-    if (err.kind === 'error') {
-      const e = new Error(err.message);
-      e.name = err.name;
-      if (err.stack) {
-        e.stack = err.stack;
+    if (normalized.kind === 'error') {
+      const error = new Error(normalized.message);
+      error.name = normalized.name;
+      if (normalized.stack) {
+        error.stack = normalized.stack;
       }
-      return e;
+      return error;
     }
-    const e = new Error(err.repr);
-    e.name = 'UnknownThrow';
-    return e;
+    const error = new Error(normalized.repr);
+    error.name = 'UnknownThrow';
+    return error;
   }
 
-  private errorProps(err: NormalizedError): TelemetryProps {
-    if (err.kind === 'http') {
+  private errorProps(normalized: NormalizedError): TelemetryProps {
+    if (normalized.kind === 'http') {
       return {
         kind: 'http',
-        status: err.status,
-        method: err.method,
-        pathTemplate: err.pathTemplate,
-        backendCode: err.backendCode
+        status: normalized.status,
+        method: normalized.method,
+        pathTemplate: normalized.pathTemplate,
+        backendCode: normalized.backendCode
       };
     }
-    if (err.kind === 'error') {
-      return { kind: 'error', name: err.name };
+    if (normalized.kind === 'error') {
+      return { kind: 'error', name: normalized.name };
     }
     return { kind: 'unknown' };
   }

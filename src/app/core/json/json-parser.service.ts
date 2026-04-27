@@ -202,8 +202,8 @@ export class JsonParserService {
     }
 
     for (const candidate of candidates) {
-      const c = candidate.trim();
-      if (!c.startsWith('{') && !c.startsWith('[')) continue;
+      const trimmed = candidate.trim();
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) continue;
       if (this.parsesCleanly(candidate)) {
         return { unescaped: candidate, changed: true };
       }
@@ -231,12 +231,12 @@ export class JsonParserService {
     return errors.length === 0;
   }
 
-  private toError(err: ParseError, text: string): JsonParseError {
-    const { line, column } = this.offsetToPosition(text, err.offset);
+  private toError(parseError: ParseError, text: string): JsonParseError {
+    const { line, column } = this.offsetToPosition(text, parseError.offset);
     return {
-      message: printParseErrorCode(err.error),
-      offset: err.offset,
-      length: err.length,
+      message: printParseErrorCode(parseError.error),
+      offset: parseError.offset,
+      length: parseError.length,
       line,
       column
     };

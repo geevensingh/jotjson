@@ -121,16 +121,16 @@ export class ToolbarComponent {
   });
 
   readonly pasteDisabled = computed(() => {
-    const s = this.clipboardState();
-    return s === 'enabled-empty' || s === 'denied';
+    const state = this.clipboardState();
+    return state === 'enabled-empty' || state === 'denied';
   });
 
   readonly pasteTooltip = computed(() => {
     switch (this.clipboardState()) {
       case 'enabled-json': {
-        const p = this.clipboardPreview();
-        return p
-          ? $localize`:@@toolbar.paste.tooltip.ready:Paste: ${p}:PREVIEW:`
+        const preview = this.clipboardPreview();
+        return preview
+          ? $localize`:@@toolbar.paste.tooltip.ready:Paste: ${preview}:PREVIEW:`
           : $localize`:@@toolbar.paste.tooltip.readyNoPreview:Paste JSON from clipboard`;
       }
       case 'enabled-empty':

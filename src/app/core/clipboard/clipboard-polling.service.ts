@@ -111,8 +111,8 @@ export class ClipboardPollingService implements OnDestroy {
       this.applyText(text);
       this.startPolling();
       return 'granted';
-    } catch (err) {
-      if (this.isNotAllowedError(err)) {
+    } catch (error) {
+      if (this.isNotAllowedError(error)) {
         this.permissionStateSignal.set('denied');
         this.clearClipboardDerived();
       }
@@ -141,8 +141,8 @@ export class ClipboardPollingService implements OnDestroy {
       }
       this.applyText(text);
       return text;
-    } catch (err) {
-      if (this.isNotAllowedError(err)) {
+    } catch (error) {
+      if (this.isNotAllowedError(error)) {
         this.permissionStateSignal.set('denied');
         this.clearClipboardDerived();
       }
@@ -208,9 +208,9 @@ export class ClipboardPollingService implements OnDestroy {
     );
   }
 
-  private isNotAllowedError(err: unknown): boolean {
-    if (!err || typeof err !== 'object') return false;
-    const name = (err as { name?: unknown }).name;
+  private isNotAllowedError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const name = (error as { name?: unknown }).name;
     return name === 'NotAllowedError' || name === 'SecurityError';
   }
 
@@ -236,12 +236,12 @@ export class ClipboardPollingService implements OnDestroy {
   }
 
   private applyPermissionStatus(status: PermissionStatus): void {
-    const s = status.state;
-    if (s === 'granted') {
+    const state = status.state;
+    if (state === 'granted') {
       this.permissionStateSignal.set('granted');
       this.startPolling();
       void this.checkOnce();
-    } else if (s === 'denied') {
+    } else if (state === 'denied') {
       this.permissionStateSignal.set('denied');
       this.clearClipboardDerived();
     } else {

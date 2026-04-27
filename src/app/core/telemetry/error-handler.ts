@@ -16,14 +16,14 @@ export class TelemetryErrorHandler extends ErrorHandler {
   private readonly logger = inject(LoggerService);
   private isHandling = false;
 
-  override handleError(err: unknown): void {
-    super.handleError(err);
+  override handleError(error: unknown): void {
+    super.handleError(error);
     if (this.isHandling) {
       return;
     }
     this.isHandling = true;
     try {
-      this.logger.error('app.unhandled', err);
+      this.logger.error('app.unhandled', error);
     } catch {
       // never throw out of the global error handler
     } finally {

@@ -34,9 +34,9 @@ export class StatusBarComponent {
   });
 
   readonly cursorLabel = computed(() => {
-    const c = this.cursor();
-    const line = c?.line ?? 1;
-    const col = c?.column ?? 1;
+    const position = this.cursor();
+    const line = position?.line ?? 1;
+    const col = position?.column ?? 1;
     return { line, col };
   });
 

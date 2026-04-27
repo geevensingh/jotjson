@@ -74,9 +74,9 @@ export class BlobsComponent implements OnInit {
       );
       this.blobList.set(sorted);
       this.state.set('ready');
-    } catch (err) {
+    } catch (error) {
       this.logger.warn('blobs.load.failed');
-      void err;
+      void error;
       this.errorMessage.set(
         $localize`:@@blobs.load.failed:Failed to load your saved blobs.`
       );
@@ -85,9 +85,9 @@ export class BlobsComponent implements OnInit {
   }
 
   displayTitle(blob: JsonBlob): string {
-    const t = blob.title?.trim();
-    return t && t.length > 0
-      ? t
+    const title = blob.title?.trim();
+    return title && title.length > 0
+      ? title
       : $localize`:@@blobs.untitled:Untitled`;
   }
 
@@ -144,9 +144,9 @@ export class BlobsComponent implements OnInit {
         $localize`:@@common.dismiss:Dismiss`,
         { duration: 3000 }
       );
-    } catch (err) {
+    } catch (error) {
       this.logger.warn('share.delete.failed');
-      void err;
+      void error;
       this.snack.open(
         $localize`:@@share.delete.failed:Failed to delete blob.`,
         $localize`:@@common.dismiss:Dismiss`,

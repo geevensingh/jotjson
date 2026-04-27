@@ -67,8 +67,8 @@ export class LoggerService {
     this.connected = true;
     this.flushSessionStorage();
     const drained = this.buffer.splice(0, this.buffer.length);
-    for (const e of drained) {
-      this.dispatch(e);
+    for (const entry of drained) {
+      this.dispatch(entry);
     }
   }
 
@@ -84,13 +84,13 @@ export class LoggerService {
 
   error(
     messageId: TelemetryMessageId,
-    err: unknown | null,
+    cause: unknown | null,
     props?: TelemetryProps,
     httpCtx?: HttpErrorContext
   ): void {
-    const normalized = err === null || err === undefined
+    const normalized = cause === null || cause === undefined
       ? undefined
-      : normalizeError(err, httpCtx);
+      : normalizeError(cause, httpCtx);
     this.consoleMirror('error', messageId, props, normalized);
     this.handle({
       ts: Date.now(),
@@ -128,18 +128,18 @@ export class LoggerService {
       } else {
         this.telemetry.trackTrace(entry.messageId, severity, entry.props);
       }
-    } catch (e) {
+    } catch (error) {
       // Never throw out of the logger.
       // eslint-disable-next-line no-console
-      console.warn('[telemetry] dispatch failed', e);
+      console.warn('[telemetry] dispatch failed', error);
     }
   }
 
-  private toSdkSeverity(s: Severity): TelemetrySeverity {
-    if (s === 'error') {
+  private toSdkSeverity(severity: Severity): TelemetrySeverity {
+    if (severity === 'error') {
       return 'error';
     }
-    if (s === 'warn') {
+    if (severity === 'warn') {
       return 'warn';
     }
     return 'info';
@@ -149,7 +149,7 @@ export class LoggerService {
     severity: Severity,
     messageId: TelemetryMessageId,
     props?: TelemetryProps,
-    err?: NormalizedError
+    error?: NormalizedError
   ): void {
     // eslint-disable-next-line no-console
     const fn = severity === 'error'
@@ -157,8 +157,8 @@ export class LoggerService {
       : severity === 'warn'
         ? console.warn
         : console.info;
-    if (err) {
-      fn(`[${messageId}]`, props ?? {}, err);
+    if (error) {
+      fn(`[${messageId}]`, props ?? {}, error);
     } else {
       fn(`[${messageId}]`, props ?? {});
     }

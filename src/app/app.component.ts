@@ -26,13 +26,13 @@ export class AppComponent implements OnInit {
       import('./core/telemetry/logger.service'),
       import('./core/telemetry/route-tracker')
     ]).then(async ([logger, tracker]) => {
-      const t = this.injector.get(tracker.RouteTracker);
+      const routeTracker = this.injector.get(tracker.RouteTracker);
       // Start subscribing to NavigationEnd before connect() resolves so
       // the bootstrap navigation is captured even though it fires
       // before telemetry is ready.
-      t.start();
+      routeTracker.start();
       await this.injector.get(logger.LoggerService).connect();
-      t.flushPending();
+      routeTracker.flushPending();
     });
     void import('./core/update/app-update.service').then(({ AppUpdateService }) => {
       this.injector.get(AppUpdateService).initialize();

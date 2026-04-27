@@ -63,11 +63,11 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
 
     // React to preference changes (font-size, wrap, tab size).
     effect(() => {
-      const p = this.prefs.prefs();
+      const currentPrefs = this.prefs.prefs();
       this.editor?.updateOptions({
-        fontSize: p.editorFontSize,
-        tabSize: p.editorTabSize,
-        wordWrap: p.editorWordWrap ? 'on' : 'off'
+        fontSize: currentPrefs.editorFontSize,
+        tabSize: currentPrefs.editorTabSize,
+        wordWrap: currentPrefs.editorWordWrap ? 'on' : 'off'
       });
     });
 
@@ -89,24 +89,24 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     let monaco: typeof MonacoNS;
     try {
       monaco = await loadMonaco();
-    } catch (err) {
-      this.logger.error('monaco.loadFailed', err);
+    } catch (error) {
+      this.logger.error('monaco.loadFailed', error);
       return;
     }
     this.monaco = monaco;
 
     this.defineThemes(monaco);
     const theme = this.prefs.effectiveTheme();
-    const p = this.prefs.prefs();
+    const currentPrefs = this.prefs.prefs();
 
     this.zone.runOutsideAngular(() => {
       const editor = monaco.editor.create(this.host().nativeElement, {
         value: this.value(),
         language: 'json',
         theme: theme === 'light' ? 'jotjson-light' : 'jotjson-dark',
-        fontSize: p.editorFontSize,
-        tabSize: p.editorTabSize,
-        wordWrap: p.editorWordWrap ? 'on' : 'off',
+        fontSize: currentPrefs.editorFontSize,
+        tabSize: currentPrefs.editorTabSize,
+        wordWrap: currentPrefs.editorWordWrap ? 'on' : 'off',
         automaticLayout: false,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
@@ -129,12 +129,12 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
 
       editor.onDidChangeModelContent(() => {
         if (this.suppressChange) return;
-        const v = editor.getValue();
-        this.zone.run(() => this.valueChange.emit(v));
+        const editorValue = editor.getValue();
+        this.zone.run(() => this.valueChange.emit(editorValue));
       });
 
-      editor.onDidChangeCursorPosition((e) => {
-        const pos = { line: e.position.lineNumber, column: e.position.column };
+      editor.onDidChangeCursorPosition((event) => {
+        const pos = { line: event.position.lineNumber, column: event.position.column };
         this.zone.run(() => this.cursorPositionChange.emit(pos));
       });
 
@@ -142,10 +142,10 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       // region is itself an escaped JSON document AND unescaping it leaves the
       // full buffer parseable - prevents us from rewriting legitimate string
       // values that happen to contain escape sequences.
-      editor.onDidPaste((e) => {
+      editor.onDidPaste((event) => {
         const model = editor.getModel();
         if (!model) return;
-        const pasted = model.getValueInRange(e.range);
+        const pasted = model.getValueInRange(event.range);
         if (!pasted) return;
         const { unescaped, changed } = this.parser.tryUnescape(pasted);
         if (!changed) return;
@@ -153,14 +153,14 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         const before = model.getValueInRange({
           startLineNumber: 1,
           startColumn: 1,
-          endLineNumber: e.range.startLineNumber,
-          endColumn: e.range.startColumn
+          endLineNumber: event.range.startLineNumber,
+          endColumn: event.range.startColumn
         });
         const after = full.substring(before.length + pasted.length);
         const hypothetical = before + unescaped + after;
         if (!this.parser.parse(hypothetical).errors.length) {
           editor.executeEdits('jotjson-unescape-paste', [
-            { range: e.range, text: unescaped, forceMoveMarkers: true }
+            { range: event.range, text: unescaped, forceMoveMarkers: true }
           ]);
         }
       });
@@ -190,13 +190,13 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     monaco.editor.setModelMarkers(
       model,
       'jotjson',
-      errs.map((e) => ({
+      errs.map((parseError) => ({
         severity: monaco.MarkerSeverity.Error,
-        message: e.message,
-        startLineNumber: e.line,
-        startColumn: e.column,
-        endLineNumber: e.line,
-        endColumn: e.column + Math.max(1, e.length)
+        message: parseError.message,
+        startLineNumber: parseError.line,
+        startColumn: parseError.column,
+        endLineNumber: parseError.line,
+        endColumn: parseError.column + Math.max(1, parseError.length)
       }))
     );
   }

@@ -152,17 +152,17 @@ function matchString(
   // future optimization, and node keys/values are short by JSON
   // standards. Per-attempt allocation is the only realistic
   // alternative and isn't measurably faster for v1 scales.
-  const a = caseSensitive ? candidate : candidate.toLowerCase();
-  const b = caseSensitive ? matchValue : matchValue.toLowerCase();
+  const lhs = caseSensitive ? candidate : candidate.toLowerCase();
+  const rhs = caseSensitive ? matchValue : matchValue.toLowerCase();
   switch (matchType) {
     case 'exact':
-      return a === b;
+      return lhs === rhs;
     case 'contains':
-      return a.includes(b);
+      return lhs.includes(rhs);
     case 'starts_with':
-      return a.startsWith(b);
+      return lhs.startsWith(rhs);
     case 'ends_with':
-      return a.endsWith(b);
+      return lhs.endsWith(rhs);
     default:
       return false;
   }

@@ -122,8 +122,8 @@ export class ProfileComponent {
   }
 
   onEditorFontSizeChange(value: number | string | null): void {
-    const n = this.clampNumber(value, FONT_SIZE_MIN, FONT_SIZE_MAX, this.editorFontSize());
-    this.prefsService.update({ editorFontSize: n });
+    const clamped = this.clampNumber(value, FONT_SIZE_MIN, FONT_SIZE_MAX, this.editorFontSize());
+    this.prefsService.update({ editorFontSize: clamped });
   }
 
   onEditorTabSizeChange(value: 2 | 4): void {
@@ -135,18 +135,18 @@ export class ProfileComponent {
   }
 
   onDefaultTreeExpansionDepthChange(value: number | string | null): void {
-    const n = this.clampNumber(
+    const clamped = this.clampNumber(
       value,
       EXPANSION_DEPTH_MIN,
       EXPANSION_DEPTH_MAX,
       this.defaultTreeExpansionDepth()
     );
-    this.prefsService.update({ defaultTreeExpansionDepth: n });
+    this.prefsService.update({ defaultTreeExpansionDepth: clamped });
   }
 
   onTreeFontSizeChange(value: number | string | null): void {
-    const n = this.clampNumber(value, FONT_SIZE_MIN, FONT_SIZE_MAX, this.treeFontSize());
-    this.prefsService.update({ treeFontSize: n });
+    const clamped = this.clampNumber(value, FONT_SIZE_MIN, FONT_SIZE_MAX, this.treeFontSize());
+    this.prefsService.update({ treeFontSize: clamped });
   }
 
   onTreeShowTypeLabelsChange(value: boolean): void {

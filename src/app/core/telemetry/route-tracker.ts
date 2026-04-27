@@ -63,11 +63,11 @@ export class RouteTracker {
   }
 
   private stripQuery(url: string): string {
-    const q = url.indexOf('?');
-    const h = url.indexOf('#');
+    const queryIdx = url.indexOf('?');
+    const hashIdx = url.indexOf('#');
     let end = url.length;
-    if (q >= 0) end = Math.min(end, q);
-    if (h >= 0) end = Math.min(end, h);
+    if (queryIdx >= 0) end = Math.min(end, queryIdx);
+    if (hashIdx >= 0) end = Math.min(end, hashIdx);
     return url.slice(0, end);
   }
 

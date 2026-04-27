@@ -76,11 +76,11 @@ export function computeTreeStats(ast: JsoncNode | undefined): TreeStats | undefi
  * fraction above 1 KB. Examples: 0 -> "0 B", 834 -> "834 B", 1536 -> "1.5 KB",
  * 2_500_000 -> "2.5 MB".
  */
-export function formatBytes(n: number): string {
-  if (!Number.isFinite(n) || n < 0) return '0 B';
-  if (n < 1000) return `${n} B`;
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
+  if (bytes < 1000) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
-  let value = n / 1000;
+  let value = bytes / 1000;
   let i = 0;
   while (value >= 1000 && i < units.length - 1) {
     value /= 1000;

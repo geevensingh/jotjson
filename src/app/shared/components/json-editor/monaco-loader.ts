@@ -70,7 +70,7 @@ export function loadMonaco(): Promise<typeof MonacoNS> {
 
 function bootstrap(
   resolve: (m: typeof MonacoNS) => void,
-  reject: (err: unknown) => void
+  reject: (error: unknown) => void
 ): void {
   const req = window.require;
   if (!req) {

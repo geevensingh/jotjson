@@ -220,9 +220,9 @@ export class JsonTreeComponent {
    * to the active row.
    */
   readonly activeHitPath = computed<string | null>(() => {
-    const i = this.activeHitIndex();
+    const index = this.activeHitIndex();
     const list = this.searchHitPaths();
-    return i >= 0 && i < list.length ? (list[i] ?? null) : null;
+    return index >= 0 && index < list.length ? (list[index] ?? null) : null;
   });
 
   readonly searchHitCount = computed<number>(() => this.searchHitPaths().length);
@@ -237,8 +237,8 @@ export class JsonTreeComponent {
     const sp = this.selectedPath();
     if (sp === null) return 0;
     if (!this.searchHits().has(sp)) return 0;
-    const idx = this.searchHitPaths().indexOf(sp);
-    return idx >= 0 ? idx + 1 : 0;
+    const index = this.searchHitPaths().indexOf(sp);
+    return index >= 0 ? index + 1 : 0;
   });
 
   /**
@@ -248,10 +248,10 @@ export class JsonTreeComponent {
    */
   readonly searchRegexInvalid = computed<boolean>(() => {
     if (!this.prefs.prefs().searchRegexMode) return false;
-    const q = this.search().trim();
-    if (!q) return false;
+    const query = this.search().trim();
+    if (!query) return false;
     try {
-      new RegExp(q);
+      new RegExp(query);
       return false;
     } catch {
       return true;
@@ -276,14 +276,14 @@ export class JsonTreeComponent {
    */
   readonly searchCountLabel = computed<string>(() => {
     if (!this.searchActive()) return '';
-    const n = this.searchHitCount();
-    if (n === 0) return $localize`:@@tree.search.count.none:No matches`;
+    const count = this.searchHitCount();
+    if (count === 0) return $localize`:@@tree.search.count.none:No matches`;
     const pos = this.currentMatchIndex();
     if (pos > 0) {
-      return $localize`:@@tree.search.count.position:${pos}:position: / ${n}:count: matches`;
+      return $localize`:@@tree.search.count.position:${pos}:position: / ${count}:count: matches`;
     }
-    if (n === 1) return $localize`:@@tree.search.count.one:1 match`;
-    return $localize`:@@tree.search.count.other:${n}:count: matches`;
+    if (count === 1) return $localize`:@@tree.search.count.one:1 match`;
+    return $localize`:@@tree.search.count.other:${count}:count: matches`;
   });
 
   /**
@@ -295,9 +295,9 @@ export class JsonTreeComponent {
    */
   readonly searchCountGhost = computed<string>(() => {
     if (!this.searchActive()) return '';
-    const n = this.searchHitCount();
-    if (n === 0) return '';
-    return $localize`:@@tree.search.count.ghost:${n}:position: / ${n}:count: matches`;
+    const count = this.searchHitCount();
+    if (count === 0) return '';
+    return $localize`:@@tree.search.count.ghost:${count}:position: / ${count}:count: matches`;
   });
 
   scopeLabel(scope: 'keys' | 'values' | 'both'): string {
@@ -344,18 +344,18 @@ export class JsonTreeComponent {
     set: ReadonlySet<string>;
     order: readonly string[];
   }>(() => {
-    const q = this.search().trim();
+    const query = this.search().trim();
     const prefs = this.prefs.prefs();
     const typeFilter = prefs.searchValueType;
-    if (!q && typeFilter === 'all') return { set: new Set(), order: [] };
+    if (!query && typeFilter === 'all') return { set: new Set(), order: [] };
     const scope = prefs.searchScope;
     const caseSensitive = prefs.searchCaseSensitive;
     const regexMode = prefs.searchRegexMode;
-    const needle = caseSensitive ? q : q.toLowerCase();
+    const needle = caseSensitive ? query : query.toLowerCase();
     let regex: RegExp | undefined;
-    if (q && regexMode) {
+    if (query && regexMode) {
       try {
-        regex = new RegExp(q, caseSensitive ? '' : 'i');
+        regex = new RegExp(query, caseSensitive ? '' : 'i');
       } catch {
         return { set: new Set(), order: [] };
       }
@@ -385,7 +385,7 @@ export class JsonTreeComponent {
     const walk = (node: TreeNode | undefined): void => {
       if (!node) return;
       if (matchesTypeFilter(node)) {
-        if (!q) {
+        if (!query) {
           // Navigator mode: list every candidate node. Skip the root
           // sentinel (segment === undefined) so users don't navigate
           // to the document root itself.
@@ -491,9 +491,9 @@ export class JsonTreeComponent {
     this.destroyRef.onDestroy(() => clearInterval(handle));
 
     effect(() => {
-      const r = this.root();
-      this.dataSource.data = r ? [r] : [];
-      if (!r) {
+      const rootNode = this.root();
+      this.dataSource.data = rootNode ? [rootNode] : [];
+      if (!rootNode) {
         this.hasInitializedExpansion = false;
         // Use untracked to avoid creating a dependency on selectedPath
         // here - we only want to react to value changes.
@@ -609,8 +609,8 @@ export class JsonTreeComponent {
   goToNextMatch(): void {
     const paths = this.searchHitPaths();
     if (paths.length === 0) return;
-    const i = this.activeHitIndex();
-    const next = i < 0 ? 0 : (i + 1) % paths.length;
+    const index = this.activeHitIndex();
+    const next = index < 0 ? 0 : (index + 1) % paths.length;
     this.activeHitIndex.set(next);
     const path = paths[next] as string;
     this.selectedPath.set(path);
@@ -620,8 +620,8 @@ export class JsonTreeComponent {
   goToPrevMatch(): void {
     const paths = this.searchHitPaths();
     if (paths.length === 0) return;
-    const i = this.activeHitIndex();
-    const prev = i <= 0 ? paths.length - 1 : i - 1;
+    const index = this.activeHitIndex();
+    const prev = index <= 0 ? paths.length - 1 : index - 1;
     this.activeHitIndex.set(prev);
     const path = paths[prev] as string;
     this.selectedPath.set(path);
@@ -671,7 +671,7 @@ export class JsonTreeComponent {
     const walk = (node: TreeNode | undefined): void => {
       if (!node || !node.children) return;
       this.treeControl.expand(node);
-      for (const c of node.children) walk(c);
+      for (const child of node.children) walk(child);
     };
     walk(this.root());
   }
@@ -686,7 +686,7 @@ export class JsonTreeComponent {
       if (!node || !node.children) return;
       if (node.depth < depth) {
         this.treeControl.expand(node);
-        for (const c of node.children) walk(c);
+        for (const child of node.children) walk(child);
       }
     };
     walk(this.root());
@@ -762,8 +762,8 @@ export class JsonTreeComponent {
 
   containerSummary(node: TreeNode): string {
     if (node.type === 'array') {
-      const n = (node.value as unknown[]).length;
-      return `[ ${n === 0 ? '' : '...'} ]`;
+      const count = (node.value as unknown[]).length;
+      return `[ ${count === 0 ? '' : '...'} ]`;
     }
     if (node.type === 'object') {
       const keys = Object.keys(node.value as Record<string, unknown>);
@@ -774,12 +774,12 @@ export class JsonTreeComponent {
 
   containerCountText(node: TreeNode): string {
     if (node.type === 'array') {
-      const n = (node.value as unknown[]).length;
-      return n === 1 ? '1 item' : `${n} items`;
+      const count = (node.value as unknown[]).length;
+      return count === 1 ? '1 item' : `${count} items`;
     }
     if (node.type === 'object') {
-      const n = Object.keys(node.value as Record<string, unknown>).length;
-      return n === 1 ? '1 key' : `${n} keys`;
+      const count = Object.keys(node.value as Record<string, unknown>).length;
+      return count === 1 ? '1 key' : `${count} keys`;
     }
     return '';
   }
@@ -793,11 +793,11 @@ export class JsonTreeComponent {
     parentPath: (string | number)[]
   ): TreeNode[] {
     if (Array.isArray(value)) {
-      return value.map((child, i) => this.buildNode(i, child, [...parentPath, i]));
+      return value.map((child, index) => this.buildNode(index, child, [...parentPath, index]));
     }
     if (value && typeof value === 'object') {
       const obj = value as Record<string, unknown>;
-      return Object.keys(obj).map((k) => this.buildNode(k, obj[k], [...parentPath, k]));
+      return Object.keys(obj).map((key) => this.buildNode(key, obj[key], [...parentPath, key]));
     }
     return [];
   }

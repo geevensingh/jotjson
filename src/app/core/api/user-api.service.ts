@@ -22,9 +22,9 @@ export class UserApiService {
    */
   getMe(): Observable<User | null> {
     return this.http.get<User>(this.base).pipe(
-      catchError((err: HttpErrorResponse) => {
-        if (err.status === 404) return of(null);
-        throw err;
+      catchError((error: HttpErrorResponse) => {
+        if (error.status === 404) return of(null);
+        throw error;
       })
     );
   }

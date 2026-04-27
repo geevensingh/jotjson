@@ -159,8 +159,8 @@ export class AuthService {
         scopes: environment.auth.scopes
       });
       return result.accessToken || null;
-    } catch (err) {
-      if (err instanceof InteractionRequiredAuthError) {
+    } catch (error) {
+      if (error instanceof InteractionRequiredAuthError) {
         return null;
       }
       return null;
@@ -174,11 +174,11 @@ export class AuthService {
    */
   private ensureInitialized(): Promise<void> {
     if (!this.initPromise) {
-      this.initPromise = Promise.resolve(this.msal.initialize()).catch((err) => {
+      this.initPromise = Promise.resolve(this.msal.initialize()).catch((error) => {
         // If initialize fails we clear the cache so a subsequent call can
         // retry rather than replaying the rejection forever.
         this.initPromise = null;
-        throw err;
+        throw error;
       });
     }
     return this.initPromise;

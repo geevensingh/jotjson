@@ -329,9 +329,9 @@ export class PreferencesService {
     // Poll until hydration leaves the state.
     return new Promise((resolve) => {
       const tick = (): void => {
-        const s = this._syncState();
-        if (s !== 'hydrating') {
-          resolve(s);
+        const current = this._syncState();
+        if (current !== 'hydrating') {
+          resolve(current);
         } else {
           setTimeout(tick, 10);
         }

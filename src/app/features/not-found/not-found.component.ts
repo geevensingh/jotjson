@@ -26,7 +26,7 @@ export class NotFoundComponent implements OnInit {
   private readAttemptedSlug(): string | undefined {
     if (typeof history === 'undefined') return undefined;
     const state = history.state as { attemptedSlug?: unknown } | null;
-    const v = state?.attemptedSlug;
-    return typeof v === 'string' && v.length > 0 ? v : undefined;
+    const slug = state?.attemptedSlug;
+    return typeof slug === 'string' && slug.length > 0 ? slug : undefined;
   }
 }
