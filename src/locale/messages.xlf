@@ -1345,128 +1345,128 @@
         <source>Expand: 1</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">110,111</context>
+          <context context-type="linenumber">115,116</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.2" datatype="html">
         <source>Expand: 2</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">111,112</context>
+          <context context-type="linenumber">116,117</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.3" datatype="html">
         <source>Expand: 3</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">112,113</context>
+          <context context-type="linenumber">117,118</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.4" datatype="html">
         <source>Expand: 4</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">113,114</context>
+          <context context-type="linenumber">118,119</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.5" datatype="html">
         <source>Expand: 5</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">114,115</context>
+          <context context-type="linenumber">119,120</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.6" datatype="html">
         <source>Expand: 6</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">115,116</context>
+          <context context-type="linenumber">120,121</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.7" datatype="html">
         <source>Expand: 7</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">116,117</context>
+          <context context-type="linenumber">121,122</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.8" datatype="html">
         <source>Expand: 8</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">117,118</context>
+          <context context-type="linenumber">122,123</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.9" datatype="html">
         <source>Expand: 9</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">118,119</context>
+          <context context-type="linenumber">123,124</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.level.all" datatype="html">
         <source>Expand: all</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">119,121</context>
+          <context context-type="linenumber">124,126</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.all" datatype="html">
         <source> Expand all </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">122,124</context>
+          <context context-type="linenumber">127,129</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.collapse.all" datatype="html">
         <source> Collapse all </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">125,129</context>
+          <context context-type="linenumber">130,134</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.dateAnnotation.aria" datatype="html">
         <source>Date annotation</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">171,172</context>
+          <context context-type="linenumber">176,177</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.copyPath.title" datatype="html">
         <source>Copy path</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">208,209</context>
+          <context context-type="linenumber">213,214</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">225,226</context>
+          <context context-type="linenumber">230,231</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">285,286</context>
+          <context context-type="linenumber">290,291</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.copyPath.aria" datatype="html">
         <source>Copy path</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">210,211</context>
+          <context context-type="linenumber">215,216</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">227,228</context>
+          <context context-type="linenumber">232,233</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">287,288</context>
+          <context context-type="linenumber">292,293</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.empty" datatype="html">
         <source> Paste or type JSON on the left to see the tree view. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">311,314</context>
+          <context context-type="linenumber">316,319</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.date" datatype="html">
@@ -1698,6 +1698,13 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
           <context context-type="linenumber">235</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="tree.search.count.ghost" datatype="html">
+        <source><x id="position" equiv-text="n"/> / <x id="count" equiv-text="n"/> matches</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
+          <context context-type="linenumber">249</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.aria" datatype="html">

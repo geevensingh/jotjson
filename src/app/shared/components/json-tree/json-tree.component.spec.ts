@@ -689,27 +689,27 @@ describe('JsonTreeComponent', () => {
     describe('match count', () => {
       it('hides the counter when the search is empty', async () => {
         await createWith({ a: 1, b: 2 });
-        expect(fixture.nativeElement.querySelector('.tree-search-count')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.tree-search-count__live')).toBeNull();
       });
 
       it('renders "No matches" when nothing matches', async () => {
         await createWith({ alpha: 1 });
         setSearch('zzz');
-        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        const el = fixture.nativeElement.querySelector('.tree-search-count__live');
         expect(el?.textContent?.trim()).toBe('No matches');
       });
 
       it('renders "1 match" for exactly one hit', async () => {
         await createWith({ alpha: 1, beta: 2 });
         setSearch('alpha');
-        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        const el = fixture.nativeElement.querySelector('.tree-search-count__live');
         expect(el?.textContent?.trim()).toBe('1 match');
       });
 
       it('renders "N matches" for multiple hits', async () => {
         await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
         setSearch('alp');
-        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        const el = fixture.nativeElement.querySelector('.tree-search-count__live');
         expect(el?.textContent?.trim()).toBe('3 matches');
       });
 
@@ -720,7 +720,7 @@ describe('JsonTreeComponent', () => {
         const paths = c.searchHitPaths();
         c.selectedPath.set(paths[1] as string);
         fixture.detectChanges();
-        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        const el = fixture.nativeElement.querySelector('.tree-search-count__live');
         expect(el?.textContent?.trim()).toBe('2 / 3 matches');
       });
 
@@ -730,7 +730,7 @@ describe('JsonTreeComponent', () => {
         const c = fixture.componentInstance;
         c.selectedPath.set('$.beta');
         fixture.detectChanges();
-        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        const el = fixture.nativeElement.querySelector('.tree-search-count__live');
         expect(el?.textContent?.trim()).toBe('2 matches');
       });
 
@@ -740,7 +740,7 @@ describe('JsonTreeComponent', () => {
         const c = fixture.componentInstance;
         c.selectedPath.set(null);
         fixture.detectChanges();
-        const el = fixture.nativeElement.querySelector('.tree-search-count');
+        const el = fixture.nativeElement.querySelector('.tree-search-count__live');
         expect(el?.textContent?.trim()).toBe('2 matches');
       });
 
@@ -752,13 +752,27 @@ describe('JsonTreeComponent', () => {
         // Next advances to index 1.
         c.goToNextMatch();
         fixture.detectChanges();
-        let el = fixture.nativeElement.querySelector('.tree-search-count');
+        let el = fixture.nativeElement.querySelector('.tree-search-count__live');
         expect(el?.textContent?.trim()).toBe('2 / 3 matches');
         c.goToNextMatch();
         fixture.detectChanges();
-        el = fixture.nativeElement.querySelector('.tree-search-count');
+        el = fixture.nativeElement.querySelector('.tree-search-count__live');
         expect(el?.textContent?.trim()).toBe('3 / 3 matches');
         expect(c.selectedPath()).toBe(c.searchHitPaths()[2] as string);
+      });
+
+      it('renders a width-reservation ghost matching "N / N matches"', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const ghost = fixture.nativeElement.querySelector('.tree-search-count__ghost');
+        expect(ghost?.textContent?.trim()).toBe('3 / 3 matches');
+        expect(ghost?.getAttribute('aria-hidden')).toBe('true');
+      });
+
+      it('omits the ghost when the search has no hits', async () => {
+        await createWith({ alpha: 1 });
+        setSearch('zzz');
+        expect(fixture.nativeElement.querySelector('.tree-search-count__ghost')).toBeNull();
       });
     });
 

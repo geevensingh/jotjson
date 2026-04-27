@@ -96,7 +96,12 @@
     &rsaquo;
   </button>
   @if (searchCountLabel()) {
-    <span class="tree-search-count" aria-live="polite">{{ searchCountLabel() }}</span>
+    <span class="tree-search-count">
+      <span class="tree-search-count__live" aria-live="polite">{{ searchCountLabel() }}</span>
+      @if (searchCountGhost()) {
+        <span class="tree-search-count__ghost" aria-hidden="true">{{ searchCountGhost() }}</span>
+      }
+    </span>
   }
   <button
     type="button"

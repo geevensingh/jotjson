@@ -235,6 +235,20 @@ export class JsonTreeComponent {
     return $localize`:@@tree.search.count.other:${n}:count: matches`;
   });
 
+  /**
+   * Worst-case label used as a hidden width-reservation "ghost" beside
+   * the live count, so toolbar controls don't shift as the position
+   * digits change. Always renders "N / N matches" - the widest label
+   * any state can produce for the current hit count - when there are
+   * hits; otherwise the empty string so no ghost is rendered.
+   */
+  readonly searchCountGhost = computed<string>(() => {
+    if (!this.search().trim()) return '';
+    const n = this.searchHitCount();
+    if (n === 0) return '';
+    return $localize`:@@tree.search.count.ghost:${n}:position: / ${n}:count: matches`;
+  });
+
   scopeLabel(scope: 'keys' | 'values' | 'both'): string {
     switch (scope) {
       case 'keys':

@@ -62,9 +62,21 @@
 }
 
 .tree-search-count {
+  display: inline-grid;
   font-size: 12px;
   color: rgba(127, 127, 127, 0.9);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-search-count__live,
+.tree-search-count__ghost {
+  grid-area: 1 / 1;
+}
+
+.tree-search-count__ghost {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .tree-btn,
