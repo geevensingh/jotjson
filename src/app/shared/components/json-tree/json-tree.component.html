@@ -147,14 +147,6 @@
           [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
           (click)="onSelect(node, $event)"
         >
-          @if (matchingPaths().has(node.pathString)) {
-            <span
-              class="tree-match-badge"
-              [attr.aria-label]="matchingValueAriaLabel"
-              i18n-aria-label="@@tree.matchValue.aria"
-              >&middot;</span
-            >
-          }
           <span class="tree-twisty tree-spacer" aria-hidden="true">&middot;</span>
 
           @if (node.segment !== undefined) {
@@ -203,6 +195,14 @@
 
           @if (showTypeBadges()) {
             <span class="tree-row-right">
+              @if (matchingPaths().has(node.pathString)) {
+                <span
+                  class="tree-match-badge"
+                  [attr.aria-label]="matchingValueAriaLabel"
+                  i18n-aria-label="@@tree.matchValue.aria"
+                  >&middot;</span
+                >
+              }
               @if (node.type === 'array' || node.type === 'object') {
                 <span class="tree-count">{{ containerCountText(node) }}</span>
               }
@@ -221,6 +221,14 @@
             </span>
           } @else {
             <span class="tree-row-right">
+              @if (matchingPaths().has(node.pathString)) {
+                <span
+                  class="tree-match-badge"
+                  [attr.aria-label]="matchingValueAriaLabel"
+                  i18n-aria-label="@@tree.matchValue.aria"
+                  >&middot;</span
+                >
+              }
               @if (node.type === 'array' || node.type === 'object') {
                 <span class="tree-count">{{ containerCountText(node) }}</span>
               }

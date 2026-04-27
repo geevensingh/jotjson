@@ -344,6 +344,32 @@ describe('JsonTreeComponent', () => {
       const matchRow = badges[0].closest('.tree-row') as HTMLElement;
       expect(matchRow.classList.contains('is-match')).toBeTrue();
       expect(matchRow.classList.contains('is-selected')).toBeFalse();
+      // Badge lives inside the trailing .tree-row-right strip, not as a
+      // leading element that would shift the row's left content.
+      expect(badges[0].parentElement?.classList.contains('tree-row-right')).toBeTrue();
+    });
+
+    it('toggling is-match does not shift left-side content', async () => {
+      await createWith({ a: 1, b: 1, c: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const root = fixture.nativeElement as HTMLElement;
+        const rowFor = (path: string) =>
+          root.querySelector(`[data-path="${path}"]`) as HTMLElement | null;
+        const keyLeft = (path: string) =>
+          (rowFor(path)?.querySelector('.tree-key') as HTMLElement | null)?.offsetLeft ?? -1;
+        cmp.selectedPath.set(null);
+        fixture.detectChanges();
+        const baseline = keyLeft('$.a');
+        cmp.selectedPath.set('$.a');
+        fixture.detectChanges();
+        // $.b matches $.a; ensure $.b's key did not shift right.
+        expect(keyLeft('$.b')).toBe(baseline);
+      } finally {
+        fixture.nativeElement.remove();
+      }
     });
 
     it('selection survives expand/collapse', async () => {
