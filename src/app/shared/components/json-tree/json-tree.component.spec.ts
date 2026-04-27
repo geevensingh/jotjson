@@ -774,6 +774,24 @@ describe('JsonTreeComponent', () => {
         setSearch('zzz');
         expect(fixture.nativeElement.querySelector('.tree-search-count__ghost')).toBeNull();
       });
+
+      it('keeps the chip width stable when toggling between total and position labels', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        document.body.appendChild(fixture.nativeElement);
+        try {
+          c.selectedPath.set(null);
+          fixture.detectChanges();
+          const totalWidth = (fixture.nativeElement.querySelector('.tree-search-count') as HTMLElement).offsetWidth;
+          c.selectedPath.set(c.searchHitPaths()[0] as string);
+          fixture.detectChanges();
+          const positionWidth = (fixture.nativeElement.querySelector('.tree-search-count') as HTMLElement).offsetWidth;
+          expect(positionWidth).toBe(totalWidth);
+        } finally {
+          fixture.nativeElement.remove();
+        }
+      });
     });
 
     describe('Escape clears the search', () => {
