@@ -72,7 +72,7 @@ const TYPE_LABELS: Record<ValueClassification, string> = {
   undefined: $localize`:@@tree.type.undefined:undefined`
 };
 
-export interface TreeNode {
+interface TreeNode {
   segment: string | number | undefined;
   path: (string | number)[];
   pathString: string;

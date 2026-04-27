@@ -3,7 +3,6 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { JsonTreeComponent } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
-import type { TreeNode } from './json-tree.component';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
@@ -20,15 +19,17 @@ describe('JsonTreeComponent', () => {
   let fixture: ComponentFixture<JsonTreeComponent>;
   let cmp: JsonTreeComponent;
   let prefs: PreferencesService;
+  let snackOpen: jasmine.Spy;
 
-  async function createWith(value: unknown, extraProviders: unknown[] = []): Promise<void> {
+  async function createWith(value: unknown): Promise<void> {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
+    snackOpen = jasmine.createSpy('snackOpen');
     await TestBed.configureTestingModule({
       imports: [JsonTreeComponent],
       providers: [
         ...provideFakeAuth(),
-        ...extraProviders
+        { provide: MatSnackBar, useValue: { open: snackOpen } }
       ]
     }).compileComponents();
     fixture = TestBed.createComponent(JsonTreeComponent);
@@ -662,13 +663,8 @@ describe('JsonTreeComponent', () => {
   });
 
   describe('copyPath', () => {
-    let snackOpen: jasmine.Spy;
-
-    const nodeFixture = (path: string) => ({ pathString: path }) as unknown as TreeNode;
-
     beforeEach(async () => {
-      snackOpen = jasmine.createSpy('snackOpen');
-      await createWith({ a: 1 }, [{ provide: MatSnackBar, useValue: { open: snackOpen } }]);
+      await createWith({ a: 1 });
     });
 
     function withClipboard<T>(
@@ -697,7 +693,7 @@ describe('JsonTreeComponent', () => {
     it('opens a success snackbar after writeText resolves', fakeAsync(() => {
       const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
       withClipboard({ writeText }, () => {
-        cmp.copyPath(nodeFixture('$.a'));
+        cmp.copyPath({ pathString: '$.a' } as never);
       });
       flushMicrotasks();
       expect(writeText).toHaveBeenCalledWith('$.a');
@@ -709,7 +705,7 @@ describe('JsonTreeComponent', () => {
     it('opens a failure snackbar when writeText rejects', fakeAsync(() => {
       const writeText = jasmine.createSpy('writeText').and.rejectWith(new Error('denied'));
       withClipboard({ writeText }, () => {
-        cmp.copyPath(nodeFixture('$.a'));
+        cmp.copyPath({ pathString: '$.a' } as never);
       });
       flushMicrotasks();
       expect(writeText).toHaveBeenCalled();
@@ -720,7 +716,7 @@ describe('JsonTreeComponent', () => {
 
     it('opens an unsupported snackbar when navigator.clipboard is missing', () => {
       withClipboard(undefined, () => {
-        cmp.copyPath(nodeFixture('$.a'));
+        cmp.copyPath({ pathString: '$.a' } as never);
       });
       expect(snackOpen).toHaveBeenCalled();
       const message = snackOpen.calls.mostRecent().args[0] as string;
