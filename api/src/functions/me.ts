@@ -45,9 +45,9 @@ export async function getMe(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    context.error('getMe auth error', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    context.error('getMe auth error', error);
     return { status: 500, jsonBody: { error: 'Internal error' } };
   }
 
@@ -63,8 +63,8 @@ export async function getMe(
       preferences: normalizeStoredPreferences(doc.preferences)
     };
     return { status: 200, jsonBody: normalized };
-  } catch (err) {
-    context.error('getMe read error', err);
+  } catch (error) {
+    context.error('getMe read error', error);
     return { status: 500, jsonBody: { error: 'Internal error' } };
   }
 }
@@ -76,9 +76,9 @@ export async function postMe(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    context.error('postMe auth error', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    context.error('postMe auth error', error);
     return { status: 500, jsonBody: { error: 'Internal error' } };
   }
 
@@ -97,9 +97,9 @@ export async function postMe(
   let preferences;
   try {
     preferences = normalizePreferences(payload.preferences);
-  } catch (err) {
-    if (err instanceof PreferenceValidationError) return badRequest(err.message);
-    throw err;
+  } catch (error) {
+    if (error instanceof PreferenceValidationError) return badRequest(error.message);
+    throw error;
   }
 
   const existing = await readUser(principal.id);
@@ -120,8 +120,8 @@ export async function postMe(
   try {
     const saved = await upsertUser(doc);
     return { status: 201, jsonBody: saved };
-  } catch (err) {
-    context.error('postMe write error', err);
+  } catch (error) {
+    context.error('postMe write error', error);
     return { status: 500, jsonBody: { error: 'Internal error' } };
   }
 }
@@ -133,9 +133,9 @@ export async function putMePreferences(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    context.error('putMePreferences auth error', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    context.error('putMePreferences auth error', error);
     return { status: 500, jsonBody: { error: 'Internal error' } };
   }
 
@@ -149,9 +149,9 @@ export async function putMePreferences(
   let preferences;
   try {
     preferences = normalizePreferences(body);
-  } catch (err) {
-    if (err instanceof PreferenceValidationError) return badRequest(err.message);
-    throw err;
+  } catch (error) {
+    if (error instanceof PreferenceValidationError) return badRequest(error.message);
+    throw error;
   }
 
   const now = new Date().toISOString();
@@ -170,8 +170,8 @@ export async function putMePreferences(
   try {
     const saved = await upsertUser(doc);
     return { status: 200, jsonBody: saved.preferences };
-  } catch (err) {
-    context.error('putMePreferences write error', err);
+  } catch (error) {
+    context.error('putMePreferences write error', error);
     return { status: 500, jsonBody: { error: 'Internal error' } };
   }
 }

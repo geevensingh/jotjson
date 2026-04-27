@@ -358,9 +358,9 @@ export async function readRuleSet(
       .item(id, userId)
       .read<RuleSetDocument>();
     return resource ?? null;
-  } catch (err) {
-    if ((err as { code?: number }).code === 404) return null;
-    throw err;
+  } catch (error) {
+    if ((error as { code?: number }).code === 404) return null;
+    throw error;
   }
 }
 
@@ -451,9 +451,9 @@ export async function deleteRuleSetById(id: string, userId: string): Promise<boo
   try {
     await getRuleSetsContainer().item(id, userId).delete();
     return true;
-  } catch (err) {
-    if ((err as { code?: number }).code === 404) return false;
-    throw err;
+  } catch (error) {
+    if ((error as { code?: number }).code === 404) return false;
+    throw error;
   }
 }
 

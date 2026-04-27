@@ -71,9 +71,9 @@ function preconditionFailed(message: string): HttpResponseInit {
 function internalError(
   context: InvocationContext,
   where: string,
-  err: unknown
+  error: unknown
 ): HttpResponseInit {
-  context.error(`${where} error`, err);
+  context.error(`${where} error`, error);
   return { status: 500, jsonBody: { error: 'Internal error' } };
 }
 
@@ -116,9 +116,9 @@ export async function postRuleSet(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'postRuleSet auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'postRuleSet auth', error);
   }
 
   let body: unknown;
@@ -131,9 +131,9 @@ export async function postRuleSet(
   let payload;
   try {
     payload = assertRuleSetPayload(body);
-  } catch (err) {
-    if (err instanceof RuleSetValidationError) return badRequest(err.message);
-    return internalError(context, 'postRuleSet validate', err);
+  } catch (error) {
+    if (error instanceof RuleSetValidationError) return badRequest(error.message);
+    return internalError(context, 'postRuleSet validate', error);
   }
 
   try {
@@ -149,9 +149,9 @@ export async function postRuleSet(
     }
     const created = await createRuleSet(principal.id, payload);
     return withEtag(201, created);
-  } catch (err) {
-    if (err instanceof RuleSetValidationError) return badRequest(err.message);
-    return internalError(context, 'postRuleSet write', err);
+  } catch (error) {
+    if (error instanceof RuleSetValidationError) return badRequest(error.message);
+    return internalError(context, 'postRuleSet write', error);
   }
 }
 
@@ -162,15 +162,15 @@ export async function listRuleSets(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'listRuleSets auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'listRuleSets auth', error);
   }
   try {
     const items = await listRuleSetsByOwner(principal.id);
     return { status: 200, jsonBody: items };
-  } catch (err) {
-    return internalError(context, 'listRuleSets read', err);
+  } catch (error) {
+    return internalError(context, 'listRuleSets read', error);
   }
 }
 
@@ -181,9 +181,9 @@ export async function getRuleSet(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'getRuleSet auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'getRuleSet auth', error);
   }
 
   const id = req.params['id'] ?? '';
@@ -205,8 +205,8 @@ export async function getRuleSet(
       return forbidden('You do not own this rule set');
     }
     return withEtag(200, found);
-  } catch (err) {
-    return internalError(context, 'getRuleSet read', err);
+  } catch (error) {
+    return internalError(context, 'getRuleSet read', error);
   }
 }
 
@@ -217,9 +217,9 @@ export async function putRuleSet(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'putRuleSet auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'putRuleSet auth', error);
   }
 
   const id = req.params['id'] ?? '';
@@ -239,9 +239,9 @@ export async function putRuleSet(
   let payload;
   try {
     payload = assertRuleSetPayload(body);
-  } catch (err) {
-    if (err instanceof RuleSetValidationError) return badRequest(err.message);
-    return internalError(context, 'putRuleSet validate', err);
+  } catch (error) {
+    if (error instanceof RuleSetValidationError) return badRequest(error.message);
+    return internalError(context, 'putRuleSet validate', error);
   }
 
   try {
@@ -257,13 +257,13 @@ export async function putRuleSet(
     }
     const next = await replaceRuleSet(found, payload, expectedVersion);
     return withEtag(200, next);
-  } catch (err) {
-    if (err instanceof RuleSetValidationError) return badRequest(err.message);
-    if (err instanceof RuleSetVersionConflictError) {
+  } catch (error) {
+    if (error instanceof RuleSetValidationError) return badRequest(error.message);
+    if (error instanceof RuleSetVersionConflictError) {
       // Race: someone else replaced the doc between our read and write.
-      return preconditionFailed(err.message);
+      return preconditionFailed(error.message);
     }
-    return internalError(context, 'putRuleSet write', err);
+    return internalError(context, 'putRuleSet write', error);
   }
 }
 
@@ -274,9 +274,9 @@ export async function deleteRuleSet(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'deleteRuleSet auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'deleteRuleSet auth', error);
   }
 
   const id = req.params['id'] ?? '';
@@ -307,13 +307,13 @@ export async function deleteRuleSet(
     // IDs at read time. We log and move on.
     try {
       await cleanupUserReferences(principal.id, found.id);
-    } catch (err) {
-      context.warn('deleteRuleSet cleanup failed', err);
+    } catch (error) {
+      context.warn('deleteRuleSet cleanup failed', error);
     }
 
     return { status: 204 };
-  } catch (err) {
-    return internalError(context, 'deleteRuleSet write', err);
+  } catch (error) {
+    return internalError(context, 'deleteRuleSet write', error);
   }
 }
 
@@ -367,9 +367,9 @@ export async function listPresets(
 ): Promise<HttpResponseInit> {
   try {
     await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'listPresets auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'listPresets auth', error);
   }
   return { status: 200, jsonBody: listPresetsData() };
 }
@@ -394,9 +394,9 @@ export async function clonePreset(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'clonePreset auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'clonePreset auth', error);
   }
 
   const presetId = req.params['id'] ?? '';
@@ -419,15 +419,15 @@ export async function clonePreset(
     const payload = presetToCreatePayload(preset);
     const created = await createRuleSet(principal.id, payload);
     return withEtag(201, created);
-  } catch (err) {
-    if (err instanceof RuleSetValidationError) {
+  } catch (error) {
+    if (error instanceof RuleSetValidationError) {
       // A preset that doesn't pass validation is a deployment bug,
       // not a user error - log and surface a 500 so we notice. The
       // ruleSetPresets.test.ts suite asserts every preset rule is
       // valid, so this branch should be unreachable in practice.
-      return internalError(context, 'clonePreset preset invalid', err);
+      return internalError(context, 'clonePreset preset invalid', error);
     }
-    return internalError(context, 'clonePreset write', err);
+    return internalError(context, 'clonePreset write', error);
   }
 }
 

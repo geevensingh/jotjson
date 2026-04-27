@@ -157,11 +157,11 @@ export async function pruneFifo(userId: string): Promise<number> {
     try {
       await container.item(row.id, userId).delete();
       deleted++;
-    } catch (err) {
+    } catch (error) {
       // Tolerate 404 from concurrent prune; rethrow anything else so the
       // caller's catch block can log it.
-      const code = (err as { code?: number }).code;
-      if (code !== 404) throw err;
+      const code = (error as { code?: number }).code;
+      if (code !== 404) throw error;
     }
   }
   return deleted;
@@ -270,9 +270,9 @@ export async function clearAll(userId: string): Promise<number> {
       try {
         await container.item(row.id, userId).delete();
         totalDeleted++;
-      } catch (err) {
-        const code = (err as { code?: number }).code;
-        if (code !== 404) throw err;
+      } catch (error) {
+        const code = (error as { code?: number }).code;
+        if (code !== 404) throw error;
       }
     }
   }

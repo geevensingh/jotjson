@@ -142,8 +142,8 @@ function getKey(authority: string): GetPublicKeyOrSecret {
     getJwksClient(authority)
       .getSigningKey(header.kid)
       .then((key) => callback(null, key.getPublicKey()))
-      .catch((err: unknown) =>
-        callback(err instanceof Error ? err : new Error('JWKS lookup failed'))
+      .catch((error: unknown) =>
+        callback(error instanceof Error ? error : new Error('JWKS lookup failed'))
       );
   };
 }
@@ -180,8 +180,8 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
         issuer: issuers,
         algorithms: ['RS256']
       },
-      (err, decoded) => {
-        if (err) return reject(new AuthError(err.message));
+      (error, decoded) => {
+        if (error) return reject(new AuthError(error.message));
         if (!decoded || typeof decoded === 'string') {
           return reject(new AuthError('Invalid token payload'));
         }
@@ -232,9 +232,9 @@ export async function tryAuth(req: HttpRequest): Promise<AuthenticatedPrincipal 
   if (!token) return null;
   try {
     return await verifyAccessToken(token);
-  } catch (err) {
-    if (err instanceof AuthError) return null;
-    throw err;
+  } catch (error) {
+    if (error instanceof AuthError) return null;
+    throw error;
   }
 }
 

@@ -256,10 +256,10 @@ export async function deleteBlobById(
   try {
     await getBlobsContainer().item(id, ownerId).delete();
     return true;
-  } catch (err) {
-    const code = (err as { code?: number }).code;
+  } catch (error) {
+    const code = (error as { code?: number }).code;
     if (code === 404) return false;
-    throw err;
+    throw error;
   }
 }
 

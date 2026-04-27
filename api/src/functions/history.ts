@@ -49,9 +49,9 @@ function isIsoTimestamp(value: string): boolean {
 function internalError(
   context: InvocationContext,
   where: string,
-  err: unknown
+  error: unknown
 ): HttpResponseInit {
-  context.error(`${where} error`, err);
+  context.error(`${where} error`, error);
   return { status: 500, jsonBody: { error: 'Internal error' } };
 }
 
@@ -62,9 +62,9 @@ export async function getHistory(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'getHistory auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'getHistory auth', error);
   }
 
   // pageSize is clamped inside listEntries; we pass the raw integer when
@@ -123,8 +123,8 @@ export async function getHistory(
       ...(to !== undefined ? { to } : {})
     });
     return { status: 200, jsonBody: result };
-  } catch (err) {
-    return internalError(context, 'getHistory read', err);
+  } catch (error) {
+    return internalError(context, 'getHistory read', error);
   }
 }
 
@@ -135,16 +135,16 @@ export async function deleteHistory(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'deleteHistory auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'deleteHistory auth', error);
   }
 
   try {
     await clearAll(principal.id);
     return { status: 204 };
-  } catch (err) {
-    return internalError(context, 'deleteHistory write', err);
+  } catch (error) {
+    return internalError(context, 'deleteHistory write', error);
   }
 }
 
@@ -165,9 +165,9 @@ export async function postHistory(
 ): Promise<HttpResponseInit> {
   try {
     await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'postHistory auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'postHistory auth', error);
   }
   return { status: 204 };
 }

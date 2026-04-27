@@ -48,9 +48,9 @@ export async function readUser(id: string): Promise<UserDocument | null> {
       .item(id, id)
       .read<UserDocument>();
     return resource ?? null;
-  } catch (err) {
-    if ((err as { code?: number }).code === 404) return null;
-    throw err;
+  } catch (error) {
+    if ((error as { code?: number }).code === 404) return null;
+    throw error;
   }
 }
 

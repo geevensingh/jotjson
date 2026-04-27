@@ -53,9 +53,9 @@ function forbidden(message: string): HttpResponseInit {
 function internalError(
   context: InvocationContext,
   where: string,
-  err: unknown
+  error: unknown
 ): HttpResponseInit {
-  context.error(`${where} error`, err);
+  context.error(`${where} error`, error);
   return { status: 500, jsonBody: { error: 'Internal error' } };
 }
 
@@ -77,8 +77,8 @@ async function recordViewedSafely(
 ): Promise<void> {
   try {
     await recordEntry({ ...input, action: 'viewed' });
-  } catch (err) {
-    context.warn('history record failed', { action: 'viewed', error: err });
+  } catch (error) {
+    context.warn('history record failed', { action: 'viewed', error });
   }
 }
 
@@ -113,8 +113,8 @@ async function readRecentlyViewedEnabled(
       return true;
     }
     return true;
-  } catch (err) {
-    context.warn('recentlyViewedEnabled read failed; failing closed', err);
+  } catch (error) {
+    context.warn('recentlyViewedEnabled read failed; failing closed', error);
     return false;
   }
 }
@@ -126,9 +126,9 @@ export async function postBlob(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'postBlob auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'postBlob auth', error);
   }
 
   let body: unknown;
@@ -173,8 +173,8 @@ export async function postBlob(
         };
       }
     }
-  } catch (err) {
-    return internalError(context, 'postBlob quota', err);
+  } catch (error) {
+    return internalError(context, 'postBlob quota', error);
   }
 
   try {
@@ -187,12 +187,12 @@ export async function postBlob(
       status: 201,
       jsonBody: autoDeleted ? { ...saved, autoDeleted } : saved
     };
-  } catch (err) {
-    if (err instanceof BlobValidationError) return badRequest(err.message);
-    if (err instanceof SlugGenerationError) {
+  } catch (error) {
+    if (error instanceof BlobValidationError) return badRequest(error.message);
+    if (error instanceof SlugGenerationError) {
       return { status: 503, jsonBody: { error: 'Could not allocate a unique slug - please retry' } };
     }
-    return internalError(context, 'postBlob write', err);
+    return internalError(context, 'postBlob write', error);
   }
 }
 
@@ -235,14 +235,14 @@ export async function getBlob(
           }
         }
       }
-    } catch (err) {
+    } catch (error) {
       // tryAuth swallows AuthError; only true infra failures land here.
       // Surface in logs but never fail the read.
-      context.warn('getBlob history hook failed', err);
+      context.warn('getBlob history hook failed', error);
     }
     return { status: 200, jsonBody: blob };
-  } catch (err) {
-    return internalError(context, 'getBlob read', err);
+  } catch (error) {
+    return internalError(context, 'getBlob read', error);
   }
 }
 
@@ -253,16 +253,16 @@ export async function listBlobs(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'listBlobs auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'listBlobs auth', error);
   }
 
   try {
     const blobs = await listBlobsByOwner(principal.id);
     return { status: 200, jsonBody: blobs };
-  } catch (err) {
-    return internalError(context, 'listBlobs read', err);
+  } catch (error) {
+    return internalError(context, 'listBlobs read', error);
   }
 }
 
@@ -273,9 +273,9 @@ export async function deleteBlob(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'deleteBlob auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'deleteBlob auth', error);
   }
 
   const id = req.params['id'] ?? '';
@@ -296,8 +296,8 @@ export async function deleteBlob(
     const deleted = await deleteBlobById(existing.id, existing.ownerId);
     if (!deleted) return notFound('Blob not found');
     return { status: 204 };
-  } catch (err) {
-    return internalError(context, 'deleteBlob write', err);
+  } catch (error) {
+    return internalError(context, 'deleteBlob write', error);
   }
 }
 
@@ -308,9 +308,9 @@ export async function putBlob(
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'putBlob auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'putBlob auth', error);
   }
 
   const id = req.params['id'] ?? '';
@@ -345,9 +345,9 @@ export async function putBlob(
       ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic as boolean } : {})
     });
     return { status: 200, jsonBody: saved };
-  } catch (err) {
-    if (err instanceof BlobValidationError) return badRequest(err.message);
-    return internalError(context, 'putBlob write', err);
+  } catch (error) {
+    if (error instanceof BlobValidationError) return badRequest(error.message);
+    return internalError(context, 'putBlob write', error);
   }
 }
 
