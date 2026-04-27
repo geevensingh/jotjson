@@ -246,5 +246,8 @@ Before finishing a task:
 
 - Re-read the relevant `DESIGN_SPEC.md` section.
 - Ask a clarifying question rather than guessing on behavioral choices,
-  defaults, limits, or scope.
+  defaults, limits, or scope. **Always ask and wait for the user's
+  answer -- even if the runtime reports the user as unavailable, busy,
+  or away. Never assume an answer or proceed autonomously with a plan
+  based on a guess.**
 - Prefer the simpler, spec-aligned option over a clever alternative.
