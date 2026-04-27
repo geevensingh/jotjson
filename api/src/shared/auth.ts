@@ -107,14 +107,21 @@ function getJwksClient(authority: string): JwksClientLike {
   if (testOverrideClient) return testOverrideClient;
   if (cachedClient && cachedAuthority === authority) return cachedClient;
   cachedAuthority = authority;
-  cachedClient = jwksClient({
+  const lib = jwksClient({
     jwksUri: buildJwksUri(authority),
     cache: true,
     cacheMaxEntries: 5,
     cacheMaxAge: 10 * 60 * 1000,
     rateLimit: true,
     jwksRequestsPerMinute: 10
-  }) as unknown as JwksClientLike;
+  });
+  // Wrap the library client in a narrow adapter so callers see only the
+  // single overload of `getSigningKey` that we actually use. The library's
+  // overloaded callback/promise signatures don't structurally match
+  // `JwksClientLike` directly.
+  cachedClient = {
+    getSigningKey: (kid: string) => lib.getSigningKey(kid)
+  };
   return cachedClient;
 }
 

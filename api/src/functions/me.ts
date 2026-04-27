@@ -60,9 +60,7 @@ export async function getMe(
     // stored docs have been re-saved.
     const normalized: UserDocument = {
       ...doc,
-      preferences: normalizeStoredPreferences(
-        doc.preferences as unknown as Record<string, unknown>
-      ) as unknown as UserDocument['preferences']
+      preferences: normalizeStoredPreferences(doc.preferences)
     };
     return { status: 200, jsonBody: normalized };
   } catch (err) {

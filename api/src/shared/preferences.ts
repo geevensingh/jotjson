@@ -248,23 +248,23 @@ function coerceRecentlyViewedEnabled(raw: Record<string, unknown>): boolean {
  * read-time validation failure must never break `GET /api/me`. We only
  * patch the one field that changed shape.
  */
-export function normalizeStoredPreferences<T extends Record<string, unknown>>(
-  prefs: T
-): T & { recentlyViewedEnabled: boolean } {
-  const out: Record<string, unknown> = { ...prefs };
-  if (typeof out['recentlyViewedEnabled'] === 'boolean') {
-    // New field already present; drop the legacy one if it lingers.
-    delete out['historyTrackingMode'];
-    return out as T & { recentlyViewedEnabled: boolean };
+export function normalizeStoredPreferences(
+  prefs: UserPreferences
+): UserPreferences {
+  // Stored docs may include a legacy `historyTrackingMode` key that's
+  // not part of the current `UserPreferences` shape. Use an extended
+  // view to read and then strip it.
+  const view: UserPreferences & { historyTrackingMode?: unknown } = { ...prefs };
+  if (typeof view.recentlyViewedEnabled !== 'boolean') {
+    const legacy = view.historyTrackingMode;
+    // Both legacy values coerce to true. Anything else (missing or
+    // malformed) falls back to the new default of true.
+    view.recentlyViewedEnabled =
+      typeof legacy !== 'string' ||
+      (LEGACY_HISTORY_MODES as readonly string[]).includes(legacy);
   }
-  const legacy = out['historyTrackingMode'];
-  // Both legacy values coerce to true. Anything else (missing or
-  // malformed) falls back to the new default of true.
-  out['recentlyViewedEnabled'] =
-    typeof legacy !== 'string' ||
-    (LEGACY_HISTORY_MODES as readonly string[]).includes(legacy);
-  delete out['historyTrackingMode'];
-  return out as T & { recentlyViewedEnabled: boolean };
+  delete view.historyTrackingMode;
+  return view;
 }
 
 function assertEnum<T extends string>(
