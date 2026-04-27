@@ -183,6 +183,26 @@
   flex: 0 0 auto;
 }
 
+// Inline icon attached to a rule-matched key/value, rendered to the
+// LEFT of the labeled element. Inherits text color so the icon picks
+// up the formatting rule's `--tree-key-color` / `--tree-value-color`
+// when set, falling back to the default token color otherwise.
+.tree-rule-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-right: 4px;
+  pointer-events: none;
+  // Sit on the type-token's color (not the row's `--fg`), so the icon
+  // visually pairs with whatever it is decorating.
+  &.tree-rule-icon--key {
+    color: var(--tree-key-color, inherit);
+  }
+  &.tree-rule-icon--value {
+    color: var(--tree-value-color, inherit);
+  }
+}
+
 .tree-twisty {
   display: inline-flex;
   justify-content: center;

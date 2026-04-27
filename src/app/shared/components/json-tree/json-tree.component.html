@@ -163,6 +163,8 @@
         <div
           class="tree-row"
           [attr.data-path]="node.pathString"
+          [style]="ruleStyleVars(node)"
+          [attr.title]="matchedRuleTitle(node)"
           [class.is-search-hit]="searchHits().has(node.pathString)"
           [class.is-active-match]="activeHitPath() === node.pathString"
           [class.is-ancestor]="ancestorPaths().has(node.pathString)"
@@ -173,6 +175,9 @@
         >
           <span class="tree-twisty tree-spacer" aria-hidden="true">&middot;</span>
 
+          @if (keyIcon(node); as ki) {
+            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="13" />
+          }
           @if (node.segment !== undefined) {
             @if (segmentIsIndex(node)) {
               <span class="tree-index">{{ node.segment }}:</span>
@@ -181,6 +186,9 @@
             }
           }
 
+          @if (valueIcon(node); as vi) {
+            <jj-icon class="tree-rule-icon tree-rule-icon--value" [name]="vi" [size]="13" />
+          }
           @switch (node.type) {
             @case ('string') {
               <span class="tree-value-string">{{ renderLeaf(node.value, node.type) }}</span>
@@ -277,6 +285,8 @@
         <div
           class="tree-row"
           [attr.data-path]="node.pathString"
+          [style]="ruleStyleVars(node)"
+          [attr.title]="matchedRuleTitle(node)"
           [class.is-search-hit]="searchHits().has(node.pathString)"
           [class.is-active-match]="activeHitPath() === node.pathString"
           [class.is-ancestor]="ancestorPaths().has(node.pathString)"
@@ -297,6 +307,9 @@
             />
           </button>
 
+          @if (keyIcon(node); as ki) {
+            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="13" />
+          }
           @if (node.segment !== undefined) {
             @if (segmentIsIndex(node)) {
               <span class="tree-index">{{ node.segment }}:</span>

@@ -1,7 +1,13 @@
 import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
+import { HttpTestingController } from '@angular/common/http/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { JsonTreeComponent } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import type {
+  FormattingRule,
+  FormattingRuleSet
+} from '../../../core/api/models';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
@@ -1234,6 +1240,249 @@ describe('JsonTreeComponent', () => {
       });
       await createWith({ alpha: 1 });
       expect(fixture.componentInstance.search()).toBe('');
+    });
+  });
+
+  describe('formatting rules integration (M6f-3)', () => {
+    let httpMock: HttpTestingController;
+    let ruleSets: RuleSetsService;
+
+    function seedRuleSets(sets: FormattingRuleSet[]): void {
+      ruleSets.list().subscribe();
+      const req = httpMock.expectOne((r) => r.url.endsWith('/rule-sets') && r.method === 'GET');
+      req.flush(sets);
+    }
+
+    function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+      return {
+        id: 'r1',
+        target: 'value',
+        matchType: 'exact',
+        matchValue: 'error',
+        caseSensitive: false,
+        style: { backgroundColor: '#ffcdd2' },
+        ...overrides
+      };
+    }
+
+    function makeSet(rules: FormattingRule[], overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
+      return {
+        id: 'set-1',
+        userId: 'oid-1',
+        name: 'Errors',
+        rules,
+        version: 1,
+        createdAt: '2026-04-27T00:00:00.000Z',
+        updatedAt: '2026-04-27T00:00:00.000Z',
+        ...overrides
+      };
+    }
+
+    beforeEach(() => {
+      // createWith resets TestBed; grab service handles after the
+      // component is constructed in each test.
+    });
+
+    async function setUp(value: unknown): Promise<void> {
+      await createWith(value);
+      httpMock = TestBed.inject(HttpTestingController);
+      ruleSets = TestBed.inject(RuleSetsService);
+    }
+
+    afterEach(() => {
+      httpMock?.verify();
+    });
+
+    it('returns null styles when no rule sets are active', async () => {
+      await setUp({ status: 'error' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      const root = cmp.root()!;
+      const status = root.children!.find((c) => c.segment === 'status')!;
+      expect(cmp.ruleStyleVars(status)).toBeNull();
+      expect(cmp.matchedRuleTitle(status)).toBeNull();
+    });
+
+    it('paints --tree-row-format-bg and --tree-value-color on a matched leaf', async () => {
+      await setUp({ status: 'error' });
+      seedRuleSets([
+        makeSet([
+          makeRule({
+            target: 'value',
+            matchValue: 'error',
+            style: { backgroundColor: '#ffcdd2', textColor: '#b71c1c' }
+          })
+        ])
+      ]);
+      prefs.update({ activeRuleSetIds: ['set-1'] });
+      cmp.expandAll();
+      fixture.detectChanges();
+      const root = cmp.root()!;
+      const status = root.children!.find((c) => c.segment === 'status')!;
+      const styles = cmp.ruleStyleVars(status);
+      expect(styles).not.toBeNull();
+      expect(styles!['--tree-row-format-bg']).toBe('#ffcdd2');
+      expect(styles!['--tree-value-color']).toBe('#b71c1c');
+    });
+
+    it('honors the F8 contract: a string "200" matches a value-exact "200" rule', async () => {
+      await setUp({ stringStatus: '200', numberStatus: 200 });
+      seedRuleSets([
+        makeSet([
+          makeRule({
+            id: 'r-200',
+            target: 'value',
+            matchType: 'exact',
+            matchValue: '200',
+            style: { backgroundColor: '#c8e6c9' }
+          })
+        ])
+      ]);
+      prefs.update({ activeRuleSetIds: ['set-1'] });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      const root = cmp.root()!;
+      const stringNode = root.children!.find((c) => c.segment === 'stringStatus')!;
+      const numberNode = root.children!.find((c) => c.segment === 'numberStatus')!;
+      expect(cmp.ruleStyleVars(stringNode)?.['--tree-row-format-bg']).toBe('#c8e6c9');
+      expect(cmp.ruleStyleVars(numberNode)?.['--tree-row-format-bg']).toBe('#c8e6c9');
+    });
+
+    it('does NOT match accidentally-quoted text against a value rule (regression for F8)', async () => {
+      // Producer must not pass through JSON.stringify-quoted strings.
+      // If it did, `'"200"'` would not equal `'200'` and the rule would
+      // miss. This test pins the producer contract.
+      await setUp({ status: '200' });
+      seedRuleSets([
+        makeSet([
+          makeRule({ target: 'value', matchType: 'exact', matchValue: '200' })
+        ])
+      ]);
+      prefs.update({ activeRuleSetIds: ['set-1'] });
+      cmp.expandAll();
+      fixture.detectChanges();
+      const root = cmp.root()!;
+      const status = root.children!.find((c) => c.segment === 'status')!;
+      expect(cmp.ruleStyleVars(status)).not.toBeNull();
+    });
+
+    it('skips containers for value-target rules but allows key-target', async () => {
+      await setUp({ errors: [1, 2] });
+      seedRuleSets([
+        makeSet([
+          makeRule({
+            id: 'r-key',
+            target: 'key',
+            matchType: 'exact',
+            matchValue: 'errors',
+            style: { textColor: '#b71c1c' }
+          }),
+          makeRule({
+            id: 'r-val',
+            target: 'value',
+            matchType: 'contains',
+            matchValue: 'errors',
+            style: { backgroundColor: '#ffcdd2' }
+          })
+        ])
+      ]);
+      prefs.update({ activeRuleSetIds: ['set-1'] });
+      cmp.expandAll();
+      fixture.detectChanges();
+      const root = cmp.root()!;
+      const errors = root.children!.find((c) => c.segment === 'errors')!;
+      const styles = cmp.ruleStyleVars(errors);
+      expect(styles?.['--tree-key-color']).toBe('#b71c1c');
+      // value rule is skipped on the container, so no row background:
+      expect(styles?.['--tree-row-format-bg']).toBeUndefined();
+    });
+
+    it('surfaces matched-rule labels via matchedRuleTitle (newline-joined)', async () => {
+      await setUp({ status: 'error' });
+      seedRuleSets([
+        makeSet([
+          makeRule({ id: 'r1', target: 'value', matchType: 'exact', matchValue: 'error' }),
+          makeRule({
+            id: 'r2',
+            target: 'value',
+            matchType: 'contains',
+            matchValue: 'err'
+          })
+        ])
+      ]);
+      prefs.update({ activeRuleSetIds: ['set-1'] });
+      cmp.expandAll();
+      fixture.detectChanges();
+      const root = cmp.root()!;
+      const status = root.children!.find((c) => c.segment === 'status')!;
+      const title = cmp.matchedRuleTitle(status);
+      expect(title).toContain('value exact "error"');
+      expect(title).toContain('value contains "err"');
+      expect(title!.split('\n').length).toBe(2);
+    });
+
+    it('renders a key-side icon when an icon-bearing rule matches', async () => {
+      await setUp({ warning: 'high' });
+      seedRuleSets([
+        makeSet([
+          makeRule({
+            id: 'r1',
+            target: 'key',
+            matchType: 'exact',
+            matchValue: 'warning',
+            style: { icon: 'warning' }
+          })
+        ])
+      ]);
+      prefs.update({ activeRuleSetIds: ['set-1'] });
+      cmp.expandAll();
+      fixture.detectChanges();
+      const root = cmp.root()!;
+      const warnNode = root.children!.find((c) => c.segment === 'warning')!;
+      expect(cmp.keyIcon(warnNode)).toBe('warning');
+      expect(cmp.valueIcon(warnNode)).toBeNull();
+      const iconEl = (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-rule-icon--key'
+      );
+      expect(iconEl).not.toBeNull();
+    });
+
+    it('caches engine results across multiple lookups for the same node', async () => {
+      // Memoization smoke test: a single tree node calls the engine
+      // exactly once per (activeSets, key, valueText, isContainer)
+      // tuple. Since `evaluateNode` is a `computed()`, repeated calls
+      // hit the same closure-scoped cache.
+      await setUp({ status: 'error' });
+      seedRuleSets([
+        makeSet([
+          makeRule({ target: 'value', matchType: 'exact', matchValue: 'error' })
+        ])
+      ]);
+      prefs.update({ activeRuleSetIds: ['set-1'] });
+      const root = cmp.root()!;
+      const status = root.children!.find((c) => c.segment === 'status')!;
+      const a = cmp.ruleResultFor(status);
+      const b = cmp.ruleResultFor(status);
+      expect(a).toBe(b);
+    });
+
+    it('drops the cache when activeRuleSets changes', async () => {
+      await setUp({ status: 'error' });
+      seedRuleSets([
+        makeSet([
+          makeRule({ id: 'r1', target: 'value', matchType: 'exact', matchValue: 'error' })
+        ])
+      ]);
+      prefs.update({ activeRuleSetIds: ['set-1'] });
+      const root = cmp.root()!;
+      const status = root.children!.find((c) => c.segment === 'status')!;
+      const before = cmp.ruleResultFor(status);
+
+      // Toggle off - now no rules apply, result must change identity.
+      prefs.update({ activeRuleSetIds: [] });
+      const after = cmp.ruleResultFor(status);
+      expect(before).not.toBe(after);
     });
   });
 });

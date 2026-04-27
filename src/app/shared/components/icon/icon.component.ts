@@ -33,7 +33,14 @@ export type JjIconName =
   | 'eye'
   | 'folder'
   | 'history'
-  | 'search';
+  | 'search'
+  | 'warning'
+  | 'check'
+  | 'star'
+  | 'info'
+  | 'error'
+  | 'flag'
+  | 'bookmark';
 
 @Component({
   selector: 'jj-icon',
@@ -189,6 +196,33 @@ export type JjIconName =
         @case ('search') {
           <circle cx="11" cy="11" r="6.5" />
           <path d="M16 16l4 4" />
+        }
+        @case ('warning') {
+          <path d="M12 4l9.5 16.5h-19z" />
+          <path d="M12 10v5" />
+          <circle cx="12" cy="17.6" r="0.9" fill="currentColor" stroke="none" />
+        }
+        @case ('check') {
+          <path d="M5 12.5l4 4 10-10" />
+        }
+        @case ('star') {
+          <path d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2L12 17.6l-5.4 2.9 1-6.2L3.2 10l6.1-.9z" />
+        }
+        @case ('info') {
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 11v5.5" />
+          <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none" />
+        }
+        @case ('error') {
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" />
+        }
+        @case ('flag') {
+          <path d="M5 21V4" />
+          <path d="M5 4h11l-2 4 2 4H5" />
+        }
+        @case ('bookmark') {
+          <path d="M6 4h12v17l-6-4-6 4z" />
         }
       }
     </svg>

@@ -19,8 +19,16 @@ import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.ser
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { persistedStringSignal } from '../../../core/preferences/persisted-signal';
 import { JsonParserService } from '../../../core/json/json-parser.service';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import type { FormattingIcon } from '../../../core/api/models';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
+import {
+  EMPTY_RULE_RESULT,
+  RuleEngineNode,
+  RuleEngineResult,
+  evaluateFormattingRules
+} from './formatting-rules-engine';
 import {
   ParsedDate,
   formatDateAnnotation,
@@ -119,6 +127,7 @@ export class JsonTreeComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly jsonParser = inject(JsonParserService);
+  private readonly ruleSets = inject(RuleSetsService);
 
   readonly value = input<unknown>(undefined);
 
@@ -722,6 +731,145 @@ export class JsonTreeComponent {
       default:
         return '';
     }
+  }
+
+  /**
+   * Memoized rule-engine evaluator for the current set of active rule
+   * sets. Recomputes (and resets the cache) only when
+   * `ruleSets.activeRuleSets()` changes - i.e. when the user toggles a
+   * set on/off OR when an active set's `version` changes after a save
+   * elsewhere. Unrelated tree updates (selection, search, expand) do
+   * NOT invalidate the cache.
+   *
+   * The cache key collapses two leaves to the same entry only when
+   * their inputs to the engine are identical: same key (or both null
+   * for root/array elements), same unquoted display text, same
+   * container-ness. That is exactly the surface the engine reads, so
+   * collisions are correctness-preserving.
+   *
+   * Returns `EMPTY_RULE_RESULT` (frozen sentinel) by identity when no
+   * active sets are configured, which lets callers short-circuit
+   * cheaply on the no-formatting path.
+   */
+  private readonly evaluateNode = computed<(node: TreeNode) => RuleEngineResult>(() => {
+    const sets = this.ruleSets.activeRuleSets();
+    if (sets.length === 0) {
+      return () => EMPTY_RULE_RESULT;
+    }
+    const cache = new Map<string, RuleEngineResult>();
+    return (node: TreeNode): RuleEngineResult => {
+      const engineNode = this.toEngineNode(node);
+      // Cache key explicitly delimits the three components so two
+      // distinct (key, valueText) pairs cannot collide via accidental
+      // concatenation. The unit separator (\u001f) is JSON-illegal, so
+      // it cannot appear inside `key` or `valueText`.
+      const cacheKey = `${engineNode.key ?? '\u0000'}\u001f${engineNode.valueText ?? '\u0000'}\u001f${engineNode.isContainer ? '1' : '0'}`;
+      let cached = cache.get(cacheKey);
+      if (!cached) {
+        cached = evaluateFormattingRules(sets, engineNode);
+        cache.set(cacheKey, cached);
+      }
+      return cached;
+    };
+  });
+
+  /**
+   * Tree node -> engine node, enforcing the F8 contract: `valueText` is
+   * the **unquoted, normalized display text** for leaf values. Strings
+   * are passed through raw (no JSON.stringify quoting), numbers /
+   * booleans are stringified, null becomes `'null'`. Container nodes
+   * carry `valueText: null` and `isContainer: true` so the engine can
+   * skip value-target rules without having to re-detect them.
+   *
+   * The root and array elements have `key: null`. Object-member keys
+   * arrive as the literal string segment.
+   */
+  private toEngineNode(node: TreeNode): RuleEngineNode {
+    const isContainer = node.type === 'object' || node.type === 'array';
+    let valueText: string | null = null;
+    if (!isContainer) {
+      switch (node.type) {
+        case 'string':
+          valueText = node.value as string;
+          break;
+        case 'number':
+        case 'boolean':
+          valueText = String(node.value);
+          break;
+        case 'null':
+          valueText = 'null';
+          break;
+        default:
+          valueText = null;
+          break;
+      }
+    }
+    const key = typeof node.segment === 'string' ? node.segment : null;
+    return { key, valueText, isContainer };
+  }
+
+  /**
+   * Public engine result for a node. Used by the template to project
+   * inline styles and to render matched-rule tooltips.
+   */
+  ruleResultFor(node: TreeNode): RuleEngineResult {
+    return this.evaluateNode()(node);
+  }
+
+  /**
+   * Build the inline `style` object for a tree row from the engine
+   * result. Returns `null` for the no-format case so Angular's `[style]`
+   * binding clears any previous values (Angular treats `null` as "no
+   * style applied"). Only properties the engine actually set are
+   * emitted - leaving e.g. `--tree-key-weight` undefined falls back to
+   * the legacy `600` default in the SCSS.
+   */
+  ruleStyleVars(node: TreeNode): Record<string, string> | null {
+    const result = this.ruleResultFor(node);
+    if (result === EMPTY_RULE_RESULT) return null;
+    const out: Record<string, string> = {};
+    if (result.rowStyle.backgroundColor) {
+      out['--tree-row-format-bg'] = result.rowStyle.backgroundColor;
+    }
+    if (result.rowStyle.borderColor) {
+      out['--tree-row-format-border'] = result.rowStyle.borderColor;
+    }
+    const k = result.keyStyle;
+    if (k.color) out['--tree-key-color'] = k.color;
+    if (k.bold !== undefined) out['--tree-key-weight'] = k.bold ? '700' : '400';
+    if (k.italic !== undefined) out['--tree-key-style'] = k.italic ? 'italic' : 'normal';
+    if (k.underline !== undefined) {
+      out['--tree-key-decoration'] = k.underline ? 'underline' : 'none';
+    }
+    const v = result.valueStyle;
+    if (v.color) out['--tree-value-color'] = v.color;
+    if (v.bold !== undefined) out['--tree-value-weight'] = v.bold ? '700' : '400';
+    if (v.italic !== undefined) out['--tree-value-style'] = v.italic ? 'italic' : 'normal';
+    if (v.underline !== undefined) {
+      out['--tree-value-decoration'] = v.underline ? 'underline' : 'none';
+    }
+    return Object.keys(out).length === 0 ? null : out;
+  }
+
+  /** Engine-supplied icon for the matched key side, or null. */
+  keyIcon(node: TreeNode): FormattingIcon | null {
+    return this.ruleResultFor(node).keyStyle.icon ?? null;
+  }
+
+  /** Engine-supplied icon for the matched value side, or null. */
+  valueIcon(node: TreeNode): FormattingIcon | null {
+    return this.ruleResultFor(node).valueStyle.icon ?? null;
+  }
+
+  /**
+   * Tooltip text listing the rule-set + rule labels that styled this
+   * row, joined by newlines. Returns `null` when nothing matched so
+   * the binding does not emit an empty `title=""` attribute.
+   */
+  matchedRuleTitle(node: TreeNode): string | null {
+    const result = this.ruleResultFor(node);
+    if (result.matchedRules.length === 0) return null;
+    return result.matchedRules.map((r) => r.label).join('\n');
   }
 
   /**
