@@ -4,6 +4,7 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
+const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
 
 interface BuiltNode {
   segment: string | number | undefined;
@@ -32,7 +33,15 @@ describe('JsonTreeComponent', () => {
     cmp = fixture.componentInstance;
   }
 
-  afterEach(() => localStorage.removeItem(STORAGE_KEY));
+  beforeEach(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TREE_SEARCH_STORAGE_KEY);
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TREE_SEARCH_STORAGE_KEY);
+  });
 
   it('does not warn about mixed flat/nested tree node types', async () => {
     const warn = spyOn(console, 'warn').and.callThrough();
@@ -935,6 +944,65 @@ describe('JsonTreeComponent', () => {
         setSearch('alpha');
         expect(c.activeHitIndex()).toBe(0);
       });
+    });
+  });
+
+  describe('search term persistence', () => {
+    const SEARCH_KEY = 'jotjson.treeSearch.v1';
+
+    beforeEach(() => localStorage.removeItem(SEARCH_KEY));
+    afterEach(() => localStorage.removeItem(SEARCH_KEY));
+
+    it('hydrates the search signal from localStorage on construction', async () => {
+      localStorage.setItem(SEARCH_KEY, 'alpha');
+      await createWith({ alpha: 1, beta: 2 });
+      expect(fixture.componentInstance.search()).toBe('alpha');
+    });
+
+    it('persists search updates to localStorage', async () => {
+      await createWith({ alpha: 1 });
+      fixture.componentInstance.search.set('alpha');
+      fixture.detectChanges();
+      expect(localStorage.getItem(SEARCH_KEY)).toBe('alpha');
+    });
+
+    it('removes the storage key when the search is cleared', async () => {
+      localStorage.setItem(SEARCH_KEY, 'alpha');
+      await createWith({ alpha: 1 });
+      fixture.componentInstance.search.set('');
+      fixture.detectChanges();
+      expect(localStorage.getItem(SEARCH_KEY)).toBeNull();
+    });
+
+    it('tolerates localStorage.setItem throwing (private mode / quota)', async () => {
+      await createWith({ alpha: 1 });
+      const original = localStorage.setItem.bind(localStorage);
+      spyOn(localStorage, 'setItem').and.callFake((key: string, value: string) => {
+        if (key === SEARCH_KEY) {
+          throw new Error('quota exceeded');
+        }
+        original(key, value);
+      });
+      expect(() => {
+        fixture.componentInstance.search.set('alpha');
+        fixture.detectChanges();
+      }).not.toThrow();
+      expect(fixture.componentInstance.search()).toBe('alpha');
+    });
+
+    it('tolerates localStorage.getItem throwing on hydrate', async () => {
+      const originalGet = Storage.prototype.getItem;
+      spyOn(Storage.prototype, 'getItem').and.callFake(function (
+        this: Storage,
+        key: string
+      ) {
+        if (key === SEARCH_KEY) {
+          throw new Error('blocked');
+        }
+        return originalGet.call(this, key);
+      });
+      await createWith({ alpha: 1 });
+      expect(fixture.componentInstance.search()).toBe('');
     });
   });
 });

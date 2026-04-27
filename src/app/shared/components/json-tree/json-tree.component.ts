@@ -66,6 +66,21 @@ function cssEscape(value: string): string {
 }
 
 /**
+ * localStorage key for the persisted tree-search term. Per-device,
+ * never synced to the server. Mirrors the `splitRatio` / draft pattern.
+ */
+const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
+
+function readPersistedSearch(): string {
+  try {
+    const raw = localStorage.getItem(TREE_SEARCH_STORAGE_KEY);
+    return typeof raw === 'string' ? raw : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Interactive tree viewer for parsed JSON, built on Angular Material's
  * mat-tree (nested variant). JsonParserService is the source of the value.
  */
@@ -84,7 +99,7 @@ export class JsonTreeComponent {
 
   readonly value = input<unknown>(undefined);
 
-  readonly search = signal('');
+  readonly search = signal(readPersistedSearch());
 
   /**
    * Path of the currently-selected tree row, or `null` for no selection.
@@ -422,6 +437,23 @@ export class JsonTreeComponent {
       untracked(() => {
         this.activeHitIndex.set(paths.length > 0 ? 0 : -1);
       });
+    });
+
+    // Persist the search term to localStorage so it survives page
+    // reloads. Per-device, never sent to the server. Empty string
+    // removes the key. Storage failures (private mode / quota) are
+    // swallowed - the in-memory signal is still authoritative.
+    effect(() => {
+      const term = this.search();
+      try {
+        if (term.length === 0) {
+          localStorage.removeItem(TREE_SEARCH_STORAGE_KEY);
+        } else {
+          localStorage.setItem(TREE_SEARCH_STORAGE_KEY, term);
+        }
+      } catch {
+        /* ignore storage errors */
+      }
     });
   }
 
