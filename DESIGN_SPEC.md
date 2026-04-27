@@ -200,6 +200,11 @@ M5 milestone notes.
 }
 ```
 
+Storage: one Cosmos document per rule set in the `rule-sets` container
+(partition key `/userId`); the `rules` array is embedded so updates to
+a set are atomic and reads are single-document. The 50-rule cap (see
+§Features 7) keeps every document well below Cosmos's 2 MB item limit.
+
 #### FormattingRule
 ```
 {
@@ -497,17 +502,19 @@ Available to **registered users** only.
 - **How it works in the Tree View:**
   - When a rule set is active, the tree view scans each node's key and value.
   - Matching nodes receive the configured inline styles (background, text color, font weight, etc.).
-  - Multiple rules can match the same node - styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
+  - **Within a rule set:** multiple rules can match the same node - styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
+  - **Across active rule sets:** sets are evaluated in the order they appear in the user's saved list on `/formatting-rules`, then in-set order. Later evaluations override earlier ones for conflicting style properties. Drag-to-reorder of active sets is a post-v1 follow-up.
+  - The optional `borderColor` style renders as a 4px left-edge accent strip on the affected row (consistent with the `.pref-substack` pattern on the profile page) so it does not collide with the selection outline or ancestor highlights.
   - A tooltip on hover shows which rule(s) matched a given node (keeps the tree visually clean).
   - **Highlight priority** (highest to lowest): selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
   - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply.
 
-- **Built-in Presets** - ship a few starter rule sets users can clone and customize:
-  - "Error Detection" - highlights keys like `error`, `err`, `exception`, `fault` in red.
-  - "Status Codes" - color-codes values like `200` (green), `400` (yellow), `500` (red).
-  - "Null Finder" - highlights all `null` values with a yellow background.
+- **Built-in Presets** - ship a few starter rule sets users can clone and customize. Preset IDs are stable kebab-case slugs (not UUIDs) so the clone endpoint URLs are human-readable and stable across rebuilds; user-created rule sets always get UUIDs.
+  - `error-detection` ("Error Detection") - highlights keys like `error`, `err`, `exception`, `fault` in red.
+  - `status-codes` ("Status Codes") - color-codes values like `200` (green), `400` (yellow), `500` (red).
+  - `null-finder` ("Null Finder") - highlights all `null` values with a yellow background.
 
-- **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set.
+- **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set. Enforced server-side as hardcoded constants in `api/src/shared/limits.ts` (mirrors the 100-blob cap pattern); raising them later is one edit.
 
 ---
 
@@ -1023,7 +1030,66 @@ EU users would need a regional resource - out of scope for v1.
      FIFO. The editor's `pasteOccurred` output and the
      `HistoryService.recordPaste` method are removed; the
      native-paste auto-unescape behavior is preserved.
-6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets.
+6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets. Broken into seven sub-milestones:
+   - **M6a**: Spec finalization. Close cross-cutting design questions
+     (storage shape, limits config, preset ID format, `borderColor`
+     rendering, multi-set precedence) and document the answers in
+     `DESIGN_SPEC.md`. No code changes.
+   - **M6b**: API CRUD foundation. Validators (`assertRuleSet`,
+     `assertRule`, `assertStyle`) following the `assertEnum` /
+     `assertInt` / `assertHex` pattern, Cosmos repository
+     (`ruleSetRepository.ts`), and the five owner-scoped functions
+     (`createRuleSet`, `listRuleSets`, `getRuleSet`, `updateRuleSet`,
+     `deleteRuleSet`). Limit enforcement (20 sets/user, 50 rules/set)
+     via hardcoded constants in `api/src/shared/limits.ts`. Owner
+     mismatch returns 404 (consistent with `getBlob`). Jest specs for
+     validators, repo, and each handler.
+   - **M6c**: Built-in presets. Define the three preset rule sets in
+     `api/src/shared/ruleSetPresets.ts` with stable kebab-case IDs
+     (`error-detection`, `status-codes`, `null-finder`). Add
+     `GET /api/rule-sets/presets` and
+     `POST /api/rule-sets/presets/:id/clone` endpoints; the clone
+     endpoint creates a user-owned UUID copy and reuses the
+     limit-enforcement path.
+   - **M6d**: Frontend service + page CRUD UI. New
+     `RuleSetsService` (signals + optimistic update, mirrors
+     `BlobsService` shape) and the registered-user-only
+     `/formatting-rules` page: list cards (one per set), empty state
+     with "Create your first rule set" CTA, create / rename /
+     duplicate / delete actions, and a "Clone preset" affordance.
+     Anonymous users hit the existing `signedInGuard`. No rule
+     builder yet - cards link to a stub editor.
+   - **M6e**: Rule builder UI with live preview.
+     `RuleEditorComponent` exposing every spec'd control: target
+     (key / value / both), match type (exact / contains /
+     starts_with / ends_with / regex), match value, case-sensitivity,
+     and full style picker (background, text, bold/italic/underline,
+     border, optional icon). Live preview renders a sample JSON
+     snippet through the production tree renderer with the
+     in-progress rule applied. Auto-save (debounced 500 ms) via
+     `PUT /api/rule-sets/:id`, consistent with the profile
+     preferences pattern.
+   - **M6f**: Tree-view integration. Pure
+     `formatting-rules-engine.ts` taking active `FormattingRuleSet[]`
+     plus a tree node and returning a merged `FormattingStyle`.
+     Implements within-set rule-list order, cross-set list order
+     (later overrides earlier), and the highlight-priority
+     suppression rule (selection -> match-value -> ancestor -> search
+     -> formatting rules). Memoization keyed on
+     `(activeSetIds, key, value, type)` so a 5 MB tree (perf NFR
+     §Non-Functional Requirements) does not re-evaluate on
+     unrelated state changes. Active-set toolbar above the tree
+     (chip list to toggle which sets apply on this session). Profile
+     page gets the deferred "Default formatting rule set" dropdown
+     wired to `defaultRuleSetId` (closes the M5d-deferred item on
+     line 459).
+   - **M6g**: Polish. Telemetry events
+     (rule-set created/updated/deleted/applied via `LoggerService`,
+     no user content), a11y pass (keyboard nav, screen-reader labels
+     on every color picker, focus management on add/delete), empty
+     and offline state polish per existing patterns, and final
+     `DESIGN_SPEC.md` + `AGENTS.md` updates capturing any
+     conventions that emerged.
 7. **Polish & launch** - Each of these lands as its own step/commit:
    - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)
    - **M7b**: Drag-and-drop file upload with full-page drop overlay (Home page §1).
