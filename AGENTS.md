@@ -59,10 +59,13 @@ Place new code in the correct bucket:
   `undefined`).
 - Production code must have **zero** `as unknown as ...` casts. If you
   hit a structural mismatch, change the function signature or write a
-  narrow adapter object instead. Test files may use `as unknown as X`
-  for partial framework stubs (`HttpRequest`, `Router`, `SwUpdate`,
-  `MatSnackBarRef`, etc.) -- prefer `jasmine.SpyObj<T>` or
-  `Partial<T>` intermediaries when feasible.
+  narrow adapter object instead. Test files (`*.spec.ts`, `*.test.ts`)
+  and test-helper modules under `src/testing/` or named `*.testing.ts`
+  may use `as unknown as X` for partial framework stubs (`HttpRequest`,
+  `Router`, `SwUpdate`, `MatSnackBarRef`, etc.) -- prefer
+  `jasmine.SpyObj<T>` or `Partial<T>` intermediaries when feasible.
+  Tier-2 lint rules will treat `src/testing/**` and `*.testing.ts` as
+  test code, not production.
 - Production code must have **zero** `as any`. The single test-file
   occurrence is grandfathered; do not add more.
 - Test-only seams on production classes use the `__<verb>ForTesting`
@@ -95,7 +98,8 @@ Place new code in the correct bucket:
 - Logging: use `LoggerService` (`src/app/core/telemetry/logger.service.ts`)
   for any log a developer might consult. Direct `console.*` calls are
   permitted only in `src/app/core/telemetry/` and `src/main.ts` (early-
-  boot bootstrap errors).
+  boot bootstrap errors). This is convention-only today; a Tier-2 lint
+  rule in `check-spec-patterns.mjs` will enforce it.
 
 ### Internationalization (i18n)
 - v1 ships in English only, but **all user-facing strings must be extractable**
@@ -117,13 +121,16 @@ Place new code in the correct bucket:
 ### Azure Functions
 - One function per folder. Keep handlers thin; put logic in `src/lib/`.
 - Validate all inputs with hand-written `assert<Shape>(value: unknown): Shape`
-  guards (see `assertEnum` / `assertInt` in `api/src/shared/preferences.ts`
+  guards (see `assertEnum` / `assertInt`, plus `assertBool` / `assertHex`
+  for booleans and 6-digit hex colors, in `api/src/shared/preferences.ts`
   for the pattern). Throw a typed validation error and translate to
   `400 Bad Request` at the handler edge. (We do not use zod -- the
   hand-rolled approach keeps the deployed bundle small.)
 - Return typed JSON responses with explicit status codes. Never leak stack
   traces. Status code conventions:
   - `200` read or update success, `201` create success.
+  - `204 No Content` delete success - no body. Used by
+    `DELETE /api/blobs/{id}` and `DELETE /api/history`.
   - `400` request-shape validation failed.
   - `401` missing or invalid auth (token expired, signature failed).
   - `403` authenticated but not allowed (e.g., not the blob owner).
