@@ -37,6 +37,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   searchCaseSensitive: false,
   searchRegexMode: false,
   searchScope: 'both',
+  searchValueType: 'all',
   blobQuotaStrategy: 'auto_fifo',
   seenBlobQuotaModal: false,
   seenClipboardBanner: false,

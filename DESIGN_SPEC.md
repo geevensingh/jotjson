@@ -99,6 +99,7 @@ Browser (Angular SPA)
   searchCaseSensitive: boolean (default: false),
   searchRegexMode: boolean (default: false),
   searchScope: "keys" | "values" | "both" (default: "both"),
+  searchValueType: "all" | "date" | "date/time" | "uuid" | "url" | "email" | "path" | "ipv4" | "ipv6" | "integer" | "number" | "string" | "boolean" | "null" | "array" | "object" (default: "all" - when set to a specific type, the tree search restricts candidate nodes to those whose classified value type matches; the existing searchScope rules then decide whether key text and/or value text are eligible for the text match. Empty query + non-"all" lists every node of that type as a navigator),
   blobQuotaStrategy: "auto_fifo" | "manual" (default: "auto_fifo" - delete oldest blob when 100-blob cap reached; "manual" blocks the save with a prompt instead),
   seenBlobQuotaModal: boolean (default: false - flipped to true after the first-time quota explainer modal has been dismissed; synced server-side so the modal doesn't reappear on other devices),
   seenClipboardBanner: boolean (default: false - flipped to true after the first-time paste-permission banner has been dismissed; synced server-side so the banner doesn't reappear on other devices),

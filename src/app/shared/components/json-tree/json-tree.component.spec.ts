@@ -201,6 +201,104 @@ describe('JsonTreeComponent', () => {
     });
   });
 
+  describe('search by value type', () => {
+    beforeEach(async () => {
+      // Mix of types so each filter has a distinguishable target:
+      // - id          : uuid string (matches type=uuid)
+      // - email       : email string (matches type=email)
+      // - count       : integer
+      // - ratio       : non-integer number
+      // - active      : boolean
+      // - missing     : null
+      // - tags        : array (and contains a string)
+      // - meta        : object (and contains a string)
+      // - name        : plain string
+      await createWith({
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        email: 'a@b.co',
+        count: 7,
+        ratio: 1.5,
+        active: true,
+        missing: null,
+        name: 'plain',
+        tags: ['x'],
+        meta: { kind: 'k' }
+      });
+    });
+
+    it('defaults to all (no filter)', () => {
+      expect(cmp.searchValueType()).toBe('all');
+    });
+
+    it('setSearchValueType writes the preference', () => {
+      cmp.setSearchValueType('uuid');
+      expect(prefs.prefs().searchValueType).toBe('uuid');
+    });
+
+    it('empty query + active type lists every node of that type (navigator mode)', () => {
+      prefs.update({ searchValueType: 'integer' });
+      cmp.search.set('');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.count')).toBeTrue();
+      // Non-integer leaves are excluded.
+      expect(hits.has('$.ratio')).toBeFalse();
+      expect(hits.has('$.id')).toBeFalse();
+      expect(hits.has('$.active')).toBeFalse();
+      // The root sentinel is never a hit.
+      expect(hits.has('$')).toBeFalse();
+    });
+
+    it('empty query + uuid filter finds the uuid leaf only', () => {
+      prefs.update({ searchValueType: 'uuid' });
+      cmp.search.set('');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.id')).toBeTrue();
+      expect(hits.has('$.email')).toBeFalse();
+    });
+
+    it('type filter narrows by type AND scope still applies for text match (scope=values)', () => {
+      prefs.update({ searchValueType: 'uuid', searchScope: 'values' });
+      // The uuid string contains "550e", but the email string does not -
+      // even if it did, type=uuid would exclude the email.
+      cmp.search.set('550e');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.id')).toBeTrue();
+      expect(hits.has('$.email')).toBeFalse();
+    });
+
+    it('scope=keys with type filter still matches against keys (only on candidate nodes)', () => {
+      prefs.update({ searchValueType: 'integer', searchScope: 'keys' });
+      // Key "count" matches; only candidate (integer) so it stays.
+      cmp.search.set('count');
+      expect(cmp.searchHits().has('$.count')).toBeTrue();
+      // Key "name" matches text too, but value type "string" != integer,
+      // so it is excluded by the type filter.
+      cmp.search.set('name');
+      expect(cmp.searchHits().has('$.name')).toBeFalse();
+    });
+
+    it('scope=keys + empty query + type filter still lists all candidates (text scope is irrelevant)', () => {
+      prefs.update({ searchValueType: 'boolean', searchScope: 'keys' });
+      cmp.search.set('');
+      expect(cmp.searchHits().has('$.active')).toBeTrue();
+    });
+
+    it('searchActive is true when only the type filter is set', () => {
+      cmp.search.set('');
+      expect(cmp.searchActive()).toBeFalse();
+      prefs.update({ searchValueType: 'string' });
+      expect(cmp.searchActive()).toBeTrue();
+    });
+
+    it('renders a count label when only the type filter is set', () => {
+      cmp.search.set('');
+      prefs.update({ searchValueType: 'uuid' });
+      // Exactly one uuid in the fixture.
+      expect(cmp.searchCountLabel()).not.toBe('');
+      expect(cmp.searchHitCount()).toBe(1);
+    });
+  });
+
   describe('expandAll / expandToLevel / collapseAll', () => {
     beforeEach(async () => {
       await createWith({

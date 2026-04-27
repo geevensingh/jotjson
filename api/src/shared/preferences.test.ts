@@ -149,4 +149,32 @@ describe('normalizePreferences', () => {
     bad['defaultRuleSetId'] = 123;
     expect(() => normalizePreferences(bad)).toThrow(/defaultRuleSetId/);
   });
+
+  it('round-trips searchValueType=all (default)', () => {
+    expect(normalizePreferences(valid()).searchValueType).toBe('all');
+  });
+
+  it('round-trips a non-default searchValueType', () => {
+    const input = valid() as Record<string, unknown>;
+    input['searchValueType'] = 'date';
+    expect(normalizePreferences(input).searchValueType).toBe('date');
+  });
+
+  it('round-trips searchValueType=date/time (slash-bearing enum value)', () => {
+    const input = valid() as Record<string, unknown>;
+    input['searchValueType'] = 'date/time';
+    expect(normalizePreferences(input).searchValueType).toBe('date/time');
+  });
+
+  it('rejects unknown searchValueType', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['searchValueType'] = 'undefined';
+    expect(() => normalizePreferences(bad)).toThrow(/searchValueType must be one of/);
+  });
+
+  it('rejects a missing searchValueType', () => {
+    const bad = valid() as Record<string, unknown>;
+    delete bad['searchValueType'];
+    expect(() => normalizePreferences(bad)).toThrow(/searchValueType/);
+  });
 });

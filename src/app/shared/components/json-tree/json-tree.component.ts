@@ -26,6 +26,32 @@ import {
 } from '../../utils/date-detect';
 import { classifyValue, ValueClassification } from '../../utils/value-classifier';
 
+/**
+ * Search-by-type filter values. `'all'` is the no-filter sentinel.
+ * Everything else mirrors `ValueClassification` minus `'undefined'`
+ * (no JSON `undefined`).
+ */
+export type SearchValueType = Exclude<ValueClassification, 'undefined'> | 'all';
+
+const SEARCH_VALUE_TYPES: readonly SearchValueType[] = [
+  'all',
+  'date',
+  'date/time',
+  'uuid',
+  'url',
+  'email',
+  'path',
+  'ipv4',
+  'ipv6',
+  'integer',
+  'number',
+  'string',
+  'boolean',
+  'null',
+  'array',
+  'object'
+];
+
 const TYPE_LABELS: Record<ValueClassification, string> = {
   date: $localize`:@@tree.type.date:date`,
   'date/time': $localize`:@@tree.type.dateTime:date/time`,
@@ -116,6 +142,8 @@ export class JsonTreeComponent {
   readonly searchScopeKeysLabel = $localize`:@@tree.search.scope.keys:Keys`;
   readonly searchScopeValuesLabel = $localize`:@@tree.search.scope.values:Values`;
   readonly searchScopeBothLabel = $localize`:@@tree.search.scope.both:Keys and values`;
+  readonly searchValueTypeTooltip = $localize`:@@tree.search.type.tooltip:Filter by value type`;
+  readonly searchValueTypeAllLabel = $localize`:@@tree.search.type.all:All types`;
   readonly searchPrevTooltip = $localize`:@@tree.search.prev.tooltip:Previous match`;
   readonly searchNextTooltip = $localize`:@@tree.search.next.tooltip:Next match`;
 
@@ -227,12 +255,23 @@ export class JsonTreeComponent {
   });
 
   /**
+   * True when the search has either non-empty query text OR an active
+   * type filter. Drives whether the match counter and prev/next nav
+   * are shown - both work in "navigator mode" (empty query + active
+   * type filter) the same way they do for a query.
+   */
+  readonly searchActive = computed<boolean>(
+    () => !!this.search().trim() || this.prefs.prefs().searchValueType !== 'all'
+  );
+
+  /**
    * Localized "12 matches" / "1 match" / "No matches" string for the
    * counter beside the search input. Returns the empty string when
-   * the search input is empty so the counter can be hidden.
+   * neither a query nor a type filter is active so the counter can be
+   * hidden.
    */
   readonly searchCountLabel = computed<string>(() => {
-    if (!this.search().trim()) return '';
+    if (!this.searchActive()) return '';
     const n = this.searchHitCount();
     if (n === 0) return $localize`:@@tree.search.count.none:No matches`;
     const pos = this.currentMatchIndex();
@@ -251,7 +290,7 @@ export class JsonTreeComponent {
    * hits; otherwise the empty string so no ghost is rendered.
    */
   readonly searchCountGhost = computed<string>(() => {
-    if (!this.search().trim()) return '';
+    if (!this.searchActive()) return '';
     const n = this.searchHitCount();
     if (n === 0) return '';
     return $localize`:@@tree.search.count.ghost:${n}:position: / ${n}:count: matches`;
@@ -268,11 +307,31 @@ export class JsonTreeComponent {
     }
   }
 
+  /**
+   * Localized label for the search-by-type dropdown trigger and menu
+   * items. `'all'` is the explicit no-filter sentinel; everything else
+   * reuses the same `@@tree.type.*` IDs as the type badges so the two
+   * surfaces stay in lockstep.
+   */
+  valueTypeLabel(type: SearchValueType): string {
+    if (type === 'all') return this.searchValueTypeAllLabel;
+    return TYPE_LABELS[type];
+  }
+
+  /**
+   * Ordered list driving the type-filter dropdown. `'all'` is first
+   * (the no-filter sentinel) followed by every `ValueClassification`
+   * value except `'undefined'` (no JSON `undefined`).
+   */
+  readonly searchValueTypes: readonly SearchValueType[] = SEARCH_VALUE_TYPES;
+
   readonly searchScope = computed(() => this.prefs.prefs().searchScope);
   readonly searchCaseSensitive = computed(() => this.prefs.prefs().searchCaseSensitive);
   readonly searchRegexMode = computed(() => this.prefs.prefs().searchRegexMode);
+  readonly searchValueType = computed(() => this.prefs.prefs().searchValueType);
 
   readonly searchScopeButtonLabel = computed(() => this.scopeLabel(this.searchScope()));
+  readonly searchValueTypeButtonLabel = computed(() => this.valueTypeLabel(this.searchValueType()));
 
   readonly searchPrevDisabled = computed(() => this.searchHitCount() === 0);
   readonly searchNextDisabled = computed(() => this.searchHitCount() === 0);
@@ -282,13 +341,15 @@ export class JsonTreeComponent {
     order: readonly string[];
   }>(() => {
     const q = this.search().trim();
-    if (!q) return { set: new Set(), order: [] };
-    const scope = this.prefs.prefs().searchScope;
-    const caseSensitive = this.prefs.prefs().searchCaseSensitive;
-    const regexMode = this.prefs.prefs().searchRegexMode;
+    const prefs = this.prefs.prefs();
+    const typeFilter = prefs.searchValueType;
+    if (!q && typeFilter === 'all') return { set: new Set(), order: [] };
+    const scope = prefs.searchScope;
+    const caseSensitive = prefs.searchCaseSensitive;
+    const regexMode = prefs.searchRegexMode;
     const needle = caseSensitive ? q : q.toLowerCase();
     let regex: RegExp | undefined;
-    if (regexMode) {
+    if (q && regexMode) {
       try {
         regex = new RegExp(q, caseSensitive ? '' : 'i');
       } catch {
@@ -304,14 +365,36 @@ export class JsonTreeComponent {
       matchSet.add(path);
       matchOrder.push(path);
     };
+    // When a type filter is active, only nodes whose classified value
+    // type matches are candidates. The existing scope rules then decide
+    // whether key text and/or value text are eligible for the text
+    // match. Empty query + active type yields every candidate node.
+    const matchesTypeFilter = (node: TreeNode): boolean => {
+      if (typeFilter === 'all') return true;
+      const classification = classifyValue(node.type, node.value, {
+        detectDates: true,
+        assumeUtcForIsoDateTime: prefs.treeAssumeUtcForIsoDateTime,
+        assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly
+      });
+      return classification === typeFilter;
+    };
     const walk = (node: TreeNode | undefined): void => {
       if (!node) return;
-      if (node.segment !== undefined && (scope === 'keys' || scope === 'both')) {
-        if (test(String(node.segment))) record(node.pathString);
-      }
-      if (scope === 'values' || scope === 'both') {
-        if (node.type !== 'object' && node.type !== 'array') {
-          if (test(this.renderLeaf(node.value, node.type))) record(node.pathString);
+      if (matchesTypeFilter(node)) {
+        if (!q) {
+          // Navigator mode: list every candidate node. Skip the root
+          // sentinel (segment === undefined) so users don't navigate
+          // to the document root itself.
+          if (node.segment !== undefined) record(node.pathString);
+        } else {
+          if (node.segment !== undefined && (scope === 'keys' || scope === 'both')) {
+            if (test(String(node.segment))) record(node.pathString);
+          }
+          if (scope === 'values' || scope === 'both') {
+            if (node.type !== 'object' && node.type !== 'array') {
+              if (test(this.renderLeaf(node.value, node.type))) record(node.pathString);
+            }
+          }
         }
       }
       node.children?.forEach(walk);
@@ -501,6 +584,10 @@ export class JsonTreeComponent {
 
   setSearchScope(scope: 'keys' | 'values' | 'both'): void {
     this.prefs.update({ searchScope: scope });
+  }
+
+  setSearchValueType(type: SearchValueType): void {
+    this.prefs.update({ searchValueType: type });
   }
 
   toggleSearchCaseSensitive(): void {
