@@ -173,7 +173,7 @@ Log Analytics workspace (App-prefixed schema):
 https://ade.loganalytics.io/subscriptions/<subId>/resourcegroups/<rg>/providers/microsoft.operationalinsights/workspaces/appi-<resourceSuffix>-law
 ```
 
-Find the actual values:
+Find the actual values for any other environment:
 
 ```sh
 az login
@@ -182,6 +182,41 @@ az resource list --resource-type Microsoft.Insights/components \
 az resource list --resource-type Microsoft.OperationalInsights/workspaces \
   --query "[].{name:name, rg:resourceGroup, sub:subscriptionId}" -o table
 ```
+
+### Resources today
+
+Concrete values for the only environment that exists right now (`dev`):
+
+| Item | Value |
+|---|---|
+| Subscription | `db5e75e4-b980-486d-a11e-fe9327a52031` (JotJson Subscription) |
+| Resource group | `rg-jotjson-dev` |
+| App Insights component | `appi-jotjson-dev` |
+| App Insights App ID (REST) | `44cc7a7c-8382-490f-8a99-7107fccfa1b0` |
+| Log Analytics workspace | `appi-jotjson-dev-law` |
+| LAW Workspace GUID (`customerId`) | `fdd8e231-1e9b-4fa9-921c-2c0ddf505e1b` |
+| Entra tenant | `68fa6d3c-ab3e-4eea-97bb-f0376ea54cba` |
+
+Substituted into the recipe above, the proxy URLs to paste into ADX Web UI
+or Kusto Explorer are:
+
+App Insights (classic schema, `traces` / `exceptions` / `customEvents` / ...):
+
+```
+https://ade.applicationinsights.io/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourcegroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev
+```
+
+Log Analytics workspace (App-prefixed schema, `AppTraces` / `AppExceptions` /
+`AppEvents` / ...):
+
+```
+https://ade.loganalytics.io/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourcegroups/rg-jotjson-dev/providers/microsoft.operationalinsights/workspaces/appi-jotjson-dev-law
+```
+
+When `stg` and `prod` are stood up they follow the same naming -- just swap
+`-dev` for `-stg` or `-prod` in the resource group and resource names. None
+of the IDs above are credentials; access still requires Entra sign-in with
+**Reader** (or higher) on the resource.
 
 ### Option 1 -- Azure Data Explorer Web UI (recommended)
 
@@ -220,13 +255,13 @@ Good fit if you want to check common queries into the repo
 ```sh
 # AI side -- accepts the AI resource name when unambiguous
 az monitor app-insights query \
-  --app appi-<resourceSuffix> \
+  --app appi-jotjson-dev \
   --analytics-query "exceptions | order by timestamp desc | take 20" \
   -o table
 
-# LAW side -- needs the workspace GUID
+# LAW side -- needs the workspace GUID (customerId)
 az monitor log-analytics query \
-  --workspace <workspace-guid> \
+  --workspace fdd8e231-1e9b-4fa9-921c-2c0ddf505e1b \
   --analytics-query "AppExceptions | order by TimeGenerated desc | take 20" \
   -o table
 ```
@@ -236,22 +271,23 @@ az monitor log-analytics query \
 ```powershell
 # Requires Az.OperationalInsights
 Invoke-AzOperationalInsightsQuery `
-  -WorkspaceId "<workspace-guid>" `
+  -WorkspaceId "fdd8e231-1e9b-4fa9-921c-2c0ddf505e1b" `
   -Query "AppExceptions | take 20"
 ```
 
 ### Option 6 -- REST API
 
 ```
-POST https://api.applicationinsights.io/v1/apps/<appId>/query
+POST https://api.applicationinsights.io/v1/apps/44cc7a7c-8382-490f-8a99-7107fccfa1b0/query
 Authorization: Bearer <Entra-token-with-AI-Reader>
 Content-Type: application/json
 
 {"query": "exceptions | order by timestamp desc | take 20"}
 ```
 
-`<appId>` is the AI resource's **App ID** GUID (visible on the AI overview
-blade), not the Azure resource ID.
+The path segment is the AI resource's **App ID** GUID (visible on the AI
+overview blade as "Application ID"), not the Azure resource ID. The value
+above is for `appi-jotjson-dev`.
 
 ---
 
