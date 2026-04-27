@@ -3,9 +3,9 @@
   <h1 i18n="@@profile.title">Profile</h1>
 
   @if (isSignedIn()) {
-    <section class="card" aria-labelledby="profile-identity">
-      <h2 id="profile-identity" class="card-title" i18n="@@profile.identity.title">
-        Identity
+    <section class="card" aria-labelledby="profile-account">
+      <h2 id="profile-account" class="card-title" i18n="@@profile.identity.title">
+        Account
       </h2>
 
       <dl>
@@ -23,6 +23,18 @@
           }
         </dd>
       </dl>
+
+      <div class="actions">
+        <button
+          type="button"
+          mat-stroked-button
+          color="warn"
+          (click)="onSignOut()"
+        >
+          <jj-icon name="sign-out" />
+          <span i18n="@@profile.signOut">Sign out</span>
+        </button>
+      </div>
     </section>
 
     <section class="card prefs-card" aria-labelledby="profile-prefs">
@@ -405,27 +417,6 @@
           </select>
         </div>
       </section>
-    </section>
-
-    <section class="card actions-card" aria-labelledby="profile-account-actions">
-      <h2
-        id="profile-account-actions"
-        class="card-title"
-        i18n="@@profile.accountActions.title"
-      >
-        Account
-      </h2>
-      <div class="actions">
-        <button
-          type="button"
-          mat-stroked-button
-          color="warn"
-          (click)="onSignOut()"
-        >
-          <jj-icon name="sign-out" />
-          <span i18n="@@profile.signOut">Sign out</span>
-        </button>
-      </div>
     </section>
   } @else {
     <section class="card" aria-labelledby="profile-signed-out">
