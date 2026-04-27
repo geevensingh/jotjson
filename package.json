@@ -67,6 +67,7 @@
   },
   "overrides": {
     "dompurify": "3.4.1",
+    "postcss": "^8.5.10",
     "uuid": "^14.0.0"
   }
 }
