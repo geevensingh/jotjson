@@ -10,7 +10,9 @@ unless a task explicitly overrides a specific rule.
   the relevant sections before making non-trivial changes. If a request
   contradicts the spec, flag the conflict before implementing.
 - Do not silently deviate from the spec (entities, routes, SKUs, limits,
-  defaults). If a change is needed, update `DESIGN_SPEC.md` in the same PR.
+  defaults). Before deviating, give a detailed written explanation of
+  why and ask for explicit permission. If approved, update
+  `DESIGN_SPEC.md` in the same PR as the code change.
 
 ## 2. Tech Stack (non-negotiable defaults)
 
@@ -95,6 +97,13 @@ Place new code in the correct bucket:
 - Styles are component-scoped SCSS. Global tokens live in `src/styles/`.
 - Theming uses the `TreeHighlightColors` / theme tokens from the spec - do not
   hardcode colors in components.
+- When overriding Material component tokens in component SCSS, use the
+  Material 21 `--mat-<component>-*` token names (e.g.,
+  `--mat-slide-toggle-track-width`). The legacy `--mdc-<component>-*`
+  names are silently no-ops on Material 21. The slide-toggle and
+  button-toggle overrides in
+  `src/app/features/profile/profile.component.scss` are reference
+  examples.
 - Logging: use `LoggerService` (`src/app/core/telemetry/logger.service.ts`)
   for any log a developer might consult. Direct `console.*` calls are
   permitted only in `src/app/core/telemetry/` and `src/main.ts` (early-
@@ -113,6 +122,11 @@ Place new code in the correct bucket:
   a stable ID, e.g., ``$localize`:@@upload.tooLarge:File too large - max 5 MB` ``.
 - Stable ID convention: `<area>.<element>.<purpose>` in camelCase / dot
   segments (e.g., `@@tree.search.placeholder`, `@@home.empty`).
+- **Renaming visible text:** when changing the user-visible source
+  string for an existing UI element, keep the existing i18n message
+  ID stable; only the source text changes. This avoids invalidating
+  prior translations and history. Re-run `npm run extract-i18n` so
+  `messages.xlf` is regenerated with the new source.
 - Never use plain strings in templates or `console.warn`/`toast` calls when
   they are user-visible.
 - Run `npm run extract-i18n` to refresh `src/locale/messages.xlf` when you add
@@ -204,6 +218,13 @@ Before finishing a task:
 
 - Small, focused commits with imperative subject lines (e.g.,
   `Add slug collision check to BlobService`).
+- Stage files explicitly by path. **Never** run `git add -A`,
+  `git add .`, or `git add --all`. This prevents committing unrelated
+  edits, generated files, or session-state artifacts.
+- **Never** run `git rebase` or `git pull --rebase`. When branches
+  diverge, use `git pull --no-rebase` (merge), or stop and ask. The
+  "do not rewrite or force-push" rule below already prohibits the
+  destructive form; this rule prohibits the local form too.
 - Never commit secrets, `.env`, `node_modules`, build output, or editor files
   beyond what `.gitignore` already covers.
 - Do not rewrite or force-push shared branches.
