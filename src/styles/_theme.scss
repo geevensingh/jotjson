@@ -15,10 +15,6 @@
   --highlight-matching: #{$highlight-matching-dark};
   --highlight-ancestor: #{$highlight-ancestor-dark};
   --highlight-search: #{$highlight-search-dark};
-
-  --scrollbar-thumb: #{rgba(121, 121, 121, 0.4)};
-  --scrollbar-thumb-hover: #{rgba(100, 100, 100, 0.7)};
-  --scrollbar-track: transparent;
 }
 
 .theme-light {
@@ -29,10 +25,6 @@
   --highlight-matching: #{$highlight-matching-light};
   --highlight-ancestor: #{$highlight-ancestor-light};
   --highlight-search: #{$highlight-search-light};
-
-  --scrollbar-thumb: #{rgba(100, 100, 100, 0.4)};
-  --scrollbar-thumb-hover: #{rgba(100, 100, 100, 0.7)};
-  --scrollbar-track: transparent;
 }
 
 @media (prefers-color-scheme: light) {
@@ -44,9 +36,5 @@
     --highlight-matching: #{$highlight-matching-light};
     --highlight-ancestor: #{$highlight-ancestor-light};
     --highlight-search: #{$highlight-search-light};
-
-    --scrollbar-thumb: #{rgba(100, 100, 100, 0.4)};
-    --scrollbar-thumb-hover: #{rgba(100, 100, 100, 0.7)};
-    --scrollbar-track: transparent;
   }
 }

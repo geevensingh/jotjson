@@ -1,5 +1,4 @@
 @use '../../../../styles/variables' as v;
-@use '../../../../styles/scrollbars' as sb;
 
 :host {
   display: flex;
@@ -46,8 +45,6 @@
   font-size: 12.5px;
   max-height: 90px;
   overflow: auto;
-
-  @include sb.themed-scrollbar;
 
   li {
     padding: 2px 0;
