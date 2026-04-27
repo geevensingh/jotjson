@@ -114,7 +114,7 @@ export class JsonTreeComponent {
   readonly searchScopeTooltip = $localize`:@@tree.search.scope.tooltip:Search in`;
   readonly searchScopeKeysLabel = $localize`:@@tree.search.scope.keys:Keys`;
   readonly searchScopeValuesLabel = $localize`:@@tree.search.scope.values:Values`;
-  readonly searchScopeBothLabel = $localize`:@@tree.search.scope.both:Both`;
+  readonly searchScopeBothLabel = $localize`:@@tree.search.scope.both:Keys and values`;
   readonly searchPrevTooltip = $localize`:@@tree.search.prev.tooltip:Previous match`;
   readonly searchNextTooltip = $localize`:@@tree.search.next.tooltip:Next match`;
 
