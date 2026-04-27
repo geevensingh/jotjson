@@ -67,6 +67,7 @@ jest.mock('../shared/users', () => ({
 }));
 
 import { AuthError, requireAuth as requireAuthMock } from '../shared/auth';
+import { findPreset } from '../shared/ruleSetPresets';
 import {
   createRuleSet as createRuleSetMock,
   deleteRuleSetById as deleteRuleSetByIdMock,
@@ -80,7 +81,9 @@ import {
 import { readUser as readUserMock, upsertUser as upsertUserMock } from '../shared/users';
 import {
   deleteRuleSet,
+  clonePreset,
   getRuleSet,
+  listPresets,
   listRuleSets,
   postRuleSet,
   putRuleSet
@@ -419,5 +422,113 @@ describe('DELETE /api/rule-sets/:id', () => {
     readUser.mockRejectedValueOnce(new Error('cosmos hiccup'));
     const res = await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
     expect(res.status).toBe(204);
+  });
+});
+
+describe('GET /api/rule-sets/:id when id="presets"', () => {
+  it('short-circuits to 404 without a Cosmos lookup', async () => {
+    const res = await getRuleSet(makeRequest({ params: { id: 'presets' } }), ctx);
+    expect(res.status).toBe(404);
+    expect(findRuleSetById).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/rule-sets/presets', () => {
+  it('returns 401 when unauthenticated', async () => {
+    requireAuth.mockRejectedValueOnce(new AuthError('Missing bearer token'));
+    const res = await listPresets(makeRequest(), ctx);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns the preset catalog in the spec-defined order', async () => {
+    const res = await listPresets(makeRequest(), ctx);
+    expect(res.status).toBe(200);
+    const body = res.jsonBody as { id: string }[];
+    expect(body.map((p) => p.id)).toEqual(['error-detection', 'status-codes', 'null-finder']);
+  });
+});
+
+describe('POST /api/rule-sets/presets/:id/clone', () => {
+  it('returns 401 when unauthenticated', async () => {
+    requireAuth.mockRejectedValueOnce(new AuthError('Missing bearer token'));
+    const res = await clonePreset(
+      makeRequest({ params: { id: 'error-detection' } }),
+      ctx
+    );
+    expect(res.status).toBe(401);
+    expect(createRuleSet).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the preset id is unknown', async () => {
+    const res = await clonePreset(
+      makeRequest({ params: { id: 'does-not-exist' } }),
+      ctx
+    );
+    expect(res.status).toBe(404);
+    expect(createRuleSet).not.toHaveBeenCalled();
+  });
+
+  it('clones the preset rules into a user-owned set with 201 + ETag', async () => {
+    const preset = findPreset('null-finder')!;
+    createRuleSet.mockResolvedValueOnce({
+      ...sampleSet,
+      id: 'rs-clone-1',
+      name: preset.name,
+      rules: preset.rules,
+      version: 1
+    });
+    const res = await clonePreset(
+      makeRequest({ params: { id: 'null-finder' } }),
+      ctx
+    );
+    expect(res.status).toBe(201);
+    expect(res.headers).toEqual({ ETag: '"1"' });
+    expect(createRuleSet).toHaveBeenCalledTimes(1);
+    const [userId, payload] = createRuleSet.mock.calls[0]!;
+    expect(userId).toBe('u-1');
+    expect(payload.name).toBe('Null Finder');
+    expect(payload.rules).toHaveLength(1);
+    expect(payload.rules[0].matchValue).toBe('null');
+  });
+
+  it('rejects clone with 409 when the user already has 20 sets', async () => {
+    listRuleSetsByOwner.mockResolvedValueOnce(
+      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` }))
+    );
+    const res = await clonePreset(
+      makeRequest({ params: { id: 'error-detection' } }),
+      ctx
+    );
+    expect(res.status).toBe(409);
+    const body = res.jsonBody as Record<string, unknown>;
+    expect(body['code']).toBe('quota_exceeded');
+    expect(createRuleSet).not.toHaveBeenCalled();
+  });
+
+  it('hands the clone payload to createRuleSet (deep-cloned, mutation-safe)', async () => {
+    createRuleSet.mockResolvedValueOnce({
+      ...sampleSet,
+      id: 'rs-clone-2',
+      name: 'Error Detection',
+      version: 1
+    });
+    await clonePreset(
+      makeRequest({ params: { id: 'error-detection' } }),
+      ctx
+    );
+    const [, payload] = createRuleSet.mock.calls[0]!;
+    // mutating the cloned payload must not change the static preset
+    payload.rules[0].matchValue = 'mutated';
+    const preset = findPreset('error-detection')!;
+    expect(preset.rules[0]!.matchValue).toBe('error');
+  });
+
+  it('returns 500 when createRuleSet itself fails', async () => {
+    createRuleSet.mockRejectedValueOnce(new Error('cosmos down'));
+    const res = await clonePreset(
+      makeRequest({ params: { id: 'null-finder' } }),
+      ctx
+    );
+    expect(res.status).toBe(500);
   });
 });

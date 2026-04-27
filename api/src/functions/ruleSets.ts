@@ -41,6 +41,11 @@ import {
   replaceRuleSet,
   type RuleSetDocument
 } from '../shared/ruleSets';
+import {
+  findPreset,
+  listPresets as listPresetsData,
+  presetToCreatePayload
+} from '../shared/ruleSetPresets';
 import { readUser, upsertUser } from '../shared/users';
 
 function unauthorized(message: string): HttpResponseInit {
@@ -183,6 +188,12 @@ export async function getRuleSet(
 
   const id = req.params['id'] ?? '';
   if (!id) return badRequest('Missing id path parameter');
+  // Defense-in-depth: the literal `presets` route is registered on
+  // its own handler, but if the framework's router ever falls back
+  // to the {id} pattern for `/api/rule-sets/presets`, we'd surface
+  // the literal as a Cosmos lookup. Short-circuit to 404 - no user
+  // rule set has the reserved kebab-case id `presets`.
+  if (id === 'presets') return notFound('Rule set not found');
 
   try {
     // Cross-partition lookup so we can distinguish "doesn't exist"
@@ -341,11 +352,109 @@ async function cleanupUserReferences(userId: string, deletedSetId: string): Prom
   });
 }
 
+/**
+ * `GET /api/rule-sets/presets`
+ *
+ * Returns the static preset list. Auth-required because the whole
+ * formatting-rules feature is registered-user-only (see the API
+ * table in DESIGN_SPEC.md and the route guard from M6a.75) - we
+ * keep the same posture so the endpoint isn't useful for
+ * unauthenticated reconnaissance of the catalog.
+ */
+export async function listPresets(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  try {
+    await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'listPresets auth', err);
+  }
+  return { status: 200, jsonBody: listPresetsData() };
+}
+
+/**
+ * `POST /api/rule-sets/presets/:id/clone`
+ *
+ * Creates a user-owned copy of the named preset and returns the
+ * new rule set with an `ETag` header (same shape as POST
+ * /api/rule-sets). Reuses the per-user quota path so cloning
+ * counts against `MAX_RULE_SETS_PER_USER` exactly like a
+ * hand-built rule set.
+ *
+ * Returns 404 for unknown preset IDs (not 400) - the spec lists
+ * preset IDs as path resources, so an unknown one is logically
+ * "not found" rather than a malformed request.
+ */
+export async function clonePreset(
+  req: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  let principal;
+  try {
+    principal = await requireAuth(req);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(err.message);
+    return internalError(context, 'clonePreset auth', err);
+  }
+
+  const presetId = req.params['id'] ?? '';
+  if (!presetId) return badRequest('Missing preset id path parameter');
+
+  const preset = findPreset(presetId);
+  if (!preset) return notFound('Preset not found');
+
+  try {
+    const existing = await listRuleSetsByOwner(principal.id);
+    if (existing.length >= MAX_RULE_SETS_PER_USER) {
+      return {
+        status: 409,
+        jsonBody: {
+          error: `Rule set quota of ${MAX_RULE_SETS_PER_USER} reached. Delete an existing set and try again.`,
+          code: 'quota_exceeded'
+        }
+      };
+    }
+    const payload = presetToCreatePayload(preset);
+    const created = await createRuleSet(principal.id, payload);
+    return withEtag(201, created);
+  } catch (err) {
+    if (err instanceof RuleSetValidationError) {
+      // A preset that doesn't pass validation is a deployment bug,
+      // not a user error - log and surface a 500 so we notice. The
+      // ruleSetPresets.test.ts suite asserts every preset rule is
+      // valid, so this branch should be unreachable in practice.
+      return internalError(context, 'clonePreset preset invalid', err);
+    }
+    return internalError(context, 'clonePreset write', err);
+  }
+}
+
 app.http('rule-sets-post', {
   methods: ['POST'],
   route: 'rule-sets',
   authLevel: 'anonymous',
   handler: postRuleSet
+});
+
+app.http('rule-sets-presets-list', {
+  methods: ['GET'],
+  // Registered before `rule-sets/{id}` so framework route resolvers
+  // that prefer registration order also match the literal first.
+  // Frameworks that prefer specificity match `presets` over `{id}`
+  // regardless. The `getRuleSet` handler also short-circuits when
+  // `id === 'presets'` as a third layer of defense.
+  route: 'rule-sets/presets',
+  authLevel: 'anonymous',
+  handler: listPresets
+});
+
+app.http('rule-sets-presets-clone', {
+  methods: ['POST'],
+  route: 'rule-sets/presets/{id}/clone',
+  authLevel: 'anonymous',
+  handler: clonePreset
 });
 
 app.http('rule-sets-list', {
