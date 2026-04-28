@@ -106,9 +106,23 @@ dl {
 
   label,
   > span:first-child {
-    flex: 0 0 auto;
-    min-width: 12rem;
+    flex: 0 1 auto;
+    min-width: 0;
     color: var(--mat-sys-on-surface, inherit);
+  }
+
+  > label + *,
+  > span:first-child + * {
+    margin-left: auto;
+  }
+
+  > .pref-hint {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  > mat-slide-toggle:first-child {
+    width: 100%;
   }
 
   &--indented { padding-left: 0.25rem; }
@@ -120,14 +134,33 @@ dl {
   }
 }
 
+.pref-control-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+// stylelint-disable-next-line selector-pseudo-element-no-unknown
+.pref-row mat-slide-toggle:first-child ::ng-deep .mdc-form-field {
+  width: 100%;
+  justify-content: space-between;
+}
+
 .pref-substack {
-  margin: 0.25rem 0 0.75rem 0.75rem;
-  padding-left: 0.875rem;
-  border-left: 2px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
+  margin: 0 1.5rem 0.5rem 1.5rem;
+  padding: 0;
+
+  .pref-row > .pref-hint {
+    flex: 0 1 auto;
+    margin-left: auto;
+    margin-top: -0.25rem;
+    max-width: 100%;
+    text-align: right;
+  }
 }
 
 .pref-hint {
-  flex: 1 1 100%;
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-size: 0.8125rem;
   font-style: italic;
@@ -160,13 +193,8 @@ dl {
 
 .pref-help {
   flex: 1 1 100%;
-  margin-left: 12rem;
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-size: 0.8125rem;
-
-  @media (max-width: 540px) {
-    margin-left: 0;
-  }
 }
 
 // ---------------------------------------------------------------
@@ -275,10 +303,6 @@ dl {
 
 .highlight-row {
   margin: 0.35rem 0;
-
-  label {
-    min-width: 11rem;
-  }
 }
 
 .pref-color {

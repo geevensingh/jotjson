@@ -507,6 +507,50 @@ describe('ProfileComponent', () => {
       expect(prefs.prefs().defaultRuleSetIds).toBe(before);
     });
   });
+
+  describe('flush-right layout', () => {
+    const signedIn = {
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    };
+
+    it('places every settings slide-toggle with its label before the thumb', async () => {
+      const { fixture } = await create(signedIn);
+      const root = fixture.nativeElement as HTMLElement;
+      const toggles = Array.from(
+        root.querySelectorAll('.pref-row mat-slide-toggle')
+      );
+      for (const toggle of toggles) {
+        const hasLabelPositionBefore = toggle.getAttribute('labelPosition') === 'before';
+        const prevSibling = toggle.previousElementSibling;
+        const hasExternalLabel = prevSibling?.tagName === 'LABEL';
+        expect(hasLabelPositionBefore || hasExternalLabel).toBe(true);
+      }
+      expect(toggles.length).toBeGreaterThan(0);
+    });
+
+    it('wraps multi-piece controls in a pref-control-group', async () => {
+      const { fixture } = await create(signedIn);
+      const root = fixture.nativeElement as HTMLElement;
+
+      const fontSize = root.querySelector('#pref-font-size');
+      const fontSizeWrap = fontSize?.closest('.pref-control-group');
+      expect(fontSizeWrap).toBeTruthy();
+      expect(fontSizeWrap?.querySelector('.pref-suffix')?.textContent).toContain('px');
+
+      const treeFontSize = root.querySelector('#pref-tree-font-size');
+      expect(treeFontSize?.closest('.pref-control-group')).toBeTruthy();
+    });
+
+    it('groups slider with its value suffix', async () => {
+      const { fixture } = await create(signedIn);
+      const root = fixture.nativeElement as HTMLElement;
+      const slider = root.querySelector('mat-slider');
+      const wrap = slider?.closest('.pref-control-group');
+      expect(wrap).toBeTruthy();
+      expect(wrap?.querySelector('.pref-suffix')).toBeTruthy();
+    });
+  });
 });
 
 function makeRuleSet(partial: { id: string; name: string }): FormattingRuleSet {
