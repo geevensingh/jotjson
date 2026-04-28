@@ -42,6 +42,15 @@ export const routes: Routes = [
     title: 'Formatting Rules - JotJSON'
   },
   {
+    path: 'formatting-rules/:id',
+    loadComponent: () =>
+      import(
+        './features/formatting-rules/rule-editor/rule-editor.component'
+      ).then((m) => m.RuleEditorComponent),
+    canActivate: [authGuard],
+    title: 'Edit rule set - JotJSON'
+  },
+  {
     path: 'profile',
     loadComponent: () =>
       import('./features/profile/profile.component').then((m) => m.ProfileComponent),

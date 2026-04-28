@@ -1,0 +1,380 @@
+<jj-app-header />
+
+<main class="rule-editor">
+  <header class="editor-header">
+    <a class="breadcrumb" routerLink="/formatting-rules"
+      ><jj-icon name="chevron-right" class="breadcrumb-icon" />
+      <span i18n="@@ruleEditor.breadcrumb">All rule sets</span></a
+    >
+    <h1 class="editor-title" i18n="@@ruleEditor.title">Edit rule set</h1>
+  </header>
+
+  @if (loadState() === 'loading') {
+    <p class="status" aria-busy="true" i18n="@@ruleEditor.loading">
+      Loading rule set...
+    </p>
+  } @else if (loadState() === 'error') {
+    <p class="status status-error" i18n="@@ruleEditor.loadError">
+      Could not load this rule set. Please try again later.
+    </p>
+  } @else if (loadState() === 'not_found') {
+    <p class="status status-error" i18n="@@ruleEditor.notFoundInline">
+      Rule set not found.
+    </p>
+  } @else if (draft(); as set) {
+    <section class="editor-card" aria-labelledby="rule-set-name-label">
+      <div class="name-row">
+        <label
+          id="rule-set-name-label"
+          for="rule-set-name"
+          class="name-label"
+          i18n="@@ruleEditor.nameLabel"
+          >Name</label
+        >
+        <input
+          id="rule-set-name"
+          type="text"
+          class="name-input"
+          [value]="set.name"
+          maxlength="80"
+          (input)="setName($any($event.target).value)"
+          aria-describedby="rule-set-name-help"
+        />
+        <p
+          id="rule-set-name-help"
+          class="name-help"
+          i18n="@@ruleEditor.nameHelp"
+        >
+          Up to 80 characters.
+        </p>
+      </div>
+
+      <div class="save-row">
+        <button
+          mat-flat-button
+          color="primary"
+          type="button"
+          [disabled]="saveState() === 'saving'"
+          (click)="onSave()"
+        >
+          @switch (saveState()) {
+            @case ('saving') {
+              <span i18n="@@ruleEditor.save.saving">Saving...</span>
+            }
+            @case ('saved') {
+              <span i18n="@@ruleEditor.save.saved">Saved</span>
+            }
+            @case ('error') {
+              <span i18n="@@ruleEditor.save.retry">Save failed - retry</span>
+            }
+            @default {
+              <span i18n="@@ruleEditor.save.idle">Save</span>
+            }
+          }
+        </button>
+        <span class="version-badge"
+          ><span i18n="@@ruleEditor.versionLabel">Version</span>
+          {{ set.version }}</span
+        >
+      </div>
+    </section>
+
+    <section class="rules-card" aria-labelledby="rules-list-heading">
+      <div class="rules-header">
+        <h2 id="rules-list-heading" i18n="@@ruleEditor.rulesHeading">
+          Rules
+        </h2>
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="addRule()"
+          data-testid="add-rule-button"
+        >
+          <span i18n="@@ruleEditor.addRule">+ Add rule</span>
+        </button>
+      </div>
+
+      @if (set.rules.length === 0) {
+        <p class="empty-rules" i18n="@@ruleEditor.emptyRules">
+          No rules yet. Click "+ Add rule" to create one.
+        </p>
+      }
+
+      <ul class="rule-list" role="list">
+        @for (rule of set.rules; track rule.id; let i = $index) {
+          <li class="rule-card" [attr.data-rule-id]="rule.id">
+            <header class="rule-card-header">
+              <span class="rule-label">{{ ruleLabel(rule) }}</span>
+              <div class="rule-card-actions">
+                <button
+                  mat-icon-button
+                  type="button"
+                  [disabled]="i === 0"
+                  aria-label="Move up"
+                  i18n-aria-label="@@ruleEditor.moveUp"
+                  (click)="moveRule(i, -1)"
+                  data-testid="move-up"
+                >
+                  <jj-icon name="chevron-down" class="rotate-180" />
+                </button>
+                <button
+                  mat-icon-button
+                  type="button"
+                  [disabled]="i === set.rules.length - 1"
+                  aria-label="Move down"
+                  i18n-aria-label="@@ruleEditor.moveDown"
+                  (click)="moveRule(i, 1)"
+                  data-testid="move-down"
+                >
+                  <jj-icon name="chevron-down" />
+                </button>
+                <button
+                  mat-icon-button
+                  type="button"
+                  aria-label="Remove rule"
+                  i18n-aria-label="@@ruleEditor.removeRule"
+                  (click)="removeRule(i)"
+                  data-testid="remove-rule"
+                >
+                  <jj-icon name="trash" />
+                </button>
+              </div>
+            </header>
+
+            <div class="rule-grid">
+              <div class="rule-field">
+                <label
+                  [attr.for]="'target-' + rule.id"
+                  i18n="@@ruleEditor.targetLabel"
+                  >Target</label
+                >
+                <mat-button-toggle-group
+                  [id]="'target-' + rule.id"
+                  [value]="rule.target"
+                  (change)="patchRule(i, { target: $event.value })"
+                  hideSingleSelectionIndicator
+                >
+                  <mat-button-toggle value="key" i18n="@@ruleEditor.target.key"
+                    >Key</mat-button-toggle
+                  >
+                  <mat-button-toggle
+                    value="value"
+                    i18n="@@ruleEditor.target.value"
+                    >Value</mat-button-toggle
+                  >
+                  <mat-button-toggle
+                    value="key_and_value"
+                    i18n="@@ruleEditor.target.both"
+                    >Both</mat-button-toggle
+                  >
+                </mat-button-toggle-group>
+              </div>
+
+              <div class="rule-field">
+                <label
+                  [attr.for]="'match-type-' + rule.id"
+                  i18n="@@ruleEditor.matchTypeLabel"
+                  >Match type</label
+                >
+                <mat-button-toggle-group
+                  [id]="'match-type-' + rule.id"
+                  [value]="rule.matchType"
+                  (change)="patchRule(i, { matchType: $event.value })"
+                  hideSingleSelectionIndicator
+                >
+                  <mat-button-toggle
+                    value="exact"
+                    i18n="@@ruleEditor.matchType.exact"
+                    >Exact</mat-button-toggle
+                  >
+                  <mat-button-toggle
+                    value="contains"
+                    i18n="@@ruleEditor.matchType.contains"
+                    >Contains</mat-button-toggle
+                  >
+                  <mat-button-toggle
+                    value="starts_with"
+                    i18n="@@ruleEditor.matchType.startsWith"
+                    >Starts with</mat-button-toggle
+                  >
+                  <mat-button-toggle
+                    value="ends_with"
+                    i18n="@@ruleEditor.matchType.endsWith"
+                    >Ends with</mat-button-toggle
+                  >
+                </mat-button-toggle-group>
+              </div>
+
+              <div class="rule-field rule-field--wide">
+                <label
+                  [attr.for]="'match-value-' + rule.id"
+                  i18n="@@ruleEditor.matchValueLabel"
+                  >Match value</label
+                >
+                <input
+                  [id]="'match-value-' + rule.id"
+                  type="text"
+                  class="match-value-input"
+                  [value]="rule.matchValue"
+                  maxlength="200"
+                  (input)="
+                    patchRule(i, {
+                      matchValue: $any($event.target).value
+                    })
+                  "
+                />
+              </div>
+
+              <div class="rule-field rule-field--toggle">
+                <mat-slide-toggle
+                  [checked]="rule.caseSensitive"
+                  (change)="
+                    patchRule(i, { caseSensitive: $event.checked })
+                  "
+                  i18n="@@ruleEditor.caseSensitiveLabel"
+                  >Case sensitive</mat-slide-toggle
+                >
+              </div>
+            </div>
+
+            <fieldset class="style-block">
+              <legend i18n="@@ruleEditor.styleHeading">Style</legend>
+
+              <div class="style-row">
+                <label
+                  [attr.for]="'bg-' + rule.id"
+                  class="style-color-label"
+                  i18n="@@ruleEditor.style.background"
+                  >Background</label
+                >
+                <input
+                  [id]="'bg-' + rule.id"
+                  type="color"
+                  class="style-color"
+                  [value]="rule.style.backgroundColor || '#ffffff'"
+                  (input)="
+                    patchStyle(i, {
+                      backgroundColor: $any($event.target).value
+                    })
+                  "
+                />
+                <code class="style-hex">{{
+                  rule.style.backgroundColor || '(none)'
+                }}</code>
+              </div>
+
+              <div class="style-row">
+                <label
+                  [attr.for]="'text-' + rule.id"
+                  class="style-color-label"
+                  i18n="@@ruleEditor.style.textColor"
+                  >Text</label
+                >
+                <input
+                  [id]="'text-' + rule.id"
+                  type="color"
+                  class="style-color"
+                  [value]="rule.style.textColor || '#000000'"
+                  (input)="
+                    patchStyle(i, {
+                      textColor: $any($event.target).value
+                    })
+                  "
+                />
+                <code class="style-hex">{{
+                  rule.style.textColor || '(none)'
+                }}</code>
+              </div>
+
+              <div class="style-row">
+                <label
+                  [attr.for]="'border-' + rule.id"
+                  class="style-color-label"
+                  i18n="@@ruleEditor.style.borderColor"
+                  >Border</label
+                >
+                <input
+                  [id]="'border-' + rule.id"
+                  type="color"
+                  class="style-color"
+                  [value]="rule.style.borderColor || '#000000'"
+                  (input)="
+                    patchStyle(i, {
+                      borderColor: $any($event.target).value
+                    })
+                  "
+                />
+                <code class="style-hex">{{
+                  rule.style.borderColor || '(none)'
+                }}</code>
+              </div>
+
+              <div class="style-toggles">
+                <label class="style-toggle">
+                  <input
+                    type="checkbox"
+                    [checked]="rule.style.bold || false"
+                    (change)="
+                      patchStyle(i, {
+                        bold: $any($event.target).checked
+                      })
+                    "
+                  /><span i18n="@@ruleEditor.style.bold">Bold</span>
+                </label>
+                <label class="style-toggle">
+                  <input
+                    type="checkbox"
+                    [checked]="rule.style.italic || false"
+                    (change)="
+                      patchStyle(i, {
+                        italic: $any($event.target).checked
+                      })
+                    "
+                  /><span i18n="@@ruleEditor.style.italic">Italic</span>
+                </label>
+                <label class="style-toggle">
+                  <input
+                    type="checkbox"
+                    [checked]="rule.style.underline || false"
+                    (change)="
+                      patchStyle(i, {
+                        underline: $any($event.target).checked
+                      })
+                    "
+                  /><span i18n="@@ruleEditor.style.underline"
+                    >Underline</span
+                  >
+                </label>
+              </div>
+
+              <div class="style-row">
+                <label
+                  [attr.for]="'icon-' + rule.id"
+                  class="style-color-label"
+                  i18n="@@ruleEditor.style.icon"
+                  >Icon</label
+                >
+                <select
+                  [id]="'icon-' + rule.id"
+                  class="style-icon-select"
+                  [value]="rule.style.icon || ''"
+                  (change)="setIcon(i, $any($event.target).value)"
+                >
+                  <option value="" i18n="@@ruleEditor.style.icon.none">
+                    (none)
+                  </option>
+                  @for (icon of icons; track icon) {
+                    <option [value]="icon">{{ icon }}</option>
+                  }
+                </select>
+                @if (rule.style.icon) {
+                  <jj-icon [name]="rule.style.icon" class="icon-preview" />
+                }
+              </div>
+            </fieldset>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+</main>

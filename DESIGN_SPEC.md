@@ -1175,23 +1175,33 @@ EU users would need a regional resource - out of scope for v1.
      `POST /api/rule-set-presets/:id/clone` endpoints; the clone
      endpoint creates a user-owned UUID copy and reuses the
      limit-enforcement path.
-   - **M6d**: Rule builder UI with valid-only autosave.
-     `RuleEditorComponent` exposing every spec'd control: target
-     (key / value / both), match type (exact / contains /
-     starts_with / ends_with - no regex in v1), match value,
-     case-sensitivity, and full style picker (background, text,
-     bold/italic/underline, border, optional icon from the
-     whitelist). Live preview renders a sample JSON snippet through
-     the production tree renderer with the in-progress rule applied.
-     **Valid-only autosave**: a local draft fires the debounced
-     500 ms `PUT /api/rule-sets/:id` only when structurally valid
-     (required fields present, hex colors well-formed, matchValue
-     within length cap). Status indicator surfaces `Editing`,
-     `Saving...`, `Saved`, `Save failed - retry`, and `Invalid - fix
-     to save`. Concurrency: editor sends `If-Match` with the
-     last-known `version`; on 412 it surfaces a "changed in another
-     tab" banner and pauses autosaves. Reordered ahead of the list
-     page so each phase ships a usable increment.
+   - **M6d**: Rule builder UI with valid-only autosave. Ships as
+     three sub-commits matching the M6f cadence:
+     - **M6d-1**: Editor scaffold + minimal list page + manual Save.
+       New route `/formatting-rules/:id` loads a `RuleEditorComponent`
+       with target (key / value / both), match type (exact /
+       contains / starts_with / ends_with - no regex in v1), match
+       value, case-sensitivity, and full style picker (background,
+       text, bold/italic/underline, border, optional icon from the
+       whitelist). Auto-generated rule labels per F1
+       (`value contains "error"`); no editable rule.name field in
+       v1. The stub `/formatting-rules` page is replaced with a
+       minimal list (cards from `RuleSetsService.ruleSets()` cache
+       + Edit button + "+ New rule set" creator). M6e expands the
+       list to full CRUD (rename, duplicate, delete, ordering,
+       clone-preset CTA). Save is a manual button; 412 surfaces a
+       snackbar.
+     - **M6d-2**: Local-draft + valid-only autosave + 412 banner.
+       Debounced 500 ms autosave gates on a `validity` computed
+       signal; status pill cycles through `Editing`, `Saving...`,
+       `Saved`, `Save failed - retry`, `Invalid - fix to save`.
+       412 surfaces a "changed in another tab" banner with a
+       Reload button that re-fetches and rehydrates the draft.
+     - **M6d-3**: Live preview. New optional `[overrideRuleSets]`
+       Input on `JsonTreeComponent` lets a `RulePreviewComponent`
+       render a built-in sample snippet through the production
+       tree with only the in-progress rule set applied (home
+       tree behavior unchanged when the input is unset).
    - **M6e**: List page wraps the editor. Registered-user-only
      `/formatting-rules` page: list cards (one per set, sorted by
      `createdAt`), empty state with "Create your first rule set"

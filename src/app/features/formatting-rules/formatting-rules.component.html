@@ -1,0 +1,67 @@
+<jj-app-header />
+
+<main class="formatting-rules">
+  <header class="page-header">
+    <h1 i18n="@@formattingRules.title">Formatting rules</h1>
+    <p class="page-subtitle" i18n="@@formattingRules.subtitle">
+      Highlight matching keys and values when viewing JSON. Pick which
+      sets apply by default in the toolbar above the tree on the home
+      page.
+    </p>
+  </header>
+
+  <div class="actions-row">
+    <button
+      mat-flat-button
+      color="primary"
+      type="button"
+      [disabled]="creating()"
+      (click)="onCreate()"
+      data-testid="new-rule-set"
+    >
+      <span i18n="@@formattingRules.newRuleSet">+ New rule set</span>
+    </button>
+  </div>
+
+  @if (loadState() === 'loading') {
+    <p class="status" aria-busy="true" i18n="@@formattingRules.loading">
+      Loading rule sets...
+    </p>
+  } @else if (loadState() === 'error') {
+    <div class="status status-error">
+      <p i18n="@@formattingRules.loadError">
+        Could not load your rule sets.
+      </p>
+      <button mat-stroked-button type="button" (click)="reload()">
+        <span i18n="@@common.retry">Retry</span>
+      </button>
+    </div>
+  } @else if (isEmpty()) {
+    <p class="status" i18n="@@formattingRules.empty">
+      You do not have any rule sets yet. Click "+ New rule set" to
+      create one, or clone a preset from the home page toolbar.
+    </p>
+  } @else {
+    <ul class="rule-set-list" role="list">
+      @for (set of ruleSets(); track set.id) {
+        <li class="rule-set-card">
+          <div class="rule-set-info">
+            <h2 class="rule-set-name">{{ set.name }}</h2>
+            <p class="rule-set-meta">
+              <span i18n="@@formattingRules.ruleCount"
+                >{{ set.rules.length }} rule(s)</span
+              >
+            </p>
+          </div>
+          <a
+            mat-stroked-button
+            [routerLink]="['/formatting-rules', set.id]"
+            data-testid="edit-rule-set"
+          >
+            <span i18n="@@formattingRules.edit">Edit</span>
+          </a>
+        </li>
+      }
+    </ul>
+  }
+</main>
