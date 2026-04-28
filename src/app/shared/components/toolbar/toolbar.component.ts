@@ -131,14 +131,14 @@ export class ToolbarComponent {
         const preview = this.clipboardPreview();
         return preview
           ? $localize`:@@toolbar.paste.tooltip.ready:Paste: ${preview}:PREVIEW:`
-          : $localize`:@@toolbar.paste.tooltip.readyNoPreview:Paste JSON from clipboard`;
+          : $localize`:@@toolbar.paste.tooltip.readyNoPreview:Paste from clipboard`;
       }
       case 'enabled-empty':
         return $localize`:@@toolbar.paste.tooltip.empty:Clipboard does not contain JSON`;
       case 'denied':
         return $localize`:@@toolbar.paste.tooltip.denied:Clipboard access blocked - enable it in your browser settings. Ctrl+V still works.`;
       default:
-        return $localize`:@@toolbar.paste.tooltip:Paste JSON from clipboard`;
+        return $localize`:@@toolbar.paste.tooltip:Paste from clipboard`;
     }
   });
 

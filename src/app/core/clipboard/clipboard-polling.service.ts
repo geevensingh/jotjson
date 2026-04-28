@@ -7,7 +7,6 @@ import {
   inject,
   signal
 } from '@angular/core';
-import { JsonParserService } from '../json/json-parser.service';
 
 /**
  * Permission state for the clipboard-read capability.
@@ -53,7 +52,6 @@ const PREVIEW_MAX_LENGTH = 80;
  */
 @Injectable({ providedIn: 'root' })
 export class ClipboardPollingService implements OnDestroy {
-  private readonly parser = inject(JsonParserService);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly permissionStateSignal = signal<ClipboardPermissionState>(
@@ -268,30 +266,15 @@ export class ClipboardPollingService implements OnDestroy {
   }
 
   /**
-   * Matches the effective Paste predicate in `HomeComponent.onPaste`:
-   * accept raw JSON/JSONC, the output of `tryUnescape` parsing to an
-   * object/array, OR a plausibility prefix (`{` or `[`) per the spec.
+   * Plausibility predicate that gates the toolbar Paste button. Widened in
+   * M7p so the button enables for mixed text (prose around JSON), which the
+   * paste pipeline can extract via `JsonExtractorService`. Returns true iff
+   * the trimmed text contains `{` or `[` anywhere.
    */
   private looksLikeJson(text: string): boolean {
     const trimmed = text.trim();
     if (!trimmed) return false;
-
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      // Plausibility fallback from the spec - even a partially typed
-      // `{"a":` should enable the button.
-      return true;
-    }
-
-    try {
-      const { unescaped, changed } = this.parser.tryUnescape(trimmed);
-      if (!changed) return false;
-      const uTrim = unescaped.trim();
-      if (!uTrim.startsWith('{') && !uTrim.startsWith('[')) return false;
-      const result = this.parser.parse(unescaped);
-      return result.errors.length === 0 && result.value !== undefined;
-    } catch {
-      return false;
-    }
+    return trimmed.includes('{') || trimmed.includes('[');
   }
 
   private makePreview(text: string): string {

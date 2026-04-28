@@ -47,7 +47,12 @@ import {
   JsonParserService,
   JsonParseResult
 } from '../../core/json/json-parser.service';
+import {
+  JsonExtractorService,
+  ExtractedJson
+} from '../../core/json/json-extractor.service';
 import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
+import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { JsonTreeComponent } from '../../shared/components/json-tree/json-tree.component';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import {
@@ -78,7 +83,8 @@ import { validateAndReadSingleFile } from '../../core/upload/upload-file-validat
     StatusBarComponent,
     ClipboardBannerComponent,
     RuleSetsToolbarComponent,
-    DropOverlayComponent
+    DropOverlayComponent,
+    ExtractJsonBannerComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.component.html',
@@ -88,6 +94,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly draft = inject(DraftService);
   private readonly prefs = inject(PreferencesService);
   private readonly parser = inject(JsonParserService);
+  private readonly extractor = inject(JsonExtractorService);
   private readonly auth = inject(AuthService);
   private readonly blobs = inject(BlobService);
   private readonly router = inject(Router);
@@ -115,6 +122,34 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly content = signal(this.draft.content());
   readonly mode = signal<EditorMode>(this.detectMode(this.draft.content()));
   readonly cursor = signal<{ line: number; column: number } | undefined>(undefined);
+
+  /**
+   * M7p extract-from-mixed-text. Holds the most recent extractor result
+   * paired with the contentVersion at the time it was produced. The banner
+   * predicate (`extractBannerVisible`) compares that token to the current
+   * version so any subsequent content mutation auto-hides the banner without
+   * needing an effect.
+   */
+  readonly extractedCandidate = signal<{
+    data: ExtractedJson;
+    sourceVersion: number;
+  } | null>(null);
+  private readonly contentVersion = signal(0);
+  readonly extractBannerVisible = computed(() => {
+    const cand = this.extractedCandidate();
+    return cand !== null && cand.sourceVersion === this.contentVersion();
+  });
+
+  /**
+   * Single funnel for every content mutation in HomeComponent. Bumps
+   * `contentVersion` so the M7p extract banner predicate auto-invalidates
+   * when content changes for any reason (typing, paste, format, hydrate,
+   * upload, clear, ...).
+   */
+  private setContent(text: string): void {
+    this.content.set(text);
+    this.contentVersion.update((v) => v + 1);
+  }
 
   /** The currently-loaded server blob, if any. Null when editing an anonymous draft. */
   readonly loadedBlob = signal<JsonBlob | null>(null);
@@ -229,7 +264,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (blob.id === this.lastHydratedInputId) return;
       this.lastHydratedInputId = blob.id;
       this.loadedBlob.set(blob);
-      this.content.set(blob.content);
+      this.setContent(blob.content);
       this.title.set(blob.title ?? '');
     });
 
@@ -332,7 +367,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   onValueChange(next: string): void {
-    this.content.set(next);
+    this.setContent(next);
   }
 
   onCursorChange(pos: { line: number; column: number }): void {
@@ -343,12 +378,80 @@ export class HomeComponent implements OnInit, OnDestroy {
     const text = await this.clipboard.readForPaste();
     if (!text || text.trim().length === 0) return;
     const { unescaped, changed } = this.parser.tryUnescape(text);
-    this.content.set(unescaped);
+    this.setContent(unescaped);
     if (changed) {
       // Pretty-print the newly-unescaped payload so the user sees the real
       // structure rather than a single dense line (per issue #38).
       this.onFormat();
     }
+
+    this.runExtractorOnCurrentContent();
+  }
+
+  /**
+   * M7p: if the current editor content does not already parse as a JSON
+   * object/array, try embedded JSON extraction so the user can promote a
+   * JSON block buried inside log lines or prose. Used by both the toolbar
+   * Paste path and the file-load path (drag/drop or Upload), since a
+   * `.log`/`.txt` file can carry the same mixed-text shape as a paste.
+   */
+  private runExtractorOnCurrentContent(): void {
+    const parsed = this.parser.parse(this.content());
+    const isObjectOrArray =
+      parsed.errors.length === 0 &&
+      typeof parsed.value === 'object' &&
+      parsed.value !== null;
+    if (isObjectOrArray) {
+      this.extractedCandidate.set(null);
+      return;
+    }
+    const extracted = this.extractor.extractFromMixedText(this.content());
+    if (extracted) {
+      this.extractedCandidate.set({
+        data: extracted,
+        sourceVersion: this.contentVersion()
+      });
+    } else {
+      this.extractedCandidate.set(null);
+    }
+  }
+
+  /**
+   * Native Monaco paste path. The editor emits the pasted region plus a
+   * pre-computed parse outcome for the post-paste buffer. If the full buffer
+   * already parses there is nothing to extract; otherwise we run the extractor
+   * on the pasted region only (NOT the whole buffer) so that pasting into an
+   * existing valid document does not surface unrelated nested blocks.
+   */
+  onEditorPaste(event: {
+    pastedText: string;
+    postPasteContent: string;
+    postPasteParses: boolean;
+  }): void {
+    if (event.postPasteParses) {
+      this.extractedCandidate.set(null);
+      return;
+    }
+    const extracted = this.extractor.extractFromMixedText(event.pastedText);
+    if (extracted) {
+      this.extractedCandidate.set({
+        data: extracted,
+        sourceVersion: this.contentVersion()
+      });
+    } else {
+      this.extractedCandidate.set(null);
+    }
+  }
+
+  onExtractAccept(): void {
+    const cand = this.extractedCandidate();
+    if (!cand) return;
+    this.setContent(cand.data.text);
+    this.extractedCandidate.set(null);
+  }
+
+  onExtractDismiss(): void {
+    this.extractedCandidate.set(null);
   }
 
   async onCopy(): Promise<void> {
@@ -399,7 +502,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     const result = await validateAndReadSingleFile(files);
     switch (result.kind) {
       case 'ok':
-        this.content.set(result.text);
+        this.setContent(result.text);
+        this.runExtractorOnCurrentContent();
         return;
       case 'empty':
         return;
@@ -445,7 +549,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   onClear(): void {
-    this.content.set('');
+    this.setContent('');
     this.title.set('');
     this.loadedBlob.set(null);
     // Clear the draft synchronously. The `content` -> draft effect is async
@@ -545,14 +649,14 @@ export class HomeComponent implements OnInit, OnDestroy {
       eol: '\n'
     });
     const next = applyEdits(text, edits);
-    if (next !== text) this.content.set(next);
+    if (next !== text) this.setContent(next);
   }
 
   onMinify(): void {
     const parsed = this.parseResult();
     if (parsed.empty || parsed.errors.length > 0) return;
     try {
-      this.content.set(JSON.stringify(parsed.value));
+      this.setContent(JSON.stringify(parsed.value));
       // Minified output has no comments -> switch back to JSON mode.
       this.mode.set('json');
     } catch {
@@ -640,7 +744,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     try {
       await firstValueFrom(this.blobs.delete(blob.id));
       this.loadedBlob.set(null);
-      this.content.set('');
+      this.setContent('');
       this.title.set('');
       this.snack.open(
         $localize`:@@share.delete.success:Blob deleted.`,

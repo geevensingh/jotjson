@@ -308,7 +308,7 @@ describe('ToolbarComponent', () => {
       fixture.detectChanges();
       const cmp = fixture.componentInstance;
       expect(cmp.pasteDisabled()).toBe(false);
-      expect(cmp.pasteTooltip()).toBe('Paste JSON from clipboard');
+      expect(cmp.pasteTooltip()).toBe('Paste from clipboard');
       const btn = (fixture.nativeElement as HTMLElement).querySelector(
         'button.paste-ready'
       );

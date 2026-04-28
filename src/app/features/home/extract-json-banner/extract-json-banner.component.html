@@ -1,0 +1,47 @@
+@if (visible()) {
+  <mat-card class="banner" role="status" aria-live="polite" appearance="outlined">
+    <span class="banner-text">
+      @if (blockCount() === 1) {
+        <span i18n="@@home.paste.extract.banner.message.single"
+          >Found JSON inside your paste.</span
+        >
+      } @else {
+        <span i18n="@@home.paste.extract.banner.message.multi"
+          >Found {{ blockCount() }} JSON blocks - they will be combined into an
+          array. Comments will be removed.</span
+        >
+      }
+    </span>
+    <span class="banner-actions">
+      @if (blockCount() === 1) {
+        <button
+          type="button"
+          mat-button
+          color="primary"
+          (click)="extract.emit()"
+          i18n="@@home.paste.extract.banner.actionSingle"
+        >
+          Extract JSON
+        </button>
+      } @else {
+        <button
+          type="button"
+          mat-button
+          color="primary"
+          (click)="extract.emit()"
+          i18n="@@home.paste.extract.banner.actionMulti"
+        >
+          Extract all as array
+        </button>
+      }
+      <button
+        type="button"
+        mat-button
+        (click)="dismiss.emit()"
+        i18n="@@home.paste.extract.banner.dismiss"
+      >
+        Dismiss
+      </button>
+    </span>
+  </mat-card>
+}

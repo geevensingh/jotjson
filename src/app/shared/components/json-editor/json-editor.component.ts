@@ -38,6 +38,11 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   readonly errors = input<JsonParseError[]>([]);
   readonly valueChange = output<string>();
   readonly cursorPositionChange = output<{ line: number; column: number }>();
+  readonly paste = output<{
+    pastedText: string;
+    postPasteContent: string;
+    postPasteParses: boolean;
+  }>();
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
@@ -146,23 +151,53 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         const model = editor.getModel();
         if (!model) return;
         const pasted = model.getValueInRange(event.range);
-        if (!pasted) return;
-        const { unescaped, changed } = this.parser.tryUnescape(pasted);
-        if (!changed) return;
-        const full = model.getValue();
-        const before = model.getValueInRange({
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: event.range.startLineNumber,
-          endColumn: event.range.startColumn
-        });
-        const after = full.substring(before.length + pasted.length);
-        const hypothetical = before + unescaped + after;
-        if (!this.parser.parse(hypothetical).errors.length) {
-          editor.executeEdits('jotjson-unescape-paste', [
-            { range: event.range, text: unescaped, forceMoveMarkers: true }
-          ]);
+        if (!pasted) {
+          return;
         }
+        let postRange: MonacoNS.IRange = event.range;
+        const { unescaped, changed } = this.parser.tryUnescape(pasted);
+        if (changed) {
+          const full = model.getValue();
+          const before = model.getValueInRange({
+            startLineNumber: 1,
+            startColumn: 1,
+            endLineNumber: event.range.startLineNumber,
+            endColumn: event.range.startColumn
+          });
+          const after = full.substring(before.length + pasted.length);
+          const hypothetical = before + unescaped + after;
+          if (!this.parser.parse(hypothetical).errors.length) {
+            editor.executeEdits('jotjson-unescape-paste', [
+              { range: event.range, text: unescaped, forceMoveMarkers: true }
+            ]);
+            const lines = unescaped.split('\n');
+            const endLineNumber = event.range.startLineNumber + lines.length - 1;
+            const endColumn =
+              lines.length === 1
+                ? event.range.startColumn + unescaped.length
+                : lines[lines.length - 1].length + 1;
+            postRange = {
+              startLineNumber: event.range.startLineNumber,
+              startColumn: event.range.startColumn,
+              endLineNumber,
+              endColumn
+            };
+          }
+        }
+
+        // Emit a single paste event per Monaco paste action, reflecting the
+        // post-rewrite state. Read the model authoritatively so consumers see
+        // the same text Monaco committed (whether unescape ran or not).
+        const pastedText = model.getValueInRange(postRange);
+        const postPasteContent = model.getValue();
+        const parseResult = this.parser.parse(postPasteContent);
+        const postPasteParses =
+          parseResult.errors.length === 0 &&
+          typeof parseResult.value === 'object' &&
+          parseResult.value !== null;
+        this.zone.run(() =>
+          this.paste.emit({ pastedText, postPasteContent, postPasteParses })
+        );
       });
 
       this.editor = editor;

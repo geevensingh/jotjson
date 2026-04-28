@@ -16,6 +16,7 @@ import type { JsonBlob } from '../../core/api/models';
 import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
+import { JsonExtractorService } from '../../core/json/json-extractor.service';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -1052,3 +1053,196 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   });
 });
 
+
+describe('HomeComponent M7p extract-from-mixed-text', () => {
+  beforeEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+  });
+
+  it('toolbar paste with mixed text shows the extract banner', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    spyOn(navigator.clipboard, 'readText').and.returnValue(
+      Promise.resolve('INFO log {"a":1}')
+    );
+    const extractor = TestBed.inject(JsonExtractorService);
+    spyOn(extractor, 'extractFromMixedText').and.returnValue({
+      text: '{ "a": 1 }',
+      blockCount: 1,
+      preservesComments: true
+    });
+
+    await component.onPaste();
+
+    expect(component.extractBannerVisible()).toBe(true);
+    expect(component.extractedCandidate()?.data.blockCount).toBe(1);
+  });
+
+  it('toolbar paste with already-valid JSON does NOT show the extract banner', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    spyOn(navigator.clipboard, 'readText').and.returnValue(
+      Promise.resolve('{"a":1}')
+    );
+    const extractor = TestBed.inject(JsonExtractorService);
+    const extractSpy = spyOn(extractor, 'extractFromMixedText').and.callThrough();
+
+    await component.onPaste();
+
+    expect(extractSpy).not.toHaveBeenCalled();
+    expect(component.extractBannerVisible()).toBe(false);
+    expect(component.extractedCandidate()).toBeNull();
+  });
+
+  it('native paste with mixed text fires extractor on pastedText only', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    const extractor = TestBed.inject(JsonExtractorService);
+    const extractSpy = spyOn(extractor, 'extractFromMixedText').and.returnValue({
+      text: '{ "a": 1 }',
+      blockCount: 1,
+      preservesComments: true
+    });
+
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1}',
+      postPasteContent: 'prefix INFO log {"a":1}',
+      postPasteParses: false
+    });
+
+    expect(extractSpy).toHaveBeenCalledTimes(1);
+    expect(extractSpy).toHaveBeenCalledWith('INFO log {"a":1}');
+    expect(component.extractBannerVisible()).toBe(true);
+  });
+
+  it('native paste with full-buffer-parses skips extractor and clears prior candidate', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.extractedCandidate.set({
+      data: { text: 'stale', blockCount: 1, preservesComments: true },
+      sourceVersion: 999
+    });
+    const extractor = TestBed.inject(JsonExtractorService);
+    const extractSpy = spyOn(extractor, 'extractFromMixedText').and.callThrough();
+
+    component.onEditorPaste({
+      pastedText: '{"a":1}',
+      postPasteContent: '{"a":1}',
+      postPasteParses: true
+    });
+
+    expect(extractSpy).not.toHaveBeenCalled();
+    expect(component.extractedCandidate()).toBeNull();
+    expect(component.extractBannerVisible()).toBe(false);
+  });
+
+  it('onExtractAccept replaces content and clears the banner', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.extractedCandidate.set({
+      data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true },
+      sourceVersion: 0
+    });
+    expect(component.extractBannerVisible()).toBe(true);
+
+    component.onExtractAccept();
+
+    expect(component.content()).toBe('{ "a": 1 }');
+    expect(component.extractedCandidate()).toBeNull();
+    expect(component.extractBannerVisible()).toBe(false);
+  });
+
+  it('onExtractDismiss clears the banner without changing content', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.onValueChange('original text');
+    const before = component.content();
+    component.extractedCandidate.set({
+      data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true },
+      sourceVersion: 999
+    });
+
+    component.onExtractDismiss();
+
+    expect(component.content()).toBe(before);
+    expect(component.extractedCandidate()).toBeNull();
+    expect(component.extractBannerVisible()).toBe(false);
+  });
+
+  it('banner auto-clears via the version predicate when content changes by typing', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    const extractor = TestBed.inject(JsonExtractorService);
+    spyOn(extractor, 'extractFromMixedText').and.returnValue({
+      text: '{ "a": 1 }',
+      blockCount: 1,
+      preservesComments: true
+    });
+
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1}',
+      postPasteContent: 'INFO log {"a":1}',
+      postPasteParses: false
+    });
+    expect(component.extractBannerVisible()).toBe(true);
+
+    // Simulate the editor's contentChange (typing) path which routes through
+    // setContent and bumps contentVersion - the banner predicate should now
+    // return false even though the candidate object is still in memory.
+    component.onValueChange('user types more');
+
+    expect(component.extractBannerVisible()).toBe(false);
+    expect(component.extractedCandidate()).not.toBeNull();
+  });
+
+  it('drag/drop file with mixed text shows the extract banner', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    const extractor = TestBed.inject(JsonExtractorService);
+    spyOn(extractor, 'extractFromMixedText').and.returnValue({
+      text: '{ "a": 1 }',
+      blockCount: 1,
+      preservesComments: true
+    });
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain'
+    });
+
+    await component.onUpload(file);
+
+    expect(extractor.extractFromMixedText).toHaveBeenCalledWith(
+      'INFO log {"a":1}'
+    );
+    expect(component.extractBannerVisible()).toBe(true);
+    expect(component.extractedCandidate()?.data.blockCount).toBe(1);
+  });
+
+  it('file load with already-valid JSON does NOT show the extract banner', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    const extractor = TestBed.inject(JsonExtractorService);
+    const extractSpy = spyOn(extractor, 'extractFromMixedText').and.callThrough();
+    const file = new File(['{"a":1}'], 'data.json', {
+      type: 'application/json'
+    });
+
+    await component.onUpload(file);
+
+    expect(extractSpy).not.toHaveBeenCalled();
+    expect(component.extractBannerVisible()).toBe(false);
+    expect(component.extractedCandidate()).toBeNull();
+  });
+});

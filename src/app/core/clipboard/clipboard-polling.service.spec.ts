@@ -194,10 +194,13 @@ describe('ClipboardPollingService', () => {
       { text: '[1,2,3]', expected: true, name: 'raw JSON array' },
       { text: '{ // comment\n "a": 1 }', expected: true, name: 'JSONC object' },
       { text: '{"a":', expected: true, name: 'partial-but-plausible' },
+      { text: 'INFO {"a":1}', expected: true, name: 'mixed prose with object' },
+      { text: 'log line with [array, here]', expected: true, name: 'mixed prose with array' },
       { text: 'hello world', expected: false, name: 'plain prose' },
+      { text: '42 dollars', expected: false, name: 'numbers and prose' },
       { text: '', expected: false, name: 'empty' },
       { text: '   \n  \t', expected: false, name: 'whitespace only' },
-      { text: '"{\\"a\\":1}"', expected: true, name: 'escaped JSON (round-trip)' }
+      { text: '"{\\"a\\":1}"', expected: true, name: 'escaped JSON (literal { qualifies)' }
     ];
 
     for (const c of cases) {
@@ -334,5 +337,47 @@ describe('ClipboardPollingService', () => {
     expect(svc.permissionState()).toBe('denied');
     expect(svc.hasJson()).toBe(false);
     expect(svc.preview()).toBe('');
+  });
+
+  describe('looksLikeJson (M7p widening)', () => {
+    async function classify(text: string): Promise<boolean> {
+      const readText = jasmine.createSpy('readText').and.resolveTo(text);
+      const svc = createService({
+        readText,
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      });
+      await flush();
+      await svc.checkOnce();
+      return svc.hasJson();
+    }
+
+    it('returns true for prose preceding a JSON object', async () => {
+      expect(await classify('INFO log {"a":1}')).toBe(true);
+    });
+
+    it('returns true for prose surrounding a JSON array', async () => {
+      expect(await classify('see results: [1,2,3] (count=3)')).toBe(true);
+    });
+
+    it('returns true when only a stray brace appears (gate is plausibility-only)', async () => {
+      expect(await classify('value is { somewhere')).toBe(true);
+    });
+
+    it('returns true for escaped JSON literals (the literal { qualifies)', async () => {
+      expect(await classify('"{\\"a\\":1}"')).toBe(true);
+    });
+
+    it('returns false for prose without { or [ anywhere', async () => {
+      expect(await classify('just a normal sentence with no json')).toBe(false);
+    });
+
+    it('returns false for numeric-only prose', async () => {
+      expect(await classify('42 dollars and 99 cents')).toBe(false);
+    });
+
+    it('returns false for empty and whitespace-only text', async () => {
+      expect(await classify('')).toBe(false);
+      expect(await classify('   \n\t  ')).toBe(false);
+    });
   });
 });

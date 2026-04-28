@@ -5,10 +5,21 @@ import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 
+interface FakeModel {
+  id: string;
+  getValue: () => string;
+  getValueInRange: (range: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  }) => string;
+}
+
 interface FakeEditor {
   getValue: jasmine.Spy<() => string>;
   setValue: jasmine.Spy<(v: string) => void>;
-  getModel: jasmine.Spy<() => object | null>;
+  getModel: jasmine.Spy<() => FakeModel | null>;
   onDidChangeModelContent: jasmine.Spy;
   onDidChangeCursorPosition: jasmine.Spy;
   onDidPaste: jasmine.Spy;
@@ -39,7 +50,23 @@ const FAKE_MARKER_ERROR_SEVERITY = 8;
 
 function makeFakeEditor(initial: string): FakeEditor {
   let current = initial;
-  const model = { id: 'fake-model' };
+  const toOffset = (line: number, column: number): number => {
+    const lines = current.split('\n');
+    let off = 0;
+    for (let i = 0; i < line - 1 && i < lines.length; i++) {
+      off += lines[i].length + 1;
+    }
+    return off + (column - 1);
+  };
+  const model: FakeModel = {
+    id: 'fake-model',
+    getValue: () => current,
+    getValueInRange: (range) => {
+      const start = toOffset(range.startLineNumber, range.startColumn);
+      const end = toOffset(range.endLineNumber, range.endColumn);
+      return current.substring(start, end);
+    }
+  };
   return {
     getValue: jasmine.createSpy('getValue').and.callFake(() => current),
     setValue: jasmine.createSpy('setValue').and.callFake((v: string) => {
@@ -57,7 +84,27 @@ function makeFakeEditor(initial: string): FakeEditor {
     }),
     updateOptions: jasmine.createSpy('updateOptions'),
     dispose: jasmine.createSpy('dispose'),
-    executeEdits: jasmine.createSpy('executeEdits'),
+    executeEdits: jasmine.createSpy('executeEdits').and.callFake(
+      (
+        _source: string,
+        edits: Array<{
+          range: {
+            startLineNumber: number;
+            startColumn: number;
+            endLineNumber: number;
+            endColumn: number;
+          };
+          text: string;
+        }>
+      ) => {
+        for (const e of edits) {
+          const start = toOffset(e.range.startLineNumber, e.range.startColumn);
+          const end = toOffset(e.range.endLineNumber, e.range.endColumn);
+          current = current.substring(0, start) + e.text + current.substring(end);
+        }
+        return true;
+      }
+    ),
     layout: jasmine.createSpy('layout')
   };
 }
@@ -212,5 +259,71 @@ describe('JsonEditorComponent', () => {
     fixture.detectChanges();
     expect(monaco.editor.setModelMarkers).toHaveBeenCalledTimes(1);
     expect(monaco.editor.setModelMarkers.calls.mostRecent().args[2]).toEqual([]);
+  });
+
+  describe('paste output', () => {
+    interface PasteEvent {
+      pastedText: string;
+      postPasteContent: string;
+      postPasteParses: boolean;
+    }
+
+    function firePasteIntoEmpty(component: JsonEditorComponent, text: string): PasteEvent[] {
+      const events: PasteEvent[] = [];
+      component.paste.subscribe((e) => events.push(e));
+      // Simulate Monaco having already inserted the pasted text into the model
+      // (onDidPaste fires AFTER the insertion). Single-line paste at (1,1).
+      editor.setValue(text);
+      const handler = editor.onDidPaste.calls.mostRecent().args[0] as (event: {
+        range: {
+          startLineNumber: number;
+          startColumn: number;
+          endLineNumber: number;
+          endColumn: number;
+        };
+      }) => void;
+      handler({
+        range: {
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: 1,
+          endColumn: text.length + 1
+        }
+      });
+      return events;
+    }
+
+    it('emits paste once with raw mixed text and postPasteParses=false', async () => {
+      const component = await create('');
+      const mixed = 'log line: hello world';
+      const events = firePasteIntoEmpty(component, mixed);
+      expect(events.length).toBe(1);
+      expect(events[0].pastedText).toBe(mixed);
+      expect(events[0].postPasteContent).toBe(mixed);
+      expect(events[0].postPasteParses).toBeFalse();
+      // No unescape rewrite expected for plain mixed text.
+      expect(editor.executeEdits).not.toHaveBeenCalled();
+    });
+
+    it('emits paste once with the unescaped text when unescape rewrites the region', async () => {
+      const component = await create('');
+      const escaped = '{\\"a\\":1}';
+      const events = firePasteIntoEmpty(component, escaped);
+      expect(editor.executeEdits).toHaveBeenCalledTimes(1);
+      expect(events.length).toBe(1);
+      expect(events[0].pastedText).toBe('{"a":1}');
+      expect(events[0].postPasteContent).toBe('{"a":1}');
+      expect(events[0].postPasteParses).toBeTrue();
+    });
+
+    it('emits paste once with valid JSON and postPasteParses=true (no unescape)', async () => {
+      const component = await create('');
+      const events = firePasteIntoEmpty(component, '{"a":1}');
+      expect(editor.executeEdits).not.toHaveBeenCalled();
+      expect(events.length).toBe(1);
+      expect(events[0].pastedText).toBe('{"a":1}');
+      expect(events[0].postPasteContent).toBe('{"a":1}');
+      expect(events[0].postPasteParses).toBeTrue();
+    });
   });
 });

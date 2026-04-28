@@ -33,11 +33,19 @@
   <div class="split" [style]="splitStyle()" #splitHost>
     <section class="pane pane-editor" aria-label="JSON input">
       <jj-clipboard-banner></jj-clipboard-banner>
+      <jotjson-extract-json-banner
+        [visible]="extractBannerVisible()"
+        [blockCount]="extractedCandidate()?.data?.blockCount ?? 0"
+        [preservesComments]="extractedCandidate()?.data?.preservesComments ?? true"
+        (extract)="onExtractAccept()"
+        (dismiss)="onExtractDismiss()"
+      ></jotjson-extract-json-banner>
       <jj-json-editor
         [value]="content()"
         [errors]="errors()"
         (valueChange)="onValueChange($event)"
         (cursorPositionChange)="onCursorChange($event)"
+        (paste)="onEditorPaste($event)"
       ></jj-json-editor>
     </section>
 
