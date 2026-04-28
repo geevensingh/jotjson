@@ -7,6 +7,7 @@ import { signal } from '@angular/core';
 
 import { RuleEditorComponent } from './rule-editor.component';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { JsonTreeComponent } from '../../../shared/components/json-tree/json-tree.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 import type {
@@ -574,6 +575,199 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       expect(cmp.previewDraft()!.name).toBe('Renamed live');
       cmp.patchRule(0, { matchValue: 'newpattern' });
       expect(cmp.previewDraft()!.rules[0].matchValue).toBe('newpattern');
+    });
+  });
+
+  describe('live preview - DOM-level (M6d-3-fu3)', () => {
+    // These integration specs assert that user-visible styling in the
+    // preview tree responds to mutations on the editor's draft. They
+    // assert through the JsonTreeComponent's `ruleStyleVars` API
+    // (the same CSS-var seam the template binds to) rather than via
+    // computed styles, since CDK virtualization can keep the actual
+    // DOM nodes from being attached during a fakeAsync test.
+    function getTree(ctx: Setup): JsonTreeComponent {
+      const debugEl = ctx.fixture.debugElement.query(
+        (el) => el.componentInstance instanceof JsonTreeComponent
+      );
+      expect(debugEl).toBeTruthy();
+      return debugEl.componentInstance as JsonTreeComponent;
+    }
+
+    function findByKey(tree: JsonTreeComponent, key: string) {
+      const root = tree.root();
+      expect(root).toBeTruthy();
+      const node = root!.children!.find((c) => c.segment === key);
+      expect(node).withContext(`expected sample to contain key "${key}"`).toBeTruthy();
+      return node!;
+    }
+
+    it('editing matchValue updates preview row styling', () => {
+      const ctx = loaded(
+        ruleSet({
+          rules: [
+            rule({
+              target: 'value',
+              matchType: 'exact',
+              matchValue: 'TypeError',
+              style: { backgroundColor: '#abcdef' }
+            })
+          ]
+        })
+      );
+      ctx.fixture.detectChanges();
+      const tree = getTree(ctx);
+      const errorNode = findByKey(tree, 'error');
+      expect(tree.ruleStyleVars(errorNode)?.['--tree-row-format-bg']).toBe('#abcdef');
+
+      ctx.fixture.componentInstance.patchRule(0, { matchValue: 'NotPresent' });
+      ctx.fixture.detectChanges();
+      expect(tree.ruleStyleVars(errorNode)).toBeNull();
+    });
+
+    it('addRule with valid pattern adds preview styling on a new sample row', () => {
+      const ctx = loaded(
+        ruleSet({
+          rules: [
+            rule({
+              target: 'value',
+              matchType: 'exact',
+              matchValue: '__never_matches__',
+              style: { backgroundColor: '#111111' }
+            })
+          ]
+        })
+      );
+      ctx.fixture.detectChanges();
+      const tree = getTree(ctx);
+      const statusNode = findByKey(tree, 'status');
+      expect(tree.ruleStyleVars(statusNode)).toBeNull();
+
+      ctx.fixture.componentInstance.addRule();
+      const newIdx = ctx.fixture.componentInstance.editable()!.rules.length - 1;
+      ctx.fixture.componentInstance.patchRule(newIdx, {
+        target: 'key',
+        matchType: 'exact',
+        matchValue: 'status',
+        style: { backgroundColor: '#ff0000' }
+      });
+      ctx.fixture.detectChanges();
+
+      expect(tree.ruleStyleVars(statusNode)?.['--tree-row-format-bg']).toBe('#ff0000');
+    });
+
+    it('removing the only rule clears all preview styling', () => {
+      const ctx = loaded(
+        ruleSet({
+          rules: [
+            rule({
+              target: 'value',
+              matchType: 'exact',
+              matchValue: 'TypeError',
+              style: { backgroundColor: '#abcdef' }
+            })
+          ]
+        })
+      );
+      ctx.fixture.detectChanges();
+      const tree = getTree(ctx);
+      const errorNode = findByKey(tree, 'error');
+      expect(tree.ruleStyleVars(errorNode)?.['--tree-row-format-bg']).toBe('#abcdef');
+
+      ctx.fixture.componentInstance.removeRule(0);
+      ctx.fixture.detectChanges();
+      expect(tree.ruleStyleVars(errorNode)).toBeNull();
+    });
+
+    it('reorder changes precedence-sensitive preview styling', () => {
+      // Two rules both target the value "TypeError" with different
+      // colors. Engine semantics: LATER rules in the array override
+      // earlier ones for the same property. So with [r-first, r-second]
+      // the second's color wins. Swap the order and the new last wins.
+      const ctx = loaded(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r-first',
+              target: 'value',
+              matchType: 'exact',
+              matchValue: 'TypeError',
+              style: { backgroundColor: '#aaaaaa' }
+            }),
+            rule({
+              id: 'r-second',
+              target: 'value',
+              matchType: 'exact',
+              matchValue: 'TypeError',
+              style: { backgroundColor: '#bbbbbb' }
+            })
+          ]
+        })
+      );
+      ctx.fixture.detectChanges();
+      const tree = getTree(ctx);
+      const errorNode = findByKey(tree, 'error');
+      expect(tree.ruleStyleVars(errorNode)?.['--tree-row-format-bg']).toBe('#bbbbbb');
+
+      // Swap: r-first becomes index 1 (last), so its color wins.
+      ctx.fixture.componentInstance.moveRule(0, 1);
+      ctx.fixture.detectChanges();
+      expect(tree.ruleStyleVars(errorNode)?.['--tree-row-format-bg']).toBe('#aaaaaa');
+    });
+
+    it('null override falls back to service rule sets (regression)', () => {
+      // Bare JsonTreeComponent fixture (does NOT mount the editor).
+      // A stubbed RuleSetsService.defaultRuleSets() returns a known
+      // set and the tree must reflect it; flipping overrideRuleSets
+      // to a different non-null array overrides the service.
+      TestBed.resetTestingModule();
+      const homeSet = ruleSet({
+        id: 'home-set',
+        rules: [
+          rule({
+            target: 'value',
+            matchType: 'exact',
+            matchValue: 'error',
+            style: { backgroundColor: '#112233' }
+          })
+        ]
+      });
+      const overrideSet = ruleSet({
+        id: 'override-set',
+        rules: [
+          rule({
+            target: 'value',
+            matchType: 'exact',
+            matchValue: 'error',
+            style: { backgroundColor: '#abcdef' }
+          })
+        ]
+      });
+      const stubbedRuleSets = {
+        ruleSets: signal<FormattingRuleSet[] | null>([homeSet]).asReadonly(),
+        defaultRuleSets: signal<FormattingRuleSet[]>([homeSet]).asReadonly(),
+        defaultRuleSetIds: signal<readonly string[]>(['home-set']).asReadonly()
+      };
+      TestBed.configureTestingModule({
+        imports: [JsonTreeComponent],
+        providers: [
+          ...provideFakeAuth(),
+          { provide: RuleSetsService, useValue: stubbedRuleSets },
+          { provide: MatSnackBar, useValue: { open: jasmine.createSpy('open') } }
+        ]
+      });
+      const fix = TestBed.createComponent(JsonTreeComponent);
+      fix.componentRef.setInput('value', { status: 'error' });
+      fix.detectChanges();
+      const cmp = fix.componentInstance;
+
+      // Null/unset override: service-provided home-set wins.
+      const status = cmp.root()!.children!.find((c) => c.segment === 'status')!;
+      expect(cmp.ruleStyleVars(status)?.['--tree-row-format-bg']).toBe('#112233');
+
+      // Now flip to a non-null override - that array wins.
+      fix.componentRef.setInput('overrideRuleSets', [overrideSet]);
+      fix.detectChanges();
+      expect(cmp.ruleStyleVars(status)?.['--tree-row-format-bg']).toBe('#abcdef');
     });
   });
 });
