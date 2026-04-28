@@ -21,7 +21,30 @@
     <p class="status status-error" i18n="@@ruleEditor.notFoundInline">
       Rule set not found.
     </p>
-  } @else if (draft(); as set) {
+  } @else if (editable(); as set) {
+    @if (conflict()) {
+      <div class="conflict-banner" role="alert" data-testid="conflict-banner">
+        <p class="conflict-message" i18n="@@ruleEditor.conflict.message">
+          This rule set was changed in another tab. Reload to discard
+          your in-progress changes and continue.
+        </p>
+        <button
+          mat-flat-button
+          color="primary"
+          type="button"
+          [disabled]="reloading()"
+          (click)="reload()"
+          data-testid="reload-button"
+        >
+          @if (reloading()) {
+            <span i18n="@@ruleEditor.conflict.reloading">Reloading...</span>
+          } @else {
+            <span i18n="@@ruleEditor.conflict.reload">Reload</span>
+          }
+        </button>
+      </div>
+    }
+
     <section class="editor-card" aria-labelledby="rule-set-name-label">
       <div class="name-row">
         <label
@@ -36,6 +59,7 @@
           type="text"
           class="name-input"
           [value]="set.name"
+          [disabled]="formDisabled()"
           maxlength="80"
           (input)="setName($any($event.target).value)"
           aria-describedby="rule-set-name-help"
@@ -49,33 +73,54 @@
         </p>
       </div>
 
-      <div class="save-row">
-        <button
-          mat-flat-button
-          color="primary"
-          type="button"
-          [disabled]="saveState() === 'saving'"
-          (click)="onSave()"
-        >
-          @switch (saveState()) {
-            @case ('saving') {
-              <span i18n="@@ruleEditor.save.saving">Saving...</span>
-            }
-            @case ('saved') {
-              <span i18n="@@ruleEditor.save.saved">Saved</span>
-            }
-            @case ('error') {
-              <span i18n="@@ruleEditor.save.retry">Save failed - retry</span>
-            }
-            @default {
-              <span i18n="@@ruleEditor.save.idle">Save</span>
-            }
+      <div class="status-row" data-testid="status-pill">
+        @switch (pillState().kind) {
+          @case ('reloading') {
+            <span class="pill pill-info" i18n="@@ruleEditor.pill.reloading"
+              >Reloading...</span
+            >
           }
-        </button>
-        <span class="version-badge"
-          ><span i18n="@@ruleEditor.versionLabel">Version</span>
-          {{ set.version }}</span
-        >
+          @case ('invalid') {
+            <span
+              class="pill pill-warn"
+              [matTooltip]="invalidReasonsText($any(pillState()).reasons)"
+              i18n="@@ruleEditor.pill.invalid"
+              >Invalid - fix to save</span
+            >
+          }
+          @case ('saving') {
+            <span class="pill pill-info" i18n="@@ruleEditor.pill.saving"
+              >Saving...</span
+            >
+          }
+          @case ('error') {
+            <button
+              mat-stroked-button
+              type="button"
+              class="pill pill-error"
+              (click)="retrySave()"
+              data-testid="retry-save"
+              i18n="@@ruleEditor.pill.retry"
+            >
+              Save failed - retry
+            </button>
+          }
+          @case ('saved') {
+            <span class="pill pill-ok" i18n="@@ruleEditor.pill.saved"
+              >Saved</span
+            >
+          }
+          @case ('editing') {
+            <span class="pill pill-info" i18n="@@ruleEditor.pill.editing"
+              >Editing</span
+            >
+          }
+          @case ('idle') {
+            <span class="pill pill-idle" i18n="@@ruleEditor.pill.idle"
+              >All saved</span
+            >
+          }
+        }
       </div>
     </section>
 
@@ -87,6 +132,7 @@
         <button
           mat-stroked-button
           type="button"
+          [disabled]="formDisabled()"
           (click)="addRule()"
           data-testid="add-rule-button"
         >
@@ -109,7 +155,7 @@
                 <button
                   mat-icon-button
                   type="button"
-                  [disabled]="i === 0"
+                  [disabled]="i === 0 || formDisabled()"
                   aria-label="Move up"
                   i18n-aria-label="@@ruleEditor.moveUp"
                   (click)="moveRule(i, -1)"
@@ -120,7 +166,7 @@
                 <button
                   mat-icon-button
                   type="button"
-                  [disabled]="i === set.rules.length - 1"
+                  [disabled]="i === set.rules.length - 1 || formDisabled()"
                   aria-label="Move down"
                   i18n-aria-label="@@ruleEditor.moveDown"
                   (click)="moveRule(i, 1)"
@@ -131,6 +177,7 @@
                 <button
                   mat-icon-button
                   type="button"
+                  [disabled]="formDisabled()"
                   aria-label="Remove rule"
                   i18n-aria-label="@@ruleEditor.removeRule"
                   (click)="removeRule(i)"
@@ -151,6 +198,7 @@
                 <mat-button-toggle-group
                   [id]="'target-' + rule.id"
                   [value]="rule.target"
+                  [disabled]="formDisabled()"
                   (change)="patchRule(i, { target: $event.value })"
                   hideSingleSelectionIndicator
                 >
@@ -179,6 +227,7 @@
                 <mat-button-toggle-group
                   [id]="'match-type-' + rule.id"
                   [value]="rule.matchType"
+                  [disabled]="formDisabled()"
                   (change)="patchRule(i, { matchType: $event.value })"
                   hideSingleSelectionIndicator
                 >
@@ -216,6 +265,7 @@
                   type="text"
                   class="match-value-input"
                   [value]="rule.matchValue"
+                  [disabled]="formDisabled()"
                   maxlength="200"
                   (input)="
                     patchRule(i, {
@@ -228,6 +278,7 @@
               <div class="rule-field rule-field--toggle">
                 <mat-slide-toggle
                   [checked]="rule.caseSensitive"
+                  [disabled]="formDisabled()"
                   (change)="
                     patchRule(i, { caseSensitive: $event.checked })
                   "
@@ -237,7 +288,7 @@
               </div>
             </div>
 
-            <fieldset class="style-block">
+            <fieldset class="style-block" [disabled]="formDisabled()">
               <legend i18n="@@ruleEditor.styleHeading">Style</legend>
 
               <div class="style-row">
@@ -358,6 +409,7 @@
                   [id]="'icon-' + rule.id"
                   class="style-icon-select"
                   [value]="rule.style.icon || ''"
+                  [disabled]="formDisabled()"
                   (change)="setIcon(i, $any($event.target).value)"
                 >
                   <option value="" i18n="@@ruleEditor.style.icon.none">

@@ -26,11 +26,19 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">123</context>
+          <context context-type="linenumber">307</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">237</context>
+          <context context-type="linenumber">420</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">431</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">504</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
@@ -474,256 +482,330 @@
           <context context-type="linenumber">22,24</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="ruleEditor.conflict.message" datatype="html">
+        <source> This rule set was changed in another tab. Reload to discard your in-progress changes and continue. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
+          <context context-type="linenumber">28,31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.conflict.reloading" datatype="html">
+        <source>Reloading...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
+          <context context-type="linenumber">40,42</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.conflict.reload" datatype="html">
+        <source>Reload</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
+          <context context-type="linenumber">42,45</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="ruleEditor.nameLabel" datatype="html">
         <source>Name</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">32,34</context>
+          <context context-type="linenumber">55,57</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.nameHelp" datatype="html">
         <source> Up to 80 characters. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">48,50</context>
+          <context context-type="linenumber">72,74</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="ruleEditor.save.saving" datatype="html">
+      <trans-unit id="ruleEditor.pill.reloading" datatype="html">
+        <source>Reloading...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
+          <context context-type="linenumber">80,83</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.pill.invalid" datatype="html">
+        <source>Invalid - fix to save</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
+          <context context-type="linenumber">88,91</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.pill.saving" datatype="html">
         <source>Saving...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">62,64</context>
+          <context context-type="linenumber">93,96</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="ruleEditor.save.saved" datatype="html">
+      <trans-unit id="ruleEditor.pill.retry" datatype="html">
+        <source> Save failed - retry </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
+          <context context-type="linenumber">105,106</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.pill.saved" datatype="html">
         <source>Saved</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">65,67</context>
+          <context context-type="linenumber">110,113</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="ruleEditor.save.retry" datatype="html">
-        <source>Save failed - retry</source>
+      <trans-unit id="ruleEditor.pill.editing" datatype="html">
+        <source>Editing</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">68,70</context>
+          <context context-type="linenumber">115,118</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="ruleEditor.save.idle" datatype="html">
-        <source>Save</source>
+      <trans-unit id="ruleEditor.pill.idle" datatype="html">
+        <source>All saved</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">71,73</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="ruleEditor.versionLabel" datatype="html">
-        <source>Version</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">76,77</context>
+          <context context-type="linenumber">120,122</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.rulesHeading" datatype="html">
         <source> Rules </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">85,87</context>
+          <context context-type="linenumber">130,132</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.addRule" datatype="html">
         <source>+ Add rule</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">93,95</context>
+          <context context-type="linenumber">139,141</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.emptyRules" datatype="html">
         <source> No rules yet. Click &quot;+ Add rule&quot; to create one. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">99,102</context>
+          <context context-type="linenumber">145,148</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.moveUp" datatype="html">
         <source>Move up</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">113,114</context>
+          <context context-type="linenumber">159,160</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.moveDown" datatype="html">
         <source>Move down</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">124,125</context>
+          <context context-type="linenumber">170,171</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.removeRule" datatype="html">
         <source>Remove rule</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">134,135</context>
+          <context context-type="linenumber">181,182</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.targetLabel" datatype="html">
         <source>Target</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">149,151</context>
+          <context context-type="linenumber">196,198</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.target.key" datatype="html">
         <source>Key</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">158,159</context>
+          <context context-type="linenumber">206,207</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.target.value" datatype="html">
         <source>Value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">163,164</context>
+          <context context-type="linenumber">211,212</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.target.both" datatype="html">
         <source>Both</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">168,169</context>
+          <context context-type="linenumber">216,217</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchTypeLabel" datatype="html">
         <source>Match type</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">177,179</context>
+          <context context-type="linenumber">225,227</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchType.exact" datatype="html">
         <source>Exact</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">188,189</context>
+          <context context-type="linenumber">237,238</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchType.contains" datatype="html">
         <source>Contains</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">193,195</context>
+          <context context-type="linenumber">242,244</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchType.startsWith" datatype="html">
         <source>Starts with</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">198,200</context>
+          <context context-type="linenumber">247,249</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchType.endsWith" datatype="html">
         <source>Ends with</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">203,205</context>
+          <context context-type="linenumber">252,254</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchValueLabel" datatype="html">
         <source>Match value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">212,214</context>
+          <context context-type="linenumber">261,263</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.caseSensitiveLabel" datatype="html">
         <source>Case sensitive</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">235,237</context>
+          <context context-type="linenumber">286,288</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.styleHeading" datatype="html">
         <source>Style</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">241,243</context>
+          <context context-type="linenumber">292,294</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.background" datatype="html">
         <source>Background</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">248,250</context>
+          <context context-type="linenumber">299,301</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.textColor" datatype="html">
         <source>Text</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">271,273</context>
+          <context context-type="linenumber">322,324</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.borderColor" datatype="html">
         <source>Border</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">294,296</context>
+          <context context-type="linenumber">345,347</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.bold" datatype="html">
         <source>Bold</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">322,324</context>
+          <context context-type="linenumber">373,375</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.italic" datatype="html">
         <source>Italic</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">333,335</context>
+          <context context-type="linenumber">384,386</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.underline" datatype="html">
         <source>Underline</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">345,347</context>
+          <context context-type="linenumber">396,398</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.icon" datatype="html">
         <source>Icon</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">355,357</context>
+          <context context-type="linenumber">406,408</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.icon.none" datatype="html">
         <source> (none) </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">364,365</context>
+          <context context-type="linenumber">416,417</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.validity.nameEmpty" datatype="html">
+        <source>Name is required.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">164</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.validity.nameLong" datatype="html">
+        <source>Name is too long (max 80 characters).</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">167</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.validity.tooManyRules" datatype="html">
+        <source>Too many rules (max 50).</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">172</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.validity.matchValueLong" datatype="html">
+        <source>One or more rules have a match value that is too long (max 200 characters).</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">190</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ruleEditor.validity.badHex" datatype="html">
+        <source>One or more rules have an invalid color (must be #rrggbb).</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">195</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.notFound" datatype="html">
         <source>Rule set not found.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">122</context>
+          <context context-type="linenumber">306</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="ruleEditor.save.conflict" datatype="html">
-        <source>This rule set was changed in another tab. Reload to continue.</source>
+      <trans-unit id="ruleEditor.deleted" datatype="html">
+        <source>This rule set was deleted.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">233</context>
+          <context context-type="linenumber">419</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">503</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="ruleEditor.save.failed" datatype="html">
-        <source>Save failed. Please try again.</source>
+      <trans-unit id="ruleEditor.reloadFailed" datatype="html">
+        <source>Reload failed. Please try again.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">234</context>
+          <context context-type="linenumber">430</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.title" datatype="html">
