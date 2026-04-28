@@ -25,14 +25,19 @@ export interface UserPreferences {
   editorFontSize: number;
   editorTabSize: 2 | 4;
   defaultTreeExpansionDepth: number;
-  defaultRuleSetId?: string;
   /**
-   * Rule sets currently toggled on in the tree-view formatting toolbar.
-   * Persisted server-side so toolbar state survives across sessions
-   * and devices. IDs that no longer resolve to an owned rule set are
+   * Rule sets applied by default when the user views JSON. The set
+   * is mirrored as toggleable chips in the tree-view formatting
+   * toolbar and as checkboxes on the Profile page. Persisted
+   * server-side so the selection survives across sessions and
+   * devices. IDs that no longer resolve to an owned rule set are
    * filtered out at read time. See DESIGN_SPEC.md §Features 7.
+   *
+   * Renamed from `activeRuleSetIds` in M6f-5; the legacy key (and
+   * the legacy single-value `defaultRuleSetId`) are folded into
+   * this array on read for one release of stale-client tolerance.
    */
-  activeRuleSetIds: string[];
+  defaultRuleSetIds: string[];
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
   treeFontSize: number;
@@ -110,7 +115,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeShowDateAnnotations: true,
   treeAssumeUtcForIsoDateTime: true,
   treeAssumeUtcForIsoDateOnly: true,
-  activeRuleSetIds: [],
+  defaultRuleSetIds: [],
   recentlyViewedEnabled: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
@@ -197,13 +202,22 @@ const TREE_PATH_ROOTS: readonly UserPreferences['treePathRoot'][] = [
  * union is widened accordingly. TODO(remove next release): drop
  * `'historyTrackingMode'` once stale clients have refreshed.
  */
-const TOP_LEVEL_KEYS: readonly (keyof UserPreferences | 'historyTrackingMode')[] = [
+const TOP_LEVEL_KEYS: readonly (
+  | keyof UserPreferences
+  | 'historyTrackingMode'
+  | 'defaultRuleSetId'
+  | 'activeRuleSetIds'
+)[] = [
   'theme',
   'editorFontSize',
   'editorTabSize',
   'defaultTreeExpansionDepth',
+  // Legacy fields accepted on the wire and folded into
+  // `defaultRuleSetIds` for one release of stale-client tolerance.
+  // TODO(remove next release).
   'defaultRuleSetId',
   'activeRuleSetIds',
+  'defaultRuleSetIds',
   'editorWordWrap',
   'layoutOrientation',
   'treeFontSize',
@@ -292,15 +306,31 @@ export function normalizeStoredPreferences(
       (LEGACY_HISTORY_MODES as readonly string[]).includes(legacy);
   }
   delete view.historyTrackingMode;
-  // Stored docs written before M6a.75 won't have `activeRuleSetIds`.
-  // The DEFAULT_PREFERENCES merge in the frontend handles the missing
-  // field on the wire, but normalizeStoredPreferences may be called on
-  // its own on the API side - default it to `[]` here so the next PUT
-  // round-trip succeeds without the client having to know about the
-  // legacy gap.
-  if (!Array.isArray(view.activeRuleSetIds)) {
-    view.activeRuleSetIds = [];
+  // Stored docs written before M6f-5 had `activeRuleSetIds` (or even
+  // earlier, `defaultRuleSetId`). Fold both legacy shapes into
+  // `defaultRuleSetIds`. The DEFAULT_PREFERENCES merge in the
+  // frontend handles the missing field on the wire, but
+  // normalizeStoredPreferences may be called on its own on the API
+  // side - migrate here so the next PUT round-trip succeeds without
+  // the client having to know about the legacy gap.
+  const legacyView = view as UserPreferences & {
+    activeRuleSetIds?: unknown;
+    defaultRuleSetId?: unknown;
+  };
+  if (!Array.isArray(legacyView.defaultRuleSetIds)) {
+    const fromLegacyArray = Array.isArray(legacyView.activeRuleSetIds)
+      ? (legacyView.activeRuleSetIds.filter((x) => typeof x === 'string') as string[])
+      : [];
+    const next = [...fromLegacyArray];
+    if (typeof legacyView.defaultRuleSetId === 'string' && legacyView.defaultRuleSetId.length > 0) {
+      if (!next.includes(legacyView.defaultRuleSetId)) {
+        next.unshift(legacyView.defaultRuleSetId);
+      }
+    }
+    legacyView.defaultRuleSetIds = next;
   }
+  delete legacyView.activeRuleSetIds;
+  delete legacyView.defaultRuleSetId;
   return view;
 }
 
@@ -439,54 +469,66 @@ export function normalizePreferences(raw: unknown): UserPreferences {
       dark: normalizeColorSet(colors['dark'], 'treeHighlightColors.dark'),
       light: normalizeColorSet(colors['light'], 'treeHighlightColors.light')
     },
-    activeRuleSetIds: normalizeActiveRuleSetIds(raw['activeRuleSetIds'])
+    defaultRuleSetIds: normalizeDefaultRuleSetIds(raw)
   };
-
-  if (raw['defaultRuleSetId'] !== undefined) {
-    const v = raw['defaultRuleSetId'];
-    if (v !== null && typeof v !== 'string') {
-      throw new PreferenceValidationError('defaultRuleSetId must be a string or null');
-    }
-    if (typeof v === 'string' && v.length > 0) {
-      if (v.length > 64) {
-        throw new PreferenceValidationError('defaultRuleSetId is too long');
-      }
-      normalized.defaultRuleSetId = v;
-    }
-  }
 
   return normalized;
 }
 
 /**
- * `activeRuleSetIds` was added alongside the M6 formatting-rules
- * feature. Accept missing-on-the-wire as `[]` for one release of
- * stale-client tolerance (clients shipped before this field will
- * omit it on every PUT). When present it must be a flat array of
- * non-empty strings each <= 64 chars; we cap the array at 32 entries
- * (well above the 20-rule-sets-per-user limit) to bound payload size
- * and dedupe while preserving order.
+ * `defaultRuleSetIds` is the user's persisted "apply by default"
+ * selection of formatting rule sets. It must be a flat array of
+ * non-empty strings each <= 64 chars; we cap the array at 32
+ * entries (well above the 20-rule-sets-per-user limit) to bound
+ * payload size and dedupe while preserving order.
+ *
+ * Migration (M6f-5): renamed from `activeRuleSetIds`, and absorbs
+ * the now-removed single-value `defaultRuleSetId`. When the new
+ * key is missing on the wire, fall back to the legacy array, and
+ * if a legacy `defaultRuleSetId` string is present prepend it
+ * (dedup-safe). One release of stale-client tolerance, then drop.
+ * TODO(remove next release): drop the legacy fallbacks once stale
+ * clients have refreshed.
  */
-function normalizeActiveRuleSetIds(value: unknown): string[] {
-  if (value === undefined) {
-    return [];
+function normalizeDefaultRuleSetIds(raw: Record<string, unknown>): string[] {
+  let source: unknown;
+  if (raw['defaultRuleSetIds'] !== undefined) {
+    source = raw['defaultRuleSetIds'];
+  } else if (raw['activeRuleSetIds'] !== undefined) {
+    source = raw['activeRuleSetIds'];
+  } else {
+    source = [];
   }
-  if (!Array.isArray(value)) {
-    throw new PreferenceValidationError('activeRuleSetIds must be an array of strings');
+  if (!Array.isArray(source)) {
+    throw new PreferenceValidationError(
+      'defaultRuleSetIds must be an array of strings'
+    );
   }
-  if (value.length > 32) {
-    throw new PreferenceValidationError('activeRuleSetIds has too many entries');
+  if (source.length > 32) {
+    throw new PreferenceValidationError('defaultRuleSetIds has too many entries');
   }
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const entry of value) {
+  // Legacy single-default folds in first so it keeps "default-most"
+  // priority when both legacy fields are present on stale clients.
+  const legacySingle = raw['defaultRuleSetId'];
+  if (typeof legacySingle === 'string' && legacySingle.length > 0) {
+    if (legacySingle.length > 64) {
+      throw new PreferenceValidationError('defaultRuleSetId is too long');
+    }
+    seen.add(legacySingle);
+    result.push(legacySingle);
+  } else if (legacySingle !== undefined && legacySingle !== null && typeof legacySingle !== 'string') {
+    throw new PreferenceValidationError('defaultRuleSetId must be a string or null');
+  }
+  for (const entry of source) {
     if (typeof entry !== 'string' || entry.length === 0) {
       throw new PreferenceValidationError(
-        'activeRuleSetIds entries must be non-empty strings'
+        'defaultRuleSetIds entries must be non-empty strings'
       );
     }
     if (entry.length > 64) {
-      throw new PreferenceValidationError('activeRuleSetIds entry is too long');
+      throw new PreferenceValidationError('defaultRuleSetIds entry is too long');
     }
     if (!seen.has(entry)) {
       seen.add(entry);

@@ -4,6 +4,8 @@ import { ProfileComponent } from './profile.component';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthUser } from '../../core/auth/auth-user';
 import { PreferencesService } from '../../core/preferences/preferences.service';
+import { RuleSetsService } from '../../core/api/rule-sets.service';
+import { FormattingRuleSet } from '../../core/api/models';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import { signal } from '@angular/core';
 
@@ -399,4 +401,123 @@ describe('ProfileComponent', () => {
       expect(colors.light.selectionColor).toBe('#222222');
     });
   });
+
+  describe('default rule sets section', () => {
+    function setRuleSetCache(sets: FormattingRuleSet[] | null): void {
+      const ruleSets = TestBed.inject(RuleSetsService);
+      (ruleSets as unknown as {
+        _ruleSets: { set(v: FormattingRuleSet[] | null): void };
+      })._ruleSets.set(sets);
+    }
+
+    it('does not render the section when signed out', async () => {
+      const { fixture } = await create({ user: null, isConfigured: true });
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).not.toContain('Default rule sets');
+    });
+
+    it('renders the section heading when signed in', async () => {
+      const { fixture } = await create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Default rule sets');
+    });
+
+    it('shows the empty-state hint when the user owns no rule sets', async () => {
+      const { fixture } = await create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+      setRuleSetCache([]);
+      fixture.detectChanges();
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Clone preset');
+    });
+
+    it('renders one checkbox per cached rule set sorted by name', async () => {
+      const { fixture } = await create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+      setRuleSetCache([
+        makeRuleSet({ id: 'rs-z', name: 'Zebra' }),
+        makeRuleSet({ id: 'rs-a', name: 'Alpha' }),
+        makeRuleSet({ id: 'rs-m', name: 'Mike' })
+      ]);
+      fixture.detectChanges();
+      const labels = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('mat-checkbox')
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(labels).toEqual(['Alpha', 'Mike', 'Zebra']);
+    });
+
+    it('reflects the current defaultRuleSetIds via the checkbox checked state', async () => {
+      const { fixture, prefs } = await create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+      setRuleSetCache([
+        makeRuleSet({ id: 'rs-1', name: 'One' }),
+        makeRuleSet({ id: 'rs-2', name: 'Two' })
+      ]);
+      prefs.update({ defaultRuleSetIds: ['rs-2'] });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isDefaultRuleSet('rs-1')).toBe(false);
+      expect(fixture.componentInstance.isDefaultRuleSet('rs-2')).toBe(true);
+    });
+
+    it('appends an ID when toggled on', async () => {
+      const { fixture, prefs } = await create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+      setRuleSetCache([
+        makeRuleSet({ id: 'rs-1', name: 'One' }),
+        makeRuleSet({ id: 'rs-2', name: 'Two' })
+      ]);
+      prefs.update({ defaultRuleSetIds: ['rs-1'] });
+      fixture.componentInstance.onDefaultRuleSetToggle('rs-2', true);
+      expect(prefs.prefs().defaultRuleSetIds).toEqual(['rs-1', 'rs-2']);
+    });
+
+    it('removes an ID when toggled off', async () => {
+      const { fixture, prefs } = await create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+      setRuleSetCache([
+        makeRuleSet({ id: 'rs-1', name: 'One' }),
+        makeRuleSet({ id: 'rs-2', name: 'Two' })
+      ]);
+      prefs.update({ defaultRuleSetIds: ['rs-1', 'rs-2'] });
+      fixture.componentInstance.onDefaultRuleSetToggle('rs-1', false);
+      expect(prefs.prefs().defaultRuleSetIds).toEqual(['rs-2']);
+    });
+
+    it('is a no-op when toggling on an ID already present', async () => {
+      const { fixture, prefs } = await create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+      prefs.update({ defaultRuleSetIds: ['rs-1'] });
+      const before = prefs.prefs().defaultRuleSetIds;
+      fixture.componentInstance.onDefaultRuleSetToggle('rs-1', true);
+      expect(prefs.prefs().defaultRuleSetIds).toBe(before);
+    });
+  });
 });
+
+function makeRuleSet(partial: { id: string; name: string }): FormattingRuleSet {
+  const now = new Date().toISOString();
+  return {
+    id: partial.id,
+    userId: 'u1',
+    name: partial.name,
+    rules: [],
+    version: 1,
+    createdAt: now,
+    updatedAt: now
+  };
+}

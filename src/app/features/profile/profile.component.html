@@ -247,6 +247,51 @@
         </div>
       </section>
 
+      <section class="prefs-group" aria-labelledby="prefs-default-rule-sets">
+        <h3
+          id="prefs-default-rule-sets"
+          class="group-title"
+          i18n="@@profile.prefs.defaultRuleSets.title"
+        >
+          Default rule sets
+        </h3>
+        <p class="group-help" i18n="@@profile.prefs.defaultRuleSets.help">
+          Highlight matches from these formatting rule sets when viewing
+          JSON. The same selection appears as chips in the toolbar above
+          the tree on the home page; changes here apply across all your
+          devices.
+        </p>
+
+        @if (ruleSetsEmpty()) {
+          <p
+            class="pref-help pref-help--inline"
+            i18n="@@profile.prefs.defaultRuleSets.empty"
+          >
+            No rule sets yet. Use "Clone preset" in the toolbar above the
+            tree on the home page to get started.
+          </p>
+        } @else if (ruleSetOptions() === null) {
+          <p
+            class="pref-help pref-help--inline"
+            i18n="@@profile.prefs.defaultRuleSets.loading"
+          >
+            Loading rule sets...
+          </p>
+        } @else {
+          <div class="pref-checkbox-list">
+            @for (set of ruleSetOptions(); track set.id) {
+              <mat-checkbox
+                [checked]="isDefaultRuleSet(set.id)"
+                [attr.data-set-id]="set.id"
+                (change)="onDefaultRuleSetToggle(set.id, $event.checked)"
+              >
+                {{ set.name }}
+              </mat-checkbox>
+            }
+          </div>
+        }
+      </section>
+
       <section class="prefs-group" aria-labelledby="prefs-highlight-colors">
         <h3
           id="prefs-highlight-colors"

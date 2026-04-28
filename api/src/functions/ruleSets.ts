@@ -7,8 +7,8 @@
  * PUT    /api/rule-sets/{id}        -> full replace; requires `If-Match: <version>`,
  *                                       412 on mismatch, 403 if not owner
  * DELETE /api/rule-sets/{id}        -> remove the rule set + clean up the user's
- *                                       `defaultRuleSetId` / `activeRuleSetIds`
- *                                       references; 204, 403 if not owner
+ *                                       `defaultRuleSetIds` references;
+ *                                       204, 403 if not owner
  *
  * Concurrency: each rule set carries an integer `version` field that is
  * surfaced to clients as a strong ETag and required via `If-Match` on
@@ -302,9 +302,9 @@ export async function deleteRuleSet(
 
     // Best-effort cleanup of the user's preference references. A
     // failure here must not roll back the delete - the rule set is
-    // already gone, and a stale `defaultRuleSetId` that points at a
-    // missing set is harmless because the frontend filters unknown
-    // IDs at read time. We log and move on.
+    // already gone, and a stale id in `defaultRuleSetIds` is harmless
+    // because the frontend filters unknown IDs at read time. We log
+    // and move on.
     try {
       await cleanupUserReferences(principal.id, found.id);
     } catch (error) {
@@ -319,31 +319,38 @@ export async function deleteRuleSet(
 
 /**
  * Strip references to the deleted rule set from the owner's user
- * document. Clears `defaultRuleSetId` if it pointed at this set and
- * filters the deleted ID out of `activeRuleSetIds`. Performs a
- * single upsert when (and only when) at least one of those values
- * actually changes - we don't churn `updatedAt` for users who never
+ * document. Filters the deleted ID out of `defaultRuleSetIds`.
+ * Performs a single upsert when (and only when) the array actually
+ * changes - we don't churn `updatedAt` for users who never
  * referenced the set.
  */
 async function cleanupUserReferences(userId: string, deletedSetId: string): Promise<void> {
   const user = await readUser(userId);
   if (!user) return;
   const prefs = user.preferences as
-    | (typeof user.preferences & { activeRuleSetIds?: string[] })
+    | (typeof user.preferences & {
+        defaultRuleSetIds?: string[];
+        // Legacy keys may still appear on stored docs that haven't
+        // been re-saved since M6f-5. Mirror the migration logic from
+        // normalizeStoredPreferences here so cleanup can run before
+        // the next read-then-write cycle.
+        activeRuleSetIds?: string[];
+        defaultRuleSetId?: string;
+      })
     | undefined;
   if (!prefs) return;
 
-  let changed = false;
+  const sourceArray = Array.isArray(prefs.defaultRuleSetIds)
+    ? prefs.defaultRuleSetIds
+    : Array.isArray(prefs.activeRuleSetIds)
+      ? prefs.activeRuleSetIds
+      : [];
+  if (!sourceArray.includes(deletedSetId)) return;
+
   const nextPrefs = { ...prefs };
-  if (prefs.defaultRuleSetId === deletedSetId) {
-    delete nextPrefs.defaultRuleSetId;
-    changed = true;
-  }
-  if (Array.isArray(prefs.activeRuleSetIds) && prefs.activeRuleSetIds.includes(deletedSetId)) {
-    nextPrefs.activeRuleSetIds = prefs.activeRuleSetIds.filter((id) => id !== deletedSetId);
-    changed = true;
-  }
-  if (!changed) return;
+  nextPrefs.defaultRuleSetIds = sourceArray.filter((id) => id !== deletedSetId);
+  delete (nextPrefs as { activeRuleSetIds?: string[] }).activeRuleSetIds;
+  delete (nextPrefs as { defaultRuleSetId?: string }).defaultRuleSetId;
 
   await upsertUser({
     ...user,

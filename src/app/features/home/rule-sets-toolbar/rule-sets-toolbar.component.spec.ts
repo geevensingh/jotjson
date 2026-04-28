@@ -136,10 +136,10 @@ describe('RuleSetsToolbarComponent', () => {
       expect(chips[1].textContent?.trim()).toBe('Beta');
     });
 
-    it('marks chips active when their id is in activeRuleSetIds', () => {
+    it('marks chips active when their id is in defaultRuleSetIds', () => {
       const prefs = TestBed.inject(PreferencesService);
       setCache([makeSet({ id: 'a', name: 'A' }), makeSet({ id: 'b', name: 'B' })]);
-      prefs.update({ activeRuleSetIds: ['a'] });
+      prefs.update({ defaultRuleSetIds: ['a'] });
 
       const fixture = render();
       const a = (fixture.nativeElement as HTMLElement).querySelector(
@@ -163,10 +163,10 @@ describe('RuleSetsToolbarComponent', () => {
         '.chip[data-set-id="a"]'
       ) as HTMLButtonElement;
       chip.click();
-      expect(prefs.prefs().activeRuleSetIds).toEqual(['a']);
+      expect(prefs.prefs().defaultRuleSetIds).toEqual(['a']);
 
       chip.click();
-      expect(prefs.prefs().activeRuleSetIds).toEqual([]);
+      expect(prefs.prefs().defaultRuleSetIds).toEqual([]);
     });
 
     it('shows the empty state when the user has no rule sets', () => {
@@ -208,9 +208,9 @@ describe('RuleSetsToolbarComponent', () => {
       const ruleSets = TestBed.inject(RuleSetsService);
       const prefs = TestBed.inject(PreferencesService);
       const cloned = makeSet({ id: 'cloned-1', name: 'Errors' });
-      // Cache must contain the cloned set so setActive() does not filter it.
+      // Cache must contain the cloned set so setDefaults() does not filter it.
       setCache([cloned]);
-      const setActiveSpy = spyOn(ruleSets, 'setActive').and.callThrough();
+      const setDefaultsSpy = spyOn(ruleSets, 'setDefaults').and.callThrough();
 
       const preset = makePreset({ id: 'p1', name: 'Error detection' });
       const ref = {
@@ -222,7 +222,7 @@ describe('RuleSetsToolbarComponent', () => {
       // so the persisted list ends up just ['cloned-1']. We assert on the
       // arg passed to setActive (the toolbar's intent), not the persisted
       // value.
-      prefs.update({ activeRuleSetIds: [] });
+      prefs.update({ defaultRuleSetIds: [] });
 
       const fixture = render();
       const trigger = (fixture.nativeElement as HTMLElement).querySelector(
@@ -231,8 +231,8 @@ describe('RuleSetsToolbarComponent', () => {
       trigger.click();
       tick();
 
-      expect(setActiveSpy).toHaveBeenCalledWith(['cloned-1']);
-      expect(prefs.prefs().activeRuleSetIds).toEqual(['cloned-1']);
+      expect(setDefaultsSpy).toHaveBeenCalledWith(['cloned-1']);
+      expect(prefs.prefs().defaultRuleSetIds).toEqual(['cloned-1']);
       expect(snackStub.open).toHaveBeenCalled();
       const toastMessage = snackStub.open.calls.mostRecent().args[0] as string;
       expect(toastMessage).toContain('Error detection');
@@ -241,7 +241,7 @@ describe('RuleSetsToolbarComponent', () => {
     it('does nothing when the user cancels the clone dialog', fakeAsync(() => {
       const ruleSets = TestBed.inject(RuleSetsService);
       setCache([]);
-      const setActiveSpy = spyOn(ruleSets, 'setActive');
+      const setDefaultsSpy = spyOn(ruleSets, 'setDefaults');
 
       const ref = {
         afterClosed: () => of(undefined)
@@ -255,7 +255,7 @@ describe('RuleSetsToolbarComponent', () => {
       trigger.click();
       tick();
 
-      expect(setActiveSpy).not.toHaveBeenCalled();
+      expect(setDefaultsSpy).not.toHaveBeenCalled();
       expect(snackStub.open).not.toHaveBeenCalled();
     }));
 

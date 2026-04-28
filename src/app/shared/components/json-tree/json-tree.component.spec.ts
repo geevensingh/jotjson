@@ -1314,7 +1314,7 @@ describe('JsonTreeComponent', () => {
           })
         ])
       ]);
-      prefs.update({ activeRuleSetIds: ['set-1'] });
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
       cmp.expandAll();
       fixture.detectChanges();
       const root = cmp.root()!;
@@ -1338,7 +1338,7 @@ describe('JsonTreeComponent', () => {
           })
         ])
       ]);
-      prefs.update({ activeRuleSetIds: ['set-1'] });
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
       cmp.expandAll();
       fixture.detectChanges();
 
@@ -1359,7 +1359,7 @@ describe('JsonTreeComponent', () => {
           makeRule({ target: 'value', matchType: 'exact', matchValue: '200' })
         ])
       ]);
-      prefs.update({ activeRuleSetIds: ['set-1'] });
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
       cmp.expandAll();
       fixture.detectChanges();
       const root = cmp.root()!;
@@ -1387,7 +1387,7 @@ describe('JsonTreeComponent', () => {
           })
         ])
       ]);
-      prefs.update({ activeRuleSetIds: ['set-1'] });
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
       cmp.expandAll();
       fixture.detectChanges();
       const root = cmp.root()!;
@@ -1411,7 +1411,7 @@ describe('JsonTreeComponent', () => {
           })
         ])
       ]);
-      prefs.update({ activeRuleSetIds: ['set-1'] });
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
       cmp.expandAll();
       fixture.detectChanges();
       const root = cmp.root()!;
@@ -1435,7 +1435,7 @@ describe('JsonTreeComponent', () => {
           })
         ])
       ]);
-      prefs.update({ activeRuleSetIds: ['set-1'] });
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
       cmp.expandAll();
       fixture.detectChanges();
       const root = cmp.root()!;
@@ -1459,7 +1459,7 @@ describe('JsonTreeComponent', () => {
           makeRule({ target: 'value', matchType: 'exact', matchValue: 'error' })
         ])
       ]);
-      prefs.update({ activeRuleSetIds: ['set-1'] });
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
       const root = cmp.root()!;
       const status = root.children!.find((c) => c.segment === 'status')!;
       const a = cmp.ruleResultFor(status);
@@ -1474,13 +1474,13 @@ describe('JsonTreeComponent', () => {
           makeRule({ id: 'r1', target: 'value', matchType: 'exact', matchValue: 'error' })
         ])
       ]);
-      prefs.update({ activeRuleSetIds: ['set-1'] });
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
       const root = cmp.root()!;
       const status = root.children!.find((c) => c.segment === 'status')!;
       const before = cmp.ruleResultFor(status);
 
       // Toggle off - now no rules apply, result must change identity.
-      prefs.update({ activeRuleSetIds: [] });
+      prefs.update({ defaultRuleSetIds: [] });
       const after = cmp.ruleResultFor(status);
       expect(before).not.toBe(after);
     });

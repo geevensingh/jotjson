@@ -20,22 +20,23 @@ import {
 
 /**
  * Toolbar pinned to the top of the tree pane that lets a signed-in user
- * (a) toggle which of their formatting rule sets are active, and
- * (b) clone one of the built-in presets into their account.
+ * (a) toggle which of their formatting rule sets are applied by default
+ * to the tree, and (b) clone one of the built-in presets into their
+ * account.
  *
  * Hidden entirely for anonymous users (per design decision 2026-04-27): the
  * presets / rule-sets endpoints are auth-gated, so an anon-visible toolbar
  * would either be empty or constantly bouncing through 401s.
  *
- * Active state lives in `UserPreferences.activeRuleSetIds`; toggling a chip
- * delegates to `RuleSetsService.toggleActive` which writes through
+ * Default-set state lives in `UserPreferences.defaultRuleSetIds`; toggling a
+ * chip delegates to `RuleSetsService.toggleDefault` which writes through
  * `PreferencesService.update`. `JsonTreeComponent` reads the same signal,
  * so the tree repaints synchronously when the user toggles.
  *
  * Clone flow opens `ClonePresetDialogComponent`. On success the returned set
- * is auto-activated so the tree paints immediately - users almost always
- * want to *use* a freshly cloned set, and the chip toggle is one extra
- * click for the rare case where they don't.
+ * is auto-added to the user's defaults so the tree paints immediately -
+ * users almost always want to *use* a freshly cloned set, and the chip
+ * toggle is one extra click for the rare case where they don't.
  */
 @Component({
   selector: 'jj-rule-sets-toolbar',
@@ -69,7 +70,7 @@ export class RuleSetsToolbarComponent implements OnInit {
     return [...cache].sort((a, b) => a.name.localeCompare(b.name));
   });
 
-  readonly activeIds = this.ruleSets.activeRuleSetIds;
+  readonly defaultIds = this.ruleSets.defaultRuleSetIds;
 
   /** True after the first successful list() resolves with no items. */
   readonly empty = computed(() => {
@@ -91,11 +92,11 @@ export class RuleSetsToolbarComponent implements OnInit {
   }
 
   isActive(id: string): boolean {
-    return this.activeIds().includes(id);
+    return this.defaultIds().includes(id);
   }
 
   onToggle(id: string): void {
-    this.ruleSets.toggleActive(id);
+    this.ruleSets.toggleDefault(id);
   }
 
   async onClonePresetClick(): Promise<void> {
@@ -112,8 +113,8 @@ export class RuleSetsToolbarComponent implements OnInit {
     const result = await firstValueFrom(ref.afterClosed());
     if (!result) return;
 
-    const next = [...this.activeIds(), result.cloned.id];
-    this.ruleSets.setActive(next);
+    const next = [...this.defaultIds(), result.cloned.id];
+    this.ruleSets.setDefaults(next);
 
     const message = $localize`:@@formattingRules.toolbar.cloneSuccess:Cloned ${result.preset.name}:name:.`;
     this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, {

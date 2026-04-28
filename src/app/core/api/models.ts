@@ -54,14 +54,19 @@ export interface UserPreferences {
   editorFontSize: number;
   editorTabSize: 2 | 4;
   defaultTreeExpansionDepth: number;
-  defaultRuleSetId?: string;
   /**
-   * Rule sets currently toggled on in the tree-view formatting toolbar.
-   * Persisted server-side so the active set survives across sessions and
-   * devices. IDs that no longer resolve to an owned rule set are
-   * filtered out at read time. See DESIGN_SPEC.md §Features 7.
+   * Rule sets applied by default when the user views JSON. The set is
+   * mirrored as toggleable chips in the tree-view formatting toolbar
+   * and as checkboxes on the Profile page. Persisted server-side so
+   * the selection survives across sessions and devices. IDs that no
+   * longer resolve to an owned rule set are filtered out at read
+   * time. See DESIGN_SPEC.md §Features 7.
+   *
+   * Renamed from `activeRuleSetIds` in M6f-5; the legacy key (and
+   * the legacy single-value `defaultRuleSetId`) are folded into this
+   * array on read for one release of stale-client tolerance.
    */
-  activeRuleSetIds: string[];
+  defaultRuleSetIds: string[];
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
   treeFontSize: number;

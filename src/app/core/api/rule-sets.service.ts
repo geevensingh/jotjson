@@ -40,9 +40,9 @@ import type {
  * the cache here, because a user with two tabs could legitimately PUT the
  * second tab's version against the first tab's body.
  *
- * Active rule-set selection lives in `UserPreferences.activeRuleSetIds`
+ * Default rule-set selection lives in `UserPreferences.defaultRuleSetIds`
  * and is mutated through `PreferencesService.update`. We expose
- * `activeRuleSetIds` and `activeRuleSets` as computed signals so consumers
+ * `defaultRuleSetIds` and `defaultRuleSets` as computed signals so consumers
  * never need to combine prefs and the cache themselves.
  */
 @Injectable({ providedIn: 'root' })
@@ -58,27 +58,27 @@ export class RuleSetsService {
   readonly ruleSets: Signal<FormattingRuleSet[] | null> = this._ruleSets.asReadonly();
 
   /**
-   * IDs the user currently has toggled on. Mirrors
-   * `UserPreferences.activeRuleSetIds` so any preference change (including
+   * IDs the user has selected as defaults. Mirrors
+   * `UserPreferences.defaultRuleSetIds` so any preference change (including
    * server hydration) is observed automatically.
    */
-  readonly activeRuleSetIds = computed(() => this.preferences.prefs().activeRuleSetIds);
+  readonly defaultRuleSetIds = computed(() => this.preferences.prefs().defaultRuleSetIds);
 
   /**
-   * Active rule sets resolved against the cache, in the order the user
+   * Default rule sets resolved against the cache, in the order the user
    * configured them. IDs that no longer resolve (e.g. another tab deleted
    * the set) are silently dropped, matching the model contract on
-   * `UserPreferences.activeRuleSetIds`.
+   * `UserPreferences.defaultRuleSetIds`.
    *
    * Returns an empty array when the cache has not yet loaded - the engine
    * is a no-op in that state, which is safer than rendering stale styling.
    */
-  readonly activeRuleSets = computed<FormattingRuleSet[]>(() => {
+  readonly defaultRuleSets = computed<FormattingRuleSet[]>(() => {
     const all = this._ruleSets();
     if (!all) return [];
     const byId = new Map(all.map((set) => [set.id, set]));
     const out: FormattingRuleSet[] = [];
-    for (const id of this.activeRuleSetIds()) {
+    for (const id of this.defaultRuleSetIds()) {
       const set = byId.get(id);
       if (set) out.push(set);
     }
@@ -89,7 +89,7 @@ export class RuleSetsService {
     // Drop the cache when the user signs out so a subsequent sign-in on the
     // same device cannot leak the previous user's rule sets through the
     // tree before its first list() resolves. PreferencesService already
-    // resets activeRuleSetIds via DEFAULT_PREFERENCES on sign-out.
+    // resets defaultRuleSetIds via DEFAULT_PREFERENCES on sign-out.
     effect(() => {
       const user = this.auth.user();
       if (!user) this._ruleSets.set(null);
@@ -126,13 +126,13 @@ export class RuleSetsService {
         if (current) {
           this._ruleSets.set(current.filter((s) => s.id !== id));
         }
-        // Also mirror the server-side cleanup of activeRuleSetIds so the
-        // toolbar reflects the deletion immediately, before the next prefs
-        // hydration round-trips.
-        const active = this.preferences.prefs().activeRuleSetIds;
-        if (active.includes(id)) {
+        // Also mirror the server-side cleanup of defaultRuleSetIds so the
+        // toolbar and profile reflect the deletion immediately, before the
+        // next prefs hydration round-trips.
+        const currentDefaults = this.preferences.prefs().defaultRuleSetIds;
+        if (currentDefaults.includes(id)) {
           this.preferences.update({
-            activeRuleSetIds: active.filter((x) => x !== id)
+            defaultRuleSetIds: currentDefaults.filter((x) => x !== id)
           });
         }
       })
@@ -153,14 +153,14 @@ export class RuleSetsService {
   }
 
   /**
-   * Mutate `UserPreferences.activeRuleSetIds`. Callers pass the full ID
+   * Mutate `UserPreferences.defaultRuleSetIds`. Callers pass the full ID
    * list; we filter out any IDs not present in the cache so the persisted
    * value does not accumulate dangling references after deletes from
    * other tabs. We DO NOT enforce ordering - the engine consumes them in
    * caller-supplied (== createdAt) order, but the toolbar may reorder
    * for display.
    */
-  setActive(ids: readonly string[]): void {
+  setDefaults(ids: readonly string[]): void {
     const cache = this._ruleSets();
     const known = cache ? new Set(cache.map((s) => s.id)) : null;
     const filtered = known ? ids.filter((id) => known.has(id)) : Array.from(ids);
@@ -173,18 +173,18 @@ export class RuleSetsService {
         deduped.push(id);
       }
     }
-    this.preferences.update({ activeRuleSetIds: deduped });
+    this.preferences.update({ defaultRuleSetIds: deduped });
   }
 
-  /** Toggle a single rule set's active state. No-op if the ID is unknown. */
-  toggleActive(id: string): void {
+  /** Toggle a single rule set's default state. No-op if the ID is unknown. */
+  toggleDefault(id: string): void {
     const cache = this._ruleSets();
     if (cache && !cache.some((s) => s.id === id)) return;
-    const current = this.preferences.prefs().activeRuleSetIds;
+    const current = this.preferences.prefs().defaultRuleSetIds;
     if (current.includes(id)) {
-      this.setActive(current.filter((x) => x !== id));
+      this.setDefaults(current.filter((x) => x !== id));
     } else {
-      this.setActive([...current, id]);
+      this.setDefaults([...current, id]);
     }
   }
 

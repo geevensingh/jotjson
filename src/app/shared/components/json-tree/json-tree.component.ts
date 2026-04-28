@@ -734,12 +734,12 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Memoized rule-engine evaluator for the current set of active rule
+   * Memoized rule-engine evaluator for the current set of default rule
    * sets. Recomputes (and resets the cache) only when
-   * `ruleSets.activeRuleSets()` changes - i.e. when the user toggles a
-   * set on/off OR when an active set's `version` changes after a save
-   * elsewhere. Unrelated tree updates (selection, search, expand) do
-   * NOT invalidate the cache.
+   * `ruleSets.defaultRuleSets()` changes - i.e. when the user toggles a
+   * set on/off OR when one of those sets' `version` changes after a
+   * save elsewhere. Unrelated tree updates (selection, search, expand)
+   * do NOT invalidate the cache.
    *
    * The cache key collapses two leaves to the same entry only when
    * their inputs to the engine are identical: same key (or both null
@@ -748,11 +748,11 @@ export class JsonTreeComponent {
    * collisions are correctness-preserving.
    *
    * Returns `EMPTY_RULE_RESULT` (frozen sentinel) by identity when no
-   * active sets are configured, which lets callers short-circuit
+   * default sets are configured, which lets callers short-circuit
    * cheaply on the no-formatting path.
    */
   private readonly evaluateNode = computed<(node: TreeNode) => RuleEngineResult>(() => {
-    const sets = this.ruleSets.activeRuleSets();
+    const sets = this.ruleSets.defaultRuleSets();
     if (sets.length === 0) {
       return () => EMPTY_RULE_RESULT;
     }
