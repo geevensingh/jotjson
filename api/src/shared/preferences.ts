@@ -298,12 +298,10 @@ export function normalizeStoredPreferences(
   // view to read and then strip it.
   const view: UserPreferences & { historyTrackingMode?: unknown } = { ...prefs };
   if (typeof view.recentlyViewedEnabled !== 'boolean') {
-    const legacy = view.historyTrackingMode;
-    // Both legacy values coerce to true. Anything else (missing or
-    // malformed) falls back to the new default of true.
-    view.recentlyViewedEnabled =
-      typeof legacy !== 'string' ||
-      (LEGACY_HISTORY_MODES as readonly string[]).includes(legacy);
+    // Both legacy `historyTrackingMode` values, missing values, and any
+    // malformed value all fall back to the new default of true. This is
+    // strictly less invasive than the legacy modes and the safest default.
+    view.recentlyViewedEnabled = true;
   }
   delete view.historyTrackingMode;
   // Stored docs written before M6f-5 had `activeRuleSetIds` (or even

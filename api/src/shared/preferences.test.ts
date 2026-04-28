@@ -1,4 +1,10 @@
-import { DEFAULT_PREFERENCES, normalizePreferences, PreferenceValidationError } from './preferences';
+import {
+  DEFAULT_PREFERENCES,
+  normalizePreferences,
+  normalizeStoredPreferences,
+  PreferenceValidationError,
+  UserPreferences
+} from './preferences';
 
 function valid(): unknown {
   return structuredClone(DEFAULT_PREFERENCES);
@@ -267,5 +273,57 @@ describe('normalizePreferences', () => {
     const bad = valid() as Record<string, unknown>;
     delete bad['searchValueType'];
     expect(() => normalizePreferences(bad)).toThrow(/searchValueType/);
+  });
+});
+
+describe('normalizeStoredPreferences', () => {
+  function storedWithoutRecentlyViewed(): Record<string, unknown> {
+    const base = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+    delete base['recentlyViewedEnabled'];
+    return base;
+  }
+
+  it('coerces legacy historyTrackingMode="save_only" to recentlyViewedEnabled=true', () => {
+    const stored = storedWithoutRecentlyViewed();
+    stored['historyTrackingMode'] = 'save_only';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.recentlyViewedEnabled).toBe(true);
+    expect((result as { historyTrackingMode?: unknown }).historyTrackingMode).toBeUndefined();
+  });
+
+  it('coerces legacy historyTrackingMode="all_actions" to recentlyViewedEnabled=true', () => {
+    const stored = storedWithoutRecentlyViewed();
+    stored['historyTrackingMode'] = 'all_actions';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.recentlyViewedEnabled).toBe(true);
+  });
+
+  it('defaults malformed legacy historyTrackingMode strings to recentlyViewedEnabled=true', () => {
+    const stored = storedWithoutRecentlyViewed();
+    stored['historyTrackingMode'] = 'garbage';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.recentlyViewedEnabled).toBe(true);
+    expect((result as { historyTrackingMode?: unknown }).historyTrackingMode).toBeUndefined();
+  });
+
+  it('defaults missing legacy and non-boolean recentlyViewedEnabled (null) to true', () => {
+    const stored = storedWithoutRecentlyViewed();
+    stored['recentlyViewedEnabled'] = null;
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.recentlyViewedEnabled).toBe(true);
+  });
+
+  it('preserves an explicit recentlyViewedEnabled=true', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES);
+    stored.recentlyViewedEnabled = true;
+    const result = normalizeStoredPreferences(stored);
+    expect(result.recentlyViewedEnabled).toBe(true);
+  });
+
+  it('preserves an explicit recentlyViewedEnabled=false', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES);
+    stored.recentlyViewedEnabled = false;
+    const result = normalizeStoredPreferences(stored);
+    expect(result.recentlyViewedEnabled).toBe(false);
   });
 });
