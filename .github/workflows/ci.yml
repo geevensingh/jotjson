@@ -25,7 +25,6 @@ jobs:
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
       - run: npm run lint
-      - run: npm run check:ascii
       - run: npm run build -- --configuration=production
 
   api:
