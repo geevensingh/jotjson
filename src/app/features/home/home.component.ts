@@ -4,6 +4,8 @@ import {
   DestroyRef,
   ElementRef,
   HostListener,
+  OnDestroy,
+  OnInit,
   computed,
   effect,
   inject,
@@ -57,6 +59,9 @@ import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.servic
 import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
 import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.component';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
+import { DropOverlayComponent } from './file-upload/drop-overlay.component';
+import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
+import { validateAndReadSingleFile } from '../../core/upload/upload-file-validator';
 
 /**
  * Primary editor + tree experience. Home is an anonymous page - persistence
@@ -72,13 +77,14 @@ import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.
     ToolbarComponent,
     StatusBarComponent,
     ClipboardBannerComponent,
-    RuleSetsToolbarComponent
+    RuleSetsToolbarComponent,
+    DropOverlayComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss'
 })
-export class HomeComponent {
+export class HomeComponent implements OnInit, OnDestroy {
   private readonly draft = inject(DraftService);
   private readonly prefs = inject(PreferencesService);
   private readonly parser = inject(JsonParserService);
@@ -93,6 +99,12 @@ export class HomeComponent {
   private readonly clipboard = inject(ClipboardPollingService);
   private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly logger = inject(LoggerService);
+  private readonly dropController = inject(DocumentDropController);
+
+  /** Mirrors the controller's drag-active signal for the drop overlay. */
+  readonly dropActive = this.dropController.dropActive;
+
+  private disposeDropHandler?: () => void;
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -366,14 +378,56 @@ export class HomeComponent {
     }
   }
 
+  ngOnInit(): void {
+    this.disposeDropHandler = this.dropController.registerEditorHandler(
+      (files) => {
+        void this.onFilesReceived(files);
+      }
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.disposeDropHandler?.();
+    this.disposeDropHandler = undefined;
+  }
+
   async onUpload(file: File): Promise<void> {
-    const MAX = 5 * 1024 * 1024;
-    if (file.size > MAX) {
-      this.logger.warn('home.upload.tooLarge', { size: file.size });
-      return;
+    await this.onFilesReceived([file]);
+  }
+
+  private async onFilesReceived(files: readonly File[]): Promise<void> {
+    const result = await validateAndReadSingleFile(files);
+    switch (result.kind) {
+      case 'ok':
+        this.content.set(result.text);
+        return;
+      case 'empty':
+        return;
+      case 'tooMany':
+        this.snack.open(
+          $localize`:@@home.upload.error.tooMany:Please drop one file at a time.`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 4000 }
+        );
+        return;
+      case 'tooLarge':
+        this.snack.open(
+          $localize`:@@home.upload.error.tooLarge:File too large - max 5 MB`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 4000 }
+        );
+        return;
+      case 'readFailed':
+        this.logger.warn('home.upload.readFailed', {
+          cause: String(result.cause)
+        });
+        this.snack.open(
+          $localize`:@@home.upload.error.readFailed:Could not read file`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 4000 }
+        );
+        return;
     }
-    const text = await file.text();
-    this.content.set(text);
   }
 
   onDownload(): void {

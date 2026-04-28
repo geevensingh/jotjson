@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, Injector } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { DocumentDropController } from './core/upload/document-drop-controller.service';
 
 @Component({
   selector: 'app-root',
@@ -11,6 +12,12 @@ export class AppComponent implements OnInit {
   readonly title = 'JotJSON';
 
   private readonly injector = inject(Injector);
+
+  // Eagerly inject so document drag-drop listeners attach at app start
+  // rather than lazily on first Home mount. This ensures off-route drops
+  // (on /history, /profile, etc.) are intercepted even if the user has
+  // not yet visited Home.
+  private readonly dropController = inject(DocumentDropController);
 
   ngOnInit(): void {
     // Note: returning-redirect handling and `AuthService.userSignal`

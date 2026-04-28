@@ -1,4 +1,5 @@
 <div class="home" [class.vertical]="layoutOrientation() === 'vertical'">
+  <jotjson-drop-overlay [visible]="dropActive()" />
   <jj-app-header>
     <jj-toolbar
       [mode]="mode()"

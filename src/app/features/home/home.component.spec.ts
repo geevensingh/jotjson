@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { of, throwError } from 'rxjs';
 import { HomeComponent } from './home.component';
@@ -12,6 +13,9 @@ import { QuotaNotificationService } from '../../core/quota/quota-notification.se
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import type { JsonBlob } from '../../core/api/models';
+import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
+import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
+import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -893,6 +897,158 @@ describe('HomeComponent blob actions (M4b)', () => {
       await fixture.componentInstance.onDeleteBlob();
       expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
       expect(snack.open).toHaveBeenCalled();
+  });
+});
+
+describe('HomeComponent drag-drop upload (M7b)', () => {
+  const PREFS_KEY = 'jotjson.preferences.v1';
+  const DRAFT_KEY = 'jotjson.draft.v1';
+  const SPLIT_KEY = 'jotjson.splitRatio.v1';
+
+  class FakeDropController {
+    readonly dropActive = signal(false);
+    registeredHandler?: (files: readonly File[]) => void;
+    readonly dispose = jasmine.createSpy('dispose');
+    readonly registerEditorHandler = jasmine
+      .createSpy('registerEditorHandler')
+      .and.callFake((handler: (files: readonly File[]) => void) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
+  function setup() {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    TestBed.resetTestingModule();
+    const fakeController = new FakeDropController();
+    const snack = { open: jasmine.createSpy('open') };
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: DocumentDropController, useValue: fakeController },
+        { provide: MatSnackBar, useValue: snack }
+      ]
+    });
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    return { fixture, fakeController, snack };
+  }
+
+  function makeOversizedFile(): File {
+    return {
+      size: MAX_UPLOAD_BYTES + 1,
+      text: () => Promise.resolve('')
+    } as unknown as File;
+  }
+
+  function makeRejectingFile(): File {
+    return {
+      size: 100,
+      text: () => Promise.reject(new Error('boom'))
+    } as unknown as File;
+  }
+
+  it('toolbar onUpload with oversized file toasts tooLarge and does not mutate content', async () => {
+    const { fixture, snack } = setup();
+    const before = fixture.componentInstance.content();
+    await fixture.componentInstance.onUpload(makeOversizedFile());
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    const args = snack.open.calls.mostRecent().args;
+    expect(args[0]).toContain('too large');
+    expect(fixture.componentInstance.content()).toBe(before);
+  });
+
+  it('toolbar onUpload with a valid file loads its text into content and does not toast', async () => {
+    const { fixture, snack } = setup();
+    const file = new File(['{"a":1}'], 'sample.json');
+    await fixture.componentInstance.onUpload(file);
+    expect(fixture.componentInstance.content()).toBe('{"a":1}');
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it('registers a drop handler with DocumentDropController on init', () => {
+    const { fakeController } = setup();
+    expect(fakeController.registerEditorHandler).toHaveBeenCalledTimes(1);
+    const handler = fakeController.registerEditorHandler.calls.mostRecent().args[0];
+    expect(typeof handler).toBe('function');
+  });
+
+  it('disposes the registered drop handler on destroy', () => {
+    const { fixture, fakeController } = setup();
+    expect(fakeController.dispose).not.toHaveBeenCalled();
+    fixture.destroy();
+    expect(fakeController.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('drop with a single valid file loads its text and does not toast', async () => {
+    const { fixture, fakeController, snack } = setup();
+    const handler = fakeController.registeredHandler!;
+    const file = {
+      size: 7,
+      text: () => Promise.resolve('{"b":2}')
+    } as unknown as File;
+    handler([file]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fixture.componentInstance.content()).toBe('{"b":2}');
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it('drop with multiple files toasts tooMany and does not mutate content', async () => {
+    const { fixture, fakeController, snack } = setup();
+    const before = fixture.componentInstance.content();
+    const file1 = new File(['{"a":1}'], 'a.json');
+    const file2 = new File(['{"b":2}'], 'b.json');
+    fakeController.registeredHandler!([file1, file2]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('one file');
+    expect(fixture.componentInstance.content()).toBe(before);
+  });
+
+  it('drop with an oversized file toasts tooLarge', async () => {
+    const { fixture, fakeController, snack } = setup();
+    const before = fixture.componentInstance.content();
+    fakeController.registeredHandler!([makeOversizedFile()]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('too large');
+    expect(fixture.componentInstance.content()).toBe(before);
+  });
+
+  it('drop where File.text() rejects toasts readFailed', async () => {
+    const { fakeController, snack } = setup();
+    fakeController.registeredHandler!([makeRejectingFile()]);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('Could not read');
+  });
+
+  it('exposes dropActive that mirrors the controller signal and is bound to the overlay', () => {
+    const { fixture, fakeController } = setup();
+    expect(fixture.componentInstance.dropActive()).toBe(false);
+    fakeController.dropActive.set(true);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    expect(fixture.componentInstance.dropActive()).toBe(true);
+
+    const overlayDebug = fixture.debugElement.query(
+      (debugEl) => debugEl.componentInstance instanceof DropOverlayComponent
+    );
+    expect(overlayDebug).toBeTruthy();
+    const overlay = overlayDebug.componentInstance as DropOverlayComponent;
+    expect(overlay.visible()).toBe(true);
+
+    fakeController.dropActive.set(false);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    expect(overlay.visible()).toBe(false);
   });
 });
 

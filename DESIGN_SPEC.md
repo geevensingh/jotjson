@@ -1253,7 +1253,7 @@ EU users would need a regional resource - out of scope for v1.
      conventions that emerged.
 7. **Polish & launch** - Each of these lands as its own step/commit:
    - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)
-   - **M7b**: Drag-and-drop file upload with full-page drop overlay (Home page §1).
+   - ~~**M7b**: Drag-and-drop file upload with full-page drop overlay (Home page §1).~~ (done)
    - ~~**M7c**: Smart date/time detection + relative-time annotations in the tree view (Home page §1).~~ (done)
    - ~~**M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).~~ (done)
    - ~~**M7e**: Custom domain (`jotjson.com`).~~ (done)
