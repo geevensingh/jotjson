@@ -174,9 +174,11 @@ export class RuleEditorComponent implements OnInit {
         $localize`:@@ruleEditor.validity.tooManyRules:Too many rules (max 50).`
       );
     }
+    let hasEmptyMatchValue = false;
     let hasLongMatchValue = false;
     let hasBadHex = false;
     for (const rule of e.rules) {
+      if (rule.matchValue.trim() === '') hasEmptyMatchValue = true;
       if (rule.matchValue.length > MATCH_VALUE_MAX) hasLongMatchValue = true;
       const colors = [
         rule.style.backgroundColor,
@@ -186,6 +188,11 @@ export class RuleEditorComponent implements OnInit {
       for (const c of colors) {
         if (c && !HEX_COLOR.test(c)) hasBadHex = true;
       }
+    }
+    if (hasEmptyMatchValue) {
+      reasons.push(
+        $localize`:@@ruleEditor.validity.matchValueEmpty:One or more rules are missing a match value.`
+      );
     }
     if (hasLongMatchValue) {
       reasons.push(

@@ -232,6 +232,50 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       ctx.fixture.componentInstance.patchStyle(0, { backgroundColor: '#abcdef' });
       expect(ctx.fixture.componentInstance.validity().kind).toBe('valid');
     });
+
+    it('addRule on a freshly-loaded set leaves validity invalid with matchValueEmpty reason', () => {
+      const ctx = loaded();
+      ctx.fixture.componentInstance.addRule();
+      const v = ctx.fixture.componentInstance.validity();
+      expect(v.kind).toBe('invalid');
+      if (v.kind === 'invalid') {
+        expect(v.reasons.some((r) => r.includes('missing a match value'))).toBeTrue();
+      }
+    });
+
+    it('flags whitespace-only matchValue as empty', () => {
+      const ctx = loaded();
+      ctx.fixture.componentInstance.patchRule(0, { matchValue: '   ' });
+      const v = ctx.fixture.componentInstance.validity();
+      expect(v.kind).toBe('invalid');
+      if (v.kind === 'invalid') {
+        expect(v.reasons.some((r) => r.includes('missing a match value'))).toBeTrue();
+      }
+    });
+  });
+
+  describe('autosave gated on empty matchValue (fu1)', () => {
+    it('autosave does not fire while a rule has empty matchValue', fakeAsync(() => {
+      const ctx = loaded();
+      ctx.fixture.componentInstance.addRule();
+      tick(600);
+      ctx.fixture.detectChanges();
+      expect(ctx.service.update).not.toHaveBeenCalled();
+      expect(ctx.fixture.componentInstance.pillState().kind).toBe('invalid');
+    }));
+
+    it('filling matchValue clears the reason and unblocks autosave', fakeAsync(() => {
+      const ctx = loaded(ruleSet({ rules: [rule({ matchValue: '' })] }));
+      // Initial validity is invalid (loaded with empty matchValue).
+      expect(ctx.fixture.componentInstance.validity().kind).toBe('invalid');
+      ctx.fixture.componentInstance.patchRule(0, { matchValue: 'foo' });
+      tick(600);
+      ctx.fixture.detectChanges();
+      expect(ctx.service.update).toHaveBeenCalledTimes(1);
+      ctx.service.updateSubjects[0].next(ruleSet({ name: 'My set', version: 2 }));
+      ctx.service.updateSubjects[0].complete();
+      flush();
+    }));
   });
 
   describe('autosave pipeline', () => {

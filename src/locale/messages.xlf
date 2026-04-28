@@ -26,19 +26,19 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">333</context>
+          <context context-type="linenumber">340</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">446</context>
+          <context context-type="linenumber">453</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">457</context>
+          <context context-type="linenumber">464</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">530</context>
+          <context context-type="linenumber">537</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
@@ -795,43 +795,50 @@
           <context context-type="linenumber">174</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="ruleEditor.validity.matchValueEmpty" datatype="html">
+        <source>One or more rules are missing a match value.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
+          <context context-type="linenumber">194</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="ruleEditor.validity.matchValueLong" datatype="html">
         <source>One or more rules have a match value that is too long (max 200 characters).</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">192</context>
+          <context context-type="linenumber">199</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.validity.badHex" datatype="html">
         <source>One or more rules have an invalid color (must be #rrggbb).</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">197</context>
+          <context context-type="linenumber">204</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.notFound" datatype="html">
         <source>Rule set not found.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">332</context>
+          <context context-type="linenumber">339</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.deleted" datatype="html">
         <source>This rule set was deleted.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">445</context>
+          <context context-type="linenumber">452</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">529</context>
+          <context context-type="linenumber">536</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.reloadFailed" datatype="html">
         <source>Reload failed. Please try again.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
-          <context context-type="linenumber">456</context>
+          <context context-type="linenumber">463</context>
         </context-group>
       </trans-unit>
       <trans-unit id="rulePreview.heading" datatype="html">
