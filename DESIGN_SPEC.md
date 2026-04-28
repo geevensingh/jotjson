@@ -91,6 +91,7 @@ Browser (Angular SPA)
   defaultRuleSetIds: string[] (default: [] - rule sets applied by default when viewing JSON; mirrored in the home-page toolbar chips and the Profile multi-select; persisted server-side so the selection survives across sessions and devices; IDs that no longer resolve to an owned rule set are filtered out on read),
   editorWordWrap: boolean (default: true),
   layoutOrientation: "horizontal" | "vertical" (default: "horizontal" - editor left, tree right; "vertical" = editor top, tree bottom),
+  treeFontSize: number (default: 13, range: 8-32),
   treeShowTypeLabels: boolean (default: true),
   treeShowDateAnnotations: boolean (default: true),
   treeAssumeUtcForIsoDateTime: boolean (default: true - timezone-less ISO 8601 date-time strings are interpreted as UTC instead of local; matches the conventional reading of log timestamps and other machine-emitted ISO values),
@@ -153,10 +154,10 @@ ThemeColorSet {
 
 | Color | Dark theme default | Light theme default |
 |---|---|---|
-| `selectionColor` | `#264F78` (muted blue) | `#CCE4F7` (soft sky blue) |
-| `matchingValueColor` | `#3E3D32` (warm gray) | `#FFF4CC` (pale amber) |
-| `ancestorColor` | `#2A2D2E` (subtle dark) | `#ECECEC` (subtle light gray) |
-| `searchHighlightColor` | `#6A4C00` (muted amber/gold) | `#FFE082` (soft yellow) |
+| `selectionColor` | `#264f78` (muted blue) | `#cce4f7` (soft sky blue) |
+| `matchingValueColor` | `#3e3d32` (warm gray) | `#fff4cc` (pale amber) |
+| `ancestorColor` | `#2a2d2e` (subtle dark) | `#ececec` (subtle light gray) |
+| `searchHighlightColor` | `#6a4c00` (muted amber/gold) | `#ffe082` (soft yellow) |
 
 When the user has not overridden a color for a given theme, the app uses that theme's default. Switching themes swaps the active color set; overrides for the inactive theme are preserved. The "Reset to defaults" button in Profile -> Preferences restores the defaults for the **currently active theme only**.
 
@@ -858,7 +859,7 @@ Static public assets (favicons, manifest, etc.) live at the repo-root
 |---|---|---|
 | Azure Static Web Apps | Standard | Hosts SPA + proxies to managed Functions. Upgraded from Free to Standard during M7e (apex custom-domain binding requires Standard). Standard also enables the Cosmos-via-managed-identity path planned in M7o (bring-your-own Functions). |
 | Azure Functions | Consumption | Serverless API |
-| Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (partitionKey: `/ownerId`) and `users` (`/id`) in v1. Planned: `history` (`/userId`, M5) and `rule-sets` (`/userId`, M6). |
+| Cosmos DB | Serverless | Database: `jotjson`. Containers + partition keys: `blobs` (`/ownerId`), `users` (`/id`), `history` (`/userId`), `rule-sets` (`/userId`). |
 | Microsoft Entra External ID | Free (50k MAU) | Identity |
 | Azure Blob Storage | Standard LRS | User avatars + export ZIP artifacts (SAS-linked, 1-hour TTL) |
 | Azure Front Door | *(deferred post-v1)* | Add for WAF / advanced routing if needed |
