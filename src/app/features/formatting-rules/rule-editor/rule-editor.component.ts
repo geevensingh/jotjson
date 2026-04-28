@@ -3,19 +3,22 @@ import {
   Component,
   DestroyRef,
   OnInit,
+  computed,
   inject,
   signal
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { firstValueFrom } from 'rxjs';
+import { EMPTY, Observable, Subject, catchError, concatMap, debounceTime, filter, firstValueFrom, merge, of, tap } from 'rxjs';
 
+import { AuthService } from '../../../core/auth/auth.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import {
   FORMATTING_ICONS,
@@ -28,7 +31,40 @@ import { AppHeaderComponent } from '../../../shared/components/app-header/app-he
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 
 type LoadState = 'loading' | 'ready' | 'not_found' | 'error';
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type SaveState = 'idle' | 'saving' | 'error';
+
+interface Editable {
+  name: string;
+  rules: FormattingRule[];
+}
+
+interface ServerMeta {
+  id: string;
+  version: number;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type Validity =
+  | { kind: 'valid' }
+  | { kind: 'invalid'; reasons: string[] };
+
+type PillState =
+  | { kind: 'reloading' }
+  | { kind: 'invalid'; reasons: string[] }
+  | { kind: 'saving' }
+  | { kind: 'error' }
+  | { kind: 'saved' }
+  | { kind: 'editing' }
+  | { kind: 'idle' };
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const NAME_MAX = 80;
+const MATCH_VALUE_MAX = 200;
+const MAX_RULES = 50;
+const SAVE_DEBOUNCE_MS = 500;
+const SAVED_FLASH_MS = 2000;
 
 const DEFAULT_NEW_RULE_STYLE = (): FormattingRule['style'] => ({
   backgroundColor: '#ffe4b5',
@@ -36,10 +72,37 @@ const DEFAULT_NEW_RULE_STYLE = (): FormattingRule['style'] => ({
 });
 
 /**
- * M6d-1 rule editor. Loads a single rule set by route id, lets the
- * signed-in user edit its name and rules, and saves on demand via a
- * manual "Save" button. Valid-only autosave + 412 concurrency banner +
- * live preview ship in M6d-2 / M6d-3.
+ * M6d-2 rule editor. Layers valid-only autosave + 412 conflict
+ * banner on top of the M6d-1 scaffold.
+ *
+ * Why `concatMap` and not `switchMap`: cancelling an in-flight
+ * `PUT /api/rule-sets/:id` does NOT guarantee the server discarded
+ * it. If the server committed the write, the next save would PUT
+ * with a stale `If-Match` version and 412 falsely. We therefore run
+ * saves one-at-a-time and let any newer queued edit fire its own
+ * save with the freshly-acknowledged version.
+ *
+ * State decomposition:
+ *  - `serverMeta` is the last acknowledged server snapshot meta
+ *    (id / version / timestamps). Saves always pass
+ *    `serverMeta().version`, never a version cached in the editable
+ *    payload.
+ *  - `editable` is the user-editable payload (`name`, `rules`).
+ *    Every form mutator writes here.
+ *  - `lastSavedFingerprint` is `JSON.stringify(editable)` after the
+ *    most recent successful save (or after initial load). The
+ *    autosave gate compares `fingerprint(editable) !==
+ *    lastSavedFingerprint` to detect dirtiness; identity / version
+ *    comparisons are unreliable because every keystroke creates a
+ *    new object.
+ *
+ * Late-response and routing guards:
+ *  - The route's `:id` may change while a save is in flight. Each
+ *    save captures the route id and the signed-in user id at
+ *    issue-time and bails before mutating any signal if they no
+ *    longer match.
+ *  - Sign-out clears `auth.user()`. In-flight saves bail on the
+ *    user-id check rather than re-seed the cleared cache.
  */
 @Component({
   selector: 'app-rule-editor',
@@ -51,6 +114,7 @@ const DEFAULT_NEW_RULE_STYLE = (): FormattingRule['style'] => ({
     MatButtonModule,
     MatButtonToggleModule,
     MatSlideToggleModule,
+    MatTooltipModule,
     RouterLink
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,12 +125,18 @@ export class RuleEditorComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly service = inject(RuleSetsService);
+  private readonly auth = inject(AuthService);
   private readonly snack = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly loadState = signal<LoadState>('loading');
   readonly saveState = signal<SaveState>('idle');
-  readonly draft = signal<FormattingRuleSet | null>(null);
+  readonly editable = signal<Editable | null>(null);
+  readonly serverMeta = signal<ServerMeta | null>(null);
+  readonly lastSavedFingerprint = signal<string>('');
+  readonly conflict = signal<boolean>(false);
+  readonly reloading = signal<boolean>(false);
+  readonly savedFlash = signal<boolean>(false);
 
   readonly icons: readonly FormattingIcon[] = FORMATTING_ICONS;
   readonly targetOptions: readonly FormattingRule['target'][] = [
@@ -81,6 +151,74 @@ export class RuleEditorComponent implements OnInit {
     'ends_with'
   ];
 
+  /** `true` while either a 412 conflict banner is up or a Reload is in flight. */
+  readonly formDisabled = computed(
+    () => this.conflict() || this.reloading()
+  );
+
+  readonly validity = computed<Validity>(() => {
+    const e = this.editable();
+    if (!e) return { kind: 'valid' };
+    const reasons: string[] = [];
+    if (!e.name.trim()) {
+      reasons.push($localize`:@@ruleEditor.validity.nameEmpty:Name is required.`);
+    } else if (e.name.length > NAME_MAX) {
+      reasons.push(
+        $localize`:@@ruleEditor.validity.nameLong:Name is too long (max 80 characters).`
+      );
+    }
+    if (e.rules.length > MAX_RULES) {
+      reasons.push(
+        $localize`:@@ruleEditor.validity.tooManyRules:Too many rules (max 50).`
+      );
+    }
+    let hasLongMatchValue = false;
+    let hasBadHex = false;
+    for (const rule of e.rules) {
+      if (rule.matchValue.length > MATCH_VALUE_MAX) hasLongMatchValue = true;
+      const colors = [
+        rule.style.backgroundColor,
+        rule.style.textColor,
+        rule.style.borderColor
+      ];
+      for (const c of colors) {
+        if (c && !HEX_COLOR.test(c)) hasBadHex = true;
+      }
+    }
+    if (hasLongMatchValue) {
+      reasons.push(
+        $localize`:@@ruleEditor.validity.matchValueLong:One or more rules have a match value that is too long (max 200 characters).`
+      );
+    }
+    if (hasBadHex) {
+      reasons.push(
+        $localize`:@@ruleEditor.validity.badHex:One or more rules have an invalid color (must be #rrggbb).`
+      );
+    }
+    return reasons.length === 0
+      ? { kind: 'valid' }
+      : { kind: 'invalid', reasons };
+  });
+
+  readonly isDirty = computed(() => {
+    const e = this.editable();
+    if (!e) return false;
+    return this.fingerprint(e) !== this.lastSavedFingerprint();
+  });
+
+  readonly pillState = computed<PillState>(() => {
+    if (this.reloading()) return { kind: 'reloading' };
+    const v = this.validity();
+    if (v.kind === 'invalid' && this.isDirty()) {
+      return { kind: 'invalid', reasons: v.reasons };
+    }
+    if (this.saveState() === 'saving') return { kind: 'saving' };
+    if (this.saveState() === 'error') return { kind: 'error' };
+    if (this.savedFlash() && !this.isDirty()) return { kind: 'saved' };
+    if (this.isDirty()) return { kind: 'editing' };
+    return { kind: 'idle' };
+  });
+
   /** Auto-generated label per F1: e.g. `key contains "error"`. */
   ruleLabel(rule: FormattingRule): string {
     const targetLabel =
@@ -90,7 +228,23 @@ export class RuleEditorComponent implements OnInit {
     return `${targetLabel} ${verb} ${value}`;
   }
 
+  /** Joined list of validity reasons for the pill tooltip. */
+  invalidReasonsText(reasons: readonly string[]): string {
+    return reasons.join(' ');
+  }
+
+  private currentId: string | null = null;
+  private savedFlashToken = 0;
+  private readonly retryTrigger$ = new Subject<void>();
+
+  // Capture the editable observable in field-initializer (injection)
+  // context so `toObservable` is legal here. The subscription is
+  // wired up in ngOnInit so destroyRef + auth are usable.
+  private readonly editable$ = toObservable(this.editable);
+
   ngOnInit(): void {
+    this.setupAutosave();
+
     this.route.paramMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((params) => {
@@ -99,23 +253,53 @@ export class RuleEditorComponent implements OnInit {
           void this.router.navigate(['/formatting-rules']);
           return;
         }
+        this.resetForId(id);
         void this.loadById(id);
       });
   }
 
-  private async loadById(id: string): Promise<void> {
+  private resetForId(id: string): void {
+    this.currentId = id;
     this.loadState.set('loading');
+    this.saveState.set('idle');
+    this.editable.set(null);
+    this.serverMeta.set(null);
+    this.lastSavedFingerprint.set('');
+    this.conflict.set(false);
+    this.reloading.set(false);
+    this.savedFlash.set(false);
+    this.savedFlashToken += 1;
+  }
+
+  private hydrateFrom(set: FormattingRuleSet): void {
+    const cloned = this.cloneRules(set.rules);
+    this.editable.set({ name: set.name, rules: cloned });
+    this.serverMeta.set({
+      id: set.id,
+      version: set.version,
+      userId: set.userId,
+      createdAt: set.createdAt,
+      updatedAt: set.updatedAt
+    });
+    this.lastSavedFingerprint.set(
+      this.fingerprint({ name: set.name, rules: cloned })
+    );
+  }
+
+  private async loadById(id: string): Promise<void> {
     const cached = this.service.ruleSets()?.find((s) => s.id === id);
     if (cached) {
-      this.draft.set(this.cloneSet(cached));
+      this.hydrateFrom(cached);
       this.loadState.set('ready');
       return;
     }
     try {
       const set = await firstValueFrom(this.service.get(id));
-      this.draft.set(this.cloneSet(set));
+      if (this.currentId !== id) return;
+      this.hydrateFrom(set);
       this.loadState.set('ready');
     } catch (err) {
+      if (this.currentId !== id) return;
       if (err instanceof HttpErrorResponse && err.status === 404) {
         this.loadState.set('not_found');
         this.snack.open(
@@ -131,13 +315,15 @@ export class RuleEditorComponent implements OnInit {
   }
 
   setName(value: string): void {
-    const current = this.draft();
+    if (this.formDisabled()) return;
+    const current = this.editable();
     if (!current) return;
-    this.draft.set({ ...current, name: value });
+    this.editable.set({ ...current, name: value });
   }
 
   addRule(): void {
-    const current = this.draft();
+    if (this.formDisabled()) return;
+    const current = this.editable();
     if (!current) return;
     const newRule: FormattingRule = {
       id: this.newRuleId(),
@@ -147,51 +333,56 @@ export class RuleEditorComponent implements OnInit {
       caseSensitive: false,
       style: DEFAULT_NEW_RULE_STYLE()
     };
-    this.draft.set({ ...current, rules: [...current.rules, newRule] });
+    this.editable.set({ ...current, rules: [...current.rules, newRule] });
   }
 
   removeRule(index: number): void {
-    const current = this.draft();
+    if (this.formDisabled()) return;
+    const current = this.editable();
     if (!current) return;
     const next = current.rules.slice();
     next.splice(index, 1);
-    this.draft.set({ ...current, rules: next });
+    this.editable.set({ ...current, rules: next });
   }
 
   moveRule(index: number, direction: -1 | 1): void {
-    const current = this.draft();
+    if (this.formDisabled()) return;
+    const current = this.editable();
     if (!current) return;
     const target = index + direction;
     if (target < 0 || target >= current.rules.length) return;
     const next = current.rules.slice();
     const [moved] = next.splice(index, 1);
     next.splice(target, 0, moved);
-    this.draft.set({ ...current, rules: next });
+    this.editable.set({ ...current, rules: next });
   }
 
   patchRule(index: number, patch: Partial<FormattingRule>): void {
-    const current = this.draft();
+    if (this.formDisabled()) return;
+    const current = this.editable();
     if (!current) return;
     const next = current.rules.slice();
     const merged = { ...next[index], ...patch };
     next[index] = merged;
-    this.draft.set({ ...current, rules: next });
+    this.editable.set({ ...current, rules: next });
   }
 
   patchStyle(
     index: number,
     patch: Partial<FormattingRule['style']>
   ): void {
-    const current = this.draft();
+    if (this.formDisabled()) return;
+    const current = this.editable();
     if (!current) return;
     const next = current.rules.slice();
     const rule = next[index];
     next[index] = { ...rule, style: { ...rule.style, ...patch } };
-    this.draft.set({ ...current, rules: next });
+    this.editable.set({ ...current, rules: next });
   }
 
   /** Set the icon dropdown; empty string clears the icon. */
   setIcon(index: number, value: string): void {
+    if (this.formDisabled()) return;
     if (value === '') {
       this.patchStyle(index, { icon: undefined });
       return;
@@ -201,42 +392,47 @@ export class RuleEditorComponent implements OnInit {
     this.patchStyle(index, { icon });
   }
 
-  /**
-   * Manual save (M6d-1). Sends the current draft via PUT with the
-   * cached version. Autosave + 412 conflict banner ship in M6d-2.
-   */
-  async onSave(): Promise<void> {
-    const current = this.draft();
-    if (!current) return;
-    if (this.saveState() === 'saving') return;
-    this.saveState.set('saving');
+  /** Manual retry from the `Save failed - retry` pill. */
+  retrySave(): void {
+    if (!this.canFireSave()) return;
+    this.retryTrigger$.next();
+  }
+
+  /** Reload the rule set from the server, discarding local edits. */
+  async reload(): Promise<void> {
+    if (this.reloading()) return;
+    const id = this.currentId;
+    if (!id) return;
+    const userId = this.auth.user()?.id ?? null;
+    this.reloading.set(true);
     try {
-      const next = await firstValueFrom(
-        this.service.update(
-          current.id,
-          { name: current.name, rules: current.rules },
-          current.version
-        )
-      );
-      this.draft.set(this.cloneSet(next));
-      this.saveState.set('saved');
-      // Auto-revert to idle after a moment so the user knows when a
-      // subsequent edit lands them back in 'idle' (M6d-2 will replace
-      // this with a real Editing state).
-      setTimeout(() => {
-        if (this.saveState() === 'saved') this.saveState.set('idle');
-      }, 2000);
+      const set = await firstValueFrom(this.service.get(id));
+      if (this.currentId !== id) return;
+      if ((this.auth.user()?.id ?? null) !== userId) return;
+      this.hydrateFrom(set);
+      this.conflict.set(false);
+      this.saveState.set('idle');
     } catch (err) {
-      this.saveState.set('error');
-      const message =
-        err instanceof HttpErrorResponse && err.status === 412
-          ? $localize`:@@ruleEditor.save.conflict:This rule set was changed in another tab. Reload to continue.`
-          : $localize`:@@ruleEditor.save.failed:Save failed. Please try again.`;
+      if (this.currentId !== id) return;
+      if (err instanceof HttpErrorResponse && err.status === 404) {
+        this.snack.open(
+          $localize`:@@ruleEditor.deleted:This rule set was deleted.`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 5000 }
+        );
+        void this.router.navigate(['/formatting-rules']);
+        return;
+      }
+      // Banner stays up; surface a transient toast so the user knows
+      // their click did something. Conflict remains true so they can
+      // retry.
       this.snack.open(
-        message,
+        $localize`:@@ruleEditor.reloadFailed:Reload failed. Please try again.`,
         $localize`:@@common.dismiss:Dismiss`,
         { duration: 5000 }
       );
+    } finally {
+      if (this.currentId === id) this.reloading.set(false);
     }
   }
 
@@ -244,11 +440,113 @@ export class RuleEditorComponent implements OnInit {
     return rule.id;
   }
 
-  private cloneSet(set: FormattingRuleSet): FormattingRuleSet {
-    return {
-      ...set,
-      rules: set.rules.map((r) => ({ ...r, style: { ...r.style } }))
+  private setupAutosave(): void {
+    merge(this.editable$, this.retryTrigger$)
+      .pipe(
+        debounceTime(SAVE_DEBOUNCE_MS),
+        filter(() => this.canFireSave()),
+        concatMap(() => this.fireSave()),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe();
+  }
+
+  private canFireSave(): boolean {
+    if (this.formDisabled()) return false;
+    if (!this.auth.user()) return false;
+    const meta = this.serverMeta();
+    if (!meta) return false;
+    if (this.validity().kind !== 'valid') return false;
+    if (!this.isDirty()) return false;
+    return true;
+  }
+
+  private fireSave(): Observable<unknown> {
+    const editable = this.editable();
+    const meta = this.serverMeta();
+    const id = this.currentId;
+    const userId = this.auth.user()?.id ?? null;
+    if (!editable || !meta || !id) return of(null);
+    const payload: Editable = {
+      name: editable.name,
+      rules: editable.rules
     };
+    const fingerprint = this.fingerprint(payload);
+
+    this.saveState.set('saving');
+    return this.service.update(id, payload, meta.version).pipe(
+      tap((response) => {
+        if (this.currentId !== id) return;
+        if ((this.auth.user()?.id ?? null) !== userId) return;
+        this.serverMeta.set({
+          id: response.id,
+          version: response.version,
+          userId: response.userId,
+          createdAt: response.createdAt,
+          updatedAt: response.updatedAt
+        });
+        this.lastSavedFingerprint.set(fingerprint);
+        this.saveState.set('idle');
+        this.flashSaved();
+      }),
+      catchError((err) => {
+        if (this.currentId !== id) return EMPTY;
+        if ((this.auth.user()?.id ?? null) !== userId) return EMPTY;
+        if (err instanceof HttpErrorResponse) {
+          if (err.status === 412) {
+            this.conflict.set(true);
+            this.saveState.set('idle');
+            return EMPTY;
+          }
+          if (err.status === 404) {
+            this.snack.open(
+              $localize`:@@ruleEditor.deleted:This rule set was deleted.`,
+              $localize`:@@common.dismiss:Dismiss`,
+              { duration: 5000 }
+            );
+            void this.router.navigate(['/formatting-rules']);
+            return EMPTY;
+          }
+        }
+        this.saveState.set('error');
+        return EMPTY;
+      })
+    );
+  }
+
+  private flashSaved(): void {
+    this.savedFlashToken += 1;
+    const token = this.savedFlashToken;
+    this.savedFlash.set(true);
+    setTimeout(() => {
+      if (this.savedFlashToken === token) this.savedFlash.set(false);
+    }, SAVED_FLASH_MS);
+  }
+
+  private fingerprint(e: Editable): string {
+    return JSON.stringify({
+      name: e.name,
+      rules: e.rules.map((r) => ({
+        id: r.id,
+        target: r.target,
+        matchType: r.matchType,
+        matchValue: r.matchValue,
+        caseSensitive: r.caseSensitive,
+        style: {
+          backgroundColor: r.style.backgroundColor ?? null,
+          textColor: r.style.textColor ?? null,
+          borderColor: r.style.borderColor ?? null,
+          bold: r.style.bold ?? false,
+          italic: r.style.italic ?? false,
+          underline: r.style.underline ?? false,
+          icon: r.style.icon ?? null
+        }
+      }))
+    });
+  }
+
+  private cloneRules(rules: FormattingRule[]): FormattingRule[] {
+    return rules.map((r) => ({ ...r, style: { ...r.style } }));
   }
 
   private newRuleId(): string {
