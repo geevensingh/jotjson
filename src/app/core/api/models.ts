@@ -74,7 +74,6 @@ export interface UserPreferences {
   treeShowDateAnnotations: boolean;
   treeAssumeUtcForIsoDateTime: boolean;
   treeAssumeUtcForIsoDateOnly: boolean;
-  historyTrackingMode?: 'save_only' | 'all_actions';
   recentlyViewedEnabled: boolean;
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
