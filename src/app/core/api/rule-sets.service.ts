@@ -140,13 +140,13 @@ export class RuleSetsService {
   }
 
   listPresets(): Observable<RuleSetPreset[]> {
-    return this.http.get<RuleSetPreset[]>(`${this.base}/presets`);
+    return this.http.get<RuleSetPreset[]>(`${environment.apiBaseUrl}/rule-set-presets`);
   }
 
   clonePreset(presetId: string): Observable<FormattingRuleSet> {
     return this.http
       .post<FormattingRuleSet>(
-        `${this.base}/presets/${encodeURIComponent(presetId)}/clone`,
+        `${environment.apiBaseUrl}/rule-set-presets/${encodeURIComponent(presetId)}/clone`,
         {}
       )
       .pipe(tap((created) => this.upsertCached(created)));

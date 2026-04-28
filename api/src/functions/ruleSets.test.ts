@@ -433,7 +433,7 @@ describe('GET /api/rule-sets/:id when id="presets"', () => {
   });
 });
 
-describe('GET /api/rule-sets/presets', () => {
+describe('GET /api/rule-set-presets', () => {
   it('returns 401 when unauthenticated', async () => {
     requireAuth.mockRejectedValueOnce(new AuthError('Missing bearer token'));
     const res = await listPresets(makeRequest(), ctx);
@@ -448,7 +448,7 @@ describe('GET /api/rule-sets/presets', () => {
   });
 });
 
-describe('POST /api/rule-sets/presets/:id/clone', () => {
+describe('POST /api/rule-set-presets/:id/clone', () => {
   it('returns 401 when unauthenticated', async () => {
     requireAuth.mockRejectedValueOnce(new AuthError('Missing bearer token'));
     const res = await clonePreset(

@@ -2,9 +2,9 @@
  * Built-in formatting-rule-set presets.
  *
  * Presets are server-side constants - NOT stored in Cosmos. They are
- * exposed via `GET /api/rule-sets/presets` and copied (with a fresh
+ * exposed via `GET /api/rule-set-presets` and copied (with a fresh
  * UUID + the caller's `userId`) into the `rule-sets` container by
- * `POST /api/rule-sets/presets/:id/clone`.
+ * `POST /api/rule-set-presets/:id/clone`.
  *
  * IDs are stable kebab-case slugs (per DESIGN_SPEC.md §Features 7
  * "Built-in Presets") so the clone URLs are human-readable and
@@ -152,7 +152,7 @@ const NULL_FINDER: RuleSetPreset = {
 };
 
 /**
- * Ordered list of presets returned by `GET /api/rule-sets/presets`.
+ * Ordered list of presets returned by `GET /api/rule-set-presets`.
  * Order is stable so the UI's "Clone preset" menu doesn't shuffle
  * between requests.
  */

@@ -200,9 +200,9 @@ export interface FormattingRuleSet {
 }
 
 /**
- * Server-defined built-in preset returned by `GET /api/rule-sets/presets`.
+ * Server-defined built-in preset returned by `GET /api/rule-set-presets`.
  * Cloned into a user-owned rule set via
- * `POST /api/rule-sets/presets/:id/clone`. See DESIGN_SPEC.md §Features 7
+ * `POST /api/rule-set-presets/:id/clone`. See DESIGN_SPEC.md §Features 7
  * "Built-in Presets".
  */
 export interface RuleSetPreset {

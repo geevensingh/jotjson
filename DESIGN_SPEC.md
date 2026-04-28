@@ -684,8 +684,8 @@ SPA-originated calls in production.
 | GET | `/api/rule-sets/:id` | Required (owner) | M6 | Get a rule set by ID; response includes `ETag` header. Owner mismatch returns 403; missing ID returns 404 |
 | PUT | `/api/rule-sets/:id` | Required (owner) | M6 | Update a rule set (full replace of `name` + `rules`). Requires `If-Match: <version>`; mismatch returns 412 Precondition Failed. Owner mismatch returns 403 |
 | DELETE | `/api/rule-sets/:id` | Required (owner) | M6 | Delete a rule set. Auto-clears the user's `defaultRuleSetId` and removes the ID from `activeRuleSetIds` if matching. Owner mismatch returns 403 |
-| GET | `/api/rule-sets/presets` | Required | M6 | List built-in preset rule sets |
-| POST | `/api/rule-sets/presets/:id/clone` | Required | M6 | Clone a preset into the user's rule sets |
+| GET | `/api/rule-set-presets` | Required | M6 | List built-in preset rule sets. Uses a top-level path (not `/api/rule-sets/presets`) because the Azure Functions Node.js v4 router resolves the latter to the parameterized `/rule-sets/{id}` handler |
+| POST | `/api/rule-set-presets/:id/clone` | Required | M6 | Clone a preset into the user's rule sets |
 
 ### Validation Rules
 - Max blob size: **1 MB** (free tier).
@@ -1169,8 +1169,8 @@ EU users would need a regional resource - out of scope for v1.
      `status-codes` preset ships as individual `exact`-match rules
      per common code (200/201/204 green; 400/401/403/404 amber;
      500/502/503 red) since the `regex` match type is deferred to
-     v1.1. Add `GET /api/rule-sets/presets` and
-     `POST /api/rule-sets/presets/:id/clone` endpoints; the clone
+     v1.1. Add `GET /api/rule-set-presets` and
+     `POST /api/rule-set-presets/:id/clone` endpoints; the clone
      endpoint creates a user-owned UUID copy and reuses the
      limit-enforcement path.
    - **M6d**: Rule builder UI with valid-only autosave.
@@ -1195,7 +1195,7 @@ EU users would need a regional resource - out of scope for v1.
      `createdAt`), empty state with "Create your first rule set"
      CTA, create / rename / duplicate / delete actions, and a
      "Clone preset" affordance that calls
-     `POST /api/rule-sets/presets/:id/clone` and navigates into the
+     `POST /api/rule-set-presets/:id/clone` and navigates into the
      M6d editor for the new set. Anonymous users hit the
      `authGuard` (applied to the route in M6a.75). New
      `RuleSetsService` (signals + optimistic update, mirrors

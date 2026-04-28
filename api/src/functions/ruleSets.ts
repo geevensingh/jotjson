@@ -353,7 +353,7 @@ async function cleanupUserReferences(userId: string, deletedSetId: string): Prom
 }
 
 /**
- * `GET /api/rule-sets/presets`
+ * `GET /api/rule-set-presets`
  *
  * Returns the static preset list. Auth-required because the whole
  * formatting-rules feature is registered-user-only (see the API
@@ -375,7 +375,7 @@ export async function listPresets(
 }
 
 /**
- * `POST /api/rule-sets/presets/:id/clone`
+ * `POST /api/rule-set-presets/:id/clone`
  *
  * Creates a user-owned copy of the named preset and returns the
  * new rule set with an `ETag` header (same shape as POST
@@ -440,19 +440,24 @@ app.http('rule-sets-post', {
 
 app.http('rule-sets-presets-list', {
   methods: ['GET'],
-  // Registered before `rule-sets/{id}` so framework route resolvers
-  // that prefer registration order also match the literal first.
-  // Frameworks that prefer specificity match `presets` over `{id}`
-  // regardless. The `getRuleSet` handler also short-circuits when
-  // `id === 'presets'` as a third layer of defense.
-  route: 'rule-sets/presets',
+  // Registered under a separate top-level segment (`rule-set-presets`)
+  // because the Azure Functions Node.js v4 router resolves
+  // `/api/rule-sets/presets` to the parameterized `/rule-sets/{id}`
+  // handler in registration order, even when a more-specific literal
+  // route is registered. Confirmed in production: requests to
+  // `/api/rule-sets/presets` were dispatched to `getRuleSet` and
+  // short-circuited to 404. Using a non-conflicting path is the
+  // simplest fix; the defensive 404 in `getRuleSet` for
+  // `id === 'presets'` is retained to keep the behavior stable for
+  // any client still hitting the old path.
+  route: 'rule-set-presets',
   authLevel: 'anonymous',
   handler: listPresets
 });
 
 app.http('rule-sets-presets-clone', {
   methods: ['POST'],
-  route: 'rule-sets/presets/{id}/clone',
+  route: 'rule-set-presets/{id}/clone',
   authLevel: 'anonymous',
   handler: clonePreset
 });

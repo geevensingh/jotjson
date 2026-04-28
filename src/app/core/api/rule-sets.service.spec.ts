@@ -14,6 +14,7 @@ import {
 import { RuleSetsService } from './rule-sets.service';
 
 const BASE = `${environment.apiBaseUrl}/rule-sets`;
+const PRESETS_BASE = `${environment.apiBaseUrl}/rule-set-presets`;
 
 function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
   return {
@@ -222,7 +223,7 @@ describe('RuleSetsService', () => {
   });
 
   describe('listPresets()', () => {
-    it('GETs /api/rule-sets/presets', () => {
+    it('GETs /api/rule-set-presets', () => {
       const presets: RuleSetPreset[] = [
         { id: 'error-detection', name: 'Errors', rules: [makeRule()] }
       ];
@@ -230,7 +231,7 @@ describe('RuleSetsService', () => {
       service.listPresets().subscribe((v) => {
         received = v;
       });
-      const req = httpMock.expectOne(`${BASE}/presets`);
+      const req = httpMock.expectOne(PRESETS_BASE);
       expect(req.request.method).toBe('GET');
       req.flush(presets);
       expect(received as RuleSetPreset[] | null).toEqual(presets);
@@ -239,9 +240,9 @@ describe('RuleSetsService', () => {
   });
 
   describe('clonePreset()', () => {
-    it('POSTs to /api/rule-sets/presets/{id}/clone with empty body', () => {
+    it('POSTs to /api/rule-set-presets/{id}/clone with empty body', () => {
       service.clonePreset('error-detection').subscribe();
-      const req = httpMock.expectOne(`${BASE}/presets/error-detection/clone`);
+      const req = httpMock.expectOne(`${PRESETS_BASE}/error-detection/clone`);
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toEqual({});
       req.flush(makeSet({ id: 'cloned', name: 'Errors' }));
@@ -253,7 +254,7 @@ describe('RuleSetsService', () => {
 
       service.clonePreset('error-detection').subscribe();
       httpMock
-        .expectOne(`${BASE}/presets/error-detection/clone`)
+        .expectOne(`${PRESETS_BASE}/error-detection/clone`)
         .flush(makeSet({ id: 'cloned', name: 'Errors' }));
 
       expect(service.ruleSets()?.map((s) => s.id)).toEqual(['a', 'cloned']);
@@ -261,7 +262,7 @@ describe('RuleSetsService', () => {
 
     it('URL-encodes the preset id', () => {
       service.clonePreset('weird id').subscribe();
-      httpMock.expectOne(`${BASE}/presets/weird%20id/clone`).flush(makeSet());
+      httpMock.expectOne(`${PRESETS_BASE}/weird%20id/clone`).flush(makeSet());
     });
   });
 
