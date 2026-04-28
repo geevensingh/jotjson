@@ -1,0 +1,14 @@
+<section class="rule-preview" aria-labelledby="rule-preview-heading">
+  <h2 id="rule-preview-heading" class="preview-heading" i18n="@@rulePreview.heading">
+    Live preview
+  </h2>
+  <p class="preview-hint" i18n="@@rulePreview.hint">
+    Sample JSON rendered with your in-progress rules.
+  </p>
+  <div class="preview-tree-wrap">
+    <jj-json-tree
+      [value]="sampleJson"
+      [overrideRuleSets]="overrideRuleSets()"
+    />
+  </div>
+</section>

@@ -495,4 +495,41 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       expect(ctx.fixture.componentInstance.savedFlash()).toBeFalse();
     }));
   });
+
+  describe('previewDraft (M6d-3 live preview)', () => {
+    it('returns null while serverMeta is still loading', () => {
+      const ctx = setup({ initialCache: [] });
+      ctx.fixture.detectChanges();
+      expect(ctx.fixture.componentInstance.previewDraft()).toBeNull();
+    });
+
+    it('builds a FormattingRuleSet snapshot from editable + serverMeta', () => {
+      const ctx = loaded(
+        ruleSet({
+          id: 'rs-1',
+          userId: 'oid-1',
+          version: 5,
+          createdAt: '2024-02-02T00:00:00Z',
+          updatedAt: '2024-02-03T00:00:00Z',
+          rules: [rule({ matchValue: 'foo' })]
+        })
+      );
+      const draft = ctx.fixture.componentInstance.previewDraft();
+      expect(draft).not.toBeNull();
+      expect(draft!.id).toBe('rs-1');
+      expect(draft!.version).toBe(5);
+      expect(draft!.userId).toBe('oid-1');
+      expect(draft!.rules[0].matchValue).toBe('foo');
+    });
+
+    it('reflects live edits to editable() reactively', () => {
+      const ctx = loaded();
+      const cmp = ctx.fixture.componentInstance;
+      expect(cmp.previewDraft()!.name).toBe('My set');
+      cmp.setName('Renamed live');
+      expect(cmp.previewDraft()!.name).toBe('Renamed live');
+      cmp.patchRule(0, { matchValue: 'newpattern' });
+      expect(cmp.previewDraft()!.rules[0].matchValue).toBe('newpattern');
+    });
+  });
 });

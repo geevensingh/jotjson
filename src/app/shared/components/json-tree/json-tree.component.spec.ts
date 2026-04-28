@@ -1485,4 +1485,135 @@ describe('JsonTreeComponent', () => {
       expect(before).not.toBe(after);
     });
   });
+
+  describe('overrideRuleSets Input (M6d-3 live preview)', () => {
+    let httpMock: HttpTestingController;
+    let ruleSets: RuleSetsService;
+
+    function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+      return {
+        id: 'r1',
+        target: 'value',
+        matchType: 'exact',
+        matchValue: 'error',
+        caseSensitive: false,
+        style: { backgroundColor: '#ffcdd2' },
+        ...overrides
+      };
+    }
+
+    function makeSet(rules: FormattingRule[], overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
+      return {
+        id: 'set-1',
+        userId: 'oid-1',
+        name: 'Set',
+        rules,
+        version: 1,
+        createdAt: '2026-04-27T00:00:00.000Z',
+        updatedAt: '2026-04-27T00:00:00.000Z',
+        ...overrides
+      };
+    }
+
+    function seedDefault(sets: FormattingRuleSet[]): void {
+      ruleSets.list().subscribe();
+      const req = httpMock.expectOne((r) => r.url.endsWith('/rule-sets') && r.method === 'GET');
+      req.flush(sets);
+    }
+
+    async function setUp(value: unknown): Promise<void> {
+      await createWith(value);
+      httpMock = TestBed.inject(HttpTestingController);
+      ruleSets = TestBed.inject(RuleSetsService);
+    }
+
+    afterEach(() => {
+      httpMock?.verify();
+    });
+
+    it('uses overrideRuleSets when set, not the service-derived list', async () => {
+      await setUp({ status: 'error' });
+      seedDefault([
+        makeSet(
+          [makeRule({ matchValue: 'error', style: { backgroundColor: '#000000' } })],
+          { id: 'default-set' }
+        )
+      ]);
+      prefs.update({ defaultRuleSetIds: ['default-set'] });
+
+      const overrideSet = makeSet(
+        [makeRule({ matchValue: 'error', style: { backgroundColor: '#abcdef' } })],
+        { id: 'override-set' }
+      );
+      fixture.componentRef.setInput('overrideRuleSets', [overrideSet]);
+      fixture.detectChanges();
+
+      const status = cmp.root()!.children!.find((c) => c.segment === 'status')!;
+      const styles = cmp.ruleStyleVars(status);
+      expect(styles?.['--tree-row-format-bg']).toBe('#abcdef');
+    });
+
+    it('falls back to the service when overrideRuleSets is null (default)', async () => {
+      await setUp({ status: 'error' });
+      seedDefault([
+        makeSet(
+          [makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]
+        )
+      ]);
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
+      fixture.detectChanges();
+
+      const status = cmp.root()!.children!.find((c) => c.segment === 'status')!;
+      const styles = cmp.ruleStyleVars(status);
+      expect(styles?.['--tree-row-format-bg']).toBe('#112233');
+    });
+
+    it('treats an empty array override as "no rule sets active" (does NOT fall back)', async () => {
+      await setUp({ status: 'error' });
+      seedDefault([
+        makeSet(
+          [makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]
+        )
+      ]);
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
+
+      fixture.componentRef.setInput('overrideRuleSets', []);
+      fixture.detectChanges();
+
+      const status = cmp.root()!.children!.find((c) => c.segment === 'status')!;
+      expect(cmp.ruleStyleVars(status)).toBeNull();
+    });
+
+    it('per-instance: overriding one tree does not affect another instance', async () => {
+      await setUp({ status: 'error' });
+      seedDefault([
+        makeSet(
+          [makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]
+        )
+      ]);
+      prefs.update({ defaultRuleSetIds: ['set-1'] });
+
+      const overrideSet = makeSet(
+        [makeRule({ matchValue: 'error', style: { backgroundColor: '#abcdef' } })],
+        { id: 'override-set' }
+      );
+      fixture.componentRef.setInput('overrideRuleSets', [overrideSet]);
+      fixture.detectChanges();
+
+      const second = TestBed.createComponent(JsonTreeComponent);
+      second.componentRef.setInput('value', { status: 'error' });
+      second.detectChanges();
+      const secondCmp = second.componentInstance;
+
+      const firstStyles = cmp.ruleStyleVars(
+        cmp.root()!.children!.find((c) => c.segment === 'status')!
+      );
+      const secondStyles = secondCmp.ruleStyleVars(
+        secondCmp.root()!.children!.find((c) => c.segment === 'status')!
+      );
+
+      expect(firstStyles?.['--tree-row-format-bg']).toBe('#abcdef');
+      expect(secondStyles?.['--tree-row-format-bg']).toBe('#112233');
+    });
+  });
 });

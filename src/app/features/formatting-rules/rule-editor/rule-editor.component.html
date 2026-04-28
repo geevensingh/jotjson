@@ -428,5 +428,9 @@
         }
       </ul>
     </section>
+
+    @if (previewDraft(); as draft) {
+      <app-rule-preview [draft]="draft" />
+    }
   }
 </main>

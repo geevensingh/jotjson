@@ -20,7 +20,7 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { persistedStringSignal } from '../../../core/preferences/persisted-signal';
 import { JsonParserService } from '../../../core/json/json-parser.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
-import type { FormattingIcon } from '../../../core/api/models';
+import type { FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
 import {
@@ -130,6 +130,23 @@ export class JsonTreeComponent {
   private readonly ruleSets = inject(RuleSetsService);
 
   readonly value = input<unknown>(undefined);
+
+  /**
+   * M6d-3 preview hook. When non-null, this list of rule sets replaces
+   * `ruleSets.defaultRuleSets()` for THIS component instance only - no
+   * shared service state is mutated. Used by the rule editor's live
+   * preview to render the in-progress draft without saving.
+   *
+   * Semantics:
+   *  - `null` / unset (default): fall back to `defaultRuleSets()`
+   *    (existing behavior, preserved).
+   *  - `[]`: no rule sets active. Tree renders plain (no highlighting).
+   *  - `[set, ...]`: those exact rule sets are evaluated, in order.
+   *
+   * Reactive via signal-based input: assigning a new array re-evaluates
+   * `evaluateNode` automatically.
+   */
+  readonly overrideRuleSets = input<FormattingRuleSet[] | null>(null);
 
   readonly search = persistedStringSignal(TREE_SEARCH_STORAGE_KEY);
 
@@ -752,7 +769,8 @@ export class JsonTreeComponent {
    * cheaply on the no-formatting path.
    */
   private readonly evaluateNode = computed<(node: TreeNode) => RuleEngineResult>(() => {
-    const sets = this.ruleSets.defaultRuleSets();
+    const override = this.overrideRuleSets();
+    const sets = override ?? this.ruleSets.defaultRuleSets();
     if (sets.length === 0) {
       return () => EMPTY_RULE_RESULT;
     }

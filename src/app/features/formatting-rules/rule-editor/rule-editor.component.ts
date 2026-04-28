@@ -29,6 +29,7 @@ import {
 } from '../../../core/api/models';
 import { AppHeaderComponent } from '../../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
+import { RulePreviewComponent } from './rule-preview/rule-preview.component';
 
 type LoadState = 'loading' | 'ready' | 'not_found' | 'error';
 type SaveState = 'idle' | 'saving' | 'error';
@@ -115,7 +116,8 @@ const DEFAULT_NEW_RULE_STYLE = (): FormattingRule['style'] => ({
     MatButtonToggleModule,
     MatSlideToggleModule,
     MatTooltipModule,
-    RouterLink
+    RouterLink,
+    RulePreviewComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './rule-editor.component.html',
@@ -217,6 +219,30 @@ export class RuleEditorComponent implements OnInit {
     if (this.savedFlash() && !this.isDirty()) return { kind: 'saved' };
     if (this.isDirty()) return { kind: 'editing' };
     return { kind: 'idle' };
+  });
+
+  /**
+   * M6d-3 live preview draft. Builds a `FormattingRuleSet`-shaped
+   * snapshot from the in-progress `editable` payload + the last
+   * acknowledged `serverMeta` so the preview component can render
+   * the production tree against the user's draft without any save.
+   * Returns `null` while the form is still loading (no serverMeta) -
+   * the template hides the preview in that state. Re-evaluates
+   * automatically on every signal write to `editable`.
+   */
+  readonly previewDraft = computed<FormattingRuleSet | null>(() => {
+    const e = this.editable();
+    const meta = this.serverMeta();
+    if (!e || !meta) return null;
+    return {
+      id: meta.id,
+      userId: meta.userId,
+      name: e.name,
+      rules: e.rules,
+      version: meta.version,
+      createdAt: meta.createdAt,
+      updatedAt: meta.updatedAt
+    };
   });
 
   /** Auto-generated label per F1: e.g. `key contains "error"`. */
