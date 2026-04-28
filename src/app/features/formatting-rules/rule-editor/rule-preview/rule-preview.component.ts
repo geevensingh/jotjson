@@ -19,6 +19,7 @@ import { JsonTreeComponent } from '../../../../shared/components/json-tree/json-
 const SAMPLE: Readonly<Record<string, unknown>> = Object.freeze({
   status: 500,
   error: 'TypeError',
+  errorType: 'error',
   message: 'Cannot read properties of undefined',
   user: {
     id: 42,

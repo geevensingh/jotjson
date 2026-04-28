@@ -65,6 +65,9 @@ describe('RulePreviewComponent', () => {
     expect(typeof sample).toBe('object');
     expect('error' in sample).toBeTrue();
     expect('status' in sample).toBeTrue();
+    // M6d-3-fu4: a key whose value is the same token as the key, so
+    // a single `target: 'key_and_value'` rule highlights both sides.
+    expect(sample['errorType']).toBe('error');
   });
 
   it('forwards the draft as a one-element overrideRuleSets array', async () => {
