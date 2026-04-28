@@ -1,0 +1,216 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { JsonEditorComponent } from './json-editor.component';
+import type { JsonParseError } from '../../../core/json/json-parser.service';
+import { provideFakeAuth } from '../../../../testing/auth.testing';
+
+const STORAGE_KEY = 'jotjson.preferences.v1';
+
+interface FakeEditor {
+  getValue: jasmine.Spy<() => string>;
+  setValue: jasmine.Spy<(v: string) => void>;
+  getModel: jasmine.Spy<() => object | null>;
+  onDidChangeModelContent: jasmine.Spy;
+  onDidChangeCursorPosition: jasmine.Spy;
+  onDidPaste: jasmine.Spy;
+  updateOptions: jasmine.Spy;
+  dispose: jasmine.Spy;
+  executeEdits: jasmine.Spy;
+  layout: jasmine.Spy;
+}
+
+interface FakeMonaco {
+  editor: {
+    create: jasmine.Spy<(...args: unknown[]) => FakeEditor>;
+    defineTheme: jasmine.Spy;
+    setTheme: jasmine.Spy;
+    setModelMarkers: jasmine.Spy;
+  };
+  json: { jsonDefaults: { setDiagnosticsOptions: jasmine.Spy } };
+  MarkerSeverity: { Error: number };
+}
+
+interface FakeResizeObserver {
+  observe: jasmine.Spy;
+  unobserve: jasmine.Spy;
+  disconnect: jasmine.Spy;
+}
+
+const FAKE_MARKER_ERROR_SEVERITY = 8;
+
+function makeFakeEditor(initial: string): FakeEditor {
+  let current = initial;
+  const model = { id: 'fake-model' };
+  return {
+    getValue: jasmine.createSpy('getValue').and.callFake(() => current),
+    setValue: jasmine.createSpy('setValue').and.callFake((v: string) => {
+      current = v;
+    }),
+    getModel: jasmine.createSpy('getModel').and.returnValue(model),
+    onDidChangeModelContent: jasmine.createSpy('onDidChangeModelContent').and.returnValue({
+      dispose: () => undefined
+    }),
+    onDidChangeCursorPosition: jasmine.createSpy('onDidChangeCursorPosition').and.returnValue({
+      dispose: () => undefined
+    }),
+    onDidPaste: jasmine.createSpy('onDidPaste').and.returnValue({
+      dispose: () => undefined
+    }),
+    updateOptions: jasmine.createSpy('updateOptions'),
+    dispose: jasmine.createSpy('dispose'),
+    executeEdits: jasmine.createSpy('executeEdits'),
+    layout: jasmine.createSpy('layout')
+  };
+}
+
+function makeFakeMonaco(editor: FakeEditor): FakeMonaco {
+  return {
+    editor: {
+      create: jasmine.createSpy('create').and.returnValue(editor),
+      defineTheme: jasmine.createSpy('defineTheme'),
+      setTheme: jasmine.createSpy('setTheme'),
+      setModelMarkers: jasmine.createSpy('setModelMarkers')
+    },
+    json: { jsonDefaults: { setDiagnosticsOptions: jasmine.createSpy('setDiagnosticsOptions') } },
+    MarkerSeverity: { Error: FAKE_MARKER_ERROR_SEVERITY }
+  };
+}
+
+describe('JsonEditorComponent', () => {
+  let fixture: ComponentFixture<JsonEditorComponent>;
+  let editor: FakeEditor;
+  let monaco: FakeMonaco;
+  let resizeObserver: FakeResizeObserver;
+  let originalMonaco: unknown;
+  let originalResizeObserver: typeof window.ResizeObserver | undefined;
+
+  async function create(initial = '{"a":1}'): Promise<JsonEditorComponent> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [JsonEditorComponent],
+      providers: [...provideFakeAuth()]
+    }).compileComponents();
+    fixture = TestBed.createComponent(JsonEditorComponent);
+    fixture.componentRef.setInput('value', initial);
+    fixture.detectChanges();
+    // ngAfterViewInit awaits loadMonaco() (resolved synchronously since
+    // window.monaco is preset). Let microtasks settle so the editor mounts.
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture.componentInstance;
+  }
+
+  beforeEach(() => {
+    localStorage.removeItem(STORAGE_KEY);
+
+    editor = makeFakeEditor('{"a":1}');
+    monaco = makeFakeMonaco(editor);
+
+    originalMonaco = (window as unknown as { monaco?: unknown }).monaco;
+    (window as unknown as { monaco: FakeMonaco }).monaco = monaco;
+
+    originalResizeObserver = window.ResizeObserver;
+    resizeObserver = {
+      observe: jasmine.createSpy('observe'),
+      unobserve: jasmine.createSpy('unobserve'),
+      disconnect: jasmine.createSpy('disconnect')
+    };
+    (window as unknown as { ResizeObserver: unknown }).ResizeObserver = function () {
+      return resizeObserver;
+    } as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    if (originalMonaco === undefined) {
+      delete (window as unknown as { monaco?: unknown }).monaco;
+    } else {
+      (window as unknown as { monaco: unknown }).monaco = originalMonaco;
+    }
+    if (originalResizeObserver) {
+      window.ResizeObserver = originalResizeObserver;
+    } else {
+      delete (window as unknown as { ResizeObserver?: unknown }).ResizeObserver;
+    }
+    localStorage.removeItem(STORAGE_KEY);
+  });
+
+  it('creates the Monaco editor on mount', async () => {
+    await create();
+    expect(monaco.editor.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes the Monaco editor instance on destroy', async () => {
+    await create();
+    expect(editor.dispose).not.toHaveBeenCalled();
+    fixture.destroy();
+    expect(editor.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('disconnects the ResizeObserver on destroy', async () => {
+    await create();
+    expect(resizeObserver.observe).toHaveBeenCalledTimes(1);
+    expect(resizeObserver.disconnect).not.toHaveBeenCalled();
+    fixture.destroy();
+    expect(resizeObserver.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('pushes external value changes into the editor via setValue', async () => {
+    await create('{"a":1}');
+    editor.setValue.calls.reset();
+    fixture.componentRef.setInput('value', '{"b":2}');
+    fixture.detectChanges();
+    expect(editor.setValue).toHaveBeenCalledTimes(1);
+    expect(editor.setValue).toHaveBeenCalledWith('{"b":2}');
+  });
+
+  it('does not call setValue when the input matches the current editor value (no echo)', async () => {
+    await create('{"a":1}');
+    editor.setValue.calls.reset();
+    // Re-set the input to the same value the (mock) editor reports.
+    fixture.componentRef.setInput('value', '{"a":1}');
+    fixture.detectChanges();
+    expect(editor.setValue).not.toHaveBeenCalled();
+  });
+
+  it('publishes Monaco markers when the errors input changes', async () => {
+    await create('{"a":1}');
+    monaco.editor.setModelMarkers.calls.reset();
+
+    const errs: JsonParseError[] = [
+      { message: 'Unexpected token', offset: 5, length: 1, line: 2, column: 3 }
+    ];
+    fixture.componentRef.setInput('errors', errs);
+    fixture.detectChanges();
+
+    expect(monaco.editor.setModelMarkers).toHaveBeenCalledTimes(1);
+    const args = monaco.editor.setModelMarkers.calls.mostRecent().args;
+    expect(args[1]).toBe('jotjson');
+    const markers = args[2] as Array<{
+      severity: number;
+      message: string;
+      startLineNumber: number;
+      startColumn: number;
+      endLineNumber: number;
+      endColumn: number;
+    }>;
+    expect(markers.length).toBe(1);
+    expect(markers[0].severity).toBe(FAKE_MARKER_ERROR_SEVERITY);
+    expect(markers[0].message).toBe('Unexpected token');
+    expect(markers[0].startLineNumber).toBe(2);
+    expect(markers[0].startColumn).toBe(3);
+    expect(markers[0].endLineNumber).toBe(2);
+    expect(markers[0].endColumn).toBe(4);
+  });
+
+  it('clears markers when errors input becomes empty', async () => {
+    await create('{"a":1}');
+    fixture.componentRef.setInput('errors', [
+      { message: 'oops', offset: 0, length: 1, line: 1, column: 1 }
+    ]);
+    fixture.detectChanges();
+    monaco.editor.setModelMarkers.calls.reset();
+    fixture.componentRef.setInput('errors', []);
+    fixture.detectChanges();
+    expect(monaco.editor.setModelMarkers).toHaveBeenCalledTimes(1);
+    expect(monaco.editor.setModelMarkers.calls.mostRecent().args[2]).toEqual([]);
+  });
+});
