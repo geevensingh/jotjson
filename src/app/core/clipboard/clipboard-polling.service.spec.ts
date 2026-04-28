@@ -92,6 +92,34 @@ async function flush(): Promise<void> {
 describe('ClipboardPollingService', () => {
   let restore: () => void = () => {};
 
+  // Defensive backstop: snapshot the truly-original navigator.clipboard /
+  // navigator.permissions descriptors once before any test in this suite
+  // can install a stub. If a test (or test helper) ever forgets to restore
+  // - or stacks two installNavigatorStubs() calls in a single spec without
+  // restoring between them - afterAll will still put the originals back so
+  // a stub does not leak into adjacent suites that spyOn(navigator.clipboard,
+  // 'writeText'/'readText') directly. Without this guard, a leaked stub
+  // whose methods are jasmine spies trips Jasmine's "already been spied
+  // upon" guard in later specs (observed in CI on Linux Chrome Headless).
+  let suiteOrigClipboard: PropertyDescriptor | undefined;
+  let suiteOrigPermissions: PropertyDescriptor | undefined;
+  beforeAll(() => {
+    suiteOrigClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    suiteOrigPermissions = Object.getOwnPropertyDescriptor(navigator, 'permissions');
+  });
+  afterAll(() => {
+    if (suiteOrigClipboard) {
+      Object.defineProperty(navigator, 'clipboard', suiteOrigClipboard);
+    } else {
+      delete (navigator as unknown as { clipboard?: Clipboard }).clipboard;
+    }
+    if (suiteOrigPermissions) {
+      Object.defineProperty(navigator, 'permissions', suiteOrigPermissions);
+    } else {
+      delete (navigator as unknown as { permissions?: Permissions }).permissions;
+    }
+  });
+
   afterEach(() => {
     restore();
     restore = () => {};
@@ -102,6 +130,15 @@ describe('ClipboardPollingService', () => {
     permissionsQuery?: jasmine.Spy | null;
     clipboardMissing?: boolean;
   }): ClipboardPollingService {
+    // Restore any prior stubs first. Without this, back-to-back createService
+    // calls in a single `it` would stack: the second installNavigatorStubs
+    // would capture the first call's STUB as the "original" descriptor, and
+    // afterEach's restore would put the first stub back instead of the real
+    // clipboard - leaking a stubbed navigator.clipboard whose writeText is
+    // already a jasmine spy into adjacent suites.
+    restore();
+    restore = () => {};
+
     const clipboard: ClipboardLike | null = opts.clipboardMissing
       ? null
       : {
@@ -119,7 +156,6 @@ describe('ClipboardPollingService', () => {
     TestBed.configureTestingModule({});
     return TestBed.inject(ClipboardPollingService);
   }
-
   it('reports unsupported when navigator.clipboard is missing', async () => {
     const svc = createService({ clipboardMissing: true });
     await flush();

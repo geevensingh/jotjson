@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { JsonParserService } from '../app/core/json/json-parser.service';
+import { JsonExtractorService } from '../app/core/json/json-extractor.service';
 import { JsonTreeComponent } from '../app/shared/components/json-tree/json-tree.component';
 import { PreferencesService } from '../app/core/preferences/preferences.service';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
@@ -106,4 +107,75 @@ describe('fixture files', () => {
       });
     });
   }
+});
+
+/**
+ * Mixed-text fixtures: prose surrounding one or more JSON bodies. These
+ * fixtures intentionally do NOT parse cleanly as a single JSON document
+ * (cf. FIXTURE_FILES above which all do). They exercise
+ * JsonExtractorService, the M7p extract-from-mixed-text path triggered by
+ * paste / native paste / drag-drop / file upload.
+ *
+ * `MultiPartMixedText.json` is a real-world example: an HTTP request and
+ * response capture (two JSON bodies separated by HTTP framing/headers
+ * and a trailing free-form sentence). Both bodies parse cleanly so the
+ * extractor returns blockCount === 2 and wraps them as an array.
+ */
+describe('extractor on mixed-text fixtures', () => {
+  let mixedText: string;
+
+  beforeAll(async () => {
+    const res = await fetch('/fixtures/MultiPartMixedText.json');
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load fixtures/MultiPartMixedText.json: HTTP ${res.status}. ` +
+          `Ensure src/testing/fixtures is registered in angular.json test assets.`
+      );
+    }
+    mixedText = await res.text();
+  });
+
+  beforeEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideAnimationsAsync(), ...provideFakeAuth()]
+    });
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+  });
+
+  it('the raw fixture does not parse cleanly as a single JSON document', () => {
+    const parser = TestBed.inject(JsonParserService);
+    const result = parser.parse(mixedText);
+    expect(result.errors.length)
+      .withContext('mixed-text fixture must produce parse errors')
+      .toBeGreaterThan(0);
+  });
+
+  it('extractFromMixedText finds the two HTTP bodies and wraps them as an array', () => {
+    const extractor = TestBed.inject(JsonExtractorService);
+    const extracted = extractor.extractFromMixedText(mixedText);
+
+    expect(extracted)
+      .withContext('extractor must return non-null on this fixture')
+      .not.toBeNull();
+    expect(extracted!.blockCount)
+      .withContext('two HTTP bodies in this capture')
+      .toBe(2);
+    // Multi-block uses JSON.stringify array wrap; comments cannot survive.
+    expect(extracted!.preservesComments).toBe(false);
+
+    // The wrapped output is a JSON array; parse and inspect each element to
+    // avoid coupling the assertion to whitespace formatting.
+    const value = JSON.parse(extracted!.text) as Array<Record<string, unknown>>;
+    expect(Array.isArray(value)).toBe(true);
+    expect(value.length).toBe(2);
+    expect(value[0]).toEqual(jasmine.objectContaining({ authentication_data: null }));
+    expect(value[1]).toEqual(
+      jasmine.objectContaining({ buyer_info: jasmine.any(Object) })
+    );
+  });
 });
