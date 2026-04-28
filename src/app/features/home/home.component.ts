@@ -56,6 +56,7 @@ import { StatusBarComponent } from './status-bar/status-bar.component';
 import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
 import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
 import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.component';
+import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
 
 /**
  * Primary editor + tree experience. Home is an anonymous page - persistence
@@ -70,7 +71,8 @@ import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.co
     JsonTreeComponent,
     ToolbarComponent,
     StatusBarComponent,
-    ClipboardBannerComponent
+    ClipboardBannerComponent,
+    RuleSetsToolbarComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.component.html',
