@@ -148,16 +148,17 @@ dl {
 }
 
 .pref-substack {
-  margin: 0.25rem 0 0.75rem 0.75rem;
-  padding: 0.25rem 1rem 0.25rem 1rem;
-  border-left: 2px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.16));
+  margin: 0 0 0.5rem 1.5rem;
+  padding: 0;
 }
 
 .pref-hint {
   flex: 1 1 100%;
+  margin-top: -0.25rem;
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-size: 0.8125rem;
   font-style: italic;
+  text-align: right;
 }
 
 .pref-number {
