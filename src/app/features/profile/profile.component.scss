@@ -106,9 +106,18 @@ dl {
 
   label,
   > span:first-child {
-    flex: 0 0 auto;
-    min-width: 12rem;
+    flex: 0 1 auto;
+    min-width: 0;
     color: var(--mat-sys-on-surface, inherit);
+  }
+
+  > label + *,
+  > span:first-child + * {
+    margin-left: auto;
+  }
+
+  > mat-slide-toggle:first-child {
+    width: 100%;
   }
 
   &--indented { padding-left: 0.25rem; }
@@ -118,6 +127,19 @@ dl {
     min-width: 12rem;
     max-width: 22rem;
   }
+}
+
+.pref-control-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+// stylelint-disable-next-line selector-pseudo-element-no-unknown
+.pref-row mat-slide-toggle:first-child ::ng-deep .mdc-form-field {
+  width: 100%;
+  justify-content: space-between;
 }
 
 .pref-substack {
@@ -160,13 +182,8 @@ dl {
 
 .pref-help {
   flex: 1 1 100%;
-  margin-left: 12rem;
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-size: 0.8125rem;
-
-  @media (max-width: 540px) {
-    margin-left: 0;
-  }
 }
 
 // ---------------------------------------------------------------
@@ -275,10 +292,6 @@ dl {
 
 .highlight-row {
   margin: 0.35rem 0;
-
-  label {
-    min-width: 11rem;
-  }
 }
 
 .pref-color {

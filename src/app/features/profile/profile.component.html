@@ -93,17 +93,19 @@
 
         <div class="pref-row">
           <label for="pref-font-size" i18n="@@profile.prefs.editor.fontSize">Font size</label>
-          <input
-            id="pref-font-size"
-            type="number"
-            class="pref-number"
-            [min]="fontSizeMin"
-            [max]="fontSizeMax"
-            step="1"
-            [ngModel]="editorFontSize()"
-            (ngModelChange)="onEditorFontSizeChange($event)"
-          />
-          <span class="pref-suffix" aria-hidden="true">px</span>
+          <span class="pref-control-group">
+            <input
+              id="pref-font-size"
+              type="number"
+              class="pref-number"
+              [min]="fontSizeMin"
+              [max]="fontSizeMax"
+              step="1"
+              [ngModel]="editorFontSize()"
+              (ngModelChange)="onEditorFontSizeChange($event)"
+            />
+            <span class="pref-suffix" aria-hidden="true">px</span>
+          </span>
         </div>
 
         <div class="pref-row">
@@ -120,6 +122,7 @@
 
         <div class="pref-row">
           <mat-slide-toggle
+            labelPosition="before"
             [checked]="editorWordWrap()"
             (change)="onEditorWordWrapChange($event.checked)"
           >
@@ -135,39 +138,43 @@
 
         <div class="pref-row">
           <label for="pref-tree-font-size" i18n="@@profile.prefs.tree.fontSize">Font size</label>
-          <input
-            id="pref-tree-font-size"
-            type="number"
-            class="pref-number"
-            [min]="fontSizeMin"
-            [max]="fontSizeMax"
-            step="1"
-            [ngModel]="treeFontSize()"
-            (ngModelChange)="onTreeFontSizeChange($event)"
-          />
-          <span class="pref-suffix" aria-hidden="true">px</span>
+          <span class="pref-control-group">
+            <input
+              id="pref-tree-font-size"
+              type="number"
+              class="pref-number"
+              [min]="fontSizeMin"
+              [max]="fontSizeMax"
+              step="1"
+              [ngModel]="treeFontSize()"
+              (ngModelChange)="onTreeFontSizeChange($event)"
+            />
+            <span class="pref-suffix" aria-hidden="true">px</span>
+          </span>
         </div>
 
         <div class="pref-row pref-row--slider">
           <label for="pref-expansion-depth" i18n="@@profile.prefs.tree.expansionDepth">
             Default expansion depth
           </label>
-          <mat-slider
-            class="pref-slider"
-            [min]="expansionDepthMin"
-            [max]="expansionDepthMax"
-            step="1"
-            discrete
-            showTickMarks
-          >
-            <input
-              matSliderThumb
-              id="pref-expansion-depth"
-              [ngModel]="defaultTreeExpansionDepth()"
-              (ngModelChange)="onDefaultTreeExpansionDepthChange($event)"
-            />
-          </mat-slider>
-          <span class="pref-suffix" aria-hidden="true">{{ defaultTreeExpansionDepth() }}</span>
+          <span class="pref-control-group">
+            <mat-slider
+              class="pref-slider"
+              [min]="expansionDepthMin"
+              [max]="expansionDepthMax"
+              step="1"
+              discrete
+              showTickMarks
+            >
+              <input
+                matSliderThumb
+                id="pref-expansion-depth"
+                [ngModel]="defaultTreeExpansionDepth()"
+                (ngModelChange)="onDefaultTreeExpansionDepthChange($event)"
+              />
+            </mat-slider>
+            <span class="pref-suffix" aria-hidden="true">{{ defaultTreeExpansionDepth() }}</span>
+          </span>
           <span class="pref-help" i18n="@@profile.prefs.tree.expansionDepth.help">
             How deep the tree starts expanded when a blob loads.
           </span>
@@ -175,6 +182,7 @@
 
         <div class="pref-row">
           <mat-slide-toggle
+            labelPosition="before"
             [checked]="treeShowTypeLabels()"
             (change)="onTreeShowTypeLabelsChange($event.checked)"
           >
@@ -184,6 +192,7 @@
 
         <div class="pref-row">
           <mat-slide-toggle
+            labelPosition="before"
             [checked]="treeShowDateAnnotations()"
             (change)="onTreeShowDateAnnotationsChange($event.checked)"
           >
@@ -196,6 +205,7 @@
         <div class="pref-substack">
           <div class="pref-row pref-row--indented">
             <mat-slide-toggle
+              labelPosition="before"
               [checked]="treeAssumeUtcForIsoDateTime()"
               [disabled]="!treeShowDateAnnotations()"
               (change)="onTreeAssumeUtcForIsoDateTimeChange($event.checked)"
@@ -208,6 +218,7 @@
 
           <div class="pref-row pref-row--indented">
             <mat-slide-toggle
+              labelPosition="before"
               [checked]="treeAssumeUtcForIsoDateOnly()"
               [disabled]="!treeShowDateAnnotations()"
               (change)="onTreeAssumeUtcForIsoDateOnlyChange($event.checked)"
@@ -349,27 +360,29 @@
                     }
                   }
                 </label>
-                <input
-                  type="color"
-                  class="pref-color"
-                  [id]="field.inputId(theme)"
-                  [value]="treeHighlightColors()[theme][field.key]"
-                  (input)="
-                    onHighlightColorChange(
-                      theme,
-                      field.key,
-                      $any($event.target).value
-                    )
-                  "
-                />
-                <span
-                  class="pref-color-swatch"
-                  [style.background]="treeHighlightColors()[theme][field.key]"
-                  aria-hidden="true"
-                ></span>
-                <code class="pref-color-hex">{{
-                  treeHighlightColors()[theme][field.key]
-                }}</code>
+                <span class="pref-control-group">
+                  <input
+                    type="color"
+                    class="pref-color"
+                    [id]="field.inputId(theme)"
+                    [value]="treeHighlightColors()[theme][field.key]"
+                    (input)="
+                      onHighlightColorChange(
+                        theme,
+                        field.key,
+                        $any($event.target).value
+                      )
+                    "
+                  />
+                  <span
+                    class="pref-color-swatch"
+                    [style.background]="treeHighlightColors()[theme][field.key]"
+                    aria-hidden="true"
+                  ></span>
+                  <code class="pref-color-hex">{{
+                    treeHighlightColors()[theme][field.key]
+                  }}</code>
+                </span>
               </div>
             }
           </div>
@@ -407,6 +420,7 @@
 
         <div class="pref-row">
           <mat-slide-toggle
+            labelPosition="before"
             [checked]="searchCaseSensitive()"
             (change)="onSearchCaseSensitiveChange($event.checked)"
           >
@@ -416,6 +430,7 @@
 
         <div class="pref-row">
           <mat-slide-toggle
+            labelPosition="before"
             [checked]="searchRegexMode()"
             (change)="onSearchRegexModeChange($event.checked)"
           >
