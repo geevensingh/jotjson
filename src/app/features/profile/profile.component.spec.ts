@@ -521,10 +521,10 @@ describe('ProfileComponent', () => {
         root.querySelectorAll('.pref-row mat-slide-toggle')
       );
       for (const toggle of toggles) {
-        const hasLabelPosBefore = toggle.getAttribute('labelPosition') === 'before';
+        const hasLabelPositionBefore = toggle.getAttribute('labelPosition') === 'before';
         const prevSibling = toggle.previousElementSibling;
         const hasExternalLabel = prevSibling?.tagName === 'LABEL';
-        expect(hasLabelPosBefore || hasExternalLabel).toBe(true);
+        expect(hasLabelPositionBefore || hasExternalLabel).toBe(true);
       }
       expect(toggles.length).toBeGreaterThan(0);
     });
