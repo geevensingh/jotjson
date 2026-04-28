@@ -5,6 +5,7 @@ import {
   AuthError,
   __setJwksClientForTesting,
   requireAuth,
+  tryAuth,
   verifyAccessToken
 } from './auth';
 
@@ -153,6 +154,48 @@ describe('shared/auth Entra JWT validation', () => {
         })
       );
       expect(principal.id).toBe('oid-custom');
+    });
+  });
+
+  describe('tryAuth (optional auth wrapper)', () => {
+    it('returns null when no Authorization header is present', async () => {
+      const principal = await tryAuth(makeRequest({}));
+      expect(principal).toBeNull();
+    });
+
+    it('returns null when the token is invalid (AuthError swallowed)', async () => {
+      const expired = sign({ oid: 'oid-1' }, { expiresIn: '-1s' });
+      const principal = await tryAuth(
+        makeRequest({ Authorization: `Bearer ${expired}` })
+      );
+      expect(principal).toBeNull();
+    });
+
+    it('returns the principal for a valid token', async () => {
+      const token = sign({ oid: 'oid-try', name: 'Tess', email: 't@example.com' });
+      const principal = await tryAuth(
+        makeRequest({ Authorization: `Bearer ${token}` })
+      );
+      expect(principal).not.toBeNull();
+      expect(principal?.id).toBe('oid-try');
+      expect(principal?.displayName).toBe('Tess');
+      expect(principal?.email).toBe('t@example.com');
+    });
+
+    it('propagates non-AuthError infrastructure failures', async () => {
+      const token = sign({ oid: 'oid-1' });
+      const infraError = new Error('jwt infra boom');
+      const jwtModule = jest.requireActual('jsonwebtoken') as typeof import('jsonwebtoken');
+      const spy = jest.spyOn(jwtModule, 'verify').mockImplementationOnce(() => {
+        throw infraError;
+      });
+      try {
+        await expect(
+          tryAuth(makeRequest({ Authorization: `Bearer ${token}` }))
+        ).rejects.toBe(infraError);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 });
