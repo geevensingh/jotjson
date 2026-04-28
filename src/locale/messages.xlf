@@ -22,7 +22,55 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
-          <context context-type="linenumber">87</context>
+          <context context-type="linenumber">115</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">202</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">222</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">237</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">244</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">272</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">282</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">288</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">317</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">336</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">342</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">394</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">400</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.ts</context>
@@ -54,31 +102,31 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">502</context>
+          <context context-type="linenumber">513</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">509</context>
+          <context context-type="linenumber">520</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">519</context>
+          <context context-type="linenumber">530</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">700</context>
+          <context context-type="linenumber">711</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">706</context>
+          <context context-type="linenumber">717</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">740</context>
+          <context context-type="linenumber">751</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">749</context>
+          <context context-type="linenumber">760</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/rule-sets-toolbar.component.ts</context>
@@ -351,8 +399,12 @@
           <context context-type="linenumber">129</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">302</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">722</context>
+          <context context-type="linenumber">733</context>
         </context-group>
       </trans-unit>
       <trans-unit id="common.cancel" datatype="html">
@@ -362,12 +414,16 @@
           <context context-type="linenumber">130</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">303</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
           <context context-type="linenumber">346</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">723</context>
+          <context context-type="linenumber">734</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/clone-preset-dialog.component.ts</context>
@@ -382,7 +438,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">739</context>
+          <context context-type="linenumber">750</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.failed" datatype="html">
@@ -393,7 +449,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">748</context>
+          <context context-type="linenumber">759</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.title" datatype="html">
@@ -414,63 +470,270 @@
         <source>+ New rule set</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
-          <context context-type="linenumber">22,26</context>
+          <context context-type="linenumber">22,25</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.clonePreset" datatype="html">
+        <source>Clone preset</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">32,36</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.loading" datatype="html">
         <source> Loading rule sets... </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
-          <context context-type="linenumber">28,30</context>
+          <context context-type="linenumber">38,40</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.loadError" datatype="html">
         <source> Could not load your rule sets. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
-          <context context-type="linenumber">33,35</context>
+          <context context-type="linenumber">43,45</context>
         </context-group>
       </trans-unit>
       <trans-unit id="common.retry" datatype="html">
         <source>Retry</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
-          <context context-type="linenumber">36,38</context>
+          <context context-type="linenumber">46,48</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.empty" datatype="html">
         <source> You do not have any rule sets yet. Click &quot;+ New rule set&quot; to create one, or clone a preset from the home page toolbar. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
-          <context context-type="linenumber">41,44</context>
+          <context context-type="linenumber">51,54</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.rename.aria" datatype="html">
+        <source>Rule set name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">91,92</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.rename.error.empty" datatype="html">
+        <source> Name is required. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">101,103</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.rename.error.tooLong" datatype="html">
+        <source> Name is too long (max 80 characters). </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">110,112</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.rename.error.conflictReload" datatype="html">
+        <source> Updated elsewhere - try again. </source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">119,121</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.rename.pencilAria" datatype="html">
+        <source>Rename</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">135,136</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.ruleCount" datatype="html">
         <source><x id="INTERPOLATION" equiv-text="{{ set.rules.length }}"/> rule(s)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
-          <context context-type="linenumber">52,53</context>
+          <context context-type="linenumber">142,143</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.edit" datatype="html">
         <source>Edit</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
-          <context context-type="linenumber">61,63</context>
+          <context context-type="linenumber">156,159</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.menu.aria" datatype="html">
+        <source>More actions</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">166,168</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.menu.rename" datatype="html">
+        <source>Rename</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">178,180</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.menu.duplicate" datatype="html">
+        <source>Duplicate</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">187,189</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.menu.delete" datatype="html">
+        <source>Delete</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.html</context>
+          <context context-type="linenumber">197,199</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.default.aria.set" datatype="html">
+        <source>Set as default</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">83</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.default.aria.unset" datatype="html">
+        <source>Remove as default</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">84</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.default.failed" datatype="html">
+        <source>Could not save your default selection - check your connection.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">114</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.justNow" datatype="html">
+        <source>just now</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">149</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.minutesAgo" datatype="html">
+        <source><x id="count" equiv-text="minutes"/> min ago</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">150</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.hoursAgo" datatype="html">
+        <source><x id="count" equiv-text="hours"/> h ago</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">152</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.daysAgo" datatype="html">
+        <source><x id="count" equiv-text="days"/> d ago</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">154</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.rename.success" datatype="html">
+        <source>Rule set renamed.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">201</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.rename.deletedDuringRename" datatype="html">
+        <source>This rule set was deleted.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">221</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">236</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.rename.failed" datatype="html">
+        <source>Could not rename rule set. Please try again.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">243</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.duplicate.success" datatype="html">
+        <source>Rule set duplicated.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">271</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.duplicate.quotaExceeded" datatype="html">
+        <source>You have reached the rule set limit (20).</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">281</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.duplicate.failed" datatype="html">
+        <source>Could not duplicate rule set.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">287</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.delete.title" datatype="html">
+        <source>Delete this rule set?</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">300</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.delete.message" datatype="html">
+        <source>&quot;<x id="name" equiv-text="set.name"/>&quot; will be permanently deleted. This cannot be undone.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">301</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.delete.success" datatype="html">
+        <source>Rule set deleted.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">316</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.delete.alreadyDeleted" datatype="html">
+        <source>This rule set was already deleted.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">335</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.delete.failed" datatype="html">
+        <source>Could not delete rule set.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">341</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.newRuleSet.defaultName" datatype="html">
         <source>New rule set</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">384</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="formattingRules.create.quotaExceeded" datatype="html">
+        <source>You have reached the rule set limit (20).</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
+          <context context-type="linenumber">393</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.create.failed" datatype="html">
         <source>Could not create rule set. Please try again.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
-          <context context-type="linenumber">86</context>
+          <context context-type="linenumber">399</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.breadcrumb" datatype="html">
@@ -1136,105 +1399,105 @@
         <source>Please drop one file at a time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">501</context>
+          <context context-type="linenumber">512</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.tooLarge" datatype="html">
         <source>File too large - max 5 MB</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">508</context>
+          <context context-type="linenumber">519</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.readFailed" datatype="html">
         <source>Could not read file</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">518</context>
+          <context context-type="linenumber">529</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.quotaExceeded" datatype="html">
         <source>Blob limit reached - delete one from your saved blobs to save a new blob.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">606</context>
+          <context context-type="linenumber">617</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.signIn" datatype="html">
         <source>Please sign in to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">624</context>
+          <context context-type="linenumber">635</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.forbidden" datatype="html">
         <source>You do not own this blob</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">627</context>
+          <context context-type="linenumber">638</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.generic" datatype="html">
         <source>Could not save - please try again</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">629</context>
+          <context context-type="linenumber">640</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.success" datatype="html">
         <source>Share link copied to clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">680</context>
+          <context context-type="linenumber">691</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.failed" datatype="html">
         <source>Failed to copy share link.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">681</context>
+          <context context-type="linenumber">692</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.unsupported" datatype="html">
         <source>Copy is not supported in this browser.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">682</context>
+          <context context-type="linenumber">693</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.public" datatype="html">
         <source>Blob is now public.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">698</context>
+          <context context-type="linenumber">709</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.private" datatype="html">
         <source>Blob is now private.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">699</context>
+          <context context-type="linenumber">710</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.failed" datatype="html">
         <source>Failed to update visibility.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">705</context>
+          <context context-type="linenumber">716</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.title" datatype="html">
         <source>Delete this blob?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">720</context>
+          <context context-type="linenumber">731</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.message" datatype="html">
         <source>&quot;<x id="name" equiv-text="label"/>&quot; will be permanently deleted. This cannot be undone.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">721</context>
+          <context context-type="linenumber">732</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.clone.title" datatype="html">

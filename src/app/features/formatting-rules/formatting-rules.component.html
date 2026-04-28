@@ -21,6 +21,16 @@
     >
       <span i18n="@@formattingRules.newRuleSet">+ New rule set</span>
     </button>
+    <button
+      mat-stroked-button
+      type="button"
+      [disabled]="cloning()"
+      (click)="openClonePresetDialog()"
+      data-testid="clone-preset"
+    >
+      <mat-icon>content_copy</mat-icon>
+      <span i18n="@@formattingRules.clonePreset">Clone preset</span>
+    </button>
   </div>
 
   @if (loadState() === 'loading') {
@@ -44,22 +54,149 @@
   } @else {
     <ul class="rule-set-list" role="list">
       @for (set of ruleSets(); track set.id) {
-        <li class="rule-set-card">
+        <li class="rule-set-card" [class.is-busy]="isBusy(set.id)">
+          <button
+            mat-icon-button
+            type="button"
+            class="default-star"
+            [attr.aria-pressed]="isDefault(set.id)"
+            [attr.aria-label]="
+              isDefault(set.id) ? removeDefaultLabel : setDefaultLabel
+            "
+            [disabled]="isBusy(set.id)"
+            data-testid="default-star"
+            (click)="toggleDefault(set)"
+          >
+            <mat-icon>{{ isDefault(set.id) ? 'star' : 'star_border' }}</mat-icon>
+          </button>
+
           <div class="rule-set-info">
-            <h2 class="rule-set-name">{{ set.name }}</h2>
+            @if (editingId() === set.id) {
+              <div class="rename-row">
+                <input
+                  #renameInput
+                  class="rename-input"
+                  type="text"
+                  [value]="editingName()"
+                  [attr.maxlength]="NAME_MAX_FIELD"
+                  (input)="onRenameInput($any($event.target).value)"
+                  (keydown.enter)="commitRename(set); $event.preventDefault()"
+                  (keydown.escape)="cancelRename(); $event.preventDefault()"
+                  (blur)="cancelRename()"
+                  [attr.aria-invalid]="editingError() !== null"
+                  [attr.aria-describedby]="
+                    editingError() ? 'rename-error-' + set.id : null
+                  "
+                  i18n-aria-label="@@formattingRules.rename.aria"
+                  aria-label="Rule set name"
+                  data-testid="rename-input"
+                />
+                @if (editingError() === 'empty') {
+                  <span
+                    [id]="'rename-error-' + set.id"
+                    class="rename-error"
+                    data-testid="rename-error"
+                    i18n="@@formattingRules.rename.error.empty"
+                  >
+                    Name is required.
+                  </span>
+                } @else if (editingError() === 'tooLong') {
+                  <span
+                    [id]="'rename-error-' + set.id"
+                    class="rename-error"
+                    data-testid="rename-error"
+                    i18n="@@formattingRules.rename.error.tooLong"
+                  >
+                    Name is too long (max 80 characters).
+                  </span>
+                } @else if (editingError() === 'conflict') {
+                  <span
+                    [id]="'rename-error-' + set.id"
+                    class="rename-error"
+                    data-testid="rename-error"
+                    i18n="@@formattingRules.rename.error.conflictReload"
+                  >
+                    Updated elsewhere - try again.
+                  </span>
+                }
+              </div>
+            } @else {
+              <div class="name-row">
+                <h2 class="rule-set-name">{{ set.name }}</h2>
+                <button
+                  mat-icon-button
+                  type="button"
+                  class="rename-pencil"
+                  [disabled]="isBusy(set.id)"
+                  (click)="startRename(set)"
+                  data-testid="rename-pencil"
+                  i18n-aria-label="@@formattingRules.rename.pencilAria"
+                  aria-label="Rename"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+              </div>
+            }
             <p class="rule-set-meta">
               <span i18n="@@formattingRules.ruleCount"
                 >{{ set.rules.length }} rule(s)</span
               >
+              <span class="meta-dot">&middot;</span>
+              <span class="meta-updated">{{ relativeTime(set.updatedAt) }}</span>
             </p>
           </div>
+
           <a
             mat-stroked-button
             [routerLink]="['/formatting-rules', set.id]"
+            [class.disabled-link]="isBusy(set.id)"
+            [attr.aria-disabled]="isBusy(set.id) ? 'true' : null"
             data-testid="edit-rule-set"
           >
             <span i18n="@@formattingRules.edit">Edit</span>
           </a>
+
+          <button
+            mat-icon-button
+            type="button"
+            [matMenuTriggerFor]="rowMenu"
+            [disabled]="isBusy(set.id)"
+            data-testid="row-menu-trigger"
+            i18n-aria-label="@@formattingRules.menu.aria"
+            aria-label="More actions"
+          >
+            <mat-icon>more_horiz</mat-icon>
+          </button>
+          <mat-menu #rowMenu="matMenu">
+            <button
+              mat-menu-item
+              type="button"
+              data-testid="menu-rename"
+              (click)="startRename(set)"
+            >
+              <mat-icon>edit</mat-icon>
+              <span i18n="@@formattingRules.menu.rename">Rename</span>
+            </button>
+            <button
+              mat-menu-item
+              type="button"
+              data-testid="menu-duplicate"
+              (click)="duplicateSet(set)"
+            >
+              <mat-icon>content_copy</mat-icon>
+              <span i18n="@@formattingRules.menu.duplicate">Duplicate</span>
+            </button>
+            <button
+              mat-menu-item
+              type="button"
+              class="menu-destructive"
+              data-testid="menu-delete"
+              (click)="deleteSet(set)"
+            >
+              <mat-icon>delete_outline</mat-icon>
+              <span i18n="@@formattingRules.menu.delete">Delete</span>
+            </button>
+          </mat-menu>
         </li>
       }
     </ul>

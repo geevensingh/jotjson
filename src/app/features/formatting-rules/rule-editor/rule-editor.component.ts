@@ -20,6 +20,7 @@ import { EMPTY, Observable, Subject, catchError, concatMap, debounceTime, filter
 
 import { AuthService } from '../../../core/auth/auth.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { NAME_MAX } from '../../../core/api/models.constants';
 import {
   FORMATTING_ICONS,
   FormattingIcon,
@@ -61,7 +62,6 @@ type PillState =
   | { kind: 'idle' };
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
-const NAME_MAX = 80;
 const MATCH_VALUE_MAX = 200;
 const MAX_RULES = 50;
 const SAVE_DEBOUNCE_MS = 500;
