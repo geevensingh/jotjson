@@ -167,6 +167,11 @@ describe('assertRule', () => {
     );
   });
 
+  it('accepts matchValue at exactly MAX_RULE_MATCH_VALUE_LENGTH chars', () => {
+    const exact = 'x'.repeat(200);
+    expect(assertRule(validRule({ matchValue: exact }), 'rule').matchValue).toBe(exact);
+  });
+
   it('rejects unknown rule fields', () => {
     const bad = { ...validRule(), tag: 'x' };
     expect(() => assertRule(bad, 'rule')).toThrow(/unknown field/);
@@ -199,6 +204,12 @@ describe('assertRuleSetPayload', () => {
     );
   });
 
+  it('accepts name at exactly MAX_RULE_SET_NAME_LENGTH chars', () => {
+    const exact = 'x'.repeat(80);
+    const out = assertRuleSetPayload({ name: exact, rules: [] });
+    expect(out.name).toBe(exact);
+  });
+
   it('rejects rules that is not an array', () => {
     expect(() => assertRuleSetPayload({ name: 'x', rules: {} })).toThrow(/array/);
   });
@@ -206,6 +217,12 @@ describe('assertRuleSetPayload', () => {
   it('rejects more than 50 rules', () => {
     const rules = Array.from({ length: 51 }, (_, i) => validRule({ id: `r${i}` }));
     expect(() => assertRuleSetPayload({ name: 'x', rules })).toThrow(/max 50/);
+  });
+
+  it('accepts exactly MAX_RULES_PER_SET rules', () => {
+    const rules = Array.from({ length: 50 }, (_, i) => validRule({ id: `r${i}` }));
+    const out = assertRuleSetPayload({ name: 'x', rules });
+    expect(out.rules).toHaveLength(50);
   });
 
   it('rejects duplicate rule ids', () => {

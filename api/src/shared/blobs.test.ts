@@ -129,6 +129,12 @@ describe('createBlob', () => {
     );
   });
 
+  it('accepts content of length exactly MAX_BLOB_BYTES', async () => {
+    const exact = 'a'.repeat(MAX_BLOB_BYTES);
+    const doc = await createBlob('owner-1', { content: exact });
+    expect(doc.content).toBe(exact);
+  });
+
   it('rejects non-string content', async () => {
     await expect(
       createBlob('owner-1', { content: 42 as unknown as string })

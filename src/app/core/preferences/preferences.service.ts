@@ -77,7 +77,8 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   // Coerce legacy historyTrackingMode -> recentlyViewedEnabled. Both old
   // values map to true (the new default and strictly less invasive than
   // either old mode). New field wins if both happen to be present.
-  const { historyTrackingMode: legacy, ...rest } = remote;
+  const view = remote as Partial<UserPreferences> & { historyTrackingMode?: unknown };
+  const { historyTrackingMode: legacy, ...rest } = view;
   const coerced: Partial<UserPreferences> = { ...rest };
   if (rest.recentlyViewedEnabled === undefined && legacy !== undefined) {
     coerced.recentlyViewedEnabled = true;
