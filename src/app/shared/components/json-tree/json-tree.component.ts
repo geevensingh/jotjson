@@ -9,7 +9,8 @@ import {
   inject,
   input,
   signal,
-  untracked
+  untracked,
+  type WritableSignal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
@@ -17,7 +18,6 @@ import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
-import { persistedStringSignal } from '../../../core/preferences/persisted-signal';
 import { JsonParserService } from '../../../core/json/json-parser.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import type { FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
@@ -148,7 +148,21 @@ export class JsonTreeComponent {
    */
   readonly overrideRuleSets = input<FormattingRuleSet[] | null>(null);
 
-  readonly search = persistedStringSignal(TREE_SEARCH_STORAGE_KEY);
+  readonly embeddedMode = input<boolean>(false);
+
+  /**
+   * Search query for the tree. When `embeddedMode` is false (default,
+   * home tree), the value is persisted to / hydrated from localStorage
+   * under `TREE_SEARCH_STORAGE_KEY`. When `embeddedMode` is true (rule
+   * editor live preview), persistence is disabled and the signal stays
+   * a plain in-memory signal seeded from `''`.
+   *
+   * Implemented via a constructor-side effect rather than the
+   * `persistedStringSignal` helper so the persistence decision can read
+   * the `embeddedMode` Input, which is not bound at field-initializer
+   * time.
+   */
+  readonly search: WritableSignal<string> = signal('');
 
   /**
    * Path of the currently-selected tree row, or `null` for no selection.
@@ -545,8 +559,41 @@ export class JsonTreeComponent {
       });
     });
 
-    // search() is persisted via persistedStringSignal at the field
-    // declaration above (key: TREE_SEARCH_STORAGE_KEY). Per-device,
+    // M6d-3-fu2 search persistence. When NOT in embeddedMode, hydrate
+    // the search signal from localStorage on first run and write
+    // through on every subsequent change. The effect early-returns in
+    // embeddedMode so the preview tree neither reads nor writes the
+    // home tree's TREE_SEARCH_STORAGE_KEY slot.
+    let searchHydrated = false;
+    effect(() => {
+      if (this.embeddedMode()) {
+        return;
+      }
+      if (!searchHydrated) {
+        searchHydrated = true;
+        try {
+          const raw = localStorage.getItem(TREE_SEARCH_STORAGE_KEY);
+          if (raw !== null) {
+            untracked(() => this.search.set(raw));
+          }
+        } catch {
+          /* storage unavailable / blocked */
+        }
+      }
+      const value = this.search();
+      try {
+        if (value.length === 0) {
+          localStorage.removeItem(TREE_SEARCH_STORAGE_KEY);
+        } else {
+          localStorage.setItem(TREE_SEARCH_STORAGE_KEY, value);
+        }
+      } catch {
+        /* storage unavailable / quota / private mode */
+      }
+    });
+
+    // search() is persisted via the effect above (keyed on
+    // TREE_SEARCH_STORAGE_KEY) when embeddedMode is false. Per-device,
     // never sent to the server.
   }
 

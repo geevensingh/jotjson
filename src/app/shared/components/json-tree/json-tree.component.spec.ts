@@ -1243,6 +1243,84 @@ describe('JsonTreeComponent', () => {
     });
   });
 
+  describe('embeddedMode (M6d-3-fu2)', () => {
+    const SEARCH_KEY = 'jotjson.treeSearch.v1';
+
+    async function createEmbedded(value: unknown): Promise<void> {
+      localStorage.removeItem(STORAGE_KEY);
+      TestBed.resetTestingModule();
+      snackOpen = jasmine.createSpy('snackOpen');
+      await TestBed.configureTestingModule({
+        imports: [JsonTreeComponent],
+        providers: [
+          ...provideFakeAuth(),
+          { provide: MatSnackBar, useValue: { open: snackOpen } }
+        ]
+      }).compileComponents();
+      fixture = TestBed.createComponent(JsonTreeComponent);
+      prefs = TestBed.inject(PreferencesService);
+      fixture.componentRef.setInput('value', value);
+      fixture.componentRef.setInput('embeddedMode', true);
+      fixture.detectChanges();
+      cmp = fixture.componentInstance;
+    }
+
+    afterEach(() => localStorage.removeItem(SEARCH_KEY));
+
+    it('does not write to localStorage when search() changes', async () => {
+      await createEmbedded({ alpha: 1 });
+      expect(localStorage.getItem(SEARCH_KEY)).toBeNull();
+      fixture.componentInstance.search.set('foo');
+      fixture.detectChanges();
+      expect(localStorage.getItem(SEARCH_KEY)).toBeNull();
+    });
+
+    it('ignores a preexisting localStorage value at construction', async () => {
+      localStorage.setItem(SEARCH_KEY, 'preexisting');
+      await createEmbedded({ alpha: 1 });
+      expect(fixture.componentInstance.search()).toBe('');
+      // And the preexisting value must remain untouched (not overwritten).
+      expect(localStorage.getItem(SEARCH_KEY)).toBe('preexisting');
+    });
+
+    it('hides the search input from the DOM', async () => {
+      await createEmbedded({ alpha: 1 });
+      const searchInput = fixture.nativeElement.querySelector(
+        'input[type="search"].tree-search'
+      );
+      expect(searchInput).toBeNull();
+    });
+
+    it('default (embeddedMode unset) preserves persisted-search behavior', async () => {
+      // Regression: the existing persistence flow still works when the
+      // Input is not set.
+      await createWith({ alpha: 1 });
+      fixture.componentInstance.search.set('alpha');
+      fixture.detectChanges();
+      expect(localStorage.getItem(SEARCH_KEY)).toBe('alpha');
+    });
+
+    it('two trees (one embedded, one not) do not cross-contaminate', async () => {
+      // Mount a non-embedded tree first; write a search value via signal.
+      await createWith({ alpha: 1 });
+      fixture.componentInstance.search.set('home-search');
+      fixture.detectChanges();
+      expect(localStorage.getItem(SEARCH_KEY)).toBe('home-search');
+      const homeFixture = fixture;
+      // Mount a separate embedded tree in a fresh testing module.
+      await createEmbedded({ alpha: 1 });
+      const embedded = fixture.componentInstance;
+      expect(embedded.search()).toBe('');
+      embedded.search.set('preview-search');
+      fixture.detectChanges();
+      // Embedded write must NOT clobber the home tree's persisted value.
+      expect(localStorage.getItem(SEARCH_KEY)).toBe('home-search');
+      // Home component's in-memory signal must also be unchanged
+      // (different signal instance).
+      expect(homeFixture.componentInstance.search()).toBe('home-search');
+    });
+  });
+
   describe('formatting rules integration (M6f-3)', () => {
     let httpMock: HttpTestingController;
     let ruleSets: RuleSetsService;

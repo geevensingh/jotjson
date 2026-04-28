@@ -97,4 +97,12 @@ describe('RulePreviewComponent', () => {
     expect(next![0].name).toBe('After');
     expect(next![0].rules[0].matchValue).toBe('message');
   });
+
+  it('binds embeddedMode=true on the inner JsonTreeComponent (M6d-3-fu2)', async () => {
+    await create(ruleSet());
+    const tree = fixture.debugElement.query(
+      (el) => el.componentInstance instanceof JsonTreeComponent
+    ).componentInstance as JsonTreeComponent;
+    expect(tree.embeddedMode()).toBeTrue();
+  });
 });

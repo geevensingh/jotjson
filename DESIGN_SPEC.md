@@ -1202,7 +1202,13 @@ EU users would need a regional resource - out of scope for v1.
        Input on `JsonTreeComponent` lets a `RulePreviewComponent`
        render a built-in sample snippet through the production
        tree with only the in-progress rule set applied (home
-       tree behavior unchanged when the input is unset).
+       tree behavior unchanged when the input is unset). The
+       component also accepts an optional `embeddedMode` Input;
+       when true (used by the rule-editor live preview) it
+       disables the persisted search box, both so the preview
+       cannot read or write the home tree's search state and so
+       the search UI is not exposed in contexts where it isn't
+       useful.
    - **M6e**: List page wraps the editor. Registered-user-only
      `/formatting-rules` page: list cards (one per set, sorted by
      `createdAt`), empty state with "Create your first rule set"
