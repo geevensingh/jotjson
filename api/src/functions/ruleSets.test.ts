@@ -444,7 +444,12 @@ describe('GET /api/rule-set-presets', () => {
     const res = await listPresets(makeRequest(), ctx);
     expect(res.status).toBe(200);
     const body = res.jsonBody as { id: string }[];
-    expect(body.map((p) => p.id)).toEqual(['error-detection', 'status-codes', 'null-finder']);
+    expect(body.map((p) => p.id)).toEqual([
+      'error-detection',
+      'status-codes',
+      'null-finder',
+      'status-highlights'
+    ]);
   });
 });
 

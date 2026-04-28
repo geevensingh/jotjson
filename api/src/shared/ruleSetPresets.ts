@@ -44,15 +44,24 @@ const STYLE_YELLOW_BG = { backgroundColor: '#fff59d' };
 // -------- Preset definitions --------
 
 /**
- * Error Detection - flags keys that name an error / failure concept
- * with a red background.
+ * Error Detection - flags keys (and most values) that name an
+ * error / failure concept with a red background.
  *
- * Spec lists "error, err, exception, fault" as the target keywords.
- * Each lands as its own `contains` rule (instead of a single
- * `error|err|exception|fault` regex) because the regex match type
- * is deferred to v1.1. `contains` is preferred over `exact` so the
- * preset matches `errors`, `errorMessage`, `lastError`, etc., which
- * is what users actually have in their JSON.
+ * Spec lists "error, err, exception, fault" as the target keywords;
+ * v1.1 adds "failure" and "failed" because they're equally common
+ * in real JSON and the bare term "Error Detection" reads as
+ * inclusive. Each lands as its own `contains` rule (instead of a
+ * single regex) because the regex match type is deferred to v1.1.
+ * `contains` is preferred over `exact` so the preset matches
+ * `errors`, `errorMessage`, `lastError`, `TypeError`, `ParseError`,
+ * etc., which is what users actually have in their JSON.
+ *
+ * `err` is keys-only (`target: 'key'`) because case-insensitive
+ * contains-match for "err" hits common English words ("merry",
+ * "berry", "where", "every"). It's safe in keys (developer-chosen
+ * identifiers) but too noisy in values (arbitrary user data). The
+ * other terms use `target: 'key_and_value'` so a value like
+ * "TypeError" or "ParseError" gets highlighted on its own.
  */
 const ERROR_DETECTION: RuleSetPreset = {
   id: 'error-detection',
@@ -60,7 +69,7 @@ const ERROR_DETECTION: RuleSetPreset = {
   rules: [
     {
       id: 'error',
-      target: 'key',
+      target: 'key_and_value',
       matchType: 'contains',
       matchValue: 'error',
       caseSensitive: false,
@@ -76,7 +85,7 @@ const ERROR_DETECTION: RuleSetPreset = {
     },
     {
       id: 'exception',
-      target: 'key',
+      target: 'key_and_value',
       matchType: 'contains',
       matchValue: 'exception',
       caseSensitive: false,
@@ -84,9 +93,25 @@ const ERROR_DETECTION: RuleSetPreset = {
     },
     {
       id: 'fault',
-      target: 'key',
+      target: 'key_and_value',
       matchType: 'contains',
       matchValue: 'fault',
+      caseSensitive: false,
+      style: STYLE_RED_BG
+    },
+    {
+      id: 'failure',
+      target: 'key_and_value',
+      matchType: 'contains',
+      matchValue: 'failure',
+      caseSensitive: false,
+      style: STYLE_RED_BG
+    },
+    {
+      id: 'failed',
+      target: 'key_and_value',
+      matchType: 'contains',
+      matchValue: 'failed',
       caseSensitive: false,
       style: STYLE_RED_BG
     }
@@ -152,6 +177,97 @@ const NULL_FINDER: RuleSetPreset = {
 };
 
 /**
+ * Status Highlights - color-codes outcome and lifecycle vocabulary
+ * with green (positive) and amber (warning / in-progress)
+ * backgrounds.
+ *
+ * Most terms are `contains` so they catch shapes like "successCount",
+ * "wasSuccessful", "loginPassed", "warningLevel", "pendingItems",
+ * etc. The bare tokens `ok` and `warn` need `exact` matches because
+ * `contains` would hit innocuous English (took, look, broken,
+ * Warner, warned). `exact` + case-insensitive still catches the
+ * very common shapes `{"status":"OK"}` and `{"level":"warn"}`,
+ * which was the whole point of including them.
+ *
+ * Every rule uses `target: 'key_and_value'`: most outcome shapes
+ * appear as values (`{"status":"success"}`) but key-side matches
+ * (`{"successCount": 42}`, `{"warning": "..."}`) are equally
+ * worth flagging.
+ */
+const STATUS_HIGHLIGHTS: RuleSetPreset = {
+  id: 'status-highlights',
+  name: 'Status Highlights',
+  rules: [
+    // Green - positive outcomes
+    {
+      id: 'success',
+      target: 'key_and_value',
+      matchType: 'contains',
+      matchValue: 'success',
+      caseSensitive: false,
+      style: STYLE_GREEN_BG
+    },
+    {
+      id: 'succeeded',
+      target: 'key_and_value',
+      matchType: 'contains',
+      matchValue: 'succeeded',
+      caseSensitive: false,
+      style: STYLE_GREEN_BG
+    },
+    {
+      id: 'passed',
+      target: 'key_and_value',
+      matchType: 'contains',
+      matchValue: 'passed',
+      caseSensitive: false,
+      style: STYLE_GREEN_BG
+    },
+    {
+      id: 'ok',
+      target: 'key_and_value',
+      matchType: 'exact',
+      matchValue: 'ok',
+      caseSensitive: false,
+      style: STYLE_GREEN_BG
+    },
+    // Amber - warnings / in-progress
+    {
+      id: 'warning',
+      target: 'key_and_value',
+      matchType: 'contains',
+      matchValue: 'warning',
+      caseSensitive: false,
+      style: STYLE_AMBER_BG
+    },
+    {
+      id: 'warn',
+      target: 'key_and_value',
+      matchType: 'exact',
+      matchValue: 'warn',
+      caseSensitive: false,
+      style: STYLE_AMBER_BG
+    },
+    {
+      id: 'pending',
+      target: 'key_and_value',
+      matchType: 'contains',
+      matchValue: 'pending',
+      caseSensitive: false,
+      style: STYLE_AMBER_BG
+    },
+    {
+      id: 'retry',
+      target: 'key_and_value',
+      matchType: 'contains',
+      matchValue: 'retry',
+      caseSensitive: false,
+      style: STYLE_AMBER_BG
+    }
+  ]
+};
+
+/**
  * Ordered list of presets returned by `GET /api/rule-set-presets`.
  * Order is stable so the UI's "Clone preset" menu doesn't shuffle
  * between requests.
@@ -159,7 +275,8 @@ const NULL_FINDER: RuleSetPreset = {
 export const PRESET_RULE_SETS: readonly RuleSetPreset[] = [
   ERROR_DETECTION,
   STATUS_CODES,
-  NULL_FINDER
+  NULL_FINDER,
+  STATUS_HIGHLIGHTS
 ] as const;
 
 const PRESET_BY_ID: ReadonlyMap<string, RuleSetPreset> = new Map(

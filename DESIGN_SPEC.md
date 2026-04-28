@@ -604,9 +604,10 @@ Available to **registered users** only.
   - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply. Toolbar state is the user's `activeRuleSetIds` preference and persists across sessions and devices.
 
 - **Built-in Presets** - ship a few starter rule sets users can clone and customize. Preset IDs are stable kebab-case slugs (not UUIDs) so the clone endpoint URLs are human-readable and stable across rebuilds; user-created rule sets always get UUIDs.
-  - `error-detection` ("Error Detection") - highlights keys like `error`, `err`, `exception`, `fault` in red.
+  - `error-detection` ("Error Detection") - highlights keys and values that name an error / failure concept in red. Six rules, all `contains` and case-insensitive: `error`, `exception`, `fault`, `failure`, `failed` target both keys and values (so `{"data":"TypeError"}` highlights the value); `err` targets keys only because case-insensitive contains-match for "err" hits common English words in arbitrary value text (merry, berry, where, every).
   - `status-codes` ("Status Codes") - color-codes a fixed list of common HTTP response code values via `exact` matches: `200`, `201`, `204` (green); `400`, `401`, `403`, `404` (amber); `500`, `502`, `503` (red). Individual rules per code rather than a single regex - a documented v1 trade-off until the regex match type lands in v1.1.
   - `null-finder` ("Null Finder") - highlights all `null` values with a yellow background.
+  - `status-highlights` ("Status Highlights") - color-codes outcome and lifecycle vocabulary on both keys and values, case-insensitive. Green: `success`, `succeeded`, `passed` (`contains`), `ok` (`exact` - avoids partial matches like "took" / "look" / "broken" while still catching `{"status":"OK"}`). Amber: `warning`, `pending`, `retry` (`contains`), `warn` (`exact` - avoids "Warner" / "warned" while catching `{"level":"warn"}`).
 
 - **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set, rule-set name <= 80 chars, rule matchValue <= 200 chars. Enforced server-side as hardcoded constants in `api/src/shared/limits.ts` (mirrors the 100-blob cap pattern); raising them later is one edit.
 
