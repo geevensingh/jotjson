@@ -85,6 +85,13 @@ describe('AppHeaderComponent', () => {
     ) as HTMLAnchorElement;
     expect(blobsLink).toBeTruthy();
     expect(blobsLink.getAttribute('href')).toBe('/blobs');
+
+    // Formatting rules affordance is also signed-in only.
+    const rulesLink = fixture.nativeElement.querySelector(
+      'a[aria-label="Formatting rules"]'
+    ) as HTMLAnchorElement;
+    expect(rulesLink).toBeTruthy();
+    expect(rulesLink.getAttribute('href')).toBe('/formatting-rules');
   });
 
   it('does not render the Blobs link when signed out', async () => {
@@ -93,6 +100,14 @@ describe('AppHeaderComponent', () => {
       'a[aria-label="Your saved blobs"]'
     );
     expect(blobsLink).toBeNull();
+  });
+
+  it('does not render the Formatting rules link when signed out', async () => {
+    const { fixture } = await create();
+    const rulesLink = fixture.nativeElement.querySelector(
+      'a[aria-label="Formatting rules"]'
+    );
+    expect(rulesLink).toBeNull();
   });
 
   it('onSignIn delegates to AuthService', async () => {
