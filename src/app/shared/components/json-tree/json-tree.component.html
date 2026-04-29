@@ -418,14 +418,19 @@
 
 <mat-menu #rowMenu="matMenu" class="tree-row-menu">
   @if (contextNode(); as cn) {
+    <button
+      mat-menu-item
+      type="button"
+      class="ctx-default-action"
+      (click)="copyValue(cn, 'menu')"
+    >
+      {{ ctxCopyValueLabel }}
+    </button>
     @if (showCopyKey(cn)) {
       <button mat-menu-item type="button" (click)="copyKey(cn)">
         {{ ctxCopyKeyLabel }}
       </button>
     }
-    <button mat-menu-item type="button" (click)="copyValue(cn, 'menu')">
-      {{ ctxCopyValueLabel }}
-    </button>
     <button mat-menu-item type="button" (click)="copyPathFromMenu(cn)">
       {{ ctxCopyPathLabel }}
     </button>

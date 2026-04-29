@@ -40,3 +40,21 @@ html:has(body.theme-light),
 body.theme-light {
   @include mat.all-component-colors($jotjson-light);
 }
+
+// Tree per-row context menu (json-tree.component): compact density and a
+// bold "default action" affordance on the Copy value item (which is also
+// what double-clicking a row triggers). Scoped via the panel-class set on
+// `<mat-menu class="tree-row-menu">` so other mat-menus in the app keep
+// Material defaults.
+.tree-row-menu {
+  --mat-menu-divider-top-spacing: 6px;
+  --mat-menu-divider-bottom-spacing: 6px;
+
+  .mat-mdc-menu-item {
+    min-height: 32px;
+  }
+
+  .mat-mdc-menu-item.ctx-default-action {
+    font-weight: 600;
+  }
+}

@@ -2409,6 +2409,34 @@ describe('JsonTreeComponent', () => {
           .forEach((b) => (b as HTMLElement).click());
         fixture.detectChanges();
       });
+
+      it('renders Copy value as the first menu item, marked as the default action', async () => {
+        // M7q polish: Copy value moved to position 1 + bold via
+        // `.ctx-default-action` so the dblclick-equivalent action is
+        // both top-of-list and visually distinct.
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const kebab = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-row[data-path="$.alpha"] .tree-kebab-pill'
+        ) as HTMLButtonElement | null;
+        expect(kebab).toBeTruthy();
+        kebab!.click();
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+        const items = document.body.querySelectorAll(
+          'button.mat-mdc-menu-item'
+        ) as NodeListOf<HTMLButtonElement>;
+        expect(items.length).toBeGreaterThan(0);
+        const first = items[0];
+        expect(first.textContent?.trim()).toBe(cmp.ctxCopyValueLabel);
+        expect(first.classList.contains('ctx-default-action')).toBe(true);
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
     });
   });
 });
