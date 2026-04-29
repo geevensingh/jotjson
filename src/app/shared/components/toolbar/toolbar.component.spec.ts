@@ -91,14 +91,14 @@ describe('ToolbarComponent', () => {
       expect(fixture.componentInstance.selectionSyncEnabled()).toBeTrue();
     });
 
-    it('selectionSyncIcon = "link" when enabled, "link-off" when disabled', async () => {
+    it('selectionSyncIcon = "arrows-exchange" when enabled, "arrows-exchange-off" when disabled', async () => {
       const { fixture, prefs } = await create();
       prefs.update({ treeEditorSelectionSync: true });
       fixture.detectChanges();
-      expect(fixture.componentInstance.selectionSyncIcon()).toBe('link');
+      expect(fixture.componentInstance.selectionSyncIcon()).toBe('arrows-exchange');
       prefs.update({ treeEditorSelectionSync: false });
       fixture.detectChanges();
-      expect(fixture.componentInstance.selectionSyncIcon()).toBe('link-off');
+      expect(fixture.componentInstance.selectionSyncIcon()).toBe('arrows-exchange-off');
     });
 
     it('aria-pressed reflects the pref state', async () => {

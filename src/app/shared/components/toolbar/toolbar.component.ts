@@ -103,13 +103,14 @@ export class ToolbarComponent {
    * Tree<->editor selection sync (issue #42). Default-on user
    * preference; both this toolbar button and the matching toggle on
    * the profile page write through to the same `treeEditorSelectionSync`
-   * key. Icon flips between `link` (on) and `link-off` (off).
+   * key. Icon flips between `arrows-exchange` (on) and
+   * `arrows-exchange-off` (off).
    */
   readonly selectionSyncEnabled = computed(
     () => this.prefs.prefs().treeEditorSelectionSync
   );
   readonly selectionSyncIcon = computed<JjIconName>(() =>
-    this.selectionSyncEnabled() ? 'link' : 'link-off'
+    this.selectionSyncEnabled() ? 'arrows-exchange' : 'arrows-exchange-off'
   );
   readonly selectionSyncTooltip = computed(() =>
     this.selectionSyncEnabled()
