@@ -132,6 +132,7 @@
         <button
           mat-stroked-button
           type="button"
+          id="add-rule-button"
           [disabled]="formDisabled()"
           (click)="addRule()"
           data-testid="add-rule-button"
@@ -155,6 +156,7 @@
                 <button
                   mat-icon-button
                   type="button"
+                  [id]="'move-up-' + rule.id"
                   [disabled]="i === 0 || formDisabled()"
                   aria-label="Move up"
                   i18n-aria-label="@@ruleEditor.moveUp"
@@ -166,6 +168,7 @@
                 <button
                   mat-icon-button
                   type="button"
+                  [id]="'move-down-' + rule.id"
                   [disabled]="i === set.rules.length - 1 || formDisabled()"
                   aria-label="Move down"
                   i18n-aria-label="@@ruleEditor.moveDown"
@@ -177,6 +180,7 @@
                 <button
                   mat-icon-button
                   type="button"
+                  [id]="'remove-rule-' + rule.id"
                   [disabled]="formDisabled()"
                   aria-label="Remove rule"
                   i18n-aria-label="@@ruleEditor.removeRule"
@@ -303,13 +307,14 @@
                   type="color"
                   class="style-color"
                   [value]="rule.style.backgroundColor || '#ffffff'"
+                  [attr.aria-describedby]="'bg-' + rule.id + '-hex'"
                   (input)="
                     patchStyle(i, {
                       backgroundColor: $any($event.target).value
                     })
                   "
                 />
-                <code class="style-hex">{{
+                <code [id]="'bg-' + rule.id + '-hex'" class="style-hex">{{
                   rule.style.backgroundColor || '(none)'
                 }}</code>
               </div>
@@ -326,13 +331,14 @@
                   type="color"
                   class="style-color"
                   [value]="rule.style.textColor || '#000000'"
+                  [attr.aria-describedby]="'text-' + rule.id + '-hex'"
                   (input)="
                     patchStyle(i, {
                       textColor: $any($event.target).value
                     })
                   "
                 />
-                <code class="style-hex">{{
+                <code [id]="'text-' + rule.id + '-hex'" class="style-hex">{{
                   rule.style.textColor || '(none)'
                 }}</code>
               </div>
@@ -349,13 +355,14 @@
                   type="color"
                   class="style-color"
                   [value]="rule.style.borderColor || '#000000'"
+                  [attr.aria-describedby]="'border-' + rule.id + '-hex'"
                   (input)="
                     patchStyle(i, {
                       borderColor: $any($event.target).value
                     })
                   "
                 />
-                <code class="style-hex">{{
+                <code [id]="'border-' + rule.id + '-hex'" class="style-hex">{{
                   rule.style.borderColor || '(none)'
                 }}</code>
               </div>

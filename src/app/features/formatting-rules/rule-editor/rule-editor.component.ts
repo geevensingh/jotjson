@@ -2,7 +2,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  Injector,
   OnInit,
+  afterNextRender,
   computed,
   inject,
   signal
@@ -130,6 +132,7 @@ export class RuleEditorComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly snack = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
 
   readonly loadState = signal<LoadState>('loading');
   readonly saveState = signal<SaveState>('idle');
@@ -367,6 +370,10 @@ export class RuleEditorComponent implements OnInit {
       style: DEFAULT_NEW_RULE_STYLE()
     };
     this.editable.set({ ...current, rules: [...current.rules, newRule] });
+    // M6g-2: focus the new rule's match-value input so users can start
+    // typing immediately. afterNextRender waits for the @for to render
+    // the new <li> before the focus call.
+    this.focusElementById(`match-value-${newRule.id}`);
   }
 
   removeRule(index: number): void {
@@ -376,6 +383,16 @@ export class RuleEditorComponent implements OnInit {
     const next = current.rules.slice();
     next.splice(index, 1);
     this.editable.set({ ...current, rules: next });
+    // M6g-2: pick a sensible focus target so keyboard users do not lose
+    // their place. Prefer the rule that filled index `index` (the next
+    // surviving rule shifted up); fall back to the previous rule (if we
+    // removed the last one); fall back to the "+ Add rule" button if
+    // the list is now empty.
+    const successor = next[index] ?? next[index - 1];
+    const targetId = successor
+      ? `remove-rule-${successor.id}`
+      : 'add-rule-button';
+    this.focusElementById(targetId);
   }
 
   moveRule(index: number, direction: -1 | 1): void {
@@ -388,6 +405,18 @@ export class RuleEditorComponent implements OnInit {
     const [moved] = next.splice(index, 1);
     next.splice(target, 0, moved);
     this.editable.set({ ...current, rules: next });
+    // M6g-2: keep keyboard focus on the same direction button so
+    // repeated keypresses keep working. If the moved rule has hit the
+    // edge in that direction (button now disabled), fall back to the
+    // opposite direction button which is still active.
+    const sameDirAtEdge =
+      (direction === -1 && target === 0) ||
+      (direction === 1 && target === next.length - 1);
+    const focusDir: -1 | 1 = sameDirAtEdge
+      ? (direction === -1 ? 1 : -1)
+      : direction;
+    const focusPrefix = focusDir === -1 ? 'move-up-' : 'move-down-';
+    this.focusElementById(`${focusPrefix}${moved.id}`);
   }
 
   patchRule(index: number, patch: Partial<FormattingRule>): void {
@@ -423,6 +452,28 @@ export class RuleEditorComponent implements OnInit {
     const icon = FORMATTING_ICONS.find((i) => i === value);
     if (!icon) return;
     this.patchStyle(index, { icon });
+  }
+
+  /**
+   * M6g-2 focus helper. Schedules a focus call on the element with
+   * `id === targetId` after Angular renders the next frame, so the
+   * caller can mutate `editable()` and then ask for focus on a
+   * just-rendered element without racing the change-detection cycle.
+   *
+   * No-ops when the element is missing (e.g., the list became empty
+   * and the caller asked for an `add-rule-button` that is conditionally
+   * rendered) and when running outside a DOM environment.
+   */
+  private focusElementById(targetId: string): void {
+    afterNextRender(
+      () => {
+        const el = document.getElementById(targetId);
+        if (el && typeof (el as HTMLElement).focus === 'function') {
+          (el as HTMLElement).focus();
+        }
+      },
+      { injector: this.injector }
+    );
   }
 
   /** Manual retry from the `Save failed - retry` pill. */

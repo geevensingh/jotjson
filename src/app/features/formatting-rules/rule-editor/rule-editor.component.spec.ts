@@ -770,4 +770,169 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       expect(cmp.ruleStyleVars(status)?.['--tree-row-format-bg']).toBe('#abcdef');
     });
   });
+
+  describe('a11y focus management (M6g-2)', () => {
+    function attached(initial: FormattingRuleSet): Setup {
+      const ctx = setup({ initialCache: [initial] });
+      document.body.appendChild(ctx.fixture.nativeElement);
+      ctx.fixture.detectChanges();
+      return ctx;
+    }
+
+    function detach(ctx: Setup): void {
+      const el = ctx.fixture.nativeElement as HTMLElement;
+      if (el.parentNode === document.body) {
+        document.body.removeChild(el);
+      }
+    }
+
+    it('addRule focuses the new rule\'s match-value input', fakeAsync(() => {
+      const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' })] }));
+      try {
+        ctx.fixture.componentInstance.addRule();
+        ctx.fixture.detectChanges();
+        flush();
+        const editable = ctx.fixture.componentInstance.editable()!;
+        const newId = editable.rules[editable.rules.length - 1].id;
+        expect((document.activeElement as HTMLElement | null)?.id).toBe(
+          `match-value-${newId}`
+        );
+      } finally {
+        detach(ctx);
+      }
+    }));
+
+    it('removeRule on a middle rule focuses the next surviving rule\'s remove button', fakeAsync(() => {
+      const ctx = attached(
+        ruleSet({
+          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })]
+        })
+      );
+      try {
+        ctx.fixture.componentInstance.removeRule(1);
+        ctx.fixture.detectChanges();
+        flush();
+        // rules[1] (r2) was removed; rules[1] is now r3 which should
+        // receive focus on its remove button.
+        expect((document.activeElement as HTMLElement | null)?.id).toBe(
+          'remove-rule-r3'
+        );
+      } finally {
+        detach(ctx);
+      }
+    }));
+
+    it('removeRule on the last rule focuses the new last rule\'s remove button', fakeAsync(() => {
+      const ctx = attached(
+        ruleSet({ rules: [rule({ id: 'r1' }), rule({ id: 'r2' })] })
+      );
+      try {
+        ctx.fixture.componentInstance.removeRule(1);
+        ctx.fixture.detectChanges();
+        flush();
+        expect((document.activeElement as HTMLElement | null)?.id).toBe(
+          'remove-rule-r1'
+        );
+      } finally {
+        detach(ctx);
+      }
+    }));
+
+    it('removeRule on the only rule focuses the "+ Add rule" button', fakeAsync(() => {
+      const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' })] }));
+      try {
+        ctx.fixture.componentInstance.removeRule(0);
+        ctx.fixture.detectChanges();
+        flush();
+        expect((document.activeElement as HTMLElement | null)?.id).toBe(
+          'add-rule-button'
+        );
+      } finally {
+        detach(ctx);
+      }
+    }));
+
+    it('moveRule keeps focus on the same direction button when not at edge', fakeAsync(() => {
+      const ctx = attached(
+        ruleSet({
+          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })]
+        })
+      );
+      try {
+        // Move r2 down (index 1 -> 2). New position is the last, so
+        // move-down would be disabled - expect fallback to move-up.
+        ctx.fixture.componentInstance.moveRule(1, 1);
+        ctx.fixture.detectChanges();
+        flush();
+        expect((document.activeElement as HTMLElement | null)?.id).toBe(
+          'move-up-r2'
+        );
+      } finally {
+        detach(ctx);
+      }
+    }));
+
+    it('moveRule falls back to opposite direction when same direction hits the edge', fakeAsync(() => {
+      const ctx = attached(
+        ruleSet({
+          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })]
+        })
+      );
+      try {
+        // Move r2 up (index 1 -> 0). New position 0 disables move-up,
+        // so focus falls back to move-down.
+        ctx.fixture.componentInstance.moveRule(1, -1);
+        ctx.fixture.detectChanges();
+        flush();
+        expect((document.activeElement as HTMLElement | null)?.id).toBe(
+          'move-down-r2'
+        );
+      } finally {
+        detach(ctx);
+      }
+    }));
+
+    it('moveRule keeps focus on the moved button when neither end is reached', fakeAsync(() => {
+      const ctx = attached(
+        ruleSet({
+          rules: [
+            rule({ id: 'r1' }),
+            rule({ id: 'r2' }),
+            rule({ id: 'r3' }),
+            rule({ id: 'r4' })
+          ]
+        })
+      );
+      try {
+        // Move r2 down (index 1 -> 2). Not the last, so move-down stays
+        // enabled and focus stays on it.
+        ctx.fixture.componentInstance.moveRule(1, 1);
+        ctx.fixture.detectChanges();
+        flush();
+        expect((document.activeElement as HTMLElement | null)?.id).toBe(
+          'move-down-r2'
+        );
+      } finally {
+        detach(ctx);
+      }
+    }));
+
+    it('every color picker is described by its sibling hex code', () => {
+      const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' })] }));
+      try {
+        const root = ctx.fixture.nativeElement as HTMLElement;
+        const bgInput = root.querySelector('input#bg-r1') as HTMLInputElement;
+        const textInput = root.querySelector('input#text-r1') as HTMLInputElement;
+        const borderInput = root.querySelector('input#border-r1') as HTMLInputElement;
+        expect(bgInput?.getAttribute('aria-describedby')).toBe('bg-r1-hex');
+        expect(textInput?.getAttribute('aria-describedby')).toBe('text-r1-hex');
+        expect(borderInput?.getAttribute('aria-describedby')).toBe('border-r1-hex');
+        expect(root.querySelector('#bg-r1-hex')).toBeTruthy();
+        expect(root.querySelector('#text-r1-hex')).toBeTruthy();
+        expect(root.querySelector('#border-r1-hex')).toBeTruthy();
+      } finally {
+        detach(ctx);
+      }
+    });
+  });
 });
