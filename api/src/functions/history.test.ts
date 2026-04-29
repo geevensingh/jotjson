@@ -23,7 +23,7 @@ import {
   clearAll as clearAllMock,
   listEntries as listEntriesMock
 } from '../shared/history';
-import { deleteHistory, getHistory, postHistory } from './history';
+import { deleteHistory, getHistory } from './history';
 
 const requireAuth = requireAuthMock as unknown as jest.Mock;
 const listEntries = listEntriesMock as unknown as jest.Mock;
@@ -117,17 +117,6 @@ describe('GET /api/history', () => {
     expect(listEntries).not.toHaveBeenCalled();
   });
 
-  it('ignores legacy actions query string for stale-client tolerance', async () => {
-    listEntries.mockResolvedValueOnce({ entries: [] });
-    await getHistory(
-      makeRequest({ query: { actions: 'saved,pasted' } }),
-      ctx
-    );
-    // The v1 narrowing collapses history to "viewed" only; the actions
-    // filter is silently dropped, never forwarded to listEntries.
-    expect(listEntries).toHaveBeenCalledWith('u-1', {});
-  });
-
   it('forwards from and to ISO timestamps', async () => {
     listEntries.mockResolvedValueOnce({ entries: [] });
     await getHistory(
@@ -209,34 +198,5 @@ describe('DELETE /api/history', () => {
     clearAll.mockRejectedValueOnce(new Error('boom'));
     const res = await deleteHistory(makeRequest(), ctx);
     expect(res.status).toBe(500);
-  });
-});
-
-describe('POST /api/history (legacy no-op)', () => {
-  it('returns 401 when unauthenticated', async () => {
-    requireAuth.mockRejectedValueOnce(new AuthError('Missing bearer token'));
-    const res = await postHistory(makeRequest({ body: { action: 'pasted' } }), ctx);
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 204 for any authed body (legacy paste shape)', async () => {
-    const res = await postHistory(
-      makeRequest({ body: { action: 'pasted', slug: 'abc', title: 'Notes' } }),
-      ctx
-    );
-    expect(res.status).toBe(204);
-  });
-
-  it('returns 204 even when the body is missing', async () => {
-    const res = await postHistory(makeRequest(), ctx);
-    expect(res.status).toBe(204);
-  });
-
-  it('returns 204 even for unrecognized action values', async () => {
-    const res = await postHistory(
-      makeRequest({ body: { action: 'whatever' } }),
-      ctx
-    );
-    expect(res.status).toBe(204);
   });
 });

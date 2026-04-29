@@ -37,7 +37,6 @@ export const TELEMETRY_MESSAGE_IDS = [
   'history.clear.failed',
   'history.delete.failed',
   'history.open.failed',
-  'history.recordPaste.failed',
 
   // Blobs
   'blobs.copyLink.failed',

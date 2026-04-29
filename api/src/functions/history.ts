@@ -8,10 +8,6 @@
  * DELETE /api/history
  *   Deletes every history entry for the caller. Returns 204.
  *
- * POST   /api/history
- *   Legacy no-op kept for one release of stale-client tolerance. Always
- *   returns 204 once auth is validated. TODO(remove next release).
- *
  * All routes require auth.
  */
 import {
@@ -87,13 +83,6 @@ export async function getHistory(
       q = trimmed;
     }
   }
-  const actionsRaw = req.query.get('actions');
-  if (actionsRaw !== null && actionsRaw !== undefined && actionsRaw.length > 0) {
-    // Legacy `actions` filter accepted on the wire but ignored. The v1
-    // narrowing collapsed history to a single action ("viewed"), so the
-    // filter has no effect. TODO(remove next release): drop this stub
-    // once stale clients have refreshed.
-  }
   const fromRaw = req.query.get('from');
   let from: string | undefined;
   if (fromRaw !== null && fromRaw !== undefined && fromRaw.length > 0) {
@@ -148,30 +137,6 @@ export async function deleteHistory(
   }
 }
 
-/**
- * Legacy paste-recording endpoint. Kept as a no-op for one release of
- * stale-client tolerance: an SPA cached before the v1 narrowing will
- * still call this on every paste, and we want those calls to succeed
- * silently (no 404s in the user's network panel) rather than fail
- * loudly. Auth is still validated so we don't accept unauthenticated
- * traffic at this surface.
- *
- * TODO(remove next release): delete this handler and its registration
- * once stale clients have refreshed.
- */
-export async function postHistory(
-  req: HttpRequest,
-  context: InvocationContext
-): Promise<HttpResponseInit> {
-  try {
-    await requireAuth(req);
-  } catch (error) {
-    if (error instanceof AuthError) return unauthorized(error.message);
-    return internalError(context, 'postHistory auth', error);
-  }
-  return { status: 204 };
-}
-
 app.http('history-get', {
   methods: ['GET'],
   route: 'history',
@@ -184,11 +149,4 @@ app.http('history-delete', {
   route: 'history',
   authLevel: 'anonymous',
   handler: deleteHistory
-});
-
-app.http('history-post', {
-  methods: ['POST'],
-  route: 'history',
-  authLevel: 'anonymous',
-  handler: postHistory
 });

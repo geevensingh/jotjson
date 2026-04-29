@@ -678,7 +678,6 @@ SPA-originated calls in production.
 |---|---|---|---|---|
 | GET | `/api/history` | Required | M5a | Paginated `viewed` timeline for the caller, newest first (continuation token for pagination). Legacy non-`viewed` rows are filtered out on read. |
 | DELETE | `/api/history` | Required | M5a | Clear all history entries for the caller |
-| POST | `/api/history` | Required | M5a | Legacy no-op (returns 204). Kept for one release of stale-client tolerance after the v1 narrowing; auth is still enforced. Removable in a follow-up. |
 | PUT | `/api/me` | Required | post-v1 | Update display name + avatar URL |
 | POST | `/api/me/export` | Required | post-v1 | Enqueue data export job (returns job ID) |
 | GET | `/api/me/export/:jobId` | Required | post-v1 | Poll export job; returns ZIP SAS URL when complete |
@@ -1119,8 +1118,7 @@ EU users would need a regional resource - out of scope for v1.
      `recentlyViewedEnabled` (boolean, default on; both legacy
      `'save_only'` and `'all_actions'` coerce to `true` since the
      narrowed feature is strictly less invasive than either old
-     mode). `POST /api/history` becomes a no-op 204 for one release
-     of stale-client tolerance, then removable. `PUT /api/me/preferences`
+     mode). `PUT /api/me/preferences`
      accepts the legacy `historyTrackingMode` field for the same
      window and translates it to the new boolean server-side.
      Existing Cosmos rows of other action types are filtered out on
