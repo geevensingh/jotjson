@@ -168,11 +168,15 @@ $wtArgs = @(
 
 if (-not $SkipTests) {
   # Tests tab: ng test on top, jest --watch in a split pane below.
+  # ng is a local devDep, not a global tool, so route the call through
+  # `npx` to pick up node_modules/.bin/ng. (`npm start` / `npm run watch`
+  # already get this for free because npm-script PATH includes
+  # node_modules/.bin; bare `ng` in a fresh wt tab does not.)
   $wtArgs += @(
     ';'
     'new-tab',    '--title', 'tests', '-d', $repoRoot,
       'pwsh', '-NoExit', '-Command',
-      'ng test --watch=true --browsers=ChromeHeadless'
+      'npx ng test --watch=true --browsers=ChromeHeadless'
     ';'
     'split-pane', '-H', '-d', $apiDir,
       'pwsh', '-NoExit', '-Command', 'npx jest --watch'
