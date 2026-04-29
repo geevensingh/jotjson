@@ -915,9 +915,10 @@ export class JsonTreeComponent {
   //
   //   collapseFromHere / expandAllFromHere / expandToDepthFromHere - menu
   //   actions; each operates on the subtree rooted at the clicked node.
-  //   `expandToDepthFromHere` snaps the subtree to exactly relative depth +N
-  //   (expanding shallower-than-N collapsed containers AND collapsing
-  //   deeper-than-N expanded ones), per Q3 decision in plan.md.
+  //   `expandToDepthFromHere` is **expand-only**: it expands every collapsed
+  //   container at relative depth `< N` and never collapses anything (M7q
+  //   follow-up; supersedes the original Q3 snap-to-N decision because users
+  //   read "Expand to depth +N" as expand-only).
   //
   // Visibility predicates (showCopyKey etc.) drive `@if` guards in the
   // template so a menu item is rendered only when its action would do
@@ -1136,10 +1137,13 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Snaps the subtree rooted at `node` to exactly relative depth `+N`
-   * (per Q3 decision). Containers at relative depth `< N` are expanded,
-   * containers at relative depth `>= N` are collapsed. The clicked node
-   * itself is at relative depth 0 (always expanded for any `N >= 1`).
+   * Expands every collapsed container in the subtree rooted at `node`
+   * whose relative depth from `node` is `< relativeDepth`. Never
+   * collapses anything: the action is purely additive, so calling it
+   * twice is idempotent.
+   *
+   * The clicked node itself is at relative depth 0, so any `N >= 1`
+   * will expand it if it is collapsed.
    *
    * Telemetry includes the relative depth as a prop so we can analyze
    * which depths users invoke most often.
@@ -1149,17 +1153,11 @@ export class JsonTreeComponent {
     this.logger.info('tree.contextMenu.expandToDepth', { relativeDepth });
     const walk = (c: TreeNode, d: number): void => {
       if (!c.children?.length) return;
-      if (d < relativeDepth) {
+      if (d >= relativeDepth) return;
+      if (!this.treeControl.isExpanded(c)) {
         this.treeControl.expand(c);
-        for (const child of c.children) walk(child, d + 1);
-      } else {
-        this.treeControl.collapse(c);
-        // Recurse so any internally-expanded descendants of this
-        // collapsed container also reset to collapsed - keeps the
-        // visible state predictable when the user later expands a
-        // shallower ancestor.
-        for (const child of c.children) walk(child, d + 1);
       }
+      for (const child of c.children) walk(child, d + 1);
     };
     walk(node, 0);
   }
@@ -1198,12 +1196,23 @@ export class JsonTreeComponent {
 
   /**
    * Whether the "Expand to depth +N from here" item should be visible
-   * for the given node. Visible iff snapping the subtree to exactly
-   * depth +N would change the currently-visible expand/collapse state.
+   * for the given node. Visible iff:
+   * 1. `relativeDepth <= maxDescendantDepth(node)` -- there is something
+   *    in the subtree at relative depth `>= relativeDepth` that the
+   *    item could ultimately reveal, AND
+   * 2. there is at least one container at relative depth `< N`
+   *    anywhere in the subtree (including under collapsed ancestors)
+   *    that is currently collapsed -- i.e., `+N` would actually expand
+   *    something.
+   *
+   * Both clauses together hide redundant entries (Bug 1: `+N` beyond
+   * subtree depth) and entries that have nothing left to do
+   * (Bug 2: subtree already expanded to `>= N` levels).
    */
   showExpandToDepth(node: TreeNode, relativeDepth: number): boolean {
     if (!node.children?.length) return false;
-    return this.wouldDepthSnapChangeVisibleState(node, relativeDepth);
+    if (relativeDepth > this.maxDescendantDepth(node)) return false;
+    return this.hasCollapsedContainerAboveDepth(node, relativeDepth);
   }
 
   // ---- Helpers ----
@@ -1251,42 +1260,57 @@ export class JsonTreeComponent {
   }
 
   /**
-   * True when "snap to exactly depth +N" would change the visible
-   * expand/collapse state of the subtree rooted at `node`. Used to
-   * gate the "Expand to depth +N from here" menu items so we never
-   * advertise a no-op.
+   * Length of the longest path from `node` down to any descendant,
+   * counting edges. Drives the cap on visible "Expand to depth +N"
+   * entries so we never offer an `+N` deeper than the subtree
+   * actually goes.
    *
-   * Walks visible containers only: a collapsed container hides its
-   * descendants, so internal expansions inside a collapsed container
-   * don't count as "visible state". The action itself does still
-   * normalize those (see `expandToDepthFromHere`); we just don't surface
-   * an item when the user-perceived state already matches.
+   * Counts every descendant -- containers AND primitive leaves --
+   * because the deepest revealed thing might be a primitive under
+   * the deepest container, and `+(maxContainerDepth + 1)` is needed
+   * to actually reveal it.
+   *
+   * Returns 0 when `node` has no children.
    */
-  private wouldDepthSnapChangeVisibleState(
+  private maxDescendantDepth(node: TreeNode): number {
+    let max = 0;
+    const walk = (c: TreeNode, d: number): void => {
+      if (d > max) max = d;
+      if (!c.children?.length) return;
+      for (const child of c.children) walk(child, d + 1);
+    };
+    walk(node, 0);
+    return max;
+  }
+
+  /**
+   * True when at least one container at relative depth strictly less
+   * than `relativeDepth` (anywhere in the subtree, including hidden
+   * under a collapsed ancestor) is currently collapsed -- i.e.,
+   * `+relativeDepth` has at least one container to expand.
+   *
+   * Walks the entire subtree (not just the visible portion) because
+   * `expandToDepthFromHere` itself walks the whole subtree -- the
+   * visibility check has to match the action's reach.
+   */
+  private hasCollapsedContainerAboveDepth(
     node: TreeNode,
     relativeDepth: number
   ): boolean {
-    let differs = false;
+    let found = false;
     const walk = (c: TreeNode, d: number): void => {
-      if (differs) return;
+      if (found) return;
       if (!c.children?.length) return;
-      const expanded = this.treeControl.isExpanded(c);
-      if (d < relativeDepth) {
-        if (!expanded) {
-          differs = true;
-          return;
-        }
+      if (d < relativeDepth && !this.treeControl.isExpanded(c)) {
+        found = true;
+        return;
+      }
+      if (d + 1 < relativeDepth) {
         for (const child of c.children) walk(child, d + 1);
-      } else {
-        if (expanded) {
-          differs = true;
-        }
-        // d >= N is supposed to be collapsed; we don't recurse into it
-        // because anything deeper is hidden from the user.
       }
     };
     walk(node, 0);
-    return differs;
+    return found;
   }
 
   /**

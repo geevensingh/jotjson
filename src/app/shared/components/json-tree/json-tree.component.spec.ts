@@ -2144,28 +2144,46 @@ describe('JsonTreeComponent', () => {
     });
 
     describe('expandToDepthFromHere', () => {
-      it('snaps the subtree to exactly relative depth +N (expand < N AND collapse >= N)', async () => {
+      it('+1 expands only the clicked node when starting from a collapsed subtree', async () => {
         await createWith({ outer: { mid: { inner: { deep: 1 } } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.expandToDepthFromHere(outer, 1);
+        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid'))).toBe(false);
+      });
+
+      it('+N expands every collapsed container at relative depth < N (including hidden ones)', async () => {
+        await createWith({ outer: { mid: { inner: { deep: 1 } } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.expandToDepthFromHere(outer, 3);
+        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid'))).toBe(true);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid.inner'))).toBe(true);
+      });
+
+      it('+N never collapses a container at relative depth >= N (expand-only)', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.expandToDepthFromHere(outer, 1);
+        // +1 only acts on depth 0; deeper containers stay expanded.
+        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid'))).toBe(true);
+      });
+
+      it('is idempotent on an already-fully-expanded subtree', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
         cmp.expandAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
         const mid = nodeAt('$.outer.mid');
-        const inner = nodeAt('$.outer.mid.inner');
-        // Snap to +1: expand depth 0, collapse depth >= 1 (mid, inner).
-        cmp.expandToDepthFromHere(outer, 1);
-        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
-        expect(cmp.treeControl.isExpanded(mid)).toBe(false);
-        expect(cmp.treeControl.isExpanded(inner)).toBe(false);
-      });
-
-      it('expands shallower-than-N collapsed containers in the same operation', async () => {
-        await createWith({ outer: { mid: { inner: 1 } } });
-        cmp.collapseAll();
-        fixture.detectChanges();
-        const outer = nodeAt('$.outer');
-        const mid = nodeAt('$.outer.mid');
-        cmp.expandToDepthFromHere(outer, 2);
-        // d=0 (outer) and d=1 (mid) expanded; d=2 has no container child.
+        cmp.expandToDepthFromHere(outer, 3);
+        cmp.expandToDepthFromHere(outer, 3);
         expect(cmp.treeControl.isExpanded(outer)).toBe(true);
         expect(cmp.treeControl.isExpanded(mid)).toBe(true);
       });
@@ -2212,19 +2230,93 @@ describe('JsonTreeComponent', () => {
         expect(cmp.showExpandAllFromHere(nodeAt('$.outer'))).toBe(false);
       });
 
-      it('showExpandToDepth +N: hidden when subtree is exactly at depth +N', async () => {
+      it('showExpandToDepth: hides +N greater than the subtree max descendant depth (Bug 1)', async () => {
+        // Subtree { outer: { mid: { inner: 1 } } } from $.outer:
+        //   $.outer (clicked, container, depth 0)
+        //   $.outer.mid (container, depth 1)
+        //   $.outer.mid.inner (primitive leaf, depth 2)
+        // maxDescendantDepth = 2, so +1 and +2 are in range; +3..+5 hide.
         await createWith({ outer: { mid: { inner: 1 } } });
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
-        // Snap to +1, then check predicate.
-        cmp.expandToDepthFromHere(outer, 1);
-        expect(cmp.showExpandToDepth(outer, 1)).toBe(false);
-        // Snap to +2; +2 should be hidden, +1 should now be visible
-        // (since mid is now expanded).
-        cmp.expandToDepthFromHere(outer, 2);
-        expect(cmp.showExpandToDepth(outer, 2)).toBe(false);
         expect(cmp.showExpandToDepth(outer, 1)).toBe(true);
+        expect(cmp.showExpandToDepth(outer, 2)).toBe(true);
+        expect(cmp.showExpandToDepth(outer, 3)).toBe(false);
+        expect(cmp.showExpandToDepth(outer, 4)).toBe(false);
+        expect(cmp.showExpandToDepth(outer, 5)).toBe(false);
+      });
+
+      it('showExpandToDepth: hides every +N when subtree is already fully expanded (Bug 2)', async () => {
+        await createWith({ outer: { mid: { inner: { leaf: 1 } } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        for (let depth = 1; depth <= 5; depth++) {
+          expect(cmp.showExpandToDepth(outer, depth))
+            .withContext(`+${depth} should hide when fully expanded`)
+            .toBe(false);
+        }
+      });
+
+      it('showExpandToDepth: caps at +1 when clicked node has only primitive children', async () => {
+        // The clicked node is a container with only primitive children;
+        // maxDescendantDepth = 1. +1 alone is meaningful.
+        await createWith({ outer: { x: 1, y: 2 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        expect(cmp.showExpandToDepth(outer, 1)).toBe(true);
+        expect(cmp.showExpandToDepth(outer, 2)).toBe(false);
+        expect(cmp.showExpandToDepth(outer, 3)).toBe(false);
+      });
+
+      it('showExpandToDepth: walks hidden containers under collapsed ancestors', async () => {
+        // outer is expanded; mid is collapsed (so inner is hidden).
+        // +3 should still see inner (depth 2, collapsed, hidden) when
+        // computing visibility, so it shows.
+        await createWith({ outer: { mid: { inner: { leaf: 1 } } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        const mid = nodeAt('$.outer.mid');
+        cmp.treeControl.collapse(mid);
+        fixture.detectChanges();
+        // Collapsed at d=1 (mid). Hidden under it: inner at d=2 still
+        // expanded (we did expandAll first, then only collapsed mid).
+        expect(cmp.showExpandToDepth(outer, 1)).toBe(false);
+        expect(cmp.showExpandToDepth(outer, 2)).toBe(true);
+        expect(cmp.showExpandToDepth(outer, 3)).toBe(true);
+      });
+
+      it('showExpandToDepth: partial expansion shows only +N that reach a collapsed container', async () => {
+        // Mirrors the user's example: top-level expanded, second-level
+        // expanded, alt-second-level collapsed (its third-level hidden
+        // and collapsed inside it). Expect: hide +1; show +2, +3; hide
+        // +4, +5.
+        await createWith({
+          'top-level': {
+            'second-level': { 'third-level': { x: 1, y: 2 } },
+            'alt-second-level': { 'third-level': { x: 1, y: 2 } }
+          }
+        });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const top = nodeAt('$["top-level"]');
+        const altSecond = nodeAt('$["top-level"]["alt-second-level"]');
+        const altThird = nodeAt(
+          '$["top-level"]["alt-second-level"]["third-level"]'
+        );
+        // Collapse only alt-second-level and its (now hidden) third-level
+        // so the partial-expansion shape matches the user's scenario.
+        cmp.treeControl.collapse(altThird);
+        cmp.treeControl.collapse(altSecond);
+        fixture.detectChanges();
+        expect(cmp.showExpandToDepth(top, 1)).toBe(false);
+        expect(cmp.showExpandToDepth(top, 2)).toBe(true);
+        expect(cmp.showExpandToDepth(top, 3)).toBe(true);
+        expect(cmp.showExpandToDepth(top, 4)).toBe(false);
+        expect(cmp.showExpandToDepth(top, 5)).toBe(false);
       });
     });
 
