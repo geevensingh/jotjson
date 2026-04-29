@@ -188,6 +188,17 @@
   <button
     type="button"
     mat-icon-button
+    [matTooltip]="selectionSyncTooltip()"
+    [attr.aria-label]="selectionSyncAriaLabel"
+    [attr.aria-pressed]="selectionSyncEnabled()"
+    (click)="toggleSelectionSync.emit()"
+  >
+    <jj-icon [name]="selectionSyncIcon()" />
+  </button>
+
+  <button
+    type="button"
+    mat-icon-button
     matTooltip="Toggle layout"
     i18n-matTooltip="@@toolbar.layout.tooltip"
     aria-label="Toggle layout"

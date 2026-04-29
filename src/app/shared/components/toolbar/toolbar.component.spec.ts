@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ToolbarComponent } from './toolbar.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
@@ -72,6 +72,61 @@ describe('ToolbarComponent', () => {
       prefs.update({ theme: 'system' });
       fixture.detectChanges();
       expect(fixture.componentInstance.themeIcon()).toBe('system');
+    });
+  });
+
+  describe('selection sync toggle (issue #42)', () => {
+    function findSyncButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement {
+      const button = (fixture.nativeElement as HTMLElement).querySelector(
+        'button[aria-label="Toggle tree-editor selection sync"]'
+      ) as HTMLButtonElement | null;
+      if (!button) {
+        throw new Error('selection-sync toggle button not found in toolbar');
+      }
+      return button;
+    }
+
+    it('selectionSyncEnabled mirrors the pref (default true)', async () => {
+      const { fixture } = await create();
+      expect(fixture.componentInstance.selectionSyncEnabled()).toBeTrue();
+    });
+
+    it('selectionSyncIcon = "link" when enabled, "link-off" when disabled', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ treeEditorSelectionSync: true });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.selectionSyncIcon()).toBe('link');
+      prefs.update({ treeEditorSelectionSync: false });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.selectionSyncIcon()).toBe('link-off');
+    });
+
+    it('aria-pressed reflects the pref state', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ treeEditorSelectionSync: true });
+      fixture.detectChanges();
+      expect(findSyncButton(fixture).getAttribute('aria-pressed')).toBe('true');
+      prefs.update({ treeEditorSelectionSync: false });
+      fixture.detectChanges();
+      expect(findSyncButton(fixture).getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('tooltip varies with state', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ treeEditorSelectionSync: true });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.selectionSyncTooltip()).toMatch(/disable/i);
+      prefs.update({ treeEditorSelectionSync: false });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.selectionSyncTooltip()).toMatch(/enable/i);
+    });
+
+    it('clicking the button emits toggleSelectionSync', async () => {
+      const { fixture } = await create();
+      let clickCount = 0;
+      fixture.componentInstance.toggleSelectionSync.subscribe(() => clickCount++);
+      findSyncButton(fixture).click();
+      expect(clickCount).toBe(1);
     });
   });
 

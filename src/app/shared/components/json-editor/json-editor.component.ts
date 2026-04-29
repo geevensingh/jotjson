@@ -37,7 +37,11 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   readonly value = input<string>('');
   readonly errors = input<JsonParseError[]>([]);
   readonly valueChange = output<string>();
-  readonly cursorPositionChange = output<{ line: number; column: number }>();
+  readonly cursorPositionChange = output<{
+    line: number;
+    column: number;
+    offset: number;
+  }>();
   readonly paste = output<{
     pastedText: string;
     postPasteContent: string;
@@ -139,8 +143,14 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       });
 
       editor.onDidChangeCursorPosition((event) => {
-        const pos = { line: event.position.lineNumber, column: event.position.column };
-        this.zone.run(() => this.cursorPositionChange.emit(pos));
+        const model = editor.getModel();
+        const offset = model ? model.getOffsetAt(event.position) : 0;
+        const payload = {
+          line: event.position.lineNumber,
+          column: event.position.column,
+          offset
+        };
+        this.zone.run(() => this.cursorPositionChange.emit(payload));
       });
 
       // Auto-unescape pasted JSON (issue #38). Only rewrite when the pasted
@@ -216,6 +226,37 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.dispose();
+  }
+
+  /**
+   * Programmatically select a range and scroll it into view (only if it's
+   * outside the current viewport - avoids unnecessary jumps). Used by the
+   * tree-to-editor selection sync. The Selection is constructed with the
+   * end coordinates first so the active cursor lands at the start of the
+   * range, which keeps the visible selection feeling natural and prevents
+   * the editor from triggering a snap-back on the matching tree row when
+   * the user clicks a tree node. No `focus()` - the click belongs to the
+   * tree pane and we don't want to steal it.
+   */
+  revealRange(range: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  }): void {
+    const editor = this.editor;
+    const monaco = this.monaco;
+    if (!editor || !monaco) return;
+    this.zone.runOutsideAngular(() => {
+      const selection = new monaco.Selection(
+        range.endLineNumber,
+        range.endColumn,
+        range.startLineNumber,
+        range.startColumn
+      );
+      editor.setSelection(selection);
+      editor.revealRangeInCenterIfOutsideViewport(selection);
+    });
   }
 
   private applyMarkers(errs: readonly JsonParseError[]): void {

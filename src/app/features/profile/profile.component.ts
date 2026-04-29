@@ -112,6 +112,9 @@ export class ProfileComponent implements OnInit {
   readonly searchScope = computed(() => this.prefs().searchScope);
 
   readonly recentlyViewedEnabled = computed(() => this.prefs().recentlyViewedEnabled);
+  readonly treeEditorSelectionSync = computed(
+    () => this.prefs().treeEditorSelectionSync
+  );
   readonly blobQuotaStrategy = computed(() => this.prefs().blobQuotaStrategy);
   readonly theme = computed(() => this.prefs().theme);
   readonly layoutOrientation = computed(() => this.prefs().layoutOrientation);
@@ -241,6 +244,10 @@ export class ProfileComponent implements OnInit {
 
   onRecentlyViewedEnabledChange(value: boolean): void {
     this.prefsService.update({ recentlyViewedEnabled: value });
+  }
+
+  onTreeEditorSelectionSyncChange(value: boolean): void {
+    this.prefsService.update({ treeEditorSelectionSync: value });
   }
 
   onBlobQuotaStrategyChange(value: string): void {

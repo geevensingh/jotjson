@@ -105,6 +105,7 @@ Browser (Angular SPA)
   seenBlobQuotaModal: boolean (default: false - flipped to true after the first-time quota explainer modal has been dismissed; synced server-side so the modal doesn't reappear on other devices),
   seenClipboardBanner: boolean (default: false - flipped to true after the first-time paste-permission banner has been dismissed; synced server-side so the banner doesn't reappear on other devices),
   treePathRoot: "jsonpath" | "none" | "root" | "data" (default: "jsonpath" - display prefix used when copying a tree row's path to the clipboard. Internal/canonical pathString always starts with `$`; only the clipboard text is rewritten. `jsonpath` -> `$.foo[0]`; `none` -> `foo[0]` (lodash-style, leading dot stripped); `root` -> `root.foo[0]`; `data` -> `Data.foo[0]` with capital D),
+  treeEditorSelectionSync: boolean (default: true - bidirectional tree<->editor selection sync. When on, selecting a tree row reveals the matching range in the editor and moving the editor cursor selects the matching tree row; when off, both panes operate independently. Toggleable from the main toolbar and Profile),
   treeHighlightColors: TreeHighlightColors
 }
 ```
@@ -337,6 +338,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - Theme-appropriate defaults are defined in the `TreeHighlightColors` section of the Domain Model.
     - Registered users can override each color individually (per theme) in the **Profile -> Preferences** section via color pickers.
     - Highlights clear when clicking outside the tree or pressing `Escape`.
+  - **Tree<->editor selection sync** - when enabled (default), selecting a tree row reveals the matching range in the editor (scrolled into view if off-screen, focus stays on the tree) and moving the editor cursor selects the matching tree row. For primitive leaves, array elements, and top-level containers the highlight covers just the value token; for object/array values inside a property the highlight covers the whole `"key": <value>` block. A cursor outside any structural node (trailing whitespace, before the document starts, no parsed AST) clears the tree selection. The behavior is controlled by the `treeEditorSelectionSync` user preference (default `true`); both directions are gated by a single toggle exposed as a toolbar button (link / link-off icon) and as a matching slide toggle in Profile. When disabled, both panes operate independently - prior selections stay visible but stop driving each other; toggling back on does not force a resync, the next user gesture re-engages.
   - **Search highlight** - a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
     - Any row whose key or value contains the search text (case-insensitive by default) is highlighted in the **search highlight color** (theme-aware default defined in `TreeHighlightColors`).

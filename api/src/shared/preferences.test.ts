@@ -89,6 +89,26 @@ describe('normalizePreferences', () => {
     expect(normalizePreferences(input).seenClipboardBanner).toBe(true);
   });
 
+  it('rejects a non-boolean treeEditorSelectionSync', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeEditorSelectionSync'] = 'yes';
+    expect(() => normalizePreferences(bad)).toThrow(
+      /treeEditorSelectionSync must be a boolean/
+    );
+  });
+
+  it('round-trips treeEditorSelectionSync=false', () => {
+    const input = valid() as Record<string, unknown>;
+    input['treeEditorSelectionSync'] = false;
+    expect(normalizePreferences(input).treeEditorSelectionSync).toBe(false);
+  });
+
+  it('round-trips treeEditorSelectionSync=true', () => {
+    const input = valid() as Record<string, unknown>;
+    input['treeEditorSelectionSync'] = true;
+    expect(normalizePreferences(input).treeEditorSelectionSync).toBe(true);
+  });
+
   it('accepts each valid treePathRoot value', () => {
     for (const mode of ['jsonpath', 'none', 'root', 'data'] as const) {
       const input = valid() as Record<string, unknown>;
@@ -287,5 +307,39 @@ describe('normalizeStoredPreferences', () => {
     stored.recentlyViewedEnabled = false;
     const result = normalizeStoredPreferences(stored);
     expect(result.recentlyViewedEnabled).toBe(false);
+  });
+
+  it('defaults missing treeEditorSelectionSync to true', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    delete stored['treeEditorSelectionSync'];
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.treeEditorSelectionSync).toBe(true);
+  });
+
+  it('defaults non-boolean treeEditorSelectionSync (null) to true', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    stored['treeEditorSelectionSync'] = null;
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.treeEditorSelectionSync).toBe(true);
+  });
+
+  it('preserves an explicit treeEditorSelectionSync=false', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES);
+    stored.treeEditorSelectionSync = false;
+    const result = normalizeStoredPreferences(stored);
+    expect(result.treeEditorSelectionSync).toBe(false);
+  });
+
+  it('preserves an explicit treeEditorSelectionSync=true', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES);
+    stored.treeEditorSelectionSync = true;
+    const result = normalizeStoredPreferences(stored);
+    expect(result.treeEditorSelectionSync).toBe(true);
   });
 });

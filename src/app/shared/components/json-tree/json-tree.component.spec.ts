@@ -1694,4 +1694,109 @@ describe('JsonTreeComponent', () => {
       expect(secondStyles?.['--tree-row-format-bg']).toBe('#112233');
     });
   });
+
+  describe('selection sync API (issue #42)', () => {
+    it('hasPath returns true for known paths and false for unknown', async () => {
+      await createWith({ a: 1, b: { c: 2 } });
+      expect(cmp.hasPath('$')).toBeTrue();
+      expect(cmp.hasPath('$.a')).toBeTrue();
+      expect(cmp.hasPath('$.b')).toBeTrue();
+      expect(cmp.hasPath('$.b.c')).toBeTrue();
+      expect(cmp.hasPath('$.nonexistent')).toBeFalse();
+      expect(cmp.hasPath('not-a-path')).toBeFalse();
+    });
+
+    it('selectByPathString writes when different from current selection', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.selectByPathString('$.a');
+      expect(cmp.selectedPath()).toBe('$.a');
+      cmp.selectByPathString('$.b');
+      expect(cmp.selectedPath()).toBe('$.b');
+    });
+
+    it('selectByPathString is idempotent for the same path (no extra write)', async () => {
+      await createWith({ a: 1 });
+      cmp.selectByPathString('$.a');
+      const writes: (string | null)[] = [];
+      cmp.selectionChange.subscribe((path) => {
+        writes.push(path === null ? null : cmp['formatPath']([...path]));
+      });
+      cmp.selectByPathString('$.a');
+      // Effect did not re-fire since selectedPath stayed the same.
+      expect(writes).toEqual([]);
+    });
+
+    it('selectByPathString silently no-ops for unknown paths', async () => {
+      await createWith({ a: 1 });
+      cmp.selectByPathString('$.does.not.exist');
+      expect(cmp.selectedPath()).toBeNull();
+    });
+
+    it('selectByPathString(null) clears the selection', async () => {
+      await createWith({ a: 1 });
+      cmp.selectByPathString('$.a');
+      expect(cmp.selectedPath()).toBe('$.a');
+      cmp.selectByPathString(null);
+      expect(cmp.selectedPath()).toBeNull();
+    });
+
+    it('selectByPathString expands ancestors so the row is visible', async () => {
+      await createWith({ a: { b: { c: 1 } } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      const rootNode = cmp.root()!;
+      const aNode = rootNode.children!.find((child) => child.segment === 'a')!;
+      const bNode = aNode.children!.find((child) => child.segment === 'b')!;
+      expect(cmp.treeControl.isExpanded(aNode)).toBeFalse();
+      expect(cmp.treeControl.isExpanded(bNode)).toBeFalse();
+      cmp.selectByPathString('$.a.b.c');
+      expect(cmp.treeControl.isExpanded(aNode)).toBeTrue();
+      expect(cmp.treeControl.isExpanded(bNode)).toBeTrue();
+    });
+
+    it('selectionChange emits structural path when selectedPath changes (e.g. via user click)', async () => {
+      // selectedPath is the canonical funnel for both user clicks
+      // (via onSelect) and programmatic selection. Drive it directly
+      // to assert the effect-based emission contract regardless of
+      // who flipped the signal.
+      await createWith({ a: 1 });
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+      cmp.selectedPath.set('$.a');
+      fixture.detectChanges();
+      expect(events.some((path) => path !== null && path.length === 1 && path[0] === 'a'))
+        .withContext('expected a selectionChange event with path ["a"]')
+        .toBeTrue();
+    });
+
+    it('selectionChange emits on programmatic selectByPathString', async () => {
+      await createWith({ a: { b: 1 } });
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+      cmp.selectByPathString('$.a.b');
+      fixture.detectChanges();
+      const matched = events.find(
+        (path) =>
+          path !== null && path.length === 2 && path[0] === 'a' && path[1] === 'b'
+      );
+      expect(matched).withContext('expected path ["a","b"]').toBeTruthy();
+    });
+
+    it('selectionChange emits null when selection is cleared', async () => {
+      await createWith({ a: 1 });
+      cmp.selectByPathString('$.a');
+      fixture.detectChanges();
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+      cmp.selectByPathString(null);
+      fixture.detectChanges();
+      expect(events).toContain(null);
+    });
+
+    it('selectByPathString resolves the synthetic root path "$"', async () => {
+      await createWith({ a: 1 });
+      cmp.selectByPathString('$');
+      expect(cmp.selectedPath()).toBe('$');
+    });
+  });
 });

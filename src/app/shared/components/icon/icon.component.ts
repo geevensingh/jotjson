@@ -26,6 +26,7 @@ export type JjIconName =
   | 'save'
   | 'more-vert'
   | 'link'
+  | 'link-off'
   | 'globe'
   | 'lock'
   | 'trash'
@@ -160,6 +161,11 @@ export type JjIconName =
         @case ('link') {
           <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" />
           <path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" />
+        }
+        @case ('link-off') {
+          <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" />
+          <path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" />
+          <path d="M4 4l16 16" />
         }
         @case ('globe') {
           <circle cx="12" cy="12" r="8.5" />

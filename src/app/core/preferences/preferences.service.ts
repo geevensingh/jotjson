@@ -35,6 +35,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeAssumeUtcForIsoDateOnly: true,
   defaultRuleSetIds: [],
   recentlyViewedEnabled: true,
+  treeEditorSelectionSync: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
   searchScope: 'both',

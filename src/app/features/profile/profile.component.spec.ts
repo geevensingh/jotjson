@@ -298,6 +298,20 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().recentlyViewedEnabled).toBe(true);
   });
 
+  it('writes treeEditorSelectionSync when toggled (issue #42)', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    expect(prefs.prefs().treeEditorSelectionSync).toBe(true);
+    expect(fixture.componentInstance.treeEditorSelectionSync()).toBe(true);
+    fixture.componentInstance.onTreeEditorSelectionSyncChange(false);
+    expect(prefs.prefs().treeEditorSelectionSync).toBe(false);
+    expect(fixture.componentInstance.treeEditorSelectionSync()).toBe(false);
+    fixture.componentInstance.onTreeEditorSelectionSyncChange(true);
+    expect(prefs.prefs().treeEditorSelectionSync).toBe(true);
+  });
+
   it('writes blobQuotaStrategy for valid values', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },

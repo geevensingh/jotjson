@@ -8,6 +8,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
   untracked,
   type WritableSignal
@@ -171,6 +172,18 @@ export class JsonTreeComponent {
    * lookups go through `nodeIndex`.
    */
   readonly selectedPath = signal<string | null>(null);
+
+  /**
+   * Emits the structural path of the currently-selected row, or `null`
+   * when nothing is selected. Driven by an `effect()` over
+   * `selectedPath` so user clicks AND programmatic
+   * `selectByPathString` calls funnel through one emission point.
+   * Used by the home component to drive editor->tree selection sync.
+   *
+   * Emits an initial `null` at construction (signal initial value);
+   * consumers must tolerate that.
+   */
+  readonly selectionChange = output<readonly (string | number)[] | null>();
 
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
@@ -595,6 +608,25 @@ export class JsonTreeComponent {
     // search() is persisted via the effect above (keyed on
     // TREE_SEARCH_STORAGE_KEY) when embeddedMode is false. Per-device,
     // never sent to the server.
+
+    // Emit selectionChange whenever the canonical selectedPath signal
+    // settles. Both user clicks (which write through onSelect) and
+    // programmatic selects (selectByPathString) go through this funnel,
+    // so the home component never has to wire two separate channels.
+    // We swallow the transient case where selectedPath references a
+    // path the current nodeIndex hasn't seen yet (e.g., a still-mid-
+    // render mat-tree update) - the next effect tick will emit when
+    // both signals agree. selectedPath = null always emits null.
+    effect(() => {
+      const selected = this.selectedPath();
+      if (selected === null) {
+        this.selectionChange.emit(null);
+        return;
+      }
+      const node = this.nodeIndex().get(selected);
+      if (!node) return;
+      this.selectionChange.emit(node.path);
+    });
   }
 
   hasChild = (_: number, node: TreeNode): boolean =>
@@ -718,10 +750,45 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Expand all ancestors of the given path and scroll the row into
-   * view. No-op when the path is unknown to `nodeIndex`.
+   * Returns true iff the given pathString is currently in the tree's
+   * `nodeIndex`. Public so the home component can pre-flight a path
+   * before calling `selectByPathString` (used by the editor->tree
+   * cursor sync to short-circuit "cursor is in JSON we can't surface
+   * yet, e.g. mid-typing").
    */
-  private revealHit(path: string): void {
+  hasPath(pathString: string): boolean {
+    return this.nodeIndex().has(pathString);
+  }
+
+  /**
+   * Programmatic selection setter. Idempotent (no write when the path
+   * is already selected) and silently no-ops when the path is not in
+   * `nodeIndex`. `null` clears the selection. Used by the home
+   * component to drive editor->tree sync.
+   *
+   * Expands ancestor containers and scrolls the row into view, mirroring
+   * the search-jump UX.
+   */
+  selectByPathString(pathString: string | null): void {
+    if (pathString === null) {
+      if (this.selectedPath() !== null) {
+        this.selectedPath.set(null);
+      }
+      return;
+    }
+    if (this.selectedPath() === pathString) return;
+    if (!this.nodeIndex().has(pathString)) return;
+    this.selectedPath.set(pathString);
+    this.expandAndScroll(pathString);
+  }
+
+  /**
+   * Expand all ancestors of the given path and scroll the row into
+   * view. No-op when the path is unknown to `nodeIndex`. Shared by the
+   * search-jump path (`revealHit`) and programmatic selection
+   * (`selectByPathString`).
+   */
+  private expandAndScroll(path: string): void {
     const node = this.nodeIndex().get(path);
     if (!node) return;
     // Walk up the path to expand each ancestor container.
@@ -738,6 +805,14 @@ export class JsonTreeComponent {
       ) as HTMLElement | null;
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     });
+  }
+
+  /**
+   * Search-jump reveal. Thin wrapper around `expandAndScroll` kept for
+   * backwards compatibility with existing search call sites.
+   */
+  private revealHit(path: string): void {
+    this.expandAndScroll(path);
   }
 
   expandAll(): void {

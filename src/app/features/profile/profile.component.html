@@ -256,6 +256,25 @@
             Prefix used when copying a tree row's path to the clipboard.
           </span>
         </div>
+
+        <div class="pref-row">
+          <mat-slide-toggle
+            labelPosition="before"
+            [checked]="treeEditorSelectionSync()"
+            (change)="onTreeEditorSelectionSyncChange($event.checked)"
+          >
+            <span i18n="@@profile.prefs.tree.selectionSync">
+              Sync tree and editor selections
+            </span>
+          </mat-slide-toggle>
+        </div>
+        <div class="pref-row">
+          <span class="pref-hint" i18n="@@profile.prefs.tree.selectionSync.help">
+            When on, selecting a tree row reveals the matching range in the
+            editor, and moving the editor cursor selects the matching tree
+            row.
+          </span>
+        </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-default-rule-sets">

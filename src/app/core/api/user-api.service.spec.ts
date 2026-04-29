@@ -22,6 +22,7 @@ function fakePreferences(): UserPreferences {
     treeAssumeUtcForIsoDateTime: false,
     treeAssumeUtcForIsoDateOnly: false,
     recentlyViewedEnabled: true,
+    treeEditorSelectionSync: true,
     searchCaseSensitive: false,
     searchRegexMode: false,
     searchScope: 'both',

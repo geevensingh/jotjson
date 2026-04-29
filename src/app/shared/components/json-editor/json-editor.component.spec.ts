@@ -14,6 +14,7 @@ interface FakeModel {
     endLineNumber: number;
     endColumn: number;
   }) => string;
+  getOffsetAt: jasmine.Spy<(pos: { lineNumber: number; column: number }) => number>;
 }
 
 interface FakeEditor {
@@ -27,6 +28,15 @@ interface FakeEditor {
   dispose: jasmine.Spy;
   executeEdits: jasmine.Spy;
   layout: jasmine.Spy;
+  setSelection: jasmine.Spy;
+  revealRangeInCenterIfOutsideViewport: jasmine.Spy;
+}
+
+interface FakeSelection {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
 }
 
 interface FakeMonaco {
@@ -38,6 +48,15 @@ interface FakeMonaco {
   };
   json: { jsonDefaults: { setDiagnosticsOptions: jasmine.Spy } };
   MarkerSeverity: { Error: number };
+  Selection: new (
+    selectionStartLineNumber: number,
+    selectionStartColumn: number,
+    positionLineNumber: number,
+    positionColumn: number
+  ) => FakeSelection;
+  __selectionConstructorCalls: Array<
+    [number, number, number, number]
+  >;
 }
 
 interface FakeResizeObserver {
@@ -65,7 +84,12 @@ function makeFakeEditor(initial: string): FakeEditor {
       const start = toOffset(range.startLineNumber, range.startColumn);
       const end = toOffset(range.endLineNumber, range.endColumn);
       return current.substring(start, end);
-    }
+    },
+    getOffsetAt: jasmine
+      .createSpy('getOffsetAt')
+      .and.callFake((position: { lineNumber: number; column: number }) =>
+        toOffset(position.lineNumber, position.column)
+      )
   };
   return {
     getValue: jasmine.createSpy('getValue').and.callFake(() => current),
@@ -105,11 +129,45 @@ function makeFakeEditor(initial: string): FakeEditor {
         return true;
       }
     ),
-    layout: jasmine.createSpy('layout')
+    layout: jasmine.createSpy('layout'),
+    setSelection: jasmine.createSpy('setSelection'),
+    revealRangeInCenterIfOutsideViewport: jasmine.createSpy(
+      'revealRangeInCenterIfOutsideViewport'
+    )
   };
 }
 
 function makeFakeMonaco(editor: FakeEditor): FakeMonaco {
+  const selectionCalls: Array<[number, number, number, number]> = [];
+  function FakeSelectionCtor(
+    this: FakeSelection,
+    selectionStartLineNumber: number,
+    selectionStartColumn: number,
+    positionLineNumber: number,
+    positionColumn: number
+  ): FakeSelection {
+    selectionCalls.push([
+      selectionStartLineNumber,
+      selectionStartColumn,
+      positionLineNumber,
+      positionColumn
+    ]);
+    // Selection's normalized start/end fields - smaller (line, col) is
+    // start, larger is end - regardless of which corner the caller
+    // passed first. The reversed-Selection trick (passing end coords
+    // first) leaves these the same; only the active cursor differs.
+    const startLineFirst =
+      selectionStartLineNumber < positionLineNumber ||
+      (selectionStartLineNumber === positionLineNumber &&
+        selectionStartColumn <= positionColumn);
+    this.startLineNumber = startLineFirst
+      ? selectionStartLineNumber
+      : positionLineNumber;
+    this.startColumn = startLineFirst ? selectionStartColumn : positionColumn;
+    this.endLineNumber = startLineFirst ? positionLineNumber : selectionStartLineNumber;
+    this.endColumn = startLineFirst ? positionColumn : selectionStartColumn;
+    return this;
+  }
   return {
     editor: {
       create: jasmine.createSpy('create').and.returnValue(editor),
@@ -118,7 +176,9 @@ function makeFakeMonaco(editor: FakeEditor): FakeMonaco {
       setModelMarkers: jasmine.createSpy('setModelMarkers')
     },
     json: { jsonDefaults: { setDiagnosticsOptions: jasmine.createSpy('setDiagnosticsOptions') } },
-    MarkerSeverity: { Error: FAKE_MARKER_ERROR_SEVERITY }
+    MarkerSeverity: { Error: FAKE_MARKER_ERROR_SEVERITY },
+    Selection: FakeSelectionCtor as unknown as FakeMonaco['Selection'],
+    __selectionConstructorCalls: selectionCalls
   };
 }
 
@@ -324,6 +384,105 @@ describe('JsonEditorComponent', () => {
       expect(events[0].pastedText).toBe('{"a":1}');
       expect(events[0].postPasteContent).toBe('{"a":1}');
       expect(events[0].postPasteParses).toBeTrue();
+    });
+  });
+
+  describe('cursorPositionChange', () => {
+    interface CursorEvent {
+      line: number;
+      column: number;
+      offset: number;
+    }
+
+    function fireCursor(line: number, column: number): CursorEvent[] {
+      const events: CursorEvent[] = [];
+      fixture.componentInstance.cursorPositionChange.subscribe((e) => events.push(e));
+      const handler = editor.onDidChangeCursorPosition.calls.mostRecent().args[0] as (event: {
+        position: { lineNumber: number; column: number };
+      }) => void;
+      handler({ position: { lineNumber: line, column } });
+      return events;
+    }
+
+    it('emits {line, column, offset} with offset computed from the model', async () => {
+      await create('{"a":1}');
+      const events = fireCursor(1, 4);
+      expect(events.length).toBe(1);
+      expect(events[0]).toEqual({ line: 1, column: 4, offset: 3 });
+      const model = editor.getModel() as FakeModel;
+      expect(model.getOffsetAt).toHaveBeenCalledWith({ lineNumber: 1, column: 4 });
+    });
+
+    it('falls back to offset=0 when the model is null', async () => {
+      await create('{"a":1}');
+      // Simulate a teardown race where the model went away before the event.
+      editor.getModel.and.returnValue(null);
+      const events = fireCursor(2, 3);
+      expect(events.length).toBe(1);
+      expect(events[0]).toEqual({ line: 2, column: 3, offset: 0 });
+    });
+  });
+
+  describe('revealRange', () => {
+    it('calls setSelection with end coords first (reversed Selection) and reveals it', async () => {
+      const component = await create('{"a":1}');
+      component.revealRange({
+        startLineNumber: 1,
+        startColumn: 2,
+        endLineNumber: 1,
+        endColumn: 5
+      });
+      expect(monaco.__selectionConstructorCalls.length).toBe(1);
+      // Reversed: end coords passed FIRST, start coords SECOND. The active
+      // cursor (positionLineNumber/positionColumn) lands at the start so
+      // the resulting cursor change reports the start coordinate.
+      expect(monaco.__selectionConstructorCalls[0]).toEqual([1, 5, 1, 2]);
+      expect(editor.setSelection).toHaveBeenCalledTimes(1);
+      const sel = editor.setSelection.calls.mostRecent().args[0] as FakeSelection;
+      // Normalized range is still (1,2)->(1,5).
+      expect(sel.startLineNumber).toBe(1);
+      expect(sel.startColumn).toBe(2);
+      expect(sel.endLineNumber).toBe(1);
+      expect(sel.endColumn).toBe(5);
+      expect(editor.revealRangeInCenterIfOutsideViewport).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call focus() (selection should not steal focus from the tree)', async () => {
+      // FakeEditor has no focus spy at all - verify nothing on the editor
+      // matches the focus contract.
+      const component = await create('{"a":1}');
+      expect(
+        (editor as unknown as { focus?: jasmine.Spy }).focus
+      ).toBeUndefined();
+      component.revealRange({
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 1,
+        endColumn: 2
+      });
+      expect(editor.setSelection).toHaveBeenCalled();
+    });
+
+    it('no-ops when the editor is not yet ready', async () => {
+      // Construct via TestBed but DO NOT mount Monaco (skip detectChanges).
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [JsonEditorComponent],
+        providers: [...provideFakeAuth()]
+      }).compileComponents();
+      const earlyFixture = TestBed.createComponent(JsonEditorComponent);
+      earlyFixture.componentRef.setInput('value', '{}');
+      // Calling revealRange before ngAfterViewInit settles must not throw
+      // and must not have any observable effect.
+      expect(() =>
+        earlyFixture.componentInstance.revealRange({
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: 1,
+          endColumn: 2
+        })
+      ).not.toThrow();
+      expect(editor.setSelection).not.toHaveBeenCalled();
     });
   });
 });

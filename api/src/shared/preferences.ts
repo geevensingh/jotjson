@@ -59,6 +59,13 @@ export interface UserPreferences {
    * strictly less invasive than either old mode).
    */
   recentlyViewedEnabled: boolean;
+  /**
+   * When true, selecting a tree row reveals the matching range in the
+   * editor and moving the editor cursor selects the matching tree row.
+   * When false, both panes operate independently. Default true. See
+   * DESIGN_SPEC.md - Tree feature, selection sync.
+   */
+  treeEditorSelectionSync: boolean;
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
@@ -121,6 +128,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeAssumeUtcForIsoDateOnly: true,
   defaultRuleSetIds: [],
   recentlyViewedEnabled: true,
+  treeEditorSelectionSync: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
   searchScope: 'both',
@@ -208,6 +216,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'treeAssumeUtcForIsoDateTime',
   'treeAssumeUtcForIsoDateOnly',
   'recentlyViewedEnabled',
+  'treeEditorSelectionSync',
   'searchCaseSensitive',
   'searchRegexMode',
   'searchScope',
@@ -254,6 +263,12 @@ export function normalizeStoredPreferences(
     // malformed value all fall back to the new default of true. This is
     // strictly less invasive than the legacy modes and the safest default.
     view.recentlyViewedEnabled = true;
+  }
+  if (typeof view.treeEditorSelectionSync !== 'boolean') {
+    // `treeEditorSelectionSync` was added after the initial preference
+    // schema. Stored docs from before its introduction default to true
+    // (sync on) - matches DEFAULT_PREFERENCES.
+    view.treeEditorSelectionSync = true;
   }
   delete view.historyTrackingMode;
   // Stored docs written before M6f-5 had `activeRuleSetIds` (or even
@@ -401,6 +416,10 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     recentlyViewedEnabled: assertBool(
       raw['recentlyViewedEnabled'],
       'recentlyViewedEnabled'
+    ),
+    treeEditorSelectionSync: assertBool(
+      raw['treeEditorSelectionSync'],
+      'treeEditorSelectionSync'
     ),
     searchCaseSensitive: assertBool(raw['searchCaseSensitive'], 'searchCaseSensitive'),
     searchRegexMode: assertBool(raw['searchRegexMode'], 'searchRegexMode'),

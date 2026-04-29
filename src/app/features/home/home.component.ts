@@ -18,7 +18,9 @@ import { Title } from '@angular/platform-browser';
 import {
   format as jsoncFormat,
   applyEdits,
-  createScanner
+  createScanner,
+  findNodeAtLocation,
+  Node as JsoncNode
 } from 'jsonc-parser';
 
 // SyntaxKind values inlined: jsonc-parser exports SyntaxKind as a `const enum`,
@@ -165,6 +167,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   private setContent(text: string): void {
     this.content.set(text);
     this.contentVersion.update((v) => v + 1);
+    // Tree<->editor selection sync (issue #42): clear any in-flight
+    // round-trip sentinels. Content reparse can clear the tree's
+    // selectedPath asynchronously, leaving a stale `pendingTreeApply`
+    // that would suppress the user's next click on the same path.
+    this.pendingEditorReveal = undefined;
+    this.pendingTreeApply = undefined;
     // Auto-clear the upload-source banner once content reaches empty or
     // parses cleanly. Reading parseResult() shares its memoized parse with
     // the editor's render path, so this does not add an extra parse.
@@ -262,6 +270,17 @@ export class HomeComponent implements OnInit, OnDestroy {
     viewChild<ElementRef<HTMLElement>>('treeHost');
 
   private readonly tree = viewChild(JsonTreeComponent);
+  private readonly editor = viewChild(JsonEditorComponent);
+
+  /**
+   * Loop-suppression sentinels for tree<->editor selection sync (issue
+   * #42). Each direction stores the canonical path string it just
+   * pushed to the OTHER pane; when the round-trip echo arrives, we
+   * recognise it as a no-op and drop it. Value-based, not flag-based,
+   * so concurrent unrelated user gestures do not get squelched.
+   */
+  private pendingEditorReveal: string | null | undefined = undefined;
+  private pendingTreeApply: string | null | undefined = undefined;
 
   constructor() {
     // Persist edits to the draft.
@@ -399,8 +418,123 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.setContent(next);
   }
 
-  onCursorChange(pos: { line: number; column: number }): void {
-    this.cursor.set(pos);
+  onCursorChange(pos: { line: number; column: number; offset: number }): void {
+    this.cursor.set({ line: pos.line, column: pos.column });
+    if (!this.syncEnabled()) return;
+    const tree = this.tree();
+    if (!tree) return;
+    const resolved = this.resolveTreePath(pos.offset);
+    // If this cursor change is the echo of a tree->editor reveal we
+    // just initiated, drop it. The pending value is consumed
+    // single-shot so a subsequent independent move re-triggers sync.
+    if (this.pendingEditorReveal === resolved) {
+      this.pendingEditorReveal = undefined;
+      return;
+    }
+    this.pendingTreeApply = resolved;
+    tree.selectByPathString(resolved);
+  }
+
+  onTreeSelectionChange(path: readonly (string | number)[] | null): void {
+    if (!this.syncEnabled()) return;
+    const editor = this.editor();
+    if (!editor) return;
+    const pathString =
+      path === null ? null : this.parser.pathToString([...path]);
+    if (this.pendingTreeApply === pathString) {
+      this.pendingTreeApply = undefined;
+      return;
+    }
+    if (path === null) return;
+
+    const ast = this.parseResult().ast;
+    if (!ast) return;
+    const valueNode = findNodeAtLocation(ast, [...path]);
+    if (!valueNode) return;
+    // Object/array values inside a property: highlight the whole
+    // "key": <value> block by selecting the parent property node.
+    // Primitive leaves and array elements: highlight just the value.
+    const target: JsoncNode =
+      (valueNode.type === 'object' || valueNode.type === 'array') &&
+      valueNode.parent?.type === 'property'
+        ? valueNode.parent
+        : valueNode;
+
+    const text = this.content();
+    // jsonc-parser strips a leading BOM before parsing, so AST node
+    // offsets are in stripped-text coordinates. Monaco/editor offsets
+    // are in full-text coordinates. Shift by the BOM length to align.
+    const bomShift = this.bomShift(text);
+    const startOffset = target.offset + bomShift;
+    const startPos = this.parser.offsetToPosition(text, startOffset);
+    const endPos = this.parser.offsetToPosition(
+      text,
+      startOffset + target.length
+    );
+    this.pendingEditorReveal = pathString;
+    editor.revealRange({
+      startLineNumber: startPos.line,
+      startColumn: startPos.column,
+      endLineNumber: endPos.line,
+      endColumn: endPos.column
+    });
+  }
+
+  onToggleSelectionSync(): void {
+    const next = !this.prefs.prefs().treeEditorSelectionSync;
+    this.prefs.update({ treeEditorSelectionSync: next });
+    // Clear any in-flight echo expectations so a cycle that survives
+    // an OFF flip cannot suppress a real gesture once sync turns back
+    // on (the next gesture re-engages cleanly).
+    this.pendingEditorReveal = undefined;
+    this.pendingTreeApply = undefined;
+  }
+
+  private syncEnabled(): boolean {
+    return this.prefs.prefs().treeEditorSelectionSync;
+  }
+
+  /**
+   * Resolves a Monaco editor offset to a tree path string. Returns
+   * `null` when the cursor is in trailing whitespace, before the
+   * document starts, or otherwise outside the parsed AST. Trailing
+   * placeholder segments produced by `jsonc-parser`'s `getLocation`
+   * (e.g. cursor in incomplete syntax) are trimmed by walking upward
+   * until a path is known to the tree's `nodeIndex`. Falls back to
+   * the document root `$` only when the offset lies inside the AST
+   * AND the tree has a row at `$`.
+   */
+  private resolveTreePath(offset: number): string | null {
+    const tree = this.tree();
+    if (!tree) return null;
+    const text = this.content();
+    // Align Monaco's full-text offset with the parser's stripped-text
+    // coordinate space (BOM-aware).
+    const bomShift = this.bomShift(text);
+    const adjusted = offset - bomShift;
+    if (adjusted < 0) return null;
+    const stripped = bomShift > 0 ? text.slice(bomShift) : text;
+    const path = this.parser.locationAt(stripped, adjusted);
+
+    for (let length = path.length; length > 0; length--) {
+      const candidate = this.parser.pathToString(path.slice(0, length));
+      if (tree.hasPath(candidate)) return candidate;
+    }
+
+    const ast = this.parseResult().ast;
+    if (
+      ast &&
+      adjusted >= ast.offset &&
+      adjusted <= ast.offset + ast.length &&
+      tree.hasPath('$')
+    ) {
+      return '$';
+    }
+    return null;
+  }
+
+  private bomShift(text: string): number {
+    return text.charCodeAt(0) === 0xfeff ? 1 : 0;
   }
 
   async onPaste(): Promise<void> {

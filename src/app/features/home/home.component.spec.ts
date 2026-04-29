@@ -409,6 +409,302 @@ describe('HomeComponent (unit-level)', () => {
   });
 });
 
+describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
+  // We can't render the full HomeComponent (it would mount Monaco), so
+  // these tests stub the `tree` and `editor` viewChild signals directly.
+  // viewChild returns a callable signal; replacing the field with a
+  // function that returns our fake matches that contract.
+
+  interface TreeStub {
+    selectByPathString: jasmine.Spy<(path: string | null) => void>;
+    hasPath: jasmine.Spy<(path: string) => boolean>;
+  }
+  interface EditorStub {
+    revealRange: jasmine.Spy<
+      (range: {
+        startLineNumber: number;
+        startColumn: number;
+        endLineNumber: number;
+        endColumn: number;
+      }) => void
+    >;
+  }
+
+  function setUp(content: string, knownPaths: readonly string[] = ['$']) {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.content.set(content);
+    const knownSet = new Set<string>(knownPaths);
+    const tree: TreeStub = {
+      selectByPathString: jasmine.createSpy('selectByPathString'),
+      hasPath: jasmine.createSpy('hasPath').and.callFake((p: string) =>
+        knownSet.has(p)
+      )
+    };
+    const editor: EditorStub = {
+      revealRange: jasmine.createSpy('revealRange')
+    };
+    (component as unknown as { tree: () => TreeStub }).tree = () => tree;
+    (component as unknown as { editor: () => EditorStub }).editor = () =>
+      editor;
+    return { fixture, component, tree, editor };
+  }
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+  });
+
+  it('cursor in middle of "value" selects matching tree row ($.a)', () => {
+    const text = '{"a": "value"}';
+    const { component, tree } = setUp(text, ['$', '$.a']);
+    // Offset 9 sits inside "value" (the v of value).
+    component.onCursorChange({ line: 1, column: 10, offset: 9 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.a');
+  });
+
+  it('cursor on top-level primitive selects $', () => {
+    const text = '42';
+    const { component, tree } = setUp(text, ['$']);
+    component.onCursorChange({ line: 1, column: 2, offset: 1 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$');
+  });
+
+  it('cursor inside an empty object selects $', () => {
+    const text = '{ }';
+    const { component, tree } = setUp(text, ['$']);
+    // Offset 1 is between the `{` and the space.
+    component.onCursorChange({ line: 1, column: 2, offset: 1 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$');
+  });
+
+  it('cursor in trailing whitespace clears tree selection', () => {
+    const text = '{"a": 1}\n\n';
+    const { component, tree } = setUp(text, ['$', '$.a']);
+    // Offset 9 is in the trailing newlines outside the AST.
+    component.onCursorChange({ line: 2, column: 1, offset: 9 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith(null);
+  });
+
+  it('tree click on container property reveals whole "key": <value> block', () => {
+    const text = '{"a": {"b": 1}}';
+    const { component, editor } = setUp(text, ['$', '$.a', '$.a.b']);
+    component.onTreeSelectionChange(['a']);
+    // Property "a": <object> spans offsets 1..14 (inclusive of value).
+    // Start col 2 (after the leading {); end col 15 (just past `}`).
+    expect(editor.revealRange).toHaveBeenCalledOnceWith({
+      startLineNumber: 1,
+      startColumn: 2,
+      endLineNumber: 1,
+      endColumn: 15
+    });
+  });
+
+  it('tree click on primitive leaf reveals just the value token', () => {
+    const text = '{"a": 42}';
+    const { component, editor } = setUp(text, ['$', '$.a']);
+    component.onTreeSelectionChange(['a']);
+    // Value 42 sits at offset 6, length 2 -> startCol 7, endCol 9.
+    expect(editor.revealRange).toHaveBeenCalledOnceWith({
+      startLineNumber: 1,
+      startColumn: 7,
+      endLineNumber: 1,
+      endColumn: 9
+    });
+  });
+
+  it('tree click on array element reveals just the value', () => {
+    const text = '[10, 20, 30]';
+    const { component, editor } = setUp(text, ['$', '$[0]', '$[1]', '$[2]']);
+    component.onTreeSelectionChange([1]);
+    // Array index 1 -> "20" at offset 5, length 2.
+    expect(editor.revealRange).toHaveBeenCalledOnceWith({
+      startLineNumber: 1,
+      startColumn: 6,
+      endLineNumber: 1,
+      endColumn: 8
+    });
+  });
+
+  it('tree clear (path=null) does not call editor.revealRange', () => {
+    const text = '{"a": 1}';
+    const { component, editor } = setUp(text, ['$', '$.a']);
+    component.onTreeSelectionChange(null);
+    expect(editor.revealRange).not.toHaveBeenCalled();
+  });
+
+  it('editor->tree round-trip does not loop (cursor echo is suppressed)', () => {
+    const text = '{"a": 1}';
+    const { component, tree, editor } = setUp(text, ['$', '$.a']);
+    // User moves cursor into $.a
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.a');
+    // Tree emits selectionChange in response - this is the echo.
+    component.onTreeSelectionChange(['a']);
+    expect(editor.revealRange).not.toHaveBeenCalled();
+  });
+
+  it('tree->editor round-trip does not loop (revealRange echo is suppressed)', () => {
+    const text = '{"a": 1}';
+    const { component, tree, editor } = setUp(text, ['$', '$.a']);
+    // User clicks tree row $.a
+    component.onTreeSelectionChange(['a']);
+    expect(editor.revealRange).toHaveBeenCalledTimes(1);
+    // Editor's cursor change as a result of revealRange - the echo.
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).not.toHaveBeenCalled();
+  });
+
+  it('two consecutive independent tree clicks reveal both (no stale suppression)', () => {
+    const text = '{"a": 1, "b": 2}';
+    const { component, editor } = setUp(text, ['$', '$.a', '$.b']);
+    component.onTreeSelectionChange(['a']);
+    component.onTreeSelectionChange(['b']);
+    expect(editor.revealRange).toHaveBeenCalledTimes(2);
+  });
+
+  it('with sync OFF: cursor change does NOT call tree.selectByPathString', () => {
+    const text = '{"a": 1}';
+    const { component, tree } = setUp(text, ['$', '$.a']);
+    TestBed.inject(PreferencesService).update({
+      treeEditorSelectionSync: false
+    });
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).not.toHaveBeenCalled();
+  });
+
+  it('with sync OFF: cursor change still updates the cursor signal (status bar)', () => {
+    const text = '{"a": 1}';
+    const { component } = setUp(text, ['$', '$.a']);
+    TestBed.inject(PreferencesService).update({
+      treeEditorSelectionSync: false
+    });
+    component.onCursorChange({ line: 3, column: 5, offset: 6 });
+    expect(component.cursor()).toEqual({ line: 3, column: 5 });
+  });
+
+  it('with sync OFF: tree click does NOT call editor.revealRange', () => {
+    const text = '{"a": 1}';
+    const { component, editor } = setUp(text, ['$', '$.a']);
+    TestBed.inject(PreferencesService).update({
+      treeEditorSelectionSync: false
+    });
+    component.onTreeSelectionChange(['a']);
+    expect(editor.revealRange).not.toHaveBeenCalled();
+  });
+
+  it('toggling the pref OFF and back ON does not auto-resync; next gesture works', () => {
+    const text = '{"a": 1}';
+    const { component, tree } = setUp(text, ['$', '$.a']);
+    // Off
+    component.onToggleSelectionSync();
+    expect(
+      TestBed.inject(PreferencesService).prefs().treeEditorSelectionSync
+    ).toBe(false);
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).not.toHaveBeenCalled();
+    // Back on
+    component.onToggleSelectionSync();
+    expect(
+      TestBed.inject(PreferencesService).prefs().treeEditorSelectionSync
+    ).toBe(true);
+    // Toggling on did not call selectByPathString of its own.
+    expect(tree.selectByPathString).not.toHaveBeenCalled();
+    // Next user move re-engages sync.
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.a');
+  });
+
+  it('onToggleSelectionSync flips the pref and is the inverse of itself', () => {
+    const { component } = setUp('{}', ['$']);
+    const prefs = TestBed.inject(PreferencesService);
+    expect(prefs.prefs().treeEditorSelectionSync).toBe(true);
+    component.onToggleSelectionSync();
+    expect(prefs.prefs().treeEditorSelectionSync).toBe(false);
+    component.onToggleSelectionSync();
+    expect(prefs.prefs().treeEditorSelectionSync).toBe(true);
+  });
+
+  it('after content reparse invalidates the path, cursor re-selects in the new structure', () => {
+    const text = '{"a": 1}';
+    const { component, tree } = setUp(text, ['$', '$.a']);
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.a');
+    // Content shape changes; offset 6 now lives at $.b in the new tree.
+    tree.selectByPathString.calls.reset();
+    component.content.set('{"b": 1}');
+    tree.hasPath.and.callFake((p) => new Set(['$', '$.b']).has(p));
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.b');
+  });
+
+  it('content change clears stale loop-suppression sentinels (regression)', () => {
+    // Race: cursor->tree direction sets pendingTreeApply, then content
+    // reparse clears the tree's selectedPath asynchronously, so the
+    // matching tree selectionChange never arrives. A subsequent user
+    // tree click on the same path must NOT be suppressed.
+    const text = '{"a": 1}';
+    const { component, editor } = setUp(text, ['$', '$.a']);
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    // Echo never arrives because reparse clears the tree.
+    // Drive content through the public setter to mimic real input.
+    component.onValueChange('{"a": 1, "b": 2}');
+    // User clicks tree row $.a in the new tree shape.
+    component.onTreeSelectionChange(['a']);
+    expect(editor.revealRange).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggling sync OFF then ON does not strand a sentinel (regression)', () => {
+    const text = '{"a": 1}';
+    const { component, tree, editor } = setUp(text, ['$', '$.a']);
+    // Tree click sets pendingEditorReveal.
+    component.onTreeSelectionChange(['a']);
+    expect(editor.revealRange).toHaveBeenCalledTimes(1);
+    // Toggle off before the cursor echo arrives.
+    component.onToggleSelectionSync();
+    // Cursor echo arrives but is ignored because sync is off.
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).not.toHaveBeenCalled();
+    // Toggle back on. Pending values must have been cleared by the OFF
+    // flip, otherwise the next legitimate cursor move at the same path
+    // would be stuck.
+    component.onToggleSelectionSync();
+    component.onCursorChange({ line: 1, column: 7, offset: 6 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.a');
+  });
+
+  it('BOM-prefixed content resolves cursor to the correct tree path', () => {
+    // \uFEFF + {"a": 1} - editor offset 7 sits inside "a" in full text;
+    // parser sees stripped offset 6 which resolves to $.a.
+    const text = '\uFEFF{"a": 1}';
+    const { component, tree } = setUp(text, ['$', '$.a']);
+    component.onCursorChange({ line: 1, column: 8, offset: 7 });
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.a');
+  });
+
+  it('BOM-prefixed content reveals the correct value range (offsets shifted by BOM)', () => {
+    const text = '\uFEFF{"a": 42}';
+    const { component, editor } = setUp(text, ['$', '$.a']);
+    component.onTreeSelectionChange(['a']);
+    // 42 sits at full-text offset 7, length 2. startCol 8, endCol 10.
+    expect(editor.revealRange).toHaveBeenCalledOnceWith({
+      startLineNumber: 1,
+      startColumn: 8,
+      endLineNumber: 1,
+      endColumn: 10
+    });
+  });
+});
+
 describe('HomeComponent save() branching (M4a)', () => {
   const blob = (overrides: Partial<JsonBlob> = {}): JsonBlob => ({
     id: 'id-1',

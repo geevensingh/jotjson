@@ -76,6 +76,13 @@ export interface UserPreferences {
   treeAssumeUtcForIsoDateTime: boolean;
   treeAssumeUtcForIsoDateOnly: boolean;
   recentlyViewedEnabled: boolean;
+  /**
+   * When true, selecting a tree row reveals the matching range in the
+   * editor and moving the editor cursor selects the matching tree row.
+   * When false, both panes operate independently. Default true. See
+   * DESIGN_SPEC.md - Tree feature, selection sync.
+   */
+  treeEditorSelectionSync: boolean;
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';

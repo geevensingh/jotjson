@@ -76,6 +76,7 @@ export class ToolbarComponent {
   readonly modeChange = output<EditorMode>();
   readonly toggleLayout = output<void>();
   readonly toggleTheme = output<void>();
+  readonly toggleSelectionSync = output<void>();
   readonly save = output<void>();
   readonly titleChange = output<string>();
   readonly copyShareLink = output<void>();
@@ -97,6 +98,25 @@ export class ToolbarComponent {
     if (theme === 'dark') return 'moon';
     return 'system';
   });
+
+  /**
+   * Tree<->editor selection sync (issue #42). Default-on user
+   * preference; both this toolbar button and the matching toggle on
+   * the profile page write through to the same `treeEditorSelectionSync`
+   * key. Icon flips between `link` (on) and `link-off` (off).
+   */
+  readonly selectionSyncEnabled = computed(
+    () => this.prefs.prefs().treeEditorSelectionSync
+  );
+  readonly selectionSyncIcon = computed<JjIconName>(() =>
+    this.selectionSyncEnabled() ? 'link' : 'link-off'
+  );
+  readonly selectionSyncTooltip = computed(() =>
+    this.selectionSyncEnabled()
+      ? $localize`:@@toolbar.syncSelection.tooltip.on:Disable tree-editor selection sync`
+      : $localize`:@@toolbar.syncSelection.tooltip.off:Enable tree-editor selection sync`
+  );
+  readonly selectionSyncAriaLabel = $localize`:@@toolbar.syncSelection.aria:Toggle tree-editor selection sync`;
 
   readonly saveDisabled = computed(
     () => !this.canSave() || !this.hasContent() || this.saveInFlight()

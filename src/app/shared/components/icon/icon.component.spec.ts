@@ -15,6 +15,8 @@ describe('IconComponent', () => {
     'moon',
     'system',
     'copy-path',
+    'link',
+    'link-off',
     'warning',
     'check',
     'star',
