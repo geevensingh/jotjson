@@ -5,6 +5,44 @@
   <p class="preview-hint" i18n="@@rulePreview.hint">
     Sample JSON rendered with your in-progress rules.
   </p>
+  @if (contrastFailures().length > 0) {
+    <details class="contrast-warning" data-testid="contrast-warning">
+      <summary class="contrast-warning-summary">
+        <span class="contrast-warning-icon" aria-hidden="true">!</span>
+        <span class="contrast-warning-text">
+          @if (contrastFailures().length === 1) {
+            <ng-container i18n="@@rulePreview.contrast.summary.one">
+              Accessibility: 1 rule may be hard to read in at least one theme.
+            </ng-container>
+          } @else {
+            <ng-container i18n="@@rulePreview.contrast.summary.many">
+              Accessibility: {{ contrastFailures().length }} rules may be hard to read in at least one theme.
+            </ng-container>
+          }
+        </span>
+      </summary>
+      <ul class="contrast-warning-list">
+        @for (failure of contrastFailures(); track failure.ruleId) {
+          <li class="contrast-warning-item">
+            <code class="contrast-warning-label">{{ failure.label }}</code>
+            @if (failure.failsLight && failure.failsDark) {
+              <span class="contrast-warning-themes" i18n="@@rulePreview.contrast.both">
+                fails in light and dark
+              </span>
+            } @else if (failure.failsLight) {
+              <span class="contrast-warning-themes" i18n="@@rulePreview.contrast.light">
+                fails in light theme
+              </span>
+            } @else {
+              <span class="contrast-warning-themes" i18n="@@rulePreview.contrast.dark">
+                fails in dark theme
+              </span>
+            }
+          </li>
+        }
+      </ul>
+    </details>
+  }
   <div class="preview-tree-wrap">
     <jj-json-tree
       [value]="sampleJson"
@@ -13,3 +51,4 @@
     />
   </div>
 </section>
+

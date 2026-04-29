@@ -108,4 +108,220 @@ describe('RulePreviewComponent', () => {
     ).componentInstance as JsonTreeComponent;
     expect(tree.embeddedMode()).toBeTrue();
   });
+
+  describe('contrast warning (M6g-3)', () => {
+    it('hides the banner when every rule passes AA in both themes', async () => {
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r1',
+              matchValue: 'ok',
+              style: { textColor: '#000000', backgroundColor: '#ffffff' }
+            })
+          ]
+        })
+      );
+      const banner = fixture.nativeElement.querySelector(
+        '[data-testid="contrast-warning"]'
+      );
+      expect(banner).toBeNull();
+      expect(fixture.componentInstance.contrastFailures()).toEqual([]);
+    });
+
+    it('hides the banner for rules with no color contributions (border only)', async () => {
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r1',
+              matchValue: 'ok',
+              // borderColor is decorative; no fg/bg set means the rule
+              // does not affect contrast and must not be flagged.
+              style: { borderColor: '#888888' }
+            })
+          ]
+        })
+      );
+      expect(fixture.componentInstance.contrastFailures()).toEqual([]);
+      const banner = fixture.nativeElement.querySelector(
+        '[data-testid="contrast-warning"]'
+      );
+      expect(banner).toBeNull();
+    });
+
+    it('flags a rule that fails AA in the light theme only', async () => {
+      // White text + no bg: light theme bg = #fafafa -> ratio ~ 1.04 (fail).
+      // Dark theme bg = #1e1e1e -> ratio ~ 17.4 (pass).
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r-white-text',
+              matchValue: 'whiteOnLight',
+              style: { textColor: '#ffffff' }
+            })
+          ]
+        })
+      );
+      const failures = fixture.componentInstance.contrastFailures();
+      expect(failures.length).toBe(1);
+      expect(failures[0].ruleId).toBe('r-white-text');
+      expect(failures[0].failsLight).toBeTrue();
+      expect(failures[0].failsDark).toBeFalse();
+      const themes = fixture.nativeElement.querySelector(
+        '.contrast-warning-themes'
+      ) as HTMLElement;
+      expect(themes.textContent?.trim()).toBe('fails in light theme');
+    });
+
+    it('flags a rule that fails AA in the dark theme only', async () => {
+      // Near-black text + no bg: dark theme bg = #1e1e1e -> ratio ~ 1.04 (fail).
+      // Light theme bg = #fafafa -> ratio ~ 19+ (pass).
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r-black-text',
+              matchValue: 'darkOnDark',
+              style: { textColor: '#000000' }
+            })
+          ]
+        })
+      );
+      const failures = fixture.componentInstance.contrastFailures();
+      expect(failures.length).toBe(1);
+      expect(failures[0].failsLight).toBeFalse();
+      expect(failures[0].failsDark).toBeTrue();
+      const themes = fixture.nativeElement.querySelector(
+        '.contrast-warning-themes'
+      ) as HTMLElement;
+      expect(themes.textContent?.trim()).toBe('fails in dark theme');
+    });
+
+    it('flags a rule that fails AA in both themes when fg and bg are both set close together', async () => {
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r-both',
+              matchValue: 'mid',
+              style: { textColor: '#888888', backgroundColor: '#999999' }
+            })
+          ]
+        })
+      );
+      const failures = fixture.componentInstance.contrastFailures();
+      expect(failures.length).toBe(1);
+      expect(failures[0].failsLight).toBeTrue();
+      expect(failures[0].failsDark).toBeTrue();
+      const themes = fixture.nativeElement.querySelector(
+        '.contrast-warning-themes'
+      ) as HTMLElement;
+      expect(themes.textContent?.trim()).toBe('fails in light and dark');
+    });
+
+    it('renders a singular summary when exactly one rule fails', async () => {
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r1',
+              matchValue: 'one',
+              style: { textColor: '#ffffff' }
+            })
+          ]
+        })
+      );
+      const summary = fixture.nativeElement.querySelector(
+        '.contrast-warning-summary .contrast-warning-text'
+      ) as HTMLElement;
+      expect(summary.textContent?.trim()).toContain('1 rule may be hard to read');
+    });
+
+    it('renders a plural summary when multiple rules fail', async () => {
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r1',
+              matchValue: 'a',
+              style: { textColor: '#ffffff' }
+            }),
+            rule({
+              id: 'r2',
+              matchValue: 'b',
+              style: { textColor: '#000000' }
+            })
+          ]
+        })
+      );
+      const summary = fixture.nativeElement.querySelector(
+        '.contrast-warning-summary .contrast-warning-text'
+      ) as HTMLElement;
+      expect(summary.textContent?.trim()).toContain('2 rules may be hard to read');
+      const items = fixture.nativeElement.querySelectorAll('.contrast-warning-item');
+      expect(items.length).toBe(2);
+    });
+
+    it('truncates long match values to 30 chars with ellipsis', async () => {
+      const longValue = 'this-is-a-rather-long-match-value-that-should-be-truncated';
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r1',
+              matchValue: longValue,
+              style: { textColor: '#ffffff' }
+            })
+          ]
+        })
+      );
+      const failures = fixture.componentInstance.contrastFailures();
+      expect(failures.length).toBe(1);
+      expect(failures[0].label.length).toBeLessThanOrEqual(30);
+      expect(failures[0].label.endsWith('...')).toBeTrue();
+      const label = fixture.nativeElement.querySelector(
+        '.contrast-warning-label'
+      ) as HTMLElement;
+      expect(label.textContent?.trim()).toBe(failures[0].label);
+    });
+
+    it('replaces empty/whitespace match values with "(empty)" in the label', async () => {
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r1',
+              matchValue: '   ',
+              style: { textColor: '#ffffff' }
+            })
+          ]
+        })
+      );
+      const failures = fixture.componentInstance.contrastFailures();
+      expect(failures[0].label).toBe('(empty)');
+    });
+
+    it('skips rules with malformed hex (in-flight typed input) without crashing', async () => {
+      // The user might briefly have invalid colors while typing. The
+      // preview's contrast banner must stay silent rather than throw.
+      await create(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r-typing',
+              matchValue: 'wip',
+              style: { backgroundColor: '#abc' }
+            })
+          ]
+        })
+      );
+      expect(fixture.componentInstance.contrastFailures()).toEqual([]);
+      const banner = fixture.nativeElement.querySelector(
+        '[data-testid="contrast-warning"]'
+      );
+      expect(banner).toBeNull();
+    });
+  });
 });
