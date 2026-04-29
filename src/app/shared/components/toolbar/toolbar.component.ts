@@ -130,24 +130,27 @@ export class ToolbarComponent {
   readonly selectionSyncAriaLabel = $localize`:@@toolbar.syncSelection.aria:Toggle tree-editor selection sync`;
 
   /**
-   * 3-state pane visibility (issue #39). The icon depicts the NEXT
-   * state (what clicking will do), per spec: `both` -> show
-   * `pane-left-only` (next click hides tree), `editor-only` -> show
-   * `pane-right-only` (next click hides editor), `tree-only` -> show
-   * `pane-both` (next click restores both panes).
+   * 3-state pane visibility (issue #39). The icon depicts the
+   * CURRENT state of the panes: `both` -> `pane-both`,
+   * `editor-only` -> `pane-left-only` (only the left/editor pane
+   * is visible), `tree-only` -> `pane-right-only` (only the
+   * right/tree pane is visible).
    *
-   * The next-action label is reused for both `matTooltip` and the
-   * button's dynamic `aria-label` so screen readers announce the
-   * action that activation will perform.
+   * The matTooltip and dynamic `aria-label` describe the NEXT
+   * action (what clicking will do), so the icon answers "where
+   * am I?" and the tooltip/aria-label answer "what happens if I
+   * click this?". This split keeps the visual affordance honest
+   * while still letting screen readers announce the action that
+   * activation will perform.
    */
   readonly paneVisibilityIcon = computed<JjIconName>(() => {
     switch (this.paneVisibility()) {
       case 'both':
-        return 'pane-left-only';
-      case 'editor-only':
-        return 'pane-right-only';
-      case 'tree-only':
         return 'pane-both';
+      case 'editor-only':
+        return 'pane-left-only';
+      case 'tree-only':
+        return 'pane-right-only';
     }
   });
   readonly paneVisibilityNextActionLabel = computed(() => {

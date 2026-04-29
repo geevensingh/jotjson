@@ -143,21 +143,21 @@ describe('ToolbarComponent', () => {
       return button;
     }
 
-    it('paneVisibilityIcon shows the icon for the next state in the cycle', async () => {
+    it('paneVisibilityIcon shows the icon for the current state', async () => {
       const { fixture } = await create();
       const c = fixture.componentInstance;
 
       fixture.componentRef.setInput('paneVisibility', 'both');
       fixture.detectChanges();
-      expect(c.paneVisibilityIcon()).toBe('pane-left-only');
+      expect(c.paneVisibilityIcon()).toBe('pane-both');
 
       fixture.componentRef.setInput('paneVisibility', 'editor-only');
       fixture.detectChanges();
-      expect(c.paneVisibilityIcon()).toBe('pane-right-only');
+      expect(c.paneVisibilityIcon()).toBe('pane-left-only');
 
       fixture.componentRef.setInput('paneVisibility', 'tree-only');
       fixture.detectChanges();
-      expect(c.paneVisibilityIcon()).toBe('pane-both');
+      expect(c.paneVisibilityIcon()).toBe('pane-right-only');
     });
 
     it('paneVisibilityNextActionLabel describes the next state', async () => {
