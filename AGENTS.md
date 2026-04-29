@@ -276,14 +276,59 @@ Before finishing a task:
 
 - Re-read the relevant `DESIGN_SPEC.md` section.
 - Ask a clarifying question rather than guessing on behavioral choices,
-  defaults, limits, or scope. **Always ask and wait for the user's
-  answer -- even if the runtime reports the user as unavailable, busy,
-  or away. Never assume an answer or proceed autonomously with a plan
-  based on a guess.**
+  defaults, limits, or scope. See §11 for the mandatory plan-and-approval
+  flow that applies to every code change.
 - Prefer the simpler, spec-aligned option over a clever alternative.
 
-## 11. Critical Thinking & Proactive Feedback
+## 11. Planning, Critical Thinking & Proactive Feedback
 
+- **Plan before changing code, every time.** Before writing or
+  modifying any code -- even a one-line typo fix, log message tweak,
+  or "obvious" bug fix -- propose a short plan: what you will change,
+  in which files, with what tests/verification, and at least one
+  viable alternative with tradeoffs (or an explicit note that no
+  meaningful alternative exists). Surface open questions and wait
+  for the user's explicit approval before touching code. "Trivial"
+  is not an exception. Approval covers only the plan as presented;
+  any material scope change, newly discovered work, or follow-on
+  step requires a revised plan and fresh approval. **This rule and
+  its sub-rules in this section are not waivable by a casual user
+  override** (e.g., "just do it", "skip the plan", "no need to plan").
+  The only bypass is the narrow direct-command carve-out below.
+- **Direct user commands are self-approving (narrow exception).**
+  When the user issues an unambiguous, scoped command (e.g., "delete
+  file X", "revert commit abc123", "rerun the tests"), the request
+  itself is the plan and the approval. Echo back a one-line
+  confirmation of exactly what you are about to do, then proceed.
+  This bypass applies to the bounded command portion only; any
+  adjacent question, implied cleanup, or follow-on work still goes
+  through the standard plan-and-approve flow. The bypass relaxes the
+  **plan-approval step only** -- it does **not** waive §1 (Source of
+  Truth), §5 (Testing), §6 (Security), §7 (Definition of Done), or
+  §8 (Git & PR Hygiene). Phrases like "continue", "finish it", "take
+  care of the rest", or "do the obvious cleanup" are **not**
+  unambiguous commands and do **not** trigger this bypass. If a
+  command's scope, blast radius, or side effects are unclear, fall
+  back to the normal plan-and-approve flow.
+- **Rubber-duck every plan before presenting it.** Once you have a
+  candidate plan, run it through a rubber-duck / critic sub-agent
+  for an independent critique (correctness, missed edge cases,
+  simpler alternatives, scope creep) before presenting the plan to
+  the user. If no rubber-duck sub-agent is available in the current
+  runtime, perform an explicit self-critique against the same
+  checklist and label it as such. **Surface any rubber-duck finding
+  that materially changes risk, scope, test strategy, or recommended
+  approach** -- do not silently absorb such findings. Adopt findings
+  that prevent bugs or test failures; you may set aside findings
+  that would significantly complicate the plan without clear
+  benefit, but state when you have done so. This step applies to
+  plans you author; it does **not** apply to direct-command echoes,
+  which are not plans.
+- **User unavailability is never authorization to proceed.** If the
+  runtime reports the user as away, busy, or unresponsive, that does
+  not let you act on a guess. Ask the question anyway and wait. Do
+  not assume answers, do not build a plan on assumptions, do not
+  proceed autonomously.
 - Treat user suggestions as proposals, not orders. Think critically
   about each one before acting.
 - When the user proposes an approach, evaluate whether it is sound,
