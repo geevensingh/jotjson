@@ -1194,8 +1194,8 @@ EU users would need a regional resource - out of scope for v1.
        whitelist). Auto-generated rule labels per F1
        (`value contains "error"`); no editable rule.name field in
        v1. The stub `/formatting-rules` page is replaced with a
-       minimal list (cards from `RuleSetsService.ruleSets()` cache
-       + Edit button + "+ New rule set" creator). M6e expands the
+       minimal list (cards from `RuleSetsService.ruleSets()` cache +
+       Edit button + "+ New rule set" creator). M6e expands the
        list to full CRUD (rename, duplicate, delete, ordering,
        clone-preset CTA). Save is a manual button; 412 surfaces a
        snackbar.~~ (done)
