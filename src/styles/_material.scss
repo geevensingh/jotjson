@@ -55,6 +55,11 @@ body.theme-light {
   }
 
   .mat-mdc-menu-item.ctx-default-action {
-    font-weight: 600;
+    // Material applies font-weight on the inner `.mat-mdc-menu-item-text`
+    // span via `var(--mat-menu-item-label-text-weight)`, so a plain
+    // `font-weight: 600` on the button is overridden back to the default
+    // (M3 label-large-weight = 500). Override the variable instead so
+    // CSS-variable inheritance carries the new value to the inner span.
+    --mat-menu-item-label-text-weight: 700;
   }
 }
