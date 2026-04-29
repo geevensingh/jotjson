@@ -942,14 +942,18 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   function makeOversizedFile(): File {
     return {
       size: MAX_UPLOAD_BYTES + 1,
-      text: () => Promise.resolve('')
+      name: 'oversized.json',
+      text: () => Promise.resolve(''),
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0))
     } as unknown as File;
   }
 
   function makeRejectingFile(): File {
     return {
       size: 100,
-      text: () => Promise.reject(new Error('boom'))
+      name: 'rejecting.json',
+      text: () => Promise.reject(new Error('boom')),
+      arrayBuffer: () => Promise.reject(new Error('boom'))
     } as unknown as File;
   }
 
@@ -990,7 +994,9 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     const handler = fakeController.registeredHandler!;
     const file = {
       size: 7,
-      text: () => Promise.resolve('{"b":2}')
+      name: 'b.json',
+      text: () => Promise.resolve('{"b":2}'),
+      arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"b":2}').buffer)
     } as unknown as File;
     handler([file]);
     await Promise.resolve();
@@ -1427,7 +1433,8 @@ describe('HomeComponent upload-error banner (#36)', () => {
     const file = {
       size: 5,
       name: 'dropped.json',
-      text: () => Promise.resolve('{"a":')
+      text: () => Promise.resolve('{"a":'),
+      arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":').buffer)
     } as unknown as File;
 
     fakeController.registeredHandler!([file]);
@@ -1445,7 +1452,8 @@ describe('HomeComponent upload-error banner (#36)', () => {
     const file = {
       size: 7,
       name: 'good.json',
-      text: () => Promise.resolve('{"a":1}')
+      text: () => Promise.resolve('{"a":1}'),
+      arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":1}').buffer)
     } as unknown as File;
 
     fakeController.registeredHandler!([file]);
@@ -1467,5 +1475,99 @@ describe('HomeComponent upload-error banner (#36)', () => {
     expect(fixture.componentInstance.uploadError()).not.toBeNull();
     expect(fixture.componentInstance.uploadError()!.filename).toBe('log.txt');
     expect(fixture.componentInstance.extractBannerVisible()).toBe(true);
+  });
+});
+
+describe('HomeComponent binary upload rejection (#62)', () => {
+  const PREFS_KEY = 'jotjson.preferences.v1';
+  const DRAFT_KEY = 'jotjson.draft.v1';
+  const SPLIT_KEY = 'jotjson.splitRatio.v1';
+
+  class FakeDropController {
+    readonly dropActive = signal(false);
+    registeredHandler?: (files: readonly File[]) => void;
+    readonly dispose = jasmine.createSpy('dispose');
+    readonly registerEditorHandler = jasmine
+      .createSpy('registerEditorHandler')
+      .and.callFake((handler: (files: readonly File[]) => void) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
+  function setup() {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    TestBed.resetTestingModule();
+    const fakeController = new FakeDropController();
+    const snack = { open: jasmine.createSpy('open') };
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: DocumentDropController, useValue: fakeController },
+        { provide: MatSnackBar, useValue: snack }
+      ]
+    });
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    return { fixture, fakeController, snack };
+  }
+
+  function pngFile(name = 'logo.png'): File {
+    const pngBytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d
+    ]);
+    return new File([pngBytes], name, { type: 'image/png' });
+  }
+
+  it('toolbar upload of a PNG toasts and does not mutate content', async () => {
+    const { fixture, snack } = setup();
+    const before = fixture.componentInstance.content();
+    await fixture.componentInstance.onUpload(pngFile());
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('does not appear to be a text file');
+    expect(fixture.componentInstance.content()).toBe(before);
+  });
+
+  it('toolbar binary upload does not set uploadError or extractBanner', async () => {
+    const { fixture } = setup();
+    await fixture.componentInstance.onUpload(pngFile());
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+    expect(fixture.componentInstance.extractBannerVisible()).toBe(false);
+  });
+
+  it('drag-drop binary upload toasts and does not mutate content', async () => {
+    const { fixture, fakeController, snack } = setup();
+    const before = fixture.componentInstance.content();
+    const pngBytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d
+    ]);
+    const fakePng = {
+      size: pngBytes.byteLength,
+      name: 'dropped.png',
+      text: () => Promise.resolve(''),
+      arrayBuffer: () => Promise.resolve(pngBytes.buffer)
+    } as unknown as File;
+    fakeController.registeredHandler!([fakePng]);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('does not appear to be a text file');
+    expect(fixture.componentInstance.content()).toBe(before);
+  });
+
+  it('subsequent text upload after a binary rejection still works', async () => {
+    const { fixture, snack } = setup();
+    await fixture.componentInstance.onUpload(pngFile());
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    const goodFile = new File(['{"after":true}'], 'good.json');
+    await fixture.componentInstance.onUpload(goodFile);
+    expect(fixture.componentInstance.content()).toBe('{"after":true}');
+    // Snackbar from binary upload is still the most recent open call (no toast for the success).
+    expect(snack.open).toHaveBeenCalledTimes(1);
   });
 });

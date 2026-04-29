@@ -25,6 +25,7 @@ export const TELEMETRY_MESSAGE_IDS = [
   'home.save.failed',
   'home.upload.tooLarge',
   'home.upload.readFailed',
+  'home.upload.binary',
   'share.visibility.failed',
   'share.delete.failed',
 

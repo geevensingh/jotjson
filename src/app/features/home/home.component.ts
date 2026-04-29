@@ -566,6 +566,14 @@ export class HomeComponent implements OnInit, OnDestroy {
           { duration: 4000 }
         );
         return;
+      case 'binary':
+        this.logger.info('home.upload.binary', { filename: result.filename });
+        this.snack.open(
+          $localize`:@@home.upload.error.binary:File does not appear to be a text file - upload was ignored.`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 4000 }
+        );
+        return;
       case 'readFailed':
         this.logger.warn('home.upload.readFailed', {
           cause: String(result.cause)
