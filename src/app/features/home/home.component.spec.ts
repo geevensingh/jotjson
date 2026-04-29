@@ -1463,18 +1463,31 @@ describe('HomeComponent upload-error banner (#36)', () => {
     expect(fixture.componentInstance.uploadError()).toBeNull();
   });
 
-  it('mixed-text invalid upload surfaces BOTH the extract banner and the upload-error banner', async () => {
+  it('mixed-text invalid upload surfaces ONLY the extract banner (suppresses upload-error)', async () => {
     const { fixture } = setup();
-    // Prose followed by a JSON object - extractor finds the embedded block,
-    // and the raw text on its own does not parse.
+    // Prose followed by a JSON object - extractor finds the embedded block
+    // and offers to extract it. The upload-error banner is suppressed in
+    // favor of the more actionable extract banner.
     const mixed = 'log: request received\n{"id":1, "ok":true}\nend of log';
     const file = new File([mixed], 'log.txt');
 
     await fixture.componentInstance.onUpload(file);
 
-    expect(fixture.componentInstance.uploadError()).not.toBeNull();
-    expect(fixture.componentInstance.uploadError()!.filename).toBe('log.txt');
     expect(fixture.componentInstance.extractBannerVisible()).toBe(true);
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+  });
+
+  it('invalid upload with no extractable block still shows the upload-error banner', async () => {
+    const { fixture } = setup();
+    // Pure noise that the JSON extractor will not find a block in.
+    const garbage = 'xx yy zz no json here';
+    const file = new File([garbage], 'noise.txt');
+
+    await fixture.componentInstance.onUpload(file);
+
+    expect(fixture.componentInstance.extractBannerVisible()).toBe(false);
+    expect(fixture.componentInstance.uploadError()).not.toBeNull();
+    expect(fixture.componentInstance.uploadError()!.filename).toBe('noise.txt');
   });
 });
 

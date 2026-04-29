@@ -541,9 +541,15 @@ export class HomeComponent implements OnInit, OnDestroy {
         // Surface upload-source validation errors as a persistent in-pane
         // banner (issue #36, spec §294). parseResult() shares its memoized
         // parse with the editor's render path, so this is not an extra
-        // parse on top of the existing reactive flow.
+        // parse on top of the existing reactive flow. When the M7p extract
+        // banner is offering a fix we suppress the upload-error banner
+        // (#62 follow-up): the extract banner is the more actionable
+        // surface, so showing both is redundant. If the user dismisses or
+        // rejects the extraction, they have implicitly chosen to keep the
+        // raw text and the inline validation errors remain visible.
         const parsed = this.parseResult();
-        if (!parsed.empty && parsed.errors.length > 0) {
+        const hasErrors = !parsed.empty && parsed.errors.length > 0;
+        if (hasErrors && !this.extractBannerVisible()) {
           this.uploadError.set({ filename });
         } else {
           this.uploadError.set(null);
