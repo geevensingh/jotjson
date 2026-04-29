@@ -96,10 +96,12 @@ describe('RuleSetsService', () => {
       req.flush(makeSet({ id: 'weird/id' }));
     });
 
-    it('does NOT touch the cache (single-doc reads are bypass-only)', () => {
+    it('seeds the cache from a successful single-doc read (M6g-4)', () => {
+      // Cold-start cache so an offline `update()` from the editor has
+      // an entry to derive its optimistic value from.
       service.get('a').subscribe();
       httpMock.expectOne(`${BASE}/a`).flush(makeSet({ id: 'a' }));
-      expect(service.ruleSets()).toBeNull();
+      expect(service.ruleSets()?.map((s) => s.id)).toEqual(['a']);
     });
   });
 
@@ -515,6 +517,272 @@ describe('RuleSetsService', () => {
         'ruleSets.applied',
         jasmine.anything()
       );
+    });
+  });
+
+  describe('offline-first pattern (M6g-4)', () => {
+    const CACHE_KEY = 'jotjson.ruleSets.cache.v1';
+    const QUEUE_KEY = 'jotjson.ruleSets.queue.v1';
+
+    function setOnline(value: boolean): void {
+      Object.defineProperty(navigator, 'onLine', {
+        configurable: true,
+        get: () => value
+      });
+    }
+
+    function restoreOnline(): void {
+      delete (navigator as { onLine?: boolean }).onLine;
+    }
+
+    function signedInService(): RuleSetsService {
+      const user: AuthUser = { id: 'oid-1', displayName: 'A', email: 'a@b' };
+      signInFakeUser(auth, { user });
+      // Flush the auth-transition effects so PreferencesService fires
+      // its sign-in /api/me hydration request, then drain it. Without
+      // the flush the effect hasn't run yet, so match() returns nothing
+      // and the request shows up later, after our test does its real
+      // work, breaking the outer afterEach `httpMock.verify()`.
+      TestBed.flushEffects();
+      drainMeRequests(httpMock);
+      // A 404 on GET /me triggers a follow-up POST /me to seed the
+      // user doc - drain that too so it doesn't hang around.
+      drainMeRequests(httpMock);
+      return service;
+    }
+
+    function drainMeRequests(http: HttpTestingController): void {
+      const pending = http.match((r) => r.url === `${environment.apiBaseUrl}/me`);
+      pending.forEach((r) => {
+        if (r.request.method === 'GET') {
+          r.flush(null, { status: 404, statusText: 'Not Found' });
+        } else {
+          r.flush(
+            { id: 'oid-1', preferences: {} },
+            { status: 200, statusText: 'OK' }
+          );
+        }
+      });
+    }
+
+    afterEach(() => {
+      restoreOnline();
+    });
+
+    it('queues an offline update and shows the optimistic value via projection', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 7, name: 'Original' })]);
+
+      setOnline(false);
+      const payload: RuleSetPayload = { name: 'Renamed', rules: [makeRule()] };
+      svc.update('a', payload, 7).subscribe();
+      // No HTTP fires while offline.
+      httpMock.expectNone(`${BASE}/a`);
+      expect(svc.ruleSets()?.[0].name).toBe('Renamed');
+      expect(svc.pendingWriteIds().has('a')).toBeTrue();
+      expect(svc.pendingWriteCount()).toBe(1);
+    });
+
+    it('queues an offline delete, prunes defaults, and projects removal', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a' }), makeSet({ id: 'b' })]);
+      preferences.update({ defaultRuleSetIds: ['a', 'b'] });
+
+      setOnline(false);
+      svc.delete('a').subscribe();
+      httpMock.expectNone(`${BASE}/a`);
+      expect(svc.ruleSets()?.map((s) => s.id)).toEqual(['b']);
+      expect(preferences.prefs().defaultRuleSetIds).toEqual(['b']);
+      expect(svc.pendingWriteIds().has('a')).toBeTrue();
+    });
+
+    it('drains queued writes when online event fires', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 7 })]);
+
+      setOnline(false);
+      const payload: RuleSetPayload = { name: 'Renamed', rules: [makeRule()] };
+      svc.update('a', payload, 7).subscribe();
+      expect(svc.pendingWriteCount()).toBe(1);
+
+      setOnline(true);
+      window.dispatchEvent(new Event('online'));
+      const req = httpMock.expectOne(`${BASE}/a`);
+      expect(req.request.method).toBe('PUT');
+      expect(req.request.headers.get('If-Match')).toBe('"7"');
+      req.flush(makeSet({ id: 'a', name: 'Renamed', version: 8 }));
+
+      expect(svc.pendingWriteCount()).toBe(0);
+      expect(svc.ruleSets()?.[0].name).toBe('Renamed');
+      expect(svc.ruleSets()?.[0].version).toBe(8);
+    });
+
+    it('emits a conflict event and resyncs on 412 during drain', (done) => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 7 })]);
+
+      setOnline(false);
+      svc.update('a', { name: 'Renamed', rules: [makeRule()] }, 7).subscribe();
+
+      const events: { kind: string; id: string }[] = [];
+      svc.events$.subscribe((e) => events.push(e));
+
+      setOnline(true);
+      window.dispatchEvent(new Event('online'));
+      httpMock.expectOne(`${BASE}/a`).flush(
+        { error: 'conflict' },
+        { status: 412, statusText: 'Precondition Failed' }
+      );
+      // The post-conflict refresh fires a list().
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 9, name: 'ServerWon' })]);
+
+      expect(events).toEqual([{ kind: 'conflict', id: 'a' }]);
+      expect(svc.pendingWriteCount()).toBe(0);
+      expect(svc.ruleSets()?.[0].name).toBe('ServerWon');
+      done();
+    });
+
+    it('leaves the queue intact when drain hits a 5xx', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 7 })]);
+
+      setOnline(false);
+      svc.update('a', { name: 'Renamed', rules: [makeRule()] }, 7).subscribe();
+
+      setOnline(true);
+      window.dispatchEvent(new Event('online'));
+      httpMock.expectOne(`${BASE}/a`).flush(
+        { error: 'boom' },
+        { status: 503, statusText: 'Service Unavailable' }
+      );
+
+      expect(svc.pendingWriteCount()).toBe(1);
+      expect(svc.pendingWriteIds().has('a')).toBeTrue();
+    });
+
+    it('coalesces consecutive offline updates: latest payload + first baseVersion', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 7 })]);
+
+      setOnline(false);
+      svc.update('a', { name: 'V1', rules: [makeRule()] }, 7).subscribe();
+      svc.update('a', { name: 'V2', rules: [makeRule()] }, 8).subscribe();
+      expect(svc.pendingWriteCount()).toBe(1);
+      expect(svc.ruleSets()?.[0].name).toBe('V2');
+
+      setOnline(true);
+      window.dispatchEvent(new Event('online'));
+      const req = httpMock.expectOne(`${BASE}/a`);
+      expect(req.request.body).toEqual({ name: 'V2', rules: [makeRule()] });
+      // First baseVersion (7) wins so If-Match still matches the
+      // server's current version.
+      expect(req.request.headers.get('If-Match')).toBe('"7"');
+      req.flush(makeSet({ id: 'a', name: 'V2', version: 8 }));
+    });
+
+    it('drops queued updates when a delete is queued for the same id', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 7 })]);
+
+      setOnline(false);
+      svc.update('a', { name: 'Renamed', rules: [makeRule()] }, 7).subscribe();
+      svc.delete('a').subscribe();
+      expect(svc.pendingWriteCount()).toBe(1);
+      expect(svc.ruleSets()?.map((s) => s.id)).toEqual([]);
+
+      setOnline(true);
+      window.dispatchEvent(new Event('online'));
+      const req = httpMock.expectOne(`${BASE}/a`);
+      expect(req.request.method).toBe('DELETE');
+      req.flush(null, { status: 204, statusText: 'No Content' });
+    });
+
+    it('treats 404 on delete drain as idempotent success', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a' })]);
+
+      setOnline(false);
+      svc.delete('a').subscribe();
+
+      setOnline(true);
+      window.dispatchEvent(new Event('online'));
+      httpMock.expectOne(`${BASE}/a`).flush(
+        { error: 'gone' },
+        { status: 404, statusText: 'Not Found' }
+      );
+
+      expect(svc.pendingWriteCount()).toBe(0);
+      expect(svc.ruleSets()?.map((s) => s.id)).toEqual([]);
+    });
+
+    it('rejects a hydrated cache with a mismatched userId and removes the key', () => {
+      // Persist a cache for a DIFFERENT user, then construct a new
+      // service with the current user signed in.
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({ userId: 'someone-else', sets: [makeSet({ id: 'x' })] })
+      );
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [provideFakeAuth()] });
+      const newAuth = TestBed.inject(AuthService);
+      const newSvc = TestBed.inject(RuleSetsService);
+      const newHttp = TestBed.inject(HttpTestingController);
+      signInFakeUser(newAuth, { user: { id: 'oid-1', displayName: 'A', email: 'a@b' } });
+      TestBed.flushEffects();
+      drainMeRequests(newHttp);
+      drainMeRequests(newHttp);
+
+      expect(newSvc.ruleSets()).toBeNull();
+      expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+      newHttp.verify();
+    });
+
+    it('clears persisted cache + queue on sign-out', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a' })]);
+      TestBed.flushEffects();
+      expect(localStorage.getItem(CACHE_KEY)).not.toBeNull();
+
+      (auth as unknown as { userSignal: { set(v: AuthUser | null): void } })
+        .userSignal.set(null);
+      TestBed.flushEffects();
+
+      expect(svc.ruleSets()).toBeNull();
+      expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+      expect(localStorage.getItem(QUEUE_KEY)).toBeNull();
+    });
+
+    it('queues on a status-0 network failure during a live update', () => {
+      const svc = signedInService();
+      svc.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 7 })]);
+
+      svc.update('a', { name: 'Renamed', rules: [makeRule()] }, 7).subscribe();
+      // Live HTTP fires (online), but the request errors with status 0.
+      const live = httpMock.expectOne(`${BASE}/a`);
+      live.flush(null, {
+        status: 0,
+        statusText: 'Unknown Error'
+      });
+
+      // The catchError path should have re-routed via the queue and
+      // immediately tried to drain. Since onLine is still true, drain
+      // pops the queue and fires another PUT.
+      const drained = httpMock.expectOne(`${BASE}/a`);
+      expect(drained.request.method).toBe('PUT');
+      drained.flush(makeSet({ id: 'a', name: 'Renamed', version: 8 }));
+
+      expect(svc.pendingWriteCount()).toBe(0);
+      expect(svc.ruleSets()?.[0].name).toBe('Renamed');
     });
   });
 });

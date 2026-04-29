@@ -110,6 +110,15 @@
               >Saved</span
             >
           }
+          @case ('savedOffline') {
+            <span
+              class="pill pill-info"
+              matTooltip="Will sync when back online"
+              i18n-matTooltip="@@ruleEditor.pill.savedOffline.tooltip"
+              i18n="@@ruleEditor.pill.savedOffline"
+              >Saved offline</span
+            >
+          }
           @case ('editing') {
             <span class="pill pill-info" i18n="@@ruleEditor.pill.editing"
               >Editing</span

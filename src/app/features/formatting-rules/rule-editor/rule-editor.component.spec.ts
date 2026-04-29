@@ -54,6 +54,9 @@ interface Setup {
     update: jasmine.Spy;
     updateSubjects: Subject<FormattingRuleSet>[];
     getSubjects: Subject<FormattingRuleSet>[];
+    events$: Subject<{ kind: 'conflict' | 'error'; id: string; status?: number }>;
+    pendingWriteIds: () => ReadonlySet<string>;
+    setPendingIds: (ids: string[]) => void;
   };
   snack: { open: jasmine.Spy };
   paramMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
@@ -71,9 +74,13 @@ function setup(opts: SetupOpts = {}): Setup {
 
   const updateSubjects: Subject<FormattingRuleSet>[] = [];
   const getSubjects: Subject<FormattingRuleSet>[] = [];
+  const events$ = new Subject<{ kind: 'conflict' | 'error'; id: string; status?: number }>();
+  const pendingIds = signal<ReadonlySet<string>>(new Set());
 
   const service = {
     ruleSets: cache.asReadonly(),
+    pendingWriteIds: pendingIds.asReadonly(),
+    events$,
     get: jasmine.createSpy('get').and.callFake(() => {
       const subj = new Subject<FormattingRuleSet>();
       getSubjects.push(subj);
@@ -108,7 +115,12 @@ function setup(opts: SetupOpts = {}): Setup {
   const fixture = TestBed.createComponent(RuleEditorComponent);
   return {
     fixture,
-    service: { ...service, updateSubjects, getSubjects },
+    service: {
+      ...service,
+      updateSubjects,
+      getSubjects,
+      setPendingIds: (ids) => pendingIds.set(new Set(ids))
+    },
     snack,
     paramMap,
     auth
@@ -350,6 +362,37 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       expect(ctx.fixture.componentInstance.pillState().kind).toBe('saved');
       // Drain the saved-flash timer to leave fakeAsync clean.
       tick(2000);
+    }));
+
+    it('shows savedOffline pill when the rule set has a pending queued write (M6g-4)', fakeAsync(() => {
+      const ctx = loaded();
+      ctx.fixture.componentInstance.setName('A');
+      tick(600);
+      // Service marks this id as having a pending offline write before
+      // the optimistic next() arrives.
+      ctx.service.setPendingIds(['rs-1']);
+      ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
+      ctx.service.updateSubjects[0].complete();
+      tick(0);
+      ctx.fixture.detectChanges();
+      expect(ctx.fixture.componentInstance.pillState().kind).toBe('savedOffline');
+      tick(2000);
+    }));
+
+    it('toasts a conflict message on a service sync conflict event (M6g-4)', fakeAsync(() => {
+      const ctx = loaded();
+      ctx.service.events$.next({ kind: 'conflict', id: 'rs-1' });
+      tick(0);
+      expect(ctx.snack.open).toHaveBeenCalled();
+      const args = ctx.snack.open.calls.mostRecent().args;
+      expect(String(args[0])).toContain('could not be saved');
+    }));
+
+    it('ignores sync events for other rule sets (M6g-4)', fakeAsync(() => {
+      const ctx = loaded();
+      ctx.service.events$.next({ kind: 'conflict', id: 'some-other-id' });
+      tick(0);
+      expect(ctx.snack.open).not.toHaveBeenCalled();
     }));
 
     it('flips to Save failed - retry on a generic 500', fakeAsync(() => {

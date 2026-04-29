@@ -60,6 +60,7 @@ type PillState =
   | { kind: 'saving' }
   | { kind: 'error' }
   | { kind: 'saved' }
+  | { kind: 'savedOffline' }
   | { kind: 'editing' }
   | { kind: 'idle' };
 
@@ -226,7 +227,13 @@ export class RuleEditorComponent implements OnInit {
     }
     if (this.saveState() === 'saving') return { kind: 'saving' };
     if (this.saveState() === 'error') return { kind: 'error' };
-    if (this.savedFlash() && !this.isDirty()) return { kind: 'saved' };
+    if (this.savedFlash() && !this.isDirty()) {
+      const meta = this.serverMeta();
+      if (meta && this.service.pendingWriteIds().has(meta.id)) {
+        return { kind: 'savedOffline' };
+      }
+      return { kind: 'saved' };
+    }
     if (this.isDirty()) return { kind: 'editing' };
     return { kind: 'idle' };
   });
@@ -281,6 +288,13 @@ export class RuleEditorComponent implements OnInit {
   ngOnInit(): void {
     this.setupAutosave();
 
+    // M6g-4: surface offline-drain conflict / error events from the
+    // service. These fire when the user makes a change while offline,
+    // we queue it, and the eventual replay fails.
+    this.service.events$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => this.handleSyncEvent(event));
+
     this.route.paramMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((params) => {
@@ -292,6 +306,25 @@ export class RuleEditorComponent implements OnInit {
         this.resetForId(id);
         void this.loadById(id);
       });
+  }
+
+  private handleSyncEvent(event: { kind: 'conflict' | 'error'; id: string; status?: number }): void {
+    const meta = this.serverMeta();
+    if (!meta || meta.id !== event.id) return;
+    if (event.kind === 'conflict') {
+      this.conflict.set(true);
+      this.snack.open(
+        $localize`:@@ruleEditor.offlineConflict:Your offline edit could not be saved - someone else changed this rule set.`,
+        $localize`:@@common.dismiss:Dismiss`,
+        { duration: 6000 }
+      );
+    } else {
+      this.snack.open(
+        $localize`:@@ruleEditor.offlineError:Your offline edit could not be saved.`,
+        $localize`:@@common.dismiss:Dismiss`,
+        { duration: 6000 }
+      );
+    }
   }
 
   private resetForId(id: string): void {

@@ -57,8 +57,8 @@ function makePreset(over: Partial<RuleSetPreset> = {}): RuleSetPreset {
 function setCache(sets: FormattingRuleSet[] | null): void {
   const ruleSets = TestBed.inject(RuleSetsService);
   (ruleSets as unknown as {
-    _ruleSets: { set(v: FormattingRuleSet[] | null): void };
-  })._ruleSets.set(sets);
+    _serverSnapshot: { set(v: FormattingRuleSet[] | null): void };
+  })._serverSnapshot.set(sets);
 }
 
 describe('RuleSetsToolbarComponent', () => {

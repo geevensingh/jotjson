@@ -406,8 +406,8 @@ describe('ProfileComponent', () => {
     function setRuleSetCache(sets: FormattingRuleSet[] | null): void {
       const ruleSets = TestBed.inject(RuleSetsService);
       (ruleSets as unknown as {
-        _ruleSets: { set(v: FormattingRuleSet[] | null): void };
-      })._ruleSets.set(sets);
+        _serverSnapshot: { set(v: FormattingRuleSet[] | null): void };
+      })._serverSnapshot.set(sets);
     }
 
     it('does not render the section when signed out', async () => {
