@@ -40,6 +40,11 @@
         (extract)="onExtractAccept()"
         (dismiss)="onExtractDismiss()"
       ></jotjson-extract-json-banner>
+      <jj-upload-error-banner
+        [visible]="uploadErrorVisible()"
+        [filename]="uploadErrorFilename()"
+        (dismiss)="onUploadErrorDismiss()"
+      ></jj-upload-error-banner>
       <jj-json-editor
         [value]="content()"
         [errors]="errors()"

@@ -1246,3 +1246,226 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     expect(component.extractedCandidate()).toBeNull();
   });
 });
+
+
+describe('HomeComponent upload-error banner (#36)', () => {
+  const PREFS_KEY = 'jotjson.preferences.v1';
+  const DRAFT_KEY = 'jotjson.draft.v1';
+  const SPLIT_KEY = 'jotjson.splitRatio.v1';
+
+  class FakeDropController {
+    readonly dropActive = signal(false);
+    registeredHandler?: (files: readonly File[]) => void;
+    readonly dispose = jasmine.createSpy('dispose');
+    readonly registerEditorHandler = jasmine
+      .createSpy('registerEditorHandler')
+      .and.callFake((handler: (files: readonly File[]) => void) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
+  function setup() {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    TestBed.resetTestingModule();
+    const fakeController = new FakeDropController();
+    const snack = { open: jasmine.createSpy('open') };
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: DocumentDropController, useValue: fakeController },
+        { provide: MatSnackBar, useValue: snack }
+      ]
+    });
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    return { fixture, fakeController, snack };
+  }
+
+  it('toolbar onUpload with malformed JSON sets uploadError and loads raw content', async () => {
+    const { fixture, snack } = setup();
+    const malformed = '{"a": 1, "b": '; // truncated, parse errors
+    const file = new File([malformed], 'broken.json');
+
+    await fixture.componentInstance.onUpload(file);
+
+    expect(fixture.componentInstance.content()).toBe(malformed);
+    const err = fixture.componentInstance.uploadError();
+    expect(err).not.toBeNull();
+    expect(err!.filename).toBe('broken.json');
+    expect(fixture.componentInstance.uploadErrorVisible()).toBe(true);
+    expect(fixture.componentInstance.uploadErrorFilename()).toBe('broken.json');
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it('toolbar onUpload with valid JSON does not set uploadError', async () => {
+    const { fixture } = setup();
+    const file = new File(['{"a":1}'], 'good.json');
+
+    await fixture.componentInstance.onUpload(file);
+
+    expect(fixture.componentInstance.content()).toBe('{"a":1}');
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+    expect(fixture.componentInstance.uploadErrorVisible()).toBe(false);
+  });
+
+  it('0-byte upload does not set uploadError (treated as empty)', async () => {
+    const { fixture } = setup();
+    const file = new File([''], 'empty.json');
+
+    await fixture.componentInstance.onUpload(file);
+
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+  });
+
+  it('whitespace-only upload does not set uploadError (empty after trim)', async () => {
+    const { fixture } = setup();
+    const file = new File(['   \n\t  '], 'whitespace.json');
+
+    await fixture.componentInstance.onUpload(file);
+
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+  });
+
+  it('onUploadErrorDismiss clears uploadError', async () => {
+    const { fixture } = setup();
+    const file = new File(['{"a":'], 'broken.json');
+
+    await fixture.componentInstance.onUpload(file);
+    expect(fixture.componentInstance.uploadError()).not.toBeNull();
+
+    fixture.componentInstance.onUploadErrorDismiss();
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+    expect(fixture.componentInstance.uploadErrorVisible()).toBe(false);
+  });
+
+  it('typing the content into validity clears uploadError', async () => {
+    const { fixture } = setup();
+    const file = new File(['{"a":'], 'broken.json');
+
+    await fixture.componentInstance.onUpload(file);
+    expect(fixture.componentInstance.uploadError()).not.toBeNull();
+
+    // Simulate the editor's valueChange -> setContent path.
+    fixture.componentInstance.onValueChange('{"a":1}');
+
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+  });
+
+  it('typing while content is still invalid keeps uploadError set', async () => {
+    const { fixture } = setup();
+    const file = new File(['{"a":'], 'broken.json');
+
+    await fixture.componentInstance.onUpload(file);
+    expect(fixture.componentInstance.uploadError()).not.toBeNull();
+
+    // Still malformed after typing.
+    fixture.componentInstance.onValueChange('{"a":');
+
+    const err = fixture.componentInstance.uploadError();
+    expect(err).not.toBeNull();
+    expect(err!.filename).toBe('broken.json');
+  });
+
+  it('typing typos into a previously empty editor does NOT set uploadError', () => {
+    const { fixture } = setup();
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+
+    // User types invalid JSON directly (no upload).
+    fixture.componentInstance.onValueChange('{"a":');
+
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+  });
+
+  it('subsequent valid upload clears uploadError from a prior malformed upload', async () => {
+    const { fixture } = setup();
+    const bad = new File(['{"a":'], 'broken.json');
+    const good = new File(['{"a":1}'], 'good.json');
+
+    await fixture.componentInstance.onUpload(bad);
+    expect(fixture.componentInstance.uploadError()).not.toBeNull();
+
+    await fixture.componentInstance.onUpload(good);
+
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+    expect(fixture.componentInstance.content()).toBe('{"a":1}');
+  });
+
+  it('subsequent malformed upload swaps the filename in uploadError', async () => {
+    const { fixture } = setup();
+    const a = new File(['{"a":'], 'a.json');
+    const b = new File(['{"b":'], 'b.json');
+
+    await fixture.componentInstance.onUpload(a);
+    expect(fixture.componentInstance.uploadError()?.filename).toBe('a.json');
+
+    await fixture.componentInstance.onUpload(b);
+
+    expect(fixture.componentInstance.uploadError()?.filename).toBe('b.json');
+  });
+
+  it('onClear clears uploadError (empty content)', async () => {
+    const { fixture } = setup();
+    const file = new File(['{"a":'], 'broken.json');
+
+    await fixture.componentInstance.onUpload(file);
+    expect(fixture.componentInstance.uploadError()).not.toBeNull();
+
+    // onClear navigates if not at root; mirror the spec's existing pattern of
+    // poking setContent through onValueChange to reach the empty state.
+    fixture.componentInstance.onValueChange('');
+
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+  });
+
+  it('drop with malformed file sets uploadError just like the toolbar path', async () => {
+    const { fixture, fakeController } = setup();
+    const file = {
+      size: 5,
+      name: 'dropped.json',
+      text: () => Promise.resolve('{"a":')
+    } as unknown as File;
+
+    fakeController.registeredHandler!([file]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const err = fixture.componentInstance.uploadError();
+    expect(err).not.toBeNull();
+    expect(err!.filename).toBe('dropped.json');
+    expect(fixture.componentInstance.content()).toBe('{"a":');
+  });
+
+  it('drop with valid file does not set uploadError', async () => {
+    const { fixture, fakeController } = setup();
+    const file = {
+      size: 7,
+      name: 'good.json',
+      text: () => Promise.resolve('{"a":1}')
+    } as unknown as File;
+
+    fakeController.registeredHandler!([file]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fixture.componentInstance.uploadError()).toBeNull();
+  });
+
+  it('mixed-text invalid upload surfaces BOTH the extract banner and the upload-error banner', async () => {
+    const { fixture } = setup();
+    // Prose followed by a JSON object - extractor finds the embedded block,
+    // and the raw text on its own does not parse.
+    const mixed = 'log: request received\n{"id":1, "ok":true}\nend of log';
+    const file = new File([mixed], 'log.txt');
+
+    await fixture.componentInstance.onUpload(file);
+
+    expect(fixture.componentInstance.uploadError()).not.toBeNull();
+    expect(fixture.componentInstance.uploadError()!.filename).toBe('log.txt');
+    expect(fixture.componentInstance.extractBannerVisible()).toBe(true);
+  });
+});

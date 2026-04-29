@@ -53,6 +53,7 @@ import {
 } from '../../core/json/json-extractor.service';
 import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
+import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
 import { JsonTreeComponent } from '../../shared/components/json-tree/json-tree.component';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import {
@@ -84,7 +85,8 @@ import { validateAndReadSingleFile } from '../../core/upload/upload-file-validat
     ClipboardBannerComponent,
     RuleSetsToolbarComponent,
     DropOverlayComponent,
-    ExtractJsonBannerComponent
+    ExtractJsonBannerComponent,
+    UploadErrorBannerComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.component.html',
@@ -141,6 +143,20 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   /**
+   * Persistent in-pane banner state for upload-source validation errors
+   * (issue #36, spec §294). Set in `onFilesReceived` when an upload's text
+   * parses with errors; cleared on dismiss, on subsequent valid upload, or
+   * inside `setContent` once content reaches empty / clean state via typing.
+   * Distinct from the inline editor errors (§795) so the user can tell the
+   * failure came from their upload rather than ordinary typing.
+   */
+  readonly uploadError = signal<{ filename: string } | null>(null);
+  readonly uploadErrorVisible = computed(() => this.uploadError() !== null);
+  readonly uploadErrorFilename = computed(
+    () => this.uploadError()?.filename ?? ''
+  );
+
+  /**
    * Single funnel for every content mutation in HomeComponent. Bumps
    * `contentVersion` so the M7p extract banner predicate auto-invalidates
    * when content changes for any reason (typing, paste, format, hydrate,
@@ -149,6 +165,19 @@ export class HomeComponent implements OnInit, OnDestroy {
   private setContent(text: string): void {
     this.content.set(text);
     this.contentVersion.update((v) => v + 1);
+    // Auto-clear the upload-source banner once content reaches empty or
+    // parses cleanly. Reading parseResult() shares its memoized parse with
+    // the editor's render path, so this does not add an extra parse.
+    // The banner stays set when the user is mid-edit on a still-invalid
+    // upload, satisfying issue #36's "does not trigger for later typing"
+    // (typing typos do not re-arm the banner; they only clear it on
+    // success).
+    if (this.uploadError() !== null) {
+      const result = this.parseResult();
+      if (result.empty || result.errors.length === 0) {
+        this.uploadError.set(null);
+      }
+    }
   }
 
   /** The currently-loaded server blob, if any. Null when editing an anonymous draft. */
@@ -454,6 +483,10 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.extractedCandidate.set(null);
   }
 
+  onUploadErrorDismiss(): void {
+    this.uploadError.set(null);
+  }
+
   async onCopy(): Promise<void> {
     const text = this.content();
     if (!text) return;
@@ -501,10 +534,22 @@ export class HomeComponent implements OnInit, OnDestroy {
   private async onFilesReceived(files: readonly File[]): Promise<void> {
     const result = await validateAndReadSingleFile(files);
     switch (result.kind) {
-      case 'ok':
+      case 'ok': {
+        const filename = files[0]?.name ?? 'file';
         this.setContent(result.text);
         this.runExtractorOnCurrentContent();
+        // Surface upload-source validation errors as a persistent in-pane
+        // banner (issue #36, spec §294). parseResult() shares its memoized
+        // parse with the editor's render path, so this is not an extra
+        // parse on top of the existing reactive flow.
+        const parsed = this.parseResult();
+        if (!parsed.empty && parsed.errors.length > 0) {
+          this.uploadError.set({ filename });
+        } else {
+          this.uploadError.set(null);
+        }
         return;
+      }
       case 'empty':
         return;
       case 'tooMany':

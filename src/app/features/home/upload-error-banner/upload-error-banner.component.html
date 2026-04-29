@@ -1,0 +1,20 @@
+@if (visible()) {
+  <mat-card class="banner" role="status" aria-live="polite" appearance="outlined">
+    <span class="banner-text" i18n="@@home.upload.invalid"
+      >Uploaded "{{ filename() }}" contains invalid JSON - showing raw
+      contents.</span
+    >
+    <span class="banner-actions">
+      <button
+        type="button"
+        mat-button
+        (click)="dismiss.emit()"
+        i18n-aria-label="@@home.upload.dismiss.aria"
+        aria-label="Dismiss upload error"
+        i18n="@@home.upload.dismiss"
+      >
+        Dismiss
+      </button>
+    </span>
+  </mat-card>
+}
