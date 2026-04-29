@@ -17,6 +17,7 @@ import { SignedInDirective } from '../../directives/signed-in.directive';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 
 export type EditorMode = 'json' | 'jsonc';
+export type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
 
 @Component({
   selector: 'jj-toolbar',
@@ -51,6 +52,14 @@ export class ToolbarComponent {
   readonly isPublic = input<boolean>(false);
 
   /**
+   * 3-state pane visibility cycle (issue #39). Driven by a localStorage-
+   * backed signal in the parent (`HomeComponent.paneVisibility`); the
+   * toolbar simply renders the icon/label and emits a cycle event on
+   * click. The order is `both -> editor-only -> tree-only -> both`.
+   */
+  readonly paneVisibility = input<PaneVisibility>('both');
+
+  /**
    * Clipboard UX state driving the Paste button, per DESIGN_SPEC.md §Smart
    * Paste Button. One of:
    * - `enabled-json`  : accent-tinted, tooltip shows the `clipboardPreview`
@@ -77,6 +86,7 @@ export class ToolbarComponent {
   readonly toggleLayout = output<void>();
   readonly toggleTheme = output<void>();
   readonly toggleSelectionSync = output<void>();
+  readonly togglePaneVisibility = output<void>();
   readonly save = output<void>();
   readonly titleChange = output<string>();
   readonly copyShareLink = output<void>();
@@ -118,6 +128,38 @@ export class ToolbarComponent {
       : $localize`:@@toolbar.syncSelection.tooltip.off:Enable tree-editor selection sync`
   );
   readonly selectionSyncAriaLabel = $localize`:@@toolbar.syncSelection.aria:Toggle tree-editor selection sync`;
+
+  /**
+   * 3-state pane visibility (issue #39). The icon depicts the NEXT
+   * state (what clicking will do), per spec: `both` -> show
+   * `pane-left-only` (next click hides tree), `editor-only` -> show
+   * `pane-right-only` (next click hides editor), `tree-only` -> show
+   * `pane-both` (next click restores both panes).
+   *
+   * The next-action label is reused for both `matTooltip` and the
+   * button's dynamic `aria-label` so screen readers announce the
+   * action that activation will perform.
+   */
+  readonly paneVisibilityIcon = computed<JjIconName>(() => {
+    switch (this.paneVisibility()) {
+      case 'both':
+        return 'pane-left-only';
+      case 'editor-only':
+        return 'pane-right-only';
+      case 'tree-only':
+        return 'pane-both';
+    }
+  });
+  readonly paneVisibilityNextActionLabel = computed(() => {
+    switch (this.paneVisibility()) {
+      case 'both':
+        return $localize`:@@toolbar.paneVisibility.tooltip.next.editorOnly:Hide tree (show editor only)`;
+      case 'editor-only':
+        return $localize`:@@toolbar.paneVisibility.tooltip.next.treeOnly:Hide editor (show tree only)`;
+      case 'tree-only':
+        return $localize`:@@toolbar.paneVisibility.tooltip.next.both:Show both panes`;
+    }
+  });
 
   readonly saveDisabled = computed(
     () => !this.canSave() || !this.hasContent() || this.saveInFlight()

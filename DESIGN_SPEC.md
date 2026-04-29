@@ -362,7 +362,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - The search field is always visible - it does not need to be toggled open.
     - Keyboard shortcut: `Ctrl+F` is **context-aware** - when the editor panel is focused, it triggers Monaco's built-in find; when the tree panel is focused (or no panel is focused), it focuses the tree search field.
 
-- **Layout:** Split-pane (resizable). **Horizontal** (default): editor left, tree right. **Vertical**: editor top, tree bottom. Toggled via a layout button in the toolbar or `layoutOrientation` user preference. On mobile (< 768px), always stacks vertically regardless of preference.
+- **Layout:** Split-pane (resizable). **Horizontal** (default): editor left, tree right. **Vertical**: editor top, tree bottom. Toggled via a layout button in the toolbar or `layoutOrientation` user preference. On mobile (< 768px), always stacks vertically regardless of preference. A separate **pane-visibility** toolbar button cycles a 3-state visibility toggle - **Both -> Editor only -> Tree only -> Both** - removing the inactive pane and the splitter from layout via `display:none`. State is persisted per device under `jotjson.paneVisibility.v1` (local-only, like `splitRatio`); returning to "Both" automatically restores the previously saved `splitRatio`.
 
 - **Status bar** (always-visible strip along the bottom of the page, shipped in M7m):
   - **Left cluster** (raw text stats): byte size in UTF-8, line count, current cursor position (`Ln X, Col Y`).

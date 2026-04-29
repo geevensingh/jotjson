@@ -60,6 +60,7 @@ import { JsonTreeComponent } from '../../shared/components/json-tree/json-tree.c
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import {
   EditorMode,
+  PaneVisibility,
   ToolbarComponent
 } from '../../shared/components/toolbar/toolbar.component';
 import { StatusBarComponent } from './status-bar/status-bar.component';
@@ -254,11 +255,35 @@ export class HomeComponent implements OnInit, OnDestroy {
     serialize: (n) => String(n)
   });
 
+  /**
+   * 3-state pane visibility cycle (issue #39). Local-only via
+   * `localStorage` (parallel to `splitRatio`); intentionally not
+   * synced via user preferences. Cycling order is
+   * `both -> editor-only -> tree-only -> both`. When returning to
+   * `both`, the persisted `splitRatio` (which was untouched while
+   * one pane was hidden) is automatically restored, so users get
+   * back the layout they had before collapsing.
+   */
+  readonly paneVisibility = persistedSignal<PaneVisibility>({
+    key: 'jotjson.paneVisibility.v1',
+    defaultValue: 'both',
+    parse: (raw) =>
+      raw === 'editor-only' || raw === 'tree-only' ? raw : 'both',
+    serialize: (value) => value
+  });
+
   readonly splitStyle = computed(() => {
+    const visibility = this.paneVisibility();
+    const orientation = this.layoutOrientation();
+    if (visibility !== 'both') {
+      return orientation === 'vertical'
+        ? { 'grid-template-rows': '1fr' }
+        : { 'grid-template-columns': '1fr' };
+    }
     const ratio = this.splitRatio();
     const leftPct = `${(ratio * 100).toFixed(3)}%`;
     const rightPct = `${((1 - ratio) * 100).toFixed(3)}%`;
-    return this.layoutOrientation() === 'vertical'
+    return orientation === 'vertical'
       ? { 'grid-template-rows': `${leftPct} var(--splitter-size) ${rightPct}` }
       : { 'grid-template-columns': `${leftPct} var(--splitter-size) ${rightPct}` };
   });
@@ -867,6 +892,24 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.prefs.update({ layoutOrientation: next });
   }
 
+  /**
+   * Cycles `paneVisibility` through `both -> editor-only -> tree-only -> both`
+   * (issue #39). State is persisted to `localStorage` so it survives
+   * reloads. `splitRatio` is intentionally left untouched while a
+   * pane is hidden, so returning to `both` restores the layout the
+   * user had before collapsing.
+   */
+  onCyclePaneVisibility(): void {
+    const current = this.paneVisibility();
+    const next: PaneVisibility =
+      current === 'both'
+        ? 'editor-only'
+        : current === 'editor-only'
+          ? 'tree-only'
+          : 'both';
+    this.paneVisibility.set(next);
+  }
+
   onToggleTheme(): void {
     // Three-state cycle driven by the raw preference: light -> dark -> system.
     // 'system' follows the OS's prefers-color-scheme setting.
@@ -986,11 +1029,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
 
     // Ctrl+F when focus is NOT in the editor -> focus tree search. When in the
-    // editor, Monaco's native find runs.
+    // editor, Monaco's native find runs. When the tree pane is hidden via the
+    // 3-state pane visibility toggle (issue #39) we skip the routing rather
+    // than focusing a `display:none` input - the keypress falls through to
+    // the browser default.
     if ((ev.ctrlKey || ev.metaKey) && ev.key === 'f') {
       const active = document.activeElement;
       const inEditor = active?.closest('.monaco-editor') != null;
-      if (!inEditor) {
+      const treeHidden = this.paneVisibility() === 'editor-only';
+      if (!inEditor && !treeHidden) {
         ev.preventDefault();
         this.focusTreeSearch();
       }

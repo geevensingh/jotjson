@@ -130,6 +130,79 @@ describe('ToolbarComponent', () => {
     });
   });
 
+  describe('pane visibility toggle (issue #39)', () => {
+    function findPaneVisibilityButton(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): HTMLButtonElement {
+      const button = (fixture.nativeElement as HTMLElement).querySelector(
+        'button.pane-visibility-toggle'
+      ) as HTMLButtonElement | null;
+      if (!button) {
+        throw new Error('pane-visibility toggle button not found in toolbar');
+      }
+      return button;
+    }
+
+    it('paneVisibilityIcon shows the icon for the next state in the cycle', async () => {
+      const { fixture } = await create();
+      const c = fixture.componentInstance;
+
+      fixture.componentRef.setInput('paneVisibility', 'both');
+      fixture.detectChanges();
+      expect(c.paneVisibilityIcon()).toBe('pane-left-only');
+
+      fixture.componentRef.setInput('paneVisibility', 'editor-only');
+      fixture.detectChanges();
+      expect(c.paneVisibilityIcon()).toBe('pane-right-only');
+
+      fixture.componentRef.setInput('paneVisibility', 'tree-only');
+      fixture.detectChanges();
+      expect(c.paneVisibilityIcon()).toBe('pane-both');
+    });
+
+    it('paneVisibilityNextActionLabel describes the next state', async () => {
+      const { fixture } = await create();
+      const c = fixture.componentInstance;
+
+      fixture.componentRef.setInput('paneVisibility', 'both');
+      fixture.detectChanges();
+      expect(c.paneVisibilityNextActionLabel()).toMatch(/hide tree/i);
+
+      fixture.componentRef.setInput('paneVisibility', 'editor-only');
+      fixture.detectChanges();
+      expect(c.paneVisibilityNextActionLabel()).toMatch(/hide editor/i);
+
+      fixture.componentRef.setInput('paneVisibility', 'tree-only');
+      fixture.detectChanges();
+      expect(c.paneVisibilityNextActionLabel()).toMatch(/show both/i);
+    });
+
+    it('aria-label on the button matches paneVisibilityNextActionLabel and updates with input', async () => {
+      const { fixture } = await create();
+      const c = fixture.componentInstance;
+
+      fixture.componentRef.setInput('paneVisibility', 'both');
+      fixture.detectChanges();
+      expect(findPaneVisibilityButton(fixture).getAttribute('aria-label')).toBe(
+        c.paneVisibilityNextActionLabel()
+      );
+
+      fixture.componentRef.setInput('paneVisibility', 'editor-only');
+      fixture.detectChanges();
+      expect(findPaneVisibilityButton(fixture).getAttribute('aria-label')).toBe(
+        c.paneVisibilityNextActionLabel()
+      );
+    });
+
+    it('clicking the button emits togglePaneVisibility', async () => {
+      const { fixture } = await create();
+      let clickCount = 0;
+      fixture.componentInstance.togglePaneVisibility.subscribe(() => clickCount++);
+      findPaneVisibilityButton(fixture).click();
+      expect(clickCount).toBe(1);
+    });
+  });
+
   describe('file input wiring', () => {
     it('emits upload when onFileChange receives a file', async () => {
       const { fixture } = await create();

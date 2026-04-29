@@ -74,6 +74,28 @@
   }
 }
 
+// 3-state pane visibility (issue #39). When in single-pane mode,
+// hide the splitter and the inactive pane and force the grid to a
+// single 1fr track. The `!important` rules at this specificity
+// (`.split.editor-only` = 0,2,0) beat the mobile media query's
+// bare `.split { ... !important }` rules at L77-85 (specificity
+// 0,1,0), so single-pane mode works correctly on narrow viewports.
+.split.editor-only .splitter,
+.split.editor-only .pane-tree {
+  display: none;
+}
+
+.split.tree-only .splitter,
+.split.tree-only .pane-editor {
+  display: none;
+}
+
+.split.editor-only,
+.split.tree-only {
+  grid-template-columns: 1fr !important;
+  grid-template-rows: 1fr !important;
+}
+
 @media (max-width: #{v.$breakpoint-mobile}) {
   .split {
     grid-template-columns: 1fr !important;

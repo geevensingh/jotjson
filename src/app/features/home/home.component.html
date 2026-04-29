@@ -11,6 +11,7 @@
       [isPublic]="isBlobPublic()"
       [clipboardState]="clipboardState()"
       [clipboardPreview]="clipboardPreview()"
+      [paneVisibility]="paneVisibility()"
       (pasteRequested)="onPaste()"
       (copyRequested)="onCopy()"
       (copyEscaped)="onCopyEscaped()"
@@ -21,6 +22,7 @@
       (minify)="onMinify()"
       (modeChange)="onModeChange($event)"
       (toggleLayout)="onToggleLayout()"
+      (togglePaneVisibility)="onCyclePaneVisibility()"
       (toggleTheme)="onToggleTheme()"
       (toggleSelectionSync)="onToggleSelectionSync()"
       (save)="onSave()"
@@ -31,7 +33,10 @@
     ></jj-toolbar>
   </jj-app-header>
 
-  <div class="split" [style]="splitStyle()" #splitHost>
+  <div class="split"
+    [class.editor-only]="paneVisibility() === 'editor-only'"
+    [class.tree-only]="paneVisibility() === 'tree-only'"
+    [style]="splitStyle()" #splitHost>
     <section class="pane pane-editor" aria-label="JSON input">
       <jj-clipboard-banner></jj-clipboard-banner>
       <jotjson-extract-json-banner

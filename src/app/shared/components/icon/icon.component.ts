@@ -28,6 +28,9 @@ export type JjIconName =
   | 'link'
   | 'arrows-exchange'
   | 'arrows-exchange-off'
+  | 'pane-both'
+  | 'pane-left-only'
+  | 'pane-right-only'
   | 'globe'
   | 'lock'
   | 'trash'
@@ -175,6 +178,18 @@ export type JjIconName =
           <path d="M19 16H5" />
           <path d="M8 13l-3 3 3 3" />
           <path d="M4 4l16 16" />
+        }
+        @case ('pane-both') {
+          <rect x="3.5" y="4.5" width="7.5" height="15" rx="1.25" fill="currentColor" fill-opacity="0.4" />
+          <rect x="13" y="4.5" width="7.5" height="15" rx="1.25" fill="currentColor" fill-opacity="0.4" />
+        }
+        @case ('pane-left-only') {
+          <rect x="3.5" y="4.5" width="7.5" height="15" rx="1.25" fill="currentColor" fill-opacity="0.4" />
+          <rect x="13" y="4.5" width="7.5" height="15" rx="1.25" />
+        }
+        @case ('pane-right-only') {
+          <rect x="3.5" y="4.5" width="7.5" height="15" rx="1.25" />
+          <rect x="13" y="4.5" width="7.5" height="15" rx="1.25" fill="currentColor" fill-opacity="0.4" />
         }
         @case ('globe') {
           <circle cx="12" cy="12" r="8.5" />

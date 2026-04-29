@@ -21,6 +21,7 @@ import { JsonExtractorService } from '../../core/json/json-extractor.service';
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
 const SPLIT_KEY = 'jotjson.splitRatio.v1';
+const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 
 describe('HomeComponent (unit-level)', () => {
   // NOTE: Full rendering of HomeComponent would load Monaco. These tests
@@ -30,6 +31,7 @@ describe('HomeComponent (unit-level)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
@@ -41,6 +43,7 @@ describe('HomeComponent (unit-level)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
   });
 
   it('onToggleTheme cycles light -> dark -> system -> light', () => {
@@ -407,6 +410,99 @@ describe('HomeComponent (unit-level)', () => {
     const f2 = TestBed.createComponent(HomeComponent);
     expect(f2.componentInstance.splitRatio()).toBe(0.1);
   });
+
+  // 3-state pane visibility toggle (issue #39).
+  it('paneVisibility defaults to "both" when localStorage is empty', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    expect(fixture.componentInstance.paneVisibility()).toBe('both');
+  });
+
+  it('paneVisibility rehydrates from localStorage, falling back to "both" for unknown values', () => {
+    localStorage.setItem(PANE_VIS_KEY, 'editor-only');
+    const f1 = TestBed.createComponent(HomeComponent);
+    expect(f1.componentInstance.paneVisibility()).toBe('editor-only');
+
+    localStorage.setItem(PANE_VIS_KEY, 'bogus');
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+    const f2 = TestBed.createComponent(HomeComponent);
+    expect(f2.componentInstance.paneVisibility()).toBe('both');
+  });
+
+  it('onCyclePaneVisibility cycles both -> editor-only -> tree-only -> both', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+    expect(c.paneVisibility()).toBe('both');
+    c.onCyclePaneVisibility();
+    expect(c.paneVisibility()).toBe('editor-only');
+    c.onCyclePaneVisibility();
+    expect(c.paneVisibility()).toBe('tree-only');
+    c.onCyclePaneVisibility();
+    expect(c.paneVisibility()).toBe('both');
+  });
+
+  it('splitStyle collapses to a single 1fr track when paneVisibility is not "both"', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+
+    c.paneVisibility.set('editor-only');
+    expect(c.splitStyle()).toEqual({ 'grid-template-columns': '1fr' });
+
+    c.paneVisibility.set('tree-only');
+    expect(c.splitStyle()).toEqual({ 'grid-template-columns': '1fr' });
+
+    TestBed.inject(PreferencesService).update({ layoutOrientation: 'vertical' });
+    c.paneVisibility.set('editor-only');
+    expect(c.splitStyle()).toEqual({ 'grid-template-rows': '1fr' });
+  });
+
+  it('returning to "both" restores the previously saved splitRatio', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+    c.splitRatio.set(0.7);
+
+    c.paneVisibility.set('editor-only');
+    expect(c.splitStyle()).toEqual({ 'grid-template-columns': '1fr' });
+    expect(c.splitRatio()).toBe(0.7);
+
+    c.paneVisibility.set('both');
+    expect(c.splitStyle()['grid-template-columns']).toContain('70.000%');
+    expect(c.splitRatio()).toBe(0.7);
+  });
+
+  it('paneVisibility persists to localStorage on change', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.paneVisibility.set('tree-only');
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(localStorage.getItem(PANE_VIS_KEY)).toBe('tree-only');
+  });
+
+  it('Ctrl+F is not routed to tree-search when the tree pane is hidden', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+    const focusSpy = spyOn(
+      c as unknown as { focusTreeSearch: () => void },
+      'focusTreeSearch'
+    );
+
+    c.paneVisibility.set('editor-only');
+    const ev = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true });
+    spyOn(ev, 'preventDefault');
+    c.onKeydown(ev);
+    expect(focusSpy).not.toHaveBeenCalled();
+    expect(ev.preventDefault).not.toHaveBeenCalled();
+
+    c.paneVisibility.set('both');
+    const ev2 = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true });
+    spyOn(ev2, 'preventDefault');
+    c.onKeydown(ev2);
+    expect(focusSpy).toHaveBeenCalled();
+    expect(ev2.preventDefault).toHaveBeenCalled();
+  });
 });
 
 describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
@@ -434,6 +530,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
@@ -462,6 +559,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
   });
 
   it('cursor in middle of "value" selects matching tree row ($.a)', () => {
@@ -742,6 +840,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     localStorage.removeItem('jotjson.preferences.v1');
     localStorage.removeItem('jotjson.draft.v1');
     localStorage.removeItem('jotjson.splitRatio.v1');
+    localStorage.removeItem('jotjson.paneVisibility.v1');
     TestBed.resetTestingModule();
 
     const stub: StubBlobService = {
@@ -912,11 +1011,13 @@ describe('HomeComponent browser-title effect (M4a)', () => {
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
+  const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 
   beforeEach(() => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
@@ -979,6 +1080,7 @@ describe('HomeComponent blob actions (M4b)', () => {
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
+  const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 
   // setup() installs a stubbed navigator.clipboard via Object.defineProperty
   // because spyOnProperty requires `clipboard` to already be an accessor,
@@ -1021,6 +1123,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
 
     const stub = {
@@ -1201,6 +1304,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
+  const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 
   class FakeDropController {
     readonly dropActive = signal(false);
@@ -1218,6 +1322,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     const fakeController = new FakeDropController();
     const snack = { open: jasmine.createSpy('open') };
@@ -1361,6 +1466,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
@@ -1372,6 +1478,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
   });
 
   it('toolbar paste with mixed text shows the extract banner', async () => {
@@ -1554,6 +1661,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
+  const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 
   class FakeDropController {
     readonly dropActive = signal(false);
@@ -1571,6 +1679,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     const fakeController = new FakeDropController();
     const snack = { open: jasmine.createSpy('open') };
@@ -1791,6 +1900,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
+  const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 
   class FakeDropController {
     readonly dropActive = signal(false);
@@ -1808,6 +1918,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     const fakeController = new FakeDropController();
     const snack = { open: jasmine.createSpy('open') };
