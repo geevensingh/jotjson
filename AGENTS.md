@@ -359,4 +359,18 @@ Before finishing a task:
   If new evidence (test output, file contents, a rubber-duck review,
   a user correction) suggests an earlier suggestion was wrong,
   acknowledge it explicitly and revise.
+- **Parallelize plan execution.** Once a plan is approved, treat its
+  steps as a dependency graph, not a list. Dispatch every step with
+  no unmet dependencies to a parallel sub-agent -- including waves
+  further down the graph (e.g., if step 1 unblocks steps 2-9, run
+  steps 2-9 in parallel after step 1 finishes, not serially). Only
+  respect true dependencies: file conflicts, read-after-write on
+  shared state, or an earlier step's output feeding a later step.
+  Each sub-agent is stateless, so include the relevant plan slice,
+  repo conventions (`AGENTS.md`, `DESIGN_SPEC.md`), and the
+  definition-of-done checks it must satisfy. After each wave
+  completes, re-evaluate which steps are now unblocked and fan those
+  out too. Use whatever parallel sub-agent mechanism the current
+  runtime exposes (e.g., `/fleet` in Copilot CLI; the `Task` tool in
+  Claude Code).
 

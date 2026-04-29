@@ -15,3 +15,9 @@ Key points (see `AGENTS.md` for the authoritative version):
 - Tests are required for logic changes. Run lint + test + build before done.
 - No new frameworks, languages, or cloud services without approval.
 - Never log or transmit clipboard/editor contents or secrets.
+
+## Copilot CLI Specifics
+
+When `AGENTS.md` §11 calls for parallel sub-agent execution, use `/fleet` mode
+whenever possible -- especially when implementing an approved plan. Apply it on
+every wave of the plan's dependency graph, not just the first one.
