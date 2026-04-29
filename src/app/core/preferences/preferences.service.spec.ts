@@ -126,6 +126,49 @@ describe('PreferencesService', () => {
     expect(svc.effectiveTheme()).toBe(expected);
   });
 
+  it('drops unknown keys (e.g. legacy historyTrackingMode/activeRuleSetIds) hydrating from localStorage', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        theme: 'dark',
+        historyTrackingMode: 'save_only',
+        activeRuleSetIds: ['rs-stale'],
+        defaultRuleSetId: 'rs-old'
+      })
+    );
+    const svc = TestBed.inject(PreferencesService);
+    const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+    expect(prefs.theme).toBe('dark');
+    expect(prefs['historyTrackingMode']).toBeUndefined();
+    expect(prefs['activeRuleSetIds']).toBeUndefined();
+    expect(prefs['defaultRuleSetId']).toBeUndefined();
+    // recentlyViewedEnabled defaults to true rather than being coerced
+    // from the legacy key (the API normalizes stored docs on read).
+    expect(prefs.recentlyViewedEnabled).toBe(DEFAULT_PREFERENCES.recentlyViewedEnabled);
+    expect(prefs.defaultRuleSetIds).toEqual(DEFAULT_PREFERENCES.defaultRuleSetIds);
+  });
+
+  it('drops unknown keys when hydrating from a remote response', async () => {
+    const remoteWithLegacy = {
+      ...DEFAULT_PREFERENCES,
+      theme: 'light' as const,
+      // The server should never send these post-cleanup, but if it
+      // does (or a stored doc leaks one through) we should not echo
+      // them back in the next PUT.
+      historyTrackingMode: 'all_actions',
+      activeRuleSetIds: ['rs-stale']
+    } as unknown as UserPreferences;
+    const svc = TestBed.inject(PreferencesService);
+    api.getMe.and.returnValue(of(makeUser(remoteWithLegacy)));
+    auth.signInAs('u-1');
+    TestBed.flushEffects();
+    await svc.__waitForSync();
+    const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+    expect(prefs.theme).toBe('light');
+    expect(prefs['historyTrackingMode']).toBeUndefined();
+    expect(prefs['activeRuleSetIds']).toBeUndefined();
+  });
+
   it('merges deep treeHighlightColors shape from storage', () => {
     localStorage.setItem(
       STORAGE_KEY,

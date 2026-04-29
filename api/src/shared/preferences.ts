@@ -33,9 +33,10 @@ export interface UserPreferences {
    * devices. IDs that no longer resolve to an owned rule set are
    * filtered out at read time. See DESIGN_SPEC.md §Features 7.
    *
-   * Renamed from `activeRuleSetIds` in M6f-5; the legacy key (and
-   * the legacy single-value `defaultRuleSetId`) are folded into
-   * this array on read for one release of stale-client tolerance.
+   * Renamed from `activeRuleSetIds` in M6f-5. The wire surface no
+   * longer accepts the legacy keys; stored docs that still carry
+   * `activeRuleSetIds` / `defaultRuleSetId` are folded into this
+   * array on read by `normalizeStoredPreferences`.
    */
   defaultRuleSetIds: string[];
   editorWordWrap: boolean;
@@ -51,8 +52,11 @@ export interface UserPreferences {
    * (user, blob) server-side). Default true.
    *
    * Replaces the legacy `historyTrackingMode: 'save_only' | 'all_actions'`
-   * preference. Both legacy values coerce to `true` on read - the
-   * narrowed feature is strictly less invasive than either old mode.
+   * preference. The wire surface no longer accepts the legacy field;
+   * stored docs that still carry `historyTrackingMode` are coerced to
+   * `recentlyViewedEnabled: true` by `normalizeStoredPreferences`
+   * (both legacy values map to true since the narrowed feature is
+   * strictly less invasive than either old mode).
    */
   recentlyViewedEnabled: boolean;
   searchCaseSensitive: boolean;
@@ -153,17 +157,6 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 const THEMES: readonly UserPreferences['theme'][] = ['dark', 'light', 'system'] as const;
 const LAYOUTS: readonly UserPreferences['layoutOrientation'][] = ['horizontal', 'vertical'] as const;
-/**
- * Legacy history tracking mode values. Accepted on the wire for one
- * release of stale-client tolerance and coerced to
- * `recentlyViewedEnabled: true` (both old modes map to true since the
- * narrowed feature is strictly less invasive than either).
- *
- * TODO(remove next release): drop legacy acceptance once stale clients
- * have refreshed.
- */
-const LEGACY_HISTORY_MODES = ['save_only', 'all_actions'] as const;
-type LegacyHistoryMode = (typeof LEGACY_HISTORY_MODES)[number];
 const SEARCH_SCOPES: readonly UserPreferences['searchScope'][] = ['keys', 'values', 'both'] as const;
 const SEARCH_VALUE_TYPES: readonly UserPreferences['searchValueType'][] = [
   'all',
@@ -195,28 +188,17 @@ const TREE_PATH_ROOTS: readonly UserPreferences['treePathRoot'][] = [
 ] as const;
 
 /**
- * Whitelist of accepted preference keys on the wire.
- *
- * Includes `historyTrackingMode` for one-release legacy tolerance even
- * though it is no longer part of `UserPreferences`. The string literal
- * union is widened accordingly. TODO(remove next release): drop
- * `'historyTrackingMode'` once stale clients have refreshed.
+ * Whitelist of accepted preference keys on the wire. Stored docs may
+ * still contain legacy keys (`historyTrackingMode`, `activeRuleSetIds`,
+ * `defaultRuleSetId`) from before M5a v1-narrowing / M6f-5; those are
+ * folded into the new shape by `normalizeStoredPreferences` on read
+ * and never round-trip through this validator.
  */
-const TOP_LEVEL_KEYS: readonly (
-  | keyof UserPreferences
-  | 'historyTrackingMode'
-  | 'defaultRuleSetId'
-  | 'activeRuleSetIds'
-)[] = [
+const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'theme',
   'editorFontSize',
   'editorTabSize',
   'defaultTreeExpansionDepth',
-  // Legacy fields accepted on the wire and folded into
-  // `defaultRuleSetIds` for one release of stale-client tolerance.
-  // TODO(remove next release).
-  'defaultRuleSetId',
-  'activeRuleSetIds',
   'defaultRuleSetIds',
   'editorWordWrap',
   'layoutOrientation',
@@ -226,9 +208,6 @@ const TOP_LEVEL_KEYS: readonly (
   'treeAssumeUtcForIsoDateTime',
   'treeAssumeUtcForIsoDateOnly',
   'recentlyViewedEnabled',
-  // Legacy field accepted on the wire and coerced to `recentlyViewedEnabled`
-  // for one release of stale-client tolerance. TODO(remove next release).
-  'historyTrackingMode',
   'searchCaseSensitive',
   'searchRegexMode',
   'searchScope',
@@ -252,43 +231,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Accept either `recentlyViewedEnabled` (new) or `historyTrackingMode`
- * (legacy) on the wire and return the boolean value. New field wins
- * when both are present. Both legacy values map to `true` since the
- * narrowed feature is strictly less invasive than either old mode.
- *
- * TODO(remove next release): drop legacy acceptance once stale clients
- * have refreshed.
- */
-function coerceRecentlyViewedEnabled(raw: Record<string, unknown>): boolean {
-  if (raw['recentlyViewedEnabled'] !== undefined) {
-    return assertBool(raw['recentlyViewedEnabled'], 'recentlyViewedEnabled');
-  }
-  if (raw['historyTrackingMode'] !== undefined) {
-    const legacy = raw['historyTrackingMode'];
-    if (
-      typeof legacy !== 'string' ||
-      !(LEGACY_HISTORY_MODES as readonly string[]).includes(legacy)
-    ) {
-      throw new PreferenceValidationError(
-        `historyTrackingMode must be one of ${LEGACY_HISTORY_MODES.join(', ')}`
-      );
-    }
-    return true;
-  }
-  throw new PreferenceValidationError('recentlyViewedEnabled is required');
-}
-
-/**
  * Lenient read-side coercion for stored user docs. Accepts a possibly
  * legacy `preferences` blob (one with `historyTrackingMode` instead of
- * `recentlyViewedEnabled`) and returns a normalized copy with only the
- * new field.
+ * `recentlyViewedEnabled`, or `activeRuleSetIds` / `defaultRuleSetId`
+ * instead of `defaultRuleSetIds`) and returns a normalized copy with
+ * only the new fields.
  *
  * Unlike `normalizePreferences`, this does NOT throw on unknown keys or
  * out-of-range values - stored docs were validated when written, and a
  * read-time validation failure must never break `GET /api/me`. We only
- * patch the one field that changed shape.
+ * patch the fields that changed shape.
  */
 export function normalizeStoredPreferences(
   prefs: UserPreferences
@@ -446,7 +398,10 @@ export function normalizePreferences(raw: unknown): UserPreferences {
       raw['treeAssumeUtcForIsoDateOnly'],
       'treeAssumeUtcForIsoDateOnly'
     ),
-    recentlyViewedEnabled: coerceRecentlyViewedEnabled(raw),
+    recentlyViewedEnabled: assertBool(
+      raw['recentlyViewedEnabled'],
+      'recentlyViewedEnabled'
+    ),
     searchCaseSensitive: assertBool(raw['searchCaseSensitive'], 'searchCaseSensitive'),
     searchRegexMode: assertBool(raw['searchRegexMode'], 'searchRegexMode'),
     searchScope: assertEnum(raw['searchScope'], SEARCH_SCOPES, 'searchScope'),
@@ -480,23 +435,13 @@ export function normalizePreferences(raw: unknown): UserPreferences {
  * entries (well above the 20-rule-sets-per-user limit) to bound
  * payload size and dedupe while preserving order.
  *
- * Migration (M6f-5): renamed from `activeRuleSetIds`, and absorbs
- * the now-removed single-value `defaultRuleSetId`. When the new
- * key is missing on the wire, fall back to the legacy array, and
- * if a legacy `defaultRuleSetId` string is present prepend it
- * (dedup-safe). One release of stale-client tolerance, then drop.
- * TODO(remove next release): drop the legacy fallbacks once stale
- * clients have refreshed.
+ * On the wire we accept only `defaultRuleSetIds` (M6f-5+). Stored
+ * docs with the legacy `activeRuleSetIds` / `defaultRuleSetId`
+ * shape are folded into `defaultRuleSetIds` by
+ * `normalizeStoredPreferences` on read.
  */
 function normalizeDefaultRuleSetIds(raw: Record<string, unknown>): string[] {
-  let source: unknown;
-  if (raw['defaultRuleSetIds'] !== undefined) {
-    source = raw['defaultRuleSetIds'];
-  } else if (raw['activeRuleSetIds'] !== undefined) {
-    source = raw['activeRuleSetIds'];
-  } else {
-    source = [];
-  }
+  const source = raw['defaultRuleSetIds'] ?? [];
   if (!Array.isArray(source)) {
     throw new PreferenceValidationError(
       'defaultRuleSetIds must be an array of strings'
@@ -507,18 +452,6 @@ function normalizeDefaultRuleSetIds(raw: Record<string, unknown>): string[] {
   }
   const seen = new Set<string>();
   const result: string[] = [];
-  // Legacy single-default folds in first so it keeps "default-most"
-  // priority when both legacy fields are present on stale clients.
-  const legacySingle = raw['defaultRuleSetId'];
-  if (typeof legacySingle === 'string' && legacySingle.length > 0) {
-    if (legacySingle.length > 64) {
-      throw new PreferenceValidationError('defaultRuleSetId is too long');
-    }
-    seen.add(legacySingle);
-    result.push(legacySingle);
-  } else if (legacySingle !== undefined && legacySingle !== null && typeof legacySingle !== 'string') {
-    throw new PreferenceValidationError('defaultRuleSetId must be a string or null');
-  }
   for (const entry of source) {
     if (typeof entry !== 'string' || entry.length === 0) {
       throw new PreferenceValidationError(

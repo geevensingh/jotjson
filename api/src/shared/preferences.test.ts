@@ -156,54 +156,16 @@ describe('normalizePreferences', () => {
     expect(() => normalizePreferences(bad)).toThrow();
   });
 
-  it('migrates legacy defaultRuleSetId into defaultRuleSetIds', () => {
-    const input = valid() as Record<string, unknown>;
-    delete input['defaultRuleSetIds'];
-    input['defaultRuleSetId'] = 'rs-123';
-    const out = normalizePreferences(input);
-    expect(out.defaultRuleSetIds).toEqual(['rs-123']);
-    expect((out as unknown as Record<string, unknown>)['defaultRuleSetId']).toBeUndefined();
-  });
-
-  it('drops empty-string legacy defaultRuleSetId', () => {
-    const input = valid() as Record<string, unknown>;
-    delete input['defaultRuleSetIds'];
-    input['defaultRuleSetId'] = '';
-    const out = normalizePreferences(input);
-    expect(out.defaultRuleSetIds).toEqual([]);
-  });
-
-  it('rejects non-string legacy defaultRuleSetId', () => {
-    const bad = valid() as Record<string, unknown>;
-    bad['defaultRuleSetId'] = 123;
-    expect(() => normalizePreferences(bad)).toThrow(/defaultRuleSetId/);
-  });
-
-  it('migrates legacy activeRuleSetIds into defaultRuleSetIds', () => {
-    const input = valid() as Record<string, unknown>;
-    delete input['defaultRuleSetIds'];
-    input['activeRuleSetIds'] = ['rs-1', 'rs-2'];
-    const out = normalizePreferences(input);
-    expect(out.defaultRuleSetIds).toEqual(['rs-1', 'rs-2']);
-    expect((out as unknown as Record<string, unknown>)['activeRuleSetIds']).toBeUndefined();
-  });
-
-  it('combines legacy defaultRuleSetId and activeRuleSetIds, single first, dedup-safe', () => {
-    const input = valid() as Record<string, unknown>;
-    delete input['defaultRuleSetIds'];
-    input['defaultRuleSetId'] = 'rs-x';
-    input['activeRuleSetIds'] = ['rs-a', 'rs-x', 'rs-b'];
-    const out = normalizePreferences(input);
-    expect(out.defaultRuleSetIds).toEqual(['rs-x', 'rs-a', 'rs-b']);
-  });
-
-  it('prefers new defaultRuleSetIds over legacy activeRuleSetIds when both present', () => {
-    const input = valid() as Record<string, unknown>;
-    input['defaultRuleSetIds'] = ['new-1'];
-    input['activeRuleSetIds'] = ['legacy-1'];
-    const out = normalizePreferences(input);
-    expect(out.defaultRuleSetIds).toEqual(['new-1']);
-  });
+  it.each(['historyTrackingMode', 'activeRuleSetIds', 'defaultRuleSetId'])(
+    'rejects legacy preference key %s',
+    (key) => {
+      const bad = valid() as Record<string, unknown>;
+      bad[key] = 'whatever';
+      expect(() => normalizePreferences(bad)).toThrow(
+        new RegExp(`Unknown preference key "${key}"`)
+      );
+    }
+  );
 
   it('defaults defaultRuleSetIds to [] when missing on the wire (stale-client tolerance)', () => {
     const input = valid() as Record<string, unknown>;

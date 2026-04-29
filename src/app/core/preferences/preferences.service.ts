@@ -67,25 +67,30 @@ function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light'
 
 /**
  * Fills in any missing fields on a preferences object read from the server
- * with built-in defaults. Guards against pre-existing user docs stored
- * before a new field was added - otherwise the next PUT would fail server
- * validation because normalizePreferences requires all keys.
+ * (or hydrated from localStorage) with built-in defaults, and drops any
+ * unknown keys. Guards against:
+ *  - pre-existing user docs stored before a new field was added (the next
+ *    PUT would otherwise fail server validation because
+ *    normalizePreferences requires all keys), and
+ *  - legacy or stale keys (e.g., `historyTrackingMode`,
+ *    `activeRuleSetIds`, `defaultRuleSetId`) that would otherwise leak
+ *    back to the API on the next PUT and get rejected as unknown.
  */
 function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   const remoteColors: Partial<UserPreferences['treeHighlightColors']> =
     remote.treeHighlightColors ?? {};
-  // Coerce legacy historyTrackingMode -> recentlyViewedEnabled. Both old
-  // values map to true (the new default and strictly less invasive than
-  // either old mode). New field wins if both happen to be present.
-  const view = remote as Partial<UserPreferences> & { historyTrackingMode?: unknown };
-  const { historyTrackingMode: legacy, ...rest } = view;
-  const coerced: Partial<UserPreferences> = { ...rest };
-  if (rest.recentlyViewedEnabled === undefined && legacy !== undefined) {
-    coerced.recentlyViewedEnabled = true;
+  const allowed = Object.keys(DEFAULT_PREFERENCES) as (keyof UserPreferences)[];
+  const remoteRecord = remote as Record<string, unknown>;
+  const filtered: Partial<UserPreferences> = {};
+  for (const key of allowed) {
+    if (key === 'treeHighlightColors') continue;
+    if (remoteRecord[key] !== undefined) {
+      (filtered as Record<string, unknown>)[key] = remoteRecord[key];
+    }
   }
   return {
     ...structuredClone(DEFAULT_PREFERENCES),
-    ...coerced,
+    ...filtered,
     treeHighlightColors: {
       dark: {
         ...DEFAULT_PREFERENCES.treeHighlightColors.dark,

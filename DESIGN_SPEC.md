@@ -567,10 +567,11 @@ Available to **registered users** only.
   user has marked as default is deleted, the `DELETE /api/rule-sets/:id`
   handler strips the deleted ID from `defaultRuleSetIds` on the user
   document in the same request. Clients refresh local prefs after a
-  successful delete. Legacy fields (`defaultRuleSetId`,
-  `activeRuleSetIds`) on stored user documents are folded into
-  `defaultRuleSetIds` on read and dropped on next save (M6f-5
-  migration).
+  successful delete. The wire surface accepts only `defaultRuleSetIds`;
+  stored user documents that still carry the legacy `defaultRuleSetId`
+  / `activeRuleSetIds` fields (pre-M6f-5) are folded into
+  `defaultRuleSetIds` on read by `normalizeStoredPreferences` and
+  dropped on next save.
 
 - **Engine output / `target` projection:** the formatting-rules engine
   is a pure function `evaluate(activeSets, node) -> RuleEngineResult`
@@ -1118,10 +1119,7 @@ EU users would need a regional resource - out of scope for v1.
      `recentlyViewedEnabled` (boolean, default on; both legacy
      `'save_only'` and `'all_actions'` coerce to `true` since the
      narrowed feature is strictly less invasive than either old
-     mode). `PUT /api/me/preferences`
-     accepts the legacy `historyTrackingMode` field for the same
-     window and translates it to the new boolean server-side.
-     Existing Cosmos rows of other action types are filtered out on
+     mode). Existing Cosmos rows of other action types are filtered out on
      read (`c.action = "viewed"` in `listEntries`); they age out via
      FIFO. The editor's `pasteOccurred` output and the
      `HistoryService.recordPaste` method are removed; the

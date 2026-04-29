@@ -62,9 +62,10 @@ export interface UserPreferences {
    * longer resolve to an owned rule set are filtered out at read
    * time. See DESIGN_SPEC.md §Features 7.
    *
-   * Renamed from `activeRuleSetIds` in M6f-5; the legacy key (and
-   * the legacy single-value `defaultRuleSetId`) are folded into this
-   * array on read for one release of stale-client tolerance.
+   * Renamed from `activeRuleSetIds` in M6f-5. The wire surface no
+   * longer accepts the legacy keys; stored docs that still carry
+   * `activeRuleSetIds` / `defaultRuleSetId` are folded into this
+   * array on read by the server.
    */
   defaultRuleSetIds: string[];
   editorWordWrap: boolean;
