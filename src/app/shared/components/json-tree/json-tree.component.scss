@@ -310,7 +310,8 @@
   }
 
   .tree-type-badge,
-  .tree-path-pill {
+  .tree-path-pill,
+  .tree-kebab-pill {
     margin-left: 0;
   }
 }
@@ -372,4 +373,41 @@
     color: var(--color-primary);
     background: rgba(127, 127, 127, 0.12);
   }
+}
+
+// Mirrors `.tree-path-pill` styling - always-visible, low-contrast,
+// brightens on hover. The kebab opens the row's context menu (M7q).
+.tree-kebab-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: rgba(127, 127, 127, 0.6);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 3px;
+
+  &:hover {
+    color: var(--color-primary);
+    background: rgba(127, 127, 127, 0.12);
+  }
+}
+
+// Hidden positional anchor used by the cursor-driven right-click flow
+// (see `onRowContextMenu`). The kebab buttons trigger the same `rowMenu`
+// from their own location, so this anchor is only rendered to satisfy
+// MatMenuTrigger's expectation of a host element.
+.tree-ctx-anchor {
+  position: fixed;
+  width: 0;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
 }

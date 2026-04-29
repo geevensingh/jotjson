@@ -49,7 +49,19 @@ export const TELEMETRY_MESSAGE_IDS = [
   'ruleSets.created',
   'ruleSets.updated',
   'ruleSets.deleted',
-  'ruleSets.applied'
+  'ruleSets.applied',
+
+  // Tree row context menu (M7q)
+  'tree.contextMenu.opened',
+  'tree.contextMenu.copyKey',
+  'tree.contextMenu.copyValue',
+  'tree.contextMenu.copyPath',
+  'tree.contextMenu.searchByKey',
+  'tree.contextMenu.searchByValue',
+  'tree.contextMenu.collapse',
+  'tree.contextMenu.expandAllFromHere',
+  'tree.contextMenu.expandToDepth',
+  'tree.row.doubleClickCopyValue'
 ] as const;
 
 export type TelemetryMessageId = (typeof TELEMETRY_MESSAGE_IDS)[number];

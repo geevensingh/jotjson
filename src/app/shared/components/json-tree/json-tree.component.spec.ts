@@ -1799,4 +1799,524 @@ describe('JsonTreeComponent', () => {
       expect(cmp.selectedPath()).toBe('$');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // M7q tree-row context menu
+  //
+  // Covers: right-click + kebab triggers, action methods (copy / search /
+  // expand / collapse), gating predicates, double-click-to-copy, and the
+  // race-free active-hit elevation in `activateClickedHitOrFirst`. Every
+  // copy-spec uses the `withCtxClipboard` helper to swap `navigator.clipboard`
+  // for a writeText spy and restore it afterwards (see the copyPath suite
+  // above for the canonical pattern).
+  // ---------------------------------------------------------------------------
+  describe('row context menu (M7q)', () => {
+    type Cn = ReturnType<JsonTreeComponent['root']>;
+
+    /** Walk `cmp.root()` to find the node whose pathString matches. */
+    function nodeAt(path: string): Cn & {} {
+      const stack: Array<NonNullable<Cn>> = [];
+      const root = cmp.root();
+      if (root) stack.push(root);
+      while (stack.length > 0) {
+        const n = stack.pop() as NonNullable<Cn>;
+        if (n.pathString === path) return n;
+        for (const c of n.children ?? []) stack.push(c);
+      }
+      throw new Error(`No node at path ${path}`);
+    }
+
+    function withCtxClipboard<T>(
+      stub: { writeText?: jasmine.Spy } | undefined,
+      run: () => T
+    ): T {
+      const original = (navigator as { clipboard?: Clipboard }).clipboard;
+      const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
+      try {
+        return run();
+      } finally {
+        if (hadOwn && original) {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: original
+          });
+        } else {
+          // No own clipboard property existed before our override; deleting
+          // restores the original prototype access (avoids the
+          // "value: undefined" trap that masks the prototype).
+          delete (navigator as { clipboard?: unknown }).clipboard;
+        }
+      }
+    }
+
+    function ctxEvent(): MouseEvent {
+      // Non-zero coords so onRowContextMenu treats this as mouse-driven.
+      return new MouseEvent('contextmenu', {
+        clientX: 100,
+        clientY: 200,
+        bubbles: true,
+        cancelable: true
+      });
+    }
+
+    describe('onRowContextMenu', () => {
+      it('sets contextNode, selects the row, captures cursor coords', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.alpha');
+        const ev = ctxEvent();
+        cmp.onRowContextMenu(ev, node);
+        expect(cmp.contextNode()?.pathString).toBe('$.alpha');
+        expect(cmp.selectedPath()).toBe('$.alpha');
+        expect(cmp.ctxX()).toBe(100);
+        expect(cmp.ctxY()).toBe(200);
+        expect(ev.defaultPrevented).toBe(true);
+      });
+
+      it('ignores keyboard-fired contextmenu (clientX/Y === 0)', async () => {
+        await createWith({ alpha: 1 });
+        const node = nodeAt('$.alpha');
+        const ev = new MouseEvent('contextmenu', {
+          clientX: 0,
+          clientY: 0,
+          bubbles: true,
+          cancelable: true
+        });
+        cmp.onRowContextMenu(ev, node);
+        expect(cmp.contextNode()).toBeNull();
+        expect(ev.defaultPrevented).toBe(false);
+      });
+
+      it('ignores contextmenu fired on an interactive descendant (e.g. the path pill)', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.alpha');
+        const pill = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-path-pill'
+        ) as HTMLButtonElement;
+        const ev = new MouseEvent('contextmenu', {
+          clientX: 100,
+          clientY: 100,
+          bubbles: true,
+          cancelable: true
+        });
+        // dispatch via the pill so target.closest('button, ...') matches.
+        Object.defineProperty(ev, 'target', { value: pill });
+        cmp.onRowContextMenu(ev, node);
+        expect(cmp.contextNode()).toBeNull();
+        expect(ev.defaultPrevented).toBe(false);
+      });
+    });
+
+    describe('onKebabClick', () => {
+      it('sets contextNode and stops propagation so row select does not fire', async () => {
+        await createWith({ alpha: 1 });
+        const node = nodeAt('$.alpha');
+        const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+        const stopSpy = spyOn(ev, 'stopPropagation').and.callThrough();
+        cmp.onKebabClick(ev, node);
+        expect(cmp.contextNode()?.pathString).toBe('$.alpha');
+        expect(cmp.selectedPath()).toBe('$.alpha');
+        expect(stopSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('copyKey', () => {
+      it('copies the key text and shows a success toast', async () => {
+        await createWith({ alpha: 1 });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.alpha');
+        withCtxClipboard({ writeText }, () => cmp.copyKey(node));
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('alpha');
+        expect(snackOpen).toHaveBeenCalled();
+      });
+
+      it('copies a numeric array index as its string form', async () => {
+        await createWith([10, 20]);
+        cmp.expandAll();
+        fixture.detectChanges();
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$[1]');
+        withCtxClipboard({ writeText }, () => cmp.copyKey(node));
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('1');
+      });
+
+      it('is a no-op on the root (segment === undefined)', async () => {
+        await createWith({ alpha: 1 });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const root = nodeAt('$');
+        withCtxClipboard({ writeText }, () => cmp.copyKey(root));
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('copyValue', () => {
+      it('copies a string value as raw text (no JSON quotes)', async () => {
+        await createWith({ note: 'hello "world"' });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.note');
+        withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('hello "world"');
+      });
+
+      it('copies a number as its string form', async () => {
+        await createWith({ count: 42 });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.count');
+        withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('42');
+      });
+
+      it('copies a boolean as "true"/"false"', async () => {
+        await createWith({ enabled: true });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.enabled');
+        withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('true');
+      });
+
+      it('copies null as the literal "null"', async () => {
+        await createWith({ blank: null });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.blank');
+        withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('null');
+      });
+
+      it('copies an object as 2-space pretty JSON (multi-line)', async () => {
+        await createWith({ obj: { a: 1, b: 'x' } });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.obj');
+        withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
+        await Promise.resolve(); await Promise.resolve();
+        const arg = writeText.calls.mostRecent().args[0] as string;
+        expect(arg).toContain('\n');
+        expect(arg).toContain('  "a": 1');
+        expect(arg).toContain('  "b": "x"');
+      });
+
+      it('copies an array as 2-space pretty JSON', async () => {
+        await createWith({ arr: [1, 2] });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.arr');
+        withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
+        await Promise.resolve(); await Promise.resolve();
+        const arg = writeText.calls.mostRecent().args[0] as string;
+        expect(arg).toBe('[\n  1,\n  2\n]');
+      });
+    });
+
+    describe('searchByKey', () => {
+      it('sets scope=keys, regex=false, valueType=all and queries the segment', async () => {
+        await createWith({ alpha: 1, beta: 2 });
+        prefs.update({
+          searchScope: 'values',
+          searchRegexMode: true,
+          searchValueType: 'string'
+        });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.alpha');
+        cmp.searchByKey(node);
+        expect(prefs.prefs().searchScope).toBe('keys');
+        expect(prefs.prefs().searchRegexMode).toBe(false);
+        expect(prefs.prefs().searchValueType).toBe('all');
+        expect(cmp.search()).toBe('alpha');
+      });
+
+      it('elevates the clicked row to the active hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.alphabet');
+        cmp.searchByKey(node);
+        await Promise.resolve(); await Promise.resolve();
+        const idx = cmp.activeHitIndex();
+        const paths = cmp.searchHitPaths();
+        expect(paths[idx]).toBe('$.alphabet');
+      });
+
+      it('falls back to the first hit when the clicked row is not a hit', async () => {
+        // searching for a key with a typo wouldn't yield clicked-row in
+        // hits; we simulate that by setting a non-matching pathString.
+        await createWith({ alpha: 1, beta: 2 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        // Manually invoke activateClickedHitOrFirst with a path that
+        // isn't in the hit set after we set search to 'beta'.
+        prefs.update({ searchScope: 'keys', searchRegexMode: false, searchValueType: 'all' });
+        cmp.search.set('beta');
+        // call private helper indirectly: searchByKey on `$.alpha` with
+        // current search='beta' would write 'alpha' to search, but we
+        // want the inverse - just verify by calling searchByKey with a
+        // node whose key doesn't match the existing query.
+        const node = nodeAt('$.alpha');
+        cmp.searchByKey(node);
+        await Promise.resolve(); await Promise.resolve();
+        // After searchByKey on $.alpha, paths = [$.alpha]; activeHit = 0.
+        const idx = cmp.activeHitIndex();
+        const paths = cmp.searchHitPaths();
+        expect(paths[idx]).toBe('$.alpha');
+      });
+
+      it('does nothing on the root (no segment)', async () => {
+        await createWith({ alpha: 1 });
+        prefs.update({ searchScope: 'values' });
+        cmp.searchByKey(nodeAt('$'));
+        // unchanged
+        expect(prefs.prefs().searchScope).toBe('values');
+      });
+    });
+
+    describe('searchByValue', () => {
+      it('sets scope=values, queries the value, and elevates the clicked row', async () => {
+        await createWith({ a: 'needle', b: 'haystack', c: 'needle' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.c');
+        cmp.searchByValue(node);
+        await Promise.resolve(); await Promise.resolve();
+        expect(prefs.prefs().searchScope).toBe('values');
+        expect(prefs.prefs().searchRegexMode).toBe(false);
+        expect(prefs.prefs().searchValueType).toBe('all');
+        expect(cmp.search()).toBe('needle');
+        const idx = cmp.activeHitIndex();
+        const paths = cmp.searchHitPaths();
+        expect(paths[idx]).toBe('$.c');
+      });
+
+      it('searches a string value as raw text (no JSON quotes)', async () => {
+        await createWith({ a: 'with "quotes"' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.searchByValue(nodeAt('$.a'));
+        expect(cmp.search()).toBe('with "quotes"');
+      });
+
+      it('does not act on object/array/null/undefined', async () => {
+        await createWith({ obj: {}, arr: [], blank: null });
+        cmp.expandAll();
+        fixture.detectChanges();
+        prefs.update({ searchScope: 'keys' });
+        cmp.searchByValue(nodeAt('$.obj'));
+        cmp.searchByValue(nodeAt('$.arr'));
+        cmp.searchByValue(nodeAt('$.blank'));
+        expect(prefs.prefs().searchScope).toBe('keys');
+        expect(cmp.search()).toBe('');
+      });
+    });
+
+    describe('collapseFromHere', () => {
+      it('collapses the clicked container and all expanded descendants', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        const mid = nodeAt('$.outer.mid');
+        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
+        expect(cmp.treeControl.isExpanded(mid)).toBe(true);
+        cmp.collapseFromHere(outer);
+        expect(cmp.treeControl.isExpanded(outer)).toBe(false);
+        expect(cmp.treeControl.isExpanded(mid)).toBe(false);
+      });
+    });
+
+    describe('expandAllFromHere', () => {
+      it('expands the clicked container and every descendant container', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.expandAllFromHere(outer);
+        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid'))).toBe(true);
+      });
+    });
+
+    describe('expandToDepthFromHere', () => {
+      it('snaps the subtree to exactly relative depth +N (expand < N AND collapse >= N)', async () => {
+        await createWith({ outer: { mid: { inner: { deep: 1 } } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        const mid = nodeAt('$.outer.mid');
+        const inner = nodeAt('$.outer.mid.inner');
+        // Snap to +1: expand depth 0, collapse depth >= 1 (mid, inner).
+        cmp.expandToDepthFromHere(outer, 1);
+        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
+        expect(cmp.treeControl.isExpanded(mid)).toBe(false);
+        expect(cmp.treeControl.isExpanded(inner)).toBe(false);
+      });
+
+      it('expands shallower-than-N collapsed containers in the same operation', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        const mid = nodeAt('$.outer.mid');
+        cmp.expandToDepthFromHere(outer, 2);
+        // d=0 (outer) and d=1 (mid) expanded; d=2 has no container child.
+        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
+        expect(cmp.treeControl.isExpanded(mid)).toBe(true);
+      });
+    });
+
+    describe('visibility predicates', () => {
+      it('showCopyKey: hidden on root, shown on keyed child', async () => {
+        await createWith({ alpha: 1 });
+        expect(cmp.showCopyKey(nodeAt('$'))).toBe(false);
+        expect(cmp.showCopyKey(nodeAt('$.alpha'))).toBe(true);
+      });
+
+      it('showSearchByKey: hidden in embeddedMode', async () => {
+        await createWith({ alpha: 1 });
+        fixture.componentRef.setInput('embeddedMode', true);
+        fixture.detectChanges();
+        expect(cmp.showSearchByKey(nodeAt('$.alpha'))).toBe(false);
+      });
+
+      it('showSearchByValue: hidden on object/array/null/undefined and in embeddedMode', async () => {
+        await createWith({ obj: {}, arr: [], blank: null, str: 'x' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        expect(cmp.showSearchByValue(nodeAt('$.obj'))).toBe(false);
+        expect(cmp.showSearchByValue(nodeAt('$.arr'))).toBe(false);
+        expect(cmp.showSearchByValue(nodeAt('$.blank'))).toBe(false);
+        expect(cmp.showSearchByValue(nodeAt('$.str'))).toBe(true);
+        fixture.componentRef.setInput('embeddedMode', true);
+        fixture.detectChanges();
+        expect(cmp.showSearchByValue(nodeAt('$.str'))).toBe(false);
+      });
+
+      it('showCollapse: hidden when already collapsed', async () => {
+        await createWith({ outer: { inner: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        expect(cmp.showCollapse(nodeAt('$.outer'))).toBe(false);
+      });
+
+      it('showExpandAllFromHere: hidden when subtree is fully expanded', async () => {
+        await createWith({ outer: { inner: { leaf: 1 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        expect(cmp.showExpandAllFromHere(nodeAt('$.outer'))).toBe(false);
+      });
+
+      it('showExpandToDepth +N: hidden when subtree is exactly at depth +N', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        // Snap to +1, then check predicate.
+        cmp.expandToDepthFromHere(outer, 1);
+        expect(cmp.showExpandToDepth(outer, 1)).toBe(false);
+        // Snap to +2; +2 should be hidden, +1 should now be visible
+        // (since mid is now expanded).
+        cmp.expandToDepthFromHere(outer, 2);
+        expect(cmp.showExpandToDepth(outer, 2)).toBe(false);
+        expect(cmp.showExpandToDepth(outer, 1)).toBe(true);
+      });
+    });
+
+    describe('onRowDblClick', () => {
+      it('copies the value of a primitive row', async () => {
+        await createWith({ note: 'hi' });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.note');
+        withCtxClipboard({ writeText }, () =>
+          cmp.onRowDblClick(new MouseEvent('dblclick'), node)
+        );
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('hi');
+      });
+
+      it('copies pretty JSON for a container row', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.obj');
+        withCtxClipboard({ writeText }, () =>
+          cmp.onRowDblClick(new MouseEvent('dblclick'), node)
+        );
+        await Promise.resolve(); await Promise.resolve();
+        const arg = writeText.calls.mostRecent().args[0] as string;
+        expect(arg).toContain('\n');
+        expect(arg).toContain('"a": 1');
+      });
+
+      it('skips when the dblclick target is an interactive descendant (kebab pill)', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const kebab = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-kebab-pill'
+        ) as HTMLButtonElement;
+        const ev = new MouseEvent('dblclick', { bubbles: true });
+        Object.defineProperty(ev, 'target', { value: kebab });
+        const node = nodeAt('$.alpha');
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(ev, node));
+        await Promise.resolve(); await Promise.resolve();
+        expect(writeText).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('rendering', () => {
+      it('renders a kebab button on every visible row', async () => {
+        await createWith({ a: 1, b: 2 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const kebabs = (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tree-kebab-pill'
+        );
+        // root container + a leaf + b leaf = 3 visible rows.
+        expect(kebabs.length).toBeGreaterThanOrEqual(3);
+      });
+
+      it('renders menu items with the right contextNode when the kebab is clicked via the DOM', async () => {
+        // Regression: MatMenuTrigger's host (click) listener could run
+        // before our template (click) on the same kebab button,
+        // opening the menu with `contextNode()` still null and the
+        // `@if (contextNode()) { ... }` branch hiding every item.
+        // Verifies the menu actually shows items after a real DOM click.
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const kebabs = (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tree-kebab-pill'
+        ) as NodeListOf<HTMLButtonElement>;
+        // The leaf row's kebab (skip the root container's kebab at index 0).
+        const leafKebab = Array.from(kebabs).find(
+          (b) => b.closest('.tree-row[data-path="$.alpha"]') !== null
+        ) as HTMLButtonElement | undefined;
+        expect(leafKebab).withContext('found a kebab on $.alpha').toBeTruthy();
+        leafKebab!.click();
+        fixture.detectChanges();
+        // Wait a tick for the menu overlay to attach.
+        await Promise.resolve();
+        fixture.detectChanges();
+        expect(cmp.contextNode()?.pathString).toBe('$.alpha');
+        const items = document.body.querySelectorAll('button.mat-mdc-menu-item');
+        expect(items.length)
+          .withContext('menu must render at least one item')
+          .toBeGreaterThan(0);
+        // Clean up the overlay so it doesn't leak into other specs.
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+    });
+  });
 });

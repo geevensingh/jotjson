@@ -11,16 +11,19 @@ import {
   output,
   signal,
   untracked,
+  viewChild,
   type WritableSignal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatMenuModule } from '@angular/material/menu';
+import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
+import { MatDividerModule } from '@angular/material/divider';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { JsonParserService } from '../../../core/json/json-parser.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
 import type { FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
@@ -117,7 +120,7 @@ const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
 @Component({
   selector: 'jj-json-tree',
   standalone: true,
-  imports: [FormsModule, MatMenuModule, MatTreeModule, IconComponent],
+  imports: [FormsModule, MatMenuModule, MatTreeModule, MatDividerModule, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
   styleUrl: './json-tree.component.scss'
@@ -129,6 +132,7 @@ export class JsonTreeComponent {
   private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly jsonParser = inject(JsonParserService);
   private readonly ruleSets = inject(RuleSetsService);
+  private readonly logger = inject(LoggerService);
 
   readonly value = input<unknown>(undefined);
 
@@ -174,6 +178,27 @@ export class JsonTreeComponent {
   readonly selectedPath = signal<string | null>(null);
 
   /**
+   * Context-menu state (M7q). `contextNode` is the row whose menu is
+   * currently open (or about to open). `ctxX` / `ctxY` carry the cursor
+   * coordinates for the right-click flow; the kebab flow self-anchors
+   * via its own `MatMenuTrigger` so these stay at 0 in that case.
+   * Mouse-only in v1: keyboard-fired contextmenu (`clientX/Y === 0`)
+   * is ignored in `onRowContextMenu`.
+   */
+  readonly contextNode = signal<TreeNode | null>(null);
+  readonly ctxX = signal(0);
+  readonly ctxY = signal(0);
+
+  /**
+   * Hidden positional anchor for the right-click context-menu flow.
+   * Bound to (`ctxX`, `ctxY`) by the template; we open it
+   * programmatically after setting both. Kebab buttons are their own
+   * `[matMenuTriggerFor]` instances and self-anchor; they do not use
+   * this trigger.
+   */
+  readonly ctxTrigger = viewChild<MatMenuTrigger>('ctxTrigger');
+
+  /**
    * Emits the structural path of the currently-selected row, or `null`
    * when nothing is selected. Driven by an `effect()` over
    * `selectedPath` so user clicks AND programmatic
@@ -203,6 +228,24 @@ export class JsonTreeComponent {
   readonly searchValueTypeAllLabel = $localize`:@@tree.search.type.all:All types`;
   readonly searchPrevTooltip = $localize`:@@tree.search.prev.tooltip:Previous match`;
   readonly searchNextTooltip = $localize`:@@tree.search.next.tooltip:Next match`;
+
+  // Context menu labels (M7q). Stored as readonly fields so $localize
+  // sees the literal at extract time and the template can bind to them
+  // without re-evaluating per render.
+  readonly ctxCopyKeyLabel = $localize`:@@tree.contextMenu.copyKey:Copy key`;
+  readonly ctxCopyValueLabel = $localize`:@@tree.contextMenu.copyValue:Copy value`;
+  readonly ctxCopyPathLabel = $localize`:@@tree.contextMenu.copyPath:Copy path`;
+  readonly ctxSearchByKeyLabel = $localize`:@@tree.contextMenu.searchByKey:Search by key`;
+  readonly ctxSearchByValueLabel = $localize`:@@tree.contextMenu.searchByValue:Search by value`;
+  readonly ctxCollapseLabel = $localize`:@@tree.contextMenu.collapse:Collapse`;
+  readonly ctxExpandAllFromHereLabel = $localize`:@@tree.contextMenu.expandAllFromHere:Expand all from here`;
+  readonly ctxExpandToDepth1Label = $localize`:@@tree.contextMenu.expandToDepth.1:Expand 1 level from here`;
+  readonly ctxExpandToDepth2Label = $localize`:@@tree.contextMenu.expandToDepth.2:Expand 2 levels from here`;
+  readonly ctxExpandToDepth3Label = $localize`:@@tree.contextMenu.expandToDepth.3:Expand 3 levels from here`;
+  readonly ctxExpandToDepth4Label = $localize`:@@tree.contextMenu.expandToDepth.4:Expand 4 levels from here`;
+  readonly ctxExpandToDepth5Label = $localize`:@@tree.contextMenu.expandToDepth.5:Expand 5 levels from here`;
+  readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
+  readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
 
   readonly treeControl = new NestedTreeControl<TreeNode, string>(
     (n) => n.children ?? [],
@@ -853,6 +896,425 @@ export class JsonTreeComponent {
       success: $localize`:@@tree.copyPath.success:Path copied to clipboard.`,
       failed: $localize`:@@tree.copyPath.failed:Failed to copy path.`,
       unsupported: $localize`:@@tree.copyPath.unsupported:Copy is not supported in this browser.`
+    });
+  }
+
+  // ===========================================================================
+  // Context menu (M7q)
+  //
+  // Public surface:
+  //   onRowContextMenu / onRowDblClick / onKebabClick - row-level event entry
+  //   points; they update `contextNode` / cursor coords and emit telemetry.
+  //
+  //   copyKey / copyValue / copyPathFromMenu - menu actions; each emits its
+  //   own `tree.contextMenu.*` telemetry id and runs the copy.
+  //
+  //   searchByKey / searchByValue - menu actions; each clears the type filter
+  //   to 'all', forces literal (non-regex) search, sets the search query,
+  //   and elevates the clicked row to the active hit when it matches.
+  //
+  //   collapseFromHere / expandAllFromHere / expandToDepthFromHere - menu
+  //   actions; each operates on the subtree rooted at the clicked node.
+  //   `expandToDepthFromHere` snaps the subtree to exactly relative depth +N
+  //   (expanding shallower-than-N collapsed containers AND collapsing
+  //   deeper-than-N expanded ones), per Q3 decision in plan.md.
+  //
+  // Visibility predicates (showCopyKey etc.) drive `@if` guards in the
+  // template so a menu item is rendered only when its action would do
+  // something meaningful for the currently-clicked row.
+  // ===========================================================================
+
+  /**
+   * Right-click handler for `.tree-row`. Sets `contextNode`, updates the
+   * cursor anchor, selects the row (mirrors OS context-menu UX), and
+   * opens the shared `rowMenu`.
+   *
+   * Bails when the event arrives with `(clientX, clientY) === (0, 0)`,
+   * which is the keyboard-fired contextmenu signal (Shift+F10 / context
+   * menu key). Keyboard support is deferred to a follow-up - rows are
+   * not currently focusable, so a keyboard menu would have no anchor.
+   *
+   * Bails when the click target is an interactive descendant (twisty,
+   * copy-path pill, kebab pill) so those keep their own click behavior.
+   */
+  onRowContextMenu(event: MouseEvent, node: TreeNode): void {
+    if (event.clientX === 0 && event.clientY === 0) return;
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const trigger = this.ctxTrigger();
+    const apply = (): void => {
+      this.ctxX.set(event.clientX);
+      this.ctxY.set(event.clientY);
+      this.contextNode.set(node);
+      this.selectedPath.set(node.pathString);
+      this.logger.info('tree.contextMenu.opened');
+      queueMicrotask(() => trigger?.openMenu());
+    };
+    if (trigger?.menuOpen) {
+      // Re-right-click on a different row while the menu is still open:
+      // close first, then re-anchor and reopen on the next microtask.
+      // Just calling openMenu() again does not reposition the panel.
+      const sub = trigger.menuClosed.subscribe(() => {
+        sub.unsubscribe();
+        apply();
+      });
+      trigger.closeMenu();
+    } else {
+      apply();
+    }
+  }
+
+  /**
+   * Double-click handler for `.tree-row`. Copies the row's value (raw
+   * text for primitives, pretty-printed JSON for containers) per Q5
+   * decision in plan.md. The browser also fires two `click` events
+   * before the `dblclick`; the existing `onSelect` runs for each but
+   * is idempotent on identical paths, so no debounce is needed.
+   */
+  onRowDblClick(event: MouseEvent, node: TreeNode): void {
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')
+    ) {
+      return;
+    }
+    this.copyValue(node, 'dblclick');
+  }
+
+  /**
+   * Click handler for the per-row kebab button. Updates `contextNode`
+   * synchronously so the menu's bindings see the right row before the
+   * MatMenuTrigger's own click listener opens the panel. The kebab is
+   * its own `[matMenuTriggerFor]` button, so the menu self-anchors to
+   * the kebab's location - no `ctxX`/`ctxY` work needed.
+   *
+   * Stops propagation so the row-level `onSelect` and `onRowDblClick`
+   * handlers do not fire on the same click sequence.
+   */
+  onKebabClick(event: MouseEvent, node: TreeNode): void {
+    event.stopPropagation();
+    this.contextNode.set(node);
+    this.selectedPath.set(node.pathString);
+    this.logger.info('tree.contextMenu.opened');
+  }
+
+  /**
+   * Copies the row's key (object member name or array index) to the
+   * clipboard. Caller must guard with `showCopyKey(node)` (root has
+   * `segment === undefined`).
+   */
+  copyKey(node: TreeNode): void {
+    if (node.segment === undefined) return;
+    this.logger.info('tree.contextMenu.copyKey');
+    void this.clipboardCopy.copyWithToast(String(node.segment), {
+      success: $localize`:@@tree.contextMenu.copy.success.key:Key copied to clipboard.`,
+      failed: $localize`:@@tree.contextMenu.copy.failed.key:Failed to copy key.`,
+      unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`
+    });
+  }
+
+  /**
+   * Copies the row's value to the clipboard. For primitives, the raw
+   * text (no enclosing quotes for strings); for objects/arrays,
+   * `JSON.stringify(value, null, 2)` (pretty, per Q1 decision).
+   *
+   * `source` distinguishes menu-driven from double-click-driven invocations
+   * for telemetry; both paths use identical copy semantics.
+   */
+  copyValue(node: TreeNode, source: 'menu' | 'dblclick'): void {
+    this.logger.info(
+      source === 'menu' ? 'tree.contextMenu.copyValue' : 'tree.row.doubleClickCopyValue'
+    );
+    void this.clipboardCopy.copyWithToast(this.serializeNodeValueForCopy(node), {
+      success: $localize`:@@tree.contextMenu.copy.success.value:Value copied to clipboard.`,
+      failed: $localize`:@@tree.contextMenu.copy.failed.value:Failed to copy value.`,
+      unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`
+    });
+  }
+
+  /**
+   * Menu wrapper around the existing `copyPath`. Adds telemetry so
+   * we can distinguish menu invocations from copy-path-pill clicks.
+   */
+  copyPathFromMenu(node: TreeNode): void {
+    this.logger.info('tree.contextMenu.copyPath');
+    this.copyPath(node);
+  }
+
+  /**
+   * Sets up a search whose query is the clicked row's key text and
+   * whose scope is keys-only. Per plan.md decisions:
+   *   - Q-typeFilter: clears `searchValueType` to `'all'` so the
+   *     clicked row isn't filtered out of the result set.
+   *   - Q2: turns `searchRegexMode` off (literal text match) so
+   *     keys with regex metachars don't surprise users.
+   *   - Q-activeHit: makes the clicked row the active hit if it
+   *     ended up in the result set; falls back to first hit otherwise.
+   *
+   * Each pref change is a write-through to `PreferencesService`,
+   * matching the pattern used by `setSearchScope`.
+   */
+  searchByKey(node: TreeNode): void {
+    if (node.segment === undefined) return;
+    this.logger.info('tree.contextMenu.searchByKey');
+    this.prefs.update({
+      searchScope: 'keys',
+      searchRegexMode: false,
+      searchValueType: 'all'
+    });
+    this.search.set(String(node.segment));
+    this.activateClickedHitOrFirst(node.pathString);
+  }
+
+  /**
+   * Like `searchByKey`, but for the row's value. Hidden in the
+   * template for containers, `null`, and `undefined` (caller should
+   * check `showSearchByValue` before invoking).
+   */
+  searchByValue(node: TreeNode): void {
+    if (
+      node.type === 'object' ||
+      node.type === 'array' ||
+      node.type === 'null' ||
+      node.type === 'undefined'
+    ) {
+      return;
+    }
+    this.logger.info('tree.contextMenu.searchByValue');
+    // Strings need to be unquoted: renderLeaf wraps them in JSON quotes
+    // for display, but the search engine matches against the raw value,
+    // so we feed it the raw string here too.
+    const query =
+      node.type === 'string'
+        ? (node.value as string)
+        : this.renderLeaf(node.value, node.type);
+    this.prefs.update({
+      searchScope: 'values',
+      searchRegexMode: false,
+      searchValueType: 'all'
+    });
+    this.search.set(query);
+    this.activateClickedHitOrFirst(node.pathString);
+  }
+
+  /**
+   * Collapses the clicked node and all expanded containers within its
+   * subtree. Caller should guard with `showCollapse(node)` (we early-out
+   * harmlessly when there are no children).
+   */
+  collapseFromHere(node: TreeNode): void {
+    if (!node.children?.length) return;
+    this.logger.info('tree.contextMenu.collapse');
+    const walk = (c: TreeNode): void => {
+      if (!c.children?.length) return;
+      this.treeControl.collapse(c);
+      for (const child of c.children) walk(child);
+    };
+    walk(node);
+  }
+
+  /**
+   * Expands the clicked node and every container in its subtree.
+   * Caller should guard with `showExpandAllFromHere(node)`.
+   */
+  expandAllFromHere(node: TreeNode): void {
+    if (!node.children?.length) return;
+    this.logger.info('tree.contextMenu.expandAllFromHere');
+    const walk = (c: TreeNode): void => {
+      if (!c.children?.length) return;
+      this.treeControl.expand(c);
+      for (const child of c.children) walk(child);
+    };
+    walk(node);
+  }
+
+  /**
+   * Snaps the subtree rooted at `node` to exactly relative depth `+N`
+   * (per Q3 decision). Containers at relative depth `< N` are expanded,
+   * containers at relative depth `>= N` are collapsed. The clicked node
+   * itself is at relative depth 0 (always expanded for any `N >= 1`).
+   *
+   * Telemetry includes the relative depth as a prop so we can analyze
+   * which depths users invoke most often.
+   */
+  expandToDepthFromHere(node: TreeNode, relativeDepth: number): void {
+    if (!node.children?.length) return;
+    this.logger.info('tree.contextMenu.expandToDepth', { relativeDepth });
+    const walk = (c: TreeNode, d: number): void => {
+      if (!c.children?.length) return;
+      if (d < relativeDepth) {
+        this.treeControl.expand(c);
+        for (const child of c.children) walk(child, d + 1);
+      } else {
+        this.treeControl.collapse(c);
+        // Recurse so any internally-expanded descendants of this
+        // collapsed container also reset to collapsed - keeps the
+        // visible state predictable when the user later expands a
+        // shallower ancestor.
+        for (const child of c.children) walk(child, d + 1);
+      }
+    };
+    walk(node, 0);
+  }
+
+  // ---- Visibility predicates (template @if guards) ----
+
+  showCopyKey(node: TreeNode): boolean {
+    return node.segment !== undefined;
+  }
+
+  showCopyValue(_node: TreeNode): boolean {
+    return true;
+  }
+
+  showSearchByKey(node: TreeNode): boolean {
+    return !this.embeddedMode() && node.segment !== undefined;
+  }
+
+  showSearchByValue(node: TreeNode): boolean {
+    if (this.embeddedMode()) return false;
+    return (
+      node.type !== 'object' &&
+      node.type !== 'array' &&
+      node.type !== 'null' &&
+      node.type !== 'undefined'
+    );
+  }
+
+  showCollapse(node: TreeNode): boolean {
+    return !!node.children?.length && this.treeControl.isExpanded(node);
+  }
+
+  showExpandAllFromHere(node: TreeNode): boolean {
+    return !!node.children?.length && !this.isFullyExpanded(node);
+  }
+
+  /**
+   * Whether the "Expand to depth +N from here" item should be visible
+   * for the given node. Visible iff snapping the subtree to exactly
+   * depth +N would change the currently-visible expand/collapse state.
+   */
+  showExpandToDepth(node: TreeNode, relativeDepth: number): boolean {
+    if (!node.children?.length) return false;
+    return this.wouldDepthSnapChangeVisibleState(node, relativeDepth);
+  }
+
+  // ---- Helpers ----
+
+  /**
+   * Serializes a node's value for the clipboard. Primitives stringify
+   * via `String(...)` (raw text - no JSON quoting for strings). Containers
+   * stringify as 2-space pretty JSON via `JSON.stringify`.
+   */
+  private serializeNodeValueForCopy(node: TreeNode): string {
+    switch (node.type) {
+      case 'string':
+        return node.value as string;
+      case 'number':
+      case 'boolean':
+        return String(node.value);
+      case 'null':
+        return 'null';
+      case 'undefined':
+        return 'undefined';
+      case 'array':
+      case 'object':
+      default:
+        return JSON.stringify(node.value, null, 2);
+    }
+  }
+
+  /**
+   * True when every container in the subtree rooted at `node` is
+   * currently expanded. Drives "Expand all from here" visibility.
+   */
+  private isFullyExpanded(node: TreeNode): boolean {
+    let allExpanded = true;
+    const walk = (c: TreeNode): void => {
+      if (!allExpanded) return;
+      if (!c.children?.length) return;
+      if (!this.treeControl.isExpanded(c)) {
+        allExpanded = false;
+        return;
+      }
+      for (const child of c.children) walk(child);
+    };
+    walk(node);
+    return allExpanded;
+  }
+
+  /**
+   * True when "snap to exactly depth +N" would change the visible
+   * expand/collapse state of the subtree rooted at `node`. Used to
+   * gate the "Expand to depth +N from here" menu items so we never
+   * advertise a no-op.
+   *
+   * Walks visible containers only: a collapsed container hides its
+   * descendants, so internal expansions inside a collapsed container
+   * don't count as "visible state". The action itself does still
+   * normalize those (see `expandToDepthFromHere`); we just don't surface
+   * an item when the user-perceived state already matches.
+   */
+  private wouldDepthSnapChangeVisibleState(
+    node: TreeNode,
+    relativeDepth: number
+  ): boolean {
+    let differs = false;
+    const walk = (c: TreeNode, d: number): void => {
+      if (differs) return;
+      if (!c.children?.length) return;
+      const expanded = this.treeControl.isExpanded(c);
+      if (d < relativeDepth) {
+        if (!expanded) {
+          differs = true;
+          return;
+        }
+        for (const child of c.children) walk(child, d + 1);
+      } else {
+        if (expanded) {
+          differs = true;
+        }
+        // d >= N is supposed to be collapsed; we don't recurse into it
+        // because anything deeper is hidden from the user.
+      }
+    };
+    walk(node, 0);
+    return differs;
+  }
+
+  /**
+   * After a search-by-key/value completes, sets the active hit to the
+   * clicked row when it landed in the result set; otherwise falls back
+   * to the first hit (or `-1` when there are no hits at all).
+   *
+   * Deferred via `queueMicrotask` because the existing reset-to-0
+   * effect (which tracks `searchHitPaths`) is itself scheduled on the
+   * microtask queue when our `prefs.update` / `search.set` calls
+   * mark `searchHitPaths` dirty. By queueing our update *after* that
+   * signal write, our microtask runs later in FIFO order and our
+   * value wins the race. Without this, the effect would clobber our
+   * set back to `0` after we returned.
+   */
+  private activateClickedHitOrFirst(clickedPath: string): void {
+    queueMicrotask(() => {
+      const paths = this.searchHitPaths();
+      if (paths.length === 0) {
+        this.activeHitIndex.set(-1);
+        return;
+      }
+      const idx = paths.indexOf(clickedPath);
+      const next = idx >= 0 ? idx : 0;
+      this.activeHitIndex.set(next);
+      const target = paths[next] as string;
+      this.selectedPath.set(target);
+      this.revealHit(target);
     });
   }
 
