@@ -50,10 +50,10 @@ describe('ExtractJsonBannerComponent', () => {
     ) as HTMLButtonElement[];
     const labels = actionButtons.map((b) => (b.textContent ?? '').trim());
     expect(labels).toContain('Extract JSON');
-    expect(labels).not.toContain('Extract all as array');
+    expect(labels).not.toContain('Extract blocks as array');
   });
 
-  it('shows multi-block message and Extract all as array action when blockCount >= 2', () => {
+  it('shows multi-block message and Extract blocks as array action when blockCount >= 2', () => {
     const fixture = create({
       visible: true,
       blockCount: 3,
@@ -68,7 +68,7 @@ describe('ExtractJsonBannerComponent', () => {
       host.querySelectorAll('.banner-actions button')
     ) as HTMLButtonElement[];
     const labels = actionButtons.map((b) => (b.textContent ?? '').trim());
-    expect(labels).toContain('Extract all as array');
+    expect(labels).toContain('Extract blocks as array');
     expect(labels).not.toContain('Extract JSON');
   });
 
