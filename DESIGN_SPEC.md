@@ -1110,7 +1110,7 @@ EU users would need a regional resource - out of scope for v1.
      `treeShowDateAnnotations`, `defaultRuleSetId`, and
      `treeHighlightColors` stay deferred to M7c, M6, and M7d
      respectively.~~ (done)
-   - **v1 narrowing (post-M5d audit)**: an audit of the shipped
+   - ~~**v1 narrowing (post-M5d audit)**: an audit of the shipped
      timeline found that `saved` / `edited` rows duplicated `/blobs`
      and that `deleted` / `pasted` rows were dead-end tombstones. v1
      narrows the feature to `viewed` rows only, with a 5 minute
@@ -1124,13 +1124,22 @@ EU users would need a regional resource - out of scope for v1.
      read (`c.action = "viewed"` in `listEntries`); they age out via
      FIFO. The editor's `pasteOccurred` output and the
      `HistoryService.recordPaste` method are removed; the
-     native-paste auto-unescape behavior is preserved.
+     native-paste auto-unescape behavior is preserved.~~ (done)
+   - **Read-side legacy folds (deferred)**: `normalizeStoredPreferences`
+     (`api/src/shared/preferences.ts`), `readRecentlyViewedEnabled`
+     (`api/src/functions/blobs.ts`), and `cleanupUserReferences`
+     (`api/src/functions/ruleSets.ts`) still tolerate the pre-narrowing
+     `historyTrackingMode`, `activeRuleSetIds`, and `defaultRuleSetId`
+     shapes on stored user/blob documents and fold them into the
+     current shape on read (and drop them on next save). These can be
+     removed in a follow-up commit once stored Cosmos data is verified
+     clean.
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets. Broken into nine sub-milestones:
-   - **M6a**: Spec finalization (round 1). Close the first batch of
+   - ~~**M6a**: Spec finalization (round 1). Close the first batch of
      cross-cutting design questions (storage shape, limits config,
      preset ID format, `borderColor` rendering, multi-set precedence)
-     and document the answers in `DESIGN_SPEC.md`. No code changes.
-   - **M6a.5**: Spec finalization (round 2). Close the deeper design
+     and document the answers in `DESIGN_SPEC.md`. No code changes.~~ (done)
+   - ~~**M6a.5**: Spec finalization (round 2). Close the deeper design
      questions surfaced by the rubber-duck pass: rule labelling
      (auto-generated, no `name` field), rule-set ordering (by
      `createdAt`), engine output shape (`{ rowStyle, keyStyle,
@@ -1140,15 +1149,15 @@ EU users would need a regional resource - out of scope for v1.
      non-string values, active-set persistence
      (`activeRuleSetIds` on `UserPreferences`), concurrency model
      (`version` field + `If-Match` + 412), and update payload shape
-     (full replace). Spec-only commit; no code.
-   - **M6a.75**: Prerequisite code refactors. Engine contract stub
+     (full replace). Spec-only commit; no code.~~ (done)
+   - ~~**M6a.75**: Prerequisite code refactors. Engine contract stub
      (`formatting-rules-engine.ts` returning the M6a.5 result shape
      with no callers), tree-row CSS-custom-property seam (no visual
      change - existing colors become CSS-var defaults), model field
      additions per M6a.5 (icon whitelist, `version` field,
      `activeRuleSetIds`), and applying `authGuard` to the
-     `/formatting-rules` route (currently unguarded).
-   - **M6b**: API CRUD foundation. Validators (`assertRuleSet`,
+     `/formatting-rules` route (currently unguarded).~~ (done)
+   - ~~**M6b**: API CRUD foundation. Validators (`assertRuleSet`,
      `assertRule`, `assertStyle`) following the `assertEnum` /
      `assertInt` / `assertHex` pattern, Cosmos repository
      (`ruleSetRepository.ts`), and the five owner-scoped functions
@@ -1163,8 +1172,8 @@ EU users would need a regional resource - out of scope for v1.
      PUT/DELETE); missing IDs return 404. PUT enforces `If-Match`
      against the stored `version`; mismatch returns 412. DELETE
      auto-clears `defaultRuleSetId` and prunes `activeRuleSetIds`.
-     Jest specs for validators, repo, and each handler.
-   - **M6c**: Built-in presets. Define the three preset rule sets in
+     Jest specs for validators, repo, and each handler.~~ (done)
+   - ~~**M6c**: Built-in presets. Define the three preset rule sets in
      `api/src/shared/ruleSetPresets.ts` with stable kebab-case IDs
      (`error-detection`, `status-codes`, `null-finder`). The
      `status-codes` preset ships as individual `exact`-match rules
@@ -1173,10 +1182,10 @@ EU users would need a regional resource - out of scope for v1.
      v1.1. Add `GET /api/rule-set-presets` and
      `POST /api/rule-set-presets/:id/clone` endpoints; the clone
      endpoint creates a user-owned UUID copy and reuses the
-     limit-enforcement path.
-   - **M6d**: Rule builder UI with valid-only autosave. Ships as
-     three sub-commits matching the M6f cadence:
-     - **M6d-1**: Editor scaffold + minimal list page + manual Save.
+     limit-enforcement path.~~ (done)
+   - ~~**M6d**: Rule builder UI with valid-only autosave. Ships as
+     three sub-commits matching the M6f cadence:~~ (done)
+     - ~~**M6d-1**: Editor scaffold + minimal list page + manual Save.
        New route `/formatting-rules/:id` loads a `RuleEditorComponent`
        with target (key / value / both), match type (exact /
        contains / starts_with / ends_with - no regex in v1), match
@@ -1189,14 +1198,14 @@ EU users would need a regional resource - out of scope for v1.
        + Edit button + "+ New rule set" creator). M6e expands the
        list to full CRUD (rename, duplicate, delete, ordering,
        clone-preset CTA). Save is a manual button; 412 surfaces a
-       snackbar.
-     - **M6d-2**: Local-draft + valid-only autosave + 412 banner.
+       snackbar.~~ (done)
+     - ~~**M6d-2**: Local-draft + valid-only autosave + 412 banner.
        Debounced 500 ms autosave gates on a `validity` computed
        signal; status pill cycles through `Editing`, `Saving...`,
        `Saved`, `Save failed - retry`, `Invalid - fix to save`.
        412 surfaces a "changed in another tab" banner with a
-       Reload button that re-fetches and rehydrates the draft.
-     - **M6d-3**: Live preview. New optional `[overrideRuleSets]`
+       Reload button that re-fetches and rehydrates the draft.~~ (done)
+     - ~~**M6d-3**: Live preview. New optional `[overrideRuleSets]`
        Input on `JsonTreeComponent` lets a `RulePreviewComponent`
        render a built-in sample snippet through the production
        tree with only the in-progress rule set applied (home
@@ -1206,8 +1215,8 @@ EU users would need a regional resource - out of scope for v1.
        disables the persisted search box, both so the preview
        cannot read or write the home tree's search state and so
        the search UI is not exposed in contexts where it isn't
-       useful.
-   - **M6e**: List page wraps the editor. Registered-user-only
+       useful.~~ (done)
+   - ~~**M6e**: List page wraps the editor. Registered-user-only
      `/formatting-rules` page: list cards (one per set, sorted by
      `createdAt`), empty state with "Create your first rule set"
      CTA, create / rename / duplicate / delete actions, and a
@@ -1217,8 +1226,8 @@ EU users would need a regional resource - out of scope for v1.
      `authGuard` (applied to the route in M6a.75). New
      `RuleSetsService` (signals + optimistic update, mirrors
      `BlobsService` shape) lands here as the list page's first
-     consumer, and also owns `activeRuleSetIds` round-trips.
-   - **M6f**: Tree-view integration. Implement the engine in
+     consumer, and also owns `activeRuleSetIds` round-trips.~~ (done)
+   - ~~**M6f**: Tree-view integration. Implement the engine in
      `formatting-rules-engine.ts` (contract sketched in M6a.75)
      taking active `FormattingRuleSet[]` plus a tree node and
      returning the M6a.5 `RuleEngineResult`. Implements within-set
@@ -1235,15 +1244,15 @@ EU users would need a regional resource - out of scope for v1.
      `defaultRuleSetIds`. Profile page gets a "Default rule
      sets" multi-select wired to the same `defaultRuleSetIds`
      field as the home-page toolbar (closes the M5d-deferred
-     item on line 459).
-   - **M6f-5**: Drop the vestigial `defaultRuleSetId` (never
+     item on line 459).~~ (done)
+   - ~~**M6f-5**: Drop the vestigial `defaultRuleSetId` (never
      wired to seed any UI) and rename `activeRuleSetIds` to
      `defaultRuleSetIds` to better capture the field's
      persisted-preference intent. Surface it as the Profile
      "Default rule sets" multi-select. Migration: legacy
      `activeRuleSetIds` and `defaultRuleSetId` fields on stored
      user documents are folded into `defaultRuleSetIds` on read
-     and dropped on next save.
+     and dropped on next save.~~ (done)
    - **M6g**: Polish. Telemetry events
      (rule-set created/updated/deleted/applied via `LoggerService`,
      no user content), a11y pass (keyboard nav, screen-reader labels
