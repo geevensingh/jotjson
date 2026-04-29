@@ -13,6 +13,7 @@ import { Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
 import { PreferencesService } from '../preferences/preferences.service';
+import { LoggerService } from '../telemetry/logger.service';
 import type {
   FormattingRuleSet,
   RuleSetPayload,
@@ -50,6 +51,7 @@ export class RuleSetsService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly preferences = inject(PreferencesService);
+  private readonly logger = inject(LoggerService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly base = `${environment.apiBaseUrl}/rule-sets`;
 
@@ -94,6 +96,27 @@ export class RuleSetsService {
       const user = this.auth.user();
       if (!user) this._ruleSets.set(null);
     });
+
+    // M6g-1: emit `ruleSets.applied` whenever the active default-rule-set
+    // selection changes. Because every mutator funnels through
+    // `preferences.update({ defaultRuleSetIds })` (setDefaults,
+    // toggleDefault, the delete() pruning path, and the
+    // PreferencesService server-hydration path), a single effect on the
+    // computed signal captures user toggles AND server-driven hydration
+    // uniformly without double-counting. We skip the synchronous initial
+    // run (the default empty state before any preferences have loaded)
+    // so a signed-out user with no hydration produces zero events; the
+    // first real change - whether hydration to `[]` or to a populated
+    // list, or a user toggle - is the first emit.
+    let appliedFirstRun = true;
+    effect(() => {
+      const ids = this.defaultRuleSetIds();
+      if (appliedFirstRun) {
+        appliedFirstRun = false;
+        return;
+      }
+      this.logger.info('ruleSets.applied', { activeCount: ids.length });
+    });
   }
 
   list(): Observable<FormattingRuleSet[]> {
@@ -108,7 +131,13 @@ export class RuleSetsService {
 
   create(payload: RuleSetPayload): Observable<FormattingRuleSet> {
     return this.http.post<FormattingRuleSet>(this.base, payload).pipe(
-      tap((created) => this.upsertCached(created))
+      tap((created) => {
+        this.upsertCached(created);
+        this.logger.info('ruleSets.created', {
+          ruleCount: created.rules.length,
+          source: 'manual'
+        });
+      })
     );
   }
 
@@ -116,7 +145,14 @@ export class RuleSetsService {
     const headers = new HttpHeaders({ 'If-Match': `"${version}"` });
     return this.http
       .put<FormattingRuleSet>(`${this.base}/${encodeURIComponent(id)}`, payload, { headers })
-      .pipe(tap((next) => this.upsertCached(next)));
+      .pipe(
+        tap((next) => {
+          this.upsertCached(next);
+          this.logger.info('ruleSets.updated', {
+            ruleCount: next.rules.length
+          });
+        })
+      );
   }
 
   delete(id: string): Observable<void> {
@@ -135,6 +171,7 @@ export class RuleSetsService {
             defaultRuleSetIds: currentDefaults.filter((x) => x !== id)
           });
         }
+        this.logger.info('ruleSets.deleted');
       })
     );
   }
@@ -149,7 +186,15 @@ export class RuleSetsService {
         `${environment.apiBaseUrl}/rule-set-presets/${encodeURIComponent(presetId)}/clone`,
         {}
       )
-      .pipe(tap((created) => this.upsertCached(created)));
+      .pipe(
+        tap((created) => {
+          this.upsertCached(created);
+          this.logger.info('ruleSets.created', {
+            ruleCount: created.rules.length,
+            source: 'preset'
+          });
+        })
+      );
   }
 
   /**

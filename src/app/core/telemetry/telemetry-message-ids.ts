@@ -43,7 +43,13 @@ export const TELEMETRY_MESSAGE_IDS = [
   'blobs.copyLink.failed',
 
   // Auth
-  'msal.error'
+  'msal.error',
+
+  // Formatting rule sets (M6g-1)
+  'ruleSets.created',
+  'ruleSets.updated',
+  'ruleSets.deleted',
+  'ruleSets.applied'
 ] as const;
 
 export type TelemetryMessageId = (typeof TELEMETRY_MESSAGE_IDS)[number];

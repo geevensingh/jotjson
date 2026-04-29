@@ -4,6 +4,7 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
 import { AuthUser } from '../auth/auth-user';
 import { PreferencesService } from '../preferences/preferences.service';
+import { LoggerService } from '../telemetry/logger.service';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import {
   FormattingRule,
@@ -371,6 +372,149 @@ describe('RuleSetsService', () => {
         .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
       // No throw, no unhandled rejection. Cache unchanged.
       expect(service.ruleSets()).toBeNull();
+    });
+  });
+
+  describe('telemetry (M6g-1)', () => {
+    let logger: LoggerService;
+    let infoSpy: jasmine.Spy;
+
+    beforeEach(() => {
+      // Re-resolve the logger from the same TestBed used by the outer
+      // `beforeEach` so the spy intercepts the same instance the
+      // service has already injected.
+      logger = TestBed.inject(LoggerService);
+      infoSpy = spyOn(logger, 'info');
+      // Drain the constructor's first effect run so subsequent
+      // preference changes are captured as real emits.
+      TestBed.flushEffects();
+    });
+
+    it('emits ruleSets.created with manual source on create() success', () => {
+      const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
+      service.create(payload).subscribe();
+      const req = httpMock.expectOne(BASE);
+      expect(req.request.method).toBe('POST');
+      req.flush(makeSet({ id: 'b', rules: [makeRule(), makeRule({ id: 'r2' })] }));
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.created', {
+        ruleCount: 2,
+        source: 'manual'
+      });
+    });
+
+    it('does NOT emit ruleSets.created when create() fails', () => {
+      const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
+      service.create(payload).subscribe({ error: () => undefined });
+      httpMock.expectOne(BASE).flush(
+        { error: 'boom' },
+        { status: 500, statusText: 'Server Error' }
+      );
+      expect(infoSpy).not.toHaveBeenCalledWith(
+        'ruleSets.created',
+        jasmine.anything()
+      );
+    });
+
+    it('emits ruleSets.updated with the rule count on update() success', () => {
+      const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
+      service.update('a', payload, 7).subscribe();
+      httpMock.expectOne(`${BASE}/a`).flush(
+        makeSet({ id: 'a', rules: [makeRule(), makeRule({ id: 'r2' }), makeRule({ id: 'r3' })] })
+      );
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.updated', { ruleCount: 3 });
+    });
+
+    it('does NOT emit ruleSets.updated on 412 conflict', () => {
+      const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
+      service.update('a', payload, 7).subscribe({ error: () => undefined });
+      httpMock.expectOne(`${BASE}/a`).flush(
+        { error: 'conflict' },
+        { status: 412, statusText: 'Precondition Failed' }
+      );
+      expect(infoSpy).not.toHaveBeenCalledWith(
+        'ruleSets.updated',
+        jasmine.anything()
+      );
+    });
+
+    it('emits ruleSets.deleted (no props) on delete() success', () => {
+      service.delete('a').subscribe();
+      httpMock.expectOne(`${BASE}/a`).flush(null, { status: 204, statusText: 'No Content' });
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.deleted');
+    });
+
+    it('does NOT emit ruleSets.deleted when delete() fails', () => {
+      service.delete('a').subscribe({ error: () => undefined });
+      httpMock.expectOne(`${BASE}/a`).flush(
+        { error: 'boom' },
+        { status: 500, statusText: 'Server Error' }
+      );
+      expect(infoSpy).not.toHaveBeenCalledWith(
+        'ruleSets.deleted',
+        jasmine.anything()
+      );
+    });
+
+    it('emits ruleSets.created with preset source on clonePreset() success', () => {
+      service.clonePreset('error-detection').subscribe();
+      httpMock.expectOne(`${PRESETS_BASE}/error-detection/clone`).flush(
+        makeSet({ id: 'b', rules: [makeRule()] })
+      );
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.created', {
+        ruleCount: 1,
+        source: 'preset'
+      });
+    });
+
+    it('emits ruleSets.applied with activeCount on every defaultRuleSetIds change', () => {
+      service.list().subscribe();
+      httpMock.expectOne(BASE).flush([
+        makeSet({ id: 'a' }),
+        makeSet({ id: 'b' }),
+        makeSet({ id: 'c' })
+      ]);
+
+      service.setDefaults(['a', 'b']);
+      TestBed.flushEffects();
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.applied', { activeCount: 2 });
+
+      infoSpy.calls.reset();
+      service.toggleDefault('c');
+      TestBed.flushEffects();
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.applied', { activeCount: 3 });
+
+      infoSpy.calls.reset();
+      service.toggleDefault('a');
+      TestBed.flushEffects();
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.applied', { activeCount: 2 });
+    });
+
+    it('emits ruleSets.applied when a delete prunes an active id from preferences', () => {
+      service.list().subscribe();
+      httpMock.expectOne(BASE).flush([makeSet({ id: 'a' }), makeSet({ id: 'b' })]);
+      service.setDefaults(['a', 'b']);
+      TestBed.flushEffects();
+      infoSpy.calls.reset();
+
+      service.delete('a').subscribe();
+      httpMock.expectOne(`${BASE}/a`).flush(null, { status: 204, statusText: 'No Content' });
+      TestBed.flushEffects();
+
+      // delete() emits both 'deleted' AND 'applied' (because pruning
+      // changed defaultRuleSetIds from ['a','b'] to ['b']).
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.deleted');
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.applied', { activeCount: 1 });
+    });
+
+    it('does NOT emit ruleSets.applied for the synchronous initial run', () => {
+      // The constructor effect has a one-shot guard that skips its
+      // first run (the default-empty state before any preferences have
+      // hydrated). The outer beforeEach already drained that run, so
+      // a fresh check here should see no prior 'applied' emits.
+      expect(infoSpy).not.toHaveBeenCalledWith(
+        'ruleSets.applied',
+        jasmine.anything()
+      );
     });
   });
 });
