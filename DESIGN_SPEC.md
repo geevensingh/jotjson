@@ -1253,7 +1253,7 @@ EU users would need a regional resource - out of scope for v1.
      `activeRuleSetIds` and `defaultRuleSetId` fields on stored
      user documents are folded into `defaultRuleSetIds` on read
      and dropped on next save.~~ (done)
-   - **M6g**: Polish. Telemetry events
+   - ~~**M6g**: Polish. Telemetry events
      (rule-set created/updated/deleted/applied via `LoggerService`,
      no user content), a11y pass (keyboard nav, screen-reader labels
      on every color picker, focus management on add/delete),
@@ -1263,7 +1263,15 @@ EU users would need a regional resource - out of scope for v1.
      rule-set service (cached reads + queued writes - documented in
      `AGENTS.md` as the pattern for later features), and final
      `DESIGN_SPEC.md` + `AGENTS.md` updates capturing any
-     conventions that emerged.
+     conventions that emerged.~~ (done)
+     - Offline-write coverage in v1 is **`update` and `delete` only**.
+       `create` and `clonePreset` remain online-required because
+       offline create would need temp-ID -> server-ID reconciliation
+       and is out of scope for "minimal". The rule editor surfaces a
+       `Saved offline` pill when a queued write is pending; the
+       service replays the queue on the next `online` event or
+       sign-in. See `AGENTS.md` -> "Offline-first patterns" for the
+       canonical pattern.
 7. **Polish & launch** - Each of these lands as its own step/commit:
    - ~~**M7a**: Smart clipboard polling + banner prompt for the Paste button (Home page §1).~~ (done)
    - ~~**M7b**: Drag-and-drop file upload with full-page drop overlay (Home page §1).~~ (done)

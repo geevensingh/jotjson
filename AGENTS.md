@@ -203,6 +203,59 @@ Place new code in the correct bucket:
   new non-ASCII codepoint (e.g., a UI glyph), add it to the `ALLOWED` set in
   `scripts/check-ascii.mjs` with an inline comment explaining why.
 
+### Offline-first patterns
+
+When a feature needs to keep working while the user is offline, follow
+the pattern established by `RuleSetsService` (M6g-4) at
+`src/app/core/api/rule-sets.service.ts`. This is the canonical example
+for new offline-capable features.
+
+Cached reads:
+- Mirror the server snapshot to a user-scoped `localStorage` envelope:
+  `jotjson.<feature>.cache.v1` storing `{ userId, ...payload }`.
+- On hydrate, reject and `removeItem` if `userId` does not match the
+  current `auth.user()?.id`. Cross-user cache leakage is a privacy bug,
+  not just a UX wart.
+- Clear the cache on sign-out (in the same effect that resets in-memory
+  state).
+- Single-doc reads (`get(id)`) should seed the cache so a cold-start
+  offline editor can optimistically mutate without a prior list call.
+
+Queued writes:
+- Persist queued writes at `jotjson.<feature>.queue.v1`. Each item
+  carries `userId`; filter mismatched entries on hydrate.
+- Coalesce per-id: collapse multiple queued updates for the same id to
+  the latest payload, but keep the **first** queued `baseVersion` so
+  the eventual `If-Match` still matches the server's known version. A
+  queued delete after queued updates for the same id supersedes them
+  all.
+- Status-0 / network failures during a live request fall back into the
+  queue (treated as transient offline).
+- The visible state (`ruleSets()`) is a `computed()` projection over
+  `serverSnapshot + queue`, not a separately mutated signal. This
+  keeps the UI consistent with what is actually persisted.
+
+Drain:
+- Subscribe to `fromEvent(window, 'online')` and to `auth.user()`
+  changes; both trigger a serial drain.
+- Drain policies: `412` -> emit a `conflict` event, refresh from
+  server, recurse. Other `4xx` -> emit an `error` event, refresh,
+  recurse. `5xx` / `0` -> requeue at head and stop. `404` on delete
+  is idempotent success.
+- Idempotency: guard re-entry with an `_inFlight` field so synchronous
+  recursive `tryDrain()` calls are safe.
+
+Service surface (UI-agnostic):
+- Expose `pendingWriteIds(): Signal<ReadonlySet<string>>` and
+  `pendingWriteCount(): Signal<number>` for badge / pill UX.
+- Expose `events$: Observable<...>` (a `Subject`) for `conflict` /
+  `error` notifications. **Do not** inject `MatSnackBar` into core/api
+  services; the consuming component (rule editor, list page, etc.)
+  owns the snackbar.
+
+Telemetry stays counts-only (no IDs, names, or user content) per the
+existing `LoggerService` conventions.
+
 ## 5. Testing
 
 - **Always add/update tests** for logic changes. No test = not done.
