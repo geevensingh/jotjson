@@ -351,6 +351,12 @@ Before finishing a task:
   Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
   ```
 
+- When opening or triaging an issue, apply exactly one priority label:
+  `priority:high`, `priority:medium`, or `priority:low`. These three
+  labels are the only priority signal in the repo (we do not use a
+  Project board field). Existing kind/area labels (e.g., `bug`,
+  `accessibility`, `tech-debt`, `ux`) are orthogonal and still apply.
+
 ## 9. Scope Discipline
 
 - Make surgical changes that fully address the request. Do not refactor
