@@ -916,7 +916,7 @@ Items to revisit before declaring v1 complete (deliberately deferred so they do 
 
 - **PR-by-default for code changes.** Today, code changes can land directly on `main`. Decide whether v1 should require code changes to land via a PR with green CI before merging, with CD/workflow hotfixes remaining as the only sanctioned direct-to-`main` path. Rationale for deferring now: keeps iteration velocity high; CI on `push: main` still runs, just after merge.
 - **Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.
-- **Production sourcemap upload to App Insights.** Currently no sourcemaps in production. Decide whether to wire symbol upload (would also require switching the SWA deploy to runner-side build via `skip_app_build: true`).
+- **Production sourcemap upload to App Insights.** Currently no sourcemaps in production. Decide whether to wire symbol upload. The build topology now runs the SPA build in CI's `web` job and passes the artifact to CD with `skip_app_build: true`, so the CI job already controls the artifacts; adding a sourcemap-upload step there is unblocked.
 - **Testing-layer strategy.** The current test suite covers static analysis + unit (frontend) + unit (api) + browser integration. See the [Testing strategy](#testing-strategy) section below for the full layer model. Decide before v1 whether any of the tracked layers (api integration, smoke e2e, cross-browser, accessibility, visual regression) should be required v1 gates rather than post-v1 follow-ups.
 
 ---
@@ -964,11 +964,13 @@ Azure Functions backend. The resource is provisioned in
 - **Functions**: connection string injected as an app setting
   (`APPLICATIONINSIGHTS_CONNECTION_STRING`) by Bicep; the Functions
   runtime auto-instruments via `host.json`.
-- **SPA**: connection string is baked into `environment.prod.ts` at CD
-  time from the `APP_INSIGHTS_CONNECTION_STRING` GitHub secret. Empty
-  value -> telemetry disabled in that build (no SDK chunk loaded). The
-  CD step intentionally does NOT fail-closed when the secret is empty,
-  so a deploy still succeeds without telemetry.
+- **SPA**: connection string is baked into `environment.prod.ts` at CI
+  build time (in `ci.yml`'s `web` job on push-to-main, or inline in
+  `cd.yml` on `workflow_dispatch`) from the
+  `APP_INSIGHTS_CONNECTION_STRING` GitHub secret. Empty value ->
+  telemetry disabled in that build (no SDK chunk loaded). The bake
+  step intentionally does NOT fail-closed when the App Insights
+  secret is empty, so a deploy still succeeds without telemetry.
 
 ### What we collect (SPA)
 
@@ -1038,10 +1040,11 @@ forwarded; PII messages are dropped at the source by MSAL.
 Production builds do **not** emit sourcemaps today (Angular default
 for the `production` configuration). Production stack traces in App
 Insights are therefore minified. Out-of-band symbol upload to App
-Insights is a planned follow-up; when it lands, the SWA build
-topology will switch to runner-side build (`skip_app_build: true`)
-so the CI job controls the artifacts and can upload symbols before
-deploy.
+Insights is a planned follow-up; the build topology already supports
+it (CI builds the SPA on the runner and uploads the bundle as a
+`web-dist` artifact; CD downloads it with `skip_app_build: true`),
+so a sourcemap-upload step can be inserted in CI's `web` job between
+the build and the artifact upload.
 
 ### Local development
 

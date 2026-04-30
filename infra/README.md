@@ -115,11 +115,15 @@ secrets:
 
 **What each consumer does with them:**
 
-- **SPA build** (GitHub Actions `cd.yml`): before `ng build --configuration=production`,
-  writes a `src/environments/environment.prod.ts` substituting the values.
+- **SPA build** (GitHub Actions `ci.yml`, push-to-main path; or
+  `cd.yml` `workflow_dispatch` path): before
+  `ng build --configuration=production`, writes a
+  `src/environments/environment.prod.ts` substituting the values.
   The resulting static bundle therefore has the client id, authority,
-  known-authority host, and API scope hard-baked. The deploy step then fails
-  fast if any placeholder survives the substitution.
+  known-authority host, and API scope hard-baked. The bake step fails
+  fast if any placeholder survives the substitution. CD's
+  `workflow_run` path downloads the prebuilt `web-dist` artifact from
+  the upstream CI run and skips the SPA build (`skip_app_build: true`).
 - **Bicep** (GitHub Actions `infra.yml`, workflow_dispatch): passes the values
   as `--parameters` overrides on `az deployment group create`. They flow into
   the Static Web App's Functions app settings (`ENTRA_TENANT_ID`,

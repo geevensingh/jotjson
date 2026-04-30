@@ -30,7 +30,89 @@ jobs:
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
       - run: npm run lint
+      - name: Bake production auth config into environment.prod.ts
+        # Only bake real secrets on push-to-main. PRs build against the
+        # placeholder environment.prod.ts checked into the repo (gate-only
+        # build). The baked file is consumed by the next step's
+        # production build and uploaded as the web-dist artifact for cd.yml
+        # to deploy.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
+          ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
+          ENTRA_KNOWN_AUTHORITY: ${{ secrets.ENTRA_KNOWN_AUTHORITY }}
+          ENTRA_API_SCOPE: ${{ secrets.ENTRA_API_SCOPE }}
+          APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.APP_INSIGHTS_CONNECTION_STRING }}
+        run: |
+          # SWA-hosted site is reachable at both the SWA default hostname and
+          # the custom domain (jotjson.com) once bound. MSAL only allows one
+          # redirectUri in its config, so we pick the canonical custom domain.
+          cat > src/environments/environment.prod.ts <<'EOF'
+          import { Environment } from './environment.interface';
+
+          export const environment: Environment = {
+            production: true,
+            apiBaseUrl: '/api',
+            auth: {
+              clientId: '__ENTRA_SPA_CLIENT_ID__',
+              authority: '__ENTRA_AUTHORITY__',
+              knownAuthorities: ['__ENTRA_KNOWN_AUTHORITY__'],
+              redirectUri: 'https://jotjson.com/',
+              postLogoutRedirectUri: 'https://jotjson.com/',
+              scopes: ['__ENTRA_API_SCOPE__']
+            },
+            appInsightsConnectionString: '__APP_INSIGHTS_CONNECTION_STRING__'
+          };
+          EOF
+          # Strip the 10-space leading indent the heredoc inherits from
+          # the YAML so the emitted TS reads naturally.
+          sed -i 's/^          //' src/environments/environment.prod.ts
+          # Substitute secrets. App Insights is intentionally optional - an
+          # empty connection string disables telemetry for that build.
+          sed -i "s|__ENTRA_SPA_CLIENT_ID__|${ENTRA_SPA_CLIENT_ID}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_AUTHORITY__|${ENTRA_AUTHORITY}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_KNOWN_AUTHORITY__|${ENTRA_KNOWN_AUTHORITY}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_API_SCOPE__|${ENTRA_API_SCOPE}|g" src/environments/environment.prod.ts
+          # `|` delimiter for AI because the connection string contains `=`
+          # but no `|`.
+          sed -i "s|__APP_INSIGHTS_CONNECTION_STRING__|${APP_INSIGHTS_CONNECTION_STRING}|g" src/environments/environment.prod.ts
+          if grep -q "__ENTRA_" src/environments/environment.prod.ts; then
+            echo "::error::One or more ENTRA_* secrets are missing - aborting build."
+            exit 1
+          fi
       - run: npm run build -- --configuration=production
+      - name: Copy SWA config into bundle
+        # staticwebapp.config.json lives at repo root because that's where
+        # the SWA CLI looks for it during local dev. The SWA deploy action
+        # with skip_app_build: true reads the config from app_location,
+        # which is the bundle directory - so we copy it in here.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: cp staticwebapp.config.json dist/jotjson/browser/staticwebapp.config.json
+      - name: Sanity-check production bundle
+        # Only meaningful when the bake step ran (push-to-main). On PRs the
+        # bundle still contains placeholder __ENTRA_* literals by design.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if [ ! -f dist/jotjson/browser/index.html ]; then
+            echo "::error::dist/jotjson/browser/index.html missing"
+            exit 1
+          fi
+          if [ ! -f dist/jotjson/browser/staticwebapp.config.json ]; then
+            echo "::error::dist/jotjson/browser/staticwebapp.config.json missing"
+            exit 1
+          fi
+          if grep -r --include='*.js' '__ENTRA_' dist/jotjson/browser/; then
+            echo "::error::Production bundle contains __ENTRA_ placeholder - secret bake failed"
+            exit 1
+          fi
+      - name: Upload web bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist/jotjson
+          if-no-files-found: error
+          retention-days: 30
 
   api:
     name: API build
