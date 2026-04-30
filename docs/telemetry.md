@@ -100,6 +100,72 @@ LAW directly, swap the table name and rename `timestamp` to `TimeGenerated`.
 
 ---
 
+## Sinks: trace vs event vs exception
+
+`LoggerService` routes to three distinct Application Insights tables based
+on which method you call. Pick the right method up front - migrating a
+token between tables later creates a historical discontinuity.
+
+| Method | Sink (classic AI table) | LAW table | When to use |
+|---|---|---|---|
+| `logger.info(id, props?)` | `traces` (severity 1) | `AppTraces` | Diagnostic / lifecycle log lines for humans reading logs. Low value individually. |
+| `logger.warn(id, props?)` | `traces` (severity 2) | `AppTraces` | Recoverable problems that warrant attention but didn't fail the operation. |
+| `logger.error(id, cause, props?)` | `exceptions` | `AppExceptions` | Unexpected failures. `cause` is normalized via `normalizeError`; the call also surfaces a stack trace. |
+| `logger.event(id, props?, measurements?)` | `customEvents` | `AppEvents` | Successful product-analytics signals (counters, completed user actions, performance samples). Supports a numeric `measurements` map. |
+
+The `props` map lands in `customDimensions` (string-keyed). The `event`
+method's `measurements` map lands in `customMeasurements` (numeric,
+queryable with `percentile()` / `avg()` / `sum()` / `min()` / `max()`).
+Don't reuse the same key across both maps for the same event - the
+wire format treats them as a single name-space.
+
+A common pattern is to include the raw number as a measurement AND a
+pre-bucketed label as a dimension, so the same event answers both
+"distribution shape" and "group-by bucket" queries:
+
+```ts
+import { bucketBytes } from 'src/app/core/telemetry/buckets';
+logger.event(
+  'paste.handle',
+  { sizeBytesBucket: bucketBytes(text.length), parseSuccess: true },
+  { sizeBytes: text.length, parseMs: 12 }
+);
+```
+
+```kusto
+// distribution shape
+customEvents
+| where name == 'paste.handle'
+| summarize percentiles(toreal(customMeasurements.parseMs), 50, 95, 99)
+// group-by bucket
+customEvents
+| where name == 'paste.handle'
+| summarize count() by tostring(customDimensions.sizeBytesBucket)
+```
+
+---
+
+## Bucketing conventions
+
+`customDimensions` is high-volume, immutable, indexed, and billed.
+High-cardinality values (raw byte counts, raw colors, full URLs, free
+search text) are forbidden. Use the helpers in
+`src/app/core/telemetry/buckets.ts`:
+
+| Helper | Returns | Buckets |
+|---|---|---|
+| `bucketBytes(n)` | `SizeBucket` | `<1KB`, `1-10KB`, `10-100KB`, `100KB-1MB`, `>1MB` |
+| `bucketCount(n)` | `CountBucket` | `<100`, `100-1K`, `1K-10K`, `>10K` |
+
+For other dimensional facets, prefer hand-coded closed-enum strings
+(e.g. `visibility: 'public' | 'private'`, `theme: 'light' | 'dark' |
+'system'`). Booleans serialize as `'true'` / `'false'` and are fine.
+Color values use a coarse named bucket
+(`'red' | 'orange' | ... | 'gray' | 'custom'`) plus an `isDefault`
+boolean - never the raw hex.
+
+---
+
 ## How to view the logs
 
 ### Local development

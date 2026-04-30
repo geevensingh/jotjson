@@ -11,6 +11,17 @@ export type TelemetryProps = Readonly<
   Record<string, string | number | boolean | undefined>
 >;
 
+/**
+ * Numeric measurements that land in Application Insights'
+ * `customMeasurements` map (queryable with `percentile()`, `avg()`,
+ * `sum()`). `TelemetryProps` lands in `customDimensions` (string-keyed,
+ * groupable). Use measurements for raw numeric quantities (timing,
+ * sizes, counts) and props for dimensional facets / closed-enum
+ * buckets. Both maps share a single key-space at the wire level - do
+ * not reuse the same key in both.
+ */
+export type TelemetryMeasurements = Readonly<Record<string, number>>;
+
 export type ConnectState = 'idle' | 'connecting' | 'connected' | 'disabled';
 
 /**
@@ -86,17 +97,25 @@ export class TelemetryService {
     }
   }
 
-  trackEvent(name: TelemetryMessageId, props?: TelemetryProps): void {
+  trackEvent(
+    name: TelemetryMessageId,
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements
+  ): void {
     if (!this.appInsights) {
       return;
     }
-    this.appInsights.trackEvent({ name }, this.toCustomProps(props));
+    this.appInsights.trackEvent(
+      { name },
+      this.toCustomProps(props, measurements)
+    );
   }
 
   trackTrace(
     name: TelemetryMessageId,
     severity: TelemetrySeverity,
-    props?: TelemetryProps
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements
   ): void {
     if (!this.appInsights) {
       return;
@@ -106,7 +125,7 @@ export class TelemetryService {
       severity === 'error' ? 3 : severity === 'warn' ? 2 : 1;
     this.appInsights.trackTrace(
       { message: name, severityLevel },
-      this.toCustomProps(props)
+      this.toCustomProps(props, measurements)
     );
   }
 
@@ -228,16 +247,32 @@ export class TelemetryService {
     }
   }
 
-  private toCustomProps(props?: TelemetryProps): Record<string, string> | undefined {
-    if (!props) {
+  private toCustomProps(
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements
+  ): Record<string, string | number> | undefined {
+    if (!props && !measurements) {
       return undefined;
     }
-    const out: Record<string, string> = {};
-    for (const [key, value] of Object.entries(props)) {
-      if (value === undefined) {
-        continue;
+    const out: Record<string, string | number> = {};
+    if (props) {
+      for (const [key, value] of Object.entries(props)) {
+        if (value === undefined) {
+          continue;
+        }
+        out[key] = String(value);
       }
-      out[key] = String(value);
+    }
+    if (measurements) {
+      for (const [key, value] of Object.entries(measurements)) {
+        // The AI SDK routes string-typed values to customDimensions and
+        // number-typed values to customMeasurements. Skip non-finite
+        // numbers (NaN, Infinity) - they would be serialized as "null"
+        // or rejected by the wire format.
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          out[key] = value;
+        }
+      }
     }
     return out;
   }

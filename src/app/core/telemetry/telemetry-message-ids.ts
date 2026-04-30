@@ -1,25 +1,48 @@
 /**
  * Centralized telemetry message IDs.
  *
- * Every call to `LoggerService.info/warn/error` MUST use one of these
- * tokens. They are intentionally English, stable across locales, and
- * typed as a literal-union so typos fail at compile time and we don't
- * fragment telemetry across slight variants of the same id.
+ * Every call to `LoggerService.info/warn/error/event` MUST use one of
+ * these tokens. They are intentionally English, stable across locales,
+ * and typed as a literal-union so typos fail at compile time and we
+ * don't fragment telemetry across slight variants of the same id.
+ * Casting (`'foo.bar' as TelemetryMessageId`) is banned in production
+ * source by `scripts/check-prod-patterns.mjs`.
+ *
+ * Three Application Insights sinks, selected by which LoggerService
+ * method you call:
+ * - **`info` / `warn`** -> `trackTrace` -> `traces` table.
+ *   For diagnostic / lifecycle messages aimed at humans reading logs.
+ * - **`error`** -> `trackException` -> `exceptions` table.
+ *   For unexpected failures with a `NormalizedError` cause.
+ * - **`event`** -> `trackEvent` -> `customEvents` table.
+ *   For product-analytics counters and successful-flow signals. Events
+ *   support an optional `measurements` map (numeric, queryable with
+ *   `percentile()` / `avg()` / `sum()`) in addition to `props`
+ *   (string-keyed `customDimensions`).
+ *
+ * Cardinality / privacy: `customDimensions` values must be closed-enum
+ * strings or pre-bucketed labels. Never log raw bytes, raw colors, raw
+ * URLs, raw search query text, or any PII. Use the helpers in
+ * `./buckets.ts` (`bucketBytes`, `bucketCount`) for numeric size /
+ * count dimensions; pair the bucket dimension with the raw number as
+ * a measurement when both are useful.
  *
  * Each token has a JSDoc block documenting:
- * - **Severity**: `info` | `warn` | `error`. Drives which `console.*`
- *   mirror is used and which Application Insights sink is hit
- *   (`trackTrace` for info/warn, `trackException` for error).
+ * - **Severity / kind**: `info` | `warn` | `error` | `event`. Drives
+ *   the sink (see above) and, for traces, which `console.*` mirror is
+ *   used.
  * - **Fired by**: the call site(s). Some tokens have multiple call
  *   sites; all are listed.
  * - **Props**: the shape attached to `LoggerService.X(token, props)`.
  *   `none` means the call passes no props.
+ * - **Measurements** (events only): the numeric map shape, if any.
  * - **Exception**: error-only. The error object passed as the `cause`
  *   argument to `logger.error(token, cause, props?)`, which is
  *   normalized via `normalizeError` into `trackException` telemetry.
  *
  * When adding a new token, add a JSDoc block above it documenting
- * severity, call site, and props (see `AGENTS.md` -> Logging).
+ * kind, call site, props, and (for events) measurements (see
+ * `AGENTS.md` -> Logging).
  */
 export const TELEMETRY_MESSAGE_IDS = [
   // Generic

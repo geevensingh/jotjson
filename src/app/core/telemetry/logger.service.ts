@@ -7,6 +7,7 @@ import {
 } from './normalize-error';
 import {
   TelemetryService,
+  TelemetryMeasurements,
   TelemetryProps,
   TelemetrySeverity
 } from './telemetry.service';
@@ -20,8 +21,16 @@ type Severity = 'info' | 'warn' | 'error';
 interface PendingEntry {
   ts: number;
   severity: Severity;
+  /**
+   * Discriminator for the App Insights sink. When `'event'`, dispatch
+   * routes to `trackEvent` (regardless of `severity`); otherwise the
+   * existing severity + error rules pick `trackTrace` vs
+   * `trackException`.
+   */
+  kind?: 'event';
   messageId: TelemetryMessageId;
   props?: TelemetryProps;
+  measurements?: TelemetryMeasurements;
   error?: NormalizedError;
 }
 
@@ -31,6 +40,16 @@ interface PendingEntry {
  *
  * - `console.*` - always (so DevTools shows everything in dev).
  * - App Insights - once `TelemetryService.connect()` resolves.
+ *
+ * Three App Insights destinations, selected by which method is called:
+ * - `info` / `warn` -> `trackTrace` (`traces` table).
+ * - `error` -> `trackException` (`exceptions` table) when a cause is
+ *   given; falls back to `trackTrace` severity error if cause is
+ *   `null`.
+ * - `event` -> `trackEvent` (`customEvents` table). For
+ *   product-analytics counters and successful-flow signals; supports
+ *   an optional numeric `measurements` map that lands in
+ *   `customMeasurements`.
  *
  * Calls made before telemetry connects are buffered (FIFO, cap 100,
  * oldest dropped on overflow) and replayed on connect. If telemetry
@@ -101,6 +120,36 @@ export class LoggerService {
     });
   }
 
+  /**
+   * Emit a product-analytics event to the `customEvents` table.
+   *
+   * `props` populates `customDimensions` (string-typed, low
+   * cardinality). `measurements` populates `customMeasurements`
+   * (numeric, queryable with `percentile()` / `avg()` / `sum()`).
+   * Don't reuse the same key across both maps - the wire format
+   * collapses them into one name-space.
+   *
+   * Use `event` for successful counters, completed user actions, and
+   * performance samples. For diagnostic / lifecycle log lines aimed at
+   * humans, use `info` / `warn` instead. For failures with a cause,
+   * use `error`.
+   */
+  event(
+    messageId: TelemetryMessageId,
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements
+  ): void {
+    this.consoleMirrorEvent(messageId, props, measurements);
+    this.handle({
+      ts: Date.now(),
+      severity: 'info',
+      kind: 'event',
+      messageId,
+      props,
+      measurements
+    });
+  }
+
   // --- internals ---
 
   private handle(entry: PendingEntry): void {
@@ -119,6 +168,14 @@ export class LoggerService {
 
   private dispatch(entry: PendingEntry): void {
     try {
+      if (entry.kind === 'event') {
+        this.telemetry.trackEvent(
+          entry.messageId,
+          entry.props,
+          entry.measurements
+        );
+        return;
+      }
       const severity = this.toSdkSeverity(entry.severity);
       if (entry.severity === 'error' && entry.error) {
         this.telemetry.trackException(entry.error, {
@@ -162,6 +219,15 @@ export class LoggerService {
     } else {
       fn(`[${messageId}]`, props ?? {});
     }
+  }
+
+  private consoleMirrorEvent(
+    messageId: TelemetryMessageId,
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements
+  ): void {
+    // eslint-disable-next-line no-console
+    console.info(`[event:${messageId}]`, props ?? {}, measurements ?? {});
   }
 
   private flushSessionStorage(): void {
