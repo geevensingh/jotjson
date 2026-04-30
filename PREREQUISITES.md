@@ -220,8 +220,12 @@ The Azure CLI is needed for two things:
 2. **Touching `infra/` or other Azure resources.** Bicep deployments,
    resource provisioning, etc.
 
-You can skip this section *only* if you're working on web-only changes
-(no API, no infra).
+Skipping this section only works for *purely* client-side changes -
+editor formatting, tree rendering, search, theming, and similar UI work
+that never hits `/api/*`. Anything that exercises sign-in, save/load,
+share URLs (`/s/<slug>`), recently-viewed history, profile pages, or
+rule-set persistence will fail or appear broken until you complete this
+section.
 
 ### Azure CLI
 
