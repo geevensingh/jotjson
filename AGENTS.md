@@ -284,9 +284,14 @@ Frontend:
 Backend (`api/src/shared/auth.ts`):
 - The bypass engages only when **all three** conditions hold:
   `JOTJSON_DEV_AUTH_BYPASS=true`, `WEBSITE_INSTANCE_ID` is unset, and
-  `WEBSITE_HOSTNAME` is unset. The latter two are set automatically by
-  Azure App Service / Functions / Static Web Apps, so even a leaked env
-  var cannot enable the bypass on Azure.
+  `WEBSITE_HOSTNAME` is either unset or matches `localhost(:<port>)?`.
+  `WEBSITE_INSTANCE_ID` is always set on Azure (App Service / Functions /
+  Static Web Apps) and never set locally; `WEBSITE_HOSTNAME` is set on
+  Azure to the external hostname (e.g. `<site>.azurewebsites.net`) but
+  is also set by Azure Functions Core Tools 4.x to `localhost:7071`
+  locally, so we only treat non-localhost values as an Azure indicator.
+  Even a leaked `JOTJSON_DEV_AUTH_BYPASS=true` cannot enable the bypass
+  on any Azure host.
 - When engaged, `verifyAccessToken` accepts `dev:<userId>` and synthesizes
   a principal with full `oid`/`sub`/`name`/`preferred_username`/`email`
   claims. Any other token shape continues through normal Entra JWT

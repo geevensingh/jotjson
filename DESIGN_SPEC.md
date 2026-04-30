@@ -675,8 +675,9 @@ header:
 convention.** Do not rely on the standard `Authorization` header for
 SPA-originated calls in production.
 
-A local-only dev-auth bypass (gated on `JOTJSON_DEV_AUTH_BYPASS=true` and
-the absence of `WEBSITE_INSTANCE_ID` / `WEBSITE_HOSTNAME`) accepts the
+A local-only dev-auth bypass (gated on `JOTJSON_DEV_AUTH_BYPASS=true`,
+the absence of `WEBSITE_INSTANCE_ID`, and `WEBSITE_HOSTNAME` being unset
+or matching `localhost(:<port>)?`) accepts the
 synthetic token form `dev:<userId>` for both `Authorization` and
 `X-Jotjson-Authorization`; see `AGENTS.md` "Local-only dev-auth bypass"
 for setup. The bypass cannot engage in any Azure-hosted environment.

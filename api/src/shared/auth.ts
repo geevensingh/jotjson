@@ -44,9 +44,14 @@ function getAuthority(): string {
  * Local-only dev-auth bypass. Engaged only when:
  *
  * - `JOTJSON_DEV_AUTH_BYPASS=true` is set in the Functions process env, AND
- * - neither `WEBSITE_INSTANCE_ID` nor `WEBSITE_HOSTNAME` is set (those are
- *   set by Azure App Service / Functions / Static Web Apps on every request
- *   and never on a developer workstation).
+ * - `WEBSITE_INSTANCE_ID` is unset (Azure App Service / Functions / Static
+ *   Web Apps always set this; Azure Functions Core Tools never sets it
+ *   locally), AND
+ * - `WEBSITE_HOSTNAME` is either unset or matches `localhost(:<port>)?`.
+ *   Azure Functions Core Tools 4.x sets `WEBSITE_HOSTNAME=localhost:7071`
+ *   on a developer workstation, so the mere presence of this var is not
+ *   an Azure indicator; we only reject Azure-shaped values like
+ *   `<site>.azurewebsites.net` or custom domains.
  *
  * The two `WEBSITE_*` guards mean a leaked `JOTJSON_DEV_AUTH_BYPASS=true`
  * value cannot engage the bypass in any Azure-hosted environment. This is
@@ -59,12 +64,13 @@ function getAuthority(): string {
  * match the dev shape continues through normal Entra JWT validation, so
  * real tokens are never silently accepted on a misconfigured local box.
  */
+const LOCALHOST_HOSTNAME_RE = /^localhost(:\d+)?$/i;
 export function isDevAuthBypassEnabled(): boolean {
-  return (
-    process.env['JOTJSON_DEV_AUTH_BYPASS'] === 'true' &&
-    !process.env['WEBSITE_INSTANCE_ID'] &&
-    !process.env['WEBSITE_HOSTNAME']
-  );
+  if (process.env['JOTJSON_DEV_AUTH_BYPASS'] !== 'true') return false;
+  if (process.env['WEBSITE_INSTANCE_ID']) return false;
+  const hostname = process.env['WEBSITE_HOSTNAME'];
+  if (hostname && !LOCALHOST_HOSTNAME_RE.test(hostname)) return false;
+  return true;
 }
 
 const DEV_TOKEN_RE = /^dev:([a-z0-9_-]{1,64})$/;

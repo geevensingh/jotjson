@@ -254,9 +254,32 @@ describe('shared/auth Entra JWT validation', () => {
         expect(isDevAuthBypassEnabled()).toBe(false);
       });
 
-      it('returns false when WEBSITE_HOSTNAME is set even with bypass=true', () => {
+      it('returns false when WEBSITE_HOSTNAME is an Azure-shaped value', () => {
         process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
         process.env['WEBSITE_HOSTNAME'] = 'jotjson.azurestaticapps.net';
+        expect(isDevAuthBypassEnabled()).toBe(false);
+        process.env['WEBSITE_HOSTNAME'] = 'jotjson.azurewebsites.net';
+        expect(isDevAuthBypassEnabled()).toBe(false);
+        process.env['WEBSITE_HOSTNAME'] = 'jot.example.com';
+        expect(isDevAuthBypassEnabled()).toBe(false);
+      });
+
+      it('returns true when WEBSITE_HOSTNAME is the localhost form Core Tools sets', () => {
+        // Azure Functions Core Tools 4.x sets WEBSITE_HOSTNAME=localhost:7071
+        // on a developer workstation - the bypass must still engage.
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        process.env['WEBSITE_HOSTNAME'] = 'localhost:7071';
+        expect(isDevAuthBypassEnabled()).toBe(true);
+        process.env['WEBSITE_HOSTNAME'] = 'localhost';
+        expect(isDevAuthBypassEnabled()).toBe(true);
+        process.env['WEBSITE_HOSTNAME'] = 'LOCALHOST:7071';
+        expect(isDevAuthBypassEnabled()).toBe(true);
+      });
+
+      it('returns false for a hostname that merely starts with "localhost"', () => {
+        // Defense in depth - prevent attacks via crafted hostnames.
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        process.env['WEBSITE_HOSTNAME'] = 'localhost.evil.example.com';
         expect(isDevAuthBypassEnabled()).toBe(false);
       });
     });
