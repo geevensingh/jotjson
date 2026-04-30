@@ -1,0 +1,28 @@
+# Normalize all text files to LF in the index. Working-tree line
+# endings follow each contributor's core.autocrlf setting (CRLF on
+# Windows when autocrlf=true, LF elsewhere). This keeps Windows
+# editors happy with native line endings while making the bytes git
+# stores - and CI on Linux reads - uniformly LF, eliminating the
+# "whole-file changed" spurious diffs caused by tools that write a
+# different EOL than the file currently has.
+* text=auto
+
+# Binaries: skip text processing entirely.
+*.png   binary
+*.ico   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+
+# Windows-shell carve-outs: cmd.exe traditionally requires CRLF in
+# .bat/.cmd files. None in the repo today; preempt future pain.
+*.bat text eol=crlf
+*.cmd text eol=crlf
