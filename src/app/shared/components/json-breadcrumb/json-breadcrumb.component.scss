@@ -43,8 +43,24 @@
 .jj-breadcrumb__item {
   display: inline-flex;
   align-items: center;
-  flex: 0 1 auto;
+  // Non-shrinking by default. Without this, flex would silently
+  // squeeze every chip to fit the container, the chips would
+  // text-overflow-ellipsize themselves into single letters, and
+  // `scrollWidth > clientWidth` would never be true - so the
+  // collapse-into-overflow algorithm would never fire.
+  flex: 0 0 auto;
   min-width: 0;
+}
+
+// The very last visible item IS allowed to shrink. Two reasons:
+//   1. When crumbs.length is small (1 or 2) and a single chip is
+//      wider than the bar, the chip should ellipsize rather than
+//      blow out the row.
+//   2. When the algorithm has fully collapsed the middle (only
+//      first + overflow + last visible) and the row STILL doesn't
+//      fit, ellipsizing the last chip is a graceful fallback.
+.jj-breadcrumb__list .jj-breadcrumb__item:last-child {
+  flex: 0 1 auto;
 }
 
 .jj-breadcrumb__item--overflow {
