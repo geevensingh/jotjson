@@ -37,7 +37,7 @@
             >
               ...
             </button>
-            <mat-menu #overflowMenu="matMenu" class="jj-breadcrumb__overflow-menu">
+            <mat-menu #overflowMenu="matMenu" class="jj-menu jj-breadcrumb__overflow-menu">
               @for (crumb of hiddenCrumbs(); track crumb.canonicalPath) {
                 <button
                   type="button"

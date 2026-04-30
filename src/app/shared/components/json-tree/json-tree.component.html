@@ -47,7 +47,7 @@
   >
     {{ searchScopeButtonLabel() }}
   </button>
-  <mat-menu #scopeMenu="matMenu">
+  <mat-menu #scopeMenu="matMenu" class="jj-menu">
     <button
       type="button"
       mat-menu-item
@@ -87,7 +87,7 @@
   >
     {{ searchValueTypeButtonLabel() }}
   </button>
-  <mat-menu #typeMenu="matMenu">
+  <mat-menu #typeMenu="matMenu" class="jj-menu">
     @for (t of searchValueTypes; track t) {
       <button
         type="button"
@@ -137,7 +137,7 @@
   >
     {{ expandMenuButtonLabel }}
   </button>
-  <mat-menu #expandMenu="matMenu">
+  <mat-menu #expandMenu="matMenu" class="jj-menu">
     <button type="button" mat-menu-item (click)="expandToLevel(1)" i18n="@@tree.expand.level.1">Expand: 1</button>
     <button type="button" mat-menu-item (click)="expandToLevel(2)" i18n="@@tree.expand.level.2">Expand: 2</button>
     <button type="button" mat-menu-item (click)="expandToLevel(3)" i18n="@@tree.expand.level.3">Expand: 3</button>
@@ -398,7 +398,7 @@
   tabindex="-1"
 ></button>
 
-<mat-menu #rowMenu="matMenu" class="tree-row-menu">
+<mat-menu #rowMenu="matMenu" class="jj-menu tree-row-menu">
   @if (contextNode(); as cn) {
     <button
       mat-menu-item

@@ -41,25 +41,37 @@ body.theme-light {
   @include mat.all-component-colors($jotjson-light);
 }
 
-// Tree per-row context menu (json-tree.component): compact density and a
-// bold "default action" affordance on the Copy value item (which is also
-// what double-clicking a row triggers). Scoped via the panel-class set on
-// `<mat-menu class="tree-row-menu">` so other mat-menus in the app keep
-// Material defaults.
-.tree-row-menu {
+// Shared compact context-menu styling. Apply via the `class`
+// attribute on any `<mat-menu>` that wants the JotJSON house style:
+//
+//   <mat-menu #foo="matMenu" class="jj-menu">
+//
+// What it does:
+//   - 32px min-height on items (vs Material's default ~40px even
+//     at density -1) for a compact, scan-friendly list.
+//   - 6px / 6px divider spacing for tighter visual grouping.
+// Feature-specific affordances (e.g. tree-row's bold default
+// action via `.ctx-default-action`, formatting-rules'
+// destructive red via `.menu-destructive`) layer on top via
+// additional classes on individual items.
+.jj-menu {
   --mat-menu-divider-top-spacing: 6px;
   --mat-menu-divider-bottom-spacing: 6px;
 
   .mat-mdc-menu-item {
     min-height: 32px;
   }
+}
 
-  .mat-mdc-menu-item.ctx-default-action {
-    // Material applies font-weight on the inner `.mat-mdc-menu-item-text`
-    // span via `var(--mat-menu-item-label-text-weight)`, so a plain
-    // `font-weight: 600` on the button is overridden back to the default
-    // (M3 label-large-weight = 500). Override the variable instead so
-    // CSS-variable inheritance carries the new value to the inner span.
-    --mat-menu-item-label-text-weight: 700;
-  }
+// Tree-row context menu (json-tree.component): bold "default
+// action" affordance on the Copy value item (which is also what
+// double-clicking a row triggers). Layered on top of `.jj-menu`,
+// applied via panel class on `<mat-menu class="jj-menu tree-row-menu">`.
+.tree-row-menu .mat-mdc-menu-item.ctx-default-action {
+  // Material applies font-weight on the inner `.mat-mdc-menu-item-text`
+  // span via `var(--mat-menu-item-label-text-weight)`, so a plain
+  // `font-weight: 600` on the button is overridden back to the default
+  // (M3 label-large-weight = 500). Override the variable instead so
+  // CSS-variable inheritance carries the new value to the inner span.
+  --mat-menu-item-label-text-weight: 700;
 }
