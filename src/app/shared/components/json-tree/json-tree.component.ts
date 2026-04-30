@@ -24,6 +24,8 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { JsonParserService } from '../../../core/json/json-parser.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
+import { bucketCount } from '../../../core/telemetry/buckets';
+import { isColdAndMark } from '../../../core/telemetry/cold-flag';
 import type { FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
@@ -101,6 +103,10 @@ interface TreeNode {
   children?: TreeNode[];
 }
 
+interface TreeBuildCounter {
+  nodeCount: number;
+}
+
 /**
  * Escapes a value for use in a CSS attribute selector. Falls back to
  * a manual escape when the platform `CSS.escape` is unavailable
@@ -118,6 +124,9 @@ function cssEscape(value: string): string {
  * never synced to the server. Mirrors the splitRatio / draft pattern.
  */
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
+const TREE_BUILD_SLOW_THRESHOLD_MS = 100;
+const TREE_RENDER_SLOW_THRESHOLD_MS = 200;
+const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
 
 /**
  * Interactive tree viewer for parsed JSON, built on Angular Material's
@@ -270,21 +279,20 @@ export class JsonTreeComponent {
   );
   readonly dataSource = new MatTreeNestedDataSource<TreeNode>();
 
+  /**
+   * Last build's node count feeds render-slow telemetry after the
+   * double-rAF paint window; it is set only when the memoized root build
+   * actually runs.
+   */
+  private latestBuildNodeCount = 0;
+
   readonly root = computed<TreeNode | undefined>(() => {
     const raw = this.value();
-    if (raw === undefined) return undefined;
-    const root: TreeNode = {
-      segment: undefined,
-      path: [],
-      pathString: '$',
-      value: raw,
-      type: jsonTypeOf(raw),
-      depth: 0
-    };
-    if (root.type === 'object' || root.type === 'array') {
-      root.children = this.buildChildren(raw, []);
+    if (raw === undefined) {
+      this.latestBuildNodeCount = 0;
+      return undefined;
     }
-    return root;
+    return this.buildRoot(raw);
   });
 
   readonly showTypeBadges = computed(() => this.prefs.prefs().treeShowTypeLabels);
@@ -646,11 +654,16 @@ export class JsonTreeComponent {
   });
 
   private hasInitializedExpansion = false;
+  private renderGeneration = 0;
+  private cancelledRender = false;
 
   constructor() {
     const NOW_TICK_MS = 60_000;
     const handle = setInterval(() => this.nowSignal.set(Date.now()), NOW_TICK_MS);
-    this.destroyRef.onDestroy(() => clearInterval(handle));
+    this.destroyRef.onDestroy(() => {
+      clearInterval(handle);
+      this.cancelledRender = true;
+    });
 
     effect(() => {
       const rootNode = this.root();
@@ -664,12 +677,42 @@ export class JsonTreeComponent {
       }
       if (!this.hasInitializedExpansion) {
         this.hasInitializedExpansion = true;
-        this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth);
+        this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth, true);
       }
       // Whenever the underlying value changes (and the resulting tree
       // root re-renders), drop any stale selection. Predictable, no
       // zombie state.
       untracked(() => this.selectedPath.set(null));
+    });
+
+    // Double-rAF waits until the browser has had a chance to commit
+    // layout/paint for the value-driven tree update before measuring.
+    effect(() => {
+      const raw = this.value();
+      const generation = ++this.renderGeneration;
+      if (raw === undefined) {
+        return;
+      }
+      const start = performance.now();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (this.cancelledRender || generation !== this.renderGeneration) {
+            return;
+          }
+          const timeMs = performance.now() - start;
+          if (timeMs > TREE_RENDER_SLOW_THRESHOLD_MS) {
+            const nodeCount = this.latestBuildNodeCount;
+            this.logger.event(
+              'tree.render.slow',
+              {
+                cold: isColdAndMark('tree.render.slow'),
+                nodeCountBucket: bucketCount(nodeCount)
+              },
+              { timeMs, nodeCount }
+            );
+          }
+        });
+      });
     });
 
     // Reset the active-match index whenever the hit list changes
@@ -953,28 +996,41 @@ export class JsonTreeComponent {
   }
 
   expandAll(): void {
-    const walk = (node: TreeNode | undefined): void => {
+    const start = performance.now();
+    let nodeCount = 0;
+    let maxDepth = 0;
+    const walk = (node: TreeNode | undefined, relativeDepth: number): void => {
       if (!node || !node.children) return;
+      nodeCount += 1;
+      maxDepth = Math.max(maxDepth, relativeDepth);
       this.treeControl.expand(node);
-      for (const child of node.children) walk(child);
+      for (const child of node.children) walk(child, relativeDepth + 1);
     };
-    walk(this.root());
+    walk(this.root(), 0);
+    this.emitSlowExpandIfNeeded(performance.now() - start, maxDepth, nodeCount);
   }
 
   collapseAll(): void {
     this.treeControl.collapseAll();
   }
 
-  expandToLevel(depth: number): void {
+  expandToLevel(depth: number, internal = false): void {
+    const start = performance.now();
+    let nodeCount = 0;
     this.treeControl.collapseAll();
     const walk = (node: TreeNode | undefined): void => {
       if (!node || !node.children) return;
+      nodeCount += 1;
       if (node.depth < depth) {
         this.treeControl.expand(node);
         for (const child of node.children) walk(child);
       }
     };
     walk(this.root());
+    const timeMs = performance.now() - start;
+    if (!internal) {
+      this.emitSlowExpandIfNeeded(timeMs, depth, nodeCount);
+    }
   }
 
   onSearchInput(ev: Event): void {
@@ -1271,14 +1327,20 @@ export class JsonTreeComponent {
    * Caller should guard with `showExpandAllFromHere(node)`.
    */
   expandAllFromHere(node: TreeNode): void {
+    const start = performance.now();
     if (!node.children?.length) return;
     this.logger.info('tree.contextMenu.expandAllFromHere');
-    const walk = (c: TreeNode): void => {
-      if (!c.children?.length) return;
-      this.treeControl.expand(c);
-      for (const child of c.children) walk(child);
+    let nodeCount = 0;
+    let maxDepth = 0;
+    const walk = (currentNode: TreeNode, relativeDepth: number): void => {
+      if (!currentNode.children?.length) return;
+      nodeCount += 1;
+      maxDepth = Math.max(maxDepth, relativeDepth);
+      this.treeControl.expand(currentNode);
+      for (const child of currentNode.children) walk(child, relativeDepth + 1);
     };
-    walk(node);
+    walk(node, 0);
+    this.emitSlowExpandIfNeeded(performance.now() - start, maxDepth, nodeCount);
   }
 
   /**
@@ -1294,17 +1356,21 @@ export class JsonTreeComponent {
    * which depths users invoke most often.
    */
   expandToDepthFromHere(node: TreeNode, relativeDepth: number): void {
+    const start = performance.now();
     if (!node.children?.length) return;
     this.logger.info('tree.contextMenu.expandToDepth', { relativeDepth });
-    const walk = (c: TreeNode, d: number): void => {
-      if (!c.children?.length) return;
-      if (d >= relativeDepth) return;
-      if (!this.treeControl.isExpanded(c)) {
-        this.treeControl.expand(c);
+    let nodeCount = 0;
+    const walk = (currentNode: TreeNode, currentDepth: number): void => {
+      if (!currentNode.children?.length) return;
+      if (currentDepth >= relativeDepth) return;
+      nodeCount += 1;
+      if (!this.treeControl.isExpanded(currentNode)) {
+        this.treeControl.expand(currentNode);
       }
-      for (const child of c.children) walk(child, d + 1);
+      for (const child of currentNode.children) walk(child, currentDepth + 1);
     };
     walk(node, 0);
+    this.emitSlowExpandIfNeeded(performance.now() - start, relativeDepth, nodeCount);
   }
 
   // ---- Visibility predicates (template @if guards) ----
@@ -1824,16 +1890,62 @@ export class JsonTreeComponent {
     return typeof node.segment === 'number';
   }
 
+  private emitSlowExpandIfNeeded(timeMs: number, depth: number, nodeCount: number): void {
+    if (timeMs <= TREE_EXPAND_SLOW_THRESHOLD_MS) {
+      return;
+    }
+    this.logger.event(
+      'tree.expand.slow',
+      { cold: isColdAndMark('tree.expand.slow') },
+      { timeMs, depth, nodeCount }
+    );
+  }
+
+  private buildRoot(raw: unknown): TreeNode {
+    const start = performance.now();
+    const counter: TreeBuildCounter = { nodeCount: 1 };
+    const root: TreeNode = {
+      segment: undefined,
+      path: [],
+      pathString: '$',
+      value: raw,
+      type: jsonTypeOf(raw),
+      depth: 0
+    };
+    if (root.type === 'object' || root.type === 'array') {
+      root.children = this.buildChildren(raw, [], counter);
+    }
+    const nodeCount = counter.nodeCount;
+    this.latestBuildNodeCount = nodeCount;
+    const timeMs = performance.now() - start;
+    if (timeMs > TREE_BUILD_SLOW_THRESHOLD_MS) {
+      this.logger.event(
+        'tree.build.slow',
+        {
+          cold: isColdAndMark('tree.build.slow'),
+          nodeCountBucket: bucketCount(nodeCount)
+        },
+        { timeMs, nodeCount }
+      );
+    }
+    return root;
+  }
+
   private buildChildren(
     value: unknown,
-    parentPath: (string | number)[]
+    parentPath: (string | number)[],
+    counter: TreeBuildCounter
   ): TreeNode[] {
     if (Array.isArray(value)) {
-      return value.map((child, index) => this.buildNode(index, child, [...parentPath, index]));
+      return value.map((child, index) =>
+        this.buildNode(index, child, [...parentPath, index], counter)
+      );
     }
     if (value && typeof value === 'object') {
-      const obj = value as Record<string, unknown>;
-      return Object.keys(obj).map((key) => this.buildNode(key, obj[key], [...parentPath, key]));
+      const objectValue = value as Record<string, unknown>;
+      return Object.keys(objectValue).map((key) =>
+        this.buildNode(key, objectValue[key], [...parentPath, key], counter)
+      );
     }
     return [];
   }
@@ -1841,8 +1953,10 @@ export class JsonTreeComponent {
   private buildNode(
     segment: string | number,
     value: unknown,
-    path: (string | number)[]
+    path: (string | number)[],
+    counter: TreeBuildCounter
   ): TreeNode {
+    counter.nodeCount += 1;
     const type = jsonTypeOf(value);
     const node: TreeNode = {
       segment,
@@ -1853,7 +1967,7 @@ export class JsonTreeComponent {
       depth: path.length
     };
     if (type === 'object' || type === 'array') {
-      node.children = this.buildChildren(value, path);
+      node.children = this.buildChildren(value, path, counter);
     }
     return node;
   }

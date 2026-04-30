@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import {
   parseTree,
   ParseError,
@@ -7,6 +7,9 @@ import {
   getLocation,
   getNodePath
 } from 'jsonc-parser';
+import { bucketBytes } from '../telemetry/buckets';
+import { isColdAndMark } from '../telemetry/cold-flag';
+import { LoggerService } from '../telemetry/logger.service';
 
 export interface JsonParseError {
   message: string;
@@ -29,10 +32,14 @@ export interface JsonParseResult {
  */
 @Injectable({ providedIn: 'root' })
 export class JsonParserService {
+  private readonly logger = inject(LoggerService);
+
   parse(text: string): JsonParseResult {
     if (!text || text.trim().length === 0) {
       return { value: undefined, ast: undefined, errors: [], empty: true };
     }
+
+    const start = performance.now();
 
     // Strip a leading UTF-8/UTF-16 BOM (U+FEFF). Many Windows editors and
     // older file-exporting tools prefix JSON with a BOM, which jsonc-parser
@@ -46,10 +53,25 @@ export class JsonParserService {
       disallowComments: false
     });
 
-    const errors = rawErrors.map((e) => this.toError(e, stripped));
+    const errors = rawErrors.map((parseError) =>
+      this.toError(parseError, stripped)
+    );
     const value = ast ? this.nodeToValue(ast) : undefined;
 
-    return { value, ast, errors, empty: false };
+    const result: JsonParseResult = { value, ast, errors, empty: false };
+    const timeMs = performance.now() - start;
+    if (timeMs > 50) {
+      const sizeBytes = new Blob([text]).size;
+      this.logger.event(
+        'parse.slow',
+        {
+          cold: isColdAndMark('parse.slow'),
+          sizeBytesBucket: bucketBytes(sizeBytes)
+        },
+        { timeMs, sizeBytes }
+      );
+    }
+    return result;
   }
 
   offsetToPosition(text: string, offset: number): { line: number; column: number } {

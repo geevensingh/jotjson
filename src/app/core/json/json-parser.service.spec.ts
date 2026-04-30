@@ -1,12 +1,24 @@
 import { TestBed } from '@angular/core/testing';
+import { bucketBytes } from '../telemetry/buckets';
+import { __resetColdFlagsForTesting } from '../telemetry/cold-flag';
+import { LoggerService } from '../telemetry/logger.service';
 import { JsonParserService } from './json-parser.service';
 
 describe('JsonParserService', () => {
   let svc: JsonParserService;
+  let loggerSpy: jasmine.SpyObj<LoggerService>;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    __resetColdFlagsForTesting();
+    loggerSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['event']);
+    TestBed.configureTestingModule({
+      providers: [{ provide: LoggerService, useValue: loggerSpy }]
+    });
     svc = TestBed.inject(JsonParserService);
+  });
+
+  afterEach(() => {
+    __resetColdFlagsForTesting();
   });
 
   describe('parse - empty inputs', () => {
@@ -36,6 +48,98 @@ describe('JsonParserService', () => {
       const r = svc.parse('{"a":[1,2,{"b":true}]}');
       expect(r.value).toEqual({ a: [1, 2, { b: true }] });
       expect(r.errors).toEqual([]);
+    });
+  });
+
+  describe('parse - slow telemetry', () => {
+    it('does not emit parse.slow for a fast parse', () => {
+      spyOn(performance, 'now').and.returnValues(0, 1);
+
+      svc.parse('{"a":1}');
+
+      expect(loggerSpy.event).not.toHaveBeenCalled();
+    });
+
+    it('emits parse.slow with cold=true on the first slow parse', () => {
+      spyOn(performance, 'now').and.returnValues(0, 51);
+      const text = '{"a":1}';
+      const sizeBytes = new Blob([text]).size;
+
+      svc.parse(text);
+
+      expect(loggerSpy.event).toHaveBeenCalledTimes(1);
+      const [messageId, props, measurements] =
+        loggerSpy.event.calls.mostRecent().args;
+      expect(messageId).toBe('parse.slow');
+      expect(props).toEqual({
+        cold: true,
+        sizeBytesBucket: bucketBytes(sizeBytes)
+      });
+      expect(measurements).toBeDefined();
+      if (!measurements) {
+        fail('Expected parse.slow measurements');
+        return;
+      }
+      expect(measurements['timeMs']).toBeGreaterThan(50);
+      expect(measurements['sizeBytes']).toBe(sizeBytes);
+    });
+
+    it('emits parse.slow with cold=false on the second slow parse', () => {
+      spyOn(performance, 'now').and.returnValues(0, 51, 100, 151);
+      const text = '{"a":1}';
+      const sizeBytes = new Blob([text]).size;
+
+      svc.parse(text);
+      svc.parse(text);
+
+      expect(loggerSpy.event).toHaveBeenCalledTimes(2);
+      const [messageId, props, measurements] =
+        loggerSpy.event.calls.argsFor(1);
+      expect(messageId).toBe('parse.slow');
+      expect(props).toEqual({
+        cold: false,
+        sizeBytesBucket: bucketBytes(sizeBytes)
+      });
+      expect(measurements).toBeDefined();
+      if (!measurements) {
+        fail('Expected parse.slow measurements');
+        return;
+      }
+      expect(measurements['timeMs']).toBeGreaterThan(50);
+      expect(measurements['sizeBytes']).toBe(sizeBytes);
+    });
+
+    it('does not emit parse.slow when elapsed time is exactly 50ms', () => {
+      spyOn(performance, 'now').and.returnValues(0, 50);
+
+      svc.parse('{"a":1}');
+
+      expect(loggerSpy.event).not.toHaveBeenCalled();
+    });
+
+    it('reports UTF-8 byte length instead of UTF-16 character count', () => {
+      spyOn(performance, 'now').and.returnValues(0, 51);
+      const chineseText = String.fromCharCode(0x4e2d, 0x6587);
+      const text = '{"name":"' + chineseText + '"}';
+      const sizeBytes = new Blob([text]).size;
+
+      svc.parse(text);
+
+      expect(sizeBytes).toBeGreaterThan(text.length);
+      expect(loggerSpy.event).toHaveBeenCalledTimes(1);
+      const [, props, measurements] =
+        loggerSpy.event.calls.mostRecent().args;
+      expect(props).toEqual({
+        cold: true,
+        sizeBytesBucket: bucketBytes(sizeBytes)
+      });
+      expect(measurements).toBeDefined();
+      if (!measurements) {
+        fail('Expected parse.slow measurements');
+        return;
+      }
+      expect(measurements['sizeBytes']).toBe(sizeBytes);
+      expect(measurements['sizeBytes']).not.toBe(text.length);
     });
   });
 

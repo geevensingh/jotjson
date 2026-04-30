@@ -122,6 +122,113 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'webVitals',
 
+  // Performance (slow-event thresholds, A4)
+
+  /**
+   * Kind: event
+   * Fired by: `JsonParserService.parse` in `core/json/json-parser.service.ts`.
+   * Emitted only when wallclock parse time exceeds 50 ms; faster
+   * parses are silent. Threshold-only keeps `customEvents` volume
+   * bounded -- the typical case is sub-millisecond. Strict `>`:
+   * `timeMs > 50` emits, `timeMs == 50` does not.
+   *
+   * Note: `parse()` is also called by the JSON extractor scanner and
+   * incidental editor flows (`json-extractor.service.ts`,
+   * `json-editor.component.ts`), not just the main document parse;
+   * a `cold` first-of-session emit may originate from any caller.
+   *
+   * Props:
+   *   { cold: boolean;
+   *     sizeBytesBucket: SizeBucket }
+   *   - `cold` is true on the first `parse.slow` emission per session
+   *     (across all callers); false thereafter. Default KQL queries
+   *     should `where cold == false` to filter cold-start noise.
+   *   - `sizeBytesBucket` from `bucketBytes(sizeBytes)`.
+   * Measurements: { timeMs: number; sizeBytes: number }.
+   *   `sizeBytes` is the UTF-8 byte length of the parsed text
+   *   (`new Blob([text]).size`), matching the existing convention
+   *   in `home/status-bar/stats.ts`.
+   */
+  'parse.slow',
+
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent` in
+   *           `shared/components/json-tree/json-tree.component.ts`,
+   *           wrapping the `root` computed signal's `buildChildren`
+   *           recursion.
+   * Emitted only when wallclock build time exceeds 100 ms.
+   * Strict `>`: `timeMs > 100` emits.
+   *
+   * Props:
+   *   { cold: boolean;
+   *     nodeCountBucket: CountBucket }
+   *   - `cold` is true on the first `tree.build.slow` per session.
+   *   - `nodeCountBucket` from `bucketCount(nodeCount)`.
+   * Measurements: { timeMs: number; nodeCount: number }.
+   *   `nodeCount` is incremented during the same traversal that
+   *   builds children; no second pass.
+   */
+  'tree.build.slow',
+
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent`, via an effect keyed on
+   *           the `value()` input signal that records
+   *           `performance.now()` at the start and emits after a
+   *           double-`requestAnimationFrame` window.
+   *
+   * What this measures: from "value() input changed" to "browser
+   * has committed two animation frames after Angular settled". This
+   * is NOT pure DOM render time -- it includes tree build,
+   * datasource update, default expansion, layout, and paint. Treat
+   * it as user-perceived initial render latency.
+   *
+   * Stale-run cancellation: a generation counter is captured at
+   * effect entry and re-checked at the inner rAF; if `value()` has
+   * thrashed in the meantime, the older measurement is dropped
+   * silently to avoid double-emitting for transient inputs.
+   *
+   * Emitted only when wallclock exceeds 200 ms. Strict `>`:
+   * `timeMs > 200` emits. Skipped entirely when `value()` is
+   * undefined (empty tree).
+   *
+   * Props:
+   *   { cold: boolean;
+   *     nodeCountBucket: CountBucket }
+   * Measurements: { timeMs: number; nodeCount: number }.
+   */
+  'tree.render.slow',
+
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent` bulk-expand methods:
+   *           `expandAll`, `expandToLevel`, `expandAllFromHere`,
+   *           `expandToDepthFromHere`. Each call wraps a wallclock
+   *           measurement around its expand traversal.
+   *
+   * Out of scope for A4: per-node chevron toggles via
+   * `matTreeNodeToggle` (no jotjson handler in between -- would
+   * require a wrapper directive). The constructor's initial
+   * `expandToLevel(defaultTreeExpansionDepth)` is also excluded
+   * (controlled by the `hasInitializedExpansion` flag) so first
+   * paint isn't double-counted with `tree.render.slow`.
+   *
+   * Emitted only when wallclock exceeds 50 ms. Strict `>`:
+   * `timeMs > 50` emits.
+   *
+   * Props:
+   *   { cold: boolean }
+   *   - `cold` is true on the first `tree.expand.slow` per session.
+   * Measurements:
+   *   { timeMs: number; depth: number; nodeCount: number }
+   *   - `depth` is the maximum depth navigated by the action
+   *     (relative to the action's start node).
+   *   - `nodeCount` is the number of containers expanded by the
+   *     action (counted during the same traversal).
+   */
+  'tree.expand.slow',
+
   // HTTP / API
 
   /**

@@ -5,6 +5,8 @@ import { JsonTreeComponent } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
+import { bucketCount } from '../../../core/telemetry/buckets';
+import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
 import type {
   FormattingRule,
   FormattingRuleSet
@@ -28,7 +30,10 @@ describe('JsonTreeComponent', () => {
   let prefs: PreferencesService;
   let snackOpen: jasmine.Spy;
 
-  async function createWith(value: unknown): Promise<void> {
+  async function createWith(
+    value: unknown,
+    beforeDetectChanges?: () => void
+  ): Promise<void> {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
     snackOpen = jasmine.createSpy('snackOpen');
@@ -41,14 +46,57 @@ describe('JsonTreeComponent', () => {
     }).compileComponents();
     fixture = TestBed.createComponent(JsonTreeComponent);
     prefs = TestBed.inject(PreferencesService);
+    beforeDetectChanges?.();
     fixture.componentRef.setInput('value', value);
     fixture.detectChanges();
     cmp = fixture.componentInstance;
   }
 
+  async function createWithEventSpy(value: unknown): Promise<jasmine.Spy> {
+    let eventSpy: jasmine.Spy | null = null;
+    await createWith(value, () => {
+      eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    });
+    if (eventSpy === null) {
+      throw new Error('Logger event spy was not initialized');
+    }
+    return eventSpy;
+  }
+
+  function installAnimationFrameQueue(): FrameRequestCallback[] {
+    const callbacks: FrameRequestCallback[] = [];
+    spyOn(window, 'requestAnimationFrame').and.callFake(
+      (callback: FrameRequestCallback): number => {
+        callbacks.push(callback);
+        return callbacks.length;
+      }
+    );
+    return callbacks;
+  }
+
+  function runNextAnimationFrame(callbacks: FrameRequestCallback[]): void {
+    const callback = callbacks.shift();
+    if (!callback) {
+      throw new Error('Expected a queued requestAnimationFrame callback');
+    }
+    callback(0);
+  }
+
+  function runQueuedAnimationFrames(callbacks: FrameRequestCallback[]): void {
+    let runCount = 0;
+    while (callbacks.length > 0) {
+      if (runCount > 20) {
+        throw new Error('Too many queued requestAnimationFrame callbacks');
+      }
+      runNextAnimationFrame(callbacks);
+      runCount += 1;
+    }
+  }
+
   beforeEach(() => {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TREE_SEARCH_STORAGE_KEY);
+    __resetColdFlagsForTesting();
   });
 
   afterEach(() => {
@@ -161,6 +209,140 @@ describe('JsonTreeComponent', () => {
       expect(arr.children).toEqual([]);
       expect(obj.type).toBe('object');
       expect(obj.children).toEqual([]);
+    });
+  });
+
+  describe('tree build slow telemetry', () => {
+    it('does not emit tree.build.slow below the threshold', async () => {
+      spyOn(window, 'requestAnimationFrame').and.returnValue(0);
+      spyOn(performance, 'now').and.returnValues(0, 99, 0, 0, 0);
+      const eventSpy = await createWithEventSpy({ a: 1 });
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.build.slow'))
+        .toBeFalse();
+    });
+
+    it('emits tree.build.slow above the threshold', async () => {
+      spyOn(window, 'requestAnimationFrame').and.returnValue(0);
+      spyOn(performance, 'now').and.returnValues(0, 101, 0, 0, 0);
+      const eventSpy = await createWithEventSpy({ a: 1 });
+      expect(eventSpy).toHaveBeenCalledWith(
+        'tree.build.slow',
+        { cold: true, nodeCountBucket: bucketCount(2) },
+        { timeMs: 101, nodeCount: 2 }
+      );
+    });
+
+    it('does not emit tree.build.slow at exactly 100 ms', async () => {
+      spyOn(window, 'requestAnimationFrame').and.returnValue(0);
+      spyOn(performance, 'now').and.returnValues(0, 100, 0, 0, 0);
+      const eventSpy = await createWithEventSpy({ a: 1 });
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.build.slow'))
+        .toBeFalse();
+    });
+
+    it('marks only the first tree.build.slow emission as cold', async () => {
+      spyOn(window, 'requestAnimationFrame').and.returnValue(0);
+      spyOn(performance, 'now').and.returnValues(
+        0, 101, 0, 0, 0,
+        200, 350, 0
+      );
+      const eventSpy = await createWithEventSpy({ a: 1 });
+      fixture.componentRef.setInput('value', { b: 2 });
+      fixture.detectChanges();
+      const buildCalls = eventSpy.calls
+        .allArgs()
+        .filter((args) => args[0] === 'tree.build.slow');
+      expect(buildCalls).toEqual([
+        [
+          'tree.build.slow',
+          { cold: true, nodeCountBucket: bucketCount(2) },
+          { timeMs: 101, nodeCount: 2 }
+        ],
+        [
+          'tree.build.slow',
+          { cold: false, nodeCountBucket: bucketCount(2) },
+          { timeMs: 150, nodeCount: 2 }
+        ]
+      ]);
+    });
+
+    it('reports the node count from the build traversal', async () => {
+      spyOn(window, 'requestAnimationFrame').and.returnValue(0);
+      spyOn(performance, 'now').and.returnValues(0, 101, 0, 0, 0);
+      const eventSpy = await createWithEventSpy({
+        a: { b: 1 },
+        c: [2, 3]
+      });
+      expect(eventSpy).toHaveBeenCalledWith(
+        'tree.build.slow',
+        { cold: true, nodeCountBucket: bucketCount(6) },
+        { timeMs: 101, nodeCount: 6 }
+      );
+    });
+  });
+
+  describe('tree render slow telemetry', () => {
+    it('does not emit tree.render.slow below the threshold', async () => {
+      const callbacks = installAnimationFrameQueue();
+      spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0, 199);
+      const eventSpy = await createWithEventSpy({ a: 1 });
+      runQueuedAnimationFrames(callbacks);
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow'))
+        .toBeFalse();
+    });
+
+    it('emits tree.render.slow above the threshold', async () => {
+      const callbacks = installAnimationFrameQueue();
+      spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 10, 211);
+      const eventSpy = await createWithEventSpy({ a: 1 });
+      runQueuedAnimationFrames(callbacks);
+      expect(eventSpy).toHaveBeenCalledWith(
+        'tree.render.slow',
+        { cold: true, nodeCountBucket: bucketCount(2) },
+        { timeMs: 201, nodeCount: 2 }
+      );
+    });
+
+    it('drops a stale tree.render.slow measurement when value changes again', async () => {
+      const callbacks = installAnimationFrameQueue();
+      spyOn(performance, 'now').and.returnValues(
+        0, 0, 0, 0, 0,
+        0, 0, 1000, 1251
+      );
+      const eventSpy = await createWithEventSpy({ first: 1 });
+      fixture.componentRef.setInput('value', { second: { leaf: 2 } });
+      fixture.detectChanges();
+
+      runQueuedAnimationFrames(callbacks);
+
+      const renderCalls = eventSpy.calls
+        .allArgs()
+        .filter((args) => args[0] === 'tree.render.slow');
+      expect(renderCalls).toEqual([
+        [
+          'tree.render.slow',
+          { cold: true, nodeCountBucket: bucketCount(3) },
+          { timeMs: 251, nodeCount: 3 }
+        ]
+      ]);
+    });
+
+    it('does not schedule tree.render.slow when value is undefined', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      runQueuedAnimationFrames(callbacks);
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow'))
+        .toBeFalse();
+    });
+
+    it('does not emit tree.render.slow after component destroy', async () => {
+      const callbacks = installAnimationFrameQueue();
+      spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0);
+      const eventSpy = await createWithEventSpy({ a: 1 });
+      fixture.destroy();
+      runQueuedAnimationFrames(callbacks);
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow'))
+        .toBeFalse();
     });
   });
 
@@ -348,6 +530,148 @@ describe('JsonTreeComponent', () => {
       expect(cmp.treeControl.isExpanded(a)).toBeTrue(); // depth 1
       const b = a.children!.find((c) => c.segment === 'b')!;
       expect(cmp.treeControl.isExpanded(b)).toBeFalse(); // depth 2 should NOT be expanded
+    });
+  });
+
+  describe('tree expand slow telemetry', () => {
+    const expandSample = {
+      a: { b: { c: 1 } },
+      list: [{ x: 1 }, { y: 2 }]
+    };
+
+    type RootNode = ReturnType<JsonTreeComponent['root']>;
+
+    async function createExpandFixture(): Promise<void> {
+      spyOn(window, 'requestAnimationFrame').and.returnValue(0);
+      await createWith(expandSample);
+    }
+
+    function nodeAt(path: string): NonNullable<RootNode> {
+      const root = cmp.root();
+      if (!root) {
+        throw new Error('Expected a tree root');
+      }
+      const stack: Array<NonNullable<RootNode>> = [root];
+      while (stack.length > 0) {
+        const currentNode = stack.pop();
+        if (!currentNode) {
+          continue;
+        }
+        if (currentNode.pathString === path) {
+          return currentNode;
+        }
+        for (const childNode of currentNode.children ?? []) {
+          stack.push(childNode);
+        }
+      }
+      throw new Error(`No node at path ${path}`);
+    }
+
+    function hasExpandSlowEvent(eventSpy: jasmine.Spy): boolean {
+      return eventSpy.calls
+        .allArgs()
+        .some((args) => args[0] === 'tree.expand.slow');
+    }
+
+    it('does not emit for expandAll below the threshold', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 49);
+      cmp.expandAll();
+      expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
+    });
+
+    it('emits for expandAll above the threshold and toggles cold', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
+      cmp.expandAll();
+      cmp.expandAll();
+      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow'))
+        .toEqual([
+          ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 6 }],
+          ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 6 }]
+        ]);
+    });
+
+    it('does not emit for expandToLevel below the threshold', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 49);
+      cmp.expandToLevel(2);
+      expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
+    });
+
+    it('emits for expandToLevel above the threshold and toggles cold', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
+      cmp.expandToLevel(2);
+      cmp.expandToLevel(2);
+      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow'))
+        .toEqual([
+          ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 6 }],
+          ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 6 }]
+        ]);
+    });
+
+    it('does not emit for expandAllFromHere below the threshold', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 49);
+      cmp.expandAllFromHere(nodeAt('$.a'));
+      expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
+    });
+
+    it('emits for expandAllFromHere above the threshold and toggles cold', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
+      const startNode = nodeAt('$.a');
+      cmp.expandAllFromHere(startNode);
+      cmp.expandAllFromHere(startNode);
+      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow'))
+        .toEqual([
+          ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 1, nodeCount: 2 }],
+          ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 1, nodeCount: 2 }]
+        ]);
+    });
+
+    it('does not emit for expandToDepthFromHere below the threshold', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 49);
+      cmp.expandToDepthFromHere(nodeAt('$.a'), 2);
+      expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
+    });
+
+    it('emits for expandToDepthFromHere above the threshold and toggles cold', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
+      const startNode = nodeAt('$.a');
+      cmp.expandToDepthFromHere(startNode, 2);
+      cmp.expandToDepthFromHere(startNode, 2);
+      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow'))
+        .toEqual([
+          ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 2 }],
+          ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 2 }]
+        ]);
+    });
+
+    it('does not emit for the initial expandToLevel even when it is slow', async () => {
+      spyOn(window, 'requestAnimationFrame').and.returnValue(0);
+      spyOn(performance, 'now').and.returnValues(0, 0, 0, 100, 0);
+      const eventSpy = await createWithEventSpy(expandSample);
+      expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
+    });
+
+    it('does not emit at exactly 50 ms', async () => {
+      await createExpandFixture();
+      const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+      spyOn(performance, 'now').and.returnValues(0, 50);
+      cmp.expandAll();
+      expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
     });
   });
 
