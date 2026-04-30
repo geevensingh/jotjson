@@ -1,4 +1,5 @@
 import type { InvocationContext } from '@azure/functions';
+import type { TelemetryClient } from 'applicationinsights';
 import {
   badRequest,
   forbidden,
@@ -6,6 +7,10 @@ import {
   notFound,
   unauthorized
 } from './http';
+import {
+  __resetTelemetryInitForTesting,
+  __setTelemetryClientForTesting
+} from './telemetry';
 
 describe('shared/http response helpers', () => {
   it('unauthorized returns status 401 with the provided message', () => {
@@ -26,10 +31,51 @@ describe('shared/http response helpers', () => {
     expect(result.jsonBody).toEqual({ error: 'Blob not found' });
   });
 
-  it('forbidden returns status 403 with the provided message', () => {
-    const result = forbidden('You do not own this blob');
-    expect(result.status).toBe(403);
-    expect(result.jsonBody).toEqual({ error: 'You do not own this blob' });
+  describe('forbidden', () => {
+    let mockTrackEvent: jest.Mock;
+
+    beforeEach(() => {
+      __resetTelemetryInitForTesting();
+      mockTrackEvent = jest.fn();
+      __setTelemetryClientForTesting({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+    });
+
+    afterEach(() => {
+      __resetTelemetryInitForTesting();
+      __setTelemetryClientForTesting(null);
+    });
+
+    it('returns status 403 with the provided message', () => {
+      const result = forbidden('You do not own this blob', 'blob');
+      expect(result.status).toBe(403);
+      expect(result.jsonBody).toEqual({ error: 'You do not own this blob' });
+    });
+
+    it('emits access.forbidden with resource=blob and authMode=required', () => {
+      forbidden('You do not own this blob', 'blob');
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+      expect(mockTrackEvent).toHaveBeenCalledWith({
+        name: 'access.forbidden',
+        properties: { resource: 'blob', authMode: 'required' },
+        measurements: undefined
+      });
+    });
+
+    it('emits access.forbidden with resource=ruleSet and authMode=required', () => {
+      forbidden('You do not own this rule set', 'ruleSet');
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+      expect(mockTrackEvent).toHaveBeenCalledWith({
+        name: 'access.forbidden',
+        properties: { resource: 'ruleSet', authMode: 'required' },
+        measurements: undefined
+      });
+    });
+
+    it('emits exactly once per call (no double-emit)', () => {
+      forbidden('first', 'blob');
+      forbidden('second', 'ruleSet');
+      expect(mockTrackEvent).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('internalError', () => {

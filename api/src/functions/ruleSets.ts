@@ -184,7 +184,7 @@ export async function getRuleSet(
     const found = await findRuleSetById(id);
     if (!found) return notFound('Rule set not found');
     if (found.userId !== principal.id) {
-      return forbidden('You do not own this rule set');
+      return forbidden('You do not own this rule set', 'ruleSet');
     }
     return withEtag(200, found);
   } catch (error) {
@@ -230,7 +230,7 @@ export async function putRuleSet(
     const found = await findRuleSetById(id);
     if (!found) return notFound('Rule set not found');
     if (found.userId !== principal.id) {
-      return forbidden('You do not own this rule set');
+      return forbidden('You do not own this rule set', 'ruleSet');
     }
     if (found.version !== expectedVersion) {
       return preconditionFailed(
@@ -274,7 +274,7 @@ export async function deleteRuleSet(
       const cross = await findRuleSetById(id);
       if (!cross) return notFound('Rule set not found');
       if (cross.userId !== principal.id) {
-        return forbidden('You do not own this rule set');
+        return forbidden('You do not own this rule set', 'ruleSet');
       }
       found = cross;
     }

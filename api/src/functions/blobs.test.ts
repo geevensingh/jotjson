@@ -59,6 +59,17 @@ import {
 import { recordEntry as recordEntryMock, getRecentViewAt as getRecentViewAtMock } from '../shared/history';
 import { readUser as readUserMock } from '../shared/users';
 import { deleteBlob, getBlob, listBlobs, postBlob, putBlob } from './blobs';
+import type { TelemetryClient } from 'applicationinsights';
+import {
+  __resetTelemetryInitForTesting,
+  __setTelemetryClientForTesting as __setTelemetryClientForTestingT
+} from '../shared/telemetry';
+
+// Silence the warn-once that shared/http.ts forbidden() would otherwise
+// trigger via trackEvent when the connection string env var is missing.
+// Specs that need to assert on emit install a real mock client in their
+// own beforeEach.
+__setTelemetryClientForTestingT(null);
 
 const requireAuth = requireAuthMock as unknown as jest.Mock;
 const tryAuth = tryAuthMock as unknown as jest.Mock;
@@ -597,6 +608,46 @@ describe('history recording hooks (v1: viewed only)', () => {
       recordEntry.mockRejectedValueOnce(new Error('cosmos hiccup'));
       const res = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
       expect(res.status).toBe(200);
+    });
+  });
+});
+
+describe('access.forbidden telemetry emission from blob handlers', () => {
+  let mockTrackEvent: jest.Mock;
+
+  beforeEach(() => {
+    __resetTelemetryInitForTesting();
+    mockTrackEvent = jest.fn();
+    __setTelemetryClientForTestingT({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+  });
+
+  afterEach(() => {
+    __resetTelemetryInitForTesting();
+    __setTelemetryClientForTestingT(null);
+  });
+
+  it('putBlob emits resource=blob when the caller does not own the blob', async () => {
+    findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
+    const res = await putBlob(
+      makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
+      ctx
+    );
+    expect(res.status).toBe(403);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'access.forbidden',
+      properties: { resource: 'blob', authMode: 'required' },
+      measurements: undefined
+    });
+  });
+
+  it('deleteBlob emits resource=blob when the caller does not own the blob', async () => {
+    findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
+    const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
+    expect(res.status).toBe(403);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'access.forbidden',
+      properties: { resource: 'blob', authMode: 'required' },
+      measurements: undefined
     });
   });
 });

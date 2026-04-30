@@ -272,7 +272,7 @@ export async function deleteBlob(
       return badRequest('DELETE requires the blob UUID id, not the slug');
     }
     if (existing.ownerId !== principal.id) {
-      return forbidden('You do not own this blob');
+      return forbidden('You do not own this blob', 'blob');
     }
 
     const deleted = await deleteBlobById(existing.id, existing.ownerId);
@@ -318,7 +318,7 @@ export async function putBlob(
       return badRequest('PUT requires the blob UUID id, not the slug');
     }
     if (existing.ownerId !== principal.id) {
-      return forbidden('You do not own this blob');
+      return forbidden('You do not own this blob', 'blob');
     }
 
     const saved = await updateBlob(existing, {

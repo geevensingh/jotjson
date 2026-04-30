@@ -12,6 +12,14 @@ import type {
   HttpResponseInit,
   InvocationContext
 } from '@azure/functions';
+import { trackEvent } from './telemetry';
+
+/**
+ * Closed enum of resources that can return 403 due to ownership mismatch.
+ * Extending this requires updating the `forbidden()` callers and the
+ * access.forbidden customDimensions schema documented in docs/telemetry.md.
+ */
+export type ForbiddenResource = 'blob' | 'ruleSet';
 
 /** 401 Unauthorized. */
 export function unauthorized(message: string): HttpResponseInit {
@@ -28,8 +36,18 @@ export function notFound(message: string): HttpResponseInit {
   return { status: 404, jsonBody: { error: message } };
 }
 
-/** 403 Forbidden. */
-export function forbidden(message: string): HttpResponseInit {
+/**
+ * 403 Forbidden. Emits a single access.forbidden customEvent with
+ * `{ resource, authMode: 'required' }` so authorization rejections are
+ * queryable in App Insights. authMode is hardcoded 'required' because
+ * every current caller invokes forbidden() AFTER requireAuth has
+ * resolved, never from an optional-auth path.
+ */
+export function forbidden(
+  message: string,
+  resource: ForbiddenResource
+): HttpResponseInit {
+  trackEvent('access.forbidden', { resource, authMode: 'required' });
   return { status: 403, jsonBody: { error: message } };
 }
 

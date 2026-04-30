@@ -88,6 +88,17 @@ import {
   postRuleSet,
   putRuleSet
 } from './ruleSets';
+import type { TelemetryClient } from 'applicationinsights';
+import {
+  __resetTelemetryInitForTesting,
+  __setTelemetryClientForTesting as __setTelemetryClientForTestingT
+} from '../shared/telemetry';
+
+// Silence the warn-once that shared/http.ts forbidden() would otherwise
+// trigger via trackEvent when the connection string env var is missing.
+// Specs that need to assert on emit install a real mock client in their
+// own beforeEach.
+__setTelemetryClientForTestingT(null);
 
 const requireAuth = requireAuthMock as unknown as jest.Mock;
 const createRuleSet = createRuleSetMock as unknown as jest.Mock;
@@ -538,5 +549,43 @@ describe('POST /api/rule-set-presets/:id/clone', () => {
       ctx
     );
     expect(res.status).toBe(500);
+  });
+});
+
+describe('access.forbidden telemetry emission from rule-set handlers', () => {
+  let mockTrackEvent: jest.Mock;
+
+  beforeEach(() => {
+    __resetTelemetryInitForTesting();
+    mockTrackEvent = jest.fn();
+    __setTelemetryClientForTestingT({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+  });
+
+  afterEach(() => {
+    __resetTelemetryInitForTesting();
+    __setTelemetryClientForTestingT(null);
+  });
+
+  it('getRuleSet emits resource=ruleSet when the caller does not own the rule set', async () => {
+    findRuleSetById.mockResolvedValueOnce({ ...sampleSet, userId: 'someone-else' });
+    const res = await getRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
+    expect(res.status).toBe(403);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'access.forbidden',
+      properties: { resource: 'ruleSet', authMode: 'required' },
+      measurements: undefined
+    });
+  });
+
+  it('deleteRuleSet emits resource=ruleSet when the caller does not own the rule set', async () => {
+    readRuleSet.mockResolvedValueOnce(null);
+    findRuleSetById.mockResolvedValueOnce({ ...sampleSet, userId: 'someone-else' });
+    const res = await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
+    expect(res.status).toBe(403);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'access.forbidden',
+      properties: { resource: 'ruleSet', authMode: 'required' },
+      measurements: undefined
+    });
   });
 });
