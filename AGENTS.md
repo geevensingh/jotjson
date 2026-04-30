@@ -422,6 +422,21 @@ Before finishing a task:
   unambiguous commands and do **not** trigger this bypass. If a
   command's scope, blast radius, or side effects are unclear, fall
   back to the normal plan-and-approve flow.
+- **Bug reports and feature ideas are plan-triggers, not
+  execute-triggers.** A user message that describes a problem ("X is
+  broken", "the spacing is off", "I noticed Y", "this seems wrong",
+  "this looks weird") or proposes an idea ("we should add X", "could
+  we have Y do Z", "what if we...") is a request to investigate and
+  propose a plan -- it is **not** authorization to edit, test, or
+  commit. The execute step requires an unambiguous command verb
+  directed at you in the same or a later turn ("fix it", "go",
+  "implement that", "commit it", "ship it", "execute"). When in
+  doubt, the default is plan-and-ask. The narrow direct-command
+  carve-out above applies only to bounded imperative requests
+  ("revert abc123", "run the tests", "delete file X"); a bug report
+  does not qualify even when the user's intent to eventually fix it
+  is obvious. The user reporting a problem is delegating diagnosis
+  and planning to you, not authorization.
 - **Rubber-duck every plan before presenting it.** Once you have a
   candidate plan, run it through a rubber-duck / critic sub-agent
   for an independent critique (correctness, missed edge cases,
