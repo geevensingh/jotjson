@@ -86,9 +86,9 @@ interface CacheEnvelope {
  * the cache here, because a user with two tabs could legitimately PUT the
  * second tab's version against the first tab's body.
  *
- * Default rule-set selection lives in `UserPreferences.defaultRuleSetIds`
+ * Active rule-set selection lives in `UserPreferences.activeRuleSetIds`
  * and is mutated through `PreferencesService.update`. We expose
- * `defaultRuleSetIds` and `defaultRuleSets` as computed signals so consumers
+ * `activeRuleSetIds` and `activeRuleSets` as computed signals so consumers
  * never need to combine prefs and the cache themselves.
  *
  * ## Offline pattern (M6g-4)
@@ -187,27 +187,27 @@ export class RuleSetsService {
   readonly events$ = new Subject<RuleSetSyncEvent>();
 
   /**
-   * IDs the user has selected as defaults. Mirrors
-   * `UserPreferences.defaultRuleSetIds` so any preference change (including
+   * IDs the user has selected as active. Mirrors
+   * `UserPreferences.activeRuleSetIds` so any preference change (including
    * server hydration) is observed automatically.
    */
-  readonly defaultRuleSetIds = computed(() => this.preferences.prefs().defaultRuleSetIds);
+  readonly activeRuleSetIds = computed(() => this.preferences.prefs().activeRuleSetIds);
 
   /**
-   * Default rule sets resolved against the cache, in the order the user
+   * Active rule sets resolved against the cache, in the order the user
    * configured them. IDs that no longer resolve (e.g. another tab deleted
    * the set) are silently dropped, matching the model contract on
-   * `UserPreferences.defaultRuleSetIds`.
+   * `UserPreferences.activeRuleSetIds`.
    *
    * Returns an empty array when the cache has not yet loaded - the engine
    * is a no-op in that state, which is safer than rendering stale styling.
    */
-  readonly defaultRuleSets = computed<FormattingRuleSet[]>(() => {
+  readonly activeRuleSets = computed<FormattingRuleSet[]>(() => {
     const all = this.ruleSets();
     if (!all) return [];
     const byId = new Map(all.map((set) => [set.id, set]));
     const out: FormattingRuleSet[] = [];
-    for (const id of this.defaultRuleSetIds()) {
+    for (const id of this.activeRuleSetIds()) {
       const set = byId.get(id);
       if (set) out.push(set);
     }
@@ -295,10 +295,10 @@ export class RuleSetsService {
       }
     });
 
-    // M6g-1: emit `ruleSets.applied` whenever the active default-rule-set
+    // M6g-1: emit `ruleSets.applied` whenever the active rule-set
     // selection changes. Because every mutator funnels through
-    // `preferences.update({ defaultRuleSetIds })` (setDefaults,
-    // toggleDefault, the delete() pruning path, and the
+    // `preferences.update({ activeRuleSetIds })` (setActives,
+    // toggleActive, the delete() pruning path, and the
     // PreferencesService server-hydration path), a single effect on the
     // computed signal captures user toggles AND server-driven hydration
     // uniformly without double-counting. We skip the synchronous initial
@@ -308,7 +308,7 @@ export class RuleSetsService {
     // list, or a user toggle - is the first emit.
     let appliedFirstRun = true;
     effect(() => {
-      const ids = this.defaultRuleSetIds();
+      const ids = this.activeRuleSetIds();
       if (appliedFirstRun) {
         appliedFirstRun = false;
         return;
@@ -397,7 +397,7 @@ export class RuleSetsService {
     return this.http.delete<void>(`${this.base}/${encodeURIComponent(id)}`).pipe(
       tap(() => {
         this.applyServerDelete(id);
-        this.pruneDefaults(id);
+        this.pruneActives(id);
         this.logger.info('ruleSets.deleted');
       }),
       catchError((err: HttpErrorResponse) => {
@@ -434,18 +434,17 @@ export class RuleSetsService {
   }
 
   /**
-   * Mutate `UserPreferences.defaultRuleSetIds`. Callers pass the full ID
+   * Mutate `UserPreferences.activeRuleSetIds`. Callers pass the full ID
    * list; we filter out any IDs not present in the cache so the persisted
    * value does not accumulate dangling references after deletes from
    * other tabs. We DO NOT enforce ordering - the engine consumes them in
    * caller-supplied (== createdAt) order, but the toolbar may reorder
    * for display.
    */
-  setDefaults(ids: readonly string[]): void {
+  setActives(ids: readonly string[]): void {
     const cache = this.ruleSets();
     const known = cache ? new Set(cache.map((s) => s.id)) : null;
     const filtered = known ? ids.filter((id) => known.has(id)) : Array.from(ids);
-    // De-duplicate while preserving first-seen order.
     const seen = new Set<string>();
     const deduped: string[] = [];
     for (const id of filtered) {
@@ -454,18 +453,18 @@ export class RuleSetsService {
         deduped.push(id);
       }
     }
-    this.preferences.update({ defaultRuleSetIds: deduped });
+    this.preferences.update({ activeRuleSetIds: deduped });
   }
 
-  /** Toggle a single rule set's default state. No-op if the ID is unknown. */
-  toggleDefault(id: string): void {
+  /** Toggle a single rule set's active state. No-op if the ID is unknown. */
+  toggleActive(id: string): void {
     const cache = this.ruleSets();
     if (cache && !cache.some((s) => s.id === id)) return;
-    const current = this.preferences.prefs().defaultRuleSetIds;
+    const current = this.preferences.prefs().activeRuleSetIds;
     if (current.includes(id)) {
-      this.setDefaults(current.filter((x) => x !== id));
+      this.setActives(current.filter((x) => x !== id));
     } else {
-      this.setDefaults([...current, id]);
+      this.setActives([...current, id]);
     }
   }
 
@@ -531,11 +530,11 @@ export class RuleSetsService {
   }
 
   private enqueueDelete(userId: string, id: string): Observable<void> {
-    // Optimistically prune defaultRuleSetIds so the toolbar / profile
+    // Optimistically prune activeRuleSetIds so the toolbar / profile
     // reflect the user's intent immediately. If the eventual drain
     // fails permanently (4xx), the post-error refresh() restores the
     // canonical state.
-    this.pruneDefaults(id);
+    this.pruneActives(id);
     const item: QueuedWrite = { kind: 'delete', userId, id };
     this._queue.update((q) => coalesce(q, item, this._inFlight() !== null));
     this.tryDrain();
@@ -650,11 +649,11 @@ export class RuleSetsService {
     this._serverSnapshot.set(current.filter((s) => s.id !== id));
   }
 
-  private pruneDefaults(id: string): void {
-    const currentDefaults = this.preferences.prefs().defaultRuleSetIds;
-    if (currentDefaults.includes(id)) {
+  private pruneActives(id: string): void {
+    const currentActives = this.preferences.prefs().activeRuleSetIds;
+    if (currentActives.includes(id)) {
       this.preferences.update({
-        defaultRuleSetIds: currentDefaults.filter((x) => x !== id)
+        activeRuleSetIds: currentActives.filter((x) => x !== id)
       });
     }
   }

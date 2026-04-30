@@ -41,7 +41,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeShowDateAnnotations: true,
   treeAssumeUtcForIsoDateTime: true,
   treeAssumeUtcForIsoDateOnly: true,
-  defaultRuleSetIds: [],
+  activeRuleSetIds: [],
   recentlyViewedEnabled: true,
   treeEditorSelectionSync: true,
   searchCaseSensitive: false,
@@ -82,13 +82,25 @@ function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light'
  *    PUT would otherwise fail server validation because
  *    normalizePreferences requires all keys), and
  *  - legacy or stale keys (e.g., `historyTrackingMode`,
- *    `activeRuleSetIds`, `defaultRuleSetId`) that would otherwise leak
+ *    `defaultRuleSetIds`, `defaultRuleSetId`) that would otherwise leak
  *    back to the API on the next PUT and get rejected as unknown.
+ *
+ * Migrates the legacy `defaultRuleSetIds` (array) and ancient
+ * `defaultRuleSetId` (single string) into the canonical
+ * `activeRuleSetIds`. Canonical wins if both are present, so users who
+ * already have the new shape in localStorage are not clobbered.
  */
 function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   const remoteColors: PartialTreeHighlightColors = remote.treeHighlightColors ?? {};
   const allowed = Object.keys(DEFAULT_PREFERENCES) as (keyof UserPreferences)[];
-  const remoteRecord = remote as Record<string, unknown>;
+  const remoteRecord = { ...(remote as Record<string, unknown>) };
+  if (!Array.isArray(remoteRecord['activeRuleSetIds'])) {
+    if (Array.isArray(remoteRecord['defaultRuleSetIds'])) {
+      remoteRecord['activeRuleSetIds'] = remoteRecord['defaultRuleSetIds'];
+    } else if (typeof remoteRecord['defaultRuleSetId'] === 'string') {
+      remoteRecord['activeRuleSetIds'] = [remoteRecord['defaultRuleSetId']];
+    }
+  }
   const filtered: Partial<UserPreferences> = {};
   for (const key of allowed) {
     if (key === 'treeHighlightColors') continue;
@@ -137,7 +149,7 @@ const PREFERENCE_KEYS = [
   'treeShowDateAnnotations',
   'treeAssumeUtcForIsoDateTime',
   'treeAssumeUtcForIsoDateOnly',
-  'defaultRuleSetIds',
+  'activeRuleSetIds',
   'recentlyViewedEnabled',
   'treeEditorSelectionSync',
   'searchCaseSensitive',
@@ -390,8 +402,8 @@ export class PreferencesService {
           source
         );
         return;
-      case 'defaultRuleSetIds':
-        this.emitCountPreferenceChange(key, preferences.defaultRuleSetIds.length, source);
+      case 'activeRuleSetIds':
+        this.emitCountPreferenceChange(key, preferences.activeRuleSetIds.length, source);
         return;
       case 'editorWordWrap':
         this.emitBooleanPreferenceChange(key, preferences.editorWordWrap, source);

@@ -58,16 +58,16 @@
           <button
             mat-icon-button
             type="button"
-            class="default-star"
-            [attr.aria-pressed]="isDefault(set.id)"
+            class="apply-toggle"
+            [attr.aria-pressed]="isActive(set.id)"
             [attr.aria-label]="
-              isDefault(set.id) ? removeDefaultLabel : setDefaultLabel
+              isActive(set.id) ? removeActiveLabel : setActiveLabel
             "
             [disabled]="isBusy(set.id)"
-            data-testid="default-star"
-            (click)="toggleDefault(set)"
+            data-testid="apply-toggle"
+            (click)="toggleActive(set)"
           >
-            <jj-icon [name]="isDefault(set.id) ? 'eye' : 'eye-off'" />
+            <jj-icon [name]="isActive(set.id) ? 'eye' : 'eye-off'" />
           </button>
 
           <div class="rule-set-info">

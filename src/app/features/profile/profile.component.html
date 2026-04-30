@@ -311,9 +311,9 @@
           <div class="pref-checkbox-list">
             @for (set of ruleSetOptions(); track set.id) {
               <mat-checkbox
-                [checked]="isDefaultRuleSet(set.id)"
+                [checked]="isActiveRuleSet(set.id)"
                 [attr.data-set-id]="set.id"
-                (change)="onDefaultRuleSetToggle(set.id, $event.checked)"
+                (change)="onActiveRuleSetToggle(set.id, $event.checked)"
               >
                 {{ set.name }}
               </mat-checkbox>

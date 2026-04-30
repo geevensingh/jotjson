@@ -153,12 +153,12 @@ export class JsonTreeComponent {
 
   /**
    * M6d-3 preview hook. When non-null, this list of rule sets replaces
-   * `ruleSets.defaultRuleSets()` for THIS component instance only - no
+   * `ruleSets.activeRuleSets()` for THIS component instance only - no
    * shared service state is mutated. Used by the rule editor's live
    * preview to render the in-progress draft without saving.
    *
    * Semantics:
-   *  - `null` / unset (default): fall back to `defaultRuleSets()`
+   *  - `null` / unset (default): fall back to `activeRuleSets()`
    *    (existing behavior, preserved).
    *  - `[]`: no rule sets active. Tree renders plain (no highlighting).
    *  - `[set, ...]`: those exact rule sets are evaluated, in order.
@@ -1687,9 +1687,9 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Memoized rule-engine evaluator for the current set of default rule
+   * Memoized rule-engine evaluator for the current set of active rule
    * sets. Recomputes (and resets the cache) only when
-   * `ruleSets.defaultRuleSets()` changes - i.e. when the user toggles a
+   * `ruleSets.activeRuleSets()` changes - i.e. when the user toggles a
    * set on/off OR when one of those sets' `version` changes after a
    * save elsewhere. Unrelated tree updates (selection, search, expand)
    * do NOT invalidate the cache.
@@ -1701,12 +1701,12 @@ export class JsonTreeComponent {
    * collisions are correctness-preserving.
    *
    * Returns `EMPTY_RULE_RESULT` (frozen sentinel) by identity when no
-   * default sets are configured, which lets callers short-circuit
+   * active sets are configured, which lets callers short-circuit
    * cheaply on the no-formatting path.
    */
   private readonly evaluateNode = computed<(node: TreeNode) => RuleEngineResult>(() => {
     const override = this.overrideRuleSets();
-    const sets = override ?? this.ruleSets.defaultRuleSets();
+    const sets = override ?? this.ruleSets.activeRuleSets();
     if (sets.length === 0) {
       return () => EMPTY_RULE_RESULT;
     }

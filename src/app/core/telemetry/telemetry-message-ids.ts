@@ -635,7 +635,7 @@ export const TELEMETRY_MESSAGE_IDS = [
    *                      measurement { value: number }.
    *   kind = 'count'   : { countBucket: CountBucket };
    *                      measurement { count: number }. Used for
-   *                      `defaultRuleSetIds`.
+   *                      `activeRuleSetIds`.
    *   kind = 'color'   : { isDefault: 'true' | 'false';
    *                        bucket: ColorBucket }.
    *                      ColorBucket = 'red' | 'orange' | 'yellow'
@@ -681,7 +681,7 @@ export const TELEMETRY_MESSAGE_IDS = [
   /**
    * Severity: info
    * Fired by: `RuleSetsService` constructor effect on
-   *           `defaultRuleSetIds` (`core/api/rule-sets.service.ts`).
+   *           `activeRuleSetIds` (`core/api/rule-sets.service.ts`).
    *           Skips the first run after hydration so steady-state
    *           startup doesn't emit a spurious event.
    * Props: { activeCount: number }. Cardinality of active rule sets

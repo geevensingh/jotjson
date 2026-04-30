@@ -80,8 +80,8 @@ export class FormattingRulesComponent implements OnInit {
 
   readonly NAME_MAX_FIELD = NAME_MAX;
 
-  readonly setDefaultLabel = $localize`:@@formattingRules.default.aria.set:Apply rule set`;
-  readonly removeDefaultLabel = $localize`:@@formattingRules.default.aria.unset:Stop applying rule set`;
+  readonly setActiveLabel = $localize`:@@formattingRules.default.aria.set:Apply rule set`;
+  readonly removeActiveLabel = $localize`:@@formattingRules.default.aria.unset:Stop applying rule set`;
 
   readonly ruleSets = computed<readonly FormattingRuleSet[]>(() => {
     const cache = this.service.ruleSets();
@@ -89,7 +89,7 @@ export class FormattingRulesComponent implements OnInit {
     return [...cache].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   });
 
-  readonly defaultRuleSetIds = computed(() => this.service.defaultRuleSetIds());
+  readonly activeRuleSetIds = computed(() => this.service.activeRuleSetIds());
 
   readonly isEmpty = computed(
     () => this.loadState() === 'ready' && this.ruleSets().length === 0
@@ -97,7 +97,7 @@ export class FormattingRulesComponent implements OnInit {
 
   @ViewChild('renameInput') renameInputRef?: ElementRef<HTMLInputElement>;
 
-  // Suppress the default-toggle error snack while we are renaming or
+  // Suppress the apply-toggle error snack while we are renaming or
   // duplicating: those flows snack their own messages, and the prefs
   // service might transition to error for an unrelated background reason.
   // We only fire on a transition INTO 'error' from a non-error state.
@@ -133,8 +133,8 @@ export class FormattingRulesComponent implements OnInit {
     }
   }
 
-  isDefault(id: string): boolean {
-    return this.defaultRuleSetIds().includes(id);
+  isActive(id: string): boolean {
+    return this.activeRuleSetIds().includes(id);
   }
 
   isBusy(id: string): boolean {
@@ -322,12 +322,12 @@ export class FormattingRulesComponent implements OnInit {
       error: (err: unknown) => {
         const status = err instanceof HttpErrorResponse ? err.status : 0;
         if (status === 404) {
-          // Service skips cache + defaultRuleSetIds cleanup on 404; mirror
+          // Service skips cache + activeRuleSetIds cleanup on 404; mirror
           // it manually so the toolbar and profile reconcile.
-          const currentDefaults = this.preferences.prefs().defaultRuleSetIds;
-          if (currentDefaults.includes(set.id)) {
+          const currentActives = this.preferences.prefs().activeRuleSetIds;
+          if (currentActives.includes(set.id)) {
             this.preferences.update({
-              defaultRuleSetIds: currentDefaults.filter((x) => x !== set.id)
+              activeRuleSetIds: currentActives.filter((x) => x !== set.id)
             });
           }
           this.service.refresh();
@@ -348,9 +348,9 @@ export class FormattingRulesComponent implements OnInit {
     });
   }
 
-  toggleDefault(set: FormattingRuleSet): void {
+  toggleActive(set: FormattingRuleSet): void {
     if (this.pendingActionId() === set.id) return;
-    this.service.toggleDefault(set.id);
+    this.service.toggleActive(set.id);
   }
 
   async openClonePresetDialog(): Promise<void> {

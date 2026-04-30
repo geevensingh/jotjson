@@ -190,26 +190,26 @@ describe('RuleSetsService', () => {
       expect(service.ruleSets()?.map((s) => s.id)).toEqual(['b']);
     });
 
-    it('strips the deleted ID from defaultRuleSetIds when present', () => {
+    it('strips the deleted ID from activeRuleSetIds when present', () => {
       service.list().subscribe();
       httpMock.expectOne(BASE).flush([makeSet({ id: 'a' }), makeSet({ id: 'b' })]);
-      preferences.update({ defaultRuleSetIds: ['a', 'b'] });
+      preferences.update({ activeRuleSetIds: ['a', 'b'] });
 
       service.delete('a').subscribe();
       httpMock.expectOne(`${BASE}/a`).flush(null, { status: 204, statusText: 'No Content' });
 
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['b']);
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['b']);
     });
 
-    it('does not touch defaultRuleSetIds when the deleted ID was not active', () => {
+    it('does not touch activeRuleSetIds when the deleted ID was not active', () => {
       service.list().subscribe();
       httpMock.expectOne(BASE).flush([makeSet({ id: 'a' }), makeSet({ id: 'b' })]);
-      preferences.update({ defaultRuleSetIds: ['b'] });
+      preferences.update({ activeRuleSetIds: ['b'] });
 
       service.delete('a').subscribe();
       httpMock.expectOne(`${BASE}/a`).flush(null, { status: 204, statusText: 'No Content' });
 
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['b']);
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['b']);
     });
 
     it('does not modify the cache when the request fails', () => {
@@ -269,10 +269,10 @@ describe('RuleSetsService', () => {
     });
   });
 
-  describe('defaultRuleSetIds / activeRuleSets', () => {
-    it('mirrors PreferencesService.prefs().defaultRuleSetIds', () => {
-      preferences.update({ defaultRuleSetIds: ['a', 'b'] });
-      expect(service.defaultRuleSetIds()).toEqual(['a', 'b']);
+  describe('activeRuleSetIds / activeRuleSets', () => {
+    it('mirrors PreferencesService.prefs().activeRuleSetIds', () => {
+      preferences.update({ activeRuleSetIds: ['a', 'b'] });
+      expect(service.activeRuleSetIds()).toEqual(['a', 'b']);
     });
 
     it('resolves activeRuleSets in user-configured order, dropping unknown IDs', () => {
@@ -281,18 +281,18 @@ describe('RuleSetsService', () => {
       const c = makeSet({ id: 'c' });
       service.list().subscribe();
       httpMock.expectOne(BASE).flush([a, b, c]);
-      preferences.update({ defaultRuleSetIds: ['c', 'unknown', 'a'] });
-      expect(service.defaultRuleSets().map((s) => s.id)).toEqual(['c', 'a']);
+      preferences.update({ activeRuleSetIds: ['c', 'unknown', 'a'] });
+      expect(service.activeRuleSets().map((s) => s.id)).toEqual(['c', 'a']);
     });
 
     it('returns an empty list when the cache has not loaded', () => {
-      preferences.update({ defaultRuleSetIds: ['a'] });
+      preferences.update({ activeRuleSetIds: ['a'] });
       expect(service.ruleSets()).toBeNull();
-      expect(service.defaultRuleSets()).toEqual([]);
+      expect(service.activeRuleSets()).toEqual([]);
     });
   });
 
-  describe('setDefaults() / toggleDefault()', () => {
+  describe('setActives() / toggleActive()', () => {
     beforeEach(() => {
       service.list().subscribe();
       httpMock.expectOne(BASE).flush([
@@ -302,41 +302,41 @@ describe('RuleSetsService', () => {
       ]);
     });
 
-    it('setDefaults() filters out IDs not present in the cache', () => {
-      service.setDefaults(['a', 'unknown', 'c']);
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['a', 'c']);
+    it('setActives() filters out IDs not present in the cache', () => {
+      service.setActives(['a', 'unknown', 'c']);
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['a', 'c']);
     });
 
-    it('setDefaults() de-duplicates while preserving first-seen order', () => {
-      service.setDefaults(['c', 'a', 'c', 'b', 'a']);
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['c', 'a', 'b']);
+    it('setActives() de-duplicates while preserving first-seen order', () => {
+      service.setActives(['c', 'a', 'c', 'b', 'a']);
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['c', 'a', 'b']);
     });
 
-    it('toggleDefault() adds an unknown-to-prefs ID to the end', () => {
-      preferences.update({ defaultRuleSetIds: ['a'] });
-      service.toggleDefault('b');
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['a', 'b']);
+    it('toggleActive() adds an unknown-to-prefs ID to the end', () => {
+      preferences.update({ activeRuleSetIds: ['a'] });
+      service.toggleActive('b');
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['a', 'b']);
     });
 
-    it('toggleDefault() removes an active ID', () => {
-      preferences.update({ defaultRuleSetIds: ['a', 'b'] });
-      service.toggleDefault('a');
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['b']);
+    it('toggleActive() removes an active ID', () => {
+      preferences.update({ activeRuleSetIds: ['a', 'b'] });
+      service.toggleActive('a');
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['b']);
     });
 
-    it('toggleDefault() is a no-op for IDs not in the cache', () => {
-      preferences.update({ defaultRuleSetIds: ['a'] });
-      service.toggleDefault('does-not-exist');
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['a']);
+    it('toggleActive() is a no-op for IDs not in the cache', () => {
+      preferences.update({ activeRuleSetIds: ['a'] });
+      service.toggleActive('does-not-exist');
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['a']);
     });
   });
 
-  describe('setDefaults() before cache loads', () => {
+  describe('setActives() before cache loads', () => {
     it('accepts ids verbatim when the cache is null (no filter)', () => {
       // Pre-cache callers (e.g. server hydration) must not be silently
       // dropped just because list() has not resolved yet.
-      service.setDefaults(['x', 'y']);
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['x', 'y']);
+      service.setActives(['x', 'y']);
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['x', 'y']);
     });
   });
 
@@ -468,7 +468,7 @@ describe('RuleSetsService', () => {
       });
     });
 
-    it('emits ruleSets.applied with activeCount on every defaultRuleSetIds change', () => {
+    it('emits ruleSets.applied with activeCount on every activeRuleSetIds change', () => {
       service.list().subscribe();
       httpMock.expectOne(BASE).flush([
         makeSet({ id: 'a' }),
@@ -476,17 +476,17 @@ describe('RuleSetsService', () => {
         makeSet({ id: 'c' })
       ]);
 
-      service.setDefaults(['a', 'b']);
+      service.setActives(['a', 'b']);
       TestBed.flushEffects();
       expect(infoSpy).toHaveBeenCalledWith('ruleSets.applied', { activeCount: 2 });
 
       infoSpy.calls.reset();
-      service.toggleDefault('c');
+      service.toggleActive('c');
       TestBed.flushEffects();
       expect(infoSpy).toHaveBeenCalledWith('ruleSets.applied', { activeCount: 3 });
 
       infoSpy.calls.reset();
-      service.toggleDefault('a');
+      service.toggleActive('a');
       TestBed.flushEffects();
       expect(infoSpy).toHaveBeenCalledWith('ruleSets.applied', { activeCount: 2 });
     });
@@ -494,7 +494,7 @@ describe('RuleSetsService', () => {
     it('emits ruleSets.applied when a delete prunes an active id from preferences', () => {
       service.list().subscribe();
       httpMock.expectOne(BASE).flush([makeSet({ id: 'a' }), makeSet({ id: 'b' })]);
-      service.setDefaults(['a', 'b']);
+      service.setActives(['a', 'b']);
       TestBed.flushEffects();
       infoSpy.calls.reset();
 
@@ -503,7 +503,7 @@ describe('RuleSetsService', () => {
       TestBed.flushEffects();
 
       // delete() emits both 'deleted' AND 'applied' (because pruning
-      // changed defaultRuleSetIds from ['a','b'] to ['b']).
+      // changed activeRuleSetIds from ['a','b'] to ['b']).
       expect(infoSpy).toHaveBeenCalledWith('ruleSets.deleted');
       expect(infoSpy).toHaveBeenCalledWith('ruleSets.applied', { activeCount: 1 });
     });
@@ -588,13 +588,13 @@ describe('RuleSetsService', () => {
       const svc = signedInService();
       svc.list().subscribe();
       httpMock.expectOne(BASE).flush([makeSet({ id: 'a' }), makeSet({ id: 'b' })]);
-      preferences.update({ defaultRuleSetIds: ['a', 'b'] });
+      preferences.update({ activeRuleSetIds: ['a', 'b'] });
 
       setOnline(false);
       svc.delete('a').subscribe();
       httpMock.expectNone(`${BASE}/a`);
       expect(svc.ruleSets()?.map((s) => s.id)).toEqual(['b']);
-      expect(preferences.prefs().defaultRuleSetIds).toEqual(['b']);
+      expect(preferences.prefs().activeRuleSetIds).toEqual(['b']);
       expect(svc.pendingWriteIds().has('a')).toBeTrue();
     });
 

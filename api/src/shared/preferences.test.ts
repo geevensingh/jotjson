@@ -176,7 +176,7 @@ describe('normalizePreferences', () => {
     expect(() => normalizePreferences(bad)).toThrow();
   });
 
-  it.each(['historyTrackingMode', 'activeRuleSetIds', 'defaultRuleSetId'])(
+  it.each(['historyTrackingMode', 'defaultRuleSetIds', 'defaultRuleSetId'])(
     'rejects legacy preference key %s',
     (key) => {
       const bad = valid() as Record<string, unknown>;
@@ -187,45 +187,45 @@ describe('normalizePreferences', () => {
     }
   );
 
-  it('defaults defaultRuleSetIds to [] when missing on the wire (stale-client tolerance)', () => {
+  it('defaults activeRuleSetIds to [] when missing on the wire (stale-client tolerance)', () => {
     const input = valid() as Record<string, unknown>;
-    delete input['defaultRuleSetIds'];
-    expect(normalizePreferences(input).defaultRuleSetIds).toEqual([]);
+    delete input['activeRuleSetIds'];
+    expect(normalizePreferences(input).activeRuleSetIds).toEqual([]);
   });
 
-  it('preserves defaultRuleSetIds when set', () => {
+  it('preserves activeRuleSetIds when set', () => {
     const input = valid() as Record<string, unknown>;
-    input['defaultRuleSetIds'] = ['rs-1', 'rs-2'];
-    expect(normalizePreferences(input).defaultRuleSetIds).toEqual(['rs-1', 'rs-2']);
+    input['activeRuleSetIds'] = ['rs-1', 'rs-2'];
+    expect(normalizePreferences(input).activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
   });
 
-  it('deduplicates defaultRuleSetIds while preserving order', () => {
+  it('deduplicates activeRuleSetIds while preserving order', () => {
     const input = valid() as Record<string, unknown>;
-    input['defaultRuleSetIds'] = ['a', 'b', 'a', 'c', 'b'];
-    expect(normalizePreferences(input).defaultRuleSetIds).toEqual(['a', 'b', 'c']);
+    input['activeRuleSetIds'] = ['a', 'b', 'a', 'c', 'b'];
+    expect(normalizePreferences(input).activeRuleSetIds).toEqual(['a', 'b', 'c']);
   });
 
-  it('rejects defaultRuleSetIds that is not an array', () => {
+  it('rejects activeRuleSetIds that is not an array', () => {
     const bad = valid() as Record<string, unknown>;
-    bad['defaultRuleSetIds'] = 'rs-1';
-    expect(() => normalizePreferences(bad)).toThrow(/defaultRuleSetIds must be an array/);
+    bad['activeRuleSetIds'] = 'rs-1';
+    expect(() => normalizePreferences(bad)).toThrow(/activeRuleSetIds must be an array/);
   });
 
-  it('rejects defaultRuleSetIds entries that are not non-empty strings', () => {
+  it('rejects activeRuleSetIds entries that are not non-empty strings', () => {
     const bad = valid() as Record<string, unknown>;
-    bad['defaultRuleSetIds'] = ['ok', ''];
+    bad['activeRuleSetIds'] = ['ok', ''];
     expect(() => normalizePreferences(bad)).toThrow(/non-empty strings/);
   });
 
-  it('rejects defaultRuleSetIds entries longer than 64 chars', () => {
+  it('rejects activeRuleSetIds entries longer than 64 chars', () => {
     const bad = valid() as Record<string, unknown>;
-    bad['defaultRuleSetIds'] = ['x'.repeat(65)];
+    bad['activeRuleSetIds'] = ['x'.repeat(65)];
     expect(() => normalizePreferences(bad)).toThrow(/too long/);
   });
 
-  it('rejects defaultRuleSetIds with more than 32 entries', () => {
+  it('rejects activeRuleSetIds with more than 32 entries', () => {
     const bad = valid() as Record<string, unknown>;
-    bad['defaultRuleSetIds'] = Array.from({ length: 33 }, (_, i) => `rs-${i}`);
+    bad['activeRuleSetIds'] = Array.from({ length: 33 }, (_, i) => `rs-${i}`);
     expect(() => normalizePreferences(bad)).toThrow(/too many entries/);
   });
 
@@ -341,5 +341,81 @@ describe('normalizeStoredPreferences', () => {
     stored.treeEditorSelectionSync = true;
     const result = normalizeStoredPreferences(stored);
     expect(result.treeEditorSelectionSync).toBe(true);
+  });
+
+  it('folds legacy defaultRuleSetIds (array) into activeRuleSetIds', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    delete stored['activeRuleSetIds'];
+    stored['defaultRuleSetIds'] = ['rs-1', 'rs-2'];
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
+    expect((result as { defaultRuleSetIds?: unknown }).defaultRuleSetIds).toBeUndefined();
+  });
+
+  it('folds ancient defaultRuleSetId (singular) into activeRuleSetIds', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    delete stored['activeRuleSetIds'];
+    stored['defaultRuleSetId'] = 'rs-1';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.activeRuleSetIds).toEqual(['rs-1']);
+    expect((result as { defaultRuleSetId?: unknown }).defaultRuleSetId).toBeUndefined();
+  });
+
+  it('canonical activeRuleSetIds wins over legacy defaultRuleSetIds when both are present', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    stored['activeRuleSetIds'] = ['canonical-1'];
+    stored['defaultRuleSetIds'] = ['legacy-1', 'legacy-2'];
+    stored['defaultRuleSetId'] = 'ancient-1';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.activeRuleSetIds).toEqual(['canonical-1']);
+    expect((result as { defaultRuleSetIds?: unknown }).defaultRuleSetIds).toBeUndefined();
+    expect((result as { defaultRuleSetId?: unknown }).defaultRuleSetId).toBeUndefined();
+  });
+
+  it('strips legacy keys even when activeRuleSetIds is canonical', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    stored['activeRuleSetIds'] = ['rs-1'];
+    stored['defaultRuleSetIds'] = ['stale'];
+    stored['defaultRuleSetId'] = 'stale-singular';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.activeRuleSetIds).toEqual(['rs-1']);
+    expect((result as { defaultRuleSetIds?: unknown }).defaultRuleSetIds).toBeUndefined();
+    expect((result as { defaultRuleSetId?: unknown }).defaultRuleSetId).toBeUndefined();
+  });
+
+  it('combines both legacy shapes when canonical is missing (singular leads, then array)', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    delete stored['activeRuleSetIds'];
+    stored['defaultRuleSetIds'] = ['rs-2'];
+    stored['defaultRuleSetId'] = 'rs-1';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
+  });
+
+  it('does not duplicate when singular legacy id already appears in legacy array', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    delete stored['activeRuleSetIds'];
+    stored['defaultRuleSetIds'] = ['rs-1', 'rs-2'];
+    stored['defaultRuleSetId'] = 'rs-1';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
   });
 });

@@ -759,7 +759,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
 
     it('null override falls back to service rule sets (regression)', () => {
       // Bare JsonTreeComponent fixture (does NOT mount the editor).
-      // A stubbed RuleSetsService.defaultRuleSets() returns a known
+      // A stubbed RuleSetsService.activeRuleSets() returns a known
       // set and the tree must reflect it; flipping overrideRuleSets
       // to a different non-null array overrides the service.
       TestBed.resetTestingModule();
@@ -787,8 +787,8 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       });
       const stubbedRuleSets = {
         ruleSets: signal<FormattingRuleSet[] | null>([homeSet]).asReadonly(),
-        defaultRuleSets: signal<FormattingRuleSet[]>([homeSet]).asReadonly(),
-        defaultRuleSetIds: signal<readonly string[]>(['home-set']).asReadonly()
+        activeRuleSets: signal<FormattingRuleSet[]>([homeSet]).asReadonly(),
+        activeRuleSetIds: signal<readonly string[]>(['home-set']).asReadonly()
       };
       TestBed.configureTestingModule({
         imports: [JsonTreeComponent],

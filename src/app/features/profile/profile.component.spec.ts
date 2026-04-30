@@ -467,7 +467,7 @@ describe('ProfileComponent', () => {
       expect(labels).toEqual(['Alpha', 'Mike', 'Zebra']);
     });
 
-    it('reflects the current defaultRuleSetIds via the checkbox checked state', async () => {
+    it('reflects the current activeRuleSetIds via the checkbox checked state', async () => {
       const { fixture, prefs } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
         isConfigured: true
@@ -476,10 +476,10 @@ describe('ProfileComponent', () => {
         makeRuleSet({ id: 'rs-1', name: 'One' }),
         makeRuleSet({ id: 'rs-2', name: 'Two' })
       ]);
-      prefs.update({ defaultRuleSetIds: ['rs-2'] });
+      prefs.update({ activeRuleSetIds: ['rs-2'] });
       fixture.detectChanges();
-      expect(fixture.componentInstance.isDefaultRuleSet('rs-1')).toBe(false);
-      expect(fixture.componentInstance.isDefaultRuleSet('rs-2')).toBe(true);
+      expect(fixture.componentInstance.isActiveRuleSet('rs-1')).toBe(false);
+      expect(fixture.componentInstance.isActiveRuleSet('rs-2')).toBe(true);
     });
 
     it('appends an ID when toggled on', async () => {
@@ -491,9 +491,9 @@ describe('ProfileComponent', () => {
         makeRuleSet({ id: 'rs-1', name: 'One' }),
         makeRuleSet({ id: 'rs-2', name: 'Two' })
       ]);
-      prefs.update({ defaultRuleSetIds: ['rs-1'] });
-      fixture.componentInstance.onDefaultRuleSetToggle('rs-2', true);
-      expect(prefs.prefs().defaultRuleSetIds).toEqual(['rs-1', 'rs-2']);
+      prefs.update({ activeRuleSetIds: ['rs-1'] });
+      fixture.componentInstance.onActiveRuleSetToggle('rs-2', true);
+      expect(prefs.prefs().activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
     });
 
     it('removes an ID when toggled off', async () => {
@@ -505,9 +505,9 @@ describe('ProfileComponent', () => {
         makeRuleSet({ id: 'rs-1', name: 'One' }),
         makeRuleSet({ id: 'rs-2', name: 'Two' })
       ]);
-      prefs.update({ defaultRuleSetIds: ['rs-1', 'rs-2'] });
-      fixture.componentInstance.onDefaultRuleSetToggle('rs-1', false);
-      expect(prefs.prefs().defaultRuleSetIds).toEqual(['rs-2']);
+      prefs.update({ activeRuleSetIds: ['rs-1', 'rs-2'] });
+      fixture.componentInstance.onActiveRuleSetToggle('rs-1', false);
+      expect(prefs.prefs().activeRuleSetIds).toEqual(['rs-2']);
     });
 
     it('is a no-op when toggling on an ID already present', async () => {
@@ -515,10 +515,10 @@ describe('ProfileComponent', () => {
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
         isConfigured: true
       });
-      prefs.update({ defaultRuleSetIds: ['rs-1'] });
-      const before = prefs.prefs().defaultRuleSetIds;
-      fixture.componentInstance.onDefaultRuleSetToggle('rs-1', true);
-      expect(prefs.prefs().defaultRuleSetIds).toBe(before);
+      prefs.update({ activeRuleSetIds: ['rs-1'] });
+      const before = prefs.prefs().activeRuleSetIds;
+      fixture.componentInstance.onActiveRuleSetToggle('rs-1', true);
+      expect(prefs.prefs().activeRuleSetIds).toBe(before);
     });
   });
 

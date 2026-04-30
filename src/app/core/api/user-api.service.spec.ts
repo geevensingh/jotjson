@@ -13,7 +13,7 @@ function fakePreferences(): UserPreferences {
     editorFontSize: 14,
     editorTabSize: 2,
     defaultTreeExpansionDepth: 2,
-    defaultRuleSetIds: [],
+    activeRuleSetIds: [],
     editorWordWrap: true,
     layoutOrientation: 'horizontal',
     treeFontSize: 14,

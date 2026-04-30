@@ -28,13 +28,13 @@ import {
  * presets / rule-sets endpoints are auth-gated, so an anon-visible toolbar
  * would either be empty or constantly bouncing through 401s.
  *
- * Default-set state lives in `UserPreferences.defaultRuleSetIds`; toggling a
- * chip delegates to `RuleSetsService.toggleDefault` which writes through
+ * Active-set state lives in `UserPreferences.activeRuleSetIds`; toggling a
+ * chip delegates to `RuleSetsService.toggleActive` which writes through
  * `PreferencesService.update`. `JsonTreeComponent` reads the same signal,
  * so the tree repaints synchronously when the user toggles.
  *
  * Clone flow opens `ClonePresetDialogComponent`. On success the returned set
- * is auto-added to the user's defaults so the tree paints immediately -
+ * is auto-added to the user's actives so the tree paints immediately -
  * users almost always want to *use* a freshly cloned set, and the chip
  * toggle is one extra click for the rare case where they don't.
  */
@@ -70,7 +70,7 @@ export class RuleSetsToolbarComponent implements OnInit {
     return [...cache].sort((a, b) => a.name.localeCompare(b.name));
   });
 
-  readonly defaultIds = this.ruleSets.defaultRuleSetIds;
+  readonly activeIds = this.ruleSets.activeRuleSetIds;
 
   /** True after the first successful list() resolves with no items. */
   readonly empty = computed(() => {
@@ -92,11 +92,11 @@ export class RuleSetsToolbarComponent implements OnInit {
   }
 
   isActive(id: string): boolean {
-    return this.defaultIds().includes(id);
+    return this.activeIds().includes(id);
   }
 
   onToggle(id: string): void {
-    this.ruleSets.toggleDefault(id);
+    this.ruleSets.toggleActive(id);
   }
 
   async onClonePresetClick(): Promise<void> {
@@ -113,8 +113,8 @@ export class RuleSetsToolbarComponent implements OnInit {
     const result = await firstValueFrom(ref.afterClosed());
     if (!result) return;
 
-    const next = [...this.defaultIds(), result.cloned.id];
-    this.ruleSets.setDefaults(next);
+    const next = [...this.activeIds(), result.cloned.id];
+    this.ruleSets.setActives(next);
 
     const message = $localize`:@@formattingRules.toolbar.cloneSuccess:Cloned ${result.preset.name}:name:.`;
     this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, {

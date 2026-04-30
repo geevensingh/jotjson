@@ -146,47 +146,57 @@ describe('PreferencesService', () => {
     expect(svc.effectiveTheme()).toBe(expected);
   });
 
-  it('drops unknown keys (e.g. legacy historyTrackingMode/activeRuleSetIds) hydrating from localStorage', () => {
+  it('folds legacy defaultRuleSetIds/defaultRuleSetId into activeRuleSetIds when hydrating from localStorage', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         theme: 'dark',
         historyTrackingMode: 'save_only',
-        activeRuleSetIds: ['rs-stale'],
-        defaultRuleSetId: 'rs-old'
+        defaultRuleSetIds: ['rs-stale-array'],
+        defaultRuleSetId: 'rs-old-singular'
       })
     );
     const svc = TestBed.inject(PreferencesService);
     const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
     expect(prefs.theme).toBe('dark');
     expect(prefs['historyTrackingMode']).toBeUndefined();
-    expect(prefs['activeRuleSetIds']).toBeUndefined();
+    expect(prefs['defaultRuleSetIds']).toBeUndefined();
     expect(prefs['defaultRuleSetId']).toBeUndefined();
     // recentlyViewedEnabled defaults to true rather than being coerced
     // from the legacy key (the API normalizes stored docs on read).
     expect(prefs.recentlyViewedEnabled).toBe(DEFAULT_PREFERENCES.recentlyViewedEnabled);
-    expect(prefs.defaultRuleSetIds).toEqual(DEFAULT_PREFERENCES.defaultRuleSetIds);
+    // The legacy array shape is folded into the canonical key.
+    expect(prefs.activeRuleSetIds).toEqual(['rs-stale-array']);
   });
 
-  it('drops unknown keys when hydrating from a remote response', async () => {
-    const remoteWithLegacy = {
-      ...DEFAULT_PREFERENCES,
-      theme: 'light' as const,
-      // The server should never send these post-cleanup, but if it
-      // does (or a stored doc leaks one through) we should not echo
-      // them back in the next PUT.
-      historyTrackingMode: 'all_actions',
-      activeRuleSetIds: ['rs-stale']
-    } as unknown as UserPreferences;
+  it('drops unknown keys when hydrating from a remote response and folds legacy defaultRuleSetIds', async () => {
+    // Build the user payload directly (bypassing makeUser's
+    // ...DEFAULT_PREFERENCES spread) so the canonical
+    // `activeRuleSetIds` is genuinely absent from the remote prefs
+    // and the migration shim has work to do.
+    const remoteRaw: Record<string, unknown> = { ...DEFAULT_PREFERENCES };
+    delete remoteRaw['activeRuleSetIds'];
+    remoteRaw['theme'] = 'light';
+    remoteRaw['historyTrackingMode'] = 'all_actions';
+    remoteRaw['defaultRuleSetIds'] = ['rs-stale'];
+    const user = {
+      id: 'u-1',
+      displayName: 'Test',
+      email: 'x@y.z',
+      createdAt: 't',
+      plan: 'free' as const,
+      preferences: remoteRaw as unknown as UserPreferences
+    };
     const svc = TestBed.inject(PreferencesService);
-    api.getMe.and.returnValue(of(makeUser(remoteWithLegacy)));
+    api.getMe.and.returnValue(of(user));
     auth.signInAs('u-1');
     TestBed.flushEffects();
     await svc.__waitForSync();
     const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
     expect(prefs.theme).toBe('light');
     expect(prefs['historyTrackingMode']).toBeUndefined();
-    expect(prefs['activeRuleSetIds']).toBeUndefined();
+    expect(prefs['defaultRuleSetIds']).toBeUndefined();
+    expect(prefs.activeRuleSetIds).toEqual(['rs-stale']);
   });
 
   it('merges deep treeHighlightColors shape from storage', () => {
@@ -263,14 +273,14 @@ describe('PreferencesService', () => {
       );
     });
 
-    it('emits a count event with bucket and measurement for defaultRuleSetIds', () => {
+    it('emits a count event with bucket and measurement for activeRuleSetIds', () => {
       const svc = TestBed.inject(PreferencesService);
 
-      svc.update({ defaultRuleSetIds: ['a', 'b'] });
+      svc.update({ activeRuleSetIds: ['a', 'b'] });
 
       expect(logger.event).toHaveBeenCalledOnceWith(
         'pref.changed',
-        { key: 'defaultRuleSetIds', source: 'user', kind: 'count', countBucket: '<100' },
+        { key: 'activeRuleSetIds', source: 'user', kind: 'count', countBucket: '<100' },
         { count: 2 }
       );
     });

@@ -382,7 +382,7 @@ describe('DELETE /api/rule-sets/:id', () => {
     deleteRuleSetById.mockResolvedValueOnce(true);
     readUser.mockResolvedValueOnce({
       id: 'u-1',
-      preferences: { defaultRuleSetIds: ['rs-other'] },
+      preferences: { activeRuleSetIds: ['rs-other'] },
       createdAt: 't',
       updatedAt: 't'
     });
@@ -392,7 +392,24 @@ describe('DELETE /api/rule-sets/:id', () => {
     expect(upsertUser).not.toHaveBeenCalled();
   });
 
-  it('strips the deleted ID from defaultRuleSetIds', async () => {
+  it('strips the deleted ID from activeRuleSetIds', async () => {
+    readRuleSet.mockResolvedValueOnce(sampleSet);
+    deleteRuleSetById.mockResolvedValueOnce(true);
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: {
+        activeRuleSetIds: ['rs-other', 'rs-1', 'rs-also']
+      },
+      createdAt: 't',
+      updatedAt: 't'
+    });
+    upsertUser.mockResolvedValueOnce({});
+    await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
+    const upserted = upsertUser.mock.calls[0]?.[0];
+    expect(upserted.preferences.activeRuleSetIds).toEqual(['rs-other', 'rs-also']);
+  });
+
+  it('migrates legacy defaultRuleSetIds (post-M6f-5) into activeRuleSetIds during delete cleanup', async () => {
     readRuleSet.mockResolvedValueOnce(sampleSet);
     deleteRuleSetById.mockResolvedValueOnce(true);
     readUser.mockResolvedValueOnce({
@@ -406,17 +423,37 @@ describe('DELETE /api/rule-sets/:id', () => {
     upsertUser.mockResolvedValueOnce({});
     await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
     const upserted = upsertUser.mock.calls[0]?.[0];
-    expect(upserted.preferences.defaultRuleSetIds).toEqual(['rs-other', 'rs-also']);
+    expect(upserted.preferences.activeRuleSetIds).toEqual(['rs-other', 'rs-also']);
+    expect(upserted.preferences.defaultRuleSetIds).toBeUndefined();
   });
 
-  it('migrates legacy activeRuleSetIds + defaultRuleSetId during delete cleanup', async () => {
+  it('migrates ancient singular defaultRuleSetId into activeRuleSetIds during delete cleanup', async () => {
     readRuleSet.mockResolvedValueOnce(sampleSet);
     deleteRuleSetById.mockResolvedValueOnce(true);
     readUser.mockResolvedValueOnce({
       id: 'u-1',
       preferences: {
-        // Stored doc still has the legacy shape from before M6f-5.
-        defaultRuleSetId: 'rs-1',
+        defaultRuleSetId: 'rs-1'
+      },
+      createdAt: 't',
+      updatedAt: 't'
+    });
+    upsertUser.mockResolvedValueOnce({});
+    await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
+    const upserted = upsertUser.mock.calls[0]?.[0];
+    expect(upserted.preferences.activeRuleSetIds).toEqual([]);
+    expect(upserted.preferences.defaultRuleSetId).toBeUndefined();
+  });
+
+  it('canonical activeRuleSetIds wins over both legacy shapes during cleanup', async () => {
+    readRuleSet.mockResolvedValueOnce(sampleSet);
+    deleteRuleSetById.mockResolvedValueOnce(true);
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: {
+        // Stored doc has all three shapes - canonical wins.
+        defaultRuleSetId: 'rs-stale-singular',
+        defaultRuleSetIds: ['rs-stale-array'],
         activeRuleSetIds: ['rs-other', 'rs-1', 'rs-also']
       },
       createdAt: 't',
@@ -425,9 +462,9 @@ describe('DELETE /api/rule-sets/:id', () => {
     upsertUser.mockResolvedValueOnce({});
     await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
     const upserted = upsertUser.mock.calls[0]?.[0];
-    expect(upserted.preferences.defaultRuleSetIds).toEqual(['rs-other', 'rs-also']);
+    expect(upserted.preferences.activeRuleSetIds).toEqual(['rs-other', 'rs-also']);
     expect(upserted.preferences.defaultRuleSetId).toBeUndefined();
-    expect(upserted.preferences.activeRuleSetIds).toBeUndefined();
+    expect(upserted.preferences.defaultRuleSetIds).toBeUndefined();
   });
 
   it('still returns 204 when preference cleanup throws', async () => {

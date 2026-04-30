@@ -88,7 +88,7 @@ Browser (Angular SPA)
   editorFontSize: number (default: 14, range: 8-32),
   editorTabSize: number (default: 2, range: 2 | 4),
   defaultTreeExpansionDepth: number (default: 2, range: 1-10),
-  defaultRuleSetIds: string[] (default: [] - rule sets applied by default when viewing JSON; mirrored in the home-page toolbar chips and the Profile multi-select; persisted server-side so the selection survives across sessions and devices; IDs that no longer resolve to an owned rule set are filtered out on read),
+  activeRuleSetIds: string[] (default: [] - rule sets currently applied to the JSON view; toggled via the eye/eye-off control on the Formatting Rules listing page and the home-page toolbar chips; persisted server-side so the selection survives across sessions and devices; IDs that no longer resolve to an owned rule set are filtered out on read),
   editorWordWrap: boolean (default: true),
   layoutOrientation: "horizontal" | "vertical" (default: "horizontal" - editor left, tree right; "vertical" = editor top, tree bottom),
   treeFontSize: number (default: 13, range: 8-32),
@@ -525,7 +525,7 @@ Available to **registered users** only. The route is auth-guarded.
   - **Delete account** - confirmation dialog, then deletes user profile, all blobs, history, and rule sets. Irreversible.
 
 - **Preferences Section - deferred items**
-  - **Default formatting rule sets** (M6) - multi-select listing the user's owned rule sets. Selected sets become the user's `defaultRuleSetIds` preference, mirrored as toolbar chips on the home page; the same selection appears in both places and persists across sessions and devices.
+  - **Default formatting rule sets** (M6) - multi-select listing the user's owned rule sets. Selected sets become the user's `activeRuleSetIds` preference, mirrored as toolbar chips on the home page; the same selection appears in both places and persists across sessions and devices.
 
 - **Data & Privacy Section**
   - **Export my data** - enqueues a background job to generate a ZIP of all blobs, history, and rule sets. User receives a download link when ready (polled via `GET /api/me/export/:jobId`). The download URL is a pre-signed Azure Blob Storage SAS link valid for **1 hour** from generation; if it expires, the user can re-request a new export. Avoids Azure Functions timeout limits.
@@ -617,15 +617,15 @@ Available to **registered users** only.
   `PUT /api/blobs/:id` semantics. Unknown top-level fields are
   rejected (consistent with the `me.ts` PUT pattern).
 
-- **`defaultRuleSetIds` referential integrity:** when a rule set the
-  user has marked as default is deleted, the `DELETE /api/rule-sets/:id`
-  handler strips the deleted ID from `defaultRuleSetIds` on the user
-  document in the same request. Clients refresh local prefs after a
-  successful delete. The wire surface accepts only `defaultRuleSetIds`;
-  stored user documents that still carry the legacy `defaultRuleSetId`
-  / `activeRuleSetIds` fields (pre-M6f-5) are folded into
-  `defaultRuleSetIds` on read by `normalizeStoredPreferences` and
-  dropped on next save.
+- **`activeRuleSetIds` referential integrity:** when an applied rule set is
+  deleted, the `DELETE /api/rule-sets/:id` handler strips the deleted ID
+  from `activeRuleSetIds` on the user document in the same request.
+  Clients refresh local prefs after a successful delete. The wire surface
+  accepts only `activeRuleSetIds`; stored user documents that still carry
+  the legacy `defaultRuleSetIds` (post-M6f-5, pre-issue #83) or
+  `defaultRuleSetId` (pre-M6f-5) fields are folded into
+  `activeRuleSetIds` on read by `normalizeStoredPreferences` and dropped
+  on next save.
 
 - **Engine output / `target` projection:** the formatting-rules engine
   is a pure function `evaluate(activeSets, node) -> RuleEngineResult`
@@ -655,11 +655,11 @@ Available to **registered users** only.
   - When a rule set is active, the tree view scans each node's key and value.
   - Matching nodes receive the configured inline styles (background, text color, font weight, etc.).
   - **Within a rule set:** multiple rules can match the same node - styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
-  - **Across default rule sets:** sets are evaluated in `createdAt` order (oldest first) - the same order they appear in the user's saved list and the default-set toolbar. Later evaluations override earlier ones for conflicting style properties. Drag-to-reorder of default sets is a post-v1 follow-up.
+  - **Across active rule sets:** sets are evaluated in `createdAt` order (oldest first) - the same order they appear in the user's saved list and the formatting toolbar. Later evaluations override earlier ones for conflicting style properties. Drag-to-reorder of active sets is a post-v1 follow-up.
   - The optional `borderColor` style renders as a 4px left-edge accent strip on the affected row (consistent with the `.pref-substack` pattern on the profile page) so it does not collide with the selection outline or ancestor highlights.
   - A tooltip on hover shows which rule(s) matched a given node (keeps the tree visually clean). Tooltip labels are auto-generated from each rule's match config.
   - **Highlight priority** (highest to lowest): selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
-  - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply. Toolbar state is the user's `defaultRuleSetIds` preference and persists across sessions and devices; the same selection appears in the Profile "Default rule sets" multi-select.
+  - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply. Toolbar state is the user's `activeRuleSetIds` preference and persists across sessions and devices; the same selection appears in the Profile "Default rule sets" multi-select.
 
 - **Built-in Presets** - ship a few starter rule sets users can clone and customize. Preset IDs are stable kebab-case slugs (not UUIDs) so the clone endpoint URLs are human-readable and stable across rebuilds; user-created rule sets always get UUIDs.
   - `error-detection` ("Error Detection") - highlights keys and values that name an error / failure concept in red. Six rules, all `contains` and case-insensitive: `error`, `exception`, `fault`, `failure`, `failed` target both keys and values (so `{"data":"TypeError"}` highlights the value); `err` targets keys only because case-insensitive contains-match for "err" hits common English words in arbitrary value text (merry, berry, where, every).
@@ -748,7 +748,7 @@ for setup. The bypass cannot engage in any Azure-hosted environment.
 | GET | `/api/rule-sets` | Required | M6 | List user's rule sets (sorted by `createdAt` ascending) |
 | GET | `/api/rule-sets/:id` | Required (owner) | M6 | Get a rule set by ID; response includes `ETag` header. Owner mismatch returns 403; missing ID returns 404 |
 | PUT | `/api/rule-sets/:id` | Required (owner) | M6 | Update a rule set (full replace of `name` + `rules`). Requires `If-Match: <version>`; mismatch returns 412 Precondition Failed. Owner mismatch returns 403 |
-| DELETE | `/api/rule-sets/:id` | Required (owner) | M6 | Delete a rule set. Removes the ID from the user's `defaultRuleSetIds` if matching. Owner mismatch returns 403 |
+| DELETE | `/api/rule-sets/:id` | Required (owner) | M6 | Delete a rule set. Removes the ID from the user's `activeRuleSetIds` if matching. Owner mismatch returns 403 |
 | GET | `/api/rule-set-presets` | Required | M6 | List built-in preset rule sets. Uses a top-level path (not `/api/rule-sets/presets`) because the Azure Functions Node.js v4 router resolves the latter to the parameterized `/rule-sets/{id}` handler |
 | POST | `/api/rule-set-presets/:id/clone` | Required | M6 | Clone a preset into the user's rule sets |
 

@@ -125,11 +125,11 @@ export class ProfileComponent implements OnInit {
   readonly highlightThemes: readonly ThemeName[] = ['dark', 'light'];
 
   /**
-   * IDs the user has selected as default rule sets. Same value the
+   * IDs the user has selected as active rule sets. Same value the
    * home-page toolbar drives - this section is just a different view
    * of the same setting.
    */
-  readonly defaultRuleSetIds = computed(() => this.prefs().defaultRuleSetIds);
+  readonly activeRuleSetIds = computed(() => this.prefs().activeRuleSetIds);
 
   /**
    * Cached rule sets sorted by name for the checkbox list. `null`
@@ -298,8 +298,8 @@ export class ProfileComponent implements OnInit {
     return this.effectiveTheme() === theme;
   }
 
-  isDefaultRuleSet(id: string): boolean {
-    return this.defaultRuleSetIds().includes(id);
+  isActiveRuleSet(id: string): boolean {
+    return this.activeRuleSetIds().includes(id);
   }
 
   /**
@@ -308,15 +308,15 @@ export class ProfileComponent implements OnInit {
    * ordering the user has been working with; filters out the ID when
    * removing.
    */
-  onDefaultRuleSetToggle(id: string, checked: boolean): void {
-    const current = this.defaultRuleSetIds();
+  onActiveRuleSetToggle(id: string, checked: boolean): void {
+    const current = this.activeRuleSetIds();
     const next = checked
       ? current.includes(id)
         ? current
         : [...current, id]
       : current.filter((x) => x !== id);
     if (next === current) return;
-    this.prefsService.update({ defaultRuleSetIds: next });
+    this.prefsService.update({ activeRuleSetIds: next });
   }
 
   private clampNumber(

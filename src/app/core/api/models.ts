@@ -55,19 +55,21 @@ export interface UserPreferences {
   editorTabSize: 2 | 4;
   defaultTreeExpansionDepth: number;
   /**
-   * Rule sets applied by default when the user views JSON. The set is
-   * mirrored as toggleable chips in the tree-view formatting toolbar
-   * and as checkboxes on the Profile page. Persisted server-side so
-   * the selection survives across sessions and devices. IDs that no
-   * longer resolve to an owned rule set are filtered out at read
-   * time. See DESIGN_SPEC.md §Features 7.
+   * Rule sets applied to the JSON view (eye/eye-off toggle on the
+   * Formatting Rules listing page; chip toggle on the home toolbar).
+   * Persisted server-side so the selection survives across sessions
+   * and devices. IDs that no longer resolve to an owned rule set are
+   * filtered out at read time. See DESIGN_SPEC.md §Features 7.
    *
-   * Renamed from `activeRuleSetIds` in M6f-5. The wire surface no
-   * longer accepts the legacy keys; stored docs that still carry
-   * `activeRuleSetIds` / `defaultRuleSetId` are folded into this
-   * array on read by the server.
+   * Naming history: this field was originally `activeRuleSetIds`, was
+   * renamed to `defaultRuleSetIds` in M6f-5, then renamed back to
+   * `activeRuleSetIds` (issue #83) because the toggle is plain
+   * enabled/disabled - there is no separate per-document override.
+   * The wire surface accepts the legacy `defaultRuleSetIds` and
+   * ancient singular `defaultRuleSetId` and folds both into this
+   * array on read; new writes only emit `activeRuleSetIds`.
    */
-  defaultRuleSetIds: string[];
+  activeRuleSetIds: string[];
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
   treeFontSize: number;

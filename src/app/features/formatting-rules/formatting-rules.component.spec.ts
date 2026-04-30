@@ -43,7 +43,7 @@ function setup(opts: SetupOpts = {}) {
 
   const stub = {
     ruleSets: cache.asReadonly(),
-    defaultRuleSetIds: defaultsSig.asReadonly(),
+    activeRuleSetIds: defaultsSig.asReadonly(),
     list: jasmine.createSpy('list').and.callFake(() => {
       if (opts.listResult instanceof Error) {
         return throwError(() => opts.listResult as Error);
@@ -65,7 +65,7 @@ function setup(opts: SetupOpts = {}) {
     delete: jasmine.createSpy('delete').and.returnValue(of(void 0)),
     get: jasmine.createSpy('get').and.returnValue(of(ruleSet())),
     refresh: jasmine.createSpy('refresh'),
-    toggleDefault: jasmine.createSpy('toggleDefault').and.callFake((id: string) => {
+    toggleActive: jasmine.createSpy('toggleActive').and.callFake((id: string) => {
       const cur = defaultsSig();
       if (cur.includes(id)) {
         defaultsSig.set(cur.filter((x) => x !== id));
@@ -77,18 +77,18 @@ function setup(opts: SetupOpts = {}) {
 
   const snack = { open: jasmine.createSpy('open') };
 
-  const prefsSig = signal<{ defaultRuleSetIds: string[] }>({
-    defaultRuleSetIds: opts.defaults ?? []
+  const prefsSig = signal<{ activeRuleSetIds: string[] }>({
+    activeRuleSetIds: opts.defaults ?? []
   });
   const syncStateSig = signal<'anon' | 'hydrating' | 'synced' | 'error'>('synced');
   const preferences = {
     prefs: prefsSig.asReadonly(),
     syncState: syncStateSig.asReadonly(),
     update: jasmine.createSpy('preferences.update').and.callFake(
-      (patch: { defaultRuleSetIds?: string[] }) => {
-        if (patch.defaultRuleSetIds) {
-          prefsSig.set({ defaultRuleSetIds: patch.defaultRuleSetIds });
-          defaultsSig.set(patch.defaultRuleSetIds);
+      (patch: { activeRuleSetIds?: string[] }) => {
+        if (patch.activeRuleSetIds) {
+          prefsSig.set({ activeRuleSetIds: patch.activeRuleSetIds });
+          defaultsSig.set(patch.activeRuleSetIds);
         }
       }
     ),
@@ -209,7 +209,7 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     await settle(fixture);
 
     const stars = Array.from(
-      fixture.nativeElement.querySelectorAll('[data-testid="default-star"]')
+      fixture.nativeElement.querySelectorAll('[data-testid="apply-toggle"]')
     ) as HTMLButtonElement[];
     expect(stars.length).toBe(2);
     expect(stars[0].getAttribute('aria-pressed')).toBe('true');
@@ -218,7 +218,7 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     expect(stars[1].getAttribute('aria-label')).toContain('Apply rule set');
 
     stars[1].click();
-    expect(stub.toggleDefault).toHaveBeenCalledWith('b');
+    expect(stub.toggleActive).toHaveBeenCalledWith('b');
   });
 
   it('snacks when preferences.syncState transitions into error', async () => {
@@ -429,7 +429,7 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     await fixture.whenStable();
 
     expect(stub.refresh).toHaveBeenCalled();
-    expect(preferences.update).toHaveBeenCalledWith({ defaultRuleSetIds: [] });
+    expect(preferences.update).toHaveBeenCalledWith({ activeRuleSetIds: [] });
     expect(snack.open.calls.mostRecent().args[0]).toContain('already deleted');
   });
 
@@ -476,10 +476,10 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     expect(cards[0].classList.contains('is-busy')).toBe(true);
     expect(cards[1].classList.contains('is-busy')).toBe(false);
     const aStar = cards[0].querySelector(
-      '[data-testid="default-star"]'
+      '[data-testid="apply-toggle"]'
     ) as HTMLButtonElement;
     const bStar = cards[1].querySelector(
-      '[data-testid="default-star"]'
+      '[data-testid="apply-toggle"]'
     ) as HTMLButtonElement;
     expect(aStar.disabled).toBe(true);
     expect(bStar.disabled).toBe(false);
