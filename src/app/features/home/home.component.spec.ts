@@ -5,7 +5,7 @@ import { of, throwError } from 'rxjs';
 import { HomeComponent } from './home.component';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { DraftService } from '../../core/preferences/draft.service';
-import { provideFakeAuth } from '../../../testing/auth.testing';
+import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import { provideRouter, Router } from '@angular/router';
 import { BlobService } from '../../core/api/blob.service';
 import { AuthService } from '../../core/auth/auth.service';
@@ -28,6 +28,7 @@ const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
 const SPLIT_KEY = 'jotjson.splitRatio.v1';
 const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
+const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 
 /**
  * Registers `installMinimalMonacoStub` / `restoreMonacoStub` as
@@ -57,6 +58,28 @@ function waitForTaskQueue(): Promise<void> {
   return new Promise<void>((resolve) => {
     setTimeout(() => resolve(), 0);
   });
+}
+
+function clearHomeStorage(): void {
+  localStorage.removeItem(PREFS_KEY);
+  localStorage.removeItem(DRAFT_KEY);
+  localStorage.removeItem(SPLIT_KEY);
+  localStorage.removeItem(PANE_VIS_KEY);
+  sessionStorage.removeItem(SIGN_IN_RESTORE_KEY);
+}
+
+function makeIdentityBlob(overrides: Partial<JsonBlob> = {}): JsonBlob {
+  return {
+    id: 'identity-blob-1',
+    slug: 'abc123',
+    content: '{"saved":true}',
+    title: 'Saved title',
+    ownerId: 'owner-me',
+    isPublic: false,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    ...overrides
+  };
 }
 
 describe('HomeComponent (unit-level)', () => {
@@ -655,6 +678,370 @@ describe('HomeComponent (unit-level)', () => {
   });
 });
 
+describe('HomeComponent dirty computed (issue #84)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+  });
+
+  afterEach(() => clearHomeStorage());
+
+  function createComponent(): HomeComponent {
+    return TestBed.createComponent(HomeComponent).componentInstance;
+  }
+
+  function loadBlob(component: HomeComponent, jsonBlob: JsonBlob): void {
+    component.loadedBlob.set(jsonBlob);
+    component.content.set(jsonBlob.content);
+    component.title.set(jsonBlob.title ?? '');
+  }
+
+  it('returns false when loadedBlob is null for a draft', () => {
+    const component = createComponent();
+    component.content.set('{"draft":true}');
+    component.title.set('Draft title');
+    expect(component.dirty()).toBeFalse();
+  });
+
+  it('returns false when blob content and title match exactly', () => {
+    const component = createComponent();
+    const jsonBlob = makeIdentityBlob();
+    loadBlob(component, jsonBlob);
+    expect(component.dirty()).toBeFalse();
+  });
+
+  it('returns true when content differs by one character', () => {
+    const component = createComponent();
+    const jsonBlob = makeIdentityBlob({ content: '{"saved":"a"}' });
+    loadBlob(component, jsonBlob);
+    component.content.set('{"saved":"b"}');
+    expect(component.dirty()).toBeTrue();
+  });
+
+  it('returns true when title differs by one character', () => {
+    const component = createComponent();
+    const jsonBlob = makeIdentityBlob({ title: 'Saved title' });
+    loadBlob(component, jsonBlob);
+    component.title.set('Saved titles');
+    expect(component.dirty()).toBeTrue();
+  });
+
+  it('returns false when content differs only by EOL style', () => {
+    const component = createComponent();
+    const jsonBlob = makeIdentityBlob({ content: '{\r\n  "saved": true\r\n}' });
+    loadBlob(component, jsonBlob);
+    component.content.set('{\n  "saved": true\n}');
+    expect(component.dirty()).toBeFalse();
+  });
+
+  it('returns false when title differs only by surrounding whitespace', () => {
+    const component = createComponent();
+    const jsonBlob = makeIdentityBlob({ title: 'Saved title' });
+    loadBlob(component, jsonBlob);
+    component.title.set('  Saved title  ');
+    expect(component.dirty()).toBeFalse();
+  });
+
+  it('returns false for an untitled blob when local title is empty', () => {
+    const component = createComponent();
+    const undefinedTitleBlob = makeIdentityBlob({ title: undefined });
+    loadBlob(component, undefinedTitleBlob);
+    component.title.set('');
+    expect(component.dirty()).toBeFalse();
+
+    const nullTitleBlob = {
+      ...makeIdentityBlob({ id: 'identity-blob-2' }),
+      title: null
+    } as unknown as JsonBlob;
+    loadBlob(component, nullTitleBlob);
+    component.title.set('');
+    expect(component.dirty()).toBeFalse();
+  });
+
+  it('returns false again after an edit is reverted exactly', () => {
+    const component = createComponent();
+    const jsonBlob = makeIdentityBlob({ content: '{"saved":true}' });
+    loadBlob(component, jsonBlob);
+    component.content.set('{"saved":false}');
+    expect(component.dirty()).toBeTrue();
+    component.content.set(jsonBlob.content);
+    component.title.set(jsonBlob.title ?? '');
+    expect(component.dirty()).toBeFalse();
+  });
+});
+
+describe('HomeComponent canSave computed (issue #84)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+  });
+
+  afterEach(() => clearHomeStorage());
+
+  function createComponent(signedInUserId: string | null = null): HomeComponent {
+    if (signedInUserId !== null) {
+      signInFakeUser(TestBed.inject(AuthService), {
+        user: { id: signedInUserId, displayName: 'Test User' }
+      });
+    }
+    return TestBed.createComponent(HomeComponent).componentInstance;
+  }
+
+  function loadBlob(component: HomeComponent, jsonBlob: JsonBlob): void {
+    component.loadedBlob.set(jsonBlob);
+    component.content.set(jsonBlob.content);
+    component.title.set(jsonBlob.title ?? '');
+  }
+
+  it('returns false when anonymous draft has no content', () => {
+    const component = createComponent();
+    component.content.set('');
+    expect(component.canSave()).toBeFalse();
+  });
+
+  it('returns false when anonymous draft has content', () => {
+    const component = createComponent();
+    component.content.set('{"draft":true}');
+    expect(component.canSave()).toBeFalse();
+  });
+
+  it('returns false when anonymous shared blob has content', () => {
+    const component = createComponent();
+    loadBlob(component, makeIdentityBlob());
+    expect(component.canSave()).toBeFalse();
+  });
+
+  it('returns false when signed-in draft has no content', () => {
+    const component = createComponent('owner-me');
+    component.content.set('   ');
+    expect(component.canSave()).toBeFalse();
+  });
+
+  it('returns true when signed-in draft has content', () => {
+    const component = createComponent('owner-me');
+    component.content.set('{"draft":true}');
+    expect(component.canSave()).toBeTrue();
+  });
+
+  it('returns false when signed-in owner shared blob is clean', () => {
+    const component = createComponent('owner-me');
+    loadBlob(component, makeIdentityBlob({ ownerId: 'owner-me' }));
+    expect(component.canSave()).toBeFalse();
+  });
+
+  it('returns true when signed-in owner shared blob has dirty content', () => {
+    const component = createComponent('owner-me');
+    loadBlob(component, makeIdentityBlob({ ownerId: 'owner-me' }));
+    component.content.set('{"saved":false}');
+    expect(component.canSave()).toBeTrue();
+  });
+
+  it('returns true when signed-in owner shared blob has dirty title', () => {
+    const component = createComponent('owner-me');
+    loadBlob(component, makeIdentityBlob({ ownerId: 'owner-me' }));
+    component.title.set('Changed title');
+    expect(component.canSave()).toBeTrue();
+  });
+
+  it('returns true when signed-in non-owner shared blob is clean', () => {
+    const component = createComponent('viewer-me');
+    loadBlob(component, makeIdentityBlob({ ownerId: 'owner-me' }));
+    expect(component.canSave()).toBeTrue();
+  });
+
+  it('returns true when signed-in non-owner shared blob is dirty', () => {
+    const component = createComponent('viewer-me');
+    loadBlob(component, makeIdentityBlob({ ownerId: 'owner-me' }));
+    component.content.set('{"saved":false}');
+    expect(component.canSave()).toBeTrue();
+  });
+});
+
+describe('HomeComponent sign-in restore (issue #84)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+  });
+
+  afterEach(() => clearHomeStorage());
+
+  function hydrateFromResolver(jsonBlob: JsonBlob): HomeComponent {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentRef.setInput('initialBlob', jsonBlob);
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    return fixture.componentInstance;
+  }
+
+  it('writes the restore snapshot and calls signIn when sign-in is requested', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    const signInSpy = spyOn(TestBed.inject(AuthService), 'signIn');
+    component.loadedBlob.set(makeIdentityBlob({ slug: 'abc123' }));
+    component.content.set('{"edited":true}');
+    component.title.set('Edited title');
+
+    component.onSignInRequested();
+
+    expect(sessionStorage.getItem(SIGN_IN_RESTORE_KEY)).toBe(
+      JSON.stringify({
+        slug: 'abc123',
+        content: '{"edited":true}',
+        title: 'Edited title'
+      })
+    );
+    expect(signInSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores matching snapshot content and title on init and clears it', () => {
+    sessionStorage.setItem(
+      SIGN_IN_RESTORE_KEY,
+      JSON.stringify({
+        slug: 'abc123',
+        content: '{"restored":true}',
+        title: 'Restored title'
+      })
+    );
+
+    const component = hydrateFromResolver(
+      makeIdentityBlob({
+        slug: 'abc123',
+        content: '{"resolver":true}',
+        title: 'Resolver title'
+      })
+    );
+
+    expect(component.content()).toBe('{"restored":true}');
+    expect(component.title()).toBe('Restored title');
+    expect(sessionStorage.getItem(SIGN_IN_RESTORE_KEY)).toBeNull();
+  });
+
+  it('clears a mismatched snapshot on init without touching resolver content or title', () => {
+    sessionStorage.setItem(
+      SIGN_IN_RESTORE_KEY,
+      JSON.stringify({
+        slug: 'different',
+        content: '{"restored":true}',
+        title: 'Restored title'
+      })
+    );
+
+    const component = hydrateFromResolver(
+      makeIdentityBlob({
+        slug: 'abc123',
+        content: '{"resolver":true}',
+        title: 'Resolver title'
+      })
+    );
+
+    expect(component.content()).toBe('{"resolver":true}');
+    expect(component.title()).toBe('Resolver title');
+    expect(sessionStorage.getItem(SIGN_IN_RESTORE_KEY)).toBeNull();
+  });
+
+  it('clears invalid snapshot JSON on init without throwing', () => {
+    sessionStorage.setItem(SIGN_IN_RESTORE_KEY, '{not json');
+
+    const component = hydrateFromResolver(
+      makeIdentityBlob({
+        content: '{"resolver":true}',
+        title: 'Resolver title'
+      })
+    );
+
+    expect(component.content()).toBe('{"resolver":true}');
+    expect(component.title()).toBe('Resolver title');
+    expect(sessionStorage.getItem(SIGN_IN_RESTORE_KEY)).toBeNull();
+  });
+
+  it('uses resolver content and title on init when no snapshot exists', () => {
+    const component = hydrateFromResolver(
+      makeIdentityBlob({
+        content: '{"resolver":true}',
+        title: 'Resolver title'
+      })
+    );
+
+    expect(component.content()).toBe('{"resolver":true}');
+    expect(component.title()).toBe('Resolver title');
+    expect(sessionStorage.getItem(SIGN_IN_RESTORE_KEY)).toBeNull();
+  });
+});
+
+describe('HomeComponent draft persistence skip (issue #84)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+  });
+
+  afterEach(() => clearHomeStorage());
+
+  function flushComponentEffects(fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>): void {
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+  }
+
+  it('writes draft content when no blob is loaded', () => {
+    const draftService = TestBed.inject(DraftService);
+    const setSpy = spyOn(draftService, 'set').and.callThrough();
+    const fixture = TestBed.createComponent(HomeComponent);
+    flushComponentEffects(fixture);
+    setSpy.calls.reset();
+
+    fixture.componentInstance.onValueChange('{"draft":true}');
+    flushComponentEffects(fixture);
+
+    expect(setSpy).toHaveBeenCalledWith('{"draft":true}');
+  });
+
+  it('does not write draft content when a shared blob is loaded', () => {
+    const draftService = TestBed.inject(DraftService);
+    const setSpy = spyOn(draftService, 'set').and.callThrough();
+    const fixture = TestBed.createComponent(HomeComponent);
+    flushComponentEffects(fixture);
+    setSpy.calls.reset();
+
+    fixture.componentInstance.loadedBlob.set(makeIdentityBlob());
+    fixture.componentInstance.onValueChange('{"shared":true}');
+    flushComponentEffects(fixture);
+
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it('still reads the existing draft when no blob is loaded', () => {
+    localStorage.setItem(DRAFT_KEY, '{"existing":true}');
+
+    const fixture = TestBed.createComponent(HomeComponent);
+
+    expect(fixture.componentInstance.loadedBlob()).toBeNull();
+    expect(fixture.componentInstance.content()).toBe('{"existing":true}');
+  });
+});
+
 describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
   setupMinimalMonacoStub();
   // We can't render the full HomeComponent (it would mount Monaco), so
@@ -1212,6 +1599,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z'
     });
+    fixture.componentInstance.content.set('{}');
     fixture.componentInstance.title.set('My Config');
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
@@ -1231,10 +1619,128 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z'
     });
+    fixture.componentInstance.content.set('{}');
     fixture.componentInstance.title.set('');
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
     expect(spy).toHaveBeenCalledWith('Untitled | JotJSON');
+  });
+});
+
+describe('HomeComponent document-title dirty indicator (issue #84)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+  });
+
+  afterEach(() => clearHomeStorage());
+
+  function flushComponentEffects(fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>): void {
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+  }
+
+  function mostRecentTitle(spy: jasmine.Spy): string {
+    return spy.calls.mostRecent().args[0] as string;
+  }
+
+  it('adds a star prefix when a loaded blob becomes dirty', () => {
+    const titleService = TestBed.inject(Title);
+    const titleSpy = spyOn(titleService, 'setTitle');
+    const fixture = TestBed.createComponent(HomeComponent);
+    const jsonBlob = makeIdentityBlob({
+      content: '{"saved":true}',
+      title: 'Saved title'
+    });
+
+    fixture.componentInstance.loadedBlob.set(jsonBlob);
+    fixture.componentInstance.content.set('{"saved":false}');
+    fixture.componentInstance.title.set('Saved title');
+    flushComponentEffects(fixture);
+
+    expect(mostRecentTitle(titleSpy)).toBe('* Saved title | JotJSON');
+  });
+
+  it('removes the star prefix when dirty content is reverted', () => {
+    const titleService = TestBed.inject(Title);
+    const titleSpy = spyOn(titleService, 'setTitle');
+    const fixture = TestBed.createComponent(HomeComponent);
+    const jsonBlob = makeIdentityBlob({
+      content: '{"saved":true}',
+      title: 'Saved title'
+    });
+
+    fixture.componentInstance.loadedBlob.set(jsonBlob);
+    fixture.componentInstance.content.set('{"saved":false}');
+    fixture.componentInstance.title.set('Saved title');
+    flushComponentEffects(fixture);
+    expect(mostRecentTitle(titleSpy)).toBe('* Saved title | JotJSON');
+
+    fixture.componentInstance.content.set(jsonBlob.content);
+    flushComponentEffects(fixture);
+
+    expect(mostRecentTitle(titleSpy)).toBe('Saved title | JotJSON');
+  });
+
+  it('does not add a star prefix to the draft fallback title', () => {
+    const titleService = TestBed.inject(Title);
+    const titleSpy = spyOn(titleService, 'setTitle');
+    const fixture = TestBed.createComponent(HomeComponent);
+
+    fixture.componentInstance.content.set('{"draft":true}');
+    fixture.componentInstance.title.set('Draft title');
+    flushComponentEffects(fixture);
+
+    expect(mostRecentTitle(titleSpy)).toContain(
+      'JotJSON - JSON viewer, formatter, and tree explorer'
+    );
+    expect(mostRecentTitle(titleSpy).startsWith('* ')).toBeFalse();
+  });
+
+  it('removes the star prefix after a successful save resets dirty state', async () => {
+    const originalBlob = makeIdentityBlob({
+      content: '{"saved":true}',
+      title: 'Saved title',
+      ownerId: 'owner-me'
+    });
+    const updatedBlob = makeIdentityBlob({
+      content: '{"saved":false}',
+      title: 'Saved title',
+      ownerId: 'owner-me'
+    });
+    const blobService = {
+      create: jasmine.createSpy('create').and.returnValue(of(updatedBlob)),
+      update: jasmine.createSpy('update').and.returnValue(of(updatedBlob)),
+      get: jasmine.createSpy('get').and.returnValue(of(originalBlob))
+    };
+    TestBed.overrideProvider(BlobService, { useValue: blobService });
+    signInFakeUser(TestBed.inject(AuthService), {
+      user: { id: 'owner-me', displayName: 'Owner User' }
+    });
+    const titleService = TestBed.inject(Title);
+    const titleSpy = spyOn(titleService, 'setTitle');
+    const fixture = TestBed.createComponent(HomeComponent);
+
+    fixture.componentInstance.loadedBlob.set(originalBlob);
+    fixture.componentInstance.content.set(updatedBlob.content);
+    fixture.componentInstance.title.set('Saved title');
+    flushComponentEffects(fixture);
+    expect(mostRecentTitle(titleSpy)).toBe('* Saved title | JotJSON');
+
+    await fixture.componentInstance.onSave();
+    flushComponentEffects(fixture);
+
+    expect(blobService.update).toHaveBeenCalledWith('identity-blob-1', {
+      content: '{"saved":false}',
+      title: 'Saved title'
+    });
+    expect(mostRecentTitle(titleSpy)).toBe('Saved title | JotJSON');
   });
 });
 

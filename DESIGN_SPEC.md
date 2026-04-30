@@ -272,6 +272,41 @@ bottom border).
 
 The primary page. Available to **all users** (anonymous + registered).
 
+- **Identity control** (toolbar document state)
+  - The home toolbar shows a state pill followed by a document title display.
+    It is visible to anonymous and signed-in users and replaces the prior
+    signed-in-only title input.
+  - Pill states:
+    - `Draft` - no blob is loaded (`/`).
+    - `Saved` - a blob is loaded and editor content/title match the saved
+      version.
+    - `Modified` - a blob is loaded and editor content or title differs from
+      the saved version.
+    - `Saving...` - a save request is in flight.
+    - `Sign in to save` - an anonymous user is viewing `/s/:slug`; the pill is
+      a clickable call-to-action that starts MSAL sign-in.
+  - Dirty model: saved blobs become `Modified` when normalized editor content
+    (CRLF and CR collapse to LF before compare) or trimmed title differs from
+    the loaded blob. Drafts are never `Modified`; they remain `Draft`.
+  - Browser tab title prefixes the normal document title with `*` while the
+    saved blob is `Modified`.
+  - Save button: for owners, disable Save when `loadedBlob !== null &&
+    !dirty()` so unchanged blobs do not issue server PUTs. For signed-in
+    non-owners, keep Save enabled whenever there is content and label it
+    `Save as copy`; saving forks to a new blob (see Persistent Link / Share
+    for fork-on-save semantics).
+  - Anonymous users on `/s/:slug` can edit the shared blob in the editor.
+    These edits are local-only, are not auto-persisted to the global draft,
+    and are lost on hard refresh.
+  - When an anonymous user clicks `Sign in to save`, snapshot `{ slug,
+    content, title }` to `sessionStorage` under `jotjson.signInRestore.v1`
+    before the MSAL redirect. After sign-in returns, restore the snapshot only
+    if the user lands back on the same `/s/:slug`, then clear it.
+  - On narrow viewports, hide the title text but keep the pill visible. The
+    `Sign in to save` label compacts to `Sign in`.
+  - The pill lives in an `aria-live="polite"` region so screen readers announce
+    state changes.
+
 - **JSON Input Panel** (left or top, depending on layout preference)
   - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON/JSONC-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size. Editor language mode auto-detects JSON vs JSONC based on content (presence of `//` or `/* */` comments) and can be toggled manually via a **JSON / JSONC** switch in the toolbar.
   - **JSONC support**: the editor and parser accept JSON with Comments (single-line `//` and multi-line `/* */`), as well as trailing commas. Comments are stripped before parsing into the tree view but preserved in the raw editor text. When saving a blob, the original text (with comments) is stored; the parsed tree is derived on load. This uses a JSONC-aware parser (e.g., `jsonc-parser` from the VS Code ecosystem) rather than native `JSON.parse`.
@@ -381,6 +416,9 @@ Available to **registered users** (create/manage). **Anonymous users can view an
 - The link loads the saved JSON blob into the editor + tree view.
 - **Visibility**: every saved blob is **private (unlisted) by default** - the link works for anyone who has it, but the blob is not listed on any public index, has a `noindex` meta tag, and does not emit rich Open Graph previews. The owner can toggle the blob to **public**, which enables Open Graph previews on `/s/:id` and allows indexing.
 - Owner can update or delete the blob.
+- **Fork-on-save**: a signed-in non-owner who saves edits to a shared blob
+  creates a new blob owned by that user with its own slug. The original blob is
+  unchanged, and the Home toolbar labels this action `Save as copy`.
 
 ### 3. Blobs + History Pages
 

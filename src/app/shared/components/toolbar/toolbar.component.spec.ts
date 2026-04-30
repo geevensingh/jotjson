@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { ToolbarComponent } from './toolbar.component';
@@ -54,6 +55,88 @@ describe('ToolbarComponent', () => {
     }
     fixture.detectChanges();
     return { fixture, prefs: TestBed.inject(PreferencesService), auth, logger };
+  }
+
+  type ToolbarInputOptions = {
+    readonly hasContent?: boolean;
+    readonly title?: string;
+    readonly canSave?: boolean;
+    readonly isSavedBlob?: boolean;
+    readonly isDirty?: boolean;
+    readonly saveInFlight?: boolean;
+    readonly loadedBlobTitle?: string | null;
+    readonly isOwner?: boolean;
+  };
+
+  function setToolbarInputs(
+    fixture: ComponentFixture<ToolbarComponent>,
+    inputs: ToolbarInputOptions
+  ): void {
+    const componentRef = fixture.componentRef;
+    if (inputs.hasContent !== undefined) {
+      componentRef.setInput('hasContent', inputs.hasContent);
+    }
+    if (inputs.title !== undefined) {
+      componentRef.setInput('title', inputs.title);
+    }
+    if (inputs.canSave !== undefined) {
+      componentRef.setInput('canSave', inputs.canSave);
+    }
+    if (inputs.isSavedBlob !== undefined) {
+      componentRef.setInput('isSavedBlob', inputs.isSavedBlob);
+    }
+    if (inputs.isDirty !== undefined) {
+      componentRef.setInput('isDirty', inputs.isDirty);
+    }
+    if (inputs.saveInFlight !== undefined) {
+      componentRef.setInput('saveInFlight', inputs.saveInFlight);
+    }
+    if (inputs.loadedBlobTitle !== undefined) {
+      componentRef.setInput('loadedBlobTitle', inputs.loadedBlobTitle);
+    }
+    if (inputs.isOwner !== undefined) {
+      componentRef.setInput('isOwner', inputs.isOwner);
+    }
+    fixture.detectChanges();
+  }
+
+  function queryByCss<TElement extends Element>(
+    fixture: ComponentFixture<ToolbarComponent>,
+    selector: string
+  ): TElement | null {
+    const debugElement = fixture.debugElement.query(By.css(selector));
+    if (!debugElement) return null;
+    return debugElement.nativeElement as TElement;
+  }
+
+  function queryAllByCss<TElement extends Element>(
+    fixture: ComponentFixture<ToolbarComponent>,
+    selector: string
+  ): TElement[] {
+    return fixture.debugElement
+      .queryAll(By.css(selector))
+      .map((debugElement) => debugElement.nativeElement as TElement);
+  }
+
+  function requireByCss<TElement extends Element>(
+    fixture: ComponentFixture<ToolbarComponent>,
+    selector: string
+  ): TElement {
+    const element = queryByCss<TElement>(fixture, selector);
+    if (!element) {
+      throw new Error(`expected element matching "${selector}"`);
+    }
+    return element;
+  }
+
+  function normalizedText(element: Element): string {
+    return element.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  }
+
+  function findSaveButton(
+    fixture: ComponentFixture<ToolbarComponent>
+  ): HTMLButtonElement {
+    return requireByCss<HTMLButtonElement>(fixture, 'button.save-button');
   }
 
   it('renders without error with default prefs', async () => {
@@ -302,6 +385,331 @@ describe('ToolbarComponent', () => {
     });
   });
 
+  describe('identity pill states (issue #84)', () => {
+    type IdentityPillState =
+      | 'draft'
+      | 'saved'
+      | 'modified'
+      | 'saving'
+      | 'signInToSave';
+
+    const pillStateCases: ReadonlyArray<{
+      readonly expectedState: IdentityPillState;
+      readonly expectedFullText: string;
+      readonly signedIn: boolean;
+      readonly inputs: ToolbarInputOptions;
+    }> = [
+      {
+        expectedState: 'draft',
+        expectedFullText: 'Draft',
+        signedIn: false,
+        inputs: {
+          isSavedBlob: false,
+          saveInFlight: false
+        }
+      },
+      {
+        expectedState: 'saving',
+        expectedFullText: 'Saving...',
+        signedIn: false,
+        inputs: {
+          isSavedBlob: true,
+          isDirty: true,
+          saveInFlight: true
+        }
+      },
+      {
+        expectedState: 'signInToSave',
+        expectedFullText: 'Sign in to save',
+        signedIn: false,
+        inputs: {
+          isSavedBlob: true,
+          saveInFlight: false
+        }
+      },
+      {
+        expectedState: 'modified',
+        expectedFullText: 'Modified',
+        signedIn: true,
+        inputs: {
+          isSavedBlob: true,
+          isDirty: true,
+          saveInFlight: false
+        }
+      },
+      {
+        expectedState: 'saved',
+        expectedFullText: 'Saved',
+        signedIn: true,
+        inputs: {
+          isSavedBlob: true,
+          isDirty: false,
+          saveInFlight: false
+        }
+      }
+    ];
+
+    for (const pillStateCase of pillStateCases) {
+      it(`renders the ${pillStateCase.expectedState} state`, async () => {
+        const { fixture } = await create({ signedIn: pillStateCase.signedIn });
+        setToolbarInputs(fixture, pillStateCase.inputs);
+
+        const statePill = requireByCss<HTMLElement>(fixture, '.state-pill');
+        expect(
+          statePill.classList.contains(
+            `state-pill--${pillStateCase.expectedState}`
+          )
+        ).toBeTrue();
+        expect(
+          normalizedText(
+            requireByCss<HTMLElement>(fixture, '.state-pill .pill-text-full')
+          )
+        ).toBe(pillStateCase.expectedFullText);
+        expect(
+          requireByCss<HTMLElement>(fixture, '.state-pill .pill-text-compact')
+        ).toBeTruthy();
+
+        const ctaButton = queryByCss<HTMLButtonElement>(
+          fixture,
+          '.state-pill button.pill-cta'
+        );
+        if (pillStateCase.expectedState === 'signInToSave') {
+          expect(ctaButton).toBeTruthy();
+        } else {
+          expect(ctaButton).toBeNull();
+        }
+      });
+    }
+  });
+
+  describe('signInRequested output (issue #84)', () => {
+    it('emits exactly once when the sign-in CTA is clicked', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        saveInFlight: false
+      });
+      const signInRequested = jasmine.createSpy('signInRequested');
+      fixture.componentInstance.signInRequested.subscribe(signInRequested);
+
+      requireByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta')
+        .click();
+      fixture.detectChanges();
+
+      expect(signInRequested).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not emit when the pill is not a CTA', async () => {
+      const { fixture } = await create({ signedIn: true });
+      const signInRequested = jasmine.createSpy('signInRequested');
+      fixture.componentInstance.signInRequested.subscribe(signInRequested);
+      const nonCtaStates: ReadonlyArray<ToolbarInputOptions> = [
+        { isSavedBlob: false, saveInFlight: false },
+        { isSavedBlob: true, saveInFlight: true },
+        { isSavedBlob: true, isDirty: true, saveInFlight: false },
+        { isSavedBlob: true, isDirty: false, saveInFlight: false }
+      ];
+
+      for (const nonCtaState of nonCtaStates) {
+        setToolbarInputs(fixture, nonCtaState);
+        expect(
+          queryByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta')
+        ).toBeNull();
+        requireByCss<HTMLElement>(fixture, '.state-pill').click();
+        fixture.detectChanges();
+      }
+
+      expect(signInRequested).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('save button identity labels (issue #84)', () => {
+    it('labels the owner save button as Save', async () => {
+      const { fixture } = await create({ signedIn: true });
+      setToolbarInputs(fixture, {
+        canSave: true,
+        isSavedBlob: true,
+        isOwner: true,
+        saveInFlight: false
+      });
+
+      expect(normalizedText(findSaveButton(fixture))).toBe('Save');
+    });
+
+    it('labels a signed-in non-owner loaded-blob save as Save as copy', async () => {
+      const { fixture } = await create({ signedIn: true });
+      setToolbarInputs(fixture, {
+        canSave: true,
+        isSavedBlob: true,
+        isOwner: false,
+        saveInFlight: false
+      });
+
+      expect(normalizedText(findSaveButton(fixture))).toBe('Save as copy');
+    });
+
+    it('labels a signed-in draft save button as Save', async () => {
+      const { fixture } = await create({ signedIn: true });
+      setToolbarInputs(fixture, {
+        canSave: true,
+        isSavedBlob: false,
+        isOwner: false,
+        saveInFlight: false
+      });
+
+      expect(normalizedText(findSaveButton(fixture))).toBe('Save');
+    });
+
+    it('disables the save button when canSave is false', async () => {
+      const { fixture } = await create({ signedIn: true });
+      setToolbarInputs(fixture, {
+        canSave: false,
+        isSavedBlob: false,
+        saveInFlight: false
+      });
+
+      expect(findSaveButton(fixture).disabled).toBeTrue();
+    });
+
+    it('disables the save button when saveInFlight is true', async () => {
+      const { fixture } = await create({ signedIn: true });
+      setToolbarInputs(fixture, {
+        canSave: true,
+        isSavedBlob: false,
+        saveInFlight: true
+      });
+
+      expect(findSaveButton(fixture).disabled).toBeTrue();
+    });
+  });
+
+  describe('identity title rendering (issue #84)', () => {
+    it('renders title-display instead of title-input for anonymous saved blobs', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        loadedBlobTitle: 'Shared blob'
+      });
+
+      expect(queryByCss<HTMLElement>(fixture, '.title-display')).toBeTruthy();
+      expect(queryByCss<HTMLInputElement>(fixture, '.title-input')).toBeNull();
+    });
+
+    it('shows Untitled with the untitled class for null or empty anonymous titles', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        loadedBlobTitle: null
+      });
+      let titleDisplay = requireByCss<HTMLElement>(fixture, '.title-display');
+      expect(normalizedText(titleDisplay)).toBe('Untitled');
+      expect(titleDisplay.classList.contains('untitled')).toBeTrue();
+
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        loadedBlobTitle: ''
+      });
+      titleDisplay = requireByCss<HTMLElement>(fixture, '.title-display');
+      expect(normalizedText(titleDisplay)).toBe('Untitled');
+      expect(titleDisplay.classList.contains('untitled')).toBeTrue();
+    });
+
+    it('shows a non-empty anonymous title without the untitled class', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        loadedBlobTitle: 'Published example'
+      });
+
+      const titleDisplay = requireByCss<HTMLElement>(fixture, '.title-display');
+      expect(normalizedText(titleDisplay)).toBe('Published example');
+      expect(titleDisplay.classList.contains('untitled')).toBeFalse();
+    });
+
+    it('renders title-input for signed-in users and emits titleChange on input', async () => {
+      const { fixture } = await create({ signedIn: true });
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        loadedBlobTitle: 'Server title',
+        title: 'Editable title'
+      });
+      const titleChange = jasmine.createSpy('titleChange');
+      fixture.componentInstance.titleChange.subscribe(titleChange);
+
+      expect(queryByCss<HTMLElement>(fixture, '.title-display')).toBeNull();
+      const titleInput = requireByCss<HTMLInputElement>(fixture, '.title-input');
+      expect(titleInput.value).toBe('Editable title');
+
+      titleInput.value = 'Renamed title';
+      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+
+      expect(titleChange).toHaveBeenCalledOnceWith('Renamed title');
+    });
+  });
+
+  describe('compact identity pill text (issue #84)', () => {
+    it('renders full and compact spans for non-CTA states', async () => {
+      const { fixture } = await create({ signedIn: true });
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        isDirty: false,
+        saveInFlight: false
+      });
+
+      expect(queryAllByCss<HTMLElement>(fixture, '.state-pill .pill-text-full').length)
+        .toBe(1);
+      expect(queryAllByCss<HTMLElement>(fixture, '.state-pill .pill-text-compact').length)
+        .toBe(1);
+      expect(queryByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta'))
+        .toBeNull();
+    });
+
+    it('renders full and compact spans inside the CTA button', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        saveInFlight: false
+      });
+
+      const ctaButton = requireByCss<HTMLButtonElement>(
+        fixture,
+        '.state-pill button.pill-cta'
+      );
+      expect(ctaButton.querySelector('.pill-text-full')).toBeTruthy();
+      expect(ctaButton.querySelector('.pill-text-compact')).toBeTruthy();
+    });
+  });
+
+  describe('identity pill ARIA (issue #84)', () => {
+    it('marks the state pill as a polite status region', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: false,
+        saveInFlight: false
+      });
+
+      const statePill = requireByCss<HTMLElement>(fixture, '.state-pill');
+      expect(statePill.getAttribute('role')).toBe('status');
+      expect(statePill.getAttribute('aria-live')).toBe('polite');
+    });
+
+    it('gives the sign-in CTA an aria-label', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        saveInFlight: false
+      });
+
+      expect(
+        requireByCss<HTMLButtonElement>(
+          fixture,
+          '.state-pill button.pill-cta'
+        ).getAttribute('aria-label')
+      ).toBe('Sign in to save and share');
+    });
+  });
+
   describe('file input wiring', () => {
     it('emits upload when onFileChange receives a file', async () => {
       const { fixture } = await create();
@@ -495,7 +903,7 @@ describe('ToolbarComponent', () => {
     function triggerSaveButtonClick(
       fixture: ComponentFixture<ToolbarComponent>
     ): void {
-      findButtonByAriaLabel(fixture, 'Save & share').click();
+      findSaveButton(fixture).click();
       fixture.detectChanges();
     }
 

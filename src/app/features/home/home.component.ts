@@ -84,6 +84,32 @@ import { validateAndReadSingleFile } from '../../core/upload/upload-file-validat
 type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
 type UploadSource = 'drag' | 'pick';
 
+type SignInRestoreSnapshot = {
+  slug: string | null;
+  content: string;
+  title: string;
+};
+
+const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
+
+const normalizeEol = (source: string): string =>
+  source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isSignInRestoreSnapshot = (
+  value: unknown
+): value is SignInRestoreSnapshot => {
+  if (!isRecord(value)) return false;
+  const slug = value['slug'];
+  return (
+    (slug === null || typeof slug === 'string') &&
+    typeof value['content'] === 'string' &&
+    typeof value['title'] === 'string'
+  );
+};
+
 /**
  * Primary editor + tree experience. Home is an anonymous page - persistence
  * goes to localStorage via DraftService (spec §Features #1 / §Milestones #2).
@@ -214,6 +240,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    * unrelated reasons).
    */
   private lastHydratedInputId: string | null = null;
+  private signInRestoreAttempted = false;
 
   readonly parseResult = computed<JsonParseResult>(() =>
     this.parser.parse(this.content())
@@ -230,7 +257,14 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   readonly hasContent = computed(() => this.content().trim().length > 0);
 
-  readonly canSave = computed(() => this.auth.isSignedIn() && this.hasContent());
+  readonly dirty = computed(() => {
+    const blob = this.loadedBlob();
+    if (!blob) return false;
+    return (
+      normalizeEol(this.content()) !== normalizeEol(blob.content) ||
+      this.title().trim() !== (blob.title ?? '').trim()
+    );
+  });
 
   readonly isOwnedBlob = computed(() => {
     const blob = this.loadedBlob();
@@ -238,6 +272,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     const user = this.auth.user();
     return !!user && user.id === blob.ownerId;
   });
+
+  readonly canSave = computed(
+    () =>
+      this.auth.isSignedIn() &&
+      this.hasContent() &&
+      (this.loadedBlob() === null || !this.isOwnedBlob() || this.dirty())
+  );
 
   readonly isBlobPublic = computed(() => !!this.loadedBlob()?.isPublic);
 
@@ -339,9 +380,11 @@ export class HomeComponent implements OnInit, OnDestroy {
   private pendingTreeApply: string | null | undefined = undefined;
 
   constructor() {
-    // Persist edits to the draft.
+    // Persist anonymous draft edits only while no saved blob is loaded.
     effect(() => {
-      this.draft.set(this.content());
+      if (this.loadedBlob() === null) {
+        this.draft.set(this.content());
+      }
     });
 
     // Keep mode in sync with content: jsonc if comments are present, json otherwise.
@@ -370,15 +413,18 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.loadedBlob.set(blob);
       this.setContent(blob.content);
       this.title.set(blob.title ?? '');
+      this.restoreSignInSnapshotOnce();
     });
 
-    // Update the browser tab title whenever the loaded blob or local title
-    // changes. Anonymous / unsaved editing falls back to the homepage title.
+    // Update the browser tab title whenever the loaded blob, local title, or
+    // dirty state changes. Anonymous / unsaved editing falls back to the
+    // homepage title.
     effect(() => {
       const blob = this.loadedBlob();
       const title = this.title();
+      const dirtyPrefix = this.dirty() ? '* ' : '';
       if (!blob) {
-        this.titleService.setTitle(this.homepageTitle);
+        this.titleService.setTitle(`${dirtyPrefix}${this.homepageTitle}`);
         this.seo.clearBlobTags();
         return;
       }
@@ -386,7 +432,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         title.trim().length > 0
           ? title.trim()
           : $localize`:@@app.title.untitled:Untitled`;
-      this.titleService.setTitle(`${label} | JotJSON`);
+      this.titleService.setTitle(`${dirtyPrefix}${label} | JotJSON`);
       if (blob.isPublic) {
         this.seo.setOpenGraphForBlob(blob);
       } else {
@@ -878,6 +924,54 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   onTitleChange(next: string): void {
     this.title.set(next);
+  }
+
+  onSignInRequested(): void {
+    const snapshot: SignInRestoreSnapshot = {
+      slug: this.loadedBlob()?.slug ?? null,
+      content: this.content(),
+      title: this.title()
+    };
+
+    try {
+      sessionStorage.setItem(SIGN_IN_RESTORE_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Storage can be disabled; sign-in should still proceed.
+    }
+
+    this.auth.signIn();
+  }
+
+  private restoreSignInSnapshotOnce(): void {
+    if (this.signInRestoreAttempted) return;
+    this.signInRestoreAttempted = true;
+
+    try {
+      const serializedSnapshot = sessionStorage.getItem(SIGN_IN_RESTORE_KEY);
+      if (serializedSnapshot === null) return;
+
+      const parsedSnapshot: unknown = JSON.parse(serializedSnapshot);
+      if (!isSignInRestoreSnapshot(parsedSnapshot)) {
+        this.clearSignInRestoreSnapshot();
+        return;
+      }
+
+      if (parsedSnapshot.slug === (this.loadedBlob()?.slug ?? null)) {
+        this.setContent(parsedSnapshot.content);
+        this.title.set(parsedSnapshot.title);
+      }
+      this.clearSignInRestoreSnapshot();
+    } catch {
+      this.clearSignInRestoreSnapshot();
+    }
+  }
+
+  private clearSignInRestoreSnapshot(): void {
+    try {
+      sessionStorage.removeItem(SIGN_IN_RESTORE_KEY);
+    } catch {
+      // Ignore disabled-storage errors.
+    }
   }
 
   /**

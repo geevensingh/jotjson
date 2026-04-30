@@ -123,31 +123,67 @@
     </mat-button-toggle>
   </mat-button-toggle-group>
 
+  <span class="divider" aria-hidden="true"></span>
+
+  <div class="identity-control">
+    <div
+      [class]="'state-pill ' + pillStateClass()"
+      role="status"
+      aria-live="polite"
+    >
+      @if (isCta()) {
+        <button
+          mat-flat-button
+          class="pill-cta"
+          type="button"
+          i18n-aria-label="@@toolbar.signInToSaveTooltip"
+          aria-label="Sign in to save and share"
+          (click)="signInRequested.emit()"
+        >
+          <span class="pill-text-full" i18n="@@toolbar.state.signInToSave">Sign in to save</span>
+          <span class="pill-text-compact" i18n="@@toolbar.state.signInToSaveCompact">Sign in</span>
+        </button>
+      } @else {
+        <span class="pill-text-full">{{ pillTextFull() }}</span>
+        <span class="pill-text-compact">{{ pillTextCompact() }}</span>
+      }
+    </div>
+
+    @if (isAnonymousOnSavedBlob()) {
+      <span
+        class="title-display"
+        [class.untitled]="!loadedBlobTitle()"
+      >
+        {{ loadedBlobTitle() || untitledLabel }}
+      </span>
+    } @else if (isSignedIn()) {
+      <input
+        class="title-input title-field"
+        type="text"
+        [value]="title()"
+        i18n-placeholder="@@toolbar.title.placeholder"
+        placeholder="Add a title..."
+        aria-label="Blob title"
+        i18n-aria-label="@@toolbar.title.aria"
+        maxlength="200"
+        (input)="onTitleInput($event)"
+        (keydown)="onTitleKeydown($event)"
+      />
+    }
+  </div>
+
   <ng-container *jjSignedIn>
-    <span class="divider" aria-hidden="true"></span>
-
-    <input
-      type="text"
-      class="title-field"
-      [value]="title()"
-      placeholder="Title (optional)"
-      i18n-placeholder="@@toolbar.title.placeholder"
-      aria-label="Blob title"
-      i18n-aria-label="@@toolbar.title.aria"
-      maxlength="200"
-      (input)="onTitleInput($event)"
-      (keydown)="onTitleKeydown($event)"
-    />
-
     <button
       type="button"
-      mat-icon-button
+      mat-flat-button
+      class="save-button"
+      color="primary"
       [matTooltip]="saveTooltip()"
-      [attr.aria-label]="saveTooltip()"
       [disabled]="saveDisabled()"
       (click)="onSaveClick()"
     >
       <jj-icon name="save" />
+      <span>{{ saveButtonLabel() }}</span>
     </button>
 
     @if (showOverflowMenu()) {

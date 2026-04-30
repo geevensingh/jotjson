@@ -12,6 +12,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { SignedInDirective } from '../../directives/signed-in.directive';
@@ -33,6 +34,9 @@ type ToolbarAction =
   | 'togglePublic'
   | 'deleteBlob'
   | 'fileChange';
+
+type PillState = 'draft' | 'saved' | 'modified' | 'saving' | 'signInToSave';
+type PillTextVariant = 'full' | 'compact';
 
 /**
  * 4-state pane layout segmented control. The toolbar's parent
@@ -70,6 +74,7 @@ export type PaneLayout =
   styleUrl: './toolbar.component.scss'
 })
 export class ToolbarComponent {
+  private readonly auth = inject(AuthService);
   private readonly prefs = inject(PreferencesService);
   private readonly loggerService = inject(LoggerService);
 
@@ -77,7 +82,11 @@ export class ToolbarComponent {
   readonly hasContent = input<boolean>(false);
   readonly title = input<string>('');
   readonly canSave = input<boolean>(false);
+  readonly isSavedBlob = input<boolean>(false);
+  readonly isDirty = input<boolean>(false);
   readonly saveInFlight = input<boolean>(false);
+  readonly loadedBlobTitle = input<string | null>(null);
+  readonly isOwnedBlob = input<boolean>(false);
   /**
    * Set to true when a blob is loaded AND the signed-in user owns it.
    * Controls whether the 3-dot overflow menu (copy link / toggle visibility
@@ -124,6 +133,7 @@ export class ToolbarComponent {
   readonly paneLayoutChange = output<PaneLayout>();
   readonly save = output<void>();
   readonly titleChange = output<string>();
+  readonly signInRequested = output<void>();
   readonly copyShareLink = output<void>();
   readonly togglePublic = output<void>();
   readonly deleteBlob = output<void>();
@@ -171,15 +181,40 @@ export class ToolbarComponent {
   readonly paneLayoutBothVerticalLabel = $localize`:@@toolbar.paneLayout.bothVertical:Editor above tree`;
   readonly paneLayoutTreeOnlyLabel = $localize`:@@toolbar.paneLayout.treeOnly:Show tree only`;
 
-  readonly saveDisabled = computed(
-    () => !this.canSave() || !this.hasContent() || this.saveInFlight()
+  readonly isSignedIn = computed(() => this.auth.isSignedIn());
+  readonly ownsLoadedBlob = computed(() => this.isOwner() || this.isOwnedBlob());
+  readonly pillState = computed<PillState>(() => {
+    if (this.saveInFlight()) return 'saving';
+    if (!this.isSavedBlob()) return 'draft';
+    if (!this.isSignedIn()) return 'signInToSave';
+    if (this.isDirty()) return 'modified';
+    return 'saved';
+  });
+  readonly pillTextFull = computed(() =>
+    this.pillTextForState(this.pillState(), 'full')
   );
+  readonly pillTextCompact = computed(() =>
+    this.pillTextForState(this.pillState(), 'compact')
+  );
+  readonly pillStateClass = computed(() => `state-pill--${this.pillState()}`);
+  readonly isCta = computed(() => this.pillState() === 'signInToSave');
+  readonly saveButtonLabel = computed(() =>
+    this.isSavedBlob() && !this.ownsLoadedBlob()
+      ? $localize`:@@toolbar.save.asCopy:Save as copy`
+      : $localize`:@@toolbar.save.label:Save`
+  );
+  readonly isAnonymousOnSavedBlob = computed(
+    () => this.isSavedBlob() && !this.isSignedIn()
+  );
+  readonly untitledLabel = $localize`:@@toolbar.title.untitled:Untitled`;
+
+  readonly saveDisabled = computed(() => !this.canSave() || this.saveInFlight());
 
   /**
    * The overflow menu is visible only when the parent tells us the current
    * signed-in user owns the loaded blob.
    */
-  readonly showOverflowMenu = computed(() => this.isOwner());
+  readonly showOverflowMenu = computed(() => this.ownsLoadedBlob());
 
   readonly visibilityMenuLabel = computed(() =>
     this.isPublic()
@@ -188,9 +223,17 @@ export class ToolbarComponent {
   );
 
   readonly saveTooltip = computed(() => {
-    if (this.saveInFlight()) return $localize`:@@toolbar.save.tooltip.saving:Saving...`;
-    if (!this.hasContent()) return $localize`:@@toolbar.save.tooltip.empty:Nothing to save`;
-    return $localize`:@@toolbar.save.tooltip.save:Save & share`;
+    if (!this.saveInFlight() && this.saveDisabled()) {
+      return $localize`:@@toolbar.save.disabledTooltip:No changes to save`;
+    }
+    if (
+      !this.saveInFlight() &&
+      this.isSavedBlob() &&
+      !this.ownsLoadedBlob()
+    ) {
+      return $localize`:@@toolbar.save.asCopyTooltip:Save your changes as a new blob`;
+    }
+    return '';
   });
 
   readonly pasteDisabled = computed(() => {
@@ -308,6 +351,25 @@ export class ToolbarComponent {
       this.emitToolbarAction('copy');
       this.copyRequested.emit();
     }
+  }
+
+  private pillTextForState(state: PillState, variant: PillTextVariant): string {
+    switch (state) {
+      case 'draft':
+        return $localize`:@@toolbar.state.draft:Draft`;
+      case 'saved':
+        return $localize`:@@toolbar.state.saved:Saved`;
+      case 'modified':
+        return $localize`:@@toolbar.state.modified:Modified`;
+      case 'saving':
+        return $localize`:@@toolbar.state.saving:Saving...`;
+      case 'signInToSave':
+        return variant === 'compact'
+          ? $localize`:@@toolbar.state.signInToSaveCompact:Sign in`
+          : $localize`:@@toolbar.state.signInToSave:Sign in to save`;
+    }
+    const exhaustiveState: never = state;
+    return exhaustiveState;
   }
 
   private emitToolbarAction(action: ToolbarAction): void {
