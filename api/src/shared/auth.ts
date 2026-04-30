@@ -326,7 +326,9 @@ export async function requireAuth(req: HttpRequest): Promise<AuthenticatedPrinci
     throw new AuthError('Malformed bearer header', 'malformed');
   }
   try {
-    return await verifyAccessToken(result.token);
+    const principal = await verifyAccessToken(result.token);
+    trackEvent('auth.tokenAccepted', { authMode: 'required' });
+    return principal;
   } catch (error) {
     if (error instanceof AuthError && error.reason) {
       trackEvent('auth.tokenRejected', { reason: error.reason, authMode: 'required' });
@@ -348,7 +350,9 @@ export async function tryAuth(req: HttpRequest): Promise<AuthenticatedPrincipal 
   const result = extractBearerToken(req);
   if (result.kind !== 'token') return null;
   try {
-    return await verifyAccessToken(result.token);
+    const principal = await verifyAccessToken(result.token);
+    trackEvent('auth.tokenAccepted', { authMode: 'optional' });
+    return principal;
   } catch (error) {
     if (error instanceof AuthError) return null;
     throw error;
