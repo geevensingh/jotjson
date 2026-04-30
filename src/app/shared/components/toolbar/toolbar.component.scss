@@ -193,10 +193,34 @@
   font-family: v.$font-ui;
   white-space: nowrap;
 
-  jj-icon {
+  // Material 21 projects all non-mat-icon content into a default-inline
+  // `<span class="mdc-button__label">`. That makes our jj-icon and the
+  // text label inline-level siblings, and an inline-flex element with
+  // line-height: 0 baselines to its bottom edge -- which would drag the
+  // icon's top well above the text top. Force the label wrapper to flex
+  // so jj-icon and the text center vertically inside the button.
+  // ::ng-deep is required because the label span is rendered inside
+  // Material's button template and doesn't carry our component's
+  // _ngcontent attribute.
+  //
+  // The label also gets nudged 2px up to compensate for the asymmetric
+  // line-box rendering: with our reduced 32px container height, the
+  // text+icon pair otherwise sits visually low inside the button.
+  ::ng-deep .mdc-button__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    top: -2px;
+  }
+
+  // Optical alignment: with "Save" having no descenders, the text's
+  // visual center sits a couple pixels above the line-box midline,
+  // while the icon's visual center sits on its box midline. Nudge
+  // the icon down so the two visual centers agree.
+  ::ng-deep jj-icon {
+    flex: 0 0 auto;
     position: relative;
-    top: 1px;
-    margin-right: 6px;
+    top: 2px;
   }
 }
 
