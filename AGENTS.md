@@ -331,6 +331,13 @@ Before finishing a task:
 - Ask a clarifying question rather than guessing on behavioral choices,
   defaults, limits, or scope. See §11 for the mandatory plan-and-approval
   flow that applies to every code change.
+- **Discussion is not approval.** When you ask a clarifying question or
+  offer the user a choice among options, their answer is input to your
+  plan, not a command to execute. Continue planning (or write up a plan)
+  and wait for an explicit go-ahead -- phrases like "implement",
+  "execute", "approved, please ship", "go ahead" -- before touching
+  code. Picking option B from a multiple-choice you offered is the user
+  choosing a direction, not authorizing the change.
 - Prefer the simpler, spec-aligned option over a clever alternative.
 
 ## 11. Planning, Critical Thinking & Proactive Feedback
