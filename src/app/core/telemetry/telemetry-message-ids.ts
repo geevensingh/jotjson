@@ -89,6 +89,39 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'app.boot',
 
+  /**
+   * Kind: event
+   * Fired by: `initWebVitals` in
+   *           `core/telemetry/web-vitals.ts`, lazily loaded from
+   *           `AppComponent.ngOnInit`. The `web-vitals` npm package
+   *           is dynamic-imported as its own chunk so it stays out
+   *           of the initial bundle.
+   *
+   * Subscribes to `onLCP` / `onINP` / `onCLS` and accumulates the
+   * latest reported value for each metric. On the first `pagehide`
+   * event of the page lifecycle (registered with `{ once: true }`),
+   * emits ONE `webVitals` event with whatever metrics have
+   * finalized. If none have, the event is suppressed -- an
+   * empty event is noise.
+   *
+   * Hand-rolled `PerformanceObserver` was rejected at planning
+   * time because BFCache resume, INP attribution, and CLS-window
+   * close-on-hidden semantics are subtle; the package gets them
+   * right.
+   *
+   * Props: { appVersion: string } sourced from `BUILD_INFO.version`.
+   *   Like `app.boot`, this dimension is exempt from the
+   *   closed-enum cardinality rule (one value per deploy across
+   *   sessions; see preamble carve-out).
+   * Measurements: { lcpMs?: number; inpMs?: number; cls?: number }.
+   *   - `lcpMs` -- Largest Contentful Paint, milliseconds.
+   *   - `inpMs` -- Interaction to Next Paint, milliseconds.
+   *   - `cls`   -- Cumulative Layout Shift, unitless score.
+   *   Each key is omitted when the corresponding callback never
+   *   fired (e.g., user closed the tab before LCP finalized).
+   */
+  'webVitals',
+
   // HTTP / API
 
   /**

@@ -96,4 +96,26 @@ describe('AppComponent', () => {
     );
     expect(callOrder).toEqual(['event', 'connect']);
   });
+
+  it('initializes web vitals after app.boot connect during lazy initialization', async () => {
+    const initSpy = jasmine.createSpy<(
+      logger: LoggerService,
+      appVersion: string
+    ) => Promise<void>>('initWebVitals').and.resolveTo();
+    const webVitalsModule = await import('./core/telemetry/web-vitals');
+    webVitalsModule.__setInitWebVitalsImplForTesting(initSpy);
+    try {
+      const fixture = TestBed.createComponent(AppComponent);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(initSpy).toHaveBeenCalledTimes(1);
+      const [logger, appVersion] = initSpy.calls.mostRecent().args;
+      expect(logger).toBe(loggerServiceSpy);
+      expect(appVersion).toEqual(jasmine.any(String));
+    } finally {
+      webVitalsModule.__resetInitWebVitalsImplForTesting();
+    }
+  });
 });

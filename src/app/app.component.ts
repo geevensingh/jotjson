@@ -48,6 +48,10 @@ export class AppComponent implements OnInit {
       }, undefined);
       await loggerService.connect();
       routeTracker.flushPending();
+      // Keep web-vitals in a lazy chunk; it emits one webVitals event on pagehide.
+      void import('./core/telemetry/web-vitals').then(({ initWebVitals }) => {
+        return initWebVitals(loggerService, buildInfoModule.BUILD_INFO.version);
+      });
     });
     void import('./core/update/app-update.service').then(({ AppUpdateService }) => {
       this.injector.get(AppUpdateService).initialize();

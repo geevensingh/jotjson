@@ -119,6 +119,10 @@ queryable with `percentile()` / `avg()` / `sum()` / `min()` / `max()`).
 Don't reuse the same key across both maps for the same event - the
 wire format treats them as a single name-space.
 
+Concrete event example: `webVitals` uses the `event` sink to record Core
+Web Vitals as numeric measurements, while keeping its only dimension to
+`appVersion`. See [Web Vitals](#web-vitals) for the full contract.
+
 A common pattern is to include the raw number as a measurement AND a
 pre-bucketed label as a dimension, so the same event answers both
 "distribution shape" and "group-by bucket" queries:
@@ -163,6 +167,46 @@ For other dimensional facets, prefer hand-coded closed-enum strings
 Color values use a coarse named bucket
 (`'red' | 'orange' | ... | 'gray' | 'custom'`) plus an `isDefault`
 boolean - never the raw hex.
+
+`webVitals` is the only current event that sends `appVersion` as a raw
+string dimension. Like `app.boot`, it is exempt from the closed-enum
+cardinality rule because it has one value per deploy (roughly one per
+week), not one value per user action or payload.
+
+---
+
+## Web Vitals
+
+`webVitals` records Google's Core Web Vitals - Largest Contentful Paint
+(LCP), Interaction to Next Paint (INP), and Cumulative Layout Shift (CLS)
+- because they are the user-perceived performance signals that move SEO
+and UX needles.
+
+The implementation uses the `web-vitals` npm package through a lazy-loaded
+telemetry module. Both the package and the wrapper module land in their own
+JavaScript chunk, fetched after `app.boot`; nothing from this path is part
+of the initial bundle.
+
+The event is emitted once per page lifecycle on the first `pagehide` event
+with `{ once: true }`. BFCache resumes do not re-emit the event; that is an
+accepted gap unless BFCache traffic becomes interesting enough to analyze
+separately. If all metrics are still undefined at `pagehide`, no event is
+emitted because an empty `webVitals` event is noise.
+
+Measurements are optional, and undefined keys are omitted:
+
+- `lcpMs` - Largest Contentful Paint in milliseconds. It typically reports
+  near `pagehide`, after the largest content paint has stabilized. Hidden-tab
+  loads can emit early.
+- `inpMs` - Interaction to Next Paint in milliseconds. This replaces FID and
+  remains undefined for sessions with zero interactions.
+- `cls` - Cumulative Layout Shift as a unitless score, not milliseconds. The
+  CLS window closes when the document becomes hidden; the package handles
+  that behavior and JotJSON snapshots the value.
+
+Privacy posture: the only custom dimension is `appVersion` from
+`BUILD_INFO.version`. No URLs, user IDs, editor or clipboard text, or other
+payload content are attached.
 
 ---
 
@@ -414,6 +458,24 @@ Fix per tool:
 
 Tested against the classic AI schema. For LAW, swap the table name (see
 the mapping above) and rename `timestamp` to `TimeGenerated`.
+
+### Web Vitals percentiles, last day
+
+```kusto
+customEvents
+| where timestamp > ago(1d)
+| where name == 'webVitals'
+| extend lcp_ms = todouble(customMeasurements['lcpMs']),
+         inp_ms = todouble(customMeasurements['inpMs']),
+         cls    = todouble(customMeasurements['cls'])
+| summarize
+    lcp_p75 = percentile(lcp_ms, 75),
+    inp_p75 = percentile(inp_ms, 75),
+    cls_p75 = percentile(cls, 75),
+    sessions = count()
+  by app_version = tostring(customDimensions['appVersion'])
+| sort by app_version desc
+```
 
 ### Recent exceptions, last hour
 

@@ -1002,6 +1002,10 @@ Manual instrumentation, driven through `core/telemetry/LoggerService`:
   are schema-derived closed enums, booleans are string dimensions,
   numeric values use bucket dimensions plus raw numeric measurements,
   and colors send only a coarse bucket plus `isDefault` (never raw hex).
+- **Core Web Vitals** - the SPA emits a `webVitals` event on `pagehide`
+  with LCP, INP, and CLS measurements. The `web-vitals` package is
+  lazily loaded in a separate post-boot chunk, so it stays out of the
+  initial bundle.
 - **Dependencies (XHR/fetch)** - **on**, for SPA <-> Functions
   correlation. URLs are sanitized in a telemetry initializer (query
   string and fragment stripped). Ajax error response bodies are **off**
