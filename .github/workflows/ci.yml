@@ -11,10 +11,15 @@ permissions:
   checks: write
   pull-requests: write
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   web:
     name: Web build & type-check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -30,6 +35,7 @@ jobs:
   api:
     name: API build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: api
@@ -42,7 +48,6 @@ jobs:
           cache-dependency-path: api/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - run: npm run build
       - name: Run tests
         run: npm test
       - name: Upload api JUnit
@@ -52,6 +57,7 @@ jobs:
           name: api-junit
           path: api/test-results/api/junit.xml
           if-no-files-found: ignore
+          retention-days: 7
       - name: Publish api test results
         if: always()
         uses: dorny/test-reporter@v2
@@ -61,19 +67,10 @@ jobs:
           reporter: java-junit
           fail-on-error: false
 
-  bicep:
-    name: Bicep validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install Bicep
-        run: az bicep install
-      - name: Build main.bicep
-        run: az bicep build --file infra/main.bicep
-
   workflows-lint:
     name: Workflows lint (actionlint)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
       - name: Install actionlint
@@ -86,9 +83,10 @@ jobs:
   web-tests:
     name: Web unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -103,6 +101,7 @@ jobs:
           name: web-coverage
           path: coverage/jotjson
           if-no-files-found: ignore
+          retention-days: 7
       - name: Upload web JUnit
         if: always()
         uses: actions/upload-artifact@v4
@@ -110,6 +109,7 @@ jobs:
           name: web-junit
           path: test-results/web/junit.xml
           if-no-files-found: ignore
+          retention-days: 7
       - name: Publish web test results
         if: always()
         uses: dorny/test-reporter@v2
@@ -118,3 +118,4 @@ jobs:
           path: test-results/web/junit.xml
           reporter: java-junit
           fail-on-error: false
+

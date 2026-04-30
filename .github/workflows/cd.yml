@@ -52,6 +52,7 @@ jobs:
   deploy:
     name: Build and deploy to Azure Static Web Apps
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Only deploy when CI succeeded for a push to main, or when a human
     # triggers a manual redeploy. PR-triggered CI runs (workflow_run.event
     # == 'pull_request') are explicitly excluded so opening a PR never
