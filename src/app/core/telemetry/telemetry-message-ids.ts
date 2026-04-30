@@ -61,6 +61,9 @@ export const TELEMETRY_MESSAGE_IDS = [
   'tree.contextMenu.collapse',
   'tree.contextMenu.expandAllFromHere',
   'tree.contextMenu.expandToDepth',
+  'tree.contextMenu.isolate',
+  'tree.contextMenu.isolateNarrow',
+  'tree.contextMenu.isolateWide',
   'tree.row.doubleClickCopyValue'
 ] as const;
 

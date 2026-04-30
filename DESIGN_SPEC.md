@@ -346,6 +346,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Search by key** - sets the search to the key text, scope to `keys`, regex mode off, and the value-type filter to `all`. The clicked row becomes the active hit when present in the result set.
     - **Search by value** - same wiring, scope `values`. Hidden on `null` and on container rows. Both search items are also hidden in `embeddedMode` (the rule-editor live preview has no search bar).
     - **Collapse** - hides itself when the row is already collapsed.
+    - **Isolate** / **Collapse siblings** - smart-visibility action(s) that fold the tree to focus on the clicked branch. Both leave the ancestor chain (root..clicked row) and the clicked row's own subtree expansion state untouched. Define `narrowSet` = visibly-expanded peers under the clicked row's immediate parent; `widerSet` = visibly-expanded peers at every higher ancestor (grandparent up to root). **Isolate** collapses `narrowSet U widerSet`; **Collapse siblings** collapses `narrowSet` only. Hidden expanded state under newly-collapsed off-chain branches is preserved (standard CDK FlatTree behavior). Visibility (when the clicked row resolves to a current, non-root node): show neither when both sets are empty; show single **Isolate** when `widerSet` is empty (wide and narrow produce identical end states) or when `narrowSet` is empty (narrow would be a no-op and wide is the only meaningful action); show **both Collapse siblings and Isolate** only when both sets are non-empty (the two actions produce distinct end states). Right-clicking the root row never offers Isolate items, and the actions are no-ops if the path no longer resolves in the current model.
     - **Expand all from here** - hides itself when every container in the subtree is already expanded.
     - **Expand to depth +1..+5 from here** - **expand-only** semantics: each container in the subtree at relative depth `< N` is expanded if it is currently collapsed, and nothing is ever collapsed (the action is purely additive and idempotent). An entry is shown only when (a) `N` does not exceed the deepest descendant's relative depth from the clicked node, and (b) at least one container at relative depth `< N` somewhere in the subtree (including hidden under a collapsed ancestor) is currently collapsed - i.e., the action would actually expand something. Together these hide redundant entries deeper than the subtree (`+4`/`+5` on a 3-level subtree) and entries that have nothing left to do (everything `+1..+N` on a fully-expanded subtree). Trade-off: there is no per-row "collapse to depth +N" - to reset a partially-expanded subtree the user invokes **Collapse** then re-expands. The toolbar's global **Expand to Level** dropdown still uses snap-to-exact semantics across the whole tree; only the per-row context menu is expand-only.
     - The right-click flow positions the menu at the cursor; the kebab self-anchors at its own location. Re-right-clicking a different row while the menu is open repositions it. Keyboard-fired contextmenu (`clientX/Y === 0`) is ignored in v1; full keyboard support is a follow-up. Each invoked action emits an info-level telemetry event under `tree.contextMenu.*`; no user content is logged.
@@ -898,7 +899,7 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 ## CI/CD (GitHub Actions)
 
 - **CI pipeline** - runs on every push and PR:
-  - Lint (ESLint), unit tests (Karma/Jest), build (`ng build --configuration production`).
+  - Lint, frontend tests, build (`ng build --configuration production`).
   - Azure Functions: lint, test, build.
 - **CD pipeline** - deploys on merge to `main`:
   - Angular SPA -> Azure Static Web Apps (using the `azure/static-web-apps-deploy` action).
@@ -915,6 +916,39 @@ Items to revisit before declaring v1 complete (deliberately deferred so they do 
 - **PR-by-default for code changes.** Today, code changes can land directly on `main`. Decide whether v1 should require code changes to land via a PR with green CI before merging, with CD/workflow hotfixes remaining as the only sanctioned direct-to-`main` path. Rationale for deferring now: keeps iteration velocity high; CI on `push: main` still runs, just after merge.
 - **Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.
 - **Production sourcemap upload to App Insights.** Currently no sourcemaps in production. Decide whether to wire symbol upload (would also require switching the SWA deploy to runner-side build via `skip_app_build: true`).
+- **Testing-layer strategy.** The current test suite covers static analysis + unit (frontend) + unit (api) + browser integration. See the [Testing strategy](#testing-strategy) section below for the full layer model. Decide before v1 whether any of the tracked layers (api integration, smoke e2e, cross-browser, accessibility, visual regression) should be required v1 gates rather than post-v1 follow-ups.
+
+---
+
+## Testing strategy
+
+JotJSON is layered: a static-analysis pass, two unit suites (frontend + Azure
+Functions), and an in-browser integration layer for components whose real
+runtime behavior cannot be faked cheaply (Monaco today; the same pattern
+applies to anything else that depends on browser globals or external scripts).
+Higher layers - api-integration against the Cosmos emulator, end-to-end smoke
+flows in a real browser, cross-browser, accessibility, and visual regression -
+are tracked as separate work items and are deliberately not gating v1.
+
+| Layer | In place? | Purpose |
+|---|---|---|
+| Static analysis | yes | TypeScript `tsc --noEmit`, ASCII gate, spec-pattern lint. |
+| Unit (frontend) | yes | Component / service / pipe / pure logic; Monaco and other browser globals are stubbed. Co-located `*.spec.ts`. |
+| Unit (api) | yes | Azure Functions handlers and shared modules; Cosmos and Blob clients are mocked. |
+| Browser integration | yes | Real Monaco loaded once per suite via the project's loader. Verifies the loader, the asset path, and the editor's mount + value roundtrip with a real DOM. Lives alongside frontend unit specs but is named `*.integration.spec.ts`. |
+| API integration | tracked as issue | Functions + shared modules against the Microsoft Cosmos emulator container. Catches partition-key, query-shape, and continuation-token mistakes that mocks cannot. |
+| Smoke e2e | tracked as issue | Playwright on critical user flows in Chromium. Catches MSAL redirect, router lazy-load, service-worker, and CSP regressions that unit + browser-integration cannot. |
+| Cross-browser smoke | tracked as issue | Playwright matrix on Firefox + WebKit, run nightly. Catches engine-specific issues. (WebKit on Linux is not Safari; iOS-Safari still needs manual verification.) |
+| Accessibility smoke | tracked as issue | `@axe-core/playwright` invoked from each smoke flow. Backs the WCAG 2.1 AA commitment in the Accessibility section. |
+| Visual regression | tracked as issue | Pixel-diff of representative screens against a baseline. Post-v1 unless visual bugs become recurring. |
+
+What this layer model deliberately does *not* claim:
+
+- The **browser integration** layer does not prove worker correctness. The Monaco JSON worker spawns from a runtime-built blob URL; verifying that requires worker-specific assertions whose value at this layer is bounded. Worker-shaped bugs are expected to surface at the smoke-e2e layer once that exists.
+- **Unit (api)** uses mocked Cosmos / Blob clients. Partition-key bugs, indexing-policy issues, and continuation-token correctness are all uncovered by today's CI; that is the gap the API integration layer closes.
+
+Layer names above are runner-neutral so this model survives runner migrations
+(see issue #47 - test-runner migration).
 
 ---
 

@@ -244,6 +244,8 @@ export class JsonTreeComponent {
   readonly ctxExpandToDepth3Label = $localize`:@@tree.contextMenu.expandToDepth.3:Expand 3 levels from here`;
   readonly ctxExpandToDepth4Label = $localize`:@@tree.contextMenu.expandToDepth.4:Expand 4 levels from here`;
   readonly ctxExpandToDepth5Label = $localize`:@@tree.contextMenu.expandToDepth.5:Expand 5 levels from here`;
+  readonly ctxIsolateLabel = $localize`:@@tree.contextMenu.isolate:Isolate`;
+  readonly ctxCollapseSiblingsLabel = $localize`:@@tree.contextMenu.collapseSiblings:Collapse siblings`;
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
 
@@ -1213,6 +1215,123 @@ export class JsonTreeComponent {
     if (!node.children?.length) return false;
     if (relativeDepth > this.maxDescendantDepth(node)) return false;
     return this.hasCollapsedContainerAboveDepth(node, relativeDepth);
+  }
+
+  /**
+   * Smart-visibility: shows a single "Isolate" item when the wide and
+   * narrow actions would produce the same end state (one of `narrowSet`
+   * or `widerSet` is empty but not both). Pair with `showIsolatePair`
+   * which fires when both sets are non-empty (a real choice between
+   * distinct outcomes). The two predicates are mutually exclusive; both
+   * return `false` when there is nothing to collapse, when the clicked
+   * row is the root, or when the path no longer resolves in the
+   * current model.
+   */
+  showIsolateSingle(node: TreeNode): boolean {
+    const result = this.resolveChainAndSets(node);
+    if (!result) return false;
+    const hasNarrow = result.narrowSet.length > 0;
+    const hasWider = result.widerSet.length > 0;
+    return hasNarrow !== hasWider;
+  }
+
+  showIsolatePair(node: TreeNode): boolean {
+    const result = this.resolveChainAndSets(node);
+    if (!result) return false;
+    return result.narrowSet.length > 0 && result.widerSet.length > 0;
+  }
+
+  /**
+   * Wide isolate: collapses every visibly-expanded container that is
+   * not on the ancestor chain from the root to the clicked row. The
+   * ancestor chain and the clicked row's own subtree expansion state
+   * are unchanged. Hidden expanded state under newly-collapsed
+   * off-chain branches is preserved (standard CDK FlatTree behavior).
+   *
+   * `source` distinguishes telemetry between the unified single-item
+   * case (`'single'`) and the wide-of-pair case (`'wide'`) so we can
+   * measure the wide-vs-narrow split when users actually have a
+   * choice.
+   */
+  isolateRow(node: TreeNode, source: 'single' | 'wide'): void {
+    const result = this.resolveChainAndSets(node);
+    if (!result) return;
+    for (const child of result.narrowSet) {
+      this.treeControl.collapse(child);
+    }
+    for (const child of result.widerSet) {
+      this.treeControl.collapse(child);
+    }
+    this.logger.info(
+      source === 'wide' ? 'tree.contextMenu.isolateWide' : 'tree.contextMenu.isolate'
+    );
+  }
+
+  /**
+   * Narrow isolate: collapses only the visibly-expanded peers under
+   * the clicked row's immediate parent. Off-chain branches at higher
+   * ancestors are left alone.
+   */
+  collapseSiblings(node: TreeNode): void {
+    const result = this.resolveChainAndSets(node);
+    if (!result) return;
+    for (const child of result.narrowSet) {
+      this.treeControl.collapse(child);
+    }
+    this.logger.info('tree.contextMenu.isolateNarrow');
+  }
+
+  /**
+   * Re-resolves the clicked node from the current root data model by
+   * walking `node.path` segment-by-segment with strict equality (no
+   * string coercion - object keys are `string` and array indices are
+   * `number`, and the lookup must not conflate them). No `TreeNode`
+   * identity coupling - the model may have rebuilt while the menu was
+   * open. Returns `null` if lookup fails or `node` is the root.
+   *
+   * On success returns the ancestor `chain` (`[root, ..., resolved
+   * node]`), the `narrowSet` (off-chain visibly-expanded children of
+   * the parent), and the `widerSet` (off-chain visibly-expanded
+   * children at every higher ancestor). Both sets contain only
+   * containers whose own `treeControl.isExpanded()` is `true`.
+   */
+  private resolveChainAndSets(node: TreeNode): {
+    chain: TreeNode[];
+    narrowSet: TreeNode[];
+    widerSet: TreeNode[];
+  } | null {
+    if (node.path.length === 0) return null;
+    const root = this.root();
+    if (!root) return null;
+
+    const chain: TreeNode[] = [root];
+    let cursor: TreeNode = root;
+    for (const segment of node.path) {
+      const child = cursor.children?.find((c) => c.segment === segment);
+      if (!child) return null;
+      chain.push(child);
+      cursor = child;
+    }
+
+    const narrowSet: TreeNode[] = [];
+    const widerSet: TreeNode[] = [];
+    const parentIndex = chain.length - 2;
+    for (let i = 0; i < chain.length - 1; i++) {
+      const ancestor = chain[i];
+      const nextChainNode = chain[i + 1];
+      if (!ancestor || !nextChainNode) continue;
+      const nextSegment = nextChainNode.segment;
+      for (const child of ancestor.children ?? []) {
+        if (child.segment === nextSegment) continue;
+        if (!this.treeControl.isExpanded(child)) continue;
+        if (i === parentIndex) {
+          narrowSet.push(child);
+        } else {
+          widerSet.push(child);
+        }
+      }
+    }
+    return { chain, narrowSet, widerSet };
   }
 
   // ---- Helpers ----

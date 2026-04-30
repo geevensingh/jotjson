@@ -449,6 +449,8 @@
     }
     @if (
       showCollapse(cn) ||
+      showIsolateSingle(cn) ||
+      showIsolatePair(cn) ||
       showExpandAllFromHere(cn) ||
       showExpandToDepth(cn, 1) ||
       showExpandToDepth(cn, 2) ||
@@ -461,6 +463,19 @@
     @if (showCollapse(cn)) {
       <button mat-menu-item type="button" (click)="collapseFromHere(cn)">
         {{ ctxCollapseLabel }}
+      </button>
+    }
+    @if (showIsolateSingle(cn)) {
+      <button mat-menu-item type="button" (click)="isolateRow(cn, 'single')">
+        {{ ctxIsolateLabel }}
+      </button>
+    }
+    @if (showIsolatePair(cn)) {
+      <button mat-menu-item type="button" (click)="collapseSiblings(cn)">
+        {{ ctxCollapseSiblingsLabel }}
+      </button>
+      <button mat-menu-item type="button" (click)="isolateRow(cn, 'wide')">
+        {{ ctxIsolateLabel }}
       </button>
     }
     @if (showExpandAllFromHere(cn)) {

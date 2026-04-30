@@ -4,6 +4,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { JsonTreeComponent } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
 import type {
   FormattingRule,
   FormattingRuleSet
@@ -2186,6 +2187,209 @@ describe('JsonTreeComponent', () => {
         cmp.expandToDepthFromHere(outer, 3);
         expect(cmp.treeControl.isExpanded(outer)).toBe(true);
         expect(cmp.treeControl.isExpanded(mid)).toBe(true);
+      });
+    });
+
+    describe('isolate / collapseSiblings', () => {
+      it('truth-table (non-empty, empty): single Isolate shown; collapses peers; emits tree.contextMenu.isolate', async () => {
+        await createWith({ a: { a1: 'leaf', a2: { z: 1 }, a3: { z: 1 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a2 = nodeAt('$.a.a2');
+        const a3 = nodeAt('$.a.a3');
+        const a = nodeAt('$.a');
+        expect(cmp.showIsolateSingle(a2)).toBe(true);
+        expect(cmp.showIsolatePair(a2)).toBe(false);
+        const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
+        cmp.isolateRow(a2, 'single');
+        expect(cmp.treeControl.isExpanded(a3)).toBe(false);
+        expect(cmp.treeControl.isExpanded(a)).toBe(true);
+        expect(cmp.treeControl.isExpanded(a2)).toBe(true);
+        expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolate');
+      });
+
+      it('truth-table (empty, non-empty): single Isolate shown; collapses higher off-chain branches; emits tree.contextMenu.isolate', async () => {
+        await createWith({ a: { a2: { z: 1 } }, b: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a2 = nodeAt('$.a.a2');
+        const b = nodeAt('$.b');
+        const a = nodeAt('$.a');
+        expect(cmp.showIsolateSingle(a2)).toBe(true);
+        expect(cmp.showIsolatePair(a2)).toBe(false);
+        const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
+        cmp.isolateRow(a2, 'single');
+        expect(cmp.treeControl.isExpanded(b)).toBe(false);
+        expect(cmp.treeControl.isExpanded(a)).toBe(true);
+        expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolate');
+      });
+
+      it('truth-table (non-empty, non-empty): pair shown; narrow collapses only direct peers, wide collapses both', async () => {
+        await createWith({
+          a: { a2: { z: 1 }, a3: { z: 1 } },
+          b: { z: 1 },
+          c: { z: 1 }
+        });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a2 = nodeAt('$.a.a2');
+        expect(cmp.showIsolateSingle(a2)).toBe(false);
+        expect(cmp.showIsolatePair(a2)).toBe(true);
+
+        const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
+        cmp.collapseSiblings(a2);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a3'))).toBe(false);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(true);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.c'))).toBe(true);
+        expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolateNarrow');
+
+        cmp.isolateRow(a2, 'wide');
+        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.c'))).toBe(false);
+        expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolateWide');
+      });
+
+      it('truth-table (empty, empty): no Isolate items shown', async () => {
+        await createWith({ a: { a2: { z: 1 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a2 = nodeAt('$.a.a2');
+        expect(cmp.showIsolateSingle(a2)).toBe(false);
+        expect(cmp.showIsolatePair(a2)).toBe(false);
+      });
+
+      it('primitive-leaf click with expanded aunts: single Isolate offered; collapses the aunts', async () => {
+        await createWith({ a: { a1: 'leaf' }, b: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a1 = nodeAt('$.a.a1');
+        expect(cmp.showIsolateSingle(a1)).toBe(true);
+        cmp.isolateRow(a1, 'single');
+        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
+      });
+
+      it('empty container click does not throw and still collapses off-chain branches', async () => {
+        await createWith({ a: { empty: {} }, b: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const empty = nodeAt('$.a.empty');
+        expect(() => cmp.isolateRow(empty, 'single')).not.toThrow();
+        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
+      });
+
+      it('array-segment path: lock-step walk handles numeric indices and collapses higher off-chain branches', async () => {
+        await createWith({ arr: [{ x: { z: 1 } }, { x: { z: 1 } }], other: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const x = nodeAt('$.arr[1].x');
+        // Off-chain peers at parent (arr[1]) level: none -> narrowSet empty.
+        // Off-chain peers at higher (root, arr): [other, arr[0]] -> widerSet non-empty.
+        expect(cmp.showIsolateSingle(x)).toBe(true);
+        expect(cmp.showIsolatePair(x)).toBe(false);
+        cmp.isolateRow(x, 'single');
+        expect(cmp.treeControl.isExpanded(nodeAt('$.arr[0]'))).toBe(false);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.other'))).toBe(false);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.arr[1]'))).toBe(true);
+      });
+
+      it('clicked-row already collapsed: hidden subtree expansion state is preserved', async () => {
+        await createWith({ a: { a2: { x: { z: 1 } } }, b: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        // Collapse only $.a.a2 (so $.a.a2.x stays expanded in CDK state but hidden).
+        cmp.treeControl.collapse(nodeAt('$.a.a2'));
+        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a2'))).toBe(false);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a2.x'))).toBe(true);
+
+        cmp.isolateRow(nodeAt('$.a.a2'), 'single');
+        // Off-chain collapse happened.
+        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
+        // Clicked row and its hidden subtree state are untouched.
+        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a2'))).toBe(false);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a2.x'))).toBe(true);
+      });
+
+      it('stale-path no-op: predicates return false and actions do nothing when path no longer resolves', async () => {
+        await createWith({ a: { b: { z: 1 } }, c: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const stale = nodeAt('$.a.b');
+        // Rebuild the tree with a different shape; $.a.b no longer exists.
+        fixture.componentRef.setInput('value', { x: { y: 1 } });
+        fixture.detectChanges();
+        expect(cmp.showIsolateSingle(stale)).toBe(false);
+        expect(cmp.showIsolatePair(stale)).toBe(false);
+        const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
+        expect(() => cmp.isolateRow(stale, 'single')).not.toThrow();
+        expect(() => cmp.collapseSiblings(stale)).not.toThrow();
+        expect(infoSpy).not.toHaveBeenCalled();
+      });
+
+      it('idempotent: invoking either action twice produces the same end state', async () => {
+        await createWith({ a: { a2: { z: 1 }, a3: { z: 1 } }, b: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a2 = nodeAt('$.a.a2');
+        cmp.isolateRow(a2, 'wide');
+        const stateAfterFirst = {
+          a: cmp.treeControl.isExpanded(nodeAt('$.a')),
+          a2: cmp.treeControl.isExpanded(a2),
+          a3: cmp.treeControl.isExpanded(nodeAt('$.a.a3')),
+          b: cmp.treeControl.isExpanded(nodeAt('$.b'))
+        };
+        cmp.isolateRow(a2, 'wide');
+        expect(cmp.treeControl.isExpanded(nodeAt('$.a'))).toBe(stateAfterFirst.a);
+        expect(cmp.treeControl.isExpanded(a2)).toBe(stateAfterFirst.a2);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a3'))).toBe(stateAfterFirst.a3);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(stateAfterFirst.b);
+      });
+
+      it('telemetry: each ID is emitted with no payload (no user content)', async () => {
+        await createWith({
+          a: { a2: { z: 1 }, a3: { z: 1 } },
+          b: { z: 1 }
+        });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a2 = nodeAt('$.a.a2');
+        const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
+        cmp.collapseSiblings(a2);
+        cmp.isolateRow(a2, 'wide');
+        expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolateNarrow');
+        expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolateWide');
+        // Verify no payload (single-arg calls).
+        for (const args of infoSpy.calls.allArgs()) {
+          expect(args.length).toBe(1);
+        }
+      });
+
+      it('root row: both predicates return false; methods are no-ops', async () => {
+        await createWith({ a: { z: 1 }, b: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const root = nodeAt('$');
+        expect(cmp.showIsolateSingle(root)).toBe(false);
+        expect(cmp.showIsolatePair(root)).toBe(false);
+        const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
+        cmp.isolateRow(root, 'single');
+        cmp.collapseSiblings(root);
+        expect(infoSpy).not.toHaveBeenCalled();
+        expect(cmp.treeControl.isExpanded(nodeAt('$.a'))).toBe(true);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(true);
+      });
+
+      it('direct child of root: widerSet is empty by definition; pair never appears', async () => {
+        await createWith({ a: { z: 1 }, b: { z: 1 }, c: { z: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a = nodeAt('$.a');
+        // Off-chain peers at the parent (root) level: [b, c] -> narrowSet non-empty.
+        // No higher ancestor exists -> widerSet is empty.
+        expect(cmp.showIsolateSingle(a)).toBe(true);
+        expect(cmp.showIsolatePair(a)).toBe(false);
+        cmp.isolateRow(a, 'single');
+        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
+        expect(cmp.treeControl.isExpanded(nodeAt('$.c'))).toBe(false);
       });
     });
 
