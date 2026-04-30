@@ -31,6 +31,7 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   // Blobs
   'blobs.load.failed',
+  'blobs.copyLink.failed',
 
   // History
   'history.load.failed',
@@ -38,9 +39,6 @@ export const TELEMETRY_MESSAGE_IDS = [
   'history.clear.failed',
   'history.delete.failed',
   'history.open.failed',
-
-  // Blobs
-  'blobs.copyLink.failed',
 
   // Auth
   'msal.error',
