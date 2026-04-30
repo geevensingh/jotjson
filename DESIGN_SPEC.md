@@ -996,6 +996,12 @@ Manual instrumentation, driven through `core/telemetry/LoggerService`:
   (`api.error`, `home.save.failed`, `share.delete.failed`, etc.). All
   message IDs come from a frozen literal-union in
   `telemetry-message-ids.ts` so typos fail at compile time.
+- **Product events** - emitted with `LoggerService.event(...)` and
+  documented in `telemetry-message-ids.ts`. Preference changes use the
+  `pref.changed` token from the `PreferencesService` chokepoint: keys
+  are schema-derived closed enums, booleans are string dimensions,
+  numeric values use bucket dimensions plus raw numeric measurements,
+  and colors send only a coarse bucket plus `isDefault` (never raw hex).
 - **Dependencies (XHR/fetch)** - **on**, for SPA <-> Functions
   correlation. URLs are sanitized in a telemetry initializer (query
   string and fragment stripped). Ajax error response bodies are **off**

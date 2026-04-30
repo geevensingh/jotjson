@@ -1,11 +1,28 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { ToolbarComponent } from './toolbar.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { AuthService } from '../../../core/auth/auth.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
+
+type ToolbarAction =
+  | 'paste'
+  | 'copy'
+  | 'copyEscaped'
+  | 'openFile'
+  | 'download'
+  | 'format'
+  | 'minify'
+  | 'clear'
+  | 'save'
+  | 'copyShareLink'
+  | 'togglePublic'
+  | 'deleteBlob'
+  | 'fileChange';
 
 describe('ToolbarComponent', () => {
   beforeEach(() => {
@@ -17,18 +34,26 @@ describe('ToolbarComponent', () => {
     localStorage.removeItem(STORAGE_KEY);
   });
 
-  async function create(opts: { signedIn?: boolean } = {}) {
+  async function create(options: { signedIn?: boolean } = {}) {
+    const logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
+      'event'
+    ]);
     await TestBed.configureTestingModule({
       imports: [ToolbarComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        provideNoopAnimations(),
+        { provide: LoggerService, useValue: logger }
+      ]
     }).compileComponents();
     const fixture = TestBed.createComponent(ToolbarComponent);
     const auth = TestBed.inject(AuthService);
-    if (opts.signedIn) {
+    if (options.signedIn) {
       signInFakeUser(auth);
     }
     fixture.detectChanges();
-    return { fixture, prefs: TestBed.inject(PreferencesService), auth };
+    return { fixture, prefs: TestBed.inject(PreferencesService), auth, logger };
   }
 
   it('renders without error with default prefs', async () => {
@@ -304,6 +329,463 @@ describe('ToolbarComponent', () => {
       cmp.upload.subscribe(spy);
       cmp.onFileChange({ target: input } as unknown as Event);
       expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('toolbar.action telemetry', () => {
+    const toolbarActions: ToolbarAction[] = [
+      'paste',
+      'copy',
+      'copyEscaped',
+      'openFile',
+      'fileChange',
+      'download',
+      'format',
+      'minify',
+      'clear',
+      'save',
+      'copyShareLink',
+      'togglePublic',
+      'deleteBlob'
+    ];
+
+    function configureActionFixture(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      fixture.componentRef.setInput('hasContent', true);
+      fixture.componentRef.setInput('canSave', true);
+      fixture.componentRef.setInput('saveInFlight', false);
+      fixture.componentRef.setInput('isOwner', true);
+      fixture.componentRef.setInput('isPublic', false);
+      fixture.detectChanges();
+    }
+
+    function hostElement(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): HTMLElement {
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    function findButtonByAriaLabel(
+      fixture: ComponentFixture<ToolbarComponent>,
+      ariaLabel: string
+    ): HTMLButtonElement {
+      const button = Array.from(
+        hostElement(fixture).querySelectorAll<HTMLButtonElement>('button')
+      ).find(
+        (candidateButton) => candidateButton.getAttribute('aria-label') === ariaLabel
+      );
+      if (!button) {
+        throw new Error(`button with aria-label "${ariaLabel}" not found`);
+      }
+      return button;
+    }
+
+    function findFileInput(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): HTMLInputElement {
+      const fileInput = hostElement(fixture).querySelector<HTMLInputElement>(
+        'input[type="file"]'
+      );
+      if (!fileInput) {
+        throw new Error('hidden file input not found');
+      }
+      return fileInput;
+    }
+
+    function findToggleSegment(
+      fixture: ComponentFixture<ToolbarComponent>,
+      groupSelector: string,
+      value: string
+    ): HTMLButtonElement {
+      const segment = hostElement(fixture).querySelector<HTMLButtonElement>(
+        `${groupSelector} mat-button-toggle[value="${value}"] button`
+      );
+      if (!segment) {
+        throw new Error(`toggle segment "${value}" not found`);
+      }
+      return segment;
+    }
+
+    function makeFile(): File {
+      return new File(['{"a":1}'], 'x.json', { type: 'application/json' });
+    }
+
+    function triggerPasteButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(fixture, 'Paste JSON from clipboard').click();
+      fixture.detectChanges();
+    }
+
+    function triggerCopyButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>,
+      options: { readonly altKey: boolean }
+    ): void {
+      findButtonByAriaLabel(
+        fixture,
+        'Copy editor contents to clipboard'
+      ).dispatchEvent(new MouseEvent('click', {
+        altKey: options.altKey,
+        bubbles: true
+      }));
+      fixture.detectChanges();
+    }
+
+    function triggerUploadButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(fixture, 'Upload file').click();
+      fixture.detectChanges();
+    }
+
+    function triggerFileInputChangeWithFile(
+      fixture: ComponentFixture<ToolbarComponent>,
+      file: File
+    ): void {
+      const fileInput = findFileInput(fixture);
+      Object.defineProperty(fileInput, 'files', {
+        configurable: true,
+        value: [file]
+      });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      fixture.detectChanges();
+    }
+
+    function triggerFileInputChangeWithoutFile(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      const fileInput = findFileInput(fixture);
+      Object.defineProperty(fileInput, 'files', {
+        configurable: true,
+        value: []
+      });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      fixture.detectChanges();
+    }
+
+    function triggerDownloadButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(fixture, 'Download as file').click();
+      fixture.detectChanges();
+    }
+
+    function triggerFormatButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(fixture, 'Format').click();
+      fixture.detectChanges();
+    }
+
+    function triggerMinifyButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(fixture, 'Minify').click();
+      fixture.detectChanges();
+    }
+
+    function triggerClearButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(fixture, 'Clear editor').click();
+      fixture.detectChanges();
+    }
+
+    function triggerSaveButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(fixture, 'Save & share').click();
+      fixture.detectChanges();
+    }
+
+    function triggerTitleEnterKeydown(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      const titleInput = hostElement(fixture).querySelector<HTMLInputElement>(
+        'input.title-field'
+      );
+      if (!titleInput) {
+        throw new Error('title input not found');
+      }
+      titleInput.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'Enter'
+      }));
+      fixture.detectChanges();
+    }
+
+    function triggerMenuItemClick(
+      fixture: ComponentFixture<ToolbarComponent>,
+      menuItemText: string
+    ): void {
+      findButtonByAriaLabel(fixture, 'More actions for this blob').click();
+      fixture.detectChanges();
+      const menuItem = Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>(
+          '.cdk-overlay-container button'
+        )
+      ).find((candidateButton) =>
+        candidateButton.textContent?.includes(menuItemText)
+      );
+      if (!menuItem) {
+        throw new Error(`menu item "${menuItemText}" not found`);
+      }
+      menuItem.click();
+      fixture.detectChanges();
+    }
+
+    function triggerCopyShareLinkMenuClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      triggerMenuItemClick(fixture, 'Copy share link');
+    }
+
+    function triggerTogglePublicMenuClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      triggerMenuItemClick(fixture, 'Make public');
+    }
+
+    function triggerDeleteBlobMenuClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      triggerMenuItemClick(fixture, 'Delete this blob');
+    }
+
+    function triggerModeToggleChange(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findToggleSegment(fixture, 'mat-button-toggle-group.mode-toggle', 'jsonc')
+        .click();
+      fixture.detectChanges();
+    }
+
+    function triggerThemeToggleButtonClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(fixture, 'Toggle theme').click();
+      fixture.detectChanges();
+    }
+
+    function triggerSelectionSyncToggleClick(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findButtonByAriaLabel(
+        fixture,
+        'Toggle tree-editor selection sync'
+      ).click();
+      fixture.detectChanges();
+    }
+
+    function triggerPaneLayoutSegmentChange(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): void {
+      findToggleSegment(
+        fixture,
+        'mat-button-toggle-group.pane-layout-group',
+        'tree-only'
+      ).click();
+      fixture.detectChanges();
+    }
+
+    function makeToolbarActionCases(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): Array<[ToolbarAction, () => void]> {
+      return [
+        ['paste', () => triggerPasteButtonClick(fixture)],
+        ['copy', () => triggerCopyButtonClick(fixture, { altKey: false })],
+        ['copyEscaped', () => triggerCopyButtonClick(fixture, { altKey: true })],
+        ['openFile', () => triggerUploadButtonClick(fixture)],
+        ['fileChange', () => triggerFileInputChangeWithFile(fixture, makeFile())],
+        ['download', () => triggerDownloadButtonClick(fixture)],
+        ['format', () => triggerFormatButtonClick(fixture)],
+        ['minify', () => triggerMinifyButtonClick(fixture)],
+        ['clear', () => triggerClearButtonClick(fixture)],
+        ['save', () => triggerSaveButtonClick(fixture)],
+        ['copyShareLink', () => triggerCopyShareLinkMenuClick(fixture)],
+        ['togglePublic', () => triggerTogglePublicMenuClick(fixture)],
+        ['deleteBlob', () => triggerDeleteBlobMenuClick(fixture)]
+      ];
+    }
+
+    function findTriggerGesture(
+      cases: Array<[ToolbarAction, () => void]>,
+      expectedAction: ToolbarAction
+    ): () => void {
+      const toolbarActionCase = cases.find(
+        ([action]) => action === expectedAction
+      );
+      if (!toolbarActionCase) {
+        throw new Error(`toolbar.action case "${expectedAction}" not found`);
+      }
+      return toolbarActionCase[1];
+    }
+
+    function trackActionOutput(
+      fixture: ComponentFixture<ToolbarComponent>,
+      action: ToolbarAction,
+      orderedCalls: string[]
+    ): jasmine.Spy {
+      if (action === 'openFile') {
+        return spyOn(findFileInput(fixture), 'click').and.callFake(() => {
+          orderedCalls.push('output');
+        });
+      }
+
+      const outputSpy = jasmine.createSpy(`${action} output`).and.callFake(() => {
+        orderedCalls.push('output');
+      });
+      const component = fixture.componentInstance;
+      switch (action) {
+        case 'paste':
+          component.pasteRequested.subscribe(() => outputSpy());
+          break;
+        case 'copy':
+          component.copyRequested.subscribe(() => outputSpy());
+          break;
+        case 'copyEscaped':
+          component.copyEscaped.subscribe(() => outputSpy());
+          break;
+        case 'fileChange':
+          component.upload.subscribe(() => outputSpy());
+          break;
+        case 'download':
+          component.download.subscribe(() => outputSpy());
+          break;
+        case 'format':
+          component.format.subscribe(() => outputSpy());
+          break;
+        case 'minify':
+          component.minify.subscribe(() => outputSpy());
+          break;
+        case 'clear':
+          component.clear.subscribe(() => outputSpy());
+          break;
+        case 'save':
+          component.save.subscribe(() => outputSpy());
+          break;
+        case 'copyShareLink':
+          component.copyShareLink.subscribe(() => outputSpy());
+          break;
+        case 'togglePublic':
+          component.togglePublic.subscribe(() => outputSpy());
+          break;
+        case 'deleteBlob':
+          component.deleteBlob.subscribe(() => outputSpy());
+          break;
+      }
+      return outputSpy;
+    }
+
+    function expectNoToolbarActionEvent(
+      logger: jasmine.SpyObj<LoggerService>
+    ): void {
+      const toolbarActionCalls = logger.event.calls.allArgs().filter(
+        ([messageId]) => messageId === 'toolbar.action'
+      );
+      expect(toolbarActionCalls).toEqual([]);
+    }
+
+    for (const expectedAction of toolbarActions) {
+      it(`emits toolbar.action ${expectedAction} before the gesture output`, async () => {
+        const { fixture, logger } = await create({ signedIn: true });
+        configureActionFixture(fixture);
+        const orderedCalls: string[] = [];
+        const outputSpy = trackActionOutput(
+          fixture,
+          expectedAction,
+          orderedCalls
+        );
+        logger.event.calls.reset();
+        logger.event.and.callFake(() => {
+          orderedCalls.push('event');
+        });
+
+        findTriggerGesture(
+          makeToolbarActionCases(fixture),
+          expectedAction
+        )();
+
+        expect(logger.event).toHaveBeenCalledOnceWith(
+          'toolbar.action',
+          { action: expectedAction },
+          undefined
+        );
+        expect(outputSpy).toHaveBeenCalledTimes(1);
+        expect(orderedCalls).toEqual(['event', 'output']);
+      });
+    }
+
+    it('emits toolbar.action save before save when Enter is pressed in the title field', async () => {
+      const { fixture, logger } = await create({ signedIn: true });
+      configureActionFixture(fixture);
+      const orderedCalls: string[] = [];
+      const outputSpy = trackActionOutput(fixture, 'save', orderedCalls);
+      logger.event.calls.reset();
+      logger.event.and.callFake(() => {
+        orderedCalls.push('event');
+      });
+
+      triggerTitleEnterKeydown(fixture);
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'toolbar.action',
+        { action: 'save' },
+        undefined
+      );
+      expect(outputSpy).toHaveBeenCalledTimes(1);
+      expect(orderedCalls).toEqual(['event', 'output']);
+    });
+
+    it('does not emit fileChange telemetry when file selection is canceled', async () => {
+      const { fixture, logger } = await create();
+      configureActionFixture(fixture);
+      logger.event.calls.reset();
+
+      triggerFileInputChangeWithoutFile(fixture);
+
+      expectNoToolbarActionEvent(logger);
+    });
+
+    it('does not emit toolbar.action for mode toggle changes', async () => {
+      const { fixture, logger } = await create();
+      configureActionFixture(fixture);
+      logger.event.calls.reset();
+
+      triggerModeToggleChange(fixture);
+
+      expectNoToolbarActionEvent(logger);
+    });
+
+    it('does not emit toolbar.action for theme toggle clicks', async () => {
+      const { fixture, logger } = await create();
+      configureActionFixture(fixture);
+      logger.event.calls.reset();
+
+      triggerThemeToggleButtonClick(fixture);
+
+      expectNoToolbarActionEvent(logger);
+    });
+
+    it('does not emit toolbar.action for selection-sync toggle clicks', async () => {
+      const { fixture, logger } = await create();
+      configureActionFixture(fixture);
+      logger.event.calls.reset();
+
+      triggerSelectionSyncToggleClick(fixture);
+
+      expectNoToolbarActionEvent(logger);
+    });
+
+    it('does not emit toolbar.action for pane layout segment changes', async () => {
+      const { fixture, logger } = await create();
+      configureActionFixture(fixture);
+      logger.event.calls.reset();
+
+      triggerPaneLayoutSegmentChange(fixture);
+
+      expectNoToolbarActionEvent(logger);
     });
   });
 

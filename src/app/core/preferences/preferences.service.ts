@@ -1,9 +1,17 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
-import { UserPreferences } from '../api/models';
+import type { ThemeColorSet, TreeHighlightColors, UserPreferences } from '../api/models';
 import { UserApiService } from '../api/user-api.service';
 import { AuthService } from '../auth/auth.service';
+import { bucketCount } from '../telemetry/buckets';
+import { LoggerService } from '../telemetry/logger.service';
+import {
+  bucketColorHex,
+  bucketDepth,
+  bucketFontSize,
+  bucketTabSize
+} from './pref-summarize';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const FLUSH_DEBOUNCE_MS = 500;
@@ -78,8 +86,7 @@ function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light'
  *    back to the API on the next PUT and get rejected as unknown.
  */
 function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
-  const remoteColors: Partial<UserPreferences['treeHighlightColors']> =
-    remote.treeHighlightColors ?? {};
+  const remoteColors: PartialTreeHighlightColors = remote.treeHighlightColors ?? {};
   const allowed = Object.keys(DEFAULT_PREFERENCES) as (keyof UserPreferences)[];
   const remoteRecord = remote as Record<string, unknown>;
   const filtered: Partial<UserPreferences> = {};
@@ -105,11 +112,100 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   };
 }
 
+type PreferenceChangeSource = 'user' | 'init' | 'sync';
+type TopLevelPreferenceKey = Exclude<keyof UserPreferences, 'treeHighlightColors'>;
+type TreeHighlightTheme = keyof TreeHighlightColors;
+type TreeHighlightColorSlot = keyof ThemeColorSet;
+type PartialTreeHighlightColors = {
+  dark?: Partial<ThemeColorSet>;
+  light?: Partial<ThemeColorSet>;
+};
+type NumberPreferenceBucket =
+  | ReturnType<typeof bucketFontSize>
+  | ReturnType<typeof bucketDepth>
+  | ReturnType<typeof bucketTabSize>;
+
+const PREFERENCE_KEYS = [
+  'theme',
+  'editorFontSize',
+  'editorTabSize',
+  'defaultTreeExpansionDepth',
+  'editorWordWrap',
+  'layoutOrientation',
+  'treeFontSize',
+  'treeShowTypeLabels',
+  'treeShowDateAnnotations',
+  'treeAssumeUtcForIsoDateTime',
+  'treeAssumeUtcForIsoDateOnly',
+  'defaultRuleSetIds',
+  'recentlyViewedEnabled',
+  'treeEditorSelectionSync',
+  'searchCaseSensitive',
+  'searchRegexMode',
+  'searchScope',
+  'searchValueType',
+  'blobQuotaStrategy',
+  'seenBlobQuotaModal',
+  'seenClipboardBanner',
+  'treePathRoot',
+  'treeHighlightColors'
+] as const satisfies readonly (keyof UserPreferences)[];
+
+const TREE_HIGHLIGHT_THEMES = [
+  'dark',
+  'light'
+] as const satisfies readonly TreeHighlightTheme[];
+const TREE_HIGHLIGHT_COLOR_SLOTS = [
+  'selectionColor',
+  'matchingValueColor',
+  'ancestorColor',
+  'searchHighlightColor'
+] as const satisfies readonly TreeHighlightColorSlot[];
+
+function deepMergeColors(
+  previousColors: TreeHighlightColors,
+  nextColors: PartialTreeHighlightColors | undefined
+): TreeHighlightColors {
+  return {
+    dark: {
+      ...previousColors.dark,
+      ...(nextColors?.dark ?? {})
+    },
+    light: {
+      ...previousColors.light,
+      ...(nextColors?.light ?? {})
+    }
+  };
+}
+
+function mergePreferencePatch(
+  previousPreferences: UserPreferences,
+  nextPreferences: Partial<UserPreferences>
+): UserPreferences {
+  return structuredClone({
+    ...previousPreferences,
+    ...nextPreferences,
+    treeHighlightColors: deepMergeColors(
+      previousPreferences.treeHighlightColors,
+      nextPreferences.treeHighlightColors
+    )
+  });
+}
+
+function deepEqualPreferenceValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function booleanDimension(value: boolean): 'true' | 'false' {
+  return value ? 'true' : 'false';
+}
+
 @Injectable({ providedIn: 'root' })
 export class PreferencesService {
   private readonly auth = inject(AuthService);
   private readonly api = inject(UserApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly loggerService = inject(LoggerService);
 
   private readonly _prefs = signal<UserPreferences>(this.loadLocal());
   readonly prefs = this._prefs.asReadonly();
@@ -202,11 +298,205 @@ export class PreferencesService {
   }
 
   update(patch: Partial<UserPreferences>): void {
-    this._prefs.set({ ...this._prefs(), ...patch });
+    this.applyPrefs(patch, 'user');
   }
 
   reset(): void {
-    this._prefs.set(structuredClone(DEFAULT_PREFERENCES));
+    this.applyPrefs(DEFAULT_PREFERENCES, 'user');
+  }
+
+  private applyPrefs(next: Partial<UserPreferences>, source: PreferenceChangeSource): void {
+    const previousPreferences = this._prefs();
+    const mergedPreferences = mergePreferencePatch(previousPreferences, next);
+    this.emitPreferenceChanges(previousPreferences, mergedPreferences, source);
+    this._prefs.set(mergedPreferences);
+  }
+
+  private emitPreferenceChanges(
+    previousPreferences: UserPreferences,
+    mergedPreferences: UserPreferences,
+    source: PreferenceChangeSource
+  ): void {
+    for (const key of PREFERENCE_KEYS) {
+      if (key === 'treeHighlightColors') {
+        this.emitTreeHighlightColorChanges(previousPreferences, mergedPreferences, source);
+        continue;
+      }
+      if (deepEqualPreferenceValue(previousPreferences[key], mergedPreferences[key])) {
+        continue;
+      }
+      this.emitTopLevelPreferenceChange(key, mergedPreferences, source);
+    }
+  }
+
+  private emitTreeHighlightColorChanges(
+    previousPreferences: UserPreferences,
+    mergedPreferences: UserPreferences,
+    source: PreferenceChangeSource
+  ): void {
+    for (const theme of TREE_HIGHLIGHT_THEMES) {
+      for (const slot of TREE_HIGHLIGHT_COLOR_SLOTS) {
+        const previousColor = previousPreferences.treeHighlightColors[theme][slot];
+        const color = mergedPreferences.treeHighlightColors[theme][slot];
+        if (deepEqualPreferenceValue(previousColor, color)) {
+          continue;
+        }
+        const defaultColor = DEFAULT_PREFERENCES.treeHighlightColors[theme][slot];
+        this.loggerService.event(
+          'pref.changed',
+          {
+            key: `treeHighlightColors.${theme}.${slot}`,
+            source,
+            kind: 'color',
+            isDefault: booleanDimension(color.toLowerCase() === defaultColor.toLowerCase()),
+            bucket: bucketColorHex(color)
+          },
+          undefined
+        );
+      }
+    }
+  }
+
+  private emitTopLevelPreferenceChange(
+    key: TopLevelPreferenceKey,
+    preferences: UserPreferences,
+    source: PreferenceChangeSource
+  ): void {
+    switch (key) {
+      case 'theme':
+        this.emitStringPreferenceChange(key, preferences.theme, source);
+        return;
+      case 'editorFontSize':
+        this.emitNumberPreferenceChange(
+          key,
+          bucketFontSize(preferences.editorFontSize),
+          preferences.editorFontSize,
+          source
+        );
+        return;
+      case 'editorTabSize':
+        this.emitNumberPreferenceChange(
+          key,
+          bucketTabSize(preferences.editorTabSize),
+          preferences.editorTabSize,
+          source
+        );
+        return;
+      case 'defaultTreeExpansionDepth':
+        this.emitNumberPreferenceChange(
+          key,
+          bucketDepth(preferences.defaultTreeExpansionDepth),
+          preferences.defaultTreeExpansionDepth,
+          source
+        );
+        return;
+      case 'defaultRuleSetIds':
+        this.emitCountPreferenceChange(key, preferences.defaultRuleSetIds.length, source);
+        return;
+      case 'editorWordWrap':
+        this.emitBooleanPreferenceChange(key, preferences.editorWordWrap, source);
+        return;
+      case 'layoutOrientation':
+        this.emitStringPreferenceChange(key, preferences.layoutOrientation, source);
+        return;
+      case 'treeFontSize':
+        this.emitNumberPreferenceChange(
+          key,
+          bucketFontSize(preferences.treeFontSize),
+          preferences.treeFontSize,
+          source
+        );
+        return;
+      case 'treeShowTypeLabels':
+        this.emitBooleanPreferenceChange(key, preferences.treeShowTypeLabels, source);
+        return;
+      case 'treeShowDateAnnotations':
+        this.emitBooleanPreferenceChange(key, preferences.treeShowDateAnnotations, source);
+        return;
+      case 'treeAssumeUtcForIsoDateTime':
+        this.emitBooleanPreferenceChange(key, preferences.treeAssumeUtcForIsoDateTime, source);
+        return;
+      case 'treeAssumeUtcForIsoDateOnly':
+        this.emitBooleanPreferenceChange(key, preferences.treeAssumeUtcForIsoDateOnly, source);
+        return;
+      case 'recentlyViewedEnabled':
+        this.emitBooleanPreferenceChange(key, preferences.recentlyViewedEnabled, source);
+        return;
+      case 'treeEditorSelectionSync':
+        this.emitBooleanPreferenceChange(key, preferences.treeEditorSelectionSync, source);
+        return;
+      case 'searchCaseSensitive':
+        this.emitBooleanPreferenceChange(key, preferences.searchCaseSensitive, source);
+        return;
+      case 'searchRegexMode':
+        this.emitBooleanPreferenceChange(key, preferences.searchRegexMode, source);
+        return;
+      case 'seenBlobQuotaModal':
+        this.emitBooleanPreferenceChange(key, preferences.seenBlobQuotaModal, source);
+        return;
+      case 'seenClipboardBanner':
+        this.emitBooleanPreferenceChange(key, preferences.seenClipboardBanner, source);
+        return;
+      case 'searchScope':
+        this.emitStringPreferenceChange(key, preferences.searchScope, source);
+        return;
+      case 'searchValueType':
+        this.emitStringPreferenceChange(key, preferences.searchValueType, source);
+        return;
+      case 'blobQuotaStrategy':
+        this.emitStringPreferenceChange(key, preferences.blobQuotaStrategy, source);
+        return;
+      case 'treePathRoot':
+        this.emitStringPreferenceChange(key, preferences.treePathRoot, source);
+        return;
+    }
+    const unhandledKey: never = key;
+    throw new Error(`Unhandled preference key: ${unhandledKey}`);
+  }
+
+  private emitStringPreferenceChange(
+    key: TopLevelPreferenceKey,
+    value: string,
+    source: PreferenceChangeSource
+  ): void {
+    this.loggerService.event('pref.changed', { key, source, kind: 'string', value }, undefined);
+  }
+
+  private emitBooleanPreferenceChange(
+    key: TopLevelPreferenceKey,
+    value: boolean,
+    source: PreferenceChangeSource
+  ): void {
+    this.loggerService.event(
+      'pref.changed',
+      { key, source, kind: 'boolean', value: booleanDimension(value) },
+      undefined
+    );
+  }
+
+  private emitNumberPreferenceChange(
+    key: TopLevelPreferenceKey,
+    valueBucket: NumberPreferenceBucket,
+    value: number,
+    source: PreferenceChangeSource
+  ): void {
+    this.loggerService.event(
+      'pref.changed',
+      { key, source, kind: 'number', valueBucket },
+      { value }
+    );
+  }
+
+  private emitCountPreferenceChange(
+    key: TopLevelPreferenceKey,
+    count: number,
+    source: PreferenceChangeSource
+  ): void {
+    this.loggerService.event(
+      'pref.changed',
+      { key, source, kind: 'count', countBucket: bucketCount(count) },
+      { count }
+    );
   }
 
   private loadLocal(): UserPreferences {
@@ -232,7 +522,7 @@ export class PreferencesService {
       } catch {
         /* ignore */
       }
-      this._prefs.set(structuredClone(DEFAULT_PREFERENCES));
+      this.applyPrefs(DEFAULT_PREFERENCES, 'init');
       this._syncState.set('anon');
       this.lastSyncedSnapshot = null;
       return;
@@ -251,7 +541,7 @@ export class PreferencesService {
             // defaults so pre-existing docs missing newer fields still
             // normalize round-trip on the next write).
             const merged = mergeWithDefaults(user.preferences);
-            this._prefs.set(merged);
+            this.applyPrefs(merged, 'init');
             this.lastSyncedSnapshot = JSON.stringify(merged);
             this._syncState.set('synced');
           } else {
@@ -264,7 +554,7 @@ export class PreferencesService {
                 next: (seeded) => {
                   if (gen !== this.syncGen) return;
                   const merged = mergeWithDefaults(seeded.preferences);
-                  this._prefs.set(merged);
+                  this.applyPrefs(merged, 'init');
                   this.lastSyncedSnapshot = JSON.stringify(merged);
                   this._syncState.set('synced');
                 },

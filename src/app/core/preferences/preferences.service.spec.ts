@@ -7,6 +7,7 @@ import {
 } from './preferences.service';
 import { AuthService } from '../auth/auth.service';
 import { UserApiService } from '../api/user-api.service';
+import { LoggerService } from '../telemetry/logger.service';
 import type { User, UserPreferences } from '../api/models';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
@@ -50,19 +51,38 @@ function makeUser(overrides: Partial<UserPreferences> = {}): User {
   };
 }
 
+type PartialTreeHighlightColors = {
+  dark?: Partial<UserPreferences['treeHighlightColors']['dark']>;
+  light?: Partial<UserPreferences['treeHighlightColors']['light']>;
+};
+
+function makeTreeHighlightPatch(treeHighlightColors: PartialTreeHighlightColors): Partial<UserPreferences> {
+  return {
+    treeHighlightColors: treeHighlightColors as unknown as UserPreferences['treeHighlightColors']
+  };
+}
+
 describe('PreferencesService', () => {
   let auth: AuthServiceStub;
   let api: UserApiServiceStub;
+  let logger: jasmine.SpyObj<LoggerService>;
 
   beforeEach(() => {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
     auth = new AuthServiceStub();
     api = new UserApiServiceStub();
+    logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
+      'event',
+      'info',
+      'warn',
+      'error'
+    ]);
     TestBed.configureTestingModule({
       providers: [
         { provide: AuthService, useValue: auth },
-        { provide: UserApiService, useValue: api }
+        { provide: UserApiService, useValue: api },
+        { provide: LoggerService, useValue: logger }
       ]
     });
   });
@@ -216,6 +236,235 @@ describe('PreferencesService', () => {
     expect(colors.light.selectionColor).toBe(
       DEFAULT_PREFERENCES.treeHighlightColors.light.selectionColor
     );
+  });
+
+  describe('pref.changed telemetry', () => {
+    it('emits a string event for a changed theme', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ theme: 'dark' });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'theme', source: 'user', kind: 'string', value: 'dark' },
+        undefined
+      );
+    });
+
+    it('emits a number event with bucket and measurement for editorFontSize', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ editorFontSize: 18 });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'editorFontSize', source: 'user', kind: 'number', valueBucket: '17-20' },
+        { value: 18 }
+      );
+    });
+
+    it('emits a count event with bucket and measurement for defaultRuleSetIds', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ defaultRuleSetIds: ['a', 'b'] });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'defaultRuleSetIds', source: 'user', kind: 'count', countBucket: '<100' },
+        { count: 2 }
+      );
+    });
+
+    it('emits boolean dimensions as strings', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ treeShowTypeLabels: false });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'treeShowTypeLabels', source: 'user', kind: 'boolean', value: 'false' },
+        undefined
+      );
+    });
+
+    it('emits only the changed treeHighlightColors leaf', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeHighlightPatch({ dark: { selectionColor: '#ff0000' } }));
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeHighlightColors.dark.selectionColor',
+          source: 'user',
+          kind: 'color',
+          isDefault: 'false',
+          bucket: 'red'
+        },
+        undefined
+      );
+    });
+
+    it('reset emits one user-sourced event per key that differs from defaults', () => {
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark', editorFontSize: 18, treeShowTypeLabels: false });
+      logger.event.calls.reset();
+
+      svc.reset();
+
+      const calls = logger.event.calls.allArgs();
+      expect(calls.length).toBe(3);
+      expect(calls.map((callArguments) => callArguments[1]?.['source'])).toEqual([
+        'user',
+        'user',
+        'user'
+      ]);
+      expect(calls.map((callArguments) => callArguments[1]?.['key'])).toEqual([
+        'theme',
+        'editorFontSize',
+        'treeShowTypeLabels'
+      ]);
+    });
+
+    it('sign-in hydration emits init-sourced events for remote preference diffs', async () => {
+      const svc = TestBed.inject(PreferencesService);
+      api.getMe.and.returnValue(of(makeUser({ theme: 'dark', editorFontSize: 18 })));
+
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      await svc.__waitForSync();
+
+      expect(logger.event).toHaveBeenCalledTimes(2);
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'theme', source: 'init', kind: 'string', value: 'dark' },
+        undefined
+      );
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'editorFontSize', source: 'init', kind: 'number', valueBucket: '17-20' },
+        { value: 18 }
+      );
+    });
+
+    it('sign-out reset emits init-sourced events for non-default current prefs', async () => {
+      const svc = TestBed.inject(PreferencesService);
+      api.getMe.and.returnValue(of(makeUser({ theme: 'dark', editorFontSize: 18 })));
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      await svc.__waitForSync();
+      logger.event.calls.reset();
+
+      auth.signOut();
+      TestBed.flushEffects();
+
+      expect(logger.event).toHaveBeenCalledTimes(2);
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'theme', source: 'init', kind: 'string', value: 'system' },
+        undefined
+      );
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'editorFontSize', source: 'init', kind: 'number', valueBucket: '13-14' },
+        { value: 14 }
+      );
+    });
+
+    it('emits one event for each changed key in a multi-key patch', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ theme: 'dark', editorFontSize: 18 });
+
+      expect(logger.event).toHaveBeenCalledTimes(2);
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'theme', source: 'user', kind: 'string', value: 'dark' },
+        undefined
+      );
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'editorFontSize', source: 'user', kind: 'number', valueBucket: '17-20' },
+        { value: 18 }
+      );
+    });
+
+    it('does not emit when theme is already system', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ theme: 'system' });
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit for an empty patch', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({});
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when editorFontSize is unchanged', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ editorFontSize: 14 });
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit during constructor initial load', () => {
+      TestBed.inject(PreferencesService);
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when matchMedia recomputes the system theme', () => {
+      const systemThemeChangeListeners: Array<() => void> = [];
+      spyOn(window, 'matchMedia').and.callFake((query: string): MediaQueryList => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: (
+          type: string,
+          listener: EventListenerOrEventListenerObject | null
+        ): void => {
+          if (type !== 'change' || listener === null) {
+            return;
+          }
+          systemThemeChangeListeners.push((): void => {
+            const event = new Event('change');
+            if (typeof listener === 'function') {
+              listener(event);
+            } else {
+              listener.handleEvent(event);
+            }
+          });
+        },
+        removeEventListener: (): void => undefined,
+        dispatchEvent: (): boolean => true,
+        addListener: (): void => undefined,
+        removeListener: (): void => undefined
+      }));
+      const svc = TestBed.inject(PreferencesService);
+      logger.event.calls.reset();
+
+      for (const fireSystemThemeChange of systemThemeChangeListeners) {
+        fireSystemThemeChange();
+      }
+      TestBed.flushEffects();
+
+      expect(svc.prefs().theme).toBe('system');
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when a treeHighlightColors leaf is unchanged', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeHighlightPatch({ dark: { selectionColor: '#264f78' } }));
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
   });
 
   describe('runtime --highlight-* projection on document.body', () => {

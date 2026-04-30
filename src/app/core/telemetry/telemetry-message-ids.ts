@@ -419,6 +419,93 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'auth.signedOut',
 
+  // Toolbar / actions
+
+  /**
+   * Kind: event
+   * Fired by: `ToolbarComponent` handlers
+   *           (`shared/components/toolbar/toolbar.component.ts`)
+   *           BEFORE the existing `EventEmitter.emit()` so the
+   *           gesture is captured even if a parent handler later
+   *           throws. Action is a closed-enum:
+   *
+   *   `paste`         -- Paste button click.
+   *   `copy`          -- Copy button (no modifier).
+   *   `copyEscaped`   -- Copy button with Alt held (issue #38
+   *                      power-user JSON-string-literal variant).
+   *   `openFile`      -- Upload button click that triggers the
+   *                      hidden file picker.
+   *   `download`      -- Download button click.
+   *   `format`        -- Format / pretty-print button.
+   *   `minify`        -- Minify button.
+   *   `clear`         -- Clear button.
+   *   `save`          -- Save button (or Enter on title field).
+   *   `copyShareLink` -- overflow menu "Copy share link".
+   *   `togglePublic`  -- overflow menu "Make public/private".
+   *                      The resulting visibility flip is logged
+   *                      separately as `share.visibility.changed`.
+   *   `deleteBlob`    -- overflow menu "Delete".
+   *   `fileChange`    -- a file was actually selected from the
+   *                      picker (post-`openFile`, gives funnel
+   *                      completion).
+   *
+   * NOT in this enum: mode toggle (json/jsonc), theme toggle,
+   * selection-sync toggle, pane-layout segmented control. Those
+   * mutate preferences and surface via `pref.changed` instead.
+   *
+   * Props: { action: <closed-enum above> }.
+   * Measurements: none.
+   */
+  'toolbar.action',
+
+  // Profile / preferences
+
+  /**
+   * Kind: event
+   * Fired by: `PreferencesService.applyPrefs`
+   *           (`core/preferences/preferences.service.ts`) once per
+   *           changed key per call. This is an internal chokepoint
+   *           that catches ALL mutation paths: public `update(patch)`,
+   *           public `reset()`, sign-in hydration / sign-out reset
+   *           in `handleAuthTransition`, and (future) server-pushed
+   *           sync. The constructor's initial-load from
+   *           `localStorage` and the system-theme matchMedia
+   *           recompute are NOT routed through here -- they
+   *           produce no observable diff for analytics.
+   *
+   * Per-key emission policy: a `pref.changed` event fires only when
+   * the deep-equal-compared value for the key actually changes.
+   * For nested objects (`treeHighlightColors`) the event fans out
+   * to one event per leaf color slot, with a dotted key name like
+   * `treeHighlightColors.dark.selectionColor`.
+   *
+   * Props (always): { key: PrefKey; source: 'user' | 'init' | 'sync';
+   *   kind: 'string' | 'boolean' | 'number' | 'count' | 'color' }.
+   *   `key` is a closed enum derived from the `UserPreferences`
+   *   schema (and dotted leaf paths for `treeHighlightColors`);
+   *   total cardinality is bounded by the schema, not by users.
+   *
+   * Props by kind (one of):
+   *   kind = 'string'  : { value: <closed-enum from schema> } e.g.
+   *                      theme, layoutOrientation, searchScope,
+   *                      searchValueType, blobQuotaStrategy,
+   *                      treePathRoot.
+   *   kind = 'boolean' : { value: 'true' | 'false' }.
+   *   kind = 'number'  : { valueBucket: <bounded bucket string> };
+   *                      measurement { value: number }.
+   *   kind = 'count'   : { countBucket: CountBucket };
+   *                      measurement { count: number }. Used for
+   *                      `defaultRuleSetIds`.
+   *   kind = 'color'   : { isDefault: 'true' | 'false';
+   *                        bucket: ColorBucket }.
+   *                      ColorBucket = 'red' | 'orange' | 'yellow'
+   *                        | 'green' | 'teal' | 'blue' | 'purple'
+   *                        | 'pink' | 'gray' | 'custom'. Raw hex
+   *                      is NEVER logged -- only the coarse named
+   *                      bucket plus a default-flag.
+   */
+  'pref.changed',
+
   // Formatting rule sets (M6g-1)
 
   /**

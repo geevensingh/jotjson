@@ -13,10 +13,26 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
 import { SignedInDirective } from '../../directives/signed-in.directive';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 
 export type EditorMode = 'json' | 'jsonc';
+
+type ToolbarAction =
+  | 'paste'
+  | 'copy'
+  | 'copyEscaped'
+  | 'openFile'
+  | 'download'
+  | 'format'
+  | 'minify'
+  | 'clear'
+  | 'save'
+  | 'copyShareLink'
+  | 'togglePublic'
+  | 'deleteBlob'
+  | 'fileChange';
 
 /**
  * 4-state pane layout segmented control. The toolbar's parent
@@ -55,6 +71,7 @@ export type PaneLayout =
 })
 export class ToolbarComponent {
   private readonly prefs = inject(PreferencesService);
+  private readonly loggerService = inject(LoggerService);
 
   readonly mode = input<EditorMode>('json');
   readonly hasContent = input<boolean>(false);
@@ -198,27 +215,77 @@ export class ToolbarComponent {
     }
   });
 
-  onTitleInput(ev: Event): void {
-    const value = (ev.target as HTMLInputElement).value;
+  onTitleInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
     this.titleChange.emit(value);
   }
 
-  onTitleKeydown(ev: KeyboardEvent): void {
-    if (ev.key === 'Enter' && !this.saveDisabled()) {
-      ev.preventDefault();
+  onTitleKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !this.saveDisabled()) {
+      event.preventDefault();
+      this.emitToolbarAction('save');
       this.save.emit();
     }
   }
 
+  onPasteClick(): void {
+    this.emitToolbarAction('paste');
+    this.pasteRequested.emit();
+  }
+
   triggerFilePicker(): void {
+    this.emitToolbarAction('openFile');
     this.fileInput().nativeElement.click();
   }
 
-  onFileChange(ev: Event): void {
-    const el = ev.target as HTMLInputElement;
-    const file = el.files?.[0];
-    if (file) this.upload.emit(file);
-    el.value = '';
+  onFileChange(event: Event): void {
+    const inputElement = event.target as HTMLInputElement;
+    const file = inputElement.files?.[0];
+    if (file) {
+      this.emitToolbarAction('fileChange');
+      this.upload.emit(file);
+    }
+    inputElement.value = '';
+  }
+
+  onDownloadClick(): void {
+    this.emitToolbarAction('download');
+    this.download.emit();
+  }
+
+  onFormatClick(): void {
+    this.emitToolbarAction('format');
+    this.format.emit();
+  }
+
+  onMinifyClick(): void {
+    this.emitToolbarAction('minify');
+    this.minify.emit();
+  }
+
+  onClearClick(): void {
+    this.emitToolbarAction('clear');
+    this.clear.emit();
+  }
+
+  onSaveClick(): void {
+    this.emitToolbarAction('save');
+    this.save.emit();
+  }
+
+  onCopyShareLinkClick(): void {
+    this.emitToolbarAction('copyShareLink');
+    this.copyShareLink.emit();
+  }
+
+  onTogglePublicClick(): void {
+    this.emitToolbarAction('togglePublic');
+    this.togglePublic.emit();
+  }
+
+  onDeleteBlobClick(): void {
+    this.emitToolbarAction('deleteBlob');
+    this.deleteBlob.emit();
   }
 
   onModeChange(next: EditorMode): void {
@@ -233,12 +300,18 @@ export class ToolbarComponent {
    * Click handler for the Copy button. Alt-click is a power-user affordance
    * that copies the editor contents as a JSON-string-literal (see issue #38).
    */
-  onCopyClick(ev: MouseEvent): void {
-    if (ev.altKey) {
+  onCopyClick(event: MouseEvent): void {
+    if (event.altKey) {
+      this.emitToolbarAction('copyEscaped');
       this.copyEscaped.emit();
     } else {
+      this.emitToolbarAction('copy');
       this.copyRequested.emit();
     }
+  }
+
+  private emitToolbarAction(action: ToolbarAction): void {
+    this.loggerService.event('toolbar.action', { action }, undefined);
   }
 }
 

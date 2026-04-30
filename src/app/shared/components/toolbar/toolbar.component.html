@@ -7,7 +7,7 @@
     i18n-aria-label="@@toolbar.paste.aria"
     [disabled]="pasteDisabled()"
     [class.paste-ready]="clipboardState() === 'enabled-json'"
-    (click)="pasteRequested.emit()"
+    (click)="onPasteClick()"
   >
     <jj-icon name="paste" />
   </button>
@@ -52,7 +52,7 @@
     aria-label="Download as file"
     i18n-aria-label="@@toolbar.download.aria"
     [disabled]="!hasContent()"
-    (click)="download.emit()"
+    (click)="onDownloadClick()"
   >
     <jj-icon name="download" />
   </button>
@@ -67,7 +67,7 @@
     aria-label="Format"
     i18n-aria-label="@@toolbar.format.aria"
     [disabled]="!hasContent()"
-    (click)="format.emit()"
+    (click)="onFormatClick()"
   >
     <jj-icon name="format" />
   </button>
@@ -80,7 +80,7 @@
     aria-label="Minify"
     i18n-aria-label="@@toolbar.minify.aria"
     [disabled]="!hasContent()"
-    (click)="minify.emit()"
+    (click)="onMinifyClick()"
   >
     <jj-icon name="minify" />
   </button>
@@ -93,7 +93,7 @@
     aria-label="Clear editor"
     i18n-aria-label="@@toolbar.clear.aria"
     [disabled]="!hasContent()"
-    (click)="clear.emit()"
+    (click)="onClearClick()"
   >
     <jj-icon name="clear" />
   </button>
@@ -145,7 +145,7 @@
       [matTooltip]="saveTooltip()"
       [attr.aria-label]="saveTooltip()"
       [disabled]="saveDisabled()"
-      (click)="save.emit()"
+      (click)="onSaveClick()"
     >
       <jj-icon name="save" />
     </button>
@@ -163,18 +163,18 @@
         <jj-icon name="more-vert" />
       </button>
       <mat-menu #blobMenu="matMenu" class="jj-menu">
-        <button mat-menu-item type="button" (click)="copyShareLink.emit()">
+        <button mat-menu-item type="button" (click)="onCopyShareLinkClick()">
           <jj-icon name="link" />
           <span i18n="@@toolbar.overflow.copyShareLink">Copy share link</span>
         </button>
-        <button mat-menu-item type="button" (click)="togglePublic.emit()">
+        <button mat-menu-item type="button" (click)="onTogglePublicClick()">
           <jj-icon [name]="isPublic() ? 'lock' : 'globe'" />
           <span>{{ visibilityMenuLabel() }}</span>
         </button>
         <button
           mat-menu-item
           type="button"
-          (click)="deleteBlob.emit()"
+          (click)="onDeleteBlobClick()"
         >
           <jj-icon name="trash" />
           <span i18n="@@toolbar.overflow.delete">Delete this blob</span>
