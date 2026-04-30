@@ -79,14 +79,72 @@ describe('HomeComponent (unit-level)', () => {
     expect(prefs.prefs().theme).toBe('light');
   });
 
-  it('onToggleLayout swaps layoutOrientation', () => {
+  // paneLayout is the 4-state derived signal that the toolbar's
+  // segmented control reads. It folds paneVisibility +
+  // layoutOrientation into one value.
+  it('paneLayout reflects paneVisibility + layoutOrientation', () => {
     const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+    const prefs = TestBed.inject(PreferencesService);
+
+    prefs.update({ layoutOrientation: 'horizontal' });
+    c.paneVisibility.set('both');
+    expect(c.paneLayout()).toBe('both-horizontal');
+
+    prefs.update({ layoutOrientation: 'vertical' });
+    expect(c.paneLayout()).toBe('both-vertical');
+
+    c.paneVisibility.set('editor-only');
+    expect(c.paneLayout()).toBe('editor-only');
+
+    c.paneVisibility.set('tree-only');
+    expect(c.paneLayout()).toBe('tree-only');
+  });
+
+  it('onPaneLayoutChange("editor-only") sets paneVisibility and leaves layoutOrientation', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
     const prefs = TestBed.inject(PreferencesService);
     prefs.update({ layoutOrientation: 'horizontal' });
-    fixture.componentInstance.onToggleLayout();
-    expect(prefs.prefs().layoutOrientation).toBe('vertical');
-    fixture.componentInstance.onToggleLayout();
+
+    c.onPaneLayoutChange('editor-only');
+    expect(c.paneVisibility()).toBe('editor-only');
     expect(prefs.prefs().layoutOrientation).toBe('horizontal');
+  });
+
+  it('onPaneLayoutChange("tree-only") sets paneVisibility and leaves layoutOrientation', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+    const prefs = TestBed.inject(PreferencesService);
+    prefs.update({ layoutOrientation: 'vertical' });
+
+    c.onPaneLayoutChange('tree-only');
+    expect(c.paneVisibility()).toBe('tree-only');
+    expect(prefs.prefs().layoutOrientation).toBe('vertical');
+  });
+
+  it('onPaneLayoutChange("both-horizontal") sets paneVisibility=both AND layoutOrientation=horizontal', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+    const prefs = TestBed.inject(PreferencesService);
+    prefs.update({ layoutOrientation: 'vertical' });
+    c.paneVisibility.set('editor-only');
+
+    c.onPaneLayoutChange('both-horizontal');
+    expect(c.paneVisibility()).toBe('both');
+    expect(prefs.prefs().layoutOrientation).toBe('horizontal');
+  });
+
+  it('onPaneLayoutChange("both-vertical") sets paneVisibility=both AND layoutOrientation=vertical', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const c = fixture.componentInstance;
+    const prefs = TestBed.inject(PreferencesService);
+    prefs.update({ layoutOrientation: 'horizontal' });
+    c.paneVisibility.set('tree-only');
+
+    c.onPaneLayoutChange('both-vertical');
+    expect(c.paneVisibility()).toBe('both');
+    expect(prefs.prefs().layoutOrientation).toBe('vertical');
   });
 
   it('onClear() empties content, title, and loadedBlob', () => {
@@ -450,16 +508,23 @@ describe('HomeComponent (unit-level)', () => {
     expect(f2.componentInstance.paneVisibility()).toBe('both');
   });
 
-  it('onCyclePaneVisibility cycles both -> editor-only -> tree-only -> both', () => {
+  it('onPaneLayoutChange cycles through each segment correctly', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const c = fixture.componentInstance;
     expect(c.paneVisibility()).toBe('both');
-    c.onCyclePaneVisibility();
+    expect(c.paneLayout()).toBe('both-horizontal');
+
+    c.onPaneLayoutChange('editor-only');
     expect(c.paneVisibility()).toBe('editor-only');
-    c.onCyclePaneVisibility();
+    expect(c.paneLayout()).toBe('editor-only');
+
+    c.onPaneLayoutChange('tree-only');
     expect(c.paneVisibility()).toBe('tree-only');
-    c.onCyclePaneVisibility();
+    expect(c.paneLayout()).toBe('tree-only');
+
+    c.onPaneLayoutChange('both-horizontal');
     expect(c.paneVisibility()).toBe('both');
+    expect(c.paneLayout()).toBe('both-horizontal');
   });
 
   it('splitStyle collapses to a single 1fr track when paneVisibility is not "both"', () => {

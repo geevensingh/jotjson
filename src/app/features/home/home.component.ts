@@ -60,7 +60,7 @@ import { JsonTreeComponent } from '../../shared/components/json-tree/json-tree.c
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import {
   EditorMode,
-  PaneVisibility,
+  PaneLayout,
   ToolbarComponent
 } from '../../shared/components/toolbar/toolbar.component';
 import { StatusBarComponent } from './status-bar/status-bar.component';
@@ -71,6 +71,15 @@ import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { validateAndReadSingleFile } from '../../core/upload/upload-file-validator';
+
+/**
+ * Local-only pane visibility (issue #39). Stored in `localStorage`
+ * via `paneVisibility` and combined with `layoutOrientation` to
+ * derive the 4-state `paneLayout` shown in the toolbar's segmented
+ * control. Kept as a separate type so a future change to the
+ * persisted shape is independent of the UI surface.
+ */
+type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
 
 /**
  * Primary editor + tree experience. Home is an anonymous page - persistence
@@ -256,12 +265,15 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   /**
-   * 3-state pane visibility cycle (issue #39). Local-only via
-   * `localStorage` (parallel to `splitRatio`); intentionally not
-   * synced via user preferences. Cycling order is
-   * `both -> editor-only -> tree-only -> both`. When returning to
-   * `both`, the persisted `splitRatio` (which was untouched while
-   * one pane was hidden) is automatically restored, so users get
+   * 3-state pane visibility (issue #39, refined in the #39 follow-up).
+   * Local-only via `localStorage` (parallel to `splitRatio`); intentionally
+   * not synced via user preferences. Combined with `layoutOrientation`
+   * (which IS roamed) by `paneLayout` below to produce the 4-state value
+   * shown in the toolbar's segmented control.
+   *
+   * When the user picks one of the `both-*` segments after being in
+   * single-pane mode, the persisted `splitRatio` (which was untouched
+   * while one pane was hidden) is automatically restored, so users get
    * back the layout they had before collapsing.
    */
   readonly paneVisibility = persistedSignal<PaneVisibility>({
@@ -270,6 +282,22 @@ export class HomeComponent implements OnInit, OnDestroy {
     parse: (raw) =>
       raw === 'editor-only' || raw === 'tree-only' ? raw : 'both',
     serialize: (value) => value
+  });
+
+  /**
+   * 4-state derived view of `paneVisibility` + `layoutOrientation`,
+   * matching the segments of the toolbar's pane-layout segmented
+   * control. Single-pane states ignore the orientation pref - it is
+   * preserved untouched and re-applied when the user picks a `both-*`
+   * segment again.
+   */
+  readonly paneLayout = computed<PaneLayout>(() => {
+    const visibility = this.paneVisibility();
+    if (visibility === 'editor-only') return 'editor-only';
+    if (visibility === 'tree-only') return 'tree-only';
+    return this.layoutOrientation() === 'vertical'
+      ? 'both-vertical'
+      : 'both-horizontal';
   });
 
   readonly splitStyle = computed(() => {
@@ -886,28 +914,41 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.mode.set(mode);
   }
 
-  onToggleLayout(): void {
-    const next =
-      this.prefs.prefs().layoutOrientation === 'horizontal' ? 'vertical' : 'horizontal';
-    this.prefs.update({ layoutOrientation: next });
-  }
-
   /**
-   * Cycles `paneVisibility` through `both -> editor-only -> tree-only -> both`
-   * (issue #39). State is persisted to `localStorage` so it survives
-   * reloads. `splitRatio` is intentionally left untouched while a
-   * pane is hidden, so returning to `both` restores the layout the
-   * user had before collapsing.
+   * Translates a 4-state `PaneLayout` segment selection from the
+   * toolbar back into the two underlying preferences:
+   *  - `editor-only` / `tree-only` set `paneVisibility` and leave
+   *    `layoutOrientation` untouched (so it is restored when the
+   *    user returns to a `both-*` segment).
+   *  - `both-horizontal` / `both-vertical` set `paneVisibility` to
+   *    `'both'` AND set `layoutOrientation` to the matching value.
+   *
+   * `splitRatio` is not touched here. While `paneVisibility !==
+   * 'both'`, `splitStyle` ignores the ratio and renders a single
+   * `1fr` track, which means the persisted ratio survives the
+   * round-trip and is restored automatically.
    */
-  onCyclePaneVisibility(): void {
-    const current = this.paneVisibility();
-    const next: PaneVisibility =
-      current === 'both'
-        ? 'editor-only'
-        : current === 'editor-only'
-          ? 'tree-only'
-          : 'both';
-    this.paneVisibility.set(next);
+  onPaneLayoutChange(next: PaneLayout): void {
+    switch (next) {
+      case 'editor-only':
+        this.paneVisibility.set('editor-only');
+        return;
+      case 'tree-only':
+        this.paneVisibility.set('tree-only');
+        return;
+      case 'both-horizontal':
+        this.paneVisibility.set('both');
+        if (this.prefs.prefs().layoutOrientation !== 'horizontal') {
+          this.prefs.update({ layoutOrientation: 'horizontal' });
+        }
+        return;
+      case 'both-vertical':
+        this.paneVisibility.set('both');
+        if (this.prefs.prefs().layoutOrientation !== 'vertical') {
+          this.prefs.update({ layoutOrientation: 'vertical' });
+        }
+        return;
+    }
   }
 
   onToggleTheme(): void {

@@ -17,7 +17,26 @@ import { SignedInDirective } from '../../directives/signed-in.directive';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 
 export type EditorMode = 'json' | 'jsonc';
-export type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
+
+/**
+ * 4-state pane layout segmented control. The toolbar's parent
+ * (`HomeComponent`) derives this from two underlying preferences:
+ *  - `paneVisibility` (local-only, one of `'both' | 'editor-only' |
+ *    'tree-only'`).
+ *  - `layoutOrientation` (roamed via UserPreferences, one of
+ *    `'horizontal' | 'vertical'`).
+ *
+ * The two `both-*` segments expose the orientation directly so users
+ * can swap orientations without first restoring both panes; the
+ * `editor-only` and `tree-only` segments leave `layoutOrientation`
+ * untouched (it gets restored when the user picks a `both-*` segment
+ * again).
+ */
+export type PaneLayout =
+  | 'editor-only'
+  | 'both-horizontal'
+  | 'both-vertical'
+  | 'tree-only';
 
 @Component({
   selector: 'jj-toolbar',
@@ -52,12 +71,12 @@ export class ToolbarComponent {
   readonly isPublic = input<boolean>(false);
 
   /**
-   * 3-state pane visibility cycle (issue #39). Driven by a localStorage-
-   * backed signal in the parent (`HomeComponent.paneVisibility`); the
-   * toolbar simply renders the icon/label and emits a cycle event on
-   * click. The order is `both -> editor-only -> tree-only -> both`.
+   * 4-state pane layout (issue #39 follow-up). Driven by the parent
+   * via `[paneLayout]`; segment changes raise `paneLayoutChange`,
+   * which the parent translates back into the two underlying
+   * preferences (see `PaneLayout` for details).
    */
-  readonly paneVisibility = input<PaneVisibility>('both');
+  readonly paneLayout = input<PaneLayout>('both-horizontal');
 
   /**
    * Clipboard UX state driving the Paste button, per DESIGN_SPEC.md §Smart
@@ -83,10 +102,9 @@ export class ToolbarComponent {
   readonly format = output<void>();
   readonly minify = output<void>();
   readonly modeChange = output<EditorMode>();
-  readonly toggleLayout = output<void>();
   readonly toggleTheme = output<void>();
   readonly toggleSelectionSync = output<void>();
-  readonly togglePaneVisibility = output<void>();
+  readonly paneLayoutChange = output<PaneLayout>();
   readonly save = output<void>();
   readonly titleChange = output<string>();
   readonly copyShareLink = output<void>();
@@ -95,12 +113,6 @@ export class ToolbarComponent {
 
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
-
-  readonly layoutIcon = computed<JjIconName>(() =>
-    this.prefs.prefs().layoutOrientation === 'horizontal'
-      ? 'layout-vertical'
-      : 'layout-horizontal'
-  );
 
   readonly themeIcon = computed<JjIconName>(() => {
     const theme = this.prefs.prefs().theme;
@@ -130,39 +142,17 @@ export class ToolbarComponent {
   readonly selectionSyncAriaLabel = $localize`:@@toolbar.syncSelection.aria:Toggle tree-editor selection sync`;
 
   /**
-   * 3-state pane visibility (issue #39). The icon depicts the
-   * CURRENT state of the panes: `both` -> `pane-both`,
-   * `editor-only` -> `pane-left-only` (only the left/editor pane
-   * is visible), `tree-only` -> `pane-right-only` (only the
-   * right/tree pane is visible).
-   *
-   * The matTooltip and dynamic `aria-label` describe the NEXT
-   * action (what clicking will do), so the icon answers "where
-   * am I?" and the tooltip/aria-label answer "what happens if I
-   * click this?". This split keeps the visual affordance honest
-   * while still letting screen readers announce the action that
-   * activation will perform.
+   * 4-state pane layout segmented control (issue #39 follow-up).
+   * Each segment shows the icon for the layout it picks; selecting
+   * a segment is a direct jump (no cycling). The two `both-*`
+   * variants are adjacent so a user can swap orientations without
+   * first restoring both panes.
    */
-  readonly paneVisibilityIcon = computed<JjIconName>(() => {
-    switch (this.paneVisibility()) {
-      case 'both':
-        return 'pane-both';
-      case 'editor-only':
-        return 'pane-left-only';
-      case 'tree-only':
-        return 'pane-right-only';
-    }
-  });
-  readonly paneVisibilityNextActionLabel = computed(() => {
-    switch (this.paneVisibility()) {
-      case 'both':
-        return $localize`:@@toolbar.paneVisibility.tooltip.next.editorOnly:Hide tree (show editor only)`;
-      case 'editor-only':
-        return $localize`:@@toolbar.paneVisibility.tooltip.next.treeOnly:Hide editor (show tree only)`;
-      case 'tree-only':
-        return $localize`:@@toolbar.paneVisibility.tooltip.next.both:Show both panes`;
-    }
-  });
+  readonly paneLayoutGroupAriaLabel = $localize`:@@toolbar.paneLayout.aria:Pane layout`;
+  readonly paneLayoutEditorOnlyLabel = $localize`:@@toolbar.paneLayout.editorOnly:Show editor only`;
+  readonly paneLayoutBothHorizontalLabel = $localize`:@@toolbar.paneLayout.bothHorizontal:Editor and tree side-by-side`;
+  readonly paneLayoutBothVerticalLabel = $localize`:@@toolbar.paneLayout.bothVertical:Editor above tree`;
+  readonly paneLayoutTreeOnlyLabel = $localize`:@@toolbar.paneLayout.treeOnly:Show tree only`;
 
   readonly saveDisabled = computed(
     () => !this.canSave() || !this.hasContent() || this.saveInFlight()
@@ -233,6 +223,10 @@ export class ToolbarComponent {
 
   onModeChange(next: EditorMode): void {
     this.modeChange.emit(next);
+  }
+
+  onPaneLayoutChange(next: PaneLayout): void {
+    this.paneLayoutChange.emit(next);
   }
 
   /**

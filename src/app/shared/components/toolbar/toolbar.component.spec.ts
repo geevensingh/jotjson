@@ -36,22 +36,6 @@ describe('ToolbarComponent', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  describe('layoutIcon', () => {
-    it('returns "layout-vertical" when layout is horizontal (shows the affordance to toggle)', async () => {
-      const { fixture, prefs } = await create();
-      prefs.update({ layoutOrientation: 'horizontal' });
-      fixture.detectChanges();
-      expect(fixture.componentInstance.layoutIcon()).toBe('layout-vertical');
-    });
-
-    it('returns "layout-horizontal" when layout is vertical', async () => {
-      const { fixture, prefs } = await create();
-      prefs.update({ layoutOrientation: 'vertical' });
-      fixture.detectChanges();
-      expect(fixture.componentInstance.layoutIcon()).toBe('layout-horizontal');
-    });
-  });
-
   describe('themeIcon (reads raw preference, not effectiveTheme)', () => {
     it('returns "sun" for light', async () => {
       const { fixture, prefs } = await create();
@@ -130,76 +114,166 @@ describe('ToolbarComponent', () => {
     });
   });
 
-  describe('pane visibility toggle (issue #39)', () => {
-    function findPaneVisibilityButton(
+  describe('pane layout segmented control (issue #39 follow-up)', () => {
+    function findGroup(
       fixture: ComponentFixture<ToolbarComponent>
-    ): HTMLButtonElement {
-      const button = (fixture.nativeElement as HTMLElement).querySelector(
-        'button.pane-visibility-toggle'
-      ) as HTMLButtonElement | null;
-      if (!button) {
-        throw new Error('pane-visibility toggle button not found in toolbar');
+    ): HTMLElement {
+      const group = (fixture.nativeElement as HTMLElement).querySelector(
+        'mat-button-toggle-group.pane-layout-group'
+      );
+      if (!group) {
+        throw new Error('pane-layout group not found in toolbar');
       }
-      return button;
+      return group as HTMLElement;
     }
 
-    it('paneVisibilityIcon shows the icon for the current state', async () => {
+    function findSegment(
+      fixture: ComponentFixture<ToolbarComponent>,
+      value: string
+    ): HTMLButtonElement {
+      const segment = findGroup(fixture).querySelector(
+        `mat-button-toggle[value="${value}"] button`
+      );
+      if (!segment) {
+        throw new Error(`segment "${value}" not found in pane-layout group`);
+      }
+      return segment as HTMLButtonElement;
+    }
+
+    it('renders all 4 segments in continuum order with their state-icons', async () => {
       const { fixture } = await create();
-      const c = fixture.componentInstance;
-
-      fixture.componentRef.setInput('paneVisibility', 'both');
-      fixture.detectChanges();
-      expect(c.paneVisibilityIcon()).toBe('pane-both');
-
-      fixture.componentRef.setInput('paneVisibility', 'editor-only');
-      fixture.detectChanges();
-      expect(c.paneVisibilityIcon()).toBe('pane-left-only');
-
-      fixture.componentRef.setInput('paneVisibility', 'tree-only');
-      fixture.detectChanges();
-      expect(c.paneVisibilityIcon()).toBe('pane-right-only');
-    });
-
-    it('paneVisibilityNextActionLabel describes the next state', async () => {
-      const { fixture } = await create();
-      const c = fixture.componentInstance;
-
-      fixture.componentRef.setInput('paneVisibility', 'both');
-      fixture.detectChanges();
-      expect(c.paneVisibilityNextActionLabel()).toMatch(/hide tree/i);
-
-      fixture.componentRef.setInput('paneVisibility', 'editor-only');
-      fixture.detectChanges();
-      expect(c.paneVisibilityNextActionLabel()).toMatch(/hide editor/i);
-
-      fixture.componentRef.setInput('paneVisibility', 'tree-only');
-      fixture.detectChanges();
-      expect(c.paneVisibilityNextActionLabel()).toMatch(/show both/i);
-    });
-
-    it('aria-label on the button matches paneVisibilityNextActionLabel and updates with input', async () => {
-      const { fixture } = await create();
-      const c = fixture.componentInstance;
-
-      fixture.componentRef.setInput('paneVisibility', 'both');
-      fixture.detectChanges();
-      expect(findPaneVisibilityButton(fixture).getAttribute('aria-label')).toBe(
-        c.paneVisibilityNextActionLabel()
+      const group = findGroup(fixture);
+      const segments = Array.from(
+        group.querySelectorAll('mat-button-toggle')
       );
 
-      fixture.componentRef.setInput('paneVisibility', 'editor-only');
-      fixture.detectChanges();
-      expect(findPaneVisibilityButton(fixture).getAttribute('aria-label')).toBe(
-        c.paneVisibilityNextActionLabel()
+      expect(segments.length).toBe(4);
+      expect(segments[0].getAttribute('value')).toBe('editor-only');
+      expect(segments[1].getAttribute('value')).toBe('both-horizontal');
+      expect(segments[2].getAttribute('value')).toBe('both-vertical');
+      expect(segments[3].getAttribute('value')).toBe('tree-only');
+
+      // Each segment renders the icon depicting its target state.
+      expect(segments[0].querySelector('jj-icon')).toBeTruthy();
+      expect(segments[1].querySelector('jj-icon')).toBeTruthy();
+      expect(segments[2].querySelector('jj-icon')).toBeTruthy();
+      expect(segments[3].querySelector('jj-icon')).toBeTruthy();
+    });
+
+    it('group aria-label is set', async () => {
+      const { fixture } = await create();
+      const group = findGroup(fixture);
+      expect(group.getAttribute('aria-label')?.toLowerCase()).toBe(
+        'pane layout'
       );
     });
 
-    it('clicking the button emits togglePaneVisibility', async () => {
+    it('segment tooltips and aria-labels describe their target state', async () => {
       const { fixture } = await create();
-      let clickCount = 0;
-      fixture.componentInstance.togglePaneVisibility.subscribe(() => clickCount++);
-      findPaneVisibilityButton(fixture).click();
-      expect(clickCount).toBe(1);
+      const c = fixture.componentInstance;
+
+      // The static labels drive both the matTooltip directive
+      // bindings and the [attr.aria-label]; we assert the values
+      // the component exposes, then confirm the aria-label is
+      // rendered on the DOM (matTooltip is not reflected as a
+      // plain HTML attribute, only the directive carries it).
+      expect(c.paneLayoutEditorOnlyLabel.toLowerCase()).toContain(
+        'editor only'
+      );
+      expect(c.paneLayoutBothHorizontalLabel.toLowerCase()).toContain(
+        'side-by-side'
+      );
+      expect(c.paneLayoutBothVerticalLabel.toLowerCase()).toContain('above');
+      expect(c.paneLayoutTreeOnlyLabel.toLowerCase()).toContain('tree only');
+
+      const group = findGroup(fixture);
+      const segments = Array.from(
+        group.querySelectorAll('mat-button-toggle')
+      );
+      // Material's <mat-button-toggle> nulls out its own host
+      // aria-label and forwards the user's value to the inner
+      // <button>. Read it from there.
+      const ariaFor = (value: string) => {
+        const seg = segments.find(
+          (s) => s.getAttribute('value') === value
+        );
+        return (
+          seg?.querySelector('button')?.getAttribute('aria-label') ?? ''
+        );
+      };
+
+      expect(ariaFor('editor-only')).toBe(c.paneLayoutEditorOnlyLabel);
+      expect(ariaFor('both-horizontal')).toBe(
+        c.paneLayoutBothHorizontalLabel
+      );
+      expect(ariaFor('both-vertical')).toBe(c.paneLayoutBothVerticalLabel);
+      expect(ariaFor('tree-only')).toBe(c.paneLayoutTreeOnlyLabel);
+    });
+
+    it('group [value] reflects the paneLayout input', async () => {
+      const { fixture } = await create();
+      for (const value of [
+        'editor-only',
+        'both-horizontal',
+        'both-vertical',
+        'tree-only'
+      ] as const) {
+        fixture.componentRef.setInput('paneLayout', value);
+        fixture.detectChanges();
+        const checked = (fixture.nativeElement as HTMLElement).querySelector(
+          'mat-button-toggle-group.pane-layout-group .mat-button-toggle-checked'
+        );
+        expect(checked?.getAttribute('value')).toBe(value);
+      }
+    });
+
+    it('clicking each segment emits paneLayoutChange with that value', async () => {
+      const { fixture } = await create();
+      // Start in both-horizontal so that each click is a real change.
+      fixture.componentRef.setInput('paneLayout', 'both-horizontal');
+      fixture.detectChanges();
+
+      const emitted: string[] = [];
+      fixture.componentInstance.paneLayoutChange.subscribe((value) => {
+        emitted.push(value);
+      });
+
+      for (const value of [
+        'editor-only',
+        'both-vertical',
+        'tree-only',
+        'both-horizontal'
+      ] as const) {
+        // Mirror what the parent does after each emission so the next
+        // click is also a change.
+        findSegment(fixture, value).click();
+        fixture.componentRef.setInput('paneLayout', value);
+        fixture.detectChanges();
+      }
+
+      expect(emitted).toEqual([
+        'editor-only',
+        'both-vertical',
+        'tree-only',
+        'both-horizontal'
+      ]);
+    });
+
+    it('re-clicking the already-active segment does NOT emit paneLayoutChange', async () => {
+      const { fixture } = await create();
+      fixture.componentRef.setInput('paneLayout', 'both-horizontal');
+      fixture.detectChanges();
+
+      let emitCount = 0;
+      fixture.componentInstance.paneLayoutChange.subscribe(() => {
+        emitCount++;
+      });
+
+      // Click the segment that is already active.
+      findSegment(fixture, 'both-horizontal').click();
+      fixture.detectChanges();
+
+      expect(emitCount).toBe(0);
     });
   });
 

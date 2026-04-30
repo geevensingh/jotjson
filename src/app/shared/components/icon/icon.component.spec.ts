@@ -21,6 +21,7 @@ describe('IconComponent', () => {
     'pane-both',
     'pane-left-only',
     'pane-right-only',
+    'pane-stacked',
     'warning',
     'check',
     'star',

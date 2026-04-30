@@ -41,6 +41,26 @@
   @include md.compact-mat-button-toggle(32px, 12px);
 }
 
+.pane-layout-group {
+  font-family: v.$font-ui;
+  font-size: 12px;
+  height: 32px;
+
+  @include md.compact-mat-button-toggle(32px, 12px);
+
+  // Icon-only segments need tighter horizontal padding than the
+  // mixin default (which assumes a text label).
+  .mat-button-toggle-label-content {
+    padding: 0 8px;
+  }
+
+  jj-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
 .title-field {
   font-family: v.$font-ui;
   font-size: 13px;

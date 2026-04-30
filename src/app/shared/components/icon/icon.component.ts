@@ -31,6 +31,7 @@ export type JjIconName =
   | 'pane-both'
   | 'pane-left-only'
   | 'pane-right-only'
+  | 'pane-stacked'
   | 'globe'
   | 'lock'
   | 'trash'
@@ -190,6 +191,10 @@ export type JjIconName =
         @case ('pane-right-only') {
           <rect x="3.5" y="4.5" width="7.5" height="15" rx="1.25" />
           <rect x="13" y="4.5" width="7.5" height="15" rx="1.25" fill="currentColor" fill-opacity="0.4" />
+        }
+        @case ('pane-stacked') {
+          <rect x="4.5" y="3.5" width="15" height="7.5" rx="1.25" fill="currentColor" fill-opacity="0.4" />
+          <rect x="4.5" y="13" width="15" height="7.5" rx="1.25" fill="currentColor" fill-opacity="0.4" />
         }
         @case ('globe') {
           <circle cx="12" cy="12" r="8.5" />

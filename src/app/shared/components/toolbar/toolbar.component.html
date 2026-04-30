@@ -196,28 +196,41 @@
     <jj-icon [name]="selectionSyncIcon()" />
   </button>
 
-  <button
-    type="button"
-    mat-icon-button
-    class="pane-visibility-toggle"
-    [matTooltip]="paneVisibilityNextActionLabel()"
-    [attr.aria-label]="paneVisibilityNextActionLabel()"
-    (click)="togglePaneVisibility.emit()"
+  <mat-button-toggle-group
+    class="pane-layout-group"
+    [value]="paneLayout()"
+    (change)="onPaneLayoutChange($any($event.value))"
+    [attr.aria-label]="paneLayoutGroupAriaLabel"
   >
-    <jj-icon [name]="paneVisibilityIcon()" />
-  </button>
-
-  <button
-    type="button"
-    mat-icon-button
-    matTooltip="Toggle layout"
-    i18n-matTooltip="@@toolbar.layout.tooltip"
-    aria-label="Toggle layout"
-    i18n-aria-label="@@toolbar.layout.aria"
-    (click)="toggleLayout.emit()"
-  >
-    <jj-icon [name]="layoutIcon()" />
-  </button>
+    <mat-button-toggle
+      value="editor-only"
+      [matTooltip]="paneLayoutEditorOnlyLabel"
+      [aria-label]="paneLayoutEditorOnlyLabel"
+    >
+      <jj-icon name="pane-left-only" />
+    </mat-button-toggle>
+    <mat-button-toggle
+      value="both-horizontal"
+      [matTooltip]="paneLayoutBothHorizontalLabel"
+      [aria-label]="paneLayoutBothHorizontalLabel"
+    >
+      <jj-icon name="pane-both" />
+    </mat-button-toggle>
+    <mat-button-toggle
+      value="both-vertical"
+      [matTooltip]="paneLayoutBothVerticalLabel"
+      [aria-label]="paneLayoutBothVerticalLabel"
+    >
+      <jj-icon name="pane-stacked" />
+    </mat-button-toggle>
+    <mat-button-toggle
+      value="tree-only"
+      [matTooltip]="paneLayoutTreeOnlyLabel"
+      [aria-label]="paneLayoutTreeOnlyLabel"
+    >
+      <jj-icon name="pane-right-only" />
+    </mat-button-toggle>
+  </mat-button-toggle-group>
 
   <span class="divider" aria-hidden="true"></span>
 
