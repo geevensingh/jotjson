@@ -25,6 +25,7 @@ export type JjIconName =
   | 'sign-out'
   | 'save'
   | 'more-vert'
+  | 'more-horiz'
   | 'link'
   | 'arrows-exchange'
   | 'arrows-exchange-off'
@@ -43,6 +44,7 @@ export type JjIconName =
   | 'warning'
   | 'check'
   | 'star'
+  | 'star-filled'
   | 'info'
   | 'error'
   | 'flag'
@@ -163,6 +165,11 @@ export type JjIconName =
           <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
           <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none" />
         }
+        @case ('more-horiz') {
+          <circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        }
         @case ('link') {
           <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" />
           <path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" />
@@ -242,6 +249,9 @@ export type JjIconName =
         }
         @case ('star') {
           <path d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2L12 17.6l-5.4 2.9 1-6.2L3.2 10l6.1-.9z" />
+        }
+        @case ('star-filled') {
+          <path fill="currentColor" d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2L12 17.6l-5.4 2.9 1-6.2L3.2 10l6.1-.9z" />
         }
         @case ('info') {
           <circle cx="12" cy="12" r="8.5" />

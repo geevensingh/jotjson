@@ -15,7 +15,6 @@ import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
-import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
@@ -28,6 +27,7 @@ import {
   PreferenceSyncState
 } from '../../core/preferences/preferences.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
+import { IconComponent } from '../../shared/components/icon/icon.component';
 import {
   ConfirmDialogComponent,
   ConfirmDialogData
@@ -52,8 +52,8 @@ const DUP_SUFFIX = ' (copy)';
   standalone: true,
   imports: [
     AppHeaderComponent,
+    IconComponent,
     MatButtonModule,
-    MatIconModule,
     MatMenuModule,
     RouterLink
   ],

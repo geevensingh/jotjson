@@ -28,7 +28,7 @@
       (click)="openClonePresetDialog()"
       data-testid="clone-preset"
     >
-      <mat-icon>content_copy</mat-icon>
+      <jj-icon name="copy" />
       <span i18n="@@formattingRules.clonePreset">Clone preset</span>
     </button>
   </div>
@@ -67,7 +67,7 @@
             data-testid="default-star"
             (click)="toggleDefault(set)"
           >
-            <mat-icon>{{ isDefault(set.id) ? 'star' : 'star_border' }}</mat-icon>
+            <jj-icon [name]="isDefault(set.id) ? 'star-filled' : 'star'" />
           </button>
 
           <div class="rule-set-info">
@@ -133,7 +133,7 @@
                   i18n-aria-label="@@formattingRules.rename.pencilAria"
                   aria-label="Rename"
                 >
-                  <mat-icon>edit</mat-icon>
+                  <jj-icon name="edit" />
                 </button>
               </div>
             }
@@ -165,7 +165,7 @@
             i18n-aria-label="@@formattingRules.menu.aria"
             aria-label="More actions"
           >
-            <mat-icon>more_horiz</mat-icon>
+            <jj-icon name="more-horiz" />
           </button>
           <mat-menu #rowMenu="matMenu" class="jj-menu">
             <button
@@ -174,7 +174,7 @@
               data-testid="menu-rename"
               (click)="startRename(set)"
             >
-              <mat-icon>edit</mat-icon>
+              <jj-icon name="edit" />
               <span i18n="@@formattingRules.menu.rename">Rename</span>
             </button>
             <button
@@ -183,7 +183,7 @@
               data-testid="menu-duplicate"
               (click)="duplicateSet(set)"
             >
-              <mat-icon>content_copy</mat-icon>
+              <jj-icon name="copy" />
               <span i18n="@@formattingRules.menu.duplicate">Duplicate</span>
             </button>
             <button
@@ -193,7 +193,7 @@
               data-testid="menu-delete"
               (click)="deleteSet(set)"
             >
-              <mat-icon>delete_outline</mat-icon>
+              <jj-icon name="trash" />
               <span i18n="@@formattingRules.menu.delete">Delete</span>
             </button>
           </mat-menu>

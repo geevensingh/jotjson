@@ -81,7 +81,7 @@
   pointer-events: none;
 }
 
-.default-star[aria-pressed="true"] mat-icon {
+.default-star[aria-pressed="true"] jj-icon {
   color: var(--mat-sys-tertiary, #f5b400);
 }
 
@@ -130,7 +130,7 @@
 }
 
 .menu-destructive,
-.menu-destructive mat-icon {
+.menu-destructive jj-icon {
   color: var(--mat-sys-error, #d32f2f);
 }
 
