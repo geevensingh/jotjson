@@ -56,7 +56,7 @@ In the [Entra admin center](https://entra.microsoft.com/), create a new tenant
 with the **External** configuration. Note the tenant id (GUID) and the
 friendly subdomain (e.g. `jotjsonauth.ciamlogin.com`).
 
-Authority URL is `https://<subdomain>.ciamlogin.com/<tenantId>/`.
+Authority URL is `https://jotjsonauth.ciamlogin.com/f23e8918-d46e-4248-9aa7-0044b5bce622/`.
 
 ### 2. Register the SPA app (browser)
 
@@ -72,18 +72,18 @@ Record the **Application (client) id** -> `ENTRA_SPA_CLIENT_ID`.
 ### 3. Register the API app (Functions)
 
 - No redirect URIs.
-- **Expose an API**: set Application ID URI to `api://<apiClientId>` and add a
+- **Expose an API**: set Application ID URI to `api://6bb9ba72-7021-4232-9a97-649d18227b5c` and add a
   scope `access_as_user` (admins + users consent).
 
 Record the **Application (client) id** -> `ENTRA_API_CLIENT_ID`.
-The audience the API validates is `ENTRA_API_AUDIENCE = api://<apiClientId>`.
+The audience the API validates is `ENTRA_API_AUDIENCE = api://6bb9ba72-7021-4232-9a97-649d18227b5c`.
 
 ### 4. Wire the SPA to the API
 
 On the SPA app registration -> **API permissions** -> add the
 `access_as_user` delegated scope from the API app -> **Grant admin consent**.
 
-The SPA's MSAL config uses `scopes: ['api://<apiClientId>/access_as_user']`.
+The SPA's MSAL config uses `scopes: ['api://6bb9ba72-7021-4232-9a97-649d18227b5c/access_as_user']`.
 
 ### 5. Create the user flow
 
@@ -103,15 +103,15 @@ The deploy workflow builds the Angular SPA with environment values baked in
 forwards the same values to Bicep as deploy parameters. Configure these repo
 secrets:
 
-| Secret                  | Used by              | Example                                          |
-| ----------------------- | -------------------- | ------------------------------------------------ |
-| `ENTRA_TENANT_ID`       | Bicep                | `00000000-0000-0000-0000-000000000000`           |
-| `ENTRA_AUTHORITY`       | Bicep + SPA build    | `https://jotjsonauth.ciamlogin.com/<tenantId>/`  |
-| `ENTRA_KNOWN_AUTHORITY` | SPA build            | `jotjsonauth.ciamlogin.com`                      |
-| `ENTRA_SPA_CLIENT_ID`   | Bicep + SPA build    | SPA app registration's Application (client) id   |
-| `ENTRA_API_CLIENT_ID`   | Bicep                | API app registration's Application (client) id   |
-| `ENTRA_API_SCOPE`       | SPA build            | `api://<apiClientId>/access_as_user`             |
-| `ENTRA_API_AUDIENCE`    | Bicep                | `api://<apiClientId>`                            |
+| Secret                  | Used by              | Example                                                                  |
+| ----------------------- | -------------------- | ------------------------------------------------------------------------ |
+| `ENTRA_TENANT_ID`       | Bicep                | `f23e8918-d46e-4248-9aa7-0044b5bce622`                                   |
+| `ENTRA_AUTHORITY`       | Bicep + SPA build    | `https://jotjsonauth.ciamlogin.com/f23e8918-d46e-4248-9aa7-0044b5bce622/` |
+| `ENTRA_KNOWN_AUTHORITY` | SPA build            | `jotjsonauth.ciamlogin.com`                                              |
+| `ENTRA_SPA_CLIENT_ID`   | Bicep + SPA build    | `79f1f299-7d52-4efc-8c09-1f4ca929fe2c`                                   |
+| `ENTRA_API_CLIENT_ID`   | Bicep                | `6bb9ba72-7021-4232-9a97-649d18227b5c`                                   |
+| `ENTRA_API_SCOPE`       | SPA build            | `api://6bb9ba72-7021-4232-9a97-649d18227b5c/access_as_user`              |
+| `ENTRA_API_AUDIENCE`    | Bicep                | `api://6bb9ba72-7021-4232-9a97-649d18227b5c`                             |
 
 **What each consumer does with them:**
 
