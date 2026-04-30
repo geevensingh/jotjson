@@ -23,7 +23,7 @@
     "applicationinsights": "^3.14.0",
     "jsonc-parser": "^3.3.1",
     "jsonwebtoken": "^9.0.3",
-    "jwks-rsa": "^3.2.2"
+    "jwks-rsa": "^4.0.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
