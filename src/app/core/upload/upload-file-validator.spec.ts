@@ -35,7 +35,7 @@ describe('validateAndReadSingleFile', () => {
       arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
     } as unknown as File;
     const result = await validateAndReadSingleFile([oversizedStub]);
-    expect(result).toEqual({ kind: 'tooLarge' });
+    expect(result).toEqual({ kind: 'tooLarge', sizeBytes: MAX_UPLOAD_BYTES + 1 });
   });
 
   it('returns ok when the file is exactly at the maximum byte limit', async () => {

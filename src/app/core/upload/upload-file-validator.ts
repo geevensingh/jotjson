@@ -6,7 +6,7 @@ export type UploadResult =
   | { kind: 'ok'; text: string }
   | { kind: 'empty' }
   | { kind: 'tooMany' }
-  | { kind: 'tooLarge' }
+  | { kind: 'tooLarge'; sizeBytes: number }
   | { kind: 'binary'; filename: string }
   | { kind: 'readFailed'; cause: unknown };
 
@@ -16,7 +16,7 @@ export async function validateAndReadSingleFile(
   if (files.length === 0) return { kind: 'empty' };
   if (files.length > 1) return { kind: 'tooMany' };
   const [file] = files;
-  if (file.size > MAX_UPLOAD_BYTES) return { kind: 'tooLarge' };
+  if (file.size > MAX_UPLOAD_BYTES) return { kind: 'tooLarge', sizeBytes: file.size };
   let buffer: ArrayBuffer;
   try {
     buffer = await file.arrayBuffer();

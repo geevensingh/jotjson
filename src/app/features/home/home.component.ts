@@ -753,6 +753,9 @@ export class HomeComponent implements OnInit, OnDestroy {
         );
         return;
       case 'tooLarge':
+        this.logger.warn('home.upload.tooLarge', {
+          sizeBytes: result.sizeBytes
+        });
         this.snack.open(
           $localize`:@@home.upload.error.tooLarge:File too large - max 5 MB`,
           $localize`:@@common.dismiss:Dismiss`,

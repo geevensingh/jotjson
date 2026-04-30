@@ -108,6 +108,12 @@ Place new code in the correct bucket:
   production code are permitted only in `src/app/core/telemetry/` and
   `src/main.ts` (early-boot bootstrap errors). Test files (`*.spec.ts`,
   `*.test.ts`) may reference `console.*` for spies and expectations.
+- Telemetry message IDs live in
+  `src/app/core/telemetry/telemetry-message-ids.ts` as a typed
+  literal-union. When you add a new token, add a JSDoc block above
+  it documenting **Severity**, **Fired by** (call site), and **Props**
+  (and **Exception** for error tokens). The file is the spec for our
+  telemetry events; keep its docs current when call sites change.
 
 ### Internationalization (i18n)
 - v1 ships in English only, but **all user-facing strings must be extractable**

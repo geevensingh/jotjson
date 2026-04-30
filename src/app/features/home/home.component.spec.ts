@@ -1449,11 +1449,15 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   it('toolbar onUpload with oversized file toasts tooLarge and does not mutate content', async () => {
     const { fixture, snack } = setup();
     const before = fixture.componentInstance.content();
+    const warnSpy = spyOn(console, 'warn');
     await fixture.componentInstance.onUpload(makeOversizedFile());
     expect(snack.open).toHaveBeenCalledTimes(1);
     const args = snack.open.calls.mostRecent().args;
     expect(args[0]).toContain('too large');
     expect(fixture.componentInstance.content()).toBe(before);
+    expect(warnSpy).toHaveBeenCalledWith('[home.upload.tooLarge]', {
+      sizeBytes: MAX_UPLOAD_BYTES + 1
+    });
   });
 
   it('toolbar onUpload with a valid file loads its text into content and does not toast', async () => {
@@ -1510,12 +1514,16 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   it('drop with an oversized file toasts tooLarge', async () => {
     const { fixture, fakeController, snack } = setup();
     const before = fixture.componentInstance.content();
+    const warnSpy = spyOn(console, 'warn');
     fakeController.registeredHandler!([makeOversizedFile()]);
     await Promise.resolve();
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
     expect(snack.open.calls.mostRecent().args[0]).toContain('too large');
     expect(fixture.componentInstance.content()).toBe(before);
+    expect(warnSpy).toHaveBeenCalledWith('[home.upload.tooLarge]', {
+      sizeBytes: MAX_UPLOAD_BYTES + 1
+    });
   });
 
   it('drop where File.text() rejects toasts readFailed', async () => {
