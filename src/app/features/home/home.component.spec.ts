@@ -17,6 +17,8 @@ import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { JsonExtractorService } from '../../core/json/json-extractor.service';
+import { LoggerService } from '../../core/telemetry/logger.service';
+import { bucketBytes } from '../../core/telemetry/buckets';
 import {
   installMinimalMonacoStub,
   restoreMonacoStub
@@ -41,6 +43,20 @@ const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 function setupMinimalMonacoStub(): void {
   beforeEach(() => installMinimalMonacoStub());
   afterEach(() => restoreMonacoStub());
+}
+
+function waitForDoubleAnimationFrame(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+function waitForTaskQueue(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(() => resolve(), 0);
+  });
 }
 
 describe('HomeComponent (unit-level)', () => {
@@ -424,6 +440,7 @@ describe('HomeComponent (unit-level)', () => {
       Promise.resolve(escaped)
     );
     await fixture.componentInstance.onPaste();
+    await waitForDoubleAnimationFrame();
     const content = fixture.componentInstance.content();
     // Unescaped + formatted: multiline with indentation.
     expect(content).toContain('\n');
@@ -436,7 +453,57 @@ describe('HomeComponent (unit-level)', () => {
     const text = '{"a":1}';
     spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve(text));
     await fixture.componentInstance.onPaste();
+    await waitForDoubleAnimationFrame();
     expect(fixture.componentInstance.content()).toBe(text);
+  });
+
+  it('onPaste emits paste.handle telemetry for valid JSON', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const text = '{"a":1}';
+    const sizeBytes = new Blob([text]).size;
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve(text));
+
+    await fixture.componentInstance.onPaste();
+    await waitForDoubleAnimationFrame();
+
+    expect(eventSpy).toHaveBeenCalledOnceWith(
+      'paste.handle',
+      { sizeBytesBucket: bucketBytes(sizeBytes) },
+      jasmine.objectContaining({
+        sizeBytes,
+        clipboardReadMs: jasmine.any(Number),
+        parseMs: jasmine.any(Number),
+        syncHandlerMs: jasmine.any(Number),
+        firstPaintMs: jasmine.any(Number)
+      })
+    );
+  });
+
+  it('onPaste does not emit paste.handle for whitespace-only clipboard text', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    spyOn(navigator.clipboard, 'readText').and.returnValue(
+      Promise.resolve('  \n\t  ')
+    );
+
+    await fixture.componentInstance.onPaste();
+    await waitForDoubleAnimationFrame();
+
+    expect(eventSpy).not.toHaveBeenCalled();
+  });
+
+  it('onEditorPaste does not emit paste.handle telemetry', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+
+    fixture.componentInstance.onEditorPaste({
+      pastedText: '{"a":1}',
+      postPasteContent: '{"a":1}',
+      postPasteParses: true
+    });
+
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 
   it('onCopyEscaped writes JSON.stringify of content to clipboard', async () => {
@@ -985,16 +1052,23 @@ describe('HomeComponent save() branching (M4a)', () => {
     expect(stub.create).not.toHaveBeenCalled();
   });
 
-  it('create path: signed-in user with no loaded blob calls create and navigates to /s/:slug', async () => {
+  it('create path: signed-in user with no loaded blob calls create, navigates, and emits share.created', async () => {
     const created = blob({ id: 'new-id', slug: 'newslug', ownerId: 'u1' });
     const { fixture, stub, router } = setup({ userId: 'u1', createResult: created });
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     const navSpy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.content.set('{"x":1}');
+    const content = '{"x":1}';
+    fixture.componentInstance.content.set(content);
     fixture.componentInstance.title.set('My title');
     await fixture.componentInstance.onSave();
-    expect(stub.create).toHaveBeenCalledWith('{"x":1}', 'My title', false);
+    expect(stub.create).toHaveBeenCalledWith(content, 'My title', false);
     expect(fixture.componentInstance.loadedBlob()).toEqual(created);
     expect(navSpy).toHaveBeenCalledWith(['/s', 'newslug']);
+    expect(eventSpy).toHaveBeenCalledOnceWith(
+      'share.created',
+      { visibility: 'private' },
+      { sizeBytes: new Blob([content]).size }
+    );
   });
 
   it('create path: forks when loaded blob belongs to someone else', async () => {
@@ -1008,9 +1082,10 @@ describe('HomeComponent save() branching (M4a)', () => {
     expect(stub.update).not.toHaveBeenCalled();
   });
 
-  it('update path: owner updates in place (same slug, no navigation)', async () => {
+  it('update path: owner updates in place (same slug, no navigation) without share.created', async () => {
     const updated = blob({ id: 'id-1', slug: 'slug-1', ownerId: 'u1', title: 'New' });
     const { fixture, stub, router } = setup({ userId: 'u1', updateResult: updated });
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     const navSpy = spyOn(router, 'navigate').and.resolveTo(true);
     fixture.componentInstance.loadedBlob.set(blob({ id: 'id-1', ownerId: 'u1' }));
     fixture.componentInstance.content.set('{"a":2}');
@@ -1020,6 +1095,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     expect(stub.create).not.toHaveBeenCalled();
     expect(navSpy).not.toHaveBeenCalled();
     expect(fixture.componentInstance.loadedBlob()).toEqual(updated);
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 
   it('empty title is sent as undefined (no title)', async () => {
@@ -1311,28 +1387,56 @@ describe('HomeComponent blob actions (M4b)', () => {
       expect(snack.open).not.toHaveBeenCalled();
   });
 
-  it('onTogglePublic flips isPublic via BlobService.update and refreshes loadedBlob', async () => {
+  it('onTogglePublic emits public visibility telemetry after a private-to-public update', async () => {
     const updated = blob({ isPublic: true });
     const { fixture, stub, snack } = setup({
       userId: 'owner-me',
       loaded: blob({ isPublic: false }),
       updateResult: updated
-    }); 
-      await fixture.componentInstance.onTogglePublic();
-      expect(stub.update).toHaveBeenCalledWith('blob-1', { isPublic: true });
-      expect(fixture.componentInstance.loadedBlob()?.isPublic).toBe(true);
-      expect(snack.open).toHaveBeenCalled();
+    });
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    await fixture.componentInstance.onTogglePublic();
+    expect(stub.update).toHaveBeenCalledWith('blob-1', { isPublic: true });
+    expect(fixture.componentInstance.loadedBlob()?.isPublic).toBe(true);
+    expect(snack.open).toHaveBeenCalled();
+    expect(eventSpy).toHaveBeenCalledOnceWith(
+      'share.visibility.changed',
+      { newVisibility: 'public' },
+      undefined
+    );
   });
 
-  it('onTogglePublic toasts an error when the update fails', async () => {
+  it('onTogglePublic emits private visibility telemetry after a public-to-private update', async () => {
+    const updated = blob({ isPublic: false });
+    const { fixture, stub, snack } = setup({
+      userId: 'owner-me',
+      loaded: blob({ isPublic: true }),
+      updateResult: updated
+    });
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    await fixture.componentInstance.onTogglePublic();
+    expect(stub.update).toHaveBeenCalledWith('blob-1', { isPublic: false });
+    expect(fixture.componentInstance.loadedBlob()?.isPublic).toBe(false);
+    expect(snack.open).toHaveBeenCalled();
+    expect(eventSpy).toHaveBeenCalledOnceWith(
+      'share.visibility.changed',
+      { newVisibility: 'private' },
+      undefined
+    );
+  });
+
+  it('onTogglePublic toasts an error without visibility telemetry when the update fails', async () => {
     const { fixture, snack } = setup({
       userId: 'owner-me',
       loaded: blob(),
       updateResult: new Error('nope')
     });
-    spyOn(console, 'warn'); 
-      await fixture.componentInstance.onTogglePublic();
-      expect(snack.open).toHaveBeenCalled();
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const warnSpy = spyOn(console, 'warn');
+    await fixture.componentInstance.onTogglePublic();
+    expect(snack.open).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith('[share.visibility.failed]', {});
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 
   it('onTogglePublic does nothing when the user does not own the blob', async () => {
@@ -1446,8 +1550,9 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     } as unknown as File;
   }
 
-  it('toolbar onUpload with oversized file toasts tooLarge and does not mutate content', async () => {
+  it('toolbar onUpload with oversized file toasts tooLarge, does not mutate content, and does not emit upload.handle', async () => {
     const { fixture, snack } = setup();
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     const before = fixture.componentInstance.content();
     const warnSpy = spyOn(console, 'warn');
     await fixture.componentInstance.onUpload(makeOversizedFile());
@@ -1458,14 +1563,29 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     expect(warnSpy).toHaveBeenCalledWith('[home.upload.tooLarge]', {
       sizeBytes: MAX_UPLOAD_BYTES + 1
     });
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 
-  it('toolbar onUpload with a valid file loads its text into content and does not toast', async () => {
+  it('toolbar onUpload with a valid file loads content and emits upload.handle with pick source', async () => {
     const { fixture, snack } = setup();
-    const file = new File(['{"a":1}'], 'sample.json');
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const text = '{"a":1}';
+    const file = new File([text], 'sample.json');
     await fixture.componentInstance.onUpload(file);
-    expect(fixture.componentInstance.content()).toBe('{"a":1}');
+    await waitForDoubleAnimationFrame();
+    expect(fixture.componentInstance.content()).toBe(text);
     expect(snack.open).not.toHaveBeenCalled();
+    expect(eventSpy).toHaveBeenCalledOnceWith(
+      'upload.handle',
+      { sizeBytesBucket: bucketBytes(file.size), source: 'pick' },
+      jasmine.objectContaining({
+        sizeBytes: file.size,
+        fileReadMs: jasmine.any(Number),
+        parseMs: jasmine.any(Number),
+        syncHandlerMs: jasmine.any(Number),
+        firstPaintMs: jasmine.any(Number)
+      })
+    );
   });
 
   it('registers a drop handler with DocumentDropController on init', () => {
@@ -1482,20 +1602,33 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     expect(fakeController.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('drop with a single valid file loads its text and does not toast', async () => {
+  it('drop with a single valid file loads content and emits upload.handle with drag source', async () => {
     const { fixture, fakeController, snack } = setup();
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     const handler = fakeController.registeredHandler!;
+    const text = '{"b":2}';
     const file = {
-      size: 7,
+      size: new Blob([text]).size,
       name: 'b.json',
-      text: () => Promise.resolve('{"b":2}'),
-      arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"b":2}').buffer)
+      text: () => Promise.resolve(text),
+      arrayBuffer: () => Promise.resolve(new TextEncoder().encode(text).buffer)
     } as unknown as File;
     handler([file]);
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(fixture.componentInstance.content()).toBe('{"b":2}');
+    await waitForTaskQueue();
+    await waitForDoubleAnimationFrame();
+    expect(fixture.componentInstance.content()).toBe(text);
     expect(snack.open).not.toHaveBeenCalled();
+    expect(eventSpy).toHaveBeenCalledOnceWith(
+      'upload.handle',
+      { sizeBytesBucket: bucketBytes(file.size), source: 'drag' },
+      jasmine.objectContaining({
+        sizeBytes: file.size,
+        fileReadMs: jasmine.any(Number),
+        parseMs: jasmine.any(Number),
+        syncHandlerMs: jasmine.any(Number),
+        firstPaintMs: jasmine.any(Number)
+      })
+    );
   });
 
   it('drop with multiple files toasts tooMany and does not mutate content', async () => {
@@ -1526,14 +1659,14 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     });
   });
 
-  it('drop where File.text() rejects toasts readFailed', async () => {
+  it('drop where File.text() rejects toasts readFailed without upload.handle telemetry', async () => {
     const { fakeController, snack } = setup();
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     fakeController.registeredHandler!([makeRejectingFile()]);
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitForTaskQueue();
     expect(snack.open).toHaveBeenCalledTimes(1);
     expect(snack.open.calls.mostRecent().args[0]).toContain('Could not read');
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 
   it('exposes dropActive that mirrors the controller signal and is bound to the overlay', () => {
@@ -1592,6 +1725,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     });
 
     await component.onPaste();
+    await waitForDoubleAnimationFrame();
 
     expect(component.extractBannerVisible()).toBe(true);
     expect(component.extractedCandidate()?.data.blockCount).toBe(1);
@@ -1607,6 +1741,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     const extractSpy = spyOn(extractor, 'extractFromMixedText').and.callThrough();
 
     await component.onPaste();
+    await waitForDoubleAnimationFrame();
 
     expect(extractSpy).not.toHaveBeenCalled();
     expect(component.extractBannerVisible()).toBe(false);
@@ -1728,6 +1863,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     });
 
     await component.onUpload(file);
+    await waitForDoubleAnimationFrame();
 
     expect(extractor.extractFromMixedText).toHaveBeenCalledWith(
       'INFO log {"a":1}'
@@ -1746,6 +1882,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     });
 
     await component.onUpload(file);
+    await waitForDoubleAnimationFrame();
 
     expect(extractSpy).not.toHaveBeenCalled();
     expect(component.extractBannerVisible()).toBe(false);
@@ -1794,6 +1931,10 @@ describe('HomeComponent upload-error banner (#36)', () => {
     fixture.componentRef.changeDetectorRef.detectChanges();
     return { fixture, fakeController, snack };
   }
+
+  afterEach(async () => {
+    await waitForDoubleAnimationFrame();
+  });
 
   it('toolbar onUpload with malformed JSON sets uploadError and loads raw content', async () => {
     const { fixture, snack } = setup();
@@ -2035,6 +2176,10 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     return { fixture, fakeController, snack };
   }
 
+  afterEach(async () => {
+    await waitForDoubleAnimationFrame();
+  });
+
   function pngFile(name = 'logo.png'): File {
     const pngBytes = new Uint8Array([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d
@@ -2051,11 +2196,13 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     expect(fixture.componentInstance.content()).toBe(before);
   });
 
-  it('toolbar binary upload does not set uploadError or extractBanner', async () => {
+  it('toolbar binary upload does not set uploadError, extractBanner, or emit upload.handle', async () => {
     const { fixture } = setup();
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     await fixture.componentInstance.onUpload(pngFile());
     expect(fixture.componentInstance.uploadError()).toBeNull();
     expect(fixture.componentInstance.extractBannerVisible()).toBe(false);
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 
   it('drag-drop binary upload toasts and does not mutate content', async () => {

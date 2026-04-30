@@ -25,7 +25,11 @@
  * URLs, raw search query text, or any PII. Use the helpers in
  * `./buckets.ts` (`bucketBytes`, `bucketCount`) for numeric size /
  * count dimensions; pair the bucket dimension with the raw number as
- * a measurement when both are useful.
+ * a measurement when both are useful. Narrow exception: build-identity
+ * dimensions (`version`, `sha`, `branch`, `dirty` on `app.boot`) are
+ * exempt because they take at most one value per deploy across all
+ * sessions; total dimension cardinality is bounded by deploy count,
+ * not session count.
  *
  * Each token has a JSDoc block documenting:
  * - **Severity / kind**: `info` | `warn` | `error` | `event`. Drives
@@ -70,7 +74,20 @@ export const TELEMETRY_MESSAGE_IDS = [
    * `sessionStorage` after a boot-time failure that wrote to the
    * `BOOT_FAIL_KEY` slot before the SDK was ready.
    */
-  'boot.failed',
+   'boot.failed',
+
+  /**
+   * Kind: event
+   * Fired by: lazy-import block in `AppComponent.ngOnInit`
+   *           (`app/app.component.ts`) once per page load, BEFORE
+   *           `LoggerService.connect()` resolves (the buffered entry
+   *           is replayed once the SDK is up).
+   * Props: { version: string; sha: string; branch: string; dirty: boolean }
+   *   sourced from `BUILD_INFO` (`src/generated/build-info.ts`).
+   *   See preamble for the build-identity carve-out.
+   * Measurements: none.
+   */
+  'app.boot',
 
   // HTTP / API
 
@@ -104,6 +121,20 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'update.unrecoverable',
 
+  /**
+   * Kind: event
+   * Fired by: `AppUpdateService.activateAndReload`
+   *           (`core/update/app-update.service.ts`) AFTER
+   *           `swUpdate.activateUpdate()` resolves and BEFORE
+   *           `reload()`. `TelemetryService.flush()` is awaited
+   *           between the event and the reload so the envelope
+   *           dispatches before the navigation tears down the
+   *           document.
+   * Props: none.
+   * Measurements: none.
+   */
+  'update.applied',
+
   // Editor
 
   /**
@@ -115,6 +146,21 @@ export const TELEMETRY_MESSAGE_IDS = [
    * (chunk load failure, network error, etc.).
    */
   'monaco.loadFailed',
+
+  /**
+   * Kind: event
+   * Fired by: `JsonEditorComponent.ngAfterViewInit` after the FIRST
+   *           successful `loadMonaco()` resolution per page load
+   *           (`shared/components/json-editor/json-editor.component.ts`).
+   *           Subsequent component remounts that hit the cached
+   *           `window.monaco` do NOT emit -- this token measures the
+   *           one-time Monaco distribution download / initialization,
+   *           not editor mount counts.
+   * Props: none.
+   * Measurements: { loadTimeMs: number }. Wall-clock time from the
+   *   `await loadMonaco()` call entering until it resolves.
+   */
+  'monaco.loaded',
 
   // Home / share
 
@@ -158,12 +204,84 @@ export const TELEMETRY_MESSAGE_IDS = [
   'home.upload.binary',
 
   /**
+   * Kind: event
+   * Fired by: `HomeComponent.onPaste`
+   *           (`features/home/home.component.ts`) on every successful
+   *           toolbar-driven paste. The early-return on empty /
+   *           whitespace clipboard does NOT emit.
+   *           `HomeComponent.onEditorPaste` (native Monaco paste,
+   *           no clipboard read) is a separate code path and does
+   *           NOT emit this token.
+   * Props: { sizeBytesBucket: SizeBucket } via `bucketBytes` over
+   *   the UTF-8 byte count of the clipboard text.
+   * Measurements: { sizeBytes: number; clipboardReadMs: number;
+   *   parseMs: number; syncHandlerMs: number; firstPaintMs: number }.
+   *   - `clipboardReadMs`: time awaiting `clipboard.readForPaste()`.
+   *   - `parseMs`: synchronous time inside `parser.tryUnescape`.
+   *   - `syncHandlerMs`: T0 to end-of-synchronous-handler. Includes
+   *     `clipboardReadMs`.
+   *   - `firstPaintMs`: T0 to first painted frame after the content
+   *     signal write, via double `requestAnimationFrame`. The
+   *     user-perceived end-to-end latency.
+   *   Reactive tree build/render in `JsonTreeComponent` is NOT
+   *   separately captured here; it is folded into the gap between
+   *   `syncHandlerMs` and `firstPaintMs`.
+   */
+  'paste.handle',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.onFilesReceived` 'ok' branch
+   *           (`features/home/home.component.ts`). Failure branches
+   *           (`tooLarge`, `binary`, `readFailed`) keep their
+   *           existing warn tokens; this event counts only
+   *           successful uploads.
+   * Props: { sizeBytesBucket: SizeBucket; source: 'drag' | 'pick' }.
+   *   `'drag'` = files via the document drag-drop controller;
+   *   `'pick'` = the toolbar Upload button (`<input type="file">`).
+   * Measurements: { sizeBytes: number; fileReadMs: number;
+   *   parseMs: number; syncHandlerMs: number; firstPaintMs: number }.
+   *   See `paste.handle` for `parseMs` / `syncHandlerMs` /
+   *   `firstPaintMs` semantics. `fileReadMs` is the time spent in
+   *   `validateAndReadSingleFile` (file I/O including text decode).
+   */
+  'upload.handle',
+
+  /**
    * Severity: warn
    * Fired by: `HomeComponent.onToggleVisibility`
    *           (`features/home/home.component.ts`)
    * Props: none
    */
   'share.visibility.failed',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.onSave`
+   *           (`features/home/home.component.ts`) after a successful
+   *           `BlobService.create` (create branch only -- the
+   *           update branch has no creation semantic).
+   * Props: { visibility: 'public' | 'private' }. Today always
+   *   `'private'` (create passes `isPublic=false`); the dimension
+   *   shape is locked now so a future public-create flow can reuse
+   *   the token without renaming.
+   * Measurements: { sizeBytes: number }. UTF-8 byte count of the
+   *   saved content.
+   */
+  'share.created',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.onToggleVisibility`
+   *           (`features/home/home.component.ts`) after a successful
+   *           `BlobService.update({ isPublic })`. Failures keep the
+   *           existing `share.visibility.failed` warn token.
+   * Props: { newVisibility: 'public' | 'private' }. The new value;
+   *   `oldVisibility` is the opposite by definition of a toggle and
+   *   is not separately logged.
+   * Measurements: none.
+   */
+  'share.visibility.changed',
 
   /**
    * Severity: warn
@@ -222,6 +340,20 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'history.clear.failed',
 
+  /**
+   * Kind: event
+   * Fired by: `HistoryComponent.openEntry`
+   *           (`features/history/history.component.ts`) after
+   *           `router.navigate(['/s', slug])` resolves with `true`.
+   *           Entries with no `slug` (deleted blobs) early-return
+   *           and do NOT emit. A navigation that resolves with
+   *           `false` (guard rejection, etc.) also does not emit.
+   * Props: none. Slug, title, and entry content are intentionally
+   *   not logged.
+   * Measurements: none.
+   */
+  'history.entry.restored',
+
   // Auth
 
   /**
@@ -251,6 +383,41 @@ export const TELEMETRY_MESSAGE_IDS = [
    * fail-closes the dev-auth bypass.
    */
   'auth.devMode.misconfigured',
+
+  /**
+   * Kind: event
+   * Fired by: `AuthService.setCurrentUser` on every null -> user
+   *           transition (`core/auth/auth.service.ts`). Covers BOTH
+   *           explicit sign-in flows (which complete via
+   *           redirect-back -> `handleRedirectPromise` ->
+   *           `refreshFromCache` -> `setCurrentUser`) AND
+   *           cached-session resumes on a fresh page load.
+   *           Interpret as "authenticated session observed", not
+   *           "user just clicked sign-in":
+   *           `customEvents | where name == 'auth.signedIn' |
+   *           summarize dcount(user_AuthenticatedId)
+   *           by bin(timestamp, 1d)` for DAU. A separate token would
+   *           be needed for fresh-click funnel analytics.
+   * Props: { mode: 'dev' | 'msal' }. Distinguishes the
+   *   `environment.devAuth` short-circuit path from real MSAL.
+   * Measurements: none.
+   */
+  'auth.signedIn',
+
+  /**
+   * Kind: event
+   * Fired by: `AuthService.signOut` directly, BEFORE
+   *           `logoutRedirect` (real MSAL) or `setCurrentUser(null)`
+   *           (dev mode), with `TelemetryService.flush()` awaited
+   *           between event emission and the redirect so the
+   *           envelope dispatches before MSAL tears down the
+   *           document. Emitting from the null-transition in
+   *           `setCurrentUser` is unreliable for real MSAL because
+   *           the LOGOUT_SUCCESS broadcast races the redirect.
+   * Props: { mode: 'dev' | 'msal' }.
+   * Measurements: none.
+   */
+  'auth.signedOut',
 
   // Formatting rule sets (M6g-1)
 

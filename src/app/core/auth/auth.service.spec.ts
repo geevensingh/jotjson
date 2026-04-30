@@ -7,6 +7,9 @@ import {
 import { MsalBroadcastService } from '@azure/msal-angular';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
+import { AuthUser } from './auth-user';
+import { LoggerService } from '../telemetry/logger.service';
+import { TelemetryService } from '../telemetry/telemetry.service';
 import {
   FakeMsalBroadcastService,
   FakeMsalClient,
@@ -16,13 +19,32 @@ import {
 
 describe('AuthService', () => {
   let fake: FakeMsalClient;
+  let loggerServiceSpy: jasmine.SpyObj<LoggerService>;
+  let telemetryServiceSpy: jasmine.SpyObj<TelemetryService>;
+
+  function configureAuthTestingModule(): void {
+    loggerServiceSpy = jasmine.createSpyObj<LoggerService>(
+      'LoggerService',
+      ['event', 'warn']
+    );
+    telemetryServiceSpy = jasmine.createSpyObj<TelemetryService>(
+      'TelemetryService',
+      ['setUser', 'flush']
+    );
+    telemetryServiceSpy.flush.and.resolveTo();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ...provideFakeAuth(fake),
+        { provide: LoggerService, useValue: loggerServiceSpy },
+        { provide: TelemetryService, useValue: telemetryServiceSpy }
+      ]
+    });
+  }
 
   beforeEach(() => {
     fake = new FakeMsalClient();
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      providers: [...provideFakeAuth(fake)]
-    });
+    configureAuthTestingModule();
   });
 
   describe('when auth is not configured (dev/empty config)', () => {
@@ -177,6 +199,215 @@ describe('AuthService', () => {
     });
   });
 
+  describe('telemetry events', () => {
+    type DevAuthCfg = {
+      enabled: boolean;
+      userId: string;
+      displayName: string;
+      email?: string;
+    };
+    type EnvWithDevAuth = typeof environment & {
+      devAuth?: DevAuthCfg;
+    };
+    type CurrentUserSetter = {
+      setCurrentUser(user: AuthUser | null): void;
+    };
+
+    const VALID_DEV_AUTH: DevAuthCfg = {
+      enabled: true,
+      userId: 'dev-user-1',
+      displayName: 'Dev User',
+      email: 'dev-user-1@dev.local'
+    };
+    const USER_A: AuthUser = {
+      id: 'user-a',
+      displayName: 'User A',
+      email: 'user-a@example.com'
+    };
+    const USER_B: AuthUser = {
+      id: 'user-b',
+      displayName: 'User B',
+      email: 'user-b@example.com'
+    };
+
+    let savedDevAuth: DevAuthCfg | undefined;
+
+    beforeEach(() => {
+      savedDevAuth = (environment as EnvWithDevAuth).devAuth;
+    });
+
+    afterEach(() => {
+      const env = environment as EnvWithDevAuth;
+      if (savedDevAuth === undefined) {
+        delete env.devAuth;
+      } else {
+        env.devAuth = savedDevAuth;
+      }
+    });
+
+    function setDevAuth(value: DevAuthCfg | undefined): void {
+      const env = environment as EnvWithDevAuth;
+      if (value === undefined) {
+        delete env.devAuth;
+      } else {
+        env.devAuth = value;
+      }
+    }
+
+    function callSetCurrentUser(auth: AuthService, user: AuthUser | null): void {
+      (auth as unknown as CurrentUserSetter).setCurrentUser(user);
+    }
+
+    function forceConfiguredMsal(auth: AuthService): void {
+      (auth as unknown as { isConfigured: boolean }).isConfigured = true;
+      (auth as unknown as { devMode: boolean }).devMode = false;
+    }
+
+    function signedInEventCount(): number {
+      return loggerServiceSpy.event.calls.allArgs()
+        .filter((callArguments) => callArguments[0] === 'auth.signedIn')
+        .length;
+    }
+
+    it('emits auth.signedIn with dev mode on a null-to-user transition', () => {
+      setDevAuth({ ...VALID_DEV_AUTH });
+      const auth = TestBed.inject(AuthService);
+
+      callSetCurrentUser(auth, USER_A);
+
+      expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+        'auth.signedIn',
+        { mode: 'dev' },
+        undefined
+      );
+    });
+
+    it('emits auth.signedIn with msal mode on a null-to-user transition', () => {
+      setDevAuth(undefined);
+      const auth = TestBed.inject(AuthService);
+
+      callSetCurrentUser(auth, USER_A);
+
+      expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+        'auth.signedIn',
+        { mode: 'msal' },
+        undefined
+      );
+    });
+
+    it('does not emit auth.signedIn on a null-to-null transition', () => {
+      setDevAuth(undefined);
+      const auth = TestBed.inject(AuthService);
+
+      callSetCurrentUser(auth, null);
+
+      expect(loggerServiceSpy.event).not.toHaveBeenCalled();
+    });
+
+    it('emits auth.signedIn only once for consecutive same-user updates', () => {
+      setDevAuth(undefined);
+      const auth = TestBed.inject(AuthService);
+
+      callSetCurrentUser(auth, USER_A);
+      callSetCurrentUser(auth, USER_A);
+
+      expect(signedInEventCount()).toBe(1);
+    });
+
+    it('does not emit auth.signedIn for user-to-user transitions', () => {
+      setDevAuth(undefined);
+      const auth = TestBed.inject(AuthService);
+      callSetCurrentUser(auth, USER_A);
+      loggerServiceSpy.event.calls.reset();
+
+      callSetCurrentUser(auth, USER_B);
+
+      expect(loggerServiceSpy.event).not.toHaveBeenCalled();
+    });
+
+    it('emits auth.signedOut before clearing the dev-auth user', async () => {
+      setDevAuth({ ...VALID_DEV_AUTH });
+      const auth = TestBed.inject(AuthService);
+      const callOrder: string[] = [];
+      loggerServiceSpy.event.and.callFake((messageId) => {
+        if (messageId === 'auth.signedOut') {
+          callOrder.push('event');
+        }
+      });
+      const currentUserSetter = auth as unknown as CurrentUserSetter;
+      const originalSetCurrentUser = currentUserSetter.setCurrentUser.bind(auth);
+      spyOn(currentUserSetter, 'setCurrentUser').and.callFake((user) => {
+        callOrder.push('setCurrentUser');
+        originalSetCurrentUser(user);
+      });
+
+      await auth.signOut();
+
+      expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+        'auth.signedOut',
+        { mode: 'dev' },
+        undefined
+      );
+      expect(callOrder).toEqual(['event', 'setCurrentUser']);
+    });
+
+    it('flushes auth.signedOut before redirecting for MSAL sign-out', async () => {
+      setDevAuth(undefined);
+      const auth = TestBed.inject(AuthService);
+      forceConfiguredMsal(auth);
+      fake.accounts = [makeAccount({ idToken: 'raw.id.token' })];
+      const callOrder: string[] = [];
+      loggerServiceSpy.event.and.callFake((messageId) => {
+        if (messageId === 'auth.signedOut') {
+          callOrder.push('event');
+        }
+      });
+      let resolveFlush: (() => void) | undefined;
+      telemetryServiceSpy.flush.and.callFake(() => {
+        callOrder.push('flush');
+        return new Promise<void>((resolve) => {
+          resolveFlush = resolve;
+        });
+      });
+      const originalLogoutRedirect = fake.logoutRedirect.bind(fake);
+      spyOn(fake, 'logoutRedirect').and.callFake((request) => {
+        callOrder.push('logoutRedirect');
+        return originalLogoutRedirect(request);
+      });
+
+      const signOutPromise = auth.signOut();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+        'auth.signedOut',
+        { mode: 'msal' },
+        undefined
+      );
+      expect(telemetryServiceSpy.flush).toHaveBeenCalledTimes(1);
+      expect(fake.logoutRedirectCalls).toBe(0);
+      if (!resolveFlush) {
+        fail('Expected telemetry flush to start before logout redirect.');
+        return;
+      }
+      resolveFlush();
+      await signOutPromise;
+
+      expect(callOrder).toEqual(['event', 'flush', 'logoutRedirect']);
+    });
+
+    it('does not emit auth.signedOut for a user-to-null transition', () => {
+      setDevAuth(undefined);
+      const auth = TestBed.inject(AuthService);
+      callSetCurrentUser(auth, USER_A);
+      loggerServiceSpy.event.calls.reset();
+
+      callSetCurrentUser(auth, null);
+
+      expect(loggerServiceSpy.event).not.toHaveBeenCalled();
+    });
+  });
+
   describe('dev-auth mode', () => {
     const STORAGE_KEY = 'jotjson.devAuth.signedIn';
     type DevAuthCfg = {
@@ -232,10 +463,7 @@ describe('AuthService', () => {
     function freshAuth(): AuthService {
       // AuthService captures `devMode` at construction time, so each test
       // needs its own instance after mutating `environment.devAuth`.
-      TestBed.resetTestingModule();
-      TestBed.configureTestingModule({
-        providers: [...provideFakeAuth(fake)]
-      });
+      configureAuthTestingModule();
       return TestBed.inject(AuthService);
     }
 
@@ -312,28 +540,11 @@ describe('AuthService', () => {
 
     it('signIn / signOut keep telemetry identity in sync with the signal', async () => {
       setDevAuth({ ...VALID_DEV_AUTH });
-      const setUserSpy = jasmine.createSpy('setUser');
-      TestBed.resetTestingModule();
-      TestBed.configureTestingModule({
-        providers: [
-          ...provideFakeAuth(fake),
-          {
-            provide: (
-              await import('../telemetry/telemetry.service')
-            ).TelemetryService,
-            useValue: {
-              setUser: setUserSpy,
-              connect: () => Promise.resolve(),
-              ingest: () => undefined
-            }
-          }
-        ]
-      });
-      const auth = TestBed.inject(AuthService);
+      const auth = freshAuth();
       auth.signIn();
-      expect(setUserSpy).toHaveBeenCalledWith('dev-user-1');
+      expect(telemetryServiceSpy.setUser).toHaveBeenCalledWith('dev-user-1');
       await auth.signOut();
-      expect(setUserSpy).toHaveBeenCalledWith(null);
+      expect(telemetryServiceSpy.setUser).toHaveBeenCalledWith(null);
     });
 
     it('does not subscribe to MsalBroadcastService events in dev mode', async () => {

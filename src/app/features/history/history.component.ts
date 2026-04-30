@@ -374,9 +374,12 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /** Click on a row - navigates to /s/<slug> when one is available. */
-  openEntry(entry: HistoryEntry): void {
+  async openEntry(entry: HistoryEntry): Promise<void> {
     if (!entry.slug) return;
-    void this.router.navigate(['/s', entry.slug]);
+    const restored = await this.router.navigate(['/s', entry.slug]);
+    if (restored) {
+      this.logger.event('history.entry.restored', undefined, undefined);
+    }
   }
 
   onSearchInput(value: string): void {

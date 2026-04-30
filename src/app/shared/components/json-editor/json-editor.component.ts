@@ -95,9 +95,17 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   async ngAfterViewInit(): Promise<void> {
     if (typeof window === 'undefined') return;
 
+    const hasCachedMonaco = window.monaco !== undefined;
     let monaco: typeof MonacoNS;
     try {
-      monaco = await loadMonaco();
+      if (hasCachedMonaco) {
+        monaco = await loadMonaco();
+      } else {
+        const loadStartTimeMs = performance.now();
+        monaco = await loadMonaco();
+        const loadTimeMs = performance.now() - loadStartTimeMs;
+        this.logger.event('monaco.loaded', undefined, { loadTimeMs });
+      }
     } catch (error) {
       this.logger.error('monaco.loadFailed', error);
       return;

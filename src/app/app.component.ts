@@ -31,14 +31,22 @@ export class AppComponent implements OnInit {
     // page load, so a deferred load is fine.
     void Promise.all([
       import('./core/telemetry/logger.service'),
-      import('./core/telemetry/route-tracker')
-    ]).then(async ([logger, tracker]) => {
-      const routeTracker = this.injector.get(tracker.RouteTracker);
+      import('./core/telemetry/route-tracker'),
+      import('../generated/build-info')
+    ]).then(async ([loggerModule, trackerModule, buildInfoModule]) => {
+      const routeTracker = this.injector.get(trackerModule.RouteTracker);
       // Start subscribing to NavigationEnd before connect() resolves so
       // the bootstrap navigation is captured even though it fires
       // before telemetry is ready.
       routeTracker.start();
-      await this.injector.get(logger.LoggerService).connect();
+      const loggerService = this.injector.get(loggerModule.LoggerService);
+      loggerService.event('app.boot', {
+        version: buildInfoModule.BUILD_INFO.version,
+        sha: buildInfoModule.BUILD_INFO.sha,
+        branch: buildInfoModule.BUILD_INFO.branch,
+        dirty: buildInfoModule.BUILD_INFO.dirty
+      }, undefined);
+      await loggerService.connect();
       routeTracker.flushPending();
     });
     void import('./core/update/app-update.service').then(({ AppUpdateService }) => {

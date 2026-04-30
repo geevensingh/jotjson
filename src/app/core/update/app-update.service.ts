@@ -3,6 +3,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
 import { filter } from 'rxjs/operators';
 import { LoggerService } from '../telemetry/logger.service';
+import { TelemetryService } from '../telemetry/telemetry.service';
 
 /**
  * Reacts to Angular service worker events so that a deploy-in-progress
@@ -27,6 +28,7 @@ export class AppUpdateService {
   private readonly swUpdate = inject(SwUpdate);
   private readonly snack = inject(MatSnackBar);
   private readonly logger = inject(LoggerService);
+  private readonly telemetry = inject(TelemetryService);
   private initialized = false;
 
   initialize(): void {
@@ -63,11 +65,15 @@ export class AppUpdateService {
     try {
       await this.swUpdate.activateUpdate();
     } catch (error) {
-      // Fall through to reload anyway - the fresh fetch will re-run the
-      // install flow and any partial cache will be discarded.
+      // Reload anyway - the fresh fetch will re-run the install flow and
+      // any partial cache will be discarded.
       this.logger.warn('update.activate.failed');
       void error;
+      this.reload();
+      return;
     }
+    this.logger.event('update.applied', undefined, undefined);
+    await this.telemetry.flush();
     this.reload();
   }
 

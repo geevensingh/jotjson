@@ -1,7 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { JsonEditorComponent } from './json-editor.component';
 import type { JsonParseError } from '../../../core/json/json-parser.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
+import {
+  installMinimalMonacoStub,
+  restoreMonacoStub
+} from '../../../../testing/monaco.testing';
+import { JsonEditorComponent } from './json-editor.component';
+import { __resetMonacoLoaderForTesting } from './monaco-loader';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 
@@ -63,6 +69,13 @@ interface FakeResizeObserver {
   observe: jasmine.Spy;
   unobserve: jasmine.Spy;
   disconnect: jasmine.Spy;
+}
+
+interface MonacoRequireStub {
+  config: jasmine.Spy<(
+    configuration: { paths: Record<string, string> }
+  ) => void>;
+  (modules: string[], onReady: () => void): void;
 }
 
 const FAKE_MARKER_ERROR_SEVERITY = 8;
@@ -187,18 +200,30 @@ describe('JsonEditorComponent', () => {
   let editor: FakeEditor;
   let monaco: FakeMonaco;
   let resizeObserver: FakeResizeObserver;
+  let logger: jasmine.SpyObj<LoggerService>;
   let originalMonaco: unknown;
   let originalResizeObserver: typeof window.ResizeObserver | undefined;
+  let minimalMonacoInstalled = false;
 
-  async function create(initial = '{"a":1}'): Promise<JsonEditorComponent> {
+  async function createFixtureWithoutSettling(
+    initial = '{"a":1}'
+  ): Promise<ComponentFixture<JsonEditorComponent>> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [JsonEditorComponent],
-      providers: [...provideFakeAuth()]
+      providers: [
+        ...provideFakeAuth(),
+        { provide: LoggerService, useValue: logger }
+      ]
     }).compileComponents();
-    fixture = TestBed.createComponent(JsonEditorComponent);
-    fixture.componentRef.setInput('value', initial);
-    fixture.detectChanges();
+    const nextFixture = TestBed.createComponent(JsonEditorComponent);
+    nextFixture.componentRef.setInput('value', initial);
+    nextFixture.detectChanges();
+    return nextFixture;
+  }
+
+  async function create(initial = '{"a":1}'): Promise<JsonEditorComponent> {
+    fixture = await createFixtureWithoutSettling(initial);
     // ngAfterViewInit awaits loadMonaco() (resolved synchronously since
     // window.monaco is preset). Let microtasks settle so the editor mounts.
     await fixture.whenStable();
@@ -211,6 +236,11 @@ describe('JsonEditorComponent', () => {
 
     editor = makeFakeEditor('{"a":1}');
     monaco = makeFakeMonaco(editor);
+    logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
+      'error',
+      'event'
+    ]);
+    minimalMonacoInstalled = false;
 
     originalMonaco = (window as unknown as { monaco?: unknown }).monaco;
     (window as unknown as { monaco: FakeMonaco }).monaco = monaco;
@@ -227,6 +257,11 @@ describe('JsonEditorComponent', () => {
   });
 
   afterEach(() => {
+    if (minimalMonacoInstalled) {
+      restoreMonacoStub();
+      minimalMonacoInstalled = false;
+    }
+    __resetMonacoLoaderForTesting();
     if (originalMonaco === undefined) {
       delete (window as unknown as { monaco?: unknown }).monaco;
     } else {
@@ -240,9 +275,91 @@ describe('JsonEditorComponent', () => {
     localStorage.removeItem(STORAGE_KEY);
   });
 
+  function installMonacoLoaderScriptPlaceholder(): void {
+    const script = document.createElement('script');
+    script.dataset['monacoLoader'] = 'true';
+    document.head.appendChild(script);
+  }
+
+  function installRequireThatLoadsFakeMonaco(): void {
+    const requireStub: MonacoRequireStub = Object.assign(
+      (modules: string[], onReady: () => void) => {
+        void modules;
+        (window as unknown as { monaco: FakeMonaco }).monaco = monaco;
+        onReady();
+      },
+      {
+        config: jasmine.createSpy<(
+          configuration: { paths: Record<string, string> }
+        ) => void>('require.config')
+      }
+    );
+    window.require = requireStub;
+  }
+
+  function installRequireThatLeavesMonacoUnavailable(): void {
+    const requireStub: MonacoRequireStub = Object.assign(
+      (modules: string[], onReady: () => void) => {
+        void modules;
+        onReady();
+      },
+      {
+        config: jasmine.createSpy<(
+          configuration: { paths: Record<string, string> }
+        ) => void>('require.config')
+      }
+    );
+    window.require = requireStub;
+  }
+
+  function expectMonacoLoadedNotEmitted(): void {
+    const emitted = logger.event.calls
+      .allArgs()
+      .some(([messageId]) => messageId === 'monaco.loaded');
+    expect(emitted).toBeFalse();
+  }
+
   it('creates the Monaco editor on mount', async () => {
     await create();
     expect(monaco.editor.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits monaco.loaded with load time when Monaco is loaded uncached', async () => {
+    __resetMonacoLoaderForTesting();
+    installMonacoLoaderScriptPlaceholder();
+    installRequireThatLoadsFakeMonaco();
+    await create();
+    expect(logger.event).toHaveBeenCalledOnceWith(
+      'monaco.loaded',
+      undefined,
+      { loadTimeMs: jasmine.any(Number) }
+    );
+    const measurements = logger.event.calls.mostRecent().args[2];
+    if (!measurements) {
+      fail('monaco.loaded measurements were not captured');
+      return;
+    }
+    expect(measurements['loadTimeMs']).toBeGreaterThanOrEqual(0);
+  });
+
+  it('does not emit monaco.loaded when Monaco is already cached', async () => {
+    delete (window as unknown as { monaco?: unknown }).monaco;
+    installMinimalMonacoStub();
+    minimalMonacoInstalled = true;
+    await create();
+    expectMonacoLoadedNotEmitted();
+  });
+
+  it('does not emit monaco.loaded when Monaco loading fails', async () => {
+    __resetMonacoLoaderForTesting();
+    installMonacoLoaderScriptPlaceholder();
+    installRequireThatLeavesMonacoUnavailable();
+    await create();
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const [messageId, cause] = logger.error.calls.mostRecent().args;
+    expect(messageId).toBe('monaco.loadFailed');
+    expect(cause).toEqual(jasmine.any(Error));
+    expectMonacoLoadedNotEmitted();
   });
 
   it('disposes the Monaco editor instance on destroy', async () => {
@@ -468,7 +585,10 @@ describe('JsonEditorComponent', () => {
       TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
         imports: [JsonEditorComponent],
-        providers: [...provideFakeAuth()]
+        providers: [
+          ...provideFakeAuth(),
+          { provide: LoggerService, useValue: logger }
+        ]
       }).compileComponents();
       const earlyFixture = TestBed.createComponent(JsonEditorComponent);
       earlyFixture.componentRef.setInput('value', '{}');

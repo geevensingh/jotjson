@@ -15,6 +15,8 @@ import { MSAL_INSTANCE } from './msal-instance';
 import { LoggerService } from '../telemetry/logger.service';
 import { TelemetryService } from '../telemetry/telemetry.service';
 
+type AuthTelemetryMode = 'dev' | 'msal';
+
 /**
  * Entry point for identity in the app.
  *
@@ -146,6 +148,8 @@ export class AuthService {
   }
 
   async signOut(): Promise<void> {
+    const mode = this.telemetryMode();
+    this.logger.event('auth.signedOut', { mode }, undefined);
     if (this.devMode) {
       try {
         localStorage.removeItem(DEV_AUTH_STORAGE_KEY);
@@ -184,6 +188,7 @@ export class AuthService {
       }
     }
 
+    await this.telemetry.flush();
     await this.msal.logoutRedirect({
       account,
       idTokenHint,
@@ -256,9 +261,18 @@ export class AuthService {
    * localStorage hydration) call here so telemetry never lags state.
    */
   private setCurrentUser(user: AuthUser | null): void {
+    const previousUser = this.userSignal();
     this.userSignal.set(user);
     // Telemetry: identify by Entra `oid` (or dev-user id) only - never email.
     this.telemetry.setUser(user ? user.id : null);
+    if (previousUser === null && user !== null) {
+      const mode = this.telemetryMode();
+      this.logger.event('auth.signedIn', { mode }, undefined);
+    }
+  }
+
+  private telemetryMode(): AuthTelemetryMode {
+    return this.devMode ? 'dev' : 'msal';
   }
 
   private hydrateDevUserFromStorage(): void {

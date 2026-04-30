@@ -7,6 +7,8 @@ import {
   VersionReadyEvent
 } from '@angular/service-worker';
 import { Subject } from 'rxjs';
+import { LoggerService } from '../telemetry/logger.service';
+import { TelemetryService } from '../telemetry/telemetry.service';
 import { AppUpdateService } from './app-update.service';
 
 /**
@@ -38,6 +40,8 @@ describe('AppUpdateService', () => {
   let snackOpen: jasmine.Spy;
   let actionSubject: Subject<void>;
   let snackRef: MatSnackBarRef<unknown>;
+  let logger: jasmine.SpyObj<LoggerService>;
+  let telemetry: jasmine.SpyObj<TelemetryService>;
 
   function setup(enabled: boolean) {
     const sw = makeSwUpdateStub(enabled);
@@ -46,11 +50,21 @@ describe('AppUpdateService', () => {
       onAction: () => actionSubject.asObservable()
     } as unknown as MatSnackBarRef<unknown>;
     snackOpen = jasmine.createSpy('snack.open').and.returnValue(snackRef);
+    logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
+      'event',
+      'warn'
+    ]);
+    telemetry = jasmine.createSpyObj<TelemetryService>('TelemetryService', [
+      'flush'
+    ]);
+    telemetry.flush.and.returnValue(Promise.resolve());
     TestBed.configureTestingModule({
       providers: [
         AppUpdateService,
         { provide: SwUpdate, useValue: sw.stub },
-        { provide: MatSnackBar, useValue: { open: snackOpen } }
+        { provide: MatSnackBar, useValue: { open: snackOpen } },
+        { provide: LoggerService, useValue: logger },
+        { provide: TelemetryService, useValue: telemetry }
       ]
     });
     const service = TestBed.inject(AppUpdateService);
@@ -104,8 +118,13 @@ describe('AppUpdateService', () => {
     expect(snackOpen).not.toHaveBeenCalled();
   });
 
-  it('activates the update and reloads when Reload is clicked', async () => {
+  it('emits update.applied, flushes telemetry, then reloads when Reload is clicked', async () => {
     const { service, sw, reload } = setup(true);
+    let resolveFlush: (() => void) | undefined;
+    const flushPromise = new Promise<void>((resolve) => {
+      resolveFlush = resolve;
+    });
+    telemetry.flush.and.returnValue(flushPromise);
     service.initialize();
     sw.versions$.next({
       type: 'VERSION_READY',
@@ -114,15 +133,29 @@ describe('AppUpdateService', () => {
     } as VersionReadyEvent);
     actionSubject.next();
     await Promise.resolve();
-    await Promise.resolve();
     expect(sw.activate).toHaveBeenCalledTimes(1);
+    expect(logger.event).toHaveBeenCalledOnceWith(
+      'update.applied',
+      undefined,
+      undefined
+    );
+    expect(telemetry.flush).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
+    if (!resolveFlush) {
+      fail('flush promise resolver was not captured');
+      return;
+    }
+    resolveFlush();
+    await flushPromise;
+    await Promise.resolve();
     expect(reload).toHaveBeenCalledTimes(1);
+    expect(logger.event).toHaveBeenCalledBefore(telemetry.flush);
+    expect(telemetry.flush).toHaveBeenCalledBefore(reload);
   });
 
-  it('still reloads if activateUpdate throws', async () => {
+  it('does not emit update.applied or flush telemetry if activateUpdate throws', async () => {
     const { service, sw, reload } = setup(true);
     sw.activate.and.returnValue(Promise.reject(new Error('boom')));
-    spyOn(console, 'warn');
     service.initialize();
     sw.versions$.next({
       type: 'VERSION_READY',
@@ -132,6 +165,9 @@ describe('AppUpdateService', () => {
     actionSubject.next();
     // Let the rejected promise + swallow-log + reload microtasks settle.
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(logger.warn).toHaveBeenCalledWith('update.activate.failed');
+    expect(logger.event).not.toHaveBeenCalled();
+    expect(telemetry.flush).not.toHaveBeenCalled();
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
@@ -141,12 +177,14 @@ describe('AppUpdateService', () => {
       service as unknown as { replaceLocation: (url: string) => void },
       'replaceLocation'
     );
-    spyOn(console, 'warn');
     service.initialize();
     sw.unrecoverable$.next({
       type: 'UNRECOVERABLE_STATE',
       reason: 'manifest mismatch'
     } as UnrecoverableStateEvent);
+    expect(logger.warn).toHaveBeenCalledWith('update.unrecoverable', {
+      reason: 'manifest mismatch'
+    });
     expect(replace).toHaveBeenCalledTimes(1);
     const target = replace.calls.mostRecent().args[0] as string;
     expect(target).toContain('_swreload=');

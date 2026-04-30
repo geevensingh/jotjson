@@ -7,6 +7,7 @@ import { HistoryComponent } from './history.component';
 import { HistoryService, HistoryPage } from '../../core/api/history.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import type { HistoryEntry } from '../../core/api/models';
+import { LoggerService } from '../../core/telemetry/logger.service';
 
 function entry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
   return {
@@ -50,6 +51,10 @@ function setup(opts: SetupOpts = {}) {
   const dialogRef = { afterClosed: () => of(!!opts.confirm) };
   const dialog = { open: jasmine.createSpy('open').and.returnValue(dialogRef) };
   const snack = { open: jasmine.createSpy('open') };
+  const logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
+    'event',
+    'warn'
+  ]);
 
   TestBed.configureTestingModule({
     imports: [HistoryComponent],
@@ -58,12 +63,13 @@ function setup(opts: SetupOpts = {}) {
       provideRouter([]),
       { provide: HistoryService, useValue: stub },
       { provide: MatDialog, useValue: dialog },
-      { provide: MatSnackBar, useValue: snack }
+      { provide: MatSnackBar, useValue: snack },
+      { provide: LoggerService, useValue: logger }
     ]
   });
 
   const fixture = TestBed.createComponent(HistoryComponent);
-  return { fixture, stub, dialog, snack };
+  return { fixture, stub, dialog, snack, logger };
 }
 
 describe('HistoryComponent', () => {
@@ -184,20 +190,46 @@ describe('HistoryComponent', () => {
     expect(snack.open).toHaveBeenCalled();
   });
 
-  it('openEntry navigates to /s/:slug for entries with a slug', async () => {
-    const { fixture } = setup();
+  it('openEntry navigates to /s/:slug and emits telemetry for entries with a slug', async () => {
+    const { fixture, logger } = setup();
     const router = TestBed.inject(Router);
     const spy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.openEntry(entry({ slug: 'abc' }));
+    await fixture.componentInstance.openEntry(entry({ slug: 'abc' }));
     expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
+    expect(logger.event).toHaveBeenCalledOnceWith(
+      'history.entry.restored',
+      undefined,
+      undefined
+    );
   });
 
-  it('openEntry is a no-op when slug is missing', () => {
-    const { fixture } = setup();
+  it('openEntry is a no-op when slug is missing', async () => {
+    const { fixture, logger } = setup();
     const router = TestBed.inject(Router);
     const spy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.openEntry(entry({ slug: undefined }));
+    await fixture.componentInstance.openEntry(entry({ slug: undefined }));
     expect(spy).not.toHaveBeenCalled();
+    expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  it('openEntry does not emit telemetry when navigation is blocked', async () => {
+    const { fixture, logger } = setup();
+    const router = TestBed.inject(Router);
+    const spy = spyOn(router, 'navigate').and.resolveTo(false);
+    await fixture.componentInstance.openEntry(entry({ slug: 'abc' }));
+    expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
+    expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  it('openEntry does not emit telemetry when navigation rejects', async () => {
+    const { fixture, logger } = setup();
+    const router = TestBed.inject(Router);
+    const spy = spyOn(router, 'navigate').and.rejectWith(new Error('blocked'));
+    await expectAsync(
+      fixture.componentInstance.openEntry(entry({ slug: 'abc' }))
+    ).toBeRejectedWithError('blocked');
+    expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
+    expect(logger.event).not.toHaveBeenCalled();
   });
 
   it('hasLink is true only for entries with a slug', () => {

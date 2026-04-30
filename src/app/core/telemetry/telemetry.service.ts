@@ -148,6 +148,28 @@ export class TelemetryService {
     this.appInsights.trackPageView({ name, uri: sanitized });
   }
 
+  /**
+   * Best-effort flush of any pending telemetry envelopes. Used by
+   * call sites that are about to navigate the document away (sign-out
+   * redirect, post-update hard reload) so that customEvents queued
+   * just before the navigation are not dropped.
+   *
+   * The underlying SDK's `flush()` is synchronous and uses sendBeacon
+   * by default (`async = true`), so the resolved promise here does
+   * NOT mean the network round-trip completed -- only that the
+   * envelopes were handed off to the browser's beacon queue. That is
+   * the strongest guarantee available before a navigation; nothing
+   * more is achievable from page JS.
+   *
+   * No-op when telemetry is disabled or not yet connected.
+   */
+  async flush(): Promise<void> {
+    if (!this.appInsights) {
+      return;
+    }
+    this.appInsights.flush();
+  }
+
   // --- internals ---
 
   private async loadAndInit(connectionString: string): Promise<void> {

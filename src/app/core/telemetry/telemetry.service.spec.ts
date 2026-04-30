@@ -58,6 +58,20 @@ describe('TelemetryService', () => {
     expect(() => svc.trackPageView('Home', '/')).not.toThrow();
   });
 
+  it('flush() is a no-op promise when disabled (no throw, resolves)', async () => {
+    environment.appInsightsConnectionString = '';
+    const svc = make();
+    await svc.connect();
+    await expectAsync(svc.flush()).toBeResolved();
+  });
+
+  it('flush() resolves before connect() even completes (no buffer)', async () => {
+    environment.appInsightsConnectionString = '';
+    const svc = make();
+    // Pre-connect: appInsights is null so flush is a no-op.
+    await expectAsync(svc.flush()).toBeResolved();
+  });
+
   it('caches setUser before connect; applies safely after disabled', async () => {
     environment.appInsightsConnectionString = '';
     const svc = make();

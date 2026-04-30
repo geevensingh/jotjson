@@ -35,6 +35,8 @@ import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
 import { persistedSignal } from '../../core/preferences/persisted-signal';
 import { LoggerService } from '../../core/telemetry/logger.service';
+import { bucketBytes } from '../../core/telemetry/buckets';
+import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
 import { SeoService } from '../../core/seo/seo.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
@@ -80,6 +82,7 @@ import { validateAndReadSingleFile } from '../../core/upload/upload-file-validat
  * persisted shape is independent of the UI surface.
  */
 type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
+type UploadSource = 'drag' | 'pick';
 
 /**
  * Primary editor + tree experience. Home is an anonymous page - persistence
@@ -590,10 +593,32 @@ export class HomeComponent implements OnInit, OnDestroy {
     return text.charCodeAt(0) === 0xfeff ? 1 : 0;
   }
 
+  private durationSince(startedAt: number): number {
+    const durationMs = performance.now() - startedAt;
+    return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : 0;
+  }
+
+  private afterFirstPaint(
+    handlerStartedAt: number,
+    callback: (firstPaintMs: number) => void
+  ): void {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        callback(this.durationSince(handlerStartedAt));
+      });
+    });
+  }
+
   async onPaste(): Promise<void> {
+    const handlerStartedAt = performance.now();
+    const clipboardReadStartedAt = performance.now();
     const text = await this.clipboard.readForPaste();
+    const clipboardReadMs = this.durationSince(clipboardReadStartedAt);
     if (!text || text.trim().length === 0) return;
+    const sizeBytes = new Blob([text]).size;
+    const parseStartedAt = performance.now();
     const { unescaped, changed } = this.parser.tryUnescape(text);
+    const parseMs = this.durationSince(parseStartedAt);
     this.setContent(unescaped);
     if (changed) {
       // Pretty-print the newly-unescaped payload so the user sees the real
@@ -602,6 +627,21 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
 
     this.runExtractorOnCurrentContent();
+    const syncHandlerMs = this.durationSince(handlerStartedAt);
+    this.afterFirstPaint(handlerStartedAt, (firstPaintMs) => {
+      const measurements: TelemetryMeasurements = {
+        sizeBytes,
+        clipboardReadMs,
+        parseMs,
+        syncHandlerMs,
+        firstPaintMs
+      };
+      this.logger.event(
+        'paste.handle',
+        { sizeBytesBucket: bucketBytes(sizeBytes) },
+        measurements
+      );
+    });
   }
 
   /**
@@ -704,7 +744,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.disposeDropHandler = this.dropController.registerEditorHandler(
       (files) => {
-        void this.onFilesReceived(files);
+        void this.onFilesReceived(files, 'drag');
       }
     );
   }
@@ -715,15 +755,25 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   async onUpload(file: File): Promise<void> {
-    await this.onFilesReceived([file]);
+    await this.onFilesReceived([file], 'pick');
   }
 
-  private async onFilesReceived(files: readonly File[]): Promise<void> {
+  private async onFilesReceived(
+    files: readonly File[],
+    source: UploadSource
+  ): Promise<void> {
+    const handlerStartedAt = performance.now();
+    const fileReadStartedAt = performance.now();
     const result = await validateAndReadSingleFile(files);
+    const fileReadMs = this.durationSince(fileReadStartedAt);
     switch (result.kind) {
       case 'ok': {
         const filename = files[0]?.name ?? 'file';
-        this.setContent(result.text);
+        const sizeBytes = files[0]?.size ?? new Blob([result.text]).size;
+        const parseStartedAt = performance.now();
+        const { unescaped } = this.parser.tryUnescape(result.text);
+        const parseMs = this.durationSince(parseStartedAt);
+        this.setContent(unescaped);
         this.runExtractorOnCurrentContent();
         // Surface upload-source validation errors as a persistent in-pane
         // banner (issue #36, spec §294). parseResult() shares its memoized
@@ -741,6 +791,21 @@ export class HomeComponent implements OnInit, OnDestroy {
         } else {
           this.uploadError.set(null);
         }
+        const syncHandlerMs = this.durationSince(handlerStartedAt);
+        this.afterFirstPaint(handlerStartedAt, (firstPaintMs) => {
+          const measurements: TelemetryMeasurements = {
+            sizeBytes,
+            fileReadMs,
+            parseMs,
+            syncHandlerMs,
+            firstPaintMs
+          };
+          this.logger.event(
+            'upload.handle',
+            { sizeBytesBucket: bucketBytes(sizeBytes), source },
+            measurements
+          );
+        });
         return;
       }
       case 'empty':
@@ -848,6 +913,11 @@ export class HomeComponent implements OnInit, OnDestroy {
             .create(content, titlePatch, false)
             .subscribe({ next: resolve, error: reject });
         });
+        this.logger.event(
+          'share.created',
+          { visibility: 'private' },
+          { sizeBytes: new Blob([content]).size }
+        );
         // Strip the auxiliary quota marker before we treat it as a JsonBlob
         // so loadedBlob stays clean.
         const { autoDeleted, ...blob } = created;
@@ -985,6 +1055,11 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.blobs.update(blob.id, { isPublic: next })
       );
       this.loadedBlob.set(updated);
+      this.logger.event(
+        'share.visibility.changed',
+        { newVisibility: updated.isPublic ? 'public' : 'private' },
+        undefined
+      );
       const message = updated.isPublic
         ? $localize`:@@share.visibility.public:Blob is now public.`
         : $localize`:@@share.visibility.private:Blob is now private.`;

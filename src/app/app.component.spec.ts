@@ -2,11 +2,32 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AppComponent } from './app.component';
+import { LoggerService } from './core/telemetry/logger.service';
+import { RouteTracker } from './core/telemetry/route-tracker';
+import { AppUpdateService } from './core/update/app-update.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import { provideFakeAuth } from '../testing/auth.testing';
 
 describe('AppComponent', () => {
+  let loggerServiceSpy: jasmine.SpyObj<LoggerService>;
+  let routeTrackerSpy: jasmine.SpyObj<RouteTracker>;
+  let appUpdateServiceSpy: jasmine.SpyObj<AppUpdateService>;
+
   beforeEach(async () => {
+    loggerServiceSpy = jasmine.createSpyObj<LoggerService>(
+      'LoggerService',
+      ['event', 'connect']
+    );
+    loggerServiceSpy.connect.and.resolveTo();
+    routeTrackerSpy = jasmine.createSpyObj<RouteTracker>(
+      'RouteTracker',
+      ['start', 'flushPending']
+    );
+    appUpdateServiceSpy = jasmine.createSpyObj<AppUpdateService>(
+      'AppUpdateService',
+      ['initialize']
+    );
+
     // Stub DocumentDropController so we don't attach real document-level
     // drag/drop listeners that would leak across the Karma test run after
     // this spec's injector is torn down.
@@ -21,6 +42,9 @@ describe('AppComponent', () => {
       imports: [AppComponent],
       providers: [
         provideRouter([]),
+        { provide: LoggerService, useValue: loggerServiceSpy },
+        { provide: RouteTracker, useValue: routeTrackerSpy },
+        { provide: AppUpdateService, useValue: appUpdateServiceSpy },
         { provide: DocumentDropController, useValue: dropControllerStub },
         ...provideFakeAuth()
       ]
@@ -43,5 +67,33 @@ describe('AppComponent', () => {
     expect(controller).toBeTruthy();
     // dropActive signal exists and is initially false
     expect(controller.dropActive()).toBe(false);
+  });
+
+  it('emits app.boot before telemetry connects during lazy initialization', async () => {
+    const callOrder: string[] = [];
+    loggerServiceSpy.event.and.callFake((messageId) => {
+      if (messageId === 'app.boot') {
+        callOrder.push('event');
+      }
+    });
+    loggerServiceSpy.connect.and.callFake(() => {
+      callOrder.push('connect');
+      return Promise.resolve();
+    });
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+      'app.boot',
+      {
+        version: jasmine.any(String),
+        sha: jasmine.any(String),
+        branch: jasmine.any(String),
+        dirty: jasmine.any(Boolean)
+      },
+      undefined
+    );
+    expect(callOrder).toEqual(['event', 'connect']);
   });
 });
