@@ -46,35 +46,17 @@ import {
   listPresets as listPresetsData,
   presetToCreatePayload
 } from '../shared/ruleSetPresets';
+import {
+  badRequest,
+  forbidden,
+  internalError,
+  notFound,
+  unauthorized
+} from '../shared/http';
 import { readUser, upsertUser } from '../shared/users';
-
-function unauthorized(message: string): HttpResponseInit {
-  return { status: 401, jsonBody: { error: message } };
-}
-
-function badRequest(message: string): HttpResponseInit {
-  return { status: 400, jsonBody: { error: message } };
-}
-
-function notFound(message: string): HttpResponseInit {
-  return { status: 404, jsonBody: { error: message } };
-}
-
-function forbidden(message: string): HttpResponseInit {
-  return { status: 403, jsonBody: { error: message } };
-}
 
 function preconditionFailed(message: string): HttpResponseInit {
   return { status: 412, jsonBody: { error: message } };
-}
-
-function internalError(
-  context: InvocationContext,
-  where: string,
-  error: unknown
-): HttpResponseInit {
-  context.error(`${where} error`, error);
-  return { status: 500, jsonBody: { error: 'Internal error' } };
 }
 
 /**

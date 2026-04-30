@@ -21,14 +21,7 @@ import {
   clearAll,
   listEntries
 } from '../shared/history';
-
-function unauthorized(message: string): HttpResponseInit {
-  return { status: 401, jsonBody: { error: message } };
-}
-
-function badRequest(message: string): HttpResponseInit {
-  return { status: 400, jsonBody: { error: message } };
-}
+import { badRequest, internalError, unauthorized } from '../shared/http';
 
 function isIsoTimestamp(value: string): boolean {
   // Require a full ISO 8601 date-time so that we don't silently accept
@@ -40,15 +33,6 @@ function isIsoTimestamp(value: string): boolean {
   }
   const t = Date.parse(value);
   return Number.isFinite(t);
-}
-
-function internalError(
-  context: InvocationContext,
-  where: string,
-  error: unknown
-): HttpResponseInit {
-  context.error(`${where} error`, error);
-  return { status: 500, jsonBody: { error: 'Internal error' } };
 }
 
 export async function getHistory(

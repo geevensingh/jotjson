@@ -24,19 +24,16 @@ import {
 } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
 import {
+  badRequest,
+  internalError,
+  unauthorized
+} from '../shared/http';
+import {
   PreferenceValidationError,
   normalizePreferences,
   normalizeStoredPreferences
 } from '../shared/preferences';
 import { readUser, upsertUser, UserDocument } from '../shared/users';
-
-function unauthorized(message: string): HttpResponseInit {
-  return { status: 401, jsonBody: { error: message } };
-}
-
-function badRequest(message: string): HttpResponseInit {
-  return { status: 400, jsonBody: { error: message } };
-}
 
 export async function getMe(
   req: HttpRequest,
@@ -47,8 +44,7 @@ export async function getMe(
     principal = await requireAuth(req);
   } catch (error) {
     if (error instanceof AuthError) return unauthorized(error.message);
-    context.error('getMe auth error', error);
-    return { status: 500, jsonBody: { error: 'Internal error' } };
+    return internalError(context, 'getMe auth', error);
   }
 
   try {
@@ -64,8 +60,7 @@ export async function getMe(
     };
     return { status: 200, jsonBody: normalized };
   } catch (error) {
-    context.error('getMe read error', error);
-    return { status: 500, jsonBody: { error: 'Internal error' } };
+    return internalError(context, 'getMe read', error);
   }
 }
 
@@ -78,8 +73,7 @@ export async function postMe(
     principal = await requireAuth(req);
   } catch (error) {
     if (error instanceof AuthError) return unauthorized(error.message);
-    context.error('postMe auth error', error);
-    return { status: 500, jsonBody: { error: 'Internal error' } };
+    return internalError(context, 'postMe auth', error);
   }
 
   let body: unknown;
@@ -121,8 +115,7 @@ export async function postMe(
     const saved = await upsertUser(doc);
     return { status: 201, jsonBody: saved };
   } catch (error) {
-    context.error('postMe write error', error);
-    return { status: 500, jsonBody: { error: 'Internal error' } };
+    return internalError(context, 'postMe write', error);
   }
 }
 
@@ -135,8 +128,7 @@ export async function putMePreferences(
     principal = await requireAuth(req);
   } catch (error) {
     if (error instanceof AuthError) return unauthorized(error.message);
-    context.error('putMePreferences auth error', error);
-    return { status: 500, jsonBody: { error: 'Internal error' } };
+    return internalError(context, 'putMePreferences auth', error);
   }
 
   let body: unknown;
@@ -171,8 +163,7 @@ export async function putMePreferences(
     const saved = await upsertUser(doc);
     return { status: 200, jsonBody: saved.preferences };
   } catch (error) {
-    context.error('putMePreferences write error', error);
-    return { status: 500, jsonBody: { error: 'Internal error' } };
+    return internalError(context, 'putMePreferences write', error);
   }
 }
 
