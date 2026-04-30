@@ -52,14 +52,25 @@
   min-width: 0;
 }
 
-// The very last visible item IS allowed to shrink. Two reasons:
-//   1. When crumbs.length is small (1 or 2) and a single chip is
-//      wider than the bar, the chip should ellipsize rather than
-//      blow out the row.
-//   2. When the algorithm has fully collapsed the middle (only
-//      first + overflow + last visible) and the row STILL doesn't
-//      fit, ellipsizing the last chip is a graceful fallback.
-.jj-breadcrumb__list .jj-breadcrumb__item:last-child {
+// The very last visible item is allowed to shrink ONLY when the
+// algorithm is fully collapsed (the host class flips on at that
+// point - see `isFullyCollapsed` in the component). Reasons to
+// gate the shrinkable behaviour:
+//   - When all items are non-shrinking, flexbox lays out at natural
+//     widths, so `scrollWidth > clientWidth` reliably detects
+//     overflow and the collapse-into-`...` algorithm engages. If
+//     the last item were shrinkable by default, flex would soak up
+//     the overflow into that one chip (silently ellipsizing it)
+//     before the JS measurement ran, and the algorithm would never
+//     fire - producing an ellipsized current chip with the rest at
+//     full width.
+// Once the algorithm has reached its terminal state (only first +
+// overflow + last visible) - or there are too few crumbs to ever
+// produce an overflow chip (1 or 2) - we let the last item shrink
+// as a graceful final fallback so the bar doesn't blow out its
+// container.
+.jj-breadcrumb-bar.is-fully-collapsed
+  .jj-breadcrumb__list .jj-breadcrumb__item:last-child {
   flex: 0 1 auto;
 }
 

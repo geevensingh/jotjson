@@ -1,4 +1,10 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  fakeAsync,
+  flush,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import {
   BreadcrumbClick,
@@ -241,5 +247,184 @@ describe('JsonBreadcrumbComponent', () => {
       copyButton(fixture)?.click();
       expect(emitted).toBe(0);
     });
+  });
+
+  describe('isFullyCollapsed signal', () => {
+    function bar(
+      fixture: ComponentFixture<JsonBreadcrumbComponent>
+    ): HTMLElement {
+      return fixture.nativeElement.querySelector(
+        '.jj-breadcrumb-bar'
+      ) as HTMLElement;
+    }
+
+    it('is false when crumbs is empty (placeholder branch)', async () => {
+      const fixture = await createWith([]);
+      expect(fixture.componentInstance.isFullyCollapsed()).toBe(false);
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
+        false
+      );
+    });
+
+    it('is true when only one crumb is supplied (no overflow possible)', async () => {
+      const fixture = await createWith(makeCrumbs(1));
+      expect(fixture.componentInstance.isFullyCollapsed()).toBe(true);
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
+        true
+      );
+    });
+
+    it('is true when two crumbs are supplied (no overflow possible)', async () => {
+      const fixture = await createWith(makeCrumbs(2));
+      expect(fixture.componentInstance.isFullyCollapsed()).toBe(true);
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
+        true
+      );
+    });
+
+    it('is false when 3+ crumbs are inline (hiddenMiddleCount = 0)', async () => {
+      const fixture = await createWith(makeCrumbs(5));
+      expect(fixture.componentInstance.hiddenMiddleCount()).toBe(0);
+      expect(fixture.componentInstance.isFullyCollapsed()).toBe(false);
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
+        false
+      );
+    });
+
+    it('is false in mid-collapse (some middle hidden, but not all)', async () => {
+      const fixture = await createWith(makeCrumbs(8));
+      // 8 crumbs => max collapsible middle = 6 (total - 2). Halfway:
+      fixture.componentInstance.hiddenMiddleCount.set(3);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isFullyCollapsed()).toBe(false);
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
+        false
+      );
+    });
+
+    it('flips to true when the algorithm has hidden every collapsible middle', async () => {
+      const fixture = await createWith(makeCrumbs(8));
+      fixture.componentInstance.hiddenMiddleCount.set(6); // total - 2
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isFullyCollapsed()).toBe(true);
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
+        true
+      );
+    });
+  });
+
+  describe('resize handling', () => {
+    interface ResizeObserverGlobal {
+      ResizeObserver: typeof ResizeObserver;
+    }
+    type ResizeFn = (
+      entries: ResizeObserverEntry[],
+      observer: ResizeObserver
+    ) => void;
+
+    let originalResizeObserver: typeof ResizeObserver | undefined;
+    let observerCallbacks: ResizeFn[];
+    let observerInstances: FakeResizeObserver[];
+
+    class FakeResizeObserver implements ResizeObserver {
+      readonly observed: Element[] = [];
+      disconnected = false;
+      constructor(public callback: ResizeFn) {
+        observerInstances.push(this);
+        observerCallbacks.push(callback);
+      }
+      observe(target: Element): void {
+        this.observed.push(target);
+      }
+      unobserve(): void {}
+      disconnect(): void {
+        this.disconnected = true;
+      }
+    }
+
+    beforeEach(() => {
+      observerCallbacks = [];
+      observerInstances = [];
+      const win = window as unknown as ResizeObserverGlobal;
+      originalResizeObserver = win.ResizeObserver;
+      win.ResizeObserver =
+        FakeResizeObserver as unknown as typeof ResizeObserver;
+    });
+
+    afterEach(() => {
+      const win = window as unknown as ResizeObserverGlobal;
+      if (originalResizeObserver === undefined) {
+        delete (win as unknown as Record<string, unknown>)['ResizeObserver'];
+      } else {
+        win.ResizeObserver = originalResizeObserver;
+      }
+    });
+
+    it('attaches a ResizeObserver to the chip list <ol>', async () => {
+      const fixture = await createWith(makeCrumbs(3));
+      expect(observerInstances.length).toBe(1);
+      const observed = observerInstances[0]!.observed[0];
+      expect(observed).toBeDefined();
+      expect((observed as HTMLElement).tagName.toLowerCase()).toBe('ol');
+    });
+
+    it('reattaches the observer when the <ol> is destroyed and re-created (deselect -> re-select)', async () => {
+      const fixture = await createWith(makeCrumbs(3));
+      const firstObserver = observerInstances[0]!;
+      expect(firstObserver.disconnected).toBe(false);
+
+      // Empty crumbs collapses the @if/@else into the placeholder
+      // branch, destroying the original <ol>.
+      fixture.componentRef.setInput('crumbs', []);
+      fixture.detectChanges();
+      expect(firstObserver.disconnected).toBe(true);
+
+      // Re-select something. A new <ol> is created. The component
+      // must observe it via a fresh ResizeObserver.
+      fixture.componentRef.setInput('crumbs', makeCrumbs(4));
+      fixture.detectChanges();
+      expect(observerInstances.length).toBe(2);
+      const secondObserver = observerInstances[1]!;
+      expect(secondObserver.disconnected).toBe(false);
+      const observed = secondObserver.observed[0];
+      expect((observed as HTMLElement).tagName.toLowerCase()).toBe('ol');
+    });
+
+    it('debounces ResizeObserver fires by 100ms (trailing edge)', fakeAsync(() => {
+      TestBed.configureTestingModule({
+        imports: [JsonBreadcrumbComponent, NoopAnimationsModule]
+      });
+      const fixture = TestBed.createComponent(JsonBreadcrumbComponent);
+      fixture.componentRef.setInput('crumbs', makeCrumbs(5));
+      fixture.detectChanges();
+
+      expect(observerCallbacks.length).toBe(1);
+      const fire = observerCallbacks[0]!;
+
+      // Pretend the algorithm has previously hidden three middle
+      // crumbs. The resize-debounce trailing-edge fire is the only
+      // thing that should reset that signal back to 0.
+      fixture.componentInstance.hiddenMiddleCount.set(3);
+
+      // Fire the callback rapidly in succession.
+      fire([], {} as ResizeObserver);
+      tick(50);
+      fire([], {} as ResizeObserver);
+      tick(50);
+      fire([], {} as ResizeObserver);
+
+      // Just before the trailing 100ms expires (relative to the
+      // last fire), no reset has occurred.
+      tick(99);
+      expect(fixture.componentInstance.hiddenMiddleCount()).toBe(3);
+
+      // After the trailing 100ms expires, the debounced callback
+      // runs exactly once and resets hiddenMiddleCount to 0.
+      tick(1);
+      expect(fixture.componentInstance.hiddenMiddleCount()).toBe(0);
+
+      // Drain any pending RAF that the trailing-edge fire scheduled.
+      flush();
+    }));
   });
 });

@@ -1,5 +1,4 @@
 import {
-  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -131,6 +130,23 @@ export class JsonBreadcrumbComponent {
   /** `true` iff at least one middle crumb is hidden. */
   readonly hasOverflow = computed(() => this.hiddenMiddleCount() > 0);
 
+  /**
+   * `true` when the collapse algorithm is fully collapsed - either
+   * because there are too few crumbs to ever produce an overflow
+   * chip (1 or 2), or because every collapsible middle crumb is
+   * already hidden. Used to flip the host class
+   * `is-fully-collapsed`, which in turn lets the SCSS make the
+   * very last chip flex-shrinkable as a final ellipsis fallback.
+   * Empty crumbs return `false` so the placeholder branch never
+   * carries the class.
+   */
+  readonly isFullyCollapsed = computed(() => {
+    const total = this.crumbs().length;
+    if (total === 0) return false;
+    if (total < 3) return true;
+    return this.hiddenMiddleCount() === total - 2;
+  });
+
   /** The first crumb (always visible whenever crumbs is non-empty). */
   readonly leadingCrumb = computed<BreadcrumbCrumb | null>(() => {
     const all = this.crumbs();
@@ -196,10 +212,20 @@ export class JsonBreadcrumbComponent {
 
   private rafHandle: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private resizeTimeoutHandle: number | null = null;
+
+  /**
+   * How long to wait after the last ResizeObserver fire before
+   * re-running the fit algorithm. Avoids RAF/relayout thrash during
+   * an active window-resize drag.
+   */
+  private static readonly RESIZE_DEBOUNCE_MS = 100;
 
   constructor() {
     // Re-fit when the crumb list changes. Reset to "all visible" and
     // schedule a measurement after Angular renders the new list.
+    // Selection-driven; NOT debounced - the breadcrumb should snap
+    // instantly to a new selection.
     effect(() => {
       this.crumbs(); // track crumb list identity
       untracked(() => {
@@ -208,16 +234,18 @@ export class JsonBreadcrumbComponent {
       });
     });
 
-    // Attach the ResizeObserver as soon as the chip list element
-    // exists. Reset to 0 hidden on resize so a widening container
-    // can re-expand previously-collapsed crumbs.
-    afterNextRender(() => {
+    // Attach (and re-attach) the ResizeObserver to whatever <ol>
+    // element viewChild currently points at. The <ol> lives inside
+    // an @else block that is destroyed when crumbs() is empty (no
+    // selection), so the element identity changes across deselect ->
+    // re-select cycles. A signal-driven effect handles that without
+    // any extra glue.
+    effect(() => {
       const list = this.listRef()?.nativeElement;
+      this.resizeObserver?.disconnect();
+      this.resizeObserver = null;
       if (!list) return;
-      this.resizeObserver = new ResizeObserver(() => {
-        this.hiddenMiddleCount.set(0);
-        this.scheduleFit();
-      });
+      this.resizeObserver = new ResizeObserver(() => this.onResize());
       this.resizeObserver.observe(list);
     });
 
@@ -226,9 +254,31 @@ export class JsonBreadcrumbComponent {
         cancelAnimationFrame(this.rafHandle);
         this.rafHandle = null;
       }
+      if (this.resizeTimeoutHandle !== null) {
+        clearTimeout(this.resizeTimeoutHandle);
+        this.resizeTimeoutHandle = null;
+      }
       this.resizeObserver?.disconnect();
       this.resizeObserver = null;
     });
+  }
+
+  /**
+   * ResizeObserver-driven recalc, debounced 100ms trailing-edge.
+   * During an active window-resize drag the bar may visibly clip on
+   * the right edge for up to ~100ms after the user pauses; that's
+   * the deliberate trade-off vs. running the full reset/measure
+   * cascade on every frame of the drag.
+   */
+  private onResize(): void {
+    if (this.resizeTimeoutHandle !== null) {
+      clearTimeout(this.resizeTimeoutHandle);
+    }
+    this.resizeTimeoutHandle = window.setTimeout(() => {
+      this.resizeTimeoutHandle = null;
+      this.hiddenMiddleCount.set(0);
+      this.scheduleFit();
+    }, JsonBreadcrumbComponent.RESIZE_DEBOUNCE_MS);
   }
 
   private scheduleFit(): void {

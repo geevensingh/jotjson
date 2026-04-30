@@ -1,4 +1,4 @@
-<div class="jj-breadcrumb-bar">
+<div class="jj-breadcrumb-bar" [class.is-fully-collapsed]="isFullyCollapsed()">
   @if (crumbs().length === 0) {
     <div class="jj-breadcrumb jj-breadcrumb--empty" aria-live="polite">
       {{ emptyPlaceholder() }}
