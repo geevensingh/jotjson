@@ -2,13 +2,23 @@
   display: block;
 }
 
-.jj-breadcrumb {
+.jj-breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   line-height: 1.4;
   color: rgba(127, 127, 127, 0.85);
   font-family: inherit;
   padding: 4px 8px;
   min-height: 24px;
+  min-width: 0;
+}
+
+.jj-breadcrumb {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
 }
@@ -27,12 +37,18 @@
   flex-wrap: nowrap;
   gap: 0;
   min-width: 0;
+  width: 100%;
 }
 
 .jj-breadcrumb__item {
   display: inline-flex;
   align-items: center;
+  flex: 0 1 auto;
   min-width: 0;
+}
+
+.jj-breadcrumb__item--overflow {
+  flex-shrink: 0;
 }
 
 .jj-breadcrumb__chip {
@@ -45,13 +61,13 @@
   line-height: inherit;
   padding: 2px 6px;
   border-radius: 3px;
-  max-width: 14ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+  min-width: 0;
 
-  &:hover {
+  &:hover:not([aria-current='location']) {
     color: var(--color-primary);
     background: rgba(127, 127, 127, 0.12);
   }
@@ -60,10 +76,16 @@
     outline: 2px solid var(--color-primary);
     outline-offset: 1px;
   }
+
+  &[aria-current='location'] {
+    background: var(--highlight-selection);
+    color: inherit;
+    cursor: pointer;
+  }
 }
 
 .jj-breadcrumb__chip--overflow {
-  max-width: none;
+  flex-shrink: 0;
   font-weight: 700;
   letter-spacing: 1px;
 }
@@ -72,4 +94,34 @@
   color: rgba(127, 127, 127, 0.5);
   margin: 0 2px;
   flex-shrink: 0;
+}
+
+.jj-breadcrumb__copy {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: rgba(127, 127, 127, 0.7);
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  padding: 0;
+
+  &:hover:not(:disabled) {
+    color: var(--color-primary);
+    background: rgba(127, 127, 127, 0.12);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
 }

@@ -1780,57 +1780,134 @@ describe('JsonTreeComponent', () => {
   // between selection state and the view-model, plus the click handler.
   // ---------------------------------------------------------------------------
   describe('breadcrumb view-model', () => {
+    // Local clipboard mock helper (the canonical `withCtxClipboard`
+    // lives inside the `row context menu` describe and isn't visible
+    // here). Mirrors the same restore semantics: if `navigator` had
+    // no own `clipboard` descriptor before our override, we delete
+    // ours so the prototype's getter is restored.
+    function withClipboardStub<T>(
+      stub: { writeText?: jasmine.Spy } | undefined,
+      run: () => T
+    ): T {
+      const original = (navigator as { clipboard?: Clipboard }).clipboard;
+      const hadOwn = Object.prototype.hasOwnProperty.call(
+        navigator,
+        'clipboard'
+      );
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: stub
+      });
+      try {
+        return run();
+      } finally {
+        if (hadOwn && original) {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: original
+          });
+        } else {
+          delete (navigator as { clipboard?: unknown }).clipboard;
+        }
+      }
+    }
+
     it('returns an empty array when nothing is selected', async () => {
       await createWith({ a: 1 });
       expect(cmp.selectedPath()).toBeNull();
       expect(cmp.crumbs()).toEqual([]);
     });
 
-    it('returns a single Root crumb when the root is selected', async () => {
+    it('returns a single Root crumb (current) when the root is selected', async () => {
       await createWith({ a: 1 });
       cmp.selectByPathString('$');
       expect(cmp.crumbs().length).toBe(1);
       const [root] = cmp.crumbs();
-      expect(root.canonicalPath).toBe('$');
-      expect(root.label).toBe(cmp.breadcrumbRootLabel);
+      expect(root!.canonicalPath).toBe('$');
+      expect(root!.label).toBe(cmp.breadcrumbRootLabel);
+      expect(root!.current).toBe(true);
     });
 
-    it('returns Root + ancestors (excluding the selected leaf) for a deep path', async () => {
+    it('returns Root + ancestors + selected leaf for a deep path, with current on the leaf', async () => {
       await createWith({ foo: { bar: { baz: 1 } } });
       cmp.selectByPathString('$.foo.bar.baz');
       const labels = cmp.crumbs().map((crumb) => crumb.label);
-      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'foo', 'bar']);
+      expect(labels).toEqual([
+        cmp.breadcrumbRootLabel,
+        'foo',
+        'bar',
+        'baz'
+      ]);
       const paths = cmp.crumbs().map((crumb) => crumb.canonicalPath);
-      expect(paths).toEqual(['$', '$.foo', '$.foo.bar']);
+      expect(paths).toEqual([
+        '$',
+        '$.foo',
+        '$.foo.bar',
+        '$.foo.bar.baz'
+      ]);
+      const currents = cmp.crumbs().map((crumb) => crumb.current);
+      expect(currents).toEqual([false, false, false, true]);
     });
 
-    it('renders array-index segments as [0], [1], etc.', async () => {
+    it('renders array-index segments as [0], [1], etc. and includes the leaf', async () => {
       await createWith({ items: [{ name: 'a' }] });
       cmp.selectByPathString('$.items[0].name');
       const labels = cmp.crumbs().map((crumb) => crumb.label);
-      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'items', '[0]']);
+      expect(labels).toEqual([
+        cmp.breadcrumbRootLabel,
+        'items',
+        '[0]',
+        'name'
+      ]);
       const paths = cmp.crumbs().map((crumb) => crumb.canonicalPath);
-      expect(paths).toEqual(['$', '$.items', '$.items[0]']);
+      expect(paths).toEqual([
+        '$',
+        '$.items',
+        '$.items[0]',
+        '$.items[0].name'
+      ]);
+      const currents = cmp.crumbs().map((crumb) => crumb.current);
+      expect(currents).toEqual([false, false, false, true]);
     });
 
-    it('renders escaped keys as their raw label and quoted canonical path', async () => {
+    it('renders escaped keys as their raw label and quoted canonical path, leaf marked current', async () => {
       await createWith({ 'a.b': { x: 1 } });
       cmp.selectByPathString('$["a.b"].x');
       expect(cmp.selectedPath()).toBe('$["a.b"].x');
       const labels = cmp.crumbs().map((crumb) => crumb.label);
-      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'a.b']);
+      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'a.b', 'x']);
       const paths = cmp.crumbs().map((crumb) => crumb.canonicalPath);
-      expect(paths).toEqual(['$', '$["a.b"]']);
+      expect(paths).toEqual(['$', '$["a.b"]', '$["a.b"].x']);
+      const last = cmp.crumbs()[cmp.crumbs().length - 1]!;
+      expect(last.current).toBe(true);
     });
 
-    it('onBreadcrumbClick re-selects the ancestor and logs telemetry', async () => {
+    it('onBreadcrumbClick re-selects the ancestor and logs telemetry with depth + selectionUpDistance', async () => {
       await createWith({ foo: { bar: { baz: 1 } } });
       cmp.selectByPathString('$.foo.bar.baz');
+      // crumbs = [Root(0), foo(1), bar(2), baz(3,current)] -> total 4
       const logger = TestBed.inject(LoggerService);
       const info = spyOn(logger, 'info');
       cmp.onBreadcrumbClick({ canonicalPath: '$.foo', depth: 1 });
       expect(cmp.selectedPath()).toBe('$.foo');
-      expect(info).toHaveBeenCalledWith('tree.breadcrumb.click', { depth: 1 });
+      expect(info).toHaveBeenCalledWith('tree.breadcrumb.click', {
+        depth: 1,
+        // Pre-click crumbs.length=4, depth=1 => up-distance from old leaf (depth=3) = 4-1-1 = 2
+        selectionUpDistance: 2
+      });
+    });
+
+    it('onBreadcrumbClick on the current crumb logs selectionUpDistance: 0', async () => {
+      await createWith({ foo: { bar: 1 } });
+      cmp.selectByPathString('$.foo.bar');
+      // crumbs = [Root(0), foo(1), bar(2,current)] -> total 3
+      const logger = TestBed.inject(LoggerService);
+      const info = spyOn(logger, 'info');
+      cmp.onBreadcrumbClick({ canonicalPath: '$.foo.bar', depth: 2 });
+      expect(info).toHaveBeenCalledWith('tree.breadcrumb.click', {
+        depth: 2,
+        selectionUpDistance: 0
+      });
     });
 
     it('clicking a chip in the rendered breadcrumb DOM updates selection', async () => {
@@ -1840,11 +1917,48 @@ describe('JsonTreeComponent', () => {
       const chips = Array.from(
         fixture.nativeElement.querySelectorAll('.jj-breadcrumb__chip')
       ) as HTMLButtonElement[];
-      // crumbs = [Root, foo] -> 2 chips. Click foo (index 1).
-      expect(chips.length).toBe(2);
-      chips[1].click();
+      // crumbs = [Root, foo, bar(current)] -> 3 chips. Click foo (index 1).
+      expect(chips.length).toBe(3);
+      chips[1]!.click();
       fixture.detectChanges();
       expect(cmp.selectedPath()).toBe('$.foo');
+    });
+
+    it('breadcrumbCopyDisabled is true when nothing is selected', async () => {
+      await createWith({ a: 1 });
+      expect(cmp.selectedPath()).toBeNull();
+      expect(cmp.breadcrumbCopyDisabled()).toBe(true);
+    });
+
+    it('breadcrumbCopyDisabled is false once a row is selected', async () => {
+      await createWith({ a: 1 });
+      cmp.selectByPathString('$.a');
+      expect(cmp.breadcrumbCopyDisabled()).toBe(false);
+    });
+
+    it('onBreadcrumbCopyPath is a no-op when nothing is selected', async () => {
+      await createWith({ a: 1 });
+      const logger = TestBed.inject(LoggerService);
+      const info = spyOn(logger, 'info');
+      const writeText = jasmine.createSpy('writeText').and.resolveTo();
+      withClipboardStub({ writeText }, () => cmp.onBreadcrumbCopyPath());
+      expect(info).not.toHaveBeenCalled();
+      expect(writeText).not.toHaveBeenCalled();
+    });
+
+    it('onBreadcrumbCopyPath copies the selected path and logs telemetry', async () => {
+      await createWith({ foo: { bar: 1 } });
+      cmp.selectByPathString('$.foo.bar');
+      // crumbs = [Root(0), foo(1), bar(2,current)] -> total 3, leaf depth = 2
+      const logger = TestBed.inject(LoggerService);
+      const info = spyOn(logger, 'info');
+      const writeText = jasmine.createSpy('writeText').and.resolveTo();
+      withClipboardStub({ writeText }, () => cmp.onBreadcrumbCopyPath());
+      expect(info).toHaveBeenCalledWith('tree.breadcrumb.copyPath', {
+        depth: 2,
+        selectionUpDistance: 0
+      });
+      expect(writeText).toHaveBeenCalled();
     });
   });
 

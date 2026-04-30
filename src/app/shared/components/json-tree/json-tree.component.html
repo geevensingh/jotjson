@@ -164,7 +164,11 @@
     [emptyPlaceholder]="breadcrumbEmptyLabel"
     [navAriaLabel]="breadcrumbAriaLabel"
     [overflowAriaLabel]="breadcrumbOverflowAriaLabel"
+    [copyPathTitle]="breadcrumbCopyPathTitle"
+    [copyPathAriaLabel]="breadcrumbCopyPathAriaLabel"
+    [copyPathDisabled]="breadcrumbCopyDisabled()"
     (crumbClick)="onBreadcrumbClick($event)"
+    (copyPathClick)="onBreadcrumbCopyPath()"
   />
 }
 

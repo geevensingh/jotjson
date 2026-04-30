@@ -1,22 +1,24 @@
-@if (crumbs().length === 0) {
-  <div class="jj-breadcrumb jj-breadcrumb--empty" aria-live="polite">
-    {{ emptyPlaceholder() }}
-  </div>
-} @else {
-  <nav class="jj-breadcrumb" [attr.aria-label]="navAriaLabel()">
-    <ol class="jj-breadcrumb__list">
-      @if (!hasOverflow()) {
-        @for (crumb of crumbs(); track crumb.canonicalPath; let last = $last) {
+<div class="jj-breadcrumb-bar">
+  @if (crumbs().length === 0) {
+    <div class="jj-breadcrumb jj-breadcrumb--empty" aria-live="polite">
+      {{ emptyPlaceholder() }}
+    </div>
+  } @else {
+    <nav class="jj-breadcrumb" [attr.aria-label]="navAriaLabel()">
+      <ol #list class="jj-breadcrumb__list">
+        @if (leadingCrumb(); as first) {
           <li class="jj-breadcrumb__item">
             <button
               type="button"
               class="jj-breadcrumb__chip"
-              [attr.title]="crumb.label"
-              (click)="onCrumbClick(crumb)"
+              [class.is-current]="first.current"
+              [attr.aria-current]="first.current ? 'location' : null"
+              [attr.title]="first.label"
+              (click)="onCrumbClick(first)"
             >
-              {{ crumb.label }}
+              {{ first.label }}
             </button>
-            @if (!last) {
+            @if (hasOverflow() || trailingCrumbs().length > 0) {
               <jj-icon
                 name="chevron-right"
                 class="jj-breadcrumb__sep"
@@ -25,50 +27,36 @@
             }
           </li>
         }
-      } @else {
-        @for (crumb of leadingCrumbs(); track crumb.canonicalPath) {
-          <li class="jj-breadcrumb__item">
+        @if (hasOverflow()) {
+          <li class="jj-breadcrumb__item jj-breadcrumb__item--overflow">
             <button
               type="button"
-              class="jj-breadcrumb__chip"
-              [attr.title]="crumb.label"
-              (click)="onCrumbClick(crumb)"
+              class="jj-breadcrumb__chip jj-breadcrumb__chip--overflow"
+              [attr.aria-label]="overflowAriaLabel()"
+              [matMenuTriggerFor]="overflowMenu"
             >
-              {{ crumb.label }}
+              ...
             </button>
-            <jj-icon
-              name="chevron-right"
-              class="jj-breadcrumb__sep"
-              [size]="12"
-            />
+            <mat-menu #overflowMenu="matMenu" class="jj-breadcrumb__overflow-menu">
+              @for (crumb of hiddenCrumbs(); track crumb.canonicalPath) {
+                <button
+                  type="button"
+                  mat-menu-item
+                  (click)="onCrumbClick(crumb)"
+                >
+                  {{ crumb.label }}
+                </button>
+              }
+            </mat-menu>
+            @if (trailingCrumbs().length > 0) {
+              <jj-icon
+                name="chevron-right"
+                class="jj-breadcrumb__sep"
+                [size]="12"
+              />
+            }
           </li>
         }
-        <li class="jj-breadcrumb__item">
-          <button
-            type="button"
-            class="jj-breadcrumb__chip jj-breadcrumb__chip--overflow"
-            [attr.aria-label]="overflowAriaLabel()"
-            [matMenuTriggerFor]="overflowMenu"
-          >
-            ...
-          </button>
-          <jj-icon
-            name="chevron-right"
-            class="jj-breadcrumb__sep"
-            [size]="12"
-          />
-          <mat-menu #overflowMenu="matMenu" class="jj-breadcrumb__overflow-menu">
-            @for (crumb of hiddenCrumbs(); track crumb.canonicalPath) {
-              <button
-                type="button"
-                mat-menu-item
-                (click)="onCrumbClick(crumb)"
-              >
-                {{ crumb.label }}
-              </button>
-            }
-          </mat-menu>
-        </li>
         @for (
           crumb of trailingCrumbs();
           track crumb.canonicalPath;
@@ -78,6 +66,8 @@
             <button
               type="button"
               class="jj-breadcrumb__chip"
+              [class.is-current]="crumb.current"
+              [attr.aria-current]="crumb.current ? 'location' : null"
               [attr.title]="crumb.label"
               (click)="onCrumbClick(crumb)"
             >
@@ -92,7 +82,17 @@
             }
           </li>
         }
-      }
-    </ol>
-  </nav>
-}
+      </ol>
+    </nav>
+  }
+  <button
+    type="button"
+    class="jj-breadcrumb__copy"
+    [attr.title]="copyPathTitle()"
+    [attr.aria-label]="copyPathAriaLabel()"
+    [disabled]="copyPathDisabled()"
+    (click)="onCopyClick()"
+  >
+    <jj-icon name="copy-path" [size]="14" />
+  </button>
+</div>

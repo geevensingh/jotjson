@@ -260,6 +260,8 @@ export class JsonTreeComponent {
   readonly breadcrumbEmptyLabel = $localize`:@@tree.breadcrumb.empty:No current selection`;
   readonly breadcrumbRootLabel = $localize`:@@tree.breadcrumb.root:Root`;
   readonly breadcrumbOverflowAriaLabel = $localize`:@@tree.breadcrumb.overflow.aria:Show hidden ancestors`;
+  readonly breadcrumbCopyPathTitle = $localize`:@@tree.breadcrumb.copyPath.title:Copy JSON path`;
+  readonly breadcrumbCopyPathAriaLabel = $localize`:@@tree.breadcrumb.copyPath.aria:Copy JSON path of selected row`;
 
   readonly treeControl = new NestedTreeControl<TreeNode, string>(
     (n) => n.children ?? [],
@@ -535,15 +537,14 @@ export class JsonTreeComponent {
   });
 
   /**
-   * Ancestor chain of the currently-selected row, suitable for the
-   * breadcrumb above the tree.
+   * Path from the root to the currently-selected row, suitable for
+   * the breadcrumb above the tree. The last crumb represents the
+   * selected row itself (flagged with `current: true`); earlier
+   * crumbs are its ancestors (flagged with `current: false`).
    *
    *  - Null selection -> `[]` (breadcrumb renders the placeholder).
-   *  - Root selected -> `[{ label: <Root>, canonicalPath: '$' }]`
-   *    (single chip; clicking it is idempotent).
-   *  - Deeper selection -> `[Root, ancestor1, ..., ancestorN]`,
-   *    EXCLUDING the selected node itself ("parent nodes" semantics
-   *    requested by the user).
+   *  - Root selected -> `[{ Root, current: true }]`.
+   *  - Deeper selection -> `[Root, ancestor1, ..., selected]`.
    *
    * Reads `selectedPath` and `nodeIndex`; recomputes when either
    * changes.
@@ -555,19 +556,34 @@ export class JsonTreeComponent {
     if (!node) return [];
     const path = node.path;
     const out: BreadcrumbCrumb[] = [
-      { label: this.breadcrumbRootLabel, canonicalPath: '$' }
+      {
+        label: this.breadcrumbRootLabel,
+        canonicalPath: '$',
+        current: path.length === 0
+      }
     ];
-    // Ancestors only: i goes 1..path.length-1 (the slice excludes
-    // the selected node itself at i = path.length).
-    for (let i = 1; i < path.length; i++) {
+    // Include the selected node as the final crumb (i = path.length).
+    for (let i = 1; i <= path.length; i++) {
       const partial = path.slice(0, i);
       const segment = partial[partial.length - 1];
       const label =
         typeof segment === 'number' ? `[${segment}]` : String(segment);
-      out.push({ label, canonicalPath: this.formatPath(partial) });
+      out.push({
+        label,
+        canonicalPath: this.formatPath(partial),
+        current: i === path.length
+      });
     }
     return out;
   });
+
+  /**
+   * `true` when the trailing copy-path button on the breadcrumb bar
+   * should be disabled. Mirrors "is anything selected?".
+   */
+  readonly breadcrumbCopyDisabled = computed(
+    () => this.selectedPath() === null
+  );
 
   /**
    * Paths of all rows that share the selected row's primitive value
@@ -879,10 +895,43 @@ export class JsonTreeComponent {
    * the canonical path content is potentially user-sensitive and is
    * NOT recorded) and re-selects the ancestor via the existing
    * `selectByPathString` flow, which handles expand-and-scroll.
+   *
+   * Telemetry includes `selectionUpDistance` so we can tell, for any
+   * crumb click, both how deep the chip was from the root (`depth`)
+   * and how many levels up from the prior selection it was. Clicking
+   * the current chip emits `selectionUpDistance: 0`.
    */
   onBreadcrumbClick(event: BreadcrumbClick): void {
-    this.logger.info('tree.breadcrumb.click', { depth: event.depth });
+    const total = this.crumbs().length;
+    const selectionUpDistance = total === 0 ? 0 : total - 1 - event.depth;
+    this.logger.info('tree.breadcrumb.click', {
+      depth: event.depth,
+      selectionUpDistance
+    });
     this.selectByPathString(event.canonicalPath);
+  }
+
+  /**
+   * Copy-path handler for the trailing button on the breadcrumb bar.
+   * Resolves the currently-selected node, emits its own telemetry id
+   * (so we can tell breadcrumb-copy from row-context-menu copy), then
+   * delegates to the shared `copyPath` writer.
+   *
+   * No-op when nothing is selected. The breadcrumb component should
+   * disable the button in that case (`breadcrumbCopyDisabled`), but
+   * we still guard here so a programmatic emit can't crash.
+   */
+  onBreadcrumbCopyPath(): void {
+    const sp = this.selectedPath();
+    if (sp === null) return;
+    const node = this.nodeIndex().get(sp);
+    if (!node) return;
+    const total = this.crumbs().length;
+    this.logger.info('tree.breadcrumb.copyPath', {
+      depth: total === 0 ? 0 : total - 1,
+      selectionUpDistance: 0
+    });
+    this.copyPath(node);
   }
 
   /**
