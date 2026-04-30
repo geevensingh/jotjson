@@ -110,35 +110,35 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">751</context>
+          <context context-type="linenumber">816</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">758</context>
+          <context context-type="linenumber">826</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">766</context>
+          <context context-type="linenumber">834</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">776</context>
+          <context context-type="linenumber">844</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">988</context>
+          <context context-type="linenumber">1066</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">994</context>
+          <context context-type="linenumber">1072</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1028</context>
+          <context context-type="linenumber">1106</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1037</context>
+          <context context-type="linenumber">1115</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/rule-sets-toolbar.component.ts</context>
@@ -219,14 +219,14 @@
         <source>A new version of JotJSON is available.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/update/app-update.service.ts</context>
-          <context context-type="linenumber">53</context>
+          <context context-type="linenumber">55</context>
         </context-group>
       </trans-unit>
       <trans-unit id="update.available.action" datatype="html">
         <source>Reload</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/update/app-update.service.ts</context>
-          <context context-type="linenumber">54</context>
+          <context context-type="linenumber">56</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.dropElsewhere" datatype="html">
@@ -416,7 +416,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1010</context>
+          <context context-type="linenumber">1088</context>
         </context-group>
       </trans-unit>
       <trans-unit id="common.cancel" datatype="html">
@@ -435,7 +435,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1011</context>
+          <context context-type="linenumber">1089</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/clone-preset-dialog.component.ts</context>
@@ -450,7 +450,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1027</context>
+          <context context-type="linenumber">1105</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.failed" datatype="html">
@@ -461,7 +461,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1036</context>
+          <context context-type="linenumber">1114</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.title" datatype="html">
@@ -598,21 +598,21 @@
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.default.aria.set" datatype="html">
-        <source>Set as default</source>
+        <source>Apply rule set</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
           <context context-type="linenumber">83</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.default.aria.unset" datatype="html">
-        <source>Remove as default</source>
+        <source>Stop applying rule set</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
           <context context-type="linenumber">84</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.default.failed" datatype="html">
-        <source>Could not save your default selection - check your connection.</source>
+        <source>Could not save which rule sets are applied - check your connection.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
           <context context-type="linenumber">114</context>
@@ -1390,7 +1390,7 @@
         <source>(deleted blob)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">404</context>
+          <context context-type="linenumber">407</context>
         </context-group>
       </trans-unit>
       <trans-unit id="clipboard.banner.body" datatype="html">
@@ -1460,126 +1460,126 @@
         <source>JotJSON - JSON viewer, formatter, and tree explorer</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">254</context>
+          <context context-type="linenumber">257</context>
         </context-group>
       </trans-unit>
       <trans-unit id="app.title.untitled" datatype="html">
         <source>Untitled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">385</context>
+          <context context-type="linenumber">388</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.tooMany" datatype="html">
         <source>Please drop one file at a time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">750</context>
+          <context context-type="linenumber">815</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.tooLarge" datatype="html">
         <source>File too large - max 5 MB</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">757</context>
+          <context context-type="linenumber">825</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.binary" datatype="html">
         <source>File does not appear to be a text file - upload was ignored.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">765</context>
+          <context context-type="linenumber">833</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.readFailed" datatype="html">
         <source>Could not read file</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">775</context>
+          <context context-type="linenumber">843</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.quotaExceeded" datatype="html">
         <source>Blob limit reached - delete one from your saved blobs to save a new blob.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">863</context>
+          <context context-type="linenumber">936</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.signIn" datatype="html">
         <source>Please sign in to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">881</context>
+          <context context-type="linenumber">954</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.forbidden" datatype="html">
         <source>You do not own this blob</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">884</context>
+          <context context-type="linenumber">957</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.generic" datatype="html">
         <source>Could not save - please try again</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">886</context>
+          <context context-type="linenumber">959</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.success" datatype="html">
         <source>Share link copied to clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">968</context>
+          <context context-type="linenumber">1041</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.failed" datatype="html">
         <source>Failed to copy share link.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">969</context>
+          <context context-type="linenumber">1042</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.unsupported" datatype="html">
         <source>Copy is not supported in this browser.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">970</context>
+          <context context-type="linenumber">1043</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.public" datatype="html">
         <source>Blob is now public.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">986</context>
+          <context context-type="linenumber">1064</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.private" datatype="html">
         <source>Blob is now private.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">987</context>
+          <context context-type="linenumber">1065</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.failed" datatype="html">
         <source>Failed to update visibility.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">993</context>
+          <context context-type="linenumber">1071</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.title" datatype="html">
         <source>Delete this blob?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1008</context>
+          <context context-type="linenumber">1086</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.message" datatype="html">
         <source>&quot;<x id="name" equiv-text="label"/>&quot; will be permanently deleted. This cannot be undone.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1009</context>
+          <context context-type="linenumber">1087</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.clone.title" datatype="html">
@@ -2552,473 +2552,473 @@
         <source>date</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">76</context>
+          <context context-type="linenumber">78</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.dateTime" datatype="html">
         <source>date/time</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">77</context>
+          <context context-type="linenumber">79</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.uuid" datatype="html">
         <source>uuid</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">78</context>
+          <context context-type="linenumber">80</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.url" datatype="html">
         <source>url</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.email" datatype="html">
         <source>email</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">80</context>
+          <context context-type="linenumber">82</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.path" datatype="html">
         <source>path</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">81</context>
+          <context context-type="linenumber">83</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.ipv4" datatype="html">
         <source>ipv4</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">82</context>
+          <context context-type="linenumber">84</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.ipv6" datatype="html">
         <source>ipv6</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">83</context>
+          <context context-type="linenumber">85</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.integer" datatype="html">
         <source>integer</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">84</context>
+          <context context-type="linenumber">86</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.number" datatype="html">
         <source>number</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">85</context>
+          <context context-type="linenumber">87</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.string" datatype="html">
         <source>string</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">86</context>
+          <context context-type="linenumber">88</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.boolean" datatype="html">
         <source>boolean</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">87</context>
+          <context context-type="linenumber">89</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.null" datatype="html">
         <source>null</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">88</context>
+          <context context-type="linenumber">90</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.array" datatype="html">
         <source>array</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">89</context>
+          <context context-type="linenumber">91</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.object" datatype="html">
         <source>object</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">90</context>
+          <context context-type="linenumber">92</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.undefined" datatype="html">
         <source>undefined</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">91</context>
+          <context context-type="linenumber">93</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.node.expand" datatype="html">
         <source>Expand</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">219</context>
+          <context context-type="linenumber">228</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.node.collapse" datatype="html">
         <source>Collapse</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">220</context>
+          <context context-type="linenumber">229</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.expand.menu.button" datatype="html">
         <source>Expand to...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">222</context>
+          <context context-type="linenumber">231</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.matchValue.aria" datatype="html">
         <source>Matches the selected value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">223</context>
+          <context context-type="linenumber">232</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.caseSensitive.label" datatype="html">
         <source>Aa</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">225</context>
+          <context context-type="linenumber">234</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.caseSensitive.tooltip" datatype="html">
         <source>Match case</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">226</context>
+          <context context-type="linenumber">235</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.regex.label" datatype="html">
         <source>.*</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">227</context>
+          <context context-type="linenumber">236</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.regex.tooltip" datatype="html">
         <source>Regular expression</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">228</context>
+          <context context-type="linenumber">237</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.scope.tooltip" datatype="html">
         <source>Search in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">229</context>
+          <context context-type="linenumber">238</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.scope.keys" datatype="html">
         <source>Keys</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">230</context>
+          <context context-type="linenumber">239</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.scope.values" datatype="html">
         <source>Values</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">231</context>
+          <context context-type="linenumber">240</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.scope.both" datatype="html">
         <source>Keys and values</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">232</context>
+          <context context-type="linenumber">241</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.type.tooltip" datatype="html">
         <source>Filter by value type</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">233</context>
+          <context context-type="linenumber">242</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.type.all" datatype="html">
         <source>All types</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">234</context>
+          <context context-type="linenumber">243</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.prev.tooltip" datatype="html">
         <source>Previous match</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">235</context>
+          <context context-type="linenumber">244</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.next.tooltip" datatype="html">
         <source>Next match</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">236</context>
+          <context context-type="linenumber">245</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.copyKey" datatype="html">
         <source>Copy key</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">241</context>
+          <context context-type="linenumber">250</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.copyValue" datatype="html">
         <source>Copy value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">242</context>
+          <context context-type="linenumber">251</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.copyPath" datatype="html">
         <source>Copy path</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">243</context>
+          <context context-type="linenumber">252</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.searchByKey" datatype="html">
         <source>Search by key</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">244</context>
+          <context context-type="linenumber">253</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.searchByValue" datatype="html">
         <source>Search by value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">245</context>
+          <context context-type="linenumber">254</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.collapse" datatype="html">
         <source>Collapse</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">246</context>
+          <context context-type="linenumber">255</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.expandAllFromHere" datatype="html">
         <source>Expand all from here</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">247</context>
+          <context context-type="linenumber">256</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.expandToDepth.1" datatype="html">
         <source>Expand 1 level from here</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">248</context>
+          <context context-type="linenumber">257</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.expandToDepth.2" datatype="html">
         <source>Expand 2 levels from here</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">249</context>
+          <context context-type="linenumber">258</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.expandToDepth.3" datatype="html">
         <source>Expand 3 levels from here</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">250</context>
+          <context context-type="linenumber">259</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.expandToDepth.4" datatype="html">
         <source>Expand 4 levels from here</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">251</context>
+          <context context-type="linenumber">260</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.expandToDepth.5" datatype="html">
         <source>Expand 5 levels from here</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">252</context>
+          <context context-type="linenumber">261</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.isolate" datatype="html">
         <source>Isolate</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">253</context>
+          <context context-type="linenumber">262</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.collapseSiblings" datatype="html">
         <source>Collapse siblings</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">254</context>
+          <context context-type="linenumber">263</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.kebab.aria" datatype="html">
         <source>Row actions</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">255</context>
+          <context context-type="linenumber">264</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.kebab.title" datatype="html">
         <source>Row actions</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">256</context>
+          <context context-type="linenumber">265</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.breadcrumb.aria" datatype="html">
         <source>Breadcrumb</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">260</context>
+          <context context-type="linenumber">269</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.breadcrumb.empty" datatype="html">
         <source>No current selection</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">261</context>
+          <context context-type="linenumber">270</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.breadcrumb.root" datatype="html">
         <source>Root</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">262</context>
+          <context context-type="linenumber">271</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.breadcrumb.overflow.aria" datatype="html">
         <source>Show hidden ancestors</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">263</context>
+          <context context-type="linenumber">272</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.breadcrumb.copyPath.title" datatype="html">
         <source>Copy JSON path</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">264</context>
+          <context context-type="linenumber">273</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.breadcrumb.copyPath.aria" datatype="html">
         <source>Copy JSON path of selected row</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">265</context>
+          <context context-type="linenumber">274</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.count.none" datatype="html">
         <source>No matches</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">393</context>
+          <context context-type="linenumber">401</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.count.position" datatype="html">
         <source><x id="position" equiv-text="pos"/> / <x id="count" equiv-text="count"/> matches</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">396</context>
+          <context context-type="linenumber">404</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.count.one" datatype="html">
         <source>1 match</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">398</context>
+          <context context-type="linenumber">406</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.count.other" datatype="html">
         <source><x id="count" equiv-text="count"/> matches</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">399</context>
+          <context context-type="linenumber">407</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.search.count.ghost" datatype="html">
         <source><x id="position" equiv-text="count"/> / <x id="count" equiv-text="count"/> matches</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">413</context>
+          <context context-type="linenumber">421</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.copyPath.success" datatype="html">
         <source>Path copied to clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">990</context>
+          <context context-type="linenumber">1046</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.copyPath.failed" datatype="html">
         <source>Failed to copy path.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">991</context>
+          <context context-type="linenumber">1047</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.copyPath.unsupported" datatype="html">
         <source>Copy is not supported in this browser.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">992</context>
+          <context context-type="linenumber">1048</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.copy.success.key" datatype="html">
         <source>Key copied to clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">1162</context>
+          <context context-type="linenumber">1218</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.copy.failed.key" datatype="html">
         <source>Failed to copy key.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">1163</context>
+          <context context-type="linenumber">1219</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.copy.unsupported" datatype="html">
         <source>Copy is not supported in this browser.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">1164</context>
+          <context context-type="linenumber">1220</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">1183</context>
+          <context context-type="linenumber">1239</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.copy.success.value" datatype="html">
         <source>Value copied to clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">1181</context>
+          <context context-type="linenumber">1237</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.contextMenu.copy.failed.value" datatype="html">
         <source>Failed to copy value.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">1182</context>
+          <context context-type="linenumber">1238</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.aria" datatype="html">
@@ -3207,126 +3207,126 @@
         <source>Disable tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">139</context>
+          <context context-type="linenumber">156</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.syncSelection.tooltip.off" datatype="html">
         <source>Enable tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">140</context>
+          <context context-type="linenumber">157</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.syncSelection.aria" datatype="html">
         <source>Toggle tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">142</context>
+          <context context-type="linenumber">159</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.aria" datatype="html">
         <source>Pane layout</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">151</context>
+          <context context-type="linenumber">168</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.editorOnly" datatype="html">
         <source>Show editor only</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">152</context>
+          <context context-type="linenumber">169</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.bothHorizontal" datatype="html">
         <source>Editor and tree side-by-side</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">153</context>
+          <context context-type="linenumber">170</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.bothVertical" datatype="html">
         <source>Editor above tree</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">154</context>
+          <context context-type="linenumber">171</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.treeOnly" datatype="html">
         <source>Show tree only</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">155</context>
+          <context context-type="linenumber">172</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.overflow.makePrivate" datatype="html">
         <source>Make private</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">169</context>
+          <context context-type="linenumber">186</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.overflow.makePublic" datatype="html">
         <source>Make public</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">170</context>
+          <context context-type="linenumber">187</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.tooltip.saving" datatype="html">
         <source>Saving...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">174</context>
+          <context context-type="linenumber">191</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.tooltip.empty" datatype="html">
         <source>Nothing to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">175</context>
+          <context context-type="linenumber">192</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.tooltip.save" datatype="html">
         <source>Save &amp; share</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">176</context>
+          <context context-type="linenumber">193</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.ready" datatype="html">
         <source>Paste: <x id="PREVIEW" equiv-text="preview"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">189</context>
+          <context context-type="linenumber">206</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.readyNoPreview" datatype="html">
         <source>Paste from clipboard</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">190</context>
+          <context context-type="linenumber">207</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.empty" datatype="html">
         <source>Clipboard does not contain JSON</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">193</context>
+          <context context-type="linenumber">210</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.denied" datatype="html">
         <source>Clipboard access blocked - enable it in your browser settings. Ctrl+V still works.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">195</context>
+          <context context-type="linenumber">212</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip" datatype="html">
         <source>Paste from clipboard</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">197</context>
+          <context context-type="linenumber">214</context>
         </context-group>
       </trans-unit>
     </body>

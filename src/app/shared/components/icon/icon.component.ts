@@ -38,13 +38,13 @@ export type JjIconName =
   | 'trash'
   | 'edit'
   | 'eye'
+  | 'eye-off'
   | 'folder'
   | 'history'
   | 'search'
   | 'warning'
   | 'check'
   | 'star'
-  | 'star-filled'
   | 'info'
   | 'error'
   | 'flag'
@@ -232,6 +232,11 @@ export type JjIconName =
           <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
           <circle cx="12" cy="12" r="3" />
         }
+        @case ('eye-off') {
+          <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="M4 4l16 16" />
+        }
         @case ('folder') {
           <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
         }
@@ -249,9 +254,6 @@ export type JjIconName =
         }
         @case ('star') {
           <path d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2L12 17.6l-5.4 2.9 1-6.2L3.2 10l6.1-.9z" />
-        }
-        @case ('star-filled') {
-          <path fill="currentColor" d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2L12 17.6l-5.4 2.9 1-6.2L3.2 10l6.1-.9z" />
         }
         @case ('info') {
           <circle cx="12" cy="12" r="8.5" />

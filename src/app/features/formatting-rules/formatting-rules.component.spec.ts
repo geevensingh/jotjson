@@ -213,9 +213,9 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     ) as HTMLButtonElement[];
     expect(stars.length).toBe(2);
     expect(stars[0].getAttribute('aria-pressed')).toBe('true');
-    expect(stars[0].getAttribute('aria-label')).toContain('Remove');
+    expect(stars[0].getAttribute('aria-label')).toContain('Stop applying');
     expect(stars[1].getAttribute('aria-pressed')).toBe('false');
-    expect(stars[1].getAttribute('aria-label')).toContain('Set as default');
+    expect(stars[1].getAttribute('aria-label')).toContain('Apply rule set');
 
     stars[1].click();
     expect(stub.toggleDefault).toHaveBeenCalledWith('b');
@@ -231,7 +231,7 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     fixture.detectChanges();
 
     expect(snack.open).toHaveBeenCalled();
-    expect(snack.open.calls.mostRecent().args[0]).toContain('default selection');
+    expect(snack.open.calls.mostRecent().args[0]).toContain('rule sets are applied');
   });
 
   it('rename happy path: pencil click -> Enter -> update + snack', async () => {

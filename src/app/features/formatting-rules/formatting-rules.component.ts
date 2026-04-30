@@ -80,8 +80,8 @@ export class FormattingRulesComponent implements OnInit {
 
   readonly NAME_MAX_FIELD = NAME_MAX;
 
-  readonly setDefaultLabel = $localize`:@@formattingRules.default.aria.set:Set as default`;
-  readonly removeDefaultLabel = $localize`:@@formattingRules.default.aria.unset:Remove as default`;
+  readonly setDefaultLabel = $localize`:@@formattingRules.default.aria.set:Apply rule set`;
+  readonly removeDefaultLabel = $localize`:@@formattingRules.default.aria.unset:Stop applying rule set`;
 
   readonly ruleSets = computed<readonly FormattingRuleSet[]>(() => {
     const cache = this.service.ruleSets();
@@ -111,7 +111,7 @@ export class FormattingRulesComponent implements OnInit {
       if (prev === undefined) return;
       if (next === 'error' && prev !== 'error') {
         this.snack.open(
-          $localize`:@@formattingRules.default.failed:Could not save your default selection - check your connection.`,
+          $localize`:@@formattingRules.default.failed:Could not save which rule sets are applied - check your connection.`,
           $localize`:@@common.dismiss:Dismiss`,
           { duration: 4000 }
         );
