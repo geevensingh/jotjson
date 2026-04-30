@@ -54,6 +54,11 @@ describe('AuthService', () => {
       // `isConfigured` is read-only in prod, but spec suite can override for
       // the no-tenant short-circuit check.
       (svc as unknown as { isConfigured: boolean }).isConfigured = true;
+      // `devMode` is captured at construction time from `environment.devAuth`.
+      // Force it off here so the configured-tenant tests exercise the MSAL
+      // paths even when the developer's local environment.ts has dev-auth
+      // bypass enabled.
+      (svc as unknown as { devMode: boolean }).devMode = false;
       return svc;
     }
 
