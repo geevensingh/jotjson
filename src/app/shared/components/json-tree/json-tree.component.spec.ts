@@ -545,63 +545,20 @@ describe('JsonTreeComponent', () => {
       expect(cmp.search()).toBe('');
     });
 
-    it('clicking outside the host clears the selection', async () => {
+    it('clicking outside the host does NOT clear the selection', async () => {
       await createWith({ a: 1 });
       document.body.appendChild(fixture.nativeElement);
-      try {
-        cmp.selectedPath.set('$.a');
-        fixture.detectChanges();
-        const outside = document.createElement('div');
-        document.body.appendChild(outside);
-        try {
-          const ev = new MouseEvent('click', { bubbles: true });
-          outside.dispatchEvent(ev);
-          fixture.detectChanges();
-          expect(cmp.selectedPath()).toBeNull();
-        } finally {
-          document.body.removeChild(outside);
-        }
-      } finally {
-        document.body.removeChild(fixture.nativeElement);
-      }
-    });
-
-    it('clicking inside the host (search input) does NOT clear the selection', async () => {
-      await createWith({ a: 1 });
-      document.body.appendChild(fixture.nativeElement);
-      try {
-        cmp.selectedPath.set('$.a');
-        fixture.detectChanges();
-        const input = (fixture.nativeElement as HTMLElement).querySelector(
-          'input.tree-search'
-        ) as HTMLInputElement;
-        const ev = new MouseEvent('click', { bubbles: true });
-        input.dispatchEvent(ev);
-        fixture.detectChanges();
-        expect(cmp.selectedPath()).toBe('$.a');
-      } finally {
-        document.body.removeChild(fixture.nativeElement);
-      }
-    });
-
-    it('clicking inside an open CDK overlay does NOT clear the selection', async () => {
-      await createWith({ a: 1 });
-      document.body.appendChild(fixture.nativeElement);
-      const overlay = document.createElement('div');
-      overlay.className = 'cdk-overlay-container';
-      const panel = document.createElement('div');
-      panel.className = 'mat-mdc-menu-panel';
-      overlay.appendChild(panel);
-      document.body.appendChild(overlay);
+      const outside = document.createElement('div');
+      document.body.appendChild(outside);
       try {
         cmp.selectedPath.set('$.a');
         fixture.detectChanges();
         const ev = new MouseEvent('click', { bubbles: true });
-        panel.dispatchEvent(ev);
+        outside.dispatchEvent(ev);
         fixture.detectChanges();
         expect(cmp.selectedPath()).toBe('$.a');
       } finally {
-        document.body.removeChild(overlay);
+        document.body.removeChild(outside);
         document.body.removeChild(fixture.nativeElement);
       }
     });

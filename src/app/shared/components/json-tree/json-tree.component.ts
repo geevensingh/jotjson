@@ -761,22 +761,6 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Outside-click clear. Fires on every document click; ignores clicks
-   * that landed inside this component or inside any open CDK overlay
-   * (mat-menu, future popovers) - those interactions should preserve
-   * the user's selection.
-   */
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: MouseEvent): void {
-    if (this.selectedPath() === null) return;
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    if (this.host.nativeElement.contains(target)) return;
-    if (target.closest('.cdk-overlay-container')) return;
-    this.clearSelection();
-  }
-
-  /**
    * Escape clears the active selection. We do not call preventDefault()
    * so the search input's own Esc binding can also clear the search
    * query when it has focus - one Esc press exits both at once.
