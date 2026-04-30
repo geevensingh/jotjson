@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto';
 import * as jwt from 'jsonwebtoken';
 import type { HttpRequest } from '@azure/functions';
+import type { TelemetryClient } from 'applicationinsights';
 import {
   AuthError,
   __resetDevAuthWarnForTesting,
@@ -11,6 +12,16 @@ import {
   tryDevAuthToken,
   verifyAccessToken
 } from './auth';
+import {
+  __resetTelemetryInitForTesting,
+  __setTelemetryClientForTesting as __setTelemetryClientForTestingT
+} from './telemetry';
+
+// Default backend telemetry to a silent null override for the whole file so
+// existing rejection tests do not trigger the warn-once console output added
+// by requireAuth's new emit path. Specs that need a mock client install one in
+// their own beforeEach/afterEach (see 'auth.tokenRejected telemetry emission').
+__setTelemetryClientForTestingT(null);
 
 const AUTHORITY = 'https://example.ciamlogin.com/tenant-1';
 const AUDIENCE = 'api://test-api-client-id';
@@ -371,5 +382,127 @@ describe('shared/auth Entra JWT validation', () => {
         );
       });
     });
+  });
+});
+
+describe('auth.tokenRejected telemetry emission', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048
+  });
+  const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+  const publicPem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
+
+  let mockTrackEvent: jest.Mock;
+  let savedAuthority: string | undefined;
+  let savedAudience: string | undefined;
+
+  beforeEach(() => {
+    __resetTelemetryInitForTesting();
+    mockTrackEvent = jest.fn();
+    __setTelemetryClientForTestingT({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+    savedAuthority = process.env['ENTRA_AUTHORITY'];
+    savedAudience = process.env['ENTRA_API_AUDIENCE'];
+    process.env['ENTRA_AUTHORITY'] = AUTHORITY;
+    process.env['ENTRA_API_AUDIENCE'] = AUDIENCE;
+    __setJwksClientForTesting({
+      getSigningKey: async () => ({
+        getPublicKey: () => publicPem
+      })
+    });
+  });
+
+  afterEach(() => {
+    __resetTelemetryInitForTesting();
+    __setTelemetryClientForTestingT(null);
+    __setJwksClientForTesting(null);
+    if (savedAuthority === undefined) delete process.env['ENTRA_AUTHORITY'];
+    else process.env['ENTRA_AUTHORITY'] = savedAuthority;
+    if (savedAudience === undefined) delete process.env['ENTRA_API_AUDIENCE'];
+    else process.env['ENTRA_API_AUDIENCE'] = savedAudience;
+  });
+
+  function sign(
+    claims: Record<string, unknown>,
+    options: jwt.SignOptions = {}
+  ): string {
+    return jwt.sign(claims, privatePem, {
+      algorithm: 'RS256',
+      audience: AUDIENCE,
+      issuer: AUTHORITY,
+      expiresIn: '10m',
+      header: { kid: 'test-kid', alg: 'RS256' },
+      ...options
+    });
+  }
+
+  it('emits missing_bearer when required auth has no bearer token', async () => {
+    await expect(requireAuth(makeRequest({}))).rejects.toBeInstanceOf(AuthError);
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'auth.tokenRejected',
+      properties: { reason: 'missing_bearer', authMode: 'required' },
+      measurements: undefined
+    });
+  });
+
+  it('emits malformed when required auth has a non-bearer header', async () => {
+    await expect(
+      requireAuth(makeRequest({ Authorization: 'Basic abc' }))
+    ).rejects.toBeInstanceOf(AuthError);
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'auth.tokenRejected',
+      properties: { reason: 'malformed', authMode: 'required' },
+      measurements: undefined
+    });
+  });
+
+  it('emits expired when required auth receives an expired token', async () => {
+    const expiredToken = sign({ oid: 'oid-expired' }, { expiresIn: '-1h' });
+    await expect(
+      requireAuth(makeRequest({ Authorization: `Bearer ${expiredToken}` }))
+    ).rejects.toBeInstanceOf(AuthError);
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'auth.tokenRejected',
+      properties: { reason: 'expired', authMode: 'required' },
+      measurements: undefined
+    });
+  });
+
+  it('emits invalid_signature when required auth receives a bad signature', async () => {
+    const token = sign({ oid: 'oid-invalid-signature' });
+    await expect(
+      requireAuth(makeRequest({ Authorization: `Bearer ${token}X` }))
+    ).rejects.toBeInstanceOf(AuthError);
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'auth.tokenRejected',
+      properties: { reason: 'invalid_signature', authMode: 'required' },
+      measurements: undefined
+    });
+  });
+
+  it('emits config_missing when required auth is not configured', async () => {
+    const token = sign({ oid: 'oid-config-missing' });
+    delete process.env['ENTRA_AUTHORITY'];
+    await expect(
+      requireAuth(makeRequest({ Authorization: `Bearer ${token}` }))
+    ).rejects.toBeInstanceOf(AuthError);
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'auth.tokenRejected',
+      properties: { reason: 'config_missing', authMode: 'required' },
+      measurements: undefined
+    });
+  });
+
+  it('does not emit when optional auth rejects a token', async () => {
+    const expiredToken = sign({ oid: 'oid-optional-expired' }, { expiresIn: '-1h' });
+    const principal = await tryAuth(
+      makeRequest({ Authorization: `Bearer ${expiredToken}` })
+    );
+    expect(principal).toBeNull();
+    expect(mockTrackEvent).not.toHaveBeenCalled();
   });
 });

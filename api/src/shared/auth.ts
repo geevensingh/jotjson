@@ -16,6 +16,14 @@ import type { HttpRequest } from '@azure/functions';
 import * as jwt from 'jsonwebtoken';
 import type { GetPublicKeyOrSecret, JwtPayload } from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
+import { trackEvent } from './telemetry';
+
+export type AuthRejectReason =
+  | 'missing_bearer'
+  | 'malformed'
+  | 'expired'
+  | 'invalid_signature'
+  | 'config_missing';
 
 export interface AuthenticatedPrincipal {
   /** Stable Entra object id - `oid` claim, falling back to `sub`. */
@@ -30,9 +38,11 @@ export interface AuthenticatedPrincipal {
 
 export class AuthError extends Error {
   readonly statusCode = 401;
-  constructor(message: string) {
+  readonly reason: AuthRejectReason | undefined;
+  constructor(message: string, reason?: AuthRejectReason) {
     super(message);
     this.name = 'AuthError';
+    this.reason = reason;
   }
 }
 
@@ -231,20 +241,21 @@ function getKey(authority: string): GetPublicKeyOrSecret {
   };
 }
 
-function extractBearerToken(req: HttpRequest): string | null {
-  // Prefer the custom header - Azure Static Web Apps strips the standard
-  // `Authorization` header from requests forwarded to managed Functions,
-  // so our SPA sends the bearer token under a custom name. Fall back to
-  // `Authorization` for local development (where requests go through the
-  // dev proxy directly to the Functions host) and for non-SWA hosting.
+type BearerTokenResult =
+  | { kind: 'absent' }
+  | { kind: 'malformed' }
+  | { kind: 'token'; token: string };
+
+function extractBearerToken(req: HttpRequest): BearerTokenResult {
   const custom =
     req.headers.get('x-jotjson-authorization') ??
     req.headers.get('X-Jotjson-Authorization');
   const fallback = req.headers.get('authorization') ?? req.headers.get('Authorization');
   const header = custom ?? fallback;
-  if (!header) return null;
+  if (!header) return { kind: 'absent' };
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match ? match[1] : null;
+  if (!match) return { kind: 'malformed' };
+  return { kind: 'token', token: match[1] };
 }
 
 export async function verifyAccessToken(token: string): Promise<AuthenticatedPrincipal> {
@@ -254,7 +265,7 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
   const audiences = getAcceptedAudiences();
   const issuers = getAcceptedIssuers(authority);
   if (!authority || !audiences || !issuers) {
-    throw new AuthError('Auth not configured');
+    throw new AuthError('Auth not configured', 'config_missing');
   }
   const payload = await new Promise<JwtPayload>((resolve, reject) => {
     jwt.verify(
@@ -266,9 +277,16 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
         algorithms: ['RS256']
       },
       (error, decoded) => {
-        if (error) return reject(new AuthError(error.message));
+        if (error) {
+          return reject(
+            new AuthError(
+              error.message,
+              error.name === 'TokenExpiredError' ? 'expired' : 'invalid_signature'
+            )
+          );
+        }
         if (!decoded || typeof decoded === 'string') {
-          return reject(new AuthError('Invalid token payload'));
+          return reject(new AuthError('Invalid token payload', 'invalid_signature'));
         }
         resolve(decoded as JwtPayload);
       }
@@ -282,7 +300,7 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
     preferred_username?: string;
   };
   const id = claims.oid || claims.sub;
-  if (!id) throw new AuthError('Token missing subject');
+  if (!id) throw new AuthError('Token missing subject', 'invalid_signature');
   return {
     id,
     displayName: claims.name,
@@ -298,9 +316,23 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
  * NOTE: Not wired to any route in M3a - lives ready for M4's blob CRUD.
  */
 export async function requireAuth(req: HttpRequest): Promise<AuthenticatedPrincipal> {
-  const token = extractBearerToken(req);
-  if (!token) throw new AuthError('Missing bearer token');
-  return verifyAccessToken(token);
+  const result = extractBearerToken(req);
+  if (result.kind === 'absent') {
+    trackEvent('auth.tokenRejected', { reason: 'missing_bearer', authMode: 'required' });
+    throw new AuthError('Missing bearer token', 'missing_bearer');
+  }
+  if (result.kind === 'malformed') {
+    trackEvent('auth.tokenRejected', { reason: 'malformed', authMode: 'required' });
+    throw new AuthError('Malformed bearer header', 'malformed');
+  }
+  try {
+    return await verifyAccessToken(result.token);
+  } catch (error) {
+    if (error instanceof AuthError && error.reason) {
+      trackEvent('auth.tokenRejected', { reason: error.reason, authMode: 'required' });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -313,10 +345,10 @@ export async function requireAuth(req: HttpRequest): Promise<AuthenticatedPrinci
  * infrastructure problems are surfaced.
  */
 export async function tryAuth(req: HttpRequest): Promise<AuthenticatedPrincipal | null> {
-  const token = extractBearerToken(req);
-  if (!token) return null;
+  const result = extractBearerToken(req);
+  if (result.kind !== 'token') return null;
   try {
-    return await verifyAccessToken(token);
+    return await verifyAccessToken(result.token);
   } catch (error) {
     if (error instanceof AuthError) return null;
     throw error;

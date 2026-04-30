@@ -20,6 +20,7 @@
     "@azure/functions": "^4.5.0",
     "@azure/identity": "^4.5.0",
     "@azure/storage-blob": "^12.24.0",
+    "applicationinsights": "^3.14.0",
     "jsonc-parser": "^3.3.1",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^3.2.2"
