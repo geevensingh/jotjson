@@ -485,4 +485,17 @@ Before finishing a task:
   out too. Use whatever parallel sub-agent mechanism the current
   runtime exposes (e.g., `/fleet` in Copilot CLI; the `Task` tool in
   Claude Code).
+- **Parallelize independent validation checks.** After making
+  changes, run the §7 Definition-of-Done checks (lint, test, build,
+  plus their `api/` counterparts) in parallel by issuing them in the
+  same response with distinct shell sessions, rather than serially.
+  They read the working tree but do not write to it, so there is no
+  contention. Use orchestrator-level parallelism (separate shell IDs
+  in one response) rather than sub-agents -- the output is just
+  pass/fail and the orchestrator has to read each result anyway, so
+  spinning up a sub-agent per check is pure overhead. Caveats: do
+  not run two `npm install`s in parallel against the same
+  `node_modules` (mutates shared state); if a test flakes under CPU
+  contention, re-run sequentially before treating it as a real
+  failure.
 
