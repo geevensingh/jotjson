@@ -75,3 +75,17 @@ body.theme-light {
   // CSS-variable inheritance carries the new value to the inner span.
   --mat-menu-item-label-text-weight: 700;
 }
+
+// Disables text selection on UI chrome where the user click-drags
+// as a control (splitter handle, chip button, status bar) or where
+// the row's own dblclick / mousedown is wired to a copy action and
+// the residual word-select / drag-select highlight is just visual
+// noise. Apply via `class="... jj-no-select"`.
+//
+// This is opt-in only - the codebase's default is browser-standard
+// text-selection. A future task may flip the global default to
+// `user-select: none` with `text` opt-ins where content selection
+// is desired.
+.jj-no-select {
+  user-select: none;
+}

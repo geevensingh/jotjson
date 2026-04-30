@@ -179,7 +179,7 @@
       <!-- Leaf nodes -->
       <mat-nested-tree-node *matTreeNodeDef="let node">
         <div
-          class="tree-row"
+          class="tree-row jj-no-select"
           [attr.data-path]="node.pathString"
           [style]="ruleStyleVars(node)"
           [attr.title]="matchedRuleTitle(node)"
@@ -301,7 +301,7 @@
       <!-- Container nodes -->
       <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
         <div
-          class="tree-row"
+          class="tree-row jj-no-select"
           [attr.data-path]="node.pathString"
           [style]="ruleStyleVars(node)"
           [attr.title]="matchedRuleTitle(node)"

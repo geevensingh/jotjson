@@ -12,7 +12,7 @@
       @for (set of sortedSets(); track trackById($index, set)) {
         <button
           type="button"
-          class="chip"
+          class="chip jj-no-select"
           [class.chip--active]="isActive(set.id)"
           [attr.aria-pressed]="isActive(set.id)"
           [attr.data-set-id]="set.id"
