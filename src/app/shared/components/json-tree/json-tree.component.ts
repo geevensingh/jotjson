@@ -1066,8 +1066,14 @@ export class JsonTreeComponent {
    * Shared opener for the row context menu. Used by both the row
    * right-click flow (`onRowContextMenu`) and the breadcrumb chip
    * right-click flow (`onBreadcrumbContextMenu`). Sets cursor anchor,
-   * pins the contextNode, selects the row, logs telemetry with the
-   * gesture source, and opens the menu on the next microtask.
+   * pins the contextNode, logs telemetry with the gesture source,
+   * and opens the menu on the next microtask.
+   *
+   * Right-click does NOT mutate `selectedPath`. Menu actions read
+   * `contextNode` (= the right-clicked target), so dropping the
+   * selection mutation is behaviour-preserving for every action
+   * while avoiding the breadcrumb-reflow bug that otherwise shifts
+   * chips out from under the cursor before the menu opens.
    *
    * If a menu is already open (e.g. user right-clicks a different
    * row before dismissing the previous menu), it closes first and
@@ -1077,7 +1083,8 @@ export class JsonTreeComponent {
    * Note: the kebab-click flow does NOT go through this helper -
    * the kebab is its own `[matMenuTriggerFor]` button and self-
    * anchors, so it only needs to update `contextNode` and
-   * `selectedPath`. Its own logger call (with `source: 'kebab'`)
+   * `selectedPath`. Kebab is a left-click gesture and DOES select
+   * the row by design. Its own logger call (with `source: 'kebab'`)
    * lives in `onKebabClick`.
    */
   private openContextMenuAt(
@@ -1091,7 +1098,6 @@ export class JsonTreeComponent {
       this.ctxX.set(event.clientX);
       this.ctxY.set(event.clientY);
       this.contextNode.set(node);
-      this.selectedPath.set(node.pathString);
       this.logger.info('tree.contextMenu.opened', { source });
       queueMicrotask(() => trigger?.openMenu());
     };

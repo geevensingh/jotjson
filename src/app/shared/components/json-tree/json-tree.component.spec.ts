@@ -1980,18 +1980,39 @@ describe('JsonTreeComponent', () => {
     }
 
     describe('onRowContextMenu', () => {
-      it('sets contextNode, selects the row, captures cursor coords', async () => {
-        await createWith({ alpha: 1 });
+      it('sets contextNode and captures cursor coords without mutating selection', async () => {
+        await createWith({ alpha: 1, beta: 2 });
         cmp.expandAll();
+        fixture.detectChanges();
+        // Pre-seed a different selection so we can prove right-click
+        // does NOT change it. Right-click should never select.
+        cmp.selectByPathString('$.beta');
         fixture.detectChanges();
         const node = nodeAt('$.alpha');
         const ev = ctxEvent();
         cmp.onRowContextMenu(ev, node);
         expect(cmp.contextNode()?.pathString).toBe('$.alpha');
-        expect(cmp.selectedPath()).toBe('$.alpha');
+        expect(cmp.selectedPath())
+          .withContext('right-click must not change selection')
+          .toBe('$.beta');
         expect(cmp.ctxX()).toBe(100);
         expect(cmp.ctxY()).toBe(200);
         expect(ev.defaultPrevented).toBe(true);
+      });
+
+      it('does not mutate selectedPath when no prior selection exists', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.alpha');
+        expect(cmp.selectedPath())
+          .withContext('precondition: nothing selected')
+          .toBeNull();
+        cmp.onRowContextMenu(ctxEvent(), node);
+        expect(cmp.selectedPath())
+          .withContext('right-click must leave selection null')
+          .toBeNull();
+        expect(cmp.contextNode()?.pathString).toBe('$.alpha');
       });
 
       it('ignores keyboard-fired contextmenu (clientX/Y === 0)', async () => {
@@ -2079,9 +2100,14 @@ describe('JsonTreeComponent', () => {
         });
       }
 
-      it('opens the menu, selects the path, and captures cursor coords', async () => {
+      it('opens the menu and captures cursor coords without mutating selection', async () => {
         await createWith({ foo: { bar: 1 } });
         cmp.expandAll();
+        fixture.detectChanges();
+        // Pre-seed selection at the leaf, then right-click an
+        // ancestor chip. Right-click must not pull selection up
+        // (which would also reflow the breadcrumb under the cursor).
+        cmp.selectByPathString('$.foo.bar');
         fixture.detectChanges();
         const event = ctxMouseEvent();
         cmp.onBreadcrumbContextMenu({
@@ -2090,9 +2116,30 @@ describe('JsonTreeComponent', () => {
           depth: 1
         });
         expect(cmp.contextNode()?.pathString).toBe('$.foo');
-        expect(cmp.selectedPath()).toBe('$.foo');
+        expect(cmp.selectedPath())
+          .withContext('right-click on a breadcrumb chip must not change selection')
+          .toBe('$.foo.bar');
         expect(cmp.ctxX()).toBe(100);
         expect(cmp.ctxY()).toBe(200);
+      });
+
+      it('does not fire selectionChange', async () => {
+        await createWith({ foo: { bar: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.selectByPathString('$.foo.bar');
+        fixture.detectChanges();
+        const events: (readonly (string | number)[] | null)[] = [];
+        cmp.selectionChange.subscribe((path) => events.push(path));
+        cmp.onBreadcrumbContextMenu({
+          event: ctxMouseEvent(),
+          canonicalPath: '$.foo',
+          depth: 1
+        });
+        fixture.detectChanges();
+        expect(events)
+          .withContext('right-click must not emit a selectionChange event')
+          .toEqual([]);
       });
 
       it("logs tree.contextMenu.opened with source: 'breadcrumb'", async () => {
