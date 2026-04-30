@@ -310,7 +310,6 @@
   }
 
   .tree-type-badge,
-  .tree-path-pill,
   .tree-kebab-pill {
     margin-left: 0;
   }
@@ -355,28 +354,6 @@
   font-size: var(--tree-font-size, 13px);
 }
 
-.tree-path-pill {
-  margin-left: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: rgba(127, 127, 127, 0.6);
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  padding: 0;
-  border-radius: 3px;
-
-  &:hover {
-    color: var(--color-primary);
-    background: rgba(127, 127, 127, 0.12);
-  }
-}
-
-// Mirrors `.tree-path-pill` styling - always-visible, low-contrast,
-// brightens on hover. The kebab opens the row's context menu (M7q).
 .tree-kebab-pill {
   display: inline-flex;
   align-items: center;

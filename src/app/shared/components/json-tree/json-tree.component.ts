@@ -679,7 +679,7 @@ export class JsonTreeComponent {
 
   /**
    * Click handler for `.tree-row`. Selects the row unless the click
-   * target is an interactive child (twisty toggle, copy-path button,
+   * target is an interactive child (twisty toggle, kebab button,
    * etc.) in which case the child's own handler takes precedence.
    */
   onSelect(node: TreeNode, event: Event): void {
@@ -938,7 +938,7 @@ export class JsonTreeComponent {
    * not currently focusable, so a keyboard menu would have no anchor.
    *
    * Bails when the click target is an interactive descendant (twisty,
-   * copy-path pill, kebab pill) so those keep their own click behavior.
+   * kebab pill) so those keep their own click behavior.
    */
   onRowContextMenu(event: MouseEvent, node: TreeNode): void {
     if (event.clientX === 0 && event.clientY === 0) return;
@@ -1044,7 +1044,8 @@ export class JsonTreeComponent {
 
   /**
    * Menu wrapper around the existing `copyPath`. Adds telemetry so
-   * we can distinguish menu invocations from copy-path-pill clicks.
+   * we can keep this menu invocation distinct from any future
+   * copy-path entry points.
    */
   copyPathFromMenu(node: TreeNode): void {
     this.logger.info('tree.contextMenu.copyPath');

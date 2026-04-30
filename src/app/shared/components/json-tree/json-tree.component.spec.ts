@@ -519,34 +519,6 @@ describe('JsonTreeComponent', () => {
       expect(cmp.selectedPath()).toBeNull();
     });
 
-    it('does not select when clicking the copy-path button', async () => {
-      await createWith({ a: 1 });
-      cmp.expandAll();
-      fixture.detectChanges();
-      const copyBtn = (fixture.nativeElement as HTMLElement).querySelector(
-        'button.tree-path-pill'
-      ) as HTMLElement;
-      expect(copyBtn).withContext('expected a copy-path button').toBeTruthy();
-      // Stub clipboard to avoid headless permission rejection noise.
-      const originalClipboard = (navigator as { clipboard?: Clipboard }).clipboard;
-      Object.defineProperty(navigator, 'clipboard', {
-        configurable: true,
-        value: { writeText: () => Promise.resolve() }
-      });
-      try {
-        copyBtn.click();
-        fixture.detectChanges();
-        expect(cmp.selectedPath()).toBeNull();
-      } finally {
-        if (originalClipboard) {
-          Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: originalClipboard
-          });
-        }
-      }
-    });
-
     it('Escape clears the selection', async () => {
       await createWith({ a: 1 });
       cmp.selectedPath.set('$.a');
@@ -1890,13 +1862,13 @@ describe('JsonTreeComponent', () => {
         expect(ev.defaultPrevented).toBe(false);
       });
 
-      it('ignores contextmenu fired on an interactive descendant (e.g. the path pill)', async () => {
+      it('ignores contextmenu fired on an interactive descendant (e.g. the kebab pill)', async () => {
         await createWith({ alpha: 1 });
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.alpha');
         const pill = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-path-pill'
+          '.tree-kebab-pill'
         ) as HTMLButtonElement;
         const ev = new MouseEvent('contextmenu', {
           clientX: 100,

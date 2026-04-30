@@ -245,17 +245,6 @@
               <span class="tree-type-badge">{{ typeLabel(node) }}</span>
               <button
                 type="button"
-                class="tree-path-pill"
-                title="Copy path"
-                i18n-title="@@tree.copyPath.title"
-                aria-label="Copy path"
-                i18n-aria-label="@@tree.copyPath.aria"
-                (click)="copyPath(node)"
-              >
-                <jj-icon name="copy-path" [size]="15" />
-              </button>
-              <button
-                type="button"
                 class="tree-kebab-pill"
                 [matMenuTriggerFor]="rowMenu"
                 (click)="onKebabClick($event, node)"
@@ -278,17 +267,6 @@
               @if (node.type === 'array' || node.type === 'object') {
                 <span class="tree-count">{{ containerCountText(node) }}</span>
               }
-              <button
-                type="button"
-                class="tree-path-pill"
-                title="Copy path"
-                i18n-title="@@tree.copyPath.title"
-                aria-label="Copy path"
-                i18n-aria-label="@@tree.copyPath.aria"
-                (click)="copyPath(node)"
-              >
-                <jj-icon name="copy-path" [size]="15" />
-              </button>
               <button
                 type="button"
                 class="tree-kebab-pill"
@@ -355,17 +333,6 @@
             @if (showTypeBadges()) {
               <span class="tree-type-badge">{{ typeLabel(node) }}</span>
             }
-            <button
-              type="button"
-              class="tree-path-pill"
-              title="Copy path"
-              i18n-title="@@tree.copyPath.title"
-              aria-label="Copy path"
-              i18n-aria-label="@@tree.copyPath.aria"
-              (click)="copyPath(node)"
-            >
-              <jj-icon name="copy-path" [size]="15" />
-            </button>
             <button
               type="button"
               class="tree-kebab-pill"
