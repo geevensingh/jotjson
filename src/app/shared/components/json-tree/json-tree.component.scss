@@ -267,7 +267,13 @@
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-style: italic;
   font-size: 0.92em;
-  white-space: nowrap;
+  // Match the wrap behavior of `.tree-value-string` so the original
+  // value and the annotation share space symmetrically. Without this,
+  // the annotation's flex-item intrinsic min-width was the entire
+  // unbreakable string, which forced it to claim full width and made
+  // the value wrap aggressively while the annotation stayed on one
+  // line - exactly the asymmetry users see on narrow rows.
+  word-break: break-word;
 }
 
 .tree-value-number {

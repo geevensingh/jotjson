@@ -1039,6 +1039,25 @@ describe('JsonTreeComponent', () => {
       expect(spans[0].textContent ?? '').toContain(')');
     });
 
+    it('lets the annotation wrap when space is tight (parity with the original value)', async () => {
+      await createWith({ created: '2024-11-05T18:30:00Z' });
+      const valueSpan = (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-value-string'
+      ) as HTMLElement | null;
+      const annotationSpan = getAnnotationSpans()[0];
+      expect(valueSpan).toBeTruthy();
+      expect(annotationSpan).toBeTruthy();
+      // The original value already wraps via `word-break: break-word`.
+      // The annotation must not be glued to one line - otherwise it
+      // claims full intrinsic width as a flex item and squeezes the
+      // value asymmetrically. Both spans should share the same wrap
+      // posture.
+      const valueWhiteSpace = getComputedStyle(valueSpan as HTMLElement).whiteSpace;
+      const annotationWhiteSpace = getComputedStyle(annotationSpan as HTMLElement).whiteSpace;
+      expect(annotationWhiteSpace).not.toBe('nowrap');
+      expect(annotationWhiteSpace).toBe(valueWhiteSpace);
+    });
+
     it('does not render an annotation when the pref is false', async () => {
       await createWith({ created: '2024-11-05T18:30:00Z' });
       prefs.update({ treeShowDateAnnotations: false });
