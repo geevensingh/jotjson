@@ -2084,6 +2084,103 @@ describe('JsonTreeComponent', () => {
         expect(cmp.selectedPath()).toBe('$.alpha');
         expect(stopSpy).toHaveBeenCalled();
       });
+
+      it("logs tree.contextMenu.opened with source: 'kebab'", async () => {
+        await createWith({ alpha: 1 });
+        const node = nodeAt('$.alpha');
+        const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+        const info = spyOn(TestBed.inject(LoggerService), 'info');
+        cmp.onKebabClick(ev, node);
+        expect(info).toHaveBeenCalledWith('tree.contextMenu.opened', {
+          source: 'kebab'
+        });
+      });
+    });
+
+    describe('source telemetry on row right-click', () => {
+      it("logs tree.contextMenu.opened with source: 'row'", async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.alpha');
+        const ev = ctxEvent();
+        const info = spyOn(TestBed.inject(LoggerService), 'info');
+        cmp.onRowContextMenu(ev, node);
+        expect(info).toHaveBeenCalledWith('tree.contextMenu.opened', {
+          source: 'row'
+        });
+      });
+    });
+
+    describe('onBreadcrumbContextMenu', () => {
+      function ctxMouseEvent(): MouseEvent {
+        return new MouseEvent('contextmenu', {
+          clientX: 100,
+          clientY: 200,
+          bubbles: true,
+          cancelable: true
+        });
+      }
+
+      it('opens the menu, selects the path, and captures cursor coords', async () => {
+        await createWith({ foo: { bar: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const event = ctxMouseEvent();
+        cmp.onBreadcrumbContextMenu({
+          event,
+          canonicalPath: '$.foo',
+          depth: 1
+        });
+        expect(cmp.contextNode()?.pathString).toBe('$.foo');
+        expect(cmp.selectedPath()).toBe('$.foo');
+        expect(cmp.ctxX()).toBe(100);
+        expect(cmp.ctxY()).toBe(200);
+      });
+
+      it("logs tree.contextMenu.opened with source: 'breadcrumb'", async () => {
+        await createWith({ foo: { bar: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const event = ctxMouseEvent();
+        const info = spyOn(TestBed.inject(LoggerService), 'info');
+        cmp.onBreadcrumbContextMenu({
+          event,
+          canonicalPath: '$.foo',
+          depth: 1
+        });
+        expect(info).toHaveBeenCalledWith('tree.contextMenu.opened', {
+          source: 'breadcrumb'
+        });
+      });
+
+      it('silently no-ops on a path unknown to nodeIndex', async () => {
+        await createWith({ alpha: 1 });
+        const event = ctxMouseEvent();
+        const info = spyOn(TestBed.inject(LoggerService), 'info');
+        cmp.onBreadcrumbContextMenu({
+          event,
+          canonicalPath: '$.does.not.exist',
+          depth: 99
+        });
+        expect(cmp.contextNode()).toBeNull();
+        expect(cmp.selectedPath()).toBeNull();
+        expect(info).not.toHaveBeenCalled();
+        expect(event.defaultPrevented).toBe(false);
+      });
+
+      it('calls preventDefault on the carried event when handling', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const event = ctxMouseEvent();
+        cmp.onBreadcrumbContextMenu({
+          event,
+          canonicalPath: '$.alpha',
+          depth: 1
+        });
+        expect(event.defaultPrevented).toBe(true);
+      });
     });
 
     describe('copyKey', () => {

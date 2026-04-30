@@ -8,6 +8,7 @@ import {
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import {
   BreadcrumbClick,
+  BreadcrumbContextMenu,
   BreadcrumbCrumb,
   JsonBreadcrumbComponent
 } from './json-breadcrumb.component';
@@ -194,6 +195,95 @@ describe('JsonBreadcrumbComponent', () => {
     });
     const nav = fixture.nativeElement.querySelector('nav');
     expect(nav?.getAttribute('aria-label')).toBe('Migas de pan');
+  });
+
+  describe('crumbContextMenu output', () => {
+    function dispatchContextMenu(
+      target: HTMLElement,
+      options: { clientX?: number; clientY?: number } = {}
+    ): MouseEvent {
+      const event = new MouseEvent('contextmenu', {
+        clientX: options.clientX ?? 100,
+        clientY: options.clientY ?? 200,
+        bubbles: true,
+        cancelable: true
+      });
+      target.dispatchEvent(event);
+      return event;
+    }
+
+    it('emits crumbContextMenu with absolute depth when the leading chip is right-clicked', async () => {
+      const fixture = await createWith(makeCrumbs(8));
+      const events: BreadcrumbContextMenu[] = [];
+      fixture.componentInstance.crumbContextMenu.subscribe((value) => {
+        events.push(value);
+      });
+      const chips = chipButtons(fixture);
+      const event = dispatchContextMenu(chips[0]!);
+      expect(events.length).toBe(1);
+      expect(events[0]!.canonicalPath).toBe('$.crumb0');
+      expect(events[0]!.depth).toBe(0);
+      expect(events[0]!.event).toBe(event);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('emits crumbContextMenu with absolute depth when a trailing chip is right-clicked while collapsed', async () => {
+      const fixture = await createWith(makeCrumbs(8));
+      fixture.componentInstance.hiddenMiddleCount.set(5);
+      fixture.detectChanges();
+      const events: BreadcrumbContextMenu[] = [];
+      fixture.componentInstance.crumbContextMenu.subscribe((value) => {
+        events.push(value);
+      });
+      const chips = chipButtons(fixture);
+      // After collapse: chips are [crumb0, ..., crumb6, crumb7]. The
+      // last chip is crumbs[7], absolute depth 7.
+      const event = dispatchContextMenu(chips[chips.length - 1]!);
+      expect(events.length).toBe(1);
+      expect(events[0]!.canonicalPath).toBe('$.crumb7');
+      expect(events[0]!.depth).toBe(7);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('does NOT emit when contextmenu fires with (clientX, clientY) === (0, 0)', async () => {
+      const fixture = await createWith(makeCrumbs(3));
+      const events: BreadcrumbContextMenu[] = [];
+      fixture.componentInstance.crumbContextMenu.subscribe((value) => {
+        events.push(value);
+      });
+      const chips = chipButtons(fixture);
+      const event = dispatchContextMenu(chips[0]!, { clientX: 0, clientY: 0 });
+      expect(events.length).toBe(0);
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('does NOT emit when contextmenu fires on the trailing copy-path button', async () => {
+      const fixture = await createWith(makeCrumbs(3));
+      const events: BreadcrumbContextMenu[] = [];
+      fixture.componentInstance.crumbContextMenu.subscribe((value) => {
+        events.push(value);
+      });
+      const button = copyButton(fixture);
+      expect(button).not.toBeNull();
+      dispatchContextMenu(button!);
+      expect(events.length).toBe(0);
+    });
+
+    it('does NOT emit when contextmenu fires on the overflow trigger chip', async () => {
+      const fixture = await createWith(makeCrumbs(8));
+      fixture.componentInstance.hiddenMiddleCount.set(5);
+      fixture.detectChanges();
+      const events: BreadcrumbContextMenu[] = [];
+      fixture.componentInstance.crumbContextMenu.subscribe((value) => {
+        events.push(value);
+      });
+      const overflow = fixture.nativeElement.querySelector(
+        '.jj-breadcrumb__chip--overflow'
+      ) as HTMLButtonElement | null;
+      expect(overflow).not.toBeNull();
+      dispatchContextMenu(overflow!);
+      expect(events.length).toBe(0);
+    });
   });
 
   describe('copy-path button', () => {

@@ -30,6 +30,7 @@ import { IconComponent } from '../icon/icon.component';
 import {
   JsonBreadcrumbComponent,
   type BreadcrumbClick,
+  type BreadcrumbContextMenu,
   type BreadcrumbCrumb
 } from '../json-breadcrumb/json-breadcrumb.component';
 import {
@@ -1056,6 +1057,50 @@ export class JsonTreeComponent {
     ) {
       return;
     }
+    this.openContextMenuAt(event, node, 'row');
+  }
+
+  /**
+   * Right-click handler for a breadcrumb chip. Resolves the chip's
+   * canonical path to a TreeNode via the same `nodeIndex` the click
+   * flow uses, then hands off to `openContextMenuAt`. The breadcrumb
+   * already called `preventDefault()` on the original event and the
+   * keyboard `(0, 0)` guard, so we just need the path-to-node lookup
+   * and the same anchor-and-open dance the row flow does.
+   *
+   * Silent no-op when the path is unknown to `nodeIndex` - that's a
+   * race where the tree changed between the chip's render and the
+   * right-click. Matches the existing `selectByPathString` behaviour.
+   */
+  onBreadcrumbContextMenu(payload: BreadcrumbContextMenu): void {
+    const node = this.nodeIndex().get(payload.canonicalPath);
+    if (!node) return;
+    this.openContextMenuAt(payload.event, node, 'breadcrumb');
+  }
+
+  /**
+   * Shared opener for the row context menu. Used by both the row
+   * right-click flow (`onRowContextMenu`) and the breadcrumb chip
+   * right-click flow (`onBreadcrumbContextMenu`). Sets cursor anchor,
+   * pins the contextNode, selects the row, logs telemetry with the
+   * gesture source, and opens the menu on the next microtask.
+   *
+   * If a menu is already open (e.g. user right-clicks a different
+   * row before dismissing the previous menu), it closes first and
+   * reopens at the new anchor; just calling `openMenu()` again does
+   * not reposition the panel.
+   *
+   * Note: the kebab-click flow does NOT go through this helper -
+   * the kebab is its own `[matMenuTriggerFor]` button and self-
+   * anchors, so it only needs to update `contextNode` and
+   * `selectedPath`. Its own logger call (with `source: 'kebab'`)
+   * lives in `onKebabClick`.
+   */
+  private openContextMenuAt(
+    event: MouseEvent,
+    node: TreeNode,
+    source: 'row' | 'breadcrumb'
+  ): void {
     event.preventDefault();
     const trigger = this.ctxTrigger();
     const apply = (): void => {
@@ -1063,7 +1108,7 @@ export class JsonTreeComponent {
       this.ctxY.set(event.clientY);
       this.contextNode.set(node);
       this.selectedPath.set(node.pathString);
-      this.logger.info('tree.contextMenu.opened');
+      this.logger.info('tree.contextMenu.opened', { source });
       queueMicrotask(() => trigger?.openMenu());
     };
     if (trigger?.menuOpen) {
@@ -1112,7 +1157,7 @@ export class JsonTreeComponent {
     event.stopPropagation();
     this.contextNode.set(node);
     this.selectedPath.set(node.pathString);
-    this.logger.info('tree.contextMenu.opened');
+    this.logger.info('tree.contextMenu.opened', { source: 'kebab' });
   }
 
   /**

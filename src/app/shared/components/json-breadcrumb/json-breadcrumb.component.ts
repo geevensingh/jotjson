@@ -39,6 +39,19 @@ export interface BreadcrumbClick {
 }
 
 /**
+ * A right-clicked-segment payload. The MouseEvent is carried so the
+ * parent can anchor its own menu at the cursor and call
+ * `preventDefault()` on the original gesture if it has not already
+ * been called by the breadcrumb (it has, but the parent may need the
+ * coordinates and target reference).
+ */
+export interface BreadcrumbContextMenu {
+  readonly event: MouseEvent;
+  readonly canonicalPath: string;
+  readonly depth: number;
+}
+
+/**
  * Breadcrumb above the JSON tree showing the path from the root to
  * the currently-selected row (selected node included; flagged via
  * `current: true`). Each segment is a clickable chip; clicking one
@@ -114,6 +127,7 @@ export class JsonBreadcrumbComponent {
   readonly copyPathDisabled = input<boolean>(false);
 
   readonly crumbClick = output<BreadcrumbClick>();
+  readonly crumbContextMenu = output<BreadcrumbContextMenu>();
   readonly copyPathClick = output<void>();
 
   /** Reference to the `<ol>` chip list, used to measure overflow. */
@@ -185,6 +199,30 @@ export class JsonBreadcrumbComponent {
 
   onCrumbClick(crumb: BreadcrumbCrumb): void {
     this.crumbClick.emit({
+      canonicalPath: crumb.canonicalPath,
+      depth: this.indexOf(crumb)
+    });
+  }
+
+  /**
+   * Right-click handler for a breadcrumb chip. Mirrors
+   * `JsonTreeComponent.onRowContextMenu`'s keyboard guard: a
+   * contextmenu event with `(clientX, clientY) === (0, 0)` is the
+   * keyboard-fired signal (Shift+F10), which we punt on here too -
+   * chips are not focusable for keyboard menu the same way rows
+   * are not. Calls `preventDefault()` so the browser's native
+   * context menu does not also appear.
+   *
+   * Bound on every chip button EXCEPT the overflow `...` trigger and
+   * the items inside the overflow menu - the overflow chip already
+   * owns a left-click mat-menu trigger, and stacking a second menu
+   * on a single overlay is messy enough not to be worth it.
+   */
+  onCrumbContextMenu(event: MouseEvent, crumb: BreadcrumbCrumb): void {
+    if (event.clientX === 0 && event.clientY === 0) return;
+    event.preventDefault();
+    this.crumbContextMenu.emit({
+      event,
       canonicalPath: crumb.canonicalPath,
       depth: this.indexOf(crumb)
     });

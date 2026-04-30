@@ -15,6 +15,7 @@
               [attr.aria-current]="first.current ? 'location' : null"
               [attr.title]="first.label"
               (click)="onCrumbClick(first)"
+              (contextmenu)="onCrumbContextMenu($event, first)"
             >
               {{ first.label }}
             </button>
@@ -70,6 +71,7 @@
               [attr.aria-current]="crumb.current ? 'location' : null"
               [attr.title]="crumb.label"
               (click)="onCrumbClick(crumb)"
+              (contextmenu)="onCrumbContextMenu($event, crumb)"
             >
               {{ crumb.label }}
             </button>
