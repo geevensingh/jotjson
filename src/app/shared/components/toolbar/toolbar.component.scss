@@ -202,25 +202,25 @@
   // ::ng-deep is required because the label span is rendered inside
   // Material's button template and doesn't carry our component's
   // _ngcontent attribute.
-  //
-  // The label also gets nudged 2px up to compensate for the asymmetric
-  // line-box rendering: with our reduced 32px container height, the
-  // text+icon pair otherwise sits visually low inside the button.
   ::ng-deep .mdc-button__label {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    top: -2px;
   }
 
-  // Optical alignment: with "Save" having no descenders, the text's
-  // visual center sits a couple pixels above the line-box midline,
-  // while the icon's visual center sits on its box midline. Nudge
-  // the icon down so the two visual centers agree.
   ::ng-deep jj-icon {
     flex: 0 0 auto;
+  }
+
+  // Optical alignment nudge: "Save" has no descenders, so its glyphs
+  // sit visually high in the line-box while the icon's drawing is
+  // centered in its viewBox. Without this shift the text reads as
+  // sitting ~2px below the icon's visual center on a 32px button.
+  // Targets the label-text span (not the jj-icon) inside Material's
+  // projected `.mdc-button__label` wrapper.
+  ::ng-deep .mdc-button__label > span {
     position: relative;
-    top: 2px;
+    top: -2px;
   }
 }
 
