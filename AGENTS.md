@@ -256,6 +256,41 @@ Service surface (UI-agnostic):
 Telemetry stays counts-only (no IDs, names, or user content) per the
 existing `LoggerService` conventions.
 
+### Local-only dev-auth bypass
+
+For local development, a tightly-guarded bypass lets you act as a fake
+signed-in user without going through MSAL or Entra. **Never enable it
+in any deployed environment.**
+
+Frontend:
+- Add a `devAuth` block to your gitignored `src/environments/environment.ts`
+  (template in `environment.example.ts`). Set `enabled: true` and pick a
+  `userId` matching `^[a-z0-9_-]{1,64}$` (e.g. `dev-user-1`).
+- The toolbar Sign-in / Sign-out buttons toggle a `localStorage` flag
+  (`jotjson.devAuth.signedIn`) instead of calling `loginRedirect` /
+  `logoutRedirect`. `AuthService.acquireTokenSilent()` returns
+  `dev:<userId>`, which the auth interceptor forwards as
+  `X-Jotjson-Authorization: Bearer dev:<userId>`.
+- If `enabled: true` but `userId` fails the regex, the dev mode is
+  **disabled** (fail-closed) and a `auth.devMode.misconfigured` warning is
+  logged via `LoggerService`.
+
+Backend (`api/src/shared/auth.ts`):
+- The bypass engages only when **all three** conditions hold:
+  `JOTJSON_DEV_AUTH_BYPASS=true`, `WEBSITE_INSTANCE_ID` is unset, and
+  `WEBSITE_HOSTNAME` is unset. The latter two are set automatically by
+  Azure App Service / Functions / Static Web Apps, so even a leaked env
+  var cannot enable the bypass on Azure.
+- When engaged, `verifyAccessToken` accepts `dev:<userId>` and synthesizes
+  a principal with full `oid`/`sub`/`name`/`preferred_username`/`email`
+  claims. Any other token shape continues through normal Entra JWT
+  validation, so real tokens are never silently accepted.
+- A one-time `console.warn` is emitted on first dev-token use as a safety
+  reminder.
+
+Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
+`Values`) for local Functions runs; do not commit this file.
+
 ## 5. Testing
 
 - **Always add/update tests** for logic changes. No test = not done.

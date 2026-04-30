@@ -44,6 +44,7 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   // Auth
   'msal.error',
+  'auth.devMode.misconfigured',
 
   // Formatting rule sets (M6g-1)
   'ruleSets.created',

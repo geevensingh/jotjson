@@ -12,6 +12,7 @@ import { filter } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { AuthUser } from './auth-user';
 import { MSAL_INSTANCE } from './msal-instance';
+import { LoggerService } from '../telemetry/logger.service';
 import { TelemetryService } from '../telemetry/telemetry.service';
 
 /**
@@ -34,33 +35,60 @@ export class AuthService {
   private readonly msal = inject<IPublicClientApplication>(MSAL_INSTANCE);
   private readonly broadcast = inject(MsalBroadcastService, { optional: true });
   private readonly telemetry = inject(TelemetryService);
+  private readonly logger = inject(LoggerService);
 
   private readonly userSignal = signal<AuthUser | null>(null);
   private initPromise: Promise<void> | null = null;
 
+  /**
+   * True when `environment.devAuth.enabled` is set AND the configured
+   * `userId` matches the backend validator regex. Fail-closed: a typo'd
+   * userId (e.g. uppercase, spaces) disables dev mode and falls back to
+   * MSAL-only behavior, with a one-shot warn from the constructor. This
+   * matters because a half-enabled state - SPA thinks it's signed in,
+   * backend 401s every request - is a confusing failure mode.
+   */
+  private readonly devMode = AuthService.computeDevMode();
+  private static computeDevMode(): boolean {
+    const cfg = environment.devAuth;
+    if (!cfg?.enabled) return false;
+    return /^[a-z0-9_-]{1,64}$/.test(cfg.userId ?? '');
+  }
+
   readonly user = this.userSignal.asReadonly();
   readonly isSignedIn = computed(() => this.userSignal() !== null);
-  readonly isConfigured = !!environment.auth.clientId;
+  readonly isConfigured = !!environment.auth.clientId || this.devMode;
 
   constructor() {
+    // If dev-auth was requested but the userId is invalid, warn so the
+    // developer can fix their environment.ts. We log here (not in
+    // `computeDevMode`) because LoggerService is only available after DI.
+    const cfg = environment.devAuth;
+    if (cfg?.enabled && !this.devMode) {
+      this.logger.warn('auth.devMode.misconfigured', {
+        reason: 'userId-format'
+      });
+    }
     // Subscribe to MSAL events so the user signal stays in sync with
     // sign-in/sign-out/acquireToken outcomes, without callers having to
-    // manually refresh.
-    this.broadcast?.msalSubject$
-      .pipe(filter((m: EventMessage) => !!m))
-      .subscribe((msg: EventMessage) => {
-        if (
-          msg.eventType === EventType.LOGIN_SUCCESS ||
-          msg.eventType === EventType.ACQUIRE_TOKEN_SUCCESS ||
-          msg.eventType === EventType.HANDLE_REDIRECT_END
-        ) {
-          this.refreshFromCache();
-        }
-        if (msg.eventType === EventType.LOGOUT_SUCCESS) {
-          this.userSignal.set(null);
-          this.telemetry.setUser(null);
-        }
-      });
+    // manually refresh. Skipped entirely in dev mode so a stray broadcast
+    // event cannot clobber the synthetic signed-in state.
+    if (!this.devMode) {
+      this.broadcast?.msalSubject$
+        .pipe(filter((m: EventMessage) => !!m))
+        .subscribe((msg: EventMessage) => {
+          if (
+            msg.eventType === EventType.LOGIN_SUCCESS ||
+            msg.eventType === EventType.ACQUIRE_TOKEN_SUCCESS ||
+            msg.eventType === EventType.HANDLE_REDIRECT_END
+          ) {
+            this.refreshFromCache();
+          }
+          if (msg.eventType === EventType.LOGOUT_SUCCESS) {
+            this.setCurrentUser(null);
+          }
+        });
+    }
   }
 
   /**
@@ -69,6 +97,10 @@ export class AuthService {
    * `AppComponent.ngOnInit`.
    */
   initializeFromRedirect(): Promise<void> {
+    if (this.devMode) {
+      this.hydrateDevUserFromStorage();
+      return Promise.resolve();
+    }
     if (!this.isConfigured) {
       this.userSignal.set(null);
       return Promise.resolve();
@@ -95,6 +127,15 @@ export class AuthService {
   }
 
   signIn(): void {
+    if (this.devMode) {
+      try {
+        localStorage.setItem(DEV_AUTH_STORAGE_KEY, '1');
+      } catch {
+        // Ignore quota / disabled-storage errors; dev signIn is best-effort.
+      }
+      this.setCurrentUser(this.devPersona());
+      return;
+    }
     if (!this.isConfigured) return;
     void this.ensureInitialized().then(() =>
       this.msal.loginRedirect({
@@ -105,6 +146,15 @@ export class AuthService {
   }
 
   async signOut(): Promise<void> {
+    if (this.devMode) {
+      try {
+        localStorage.removeItem(DEV_AUTH_STORAGE_KEY);
+      } catch {
+        // Ignore quota / disabled-storage errors.
+      }
+      this.setCurrentUser(null);
+      return;
+    }
     if (!this.isConfigured) return;
     await this.ensureInitialized();
     const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
@@ -147,8 +197,16 @@ export class AuthService {
    * a hidden iframe). Never triggers an interactive flow; returns `null` on
    * any failure so callers (notably the HTTP interceptor) can degrade
    * gracefully.
+   *
+   * In dev mode, returns the synthetic `dev:<userId>` token when signed in
+   * (the existing interceptor wraps it in `Bearer ...` and attaches under
+   * `X-Jotjson-Authorization`), or `null` when signed out.
    */
   async acquireTokenSilent(): Promise<string | null> {
+    if (this.devMode) {
+      if (!this.isSignedIn()) return null;
+      return `dev:${environment.devAuth!.userId}`;
+    }
     if (!this.isConfigured) return null;
     await this.ensureInitialized();
     const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0];
@@ -188,9 +246,38 @@ export class AuthService {
     const account =
       this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0] ?? null;
     const user = account ? this.toAuthUser(account) : null;
+    this.setCurrentUser(user);
+  }
+
+  /**
+   * Single source of truth for updating the user signal AND telemetry
+   * identity together. Both real-MSAL paths (login/logout/acquire-token
+   * events, redirect hydration) and dev-auth paths (signIn/signOut,
+   * localStorage hydration) call here so telemetry never lags state.
+   */
+  private setCurrentUser(user: AuthUser | null): void {
     this.userSignal.set(user);
-    // Telemetry: identify by Entra `oid` only - never email or username.
+    // Telemetry: identify by Entra `oid` (or dev-user id) only - never email.
     this.telemetry.setUser(user ? user.id : null);
+  }
+
+  private hydrateDevUserFromStorage(): void {
+    let signedIn = false;
+    try {
+      signedIn = localStorage.getItem(DEV_AUTH_STORAGE_KEY) === '1';
+    } catch {
+      // Disabled-storage / privacy mode - treat as signed out.
+    }
+    this.setCurrentUser(signedIn ? this.devPersona() : null);
+  }
+
+  private devPersona(): AuthUser {
+    const cfg = environment.devAuth!;
+    return {
+      id: cfg.userId,
+      displayName: cfg.displayName,
+      ...(cfg.email !== undefined ? { email: cfg.email } : {})
+    };
   }
 
   private toAuthUser(a: AccountInfo): AuthUser {
@@ -207,3 +294,5 @@ export class AuthService {
     return { id, displayName, email };
   }
 }
+
+const DEV_AUTH_STORAGE_KEY = 'jotjson.devAuth.signedIn';

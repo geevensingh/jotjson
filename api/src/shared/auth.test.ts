@@ -3,9 +3,12 @@ import * as jwt from 'jsonwebtoken';
 import type { HttpRequest } from '@azure/functions';
 import {
   AuthError,
+  __resetDevAuthWarnForTesting,
   __setJwksClientForTesting,
+  isDevAuthBypassEnabled,
   requireAuth,
   tryAuth,
+  tryDevAuthToken,
   verifyAccessToken
 } from './auth';
 
@@ -196,6 +199,154 @@ describe('shared/auth Entra JWT validation', () => {
       } finally {
         spy.mockRestore();
       }
+    });
+  });
+
+  describe('dev-auth bypass', () => {
+    let savedBypass: string | undefined;
+    let savedInstanceId: string | undefined;
+    let savedHostname: string | undefined;
+    let warnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      savedBypass = process.env['JOTJSON_DEV_AUTH_BYPASS'];
+      savedInstanceId = process.env['WEBSITE_INSTANCE_ID'];
+      savedHostname = process.env['WEBSITE_HOSTNAME'];
+      delete process.env['JOTJSON_DEV_AUTH_BYPASS'];
+      delete process.env['WEBSITE_INSTANCE_ID'];
+      delete process.env['WEBSITE_HOSTNAME'];
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      __resetDevAuthWarnForTesting();
+    });
+
+    afterEach(() => {
+      if (savedBypass === undefined) delete process.env['JOTJSON_DEV_AUTH_BYPASS'];
+      else process.env['JOTJSON_DEV_AUTH_BYPASS'] = savedBypass;
+      if (savedInstanceId === undefined) delete process.env['WEBSITE_INSTANCE_ID'];
+      else process.env['WEBSITE_INSTANCE_ID'] = savedInstanceId;
+      if (savedHostname === undefined) delete process.env['WEBSITE_HOSTNAME'];
+      else process.env['WEBSITE_HOSTNAME'] = savedHostname;
+      warnSpy.mockRestore();
+    });
+
+    describe('isDevAuthBypassEnabled', () => {
+      it('returns false when JOTJSON_DEV_AUTH_BYPASS is unset', () => {
+        expect(isDevAuthBypassEnabled()).toBe(false);
+      });
+
+      it('returns false when JOTJSON_DEV_AUTH_BYPASS is anything but the literal "true"', () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = '1';
+        expect(isDevAuthBypassEnabled()).toBe(false);
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'TRUE';
+        expect(isDevAuthBypassEnabled()).toBe(false);
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'yes';
+        expect(isDevAuthBypassEnabled()).toBe(false);
+      });
+
+      it('returns true when JOTJSON_DEV_AUTH_BYPASS=true and WEBSITE_* vars are absent', () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        expect(isDevAuthBypassEnabled()).toBe(true);
+      });
+
+      it('returns false when WEBSITE_INSTANCE_ID is set even with bypass=true', () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        process.env['WEBSITE_INSTANCE_ID'] = 'abc';
+        expect(isDevAuthBypassEnabled()).toBe(false);
+      });
+
+      it('returns false when WEBSITE_HOSTNAME is set even with bypass=true', () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        process.env['WEBSITE_HOSTNAME'] = 'jotjson.azurestaticapps.net';
+        expect(isDevAuthBypassEnabled()).toBe(false);
+      });
+    });
+
+    describe('tryDevAuthToken', () => {
+      it('returns null when bypass is disabled', () => {
+        expect(tryDevAuthToken('dev:dev-user-1')).toBeNull();
+      });
+
+      it('returns a populated principal for a valid dev:<userId> token', () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        const principal = tryDevAuthToken('dev:dev-user-1');
+        expect(principal).not.toBeNull();
+        expect(principal?.id).toBe('dev-user-1');
+        expect(principal?.displayName).toBe('Dev User (dev-user-1)');
+        expect(principal?.email).toBe('dev-user-1@dev.local');
+        expect(principal?.claims['oid']).toBe('dev-user-1');
+        expect(principal?.claims['sub']).toBe('dev-user-1');
+        expect(principal?.claims['preferred_username']).toBe('dev-user-1@dev.local');
+      });
+
+      it('rejects malformed dev tokens (uppercase, spaces, missing prefix, too long)', () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        expect(tryDevAuthToken('dev:DevUser')).toBeNull();
+        expect(tryDevAuthToken('dev:has space')).toBeNull();
+        expect(tryDevAuthToken('dev-user-1')).toBeNull();
+        expect(tryDevAuthToken('Bearer dev:dev-user-1')).toBeNull();
+        expect(tryDevAuthToken('dev:' + 'a'.repeat(65))).toBeNull();
+      });
+
+      it('emits a one-time warning to console.warn when first invoked with a valid token', () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        // First valid call emits.
+        tryDevAuthToken('dev:dev-user-1');
+        const callsAfterFirst = warnSpy.mock.calls.length;
+        expect(callsAfterFirst).toBeGreaterThanOrEqual(1);
+        // Second valid call does not emit again (module-level dedupe).
+        tryDevAuthToken('dev:dev-user-1');
+        expect(warnSpy.mock.calls.length).toBe(callsAfterFirst);
+      });
+    });
+
+    describe('verifyAccessToken / requireAuth / tryAuth integration', () => {
+      it('verifyAccessToken returns the dev principal for dev:<userId> when bypass on', async () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        const principal = await verifyAccessToken('dev:dev-user-1');
+        expect(principal.id).toBe('dev-user-1');
+      });
+
+      it('verifyAccessToken still rejects malformed dev: tokens via JWT path when bypass on', async () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        // 'dev:NOT MATCHING REGEX' is not accepted as a dev token, so it falls through
+        // to JWT validation and is rejected as malformed JWT.
+        await expect(verifyAccessToken('dev:UPPER!')).rejects.toBeInstanceOf(
+          AuthError
+        );
+      });
+
+      it('requireAuth honors dev token in X-Jotjson-Authorization header', async () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        const principal = await requireAuth(
+          makeRequest({ 'X-Jotjson-Authorization': 'Bearer dev:dev-user-1' })
+        );
+        expect(principal.id).toBe('dev-user-1');
+      });
+
+      it('tryAuth returns the dev principal for a valid dev token', async () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        const principal = await tryAuth(
+          makeRequest({ Authorization: 'Bearer dev:dev-user-1' })
+        );
+        expect(principal?.id).toBe('dev-user-1');
+      });
+
+      it('regression: real Entra JWTs still validate when bypass is on', async () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        const token = sign({ oid: 'oid-real', name: 'Real User' });
+        const principal = await verifyAccessToken(token);
+        expect(principal.id).toBe('oid-real');
+      });
+
+      it('refuses to engage when WEBSITE_INSTANCE_ID indicates an Azure runtime', async () => {
+        process.env['JOTJSON_DEV_AUTH_BYPASS'] = 'true';
+        process.env['WEBSITE_INSTANCE_ID'] = 'cloud-sentinel';
+        // Dev token format is rejected because bypass is force-disabled in Azure;
+        // it falls through to JWT validation and fails as malformed.
+        await expect(verifyAccessToken('dev:dev-user-1')).rejects.toBeInstanceOf(
+          AuthError
+        );
+      });
     });
   });
 });

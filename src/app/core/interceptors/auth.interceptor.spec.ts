@@ -99,4 +99,15 @@ describe('authInterceptor', () => {
     req.flush('unauthorized', { status: 401, statusText: 'Unauthorized' });
     expect(caught).toBeTruthy();
   });
+
+  it('threads dev:<userId> tokens through to Bearer dev:<userId>', async () => {
+    setup(fakeAuthService({ signedIn: true, token: 'dev:dev-user-1' }));
+    http.get('/api/me').subscribe();
+    await Promise.resolve();
+    const req = httpMock.expectOne('/api/me');
+    expect(req.request.headers.get('X-Jotjson-Authorization')).toBe(
+      'Bearer dev:dev-user-1'
+    );
+    req.flush({});
+  });
 });

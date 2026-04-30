@@ -41,6 +41,83 @@ function getAuthority(): string {
 }
 
 /**
+ * Local-only dev-auth bypass. Engaged only when:
+ *
+ * - `JOTJSON_DEV_AUTH_BYPASS=true` is set in the Functions process env, AND
+ * - neither `WEBSITE_INSTANCE_ID` nor `WEBSITE_HOSTNAME` is set (those are
+ *   set by Azure App Service / Functions / Static Web Apps on every request
+ *   and never on a developer workstation).
+ *
+ * The two `WEBSITE_*` guards mean a leaked `JOTJSON_DEV_AUTH_BYPASS=true`
+ * value cannot engage the bypass in any Azure-hosted environment. This is
+ * defense-in-depth: the env var alone should be enough, but the platform
+ * indicators provide a second independent check.
+ *
+ * When engaged, `verifyAccessToken` accepts the synthetic token form
+ * `dev:<userId>` (where `userId` matches `^[a-z0-9_-]{1,64}$`) and
+ * synthesizes an `AuthenticatedPrincipal` for it. Any token that does not
+ * match the dev shape continues through normal Entra JWT validation, so
+ * real tokens are never silently accepted on a misconfigured local box.
+ */
+export function isDevAuthBypassEnabled(): boolean {
+  return (
+    process.env['JOTJSON_DEV_AUTH_BYPASS'] === 'true' &&
+    !process.env['WEBSITE_INSTANCE_ID'] &&
+    !process.env['WEBSITE_HOSTNAME']
+  );
+}
+
+const DEV_TOKEN_RE = /^dev:([a-z0-9_-]{1,64})$/;
+let devAuthWarnEmitted = false;
+
+function emitDevAuthWarnOnce(): void {
+  if (devAuthWarnEmitted) return;
+  devAuthWarnEmitted = true;
+  console.warn(
+    '[auth] JOTJSON_DEV_AUTH_BYPASS is enabled. ' +
+      'Synthetic dev:<userId> tokens are being accepted on this process. ' +
+      'This must never run in production.'
+  );
+}
+
+/**
+ * Test seam: resets the module-level dedupe so that tests can verify
+ * the one-time warning behavior across multiple cases. Production code
+ * must never call this.
+ */
+export function __resetDevAuthWarnForTesting(): void {
+  devAuthWarnEmitted = false;
+}
+
+/**
+ * Returns a synthesized principal for a `dev:<userId>` token when the
+ * bypass is enabled, or `null` otherwise. Caller is responsible for
+ * dispatching real JWTs to `verifyAccessToken`'s normal path when this
+ * helper returns `null`.
+ */
+export function tryDevAuthToken(token: string): AuthenticatedPrincipal | null {
+  if (!isDevAuthBypassEnabled()) return null;
+  const match = DEV_TOKEN_RE.exec(token);
+  if (!match) return null;
+  emitDevAuthWarnOnce();
+  const userId = match[1];
+  const displayName = `Dev User (${userId})`;
+  const email = `${userId}@dev.local`;
+  return {
+    id: userId,
+    displayName,
+    email,
+    claims: {
+      oid: userId,
+      sub: userId,
+      name: displayName,
+      preferred_username: email,
+      email
+    } as JwtPayload
+  };
+}
+
+/**
  * Entra External ID may issue access tokens whose `iss` claim uses the
  * tenant GUID subdomain (e.g. `https://<tenantId>.ciamlogin.com/...`) even
  * when the configured authority uses a vanity subdomain
@@ -165,6 +242,8 @@ function extractBearerToken(req: HttpRequest): string | null {
 }
 
 export async function verifyAccessToken(token: string): Promise<AuthenticatedPrincipal> {
+  const devPrincipal = tryDevAuthToken(token);
+  if (devPrincipal) return devPrincipal;
   const authority = getAuthority();
   const audiences = getAcceptedAudiences();
   const issuers = getAcceptedIssuers(authority);
