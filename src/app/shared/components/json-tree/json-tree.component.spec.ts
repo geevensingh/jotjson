@@ -1774,6 +1774,81 @@ describe('JsonTreeComponent', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Phase 2 breadcrumb: the `crumbs()` view-model and DOM/click behaviour.
+  // The breadcrumb itself (chip layout, overflow menu) is exercised in
+  // `json-breadcrumb.component.spec.ts`; these tests cover the wiring
+  // between selection state and the view-model, plus the click handler.
+  // ---------------------------------------------------------------------------
+  describe('breadcrumb view-model', () => {
+    it('returns an empty array when nothing is selected', async () => {
+      await createWith({ a: 1 });
+      expect(cmp.selectedPath()).toBeNull();
+      expect(cmp.crumbs()).toEqual([]);
+    });
+
+    it('returns a single Root crumb when the root is selected', async () => {
+      await createWith({ a: 1 });
+      cmp.selectByPathString('$');
+      expect(cmp.crumbs().length).toBe(1);
+      const [root] = cmp.crumbs();
+      expect(root.canonicalPath).toBe('$');
+      expect(root.label).toBe(cmp.breadcrumbRootLabel);
+    });
+
+    it('returns Root + ancestors (excluding the selected leaf) for a deep path', async () => {
+      await createWith({ foo: { bar: { baz: 1 } } });
+      cmp.selectByPathString('$.foo.bar.baz');
+      const labels = cmp.crumbs().map((crumb) => crumb.label);
+      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'foo', 'bar']);
+      const paths = cmp.crumbs().map((crumb) => crumb.canonicalPath);
+      expect(paths).toEqual(['$', '$.foo', '$.foo.bar']);
+    });
+
+    it('renders array-index segments as [0], [1], etc.', async () => {
+      await createWith({ items: [{ name: 'a' }] });
+      cmp.selectByPathString('$.items[0].name');
+      const labels = cmp.crumbs().map((crumb) => crumb.label);
+      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'items', '[0]']);
+      const paths = cmp.crumbs().map((crumb) => crumb.canonicalPath);
+      expect(paths).toEqual(['$', '$.items', '$.items[0]']);
+    });
+
+    it('renders escaped keys as their raw label and quoted canonical path', async () => {
+      await createWith({ 'a.b': { x: 1 } });
+      cmp.selectByPathString('$["a.b"].x');
+      expect(cmp.selectedPath()).toBe('$["a.b"].x');
+      const labels = cmp.crumbs().map((crumb) => crumb.label);
+      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'a.b']);
+      const paths = cmp.crumbs().map((crumb) => crumb.canonicalPath);
+      expect(paths).toEqual(['$', '$["a.b"]']);
+    });
+
+    it('onBreadcrumbClick re-selects the ancestor and logs telemetry', async () => {
+      await createWith({ foo: { bar: { baz: 1 } } });
+      cmp.selectByPathString('$.foo.bar.baz');
+      const logger = TestBed.inject(LoggerService);
+      const info = spyOn(logger, 'info');
+      cmp.onBreadcrumbClick({ canonicalPath: '$.foo', depth: 1 });
+      expect(cmp.selectedPath()).toBe('$.foo');
+      expect(info).toHaveBeenCalledWith('tree.breadcrumb.click', { depth: 1 });
+    });
+
+    it('clicking a chip in the rendered breadcrumb DOM updates selection', async () => {
+      await createWith({ foo: { bar: 1 } });
+      cmp.selectByPathString('$.foo.bar');
+      fixture.detectChanges();
+      const chips = Array.from(
+        fixture.nativeElement.querySelectorAll('.jj-breadcrumb__chip')
+      ) as HTMLButtonElement[];
+      // crumbs = [Root, foo] -> 2 chips. Click foo (index 1).
+      expect(chips.length).toBe(2);
+      chips[1].click();
+      fixture.detectChanges();
+      expect(cmp.selectedPath()).toBe('$.foo');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // M7q tree-row context menu
   //
   // Covers: right-click + kebab triggers, action methods (copy / search /

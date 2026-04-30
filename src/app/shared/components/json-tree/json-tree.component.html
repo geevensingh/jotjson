@@ -157,6 +157,17 @@
   </button>
 </div>
 
+@if (root()) {
+  <jj-breadcrumb
+    class="tree-breadcrumb"
+    [crumbs]="crumbs()"
+    [emptyPlaceholder]="breadcrumbEmptyLabel"
+    [navAriaLabel]="breadcrumbAriaLabel"
+    [overflowAriaLabel]="breadcrumbOverflowAriaLabel"
+    (crumbClick)="onBreadcrumbClick($event)"
+  />
+}
+
 <div class="tree-body" [style.--tree-font-size]="treeFontSizePx()">
   @if (root()) {
     <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">

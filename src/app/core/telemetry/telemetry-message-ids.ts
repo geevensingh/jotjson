@@ -64,7 +64,8 @@ export const TELEMETRY_MESSAGE_IDS = [
   'tree.contextMenu.isolate',
   'tree.contextMenu.isolateNarrow',
   'tree.contextMenu.isolateWide',
-  'tree.row.doubleClickCopyValue'
+  'tree.row.doubleClickCopyValue',
+  'tree.breadcrumb.click'
 ] as const;
 
 export type TelemetryMessageId = (typeof TELEMETRY_MESSAGE_IDS)[number];

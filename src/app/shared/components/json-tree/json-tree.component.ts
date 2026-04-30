@@ -28,6 +28,11 @@ import type { FormattingIcon, FormattingRuleSet } from '../../../core/api/models
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
 import {
+  JsonBreadcrumbComponent,
+  type BreadcrumbClick,
+  type BreadcrumbCrumb
+} from '../json-breadcrumb/json-breadcrumb.component';
+import {
   EMPTY_RULE_RESULT,
   RuleEngineNode,
   RuleEngineResult,
@@ -120,7 +125,7 @@ const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
 @Component({
   selector: 'jj-json-tree',
   standalone: true,
-  imports: [FormsModule, MatMenuModule, MatTreeModule, MatDividerModule, IconComponent],
+  imports: [FormsModule, MatMenuModule, MatTreeModule, MatDividerModule, IconComponent, JsonBreadcrumbComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
   styleUrl: './json-tree.component.scss'
@@ -248,6 +253,13 @@ export class JsonTreeComponent {
   readonly ctxCollapseSiblingsLabel = $localize`:@@tree.contextMenu.collapseSiblings:Collapse siblings`;
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
+
+  // Breadcrumb labels (Phase 2). Stable English source strings; i18n
+  // IDs feed through the standard pipeline (extract-i18n).
+  readonly breadcrumbAriaLabel = $localize`:@@tree.breadcrumb.aria:Breadcrumb`;
+  readonly breadcrumbEmptyLabel = $localize`:@@tree.breadcrumb.empty:No current selection`;
+  readonly breadcrumbRootLabel = $localize`:@@tree.breadcrumb.root:Root`;
+  readonly breadcrumbOverflowAriaLabel = $localize`:@@tree.breadcrumb.overflow.aria:Show hidden ancestors`;
 
   readonly treeControl = new NestedTreeControl<TreeNode, string>(
     (n) => n.children ?? [],
@@ -520,6 +532,41 @@ export class JsonTreeComponent {
     };
     walk(this.root());
     return map;
+  });
+
+  /**
+   * Ancestor chain of the currently-selected row, suitable for the
+   * breadcrumb above the tree.
+   *
+   *  - Null selection -> `[]` (breadcrumb renders the placeholder).
+   *  - Root selected -> `[{ label: <Root>, canonicalPath: '$' }]`
+   *    (single chip; clicking it is idempotent).
+   *  - Deeper selection -> `[Root, ancestor1, ..., ancestorN]`,
+   *    EXCLUDING the selected node itself ("parent nodes" semantics
+   *    requested by the user).
+   *
+   * Reads `selectedPath` and `nodeIndex`; recomputes when either
+   * changes.
+   */
+  readonly crumbs = computed<readonly BreadcrumbCrumb[]>(() => {
+    const sp = this.selectedPath();
+    if (sp === null) return [];
+    const node = this.nodeIndex().get(sp);
+    if (!node) return [];
+    const path = node.path;
+    const out: BreadcrumbCrumb[] = [
+      { label: this.breadcrumbRootLabel, canonicalPath: '$' }
+    ];
+    // Ancestors only: i goes 1..path.length-1 (the slice excludes
+    // the selected node itself at i = path.length).
+    for (let i = 1; i < path.length; i++) {
+      const partial = path.slice(0, i);
+      const segment = partial[partial.length - 1];
+      const label =
+        typeof segment === 'number' ? `[${segment}]` : String(segment);
+      out.push({ label, canonicalPath: this.formatPath(partial) });
+    }
+    return out;
   });
 
   /**
@@ -825,6 +872,17 @@ export class JsonTreeComponent {
     if (!this.nodeIndex().has(pathString)) return;
     this.selectedPath.set(pathString);
     this.expandAndScroll(pathString);
+  }
+
+  /**
+   * Breadcrumb chip activation handler. Logs telemetry (depth-only;
+   * the canonical path content is potentially user-sensitive and is
+   * NOT recorded) and re-selects the ancestor via the existing
+   * `selectByPathString` flow, which handles expand-and-scroll.
+   */
+  onBreadcrumbClick(event: BreadcrumbClick): void {
+    this.logger.info('tree.breadcrumb.click', { depth: event.depth });
+    this.selectByPathString(event.canonicalPath);
   }
 
   /**

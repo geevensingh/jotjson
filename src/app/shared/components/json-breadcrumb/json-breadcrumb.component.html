@@ -1,0 +1,98 @@
+@if (crumbs().length === 0) {
+  <div class="jj-breadcrumb jj-breadcrumb--empty" aria-live="polite">
+    {{ emptyPlaceholder() }}
+  </div>
+} @else {
+  <nav class="jj-breadcrumb" [attr.aria-label]="navAriaLabel()">
+    <ol class="jj-breadcrumb__list">
+      @if (!hasOverflow()) {
+        @for (crumb of crumbs(); track crumb.canonicalPath; let last = $last) {
+          <li class="jj-breadcrumb__item">
+            <button
+              type="button"
+              class="jj-breadcrumb__chip"
+              [attr.title]="crumb.label"
+              (click)="onCrumbClick(crumb)"
+            >
+              {{ crumb.label }}
+            </button>
+            @if (!last) {
+              <jj-icon
+                name="chevron-right"
+                class="jj-breadcrumb__sep"
+                [size]="12"
+              />
+            }
+          </li>
+        }
+      } @else {
+        @for (crumb of leadingCrumbs(); track crumb.canonicalPath) {
+          <li class="jj-breadcrumb__item">
+            <button
+              type="button"
+              class="jj-breadcrumb__chip"
+              [attr.title]="crumb.label"
+              (click)="onCrumbClick(crumb)"
+            >
+              {{ crumb.label }}
+            </button>
+            <jj-icon
+              name="chevron-right"
+              class="jj-breadcrumb__sep"
+              [size]="12"
+            />
+          </li>
+        }
+        <li class="jj-breadcrumb__item">
+          <button
+            type="button"
+            class="jj-breadcrumb__chip jj-breadcrumb__chip--overflow"
+            [attr.aria-label]="overflowAriaLabel()"
+            [matMenuTriggerFor]="overflowMenu"
+          >
+            ...
+          </button>
+          <jj-icon
+            name="chevron-right"
+            class="jj-breadcrumb__sep"
+            [size]="12"
+          />
+          <mat-menu #overflowMenu="matMenu" class="jj-breadcrumb__overflow-menu">
+            @for (crumb of hiddenCrumbs(); track crumb.canonicalPath) {
+              <button
+                type="button"
+                mat-menu-item
+                (click)="onCrumbClick(crumb)"
+              >
+                {{ crumb.label }}
+              </button>
+            }
+          </mat-menu>
+        </li>
+        @for (
+          crumb of trailingCrumbs();
+          track crumb.canonicalPath;
+          let last = $last
+        ) {
+          <li class="jj-breadcrumb__item">
+            <button
+              type="button"
+              class="jj-breadcrumb__chip"
+              [attr.title]="crumb.label"
+              (click)="onCrumbClick(crumb)"
+            >
+              {{ crumb.label }}
+            </button>
+            @if (!last) {
+              <jj-icon
+                name="chevron-right"
+                class="jj-breadcrumb__sep"
+                [size]="12"
+              />
+            }
+          </li>
+        }
+      }
+    </ol>
+  </nav>
+}
