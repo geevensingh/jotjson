@@ -17,16 +17,34 @@ import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { JsonExtractorService } from '../../core/json/json-extractor.service';
+import {
+  installMinimalMonacoStub,
+  restoreMonacoStub
+} from '../../../testing/monaco.testing';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
 const SPLIT_KEY = 'jotjson.splitRatio.v1';
 const PANE_VIS_KEY = 'jotjson.paneVisibility.v1';
 
+/**
+ * Registers `installMinimalMonacoStub` / `restoreMonacoStub` as
+ * before/afterEach hooks on the calling describe. Specs in this file mount
+ * `HomeComponent` (some via `detectChanges()`) which embeds
+ * `<jj-json-editor>`. Without a stub on `window.monaco`, the editor's
+ * lifecycle calls `loadMonaco()` and either fetches the real Monaco AMD
+ * loader (slow, mounts real editors in unit specs) or fails noisily
+ * (when the asset path is misconfigured). Either way, unit-level home
+ * specs do not want to exercise real Monaco - that is the browser
+ * integration layer's job. See DESIGN_SPEC.md > Testing strategy.
+ */
+function setupMinimalMonacoStub(): void {
+  beforeEach(() => installMinimalMonacoStub());
+  afterEach(() => restoreMonacoStub());
+}
+
 describe('HomeComponent (unit-level)', () => {
-  // NOTE: Full rendering of HomeComponent would load Monaco. These tests
-  // exercise the component's logic without detectChanges triggering the
-  // editor mount.
+  setupMinimalMonacoStub();
   beforeEach(() => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
@@ -506,6 +524,7 @@ describe('HomeComponent (unit-level)', () => {
 });
 
 describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
+  setupMinimalMonacoStub();
   // We can't render the full HomeComponent (it would mount Monaco), so
   // these tests stub the `tree` and `editor` viewChild signals directly.
   // viewChild returns a callable signal; replacing the field with a
@@ -804,6 +823,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
 });
 
 describe('HomeComponent save() branching (M4a)', () => {
+  setupMinimalMonacoStub();
   const blob = (overrides: Partial<JsonBlob> = {}): JsonBlob => ({
     id: 'id-1',
     slug: 'slug-1',
@@ -1008,6 +1028,7 @@ describe('HomeComponent save() branching (M4a)', () => {
 });
 
 describe('HomeComponent browser-title effect (M4a)', () => {
+  setupMinimalMonacoStub();
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
@@ -1077,6 +1098,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
 });
 
 describe('HomeComponent blob actions (M4b)', () => {
+  setupMinimalMonacoStub();
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
@@ -1301,6 +1323,7 @@ describe('HomeComponent blob actions (M4b)', () => {
 });
 
 describe('HomeComponent drag-drop upload (M7b)', () => {
+  setupMinimalMonacoStub();
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
@@ -1462,6 +1485,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
 
 
 describe('HomeComponent M7p extract-from-mixed-text', () => {
+  setupMinimalMonacoStub();
   beforeEach(() => {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
@@ -1658,6 +1682,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
 
 
 describe('HomeComponent upload-error banner (#36)', () => {
+  setupMinimalMonacoStub();
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';
@@ -1897,6 +1922,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
 });
 
 describe('HomeComponent binary upload rejection (#62)', () => {
+  setupMinimalMonacoStub();
   const PREFS_KEY = 'jotjson.preferences.v1';
   const DRAFT_KEY = 'jotjson.draft.v1';
   const SPLIT_KEY = 'jotjson.splitRatio.v1';

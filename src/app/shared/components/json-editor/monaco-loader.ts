@@ -83,3 +83,23 @@ function bootstrap(
     else reject(new Error('Monaco loaded but window.monaco is unavailable'));
   });
 }
+
+/**
+ * Test-only seam: clears every piece of loader-owned global state so a
+ * subsequent `loadMonaco()` call goes through the full bootstrap again.
+ * Resets the cached promise, removes the AMD loader's globals
+ * (`window.require`, `window.MonacoEnvironment`, `window.monaco`), and
+ * detaches the injected loader script tag. Production callers must
+ * never reference this. See AGENTS.md `__<verb>ForTesting` convention.
+ */
+export function __resetMonacoLoaderForTesting(): void {
+  monacoPromise = undefined;
+  if (typeof window === 'undefined') return;
+  const winRef = window as unknown as Record<string, unknown>;
+  delete winRef['require'];
+  delete winRef['MonacoEnvironment'];
+  delete winRef['monaco'];
+  document
+    .querySelector('script[data-monaco-loader="true"]')
+    ?.remove();
+}

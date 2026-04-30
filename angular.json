@@ -115,6 +115,11 @@
                 "glob": "**/*",
                 "input": "src/testing/fixtures",
                 "output": "/fixtures"
+              },
+              {
+                "glob": "**/*",
+                "input": "node_modules/monaco-editor/min/vs",
+                "output": "vs"
               }
             ],
             "styles": [
