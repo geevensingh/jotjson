@@ -280,6 +280,8 @@
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-style: italic;
   font-size: 0.92em;
+  // Decoration -> sans (DESIGN_SPEC.md tree font philosophy).
+  font-family: var(--font-ui);
   // Match the wrap behavior of `.tree-value-string` so the original
   // value and the annotation share space symmetrically. Without this,
   // the annotation's flex-item intrinsic min-width was the entire
@@ -326,6 +328,8 @@
   .tree-count {
     color: rgba(127, 127, 127, 0.7);
     font-style: italic;
+    // Decoration -> sans (DESIGN_SPEC.md tree font philosophy).
+    font-family: var(--font-ui);
   }
 
   .tree-type-badge,
@@ -341,7 +345,8 @@
 .tree-comment {
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-style: italic;
-  font-family: v.$font-mono;
+  // Decoration -> sans (DESIGN_SPEC.md tree font philosophy).
+  font-family: var(--font-ui);
   font-size: 0.92em;
   white-space: nowrap;
   overflow: hidden;

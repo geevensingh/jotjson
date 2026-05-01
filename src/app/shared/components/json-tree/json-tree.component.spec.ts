@@ -1175,6 +1175,74 @@ describe('JsonTreeComponent', () => {
     });
   });
 
+  describe('decoration vs data fonts (tree font philosophy)', () => {
+    // Per the data-vs-decoration font rule (DESIGN_SPEC.md tree
+    // section): keys, values, indexes, and brace glyphs render in
+    // the document's monospace face; type-badge, container counts,
+    // date annotations, and comment slots render in the UI
+    // sans-serif face. These specs guard that contract for each
+    // decoration class.
+    function attachAndComputeFontFamily(selector: string): string {
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const element = (fixture.nativeElement as HTMLElement).querySelector(
+          selector
+        ) as HTMLElement | null;
+        if (!element) {
+          throw new Error(`Expected ${selector} to be rendered`);
+        }
+        return getComputedStyle(element).fontFamily;
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    }
+
+    const SANS_PATTERN = /system-ui|Segoe UI|Roboto|sans-serif/i;
+    const MONO_PATTERN = /JetBrains Mono|Fira Code|Consolas|monospace/i;
+
+    it('renders .tree-type-badge in the UI sans-serif font', async () => {
+      await createWith({ a: 1 });
+      prefs.update({ treeShowTypeLabels: true });
+      fixture.detectChanges();
+      const family = attachAndComputeFontFamily('.tree-type-badge');
+      expect(family).toMatch(SANS_PATTERN);
+      expect(family).not.toMatch(MONO_PATTERN);
+    });
+
+    it('renders .tree-count in the UI sans-serif font (decoration)', async () => {
+      await createWith({ items: [1, 2, 3] });
+      const family = attachAndComputeFontFamily('.tree-count');
+      expect(family).toMatch(SANS_PATTERN);
+      expect(family).not.toMatch(MONO_PATTERN);
+    });
+
+    it('renders .tree-date-annotation in the UI sans-serif font (decoration)', async () => {
+      prefs.update({ treeShowDateAnnotations: true });
+      await createWith({ when: '2024-01-15T00:00:00Z' });
+      const family = attachAndComputeFontFamily('.tree-date-annotation');
+      expect(family).toMatch(SANS_PATTERN);
+      expect(family).not.toMatch(MONO_PATTERN);
+    });
+
+    it('renders .tree-comment in the UI sans-serif font (decoration)', async () => {
+      await createWith({ name: 'Alice' });
+      fixture.componentRef.setInput(
+        'commentsByPath',
+        new Map([['$.name', { leading: 'note' }]])
+      );
+      fixture.detectChanges();
+      const family = attachAndComputeFontFamily('.tree-comment');
+      expect(family).toMatch(SANS_PATTERN);
+      expect(family).not.toMatch(MONO_PATTERN);
+    });
+
+    it('renders .tree-key in the document monospace font (data, sanity check)', async () => {
+      await createWith({ name: 'Alice' });
+      const family = attachAndComputeFontFamily('.tree-key');
+      expect(family).toMatch(MONO_PATTERN);
+    });
+  });
+
   describe('selection highlighting', () => {
     /** Look up a rendered .tree-row whose bound TreeNode has the given pathString. */
     function findRow(path: string): HTMLElement {
