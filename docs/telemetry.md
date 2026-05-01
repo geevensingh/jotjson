@@ -421,23 +421,24 @@ App Insights and Log Analytics are real Azure Data Explorer (Kusto)
 clusters under the hood, exposed through proxy endpoints. Any tool that
 speaks KQL can connect.
 
-### Proxy URL recipe
+### Proxy URLs (dev)
 
 Two cluster URLs map to the same data; pick whichever schema you prefer.
 
-App Insights (classic schema):
+App Insights (classic schema, `traces` / `exceptions` / `customEvents` / ...):
 
 ```
-https://ade.applicationinsights.io/subscriptions/<subId>/resourcegroups/<rg>/providers/microsoft.insights/components/appi-<resourceSuffix>
+https://ade.applicationinsights.io/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourcegroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev
 ```
 
-Log Analytics workspace (App-prefixed schema):
+Log Analytics workspace (App-prefixed schema, `AppTraces` / `AppExceptions` /
+`AppEvents` / ...):
 
 ```
-https://ade.loganalytics.io/subscriptions/<subId>/resourcegroups/<rg>/providers/microsoft.operationalinsights/workspaces/appi-<resourceSuffix>-law
+https://ade.loganalytics.io/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourcegroups/rg-jotjson-dev/providers/microsoft.operationalinsights/workspaces/appi-jotjson-dev-law
 ```
 
-Find the actual values for any other environment:
+To find the equivalent values for any new environment:
 
 ```sh
 az login
@@ -461,23 +462,7 @@ Concrete values for the only environment that exists right now (`dev`):
 | LAW Workspace GUID (`customerId`) | `fdd8e231-1e9b-4fa9-921c-2c0ddf505e1b` |
 | Entra tenant | `68fa6d3c-ab3e-4eea-97bb-f0376ea54cba` |
 
-Substituted into the recipe above, the proxy URLs to paste into ADX Web UI
-or Kusto Explorer are:
-
-App Insights (classic schema, `traces` / `exceptions` / `customEvents` / ...):
-
-```
-https://ade.applicationinsights.io/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourcegroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev
-```
-
-Log Analytics workspace (App-prefixed schema, `AppTraces` / `AppExceptions` /
-`AppEvents` / ...):
-
-```
-https://ade.loganalytics.io/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourcegroups/rg-jotjson-dev/providers/microsoft.operationalinsights/workspaces/appi-jotjson-dev-law
-```
-
-When `stg` and `prod` are stood up they follow the same naming -- just swap
+When `stg` and `prod` are stood up -- they follow the same naming, just swap
 `-dev` for `-stg` or `-prod` in the resource group and resource names. None
 of the IDs above are credentials; access still requires Entra sign-in with
 **Reader** (or higher) on the resource.
@@ -774,11 +759,44 @@ exceptions
 
 ---
 
-## Dashboards & alerts (M7i)
+## Dashboards & alerts
+
+### Quick links
+
+Direct portal links to the resources backing the dashboards and alerts
+described below. URLs include the JotJson tenant
+(`68fa6d3c-ab3e-4eea-97bb-f0376ea54cba`) so the portal pins to the right
+directory at sign-in.
+
+- [Resource group `rg-jotjson-dev` (overview)](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/overview)
+- [App Insights component `appi-jotjson-dev` (overview)](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev/overview)
+  -- entry point for Live Metrics, Failures, Performance, App Map, Logs.
+- [App Insights -> Workbooks gallery](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev/workbooks)
+  -- open the workbook named **`JotJSON monitoring (dev)`**. (If the gallery
+  subpath ever changes, fall back to the App Insights overview link above
+  and click **Workbooks** in the left nav.)
+- [Log Analytics workspace `appi-jotjson-dev-law` (overview)](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.operationalinsights/workspaces/appi-jotjson-dev-law/overview)
+- [Log Analytics -> Alerts](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.operationalinsights/workspaces/appi-jotjson-dev-law/alerts)
+  -- alerts blade scoped to the workspace. (Fallback: open the LAW overview
+  link above and click **Alerts** in the left nav.)
+- [Action group `ag-jotjson-dev` (overview)](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.insights/actionGroups/ag-jotjson-dev/overview)
+
+If you hit a `wrong issuer` token error after sign-in, see
+[Cross-tenant gotcha](#cross-tenant-gotcha-read-this-if-wrong-issuer-hits-you).
+
+**Pre-deployment state.** Live now: the resource group, App Insights
+component, and Log Analytics workspace. Resolves only after the first
+`infra` deployment that brings the monitoring stack online (run via
+**Actions -> Deploy infra (Bicep) -> Run workflow**, or the manual
+`az deployment group create` command in `infra/README.md`): the
+`JotJSON monitoring (dev)` workbook entry, all four scheduled-query-rule
+alerts, and the action group `ag-jotjson-dev`. The Workbooks gallery
+itself and the Alerts blade itself will load before that deployment;
+they just won't list the JotJson resources yet.
 
 ### Overview
 
-M7i adds an operator-facing monitoring layer on top of the instrumentation
+An operator-facing monitoring layer sits on top of the instrumentation
 documented earlier in this file: a workbook with five sections (Health,
 Performance, Auth & Access, API, Quotas) and four scheduled-query-rule alerts
 wired to a single action group.
@@ -790,7 +808,7 @@ non-empty `notificationEmail` parameter at deploy time.
 
 ### Workbook vs alert schema split
 
-The M7i workbook and alerts intentionally query different Azure Monitor targets.
+The workbook and alerts intentionally query different Azure Monitor targets.
 This is the easiest part to get wrong when editing these resources.
 
 - **Workbook** queries target the App Insights component directly
@@ -847,14 +865,20 @@ silently breaks evaluation; queries return 0 rows or fail.
 The action group defaults to empty: no email, SMS, Teams, or webhook receivers.
 Alerts still fire and are visible in Azure portal -> Monitor -> Alerts.
 
-To add an email receiver, pass `notificationEmail=<address>` at deploy time:
+To add an email receiver, pass `notificationEmail=<address>` at deploy time.
+Stack `dev.bicepparam` first (provides Entra config) and override
+`notificationEmail` on top:
 
 ```sh
 az deployment group create \
-  --resource-group <rg> \
+  --resource-group rg-jotjson-dev \
   --template-file infra/main.bicep \
+  --parameters infra/parameters/dev.bicepparam \
   --parameters notificationEmail=alerts@example.com
 ```
+
+Equivalently, edit `infra/parameters/dev.bicepparam` to set
+`notificationEmail` and let the `infra` workflow pick it up.
 
 This is tracked by issue #94. Issue #92 covers expanding to SMS / Teams /
 webhook receivers.
