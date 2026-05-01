@@ -94,6 +94,13 @@ export interface UserPreferences {
    * DESIGN_SPEC.md - Tree feature, selection sync.
    */
   treeEditorSelectionSync: boolean;
+  /**
+   * When true, the JSON tree expands to an automatically computed depth
+   * that fits the visible viewport (auto-fit mode). When false, the tree
+   * expands to the fixed depth set by `defaultTreeExpansionDepth`.
+   * Default true. See DESIGN_SPEC.md - Tree feature, auto-fit expansion.
+   */
+  treeAutoFitToWindow: boolean;
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';

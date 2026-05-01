@@ -593,6 +593,18 @@ describe('PreferencesService', () => {
 
       expect(logger.event).not.toHaveBeenCalled();
     });
+
+    it('emits a boolean event for treeAutoFitToWindow', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ treeAutoFitToWindow: false });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'treeAutoFitToWindow', source: 'user', kind: 'boolean', value: 'false' },
+        undefined
+      );
+    });
   });
 
   describe('runtime --highlight-* projection on document.body', () => {
@@ -805,6 +817,46 @@ describe('PreferencesService', () => {
       slow.complete();
       expect(svc.syncState()).toBe('anon');
       expect(svc.prefs()).toEqual(DEFAULT_PREFERENCES);
+    });
+  });
+
+  describe('treeAutoFitToWindow one-shot migration', () => {
+    it('sets treeAutoFitToWindow=true when depth is 2 (default) and field is absent', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ defaultTreeExpansionDepth: 2 })
+      );
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(true);
+    });
+
+    it('sets treeAutoFitToWindow=false when depth is customized and field is absent', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ defaultTreeExpansionDepth: 5 })
+      );
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(false);
+    });
+
+    it('respects explicit treeAutoFitToWindow=false even when depth is 2', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ defaultTreeExpansionDepth: 2, treeAutoFitToWindow: false })
+      );
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(false);
+    });
+
+    it('sets treeAutoFitToWindow=true when neither depth nor treeAutoFitToWindow is present', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: 'dark' }));
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(true);
+    });
+
+    it('new user (no prefs at all) gets treeAutoFitToWindow=true', () => {
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(true);
     });
   });
 });

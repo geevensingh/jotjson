@@ -304,6 +304,66 @@ customEvents
 
 ---
 
+## Frontend events
+
+Manual `customEvents` emitted from the Angular frontend via
+`LoggerService.event(id, props?, measurements?)`. All frontend events
+land in the `customEvents` (classic AI) / `AppEvents` (LAW) table.
+
+### Event catalog
+
+#### `tree.expand.autoFit`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired every time the auto-fit algorithm successfully picks an initial
+expansion depth and applies it. Specifically: the user has
+`treeAutoFitToWindow` on, the viewport is measurable (capacity >= 1
+and probe row height >= 8 px), and `expandToLevel(K, internal=true)`
+has been called.
+
+**Properties:** none (no closed-enum bag means no schema constraints
+to maintain).
+
+**Measurements:**
+
+| name | type | meaning |
+| --- | --- | --- |
+| chosenDepth | number | The picked K (root = 0). |
+| totalNodes | number | Total nodes in the tree (all depths). |
+| viewportPx | number | The scroll container's clientHeight at measurement time. |
+| probeRowPx | number | Measured height of the hidden probe row (lower bound on row height). |
+| estimatedRows | number | floor(viewportPx / probeRowPx) - the row capacity used in the algorithm. |
+| chosenRows | number | sum(nodesAt[0..chosenDepth]) - the estimated rows that will be visible. |
+| fillRatioPct | number | round(chosenRows / estimatedRows * 100). Estimated fill (probe-based). |
+| actualHeightPx | number | Post-expand scroll container scrollHeight (real rendered height). |
+| actualFillRatioPct | number | round(actualHeightPx / viewportPx * 100). Real fill. |
+
+**Example: distribution of actual fill ratio**
+
+To tune the 1.5x overflow tolerance, examine how often the algorithm
+overfills:
+
+```kusto
+customEvents
+| where name == "tree.expand.autoFit"
+| extend
+    actualFillRatioPct = toint(customMeasurements.actualFillRatioPct),
+    chosenDepth = toint(customMeasurements.chosenDepth)
+| summarize p50 = percentile(actualFillRatioPct, 50),
+            p90 = percentile(actualFillRatioPct, 90),
+            p99 = percentile(actualFillRatioPct, 99),
+            count_ = count()
+        by chosenDepth
+| order by chosenDepth asc
+```
+
+If p90 or p99 is consistently > 200%, the tolerance is too aggressive
+and we should consider reducing it or adding a corrective
+measure-after-expand pass.
+
+---
+
 ## How to view the logs
 
 ### Local development

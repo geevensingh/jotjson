@@ -47,6 +47,8 @@ import {
   parseAsDate
 } from '../../utils/date-detect';
 import { classifyValue, ValueClassification } from '../../utils/value-classifier';
+import { computeAutoFitDepth } from './auto-fit-depth';
+import { findScrollableAncestor } from './scroll-container';
 
 /**
  * Search-by-type filter values. `'all'` is the no-filter sentinel.
@@ -93,7 +95,7 @@ const TYPE_LABELS: Record<ValueClassification, string> = {
   undefined: $localize`:@@tree.type.undefined:undefined`
 };
 
-interface TreeNode {
+export interface TreeNode {
   segment: string | number | undefined;
   path: (string | number)[];
   pathString: string;
@@ -212,6 +214,15 @@ export class JsonTreeComponent {
    * this trigger.
    */
   readonly ctxTrigger = viewChild<MatMenuTrigger>('ctxTrigger');
+
+  /**
+   * Hidden offscreen probe row used to measure the rendered row
+   * height for the auto-fit-to-window initial expansion. Sits inside
+   * `.tree-body` so it inherits the same `--tree-font-size` and base
+   * row CSS as real rows. Required only when
+   * `treeAutoFitToWindow` is on; harmless otherwise.
+   */
+  private readonly autoFitProbe = viewChild<ElementRef<HTMLElement>>('autoFitProbe');
 
   /**
    * Emits the structural path of the currently-selected row, or `null`
@@ -657,6 +668,49 @@ export class JsonTreeComponent {
   private renderGeneration = 0;
   private cancelledRender = false;
 
+  /**
+   * Cached probe row height keyed by `treeFontSize`. Invalidated
+   * when the user changes the font size. Cheap microreflow once
+   * per font size; repeated calls re-use the cached value.
+   */
+  private probeRowHeightCache: { fontSize: number; heightPx: number } | null = null;
+
+  /**
+   * Per-auto-fit-run generation counter used to drop stale post-
+   * expand telemetry rAFs when the value changes again before the
+   * frame fires. Separate from `renderGeneration` because the two
+   * effects (auto-fit and `tree.render.slow`) advance independently.
+   */
+  private autoFitGeneration = 0;
+
+  /**
+   * Test-only override for auto-fit measurement. When set, bypasses
+   * DOM probing and viewport resolution so specs can drive the
+   * algorithm with deterministic inputs. Production code paths
+   * never read or write this. Cleared by destroy.
+   */
+  private autoFitMeasurementOverrideForTesting: {
+    probeHeightPx: number;
+    viewportPx: number;
+    scrollContainer: HTMLElement | null;
+  } | null = null;
+
+  /**
+   * Test-only seam for stubbing auto-fit measurement. Production
+   * callers must never reference this.
+   */
+  __setAutoFitMeasurementsForTesting(
+    probeHeightPx: number,
+    viewportPx: number,
+    scrollContainer: HTMLElement | null = null
+  ): void {
+    this.autoFitMeasurementOverrideForTesting = {
+      probeHeightPx,
+      viewportPx,
+      scrollContainer
+    };
+  }
+
   constructor() {
     const NOW_TICK_MS = 60_000;
     const handle = setInterval(() => this.nowSignal.set(Date.now()), NOW_TICK_MS);
@@ -677,7 +731,11 @@ export class JsonTreeComponent {
       }
       if (!this.hasInitializedExpansion) {
         this.hasInitializedExpansion = true;
-        this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth, true);
+        if (this.prefs.prefs().treeAutoFitToWindow) {
+          this.runAutoFitInitialExpansion();
+        } else {
+          this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth, true);
+        }
       }
       // Whenever the underlying value changes (and the resulting tree
       // root re-renders), drop any stale selection. Predictable, no
@@ -1031,6 +1089,132 @@ export class JsonTreeComponent {
     if (!internal) {
       this.emitSlowExpandIfNeeded(timeMs, depth, nodeCount);
     }
+  }
+
+  /**
+   * Initial-expansion auto-fit branch. Picks the largest expansion
+   * depth K such that `sum(nodesAt[0..K]) <= 1.5 * capacity`, where
+   * `capacity = floor(viewportPx / probeRowPx)`. Falls back to the
+   * fixed-depth path (`defaultTreeExpansionDepth`) when the probe or
+   * viewport cannot be measured. Schedules a one-rAF post-expand
+   * pass to read the actual rendered scroll height into telemetry.
+   *
+   * Called from the root-change effect when `treeAutoFitToWindow` is
+   * on and `hasInitializedExpansion` was false. Synchronous up to
+   * `expandToLevel(K)`; only the telemetry emit is deferred.
+   */
+  private runAutoFitInitialExpansion(): void {
+    const measured = this.resolveAutoFitMeasurements();
+    const fallbackDepth = this.prefs.prefs().defaultTreeExpansionDepth;
+    if (measured === null) {
+      this.expandToLevel(fallbackDepth, true);
+      return;
+    }
+    const { probeHeightPx, viewportPx, scrollContainer } = measured;
+    const estimatedRows = Math.floor(viewportPx / probeHeightPx);
+    if (estimatedRows < 1) {
+      this.expandToLevel(fallbackDepth, true);
+      return;
+    }
+    const result = computeAutoFitDepth(this.root() ?? null, estimatedRows, 1.5);
+    this.expandToLevel(result.chosenDepth, true);
+    const fillRatioPct =
+      estimatedRows > 0
+        ? Math.round((result.chosenRows / estimatedRows) * 100)
+        : 0;
+    const generation = ++this.autoFitGeneration;
+    requestAnimationFrame(() => {
+      if (this.cancelledRender || generation !== this.autoFitGeneration) {
+        return;
+      }
+      const actualHeightPx = scrollContainer
+        ? scrollContainer.scrollHeight
+        : 0;
+      const actualFillRatioPct =
+        viewportPx > 0
+          ? Math.round((actualHeightPx / viewportPx) * 100)
+          : 0;
+      this.logger.event(
+        'tree.expand.autoFit',
+        {},
+        {
+          chosenDepth: result.chosenDepth,
+          totalNodes: result.totalNodes,
+          viewportPx,
+          probeRowPx: probeHeightPx,
+          estimatedRows,
+          chosenRows: result.chosenRows,
+          fillRatioPct,
+          actualHeightPx,
+          actualFillRatioPct
+        }
+      );
+    });
+  }
+
+  /**
+   * Returns probe height + viewport height for the auto-fit
+   * algorithm, or `null` when either cannot be measured. The probe
+   * height is cached by `treeFontSize`; the viewport is re-resolved
+   * on each call (cheap DOM walk).
+   *
+   * Honors the test-only override when set so specs can drive the
+   * algorithm without a real DOM.
+   */
+  private resolveAutoFitMeasurements(): {
+    probeHeightPx: number;
+    viewportPx: number;
+    scrollContainer: HTMLElement | null;
+  } | null {
+    const override = this.autoFitMeasurementOverrideForTesting;
+    if (override !== null) {
+      if (override.probeHeightPx < 8 || override.viewportPx <= 0) {
+        return null;
+      }
+      return {
+        probeHeightPx: override.probeHeightPx,
+        viewportPx: override.viewportPx,
+        scrollContainer: override.scrollContainer
+      };
+    }
+    const probeHeightPx = this.measureProbeRowHeight();
+    if (probeHeightPx < 8) {
+      return null;
+    }
+    const scrollContainer = findScrollableAncestor(this.host.nativeElement);
+    const viewportPx = scrollContainer
+      ? scrollContainer.clientHeight
+      : window.innerHeight;
+    if (viewportPx <= 0) {
+      return null;
+    }
+    return { probeHeightPx, viewportPx, scrollContainer };
+  }
+
+  /**
+   * Reads (and caches) the rendered height of the offscreen probe
+   * row. Returns 0 when the probe ref is not yet attached or has
+   * collapsed to 0 height (e.g., before first layout). Cache key is
+   * the current `treeFontSize`.
+   */
+  private measureProbeRowHeight(): number {
+    const fontSize = this.treeFontSize();
+    if (
+      this.probeRowHeightCache !== null &&
+      this.probeRowHeightCache.fontSize === fontSize
+    ) {
+      return this.probeRowHeightCache.heightPx;
+    }
+    const probeRef = this.autoFitProbe();
+    if (!probeRef) {
+      return 0;
+    }
+    const heightPx = probeRef.nativeElement.getBoundingClientRect().height;
+    if (heightPx <= 0) {
+      return 0;
+    }
+    this.probeRowHeightCache = { fontSize, heightPx };
+    return heightPx;
   }
 
   onSearchInput(ev: Event): void {

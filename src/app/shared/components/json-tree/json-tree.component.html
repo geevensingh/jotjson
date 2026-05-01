@@ -174,6 +174,11 @@
 }
 
 <div class="tree-body" [style.--tree-font-size]="treeFontSizePx()">
+  <div #autoFitProbe class="tree-row tree-row--probe" aria-hidden="true">
+    <span class="tree-twisty tree-spacer">&middot;</span>
+    <span class="tree-key">probe</span>
+    <span class="tree-value-string">"x"</span>
+  </div>
   @if (root()) {
     <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
       <!-- Leaf nodes -->

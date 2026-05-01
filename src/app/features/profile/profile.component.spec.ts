@@ -238,6 +238,75 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().defaultTreeExpansionDepth).toBe(10);
   });
 
+  it('renders the Fit tree to window checkbox', async () => {
+    const { fixture } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    const checkbox = await loader.getHarness(MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }));
+    expect(await checkbox.getLabelText()).toContain('Fit tree to window');
+  });
+
+  it('checks the Fit tree to window checkbox when treeAutoFitToWindow is true', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    prefs.update({ treeAutoFitToWindow: true });
+    fixture.detectChanges();
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    const checkbox = await loader.getHarness(MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }));
+    expect(await checkbox.isChecked()).toBeTrue();
+  });
+
+  it('unchecks the Fit tree to window checkbox when treeAutoFitToWindow is false', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    prefs.update({ treeAutoFitToWindow: false });
+    fixture.detectChanges();
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    const checkbox = await loader.getHarness(MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }));
+    expect(await checkbox.isChecked()).toBeFalse();
+  });
+
+  it('writes treeAutoFitToWindow through PreferencesService when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onTreeAutoFitToWindowChange(false);
+    expect(prefs.prefs().treeAutoFitToWindow).toBe(false);
+    fixture.componentInstance.onTreeAutoFitToWindowChange(true);
+    expect(prefs.prefs().treeAutoFitToWindow).toBe(true);
+  });
+
+  it('disables the expansion depth slider when treeAutoFitToWindow is true', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    prefs.update({ treeAutoFitToWindow: true });
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector('#pref-expansion-depth') as HTMLInputElement | null;
+    expect(input?.disabled).toBeTrue();
+  });
+
+  it('enables the expansion depth slider when treeAutoFitToWindow is false', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    prefs.update({ treeAutoFitToWindow: false });
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector('#pref-expansion-depth') as HTMLInputElement | null;
+    expect(input?.disabled).toBeFalse();
+  });
+
   it('writes treeShowTypeLabels through PreferencesService when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },

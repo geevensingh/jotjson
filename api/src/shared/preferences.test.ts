@@ -231,6 +231,33 @@ describe('normalizePreferences', () => {
     delete bad['treePathRoot'];
     expect(() => normalizePreferences(bad)).toThrow(/treePathRoot must be one of/);
   });
+
+  it('rejects a non-boolean treeAutoFitToWindow', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeAutoFitToWindow'] = 'yes';
+    expect(() => normalizePreferences(bad)).toThrow(
+      /treeAutoFitToWindow must be a boolean/
+    );
+  });
+
+  it('round-trips treeAutoFitToWindow=true', () => {
+    const input = valid() as Record<string, unknown>;
+    input['treeAutoFitToWindow'] = true;
+    expect(normalizePreferences(input).treeAutoFitToWindow).toBe(true);
+  });
+
+  it('round-trips treeAutoFitToWindow=false', () => {
+    const input = valid() as Record<string, unknown>;
+    input['treeAutoFitToWindow'] = false;
+    expect(normalizePreferences(input).treeAutoFitToWindow).toBe(false);
+  });
+
+  it('defaults missing treeAutoFitToWindow to true', () => {
+    const input = valid() as Record<string, unknown>;
+    delete input['treeAutoFitToWindow'];
+    expect(normalizePreferences(input).treeAutoFitToWindow).toBe(true);
+  });
+
   it('rejects bad hex colors', () => {
     const bad = valid() as Record<string, unknown>;
     (bad['treeHighlightColors'] as Record<string, unknown>)['dark'] = {

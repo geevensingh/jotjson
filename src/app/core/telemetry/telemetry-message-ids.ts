@@ -229,6 +229,58 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'tree.expand.slow',
 
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent`'s initial-expansion auto-fit
+   *           branch. Runs exactly once per `root()` change when the
+   *           `treeAutoFitToWindow` preference is on, the probe row
+   *           height measures >= 8 px, and the resolved scroll
+   *           viewport has positive `clientHeight`.
+   *
+   * What this measures: the chosen initial expansion depth `K`
+   *   plus before-and-after fit metrics. The "estimated" measurements
+   *   come from a fixed probe row height (a lower bound), and the
+   *   "actual" measurements are read after expansion has been
+   *   applied and the browser has committed one more animation
+   *   frame.
+   *
+   * Stale-run cancellation: a per-auto-fit generation counter is
+   *   captured at function entry and re-checked inside the post-
+   *   expand rAF; if `value()` has thrashed in the meantime, the
+   *   stale measurement is dropped silently.
+   *
+   * Cold flag: NOT applied. The event fires on every value-driven
+   *   auto-fit (typically several per minute for an active editing
+   *   session); we want each run sampled, not just the first per
+   *   session. Volume is acceptable -- frontend telemetry is
+   *   unsampled by design and the per-user emit rate is moderate.
+   *
+   * Props: none. Closed-enum constraints don't apply because the
+   *   event carries no string dimensions.
+   * Measurements:
+   *   { chosenDepth: number;
+   *     totalNodes: number;
+   *     viewportPx: number;
+   *     probeRowPx: number;
+   *     estimatedRows: number;
+   *     chosenRows: number;
+   *     fillRatioPct: number;
+   *     actualHeightPx: number;
+   *     actualFillRatioPct: number }
+   *   - `chosenDepth`: the picked K (root = 0).
+   *   - `totalNodes`: total nodes in the tree (all depths).
+   *   - `viewportPx`: scroll-container clientHeight at compute time.
+   *   - `probeRowPx`: measured probe row height (lower bound).
+   *   - `estimatedRows`: floor(viewportPx / probeRowPx).
+   *   - `chosenRows`: sum(nodesAt[0..chosenDepth]).
+   *   - `fillRatioPct`: round(chosenRows / estimatedRows * 100).
+   *   - `actualHeightPx`: post-expand `scrollHeight` of the scroll
+   *     container, measured one rAF after `expandToLevel(K)`.
+   *   - `actualFillRatioPct`: round(actualHeightPx / viewportPx
+   *     * 100). Use this to tune the 1.5x overflow tolerance.
+   */
+  'tree.expand.autoFit',
+
   // HTTP / API
 
   /**

@@ -79,6 +79,18 @@ export interface UserPreferences {
    * DESIGN_SPEC.md - Tree feature, selection sync.
    */
   treeEditorSelectionSync: boolean;
+  /**
+   * When true, the JSON tree expands to an automatically computed depth
+   * that fits the visible viewport (auto-fit mode). When false, the tree
+   * expands to the fixed depth set by `defaultTreeExpansionDepth`.
+   * Default true. See DESIGN_SPEC.md - Tree feature, auto-fit expansion.
+   *
+   * One-shot migration (frontend only): if this field is absent from
+   * a persisted prefs object, it defaults to false when the user had
+   * customized `defaultTreeExpansionDepth` away from 2, and to true
+   * otherwise. This preserves explicit slider customizations.
+   */
+  treeAutoFitToWindow: boolean;
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
@@ -157,6 +169,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   activeRuleSetIds: [],
   recentlyViewedEnabled: true,
   treeEditorSelectionSync: true,
+  treeAutoFitToWindow: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
   searchScope: 'both',
@@ -255,6 +268,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'treeAssumeUtcForIsoDateOnly',
   'recentlyViewedEnabled',
   'treeEditorSelectionSync',
+  'treeAutoFitToWindow',
   'searchCaseSensitive',
   'searchRegexMode',
   'searchScope',
@@ -508,6 +522,10 @@ export function normalizePreferences(raw: unknown): UserPreferences {
       raw['treeEditorSelectionSync'],
       'treeEditorSelectionSync'
     ),
+    treeAutoFitToWindow:
+      raw['treeAutoFitToWindow'] !== undefined
+        ? assertBool(raw['treeAutoFitToWindow'], 'treeAutoFitToWindow')
+        : DEFAULT_PREFERENCES.treeAutoFitToWindow,
     searchCaseSensitive: assertBool(raw['searchCaseSensitive'], 'searchCaseSensitive'),
     searchRegexMode: assertBool(raw['searchRegexMode'], 'searchRegexMode'),
     searchScope: assertEnum(raw['searchScope'], SEARCH_SCOPES, 'searchScope'),

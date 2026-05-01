@@ -158,6 +158,17 @@
           </mat-form-field>
         </div>
 
+        <mat-checkbox
+          data-tree-auto-fit
+          [checked]="treeAutoFitToWindow()"
+          (change)="onTreeAutoFitToWindowChange($event.checked)"
+        >
+          <span i18n="@@profile.tree.autoFit.label">Fit tree to window</span>
+        </mat-checkbox>
+        <p class="pref-help-line" i18n="@@profile.tree.autoFit.hint">
+          When on, the tree opens at a depth that fits your window. Turn off to use a fixed depth.
+        </p>
+
         <div class="pref-row pref-row--slider">
           <label for="pref-expansion-depth" i18n="@@profile.prefs.tree.expansionDepth">
             Default expansion depth
@@ -170,6 +181,7 @@
               step="1"
               discrete
               showTickMarks
+              [disabled]="treeAutoFitToWindow()"
             >
               <input
                 matSliderThumb

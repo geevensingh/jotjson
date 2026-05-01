@@ -139,6 +139,19 @@
   // so the strip does not collide with the selection outline below.
   box-shadow: inset 4px 0 0 var(--tree-row-format-border, transparent);
 
+  &--probe {
+    // Hidden offscreen probe used by the auto-fit-to-window initial
+    // expansion to measure the rendered row height once per font
+    // size. `visibility: hidden` keeps the layout box (so we get a
+    // real bounding rect) without rendering pixels; offscreen left
+    // takes it out of any visual region.
+    visibility: hidden;
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    pointer-events: none;
+  }
+
   &:hover {
     background: rgba(127, 127, 127, 0.08);
   }

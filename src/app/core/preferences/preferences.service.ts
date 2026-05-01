@@ -53,6 +53,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   activeRuleSetIds: [],
   recentlyViewedEnabled: true,
   treeEditorSelectionSync: true,
+  treeAutoFitToWindow: true,
   searchCaseSensitive: false,
   searchRegexMode: false,
   searchScope: 'both',
@@ -118,6 +119,15 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
       (filtered as Record<string, unknown>)[key] = remoteRecord[key];
     }
   }
+  // One-shot migration: if treeAutoFitToWindow was not persisted, derive
+  // the value from defaultTreeExpansionDepth. Users who customized the
+  // depth slider away from the default of 2 get auto-fit turned off so
+  // their existing slider setting is preserved; everyone else (new users
+  // or those who kept the default depth) get auto-fit on.
+  if (filtered.treeAutoFitToWindow === undefined) {
+    const persistedDepth = remoteRecord['defaultTreeExpansionDepth'];
+    filtered.treeAutoFitToWindow = persistedDepth === undefined || persistedDepth === 2;
+  }
   return {
     ...structuredClone(DEFAULT_PREFERENCES),
     ...filtered,
@@ -170,6 +180,7 @@ const PREFERENCE_KEYS = [
   'activeRuleSetIds',
   'recentlyViewedEnabled',
   'treeEditorSelectionSync',
+  'treeAutoFitToWindow',
   'searchCaseSensitive',
   'searchRegexMode',
   'searchScope',
@@ -489,6 +500,9 @@ export class PreferencesService {
         return;
       case 'treeEditorSelectionSync':
         this.emitBooleanPreferenceChange(key, preferences.treeEditorSelectionSync, source);
+        return;
+      case 'treeAutoFitToWindow':
+        this.emitBooleanPreferenceChange(key, preferences.treeAutoFitToWindow, source);
         return;
       case 'searchCaseSensitive':
         this.emitBooleanPreferenceChange(key, preferences.searchCaseSensitive, source);

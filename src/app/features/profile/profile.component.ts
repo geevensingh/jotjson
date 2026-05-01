@@ -101,6 +101,7 @@ export class ProfileComponent implements OnInit {
   readonly editorTabSize = computed(() => this.prefs().editorTabSize);
   readonly editorWordWrap = computed(() => this.prefs().editorWordWrap);
   readonly defaultTreeExpansionDepth = computed(() => this.prefs().defaultTreeExpansionDepth);
+  readonly treeAutoFitToWindow = computed(() => this.prefs().treeAutoFitToWindow);
   readonly treeShowTypeLabels = computed(() => this.prefs().treeShowTypeLabels);
   readonly treeShowDateAnnotations = computed(
     () => this.prefs().treeShowDateAnnotations
@@ -221,6 +222,10 @@ export class ProfileComponent implements OnInit {
 
   onTreeShowTypeLabelsChange(value: boolean): void {
     this.prefsService.update({ treeShowTypeLabels: value });
+  }
+
+  onTreeAutoFitToWindowChange(value: boolean): void {
+    this.prefsService.update({ treeAutoFitToWindow: value });
   }
 
   onTreeShowDateAnnotationsChange(value: boolean): void {

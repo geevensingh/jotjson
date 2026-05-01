@@ -346,6 +346,173 @@ describe('JsonTreeComponent', () => {
     });
   });
 
+  describe('initial expansion auto-fit', () => {
+    /**
+     * Auto-fit's measurement seam lets us drive the algorithm with
+     * deterministic probe + viewport heights. Tests use the seam so
+     * they don't depend on how the headless browser lays out the
+     * component (probe row in particular varies by Chrome version
+     * font metrics).
+     */
+    function captureAutoFitEmit(
+      eventSpy: jasmine.Spy
+    ): { props: Record<string, unknown>; measurements: Record<string, number> } | null {
+      const call = eventSpy.calls
+        .allArgs()
+        .find((args) => args[0] === 'tree.expand.autoFit');
+      if (!call) return null;
+      return {
+        props: call[1] as Record<string, unknown>,
+        measurements: call[2] as Record<string, number>
+      };
+    }
+
+    function expandToLevelCallsFor(
+      spy: jasmine.Spy
+    ): { depth: number; internal: boolean }[] {
+      return spy.calls.allArgs().map((args) => ({
+        depth: args[0] as number,
+        internal: (args[1] as boolean | undefined) ?? false
+      }));
+    }
+
+    it('with auto-fit ON, picks K via the algorithm and calls expandToLevel(K, true)', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      // Stub measurements before triggering the value change. Probe
+      // 20 px, viewport 100 px -> capacity = 5; 1.5 * 5 = 7.5.
+      // Tree {a:{b:1}} -> nodesAt = [1, 1, 1]; sums = [1, 2, 3]; all
+      // fit -> K = 2 (max depth).
+      cmp = fixture.componentInstance;
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      const expandSpy = spyOn(cmp, 'expandToLevel').and.callThrough();
+      fixture.componentRef.setInput('value', { a: { b: 1 } });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      const calls = expandToLevelCallsFor(expandSpy);
+      expect(calls).toEqual([{ depth: 2, internal: true }]);
+      const emit = captureAutoFitEmit(eventSpy);
+      expect(emit).not.toBeNull();
+      expect(emit!.props).toEqual({});
+      expect(emit!.measurements['chosenDepth']).toBe(2);
+      expect(emit!.measurements['totalNodes']).toBe(3);
+      expect(emit!.measurements['viewportPx']).toBe(100);
+      expect(emit!.measurements['probeRowPx']).toBe(20);
+      expect(emit!.measurements['estimatedRows']).toBe(5);
+      expect(emit!.measurements['chosenRows']).toBe(3);
+      expect(emit!.measurements['fillRatioPct']).toBe(60);
+      expect(typeof emit!.measurements['actualHeightPx']).toBe('number');
+      expect(typeof emit!.measurements['actualFillRatioPct']).toBe('number');
+    });
+
+    it('wide-explosion case picks K = 0 (root collapsed)', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp = fixture.componentInstance;
+      // Probe 20 px, viewport 200 px -> capacity = 10; 1.5 * 10 = 15.
+      cmp.__setAutoFitMeasurementsForTesting(20, 200);
+      const expandSpy = spyOn(cmp, 'expandToLevel').and.callThrough();
+      // Build a wide tree: root with 50 children, each container with
+      // 1 grandchild leaf. nodesAt = [1, 50, 50]; sum[0..0] = 1
+      // (fits), sum[0..1] = 51 (overflows 15) -> K = 0.
+      const wide: Record<string, { leaf: number }> = {};
+      for (let outerIndex = 0; outerIndex < 50; outerIndex += 1) {
+        wide[`k${outerIndex}`] = { leaf: outerIndex };
+      }
+      fixture.componentRef.setInput('value', wide);
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      const calls = expandToLevelCallsFor(expandSpy);
+      expect(calls).toEqual([{ depth: 0, internal: true }]);
+      const emit = captureAutoFitEmit(eventSpy);
+      expect(emit!.measurements['chosenDepth']).toBe(0);
+      expect(emit!.measurements['chosenRows']).toBe(1);
+    });
+
+    it('with auto-fit OFF, falls back to defaultTreeExpansionDepth and emits no autoFit event', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp = fixture.componentInstance;
+      prefs.update({ treeAutoFitToWindow: false, defaultTreeExpansionDepth: 3 });
+      // Stub measurements anyway; they should be ignored on the OFF
+      // path (and we want to be sure of that).
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      const expandSpy = spyOn(cmp, 'expandToLevel').and.callThrough();
+      fixture.componentRef.setInput('value', { a: { b: { c: 1 } } });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      const calls = expandToLevelCallsFor(expandSpy);
+      expect(calls).toEqual([{ depth: 3, internal: true }]);
+      expect(captureAutoFitEmit(eventSpy)).toBeNull();
+    });
+
+    it('falls back to defaultTreeExpansionDepth when probe height is unmeasurable', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp = fixture.componentInstance;
+      // probe = 0 -> unmeasurable; viewport ignored.
+      cmp.__setAutoFitMeasurementsForTesting(0, 100);
+      const expandSpy = spyOn(cmp, 'expandToLevel').and.callThrough();
+      fixture.componentRef.setInput('value', { a: { b: 1 } });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      // Default is 2.
+      expect(expandToLevelCallsFor(expandSpy)).toEqual([{ depth: 2, internal: true }]);
+      expect(captureAutoFitEmit(eventSpy)).toBeNull();
+    });
+
+    it('falls back to defaultTreeExpansionDepth when viewport is 0 px tall', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp = fixture.componentInstance;
+      cmp.__setAutoFitMeasurementsForTesting(20, 0);
+      const expandSpy = spyOn(cmp, 'expandToLevel').and.callThrough();
+      fixture.componentRef.setInput('value', { a: { b: 1 } });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      expect(expandToLevelCallsFor(expandSpy)).toEqual([{ depth: 2, internal: true }]);
+      expect(captureAutoFitEmit(eventSpy)).toBeNull();
+    });
+
+    it('does not emit tree.expand.autoFit after component destroy', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp = fixture.componentInstance;
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      fixture.componentRef.setInput('value', { a: 1 });
+      fixture.detectChanges();
+      fixture.destroy();
+      runQueuedAnimationFrames(callbacks);
+      expect(captureAutoFitEmit(eventSpy)).toBeNull();
+    });
+
+    it('drops a stale autoFit measurement when value cycles through undefined', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp = fixture.componentInstance;
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      // First load -> auto-fit runs, queues rAF (generation 1).
+      fixture.componentRef.setInput('value', { a: 1 });
+      fixture.detectChanges();
+      // Reset to undefined -> hasInitializedExpansion -> false.
+      fixture.componentRef.setInput('value', undefined);
+      fixture.detectChanges();
+      // Second load BEFORE the first rAF fires -> auto-fit runs
+      // again, queues a second rAF (generation 2). Now there are
+      // two queued rAFs; the first is stale.
+      fixture.componentRef.setInput('value', { b: 2 });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      // Only the second (current-generation) rAF should emit.
+      const autoFitCalls = eventSpy.calls
+        .allArgs()
+        .filter((args) => args[0] === 'tree.expand.autoFit');
+      expect(autoFitCalls.length).toBe(1);
+      const measurements = autoFitCalls[0]![2] as Record<string, number>;
+      expect(measurements['totalNodes']).toBe(2);
+    });
+  });
+
   describe('searchHits', () => {
     beforeEach(async () => {
       await createWith({ alpha: 'hello', beta: { gamma: 'HELLO', delta: 7 } });

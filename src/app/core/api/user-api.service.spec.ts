@@ -32,6 +32,7 @@ function fakePreferences(): UserPreferences {
     treeDateAnnotationFriendlyForms: true,
     recentlyViewedEnabled: true,
     treeEditorSelectionSync: true,
+    treeAutoFitToWindow: true,
     searchCaseSensitive: false,
     searchRegexMode: false,
     searchScope: 'both',
