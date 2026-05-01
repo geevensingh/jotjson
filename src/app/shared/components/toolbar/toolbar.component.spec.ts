@@ -710,6 +710,81 @@ describe('ToolbarComponent', () => {
     });
   });
 
+  describe('identity-control child order', () => {
+    function classOfChild(parent: Element, index: number): string {
+      const child = parent.children.item(index);
+      if (!child) {
+        throw new Error(`expected child at index ${index} of identity-control`);
+      }
+      return child.className;
+    }
+
+    it('signed-in: renders [title-input, state-pill, save-button] in order', async () => {
+      const { fixture } = await create({ signedIn: true });
+      setToolbarInputs(fixture, {
+        isSavedBlob: false,
+        isDirty: false,
+        saveInFlight: false
+      });
+
+      const identityControl = requireByCss<HTMLElement>(
+        fixture,
+        '.identity-control'
+      );
+      expect(identityControl.children.length).toBe(3);
+      expect(classOfChild(identityControl, 0)).toContain('title-input');
+      expect(classOfChild(identityControl, 1)).toContain('state-pill');
+      expect(classOfChild(identityControl, 2)).toContain('save-button');
+    });
+
+    it('anonymous on saved blob: renders [title-display, state-pill (with CTA)] in order', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        loadedBlobTitle: 'Shared blob',
+        saveInFlight: false
+      });
+
+      const identityControl = requireByCss<HTMLElement>(
+        fixture,
+        '.identity-control'
+      );
+      expect(identityControl.children.length).toBe(2);
+      expect(classOfChild(identityControl, 0)).toContain('title-display');
+      expect(classOfChild(identityControl, 1)).toContain('state-pill');
+      expect(
+        identityControl.querySelector('.state-pill button.pill-cta')
+      ).toBeTruthy();
+      expect(
+        identityControl.querySelector('.save-button')
+      ).toBeNull();
+    });
+
+    it('anonymous, no saved blob: state-pill is the only child; no title or save-button', async () => {
+      const { fixture } = await create();
+      setToolbarInputs(fixture, {
+        isSavedBlob: false,
+        saveInFlight: false
+      });
+
+      const identityControl = requireByCss<HTMLElement>(
+        fixture,
+        '.identity-control'
+      );
+      expect(identityControl.children.length).toBe(1);
+      expect(classOfChild(identityControl, 0)).toContain('state-pill');
+      expect(
+        identityControl.querySelector('.title-display')
+      ).toBeNull();
+      expect(
+        identityControl.querySelector('.title-input')
+      ).toBeNull();
+      expect(
+        identityControl.querySelector('.save-button')
+      ).toBeNull();
+    });
+  });
+
   describe('file input wiring', () => {
     it('emits upload when onFileChange receives a file', async () => {
       const { fixture } = await create();

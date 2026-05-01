@@ -101,6 +101,28 @@
   <span class="divider" aria-hidden="true"></span>
 
   <div class="identity-control">
+    @if (isAnonymousOnSavedBlob()) {
+      <span
+        class="title-display"
+        [class.untitled]="!loadedBlobTitle()"
+      >
+        {{ loadedBlobTitle() || untitledLabel }}
+      </span>
+    } @else if (isSignedIn()) {
+      <input
+        class="title-input title-field"
+        type="text"
+        [value]="title()"
+        i18n-placeholder="@@toolbar.title.placeholder"
+        placeholder="Add a title..."
+        aria-label="Blob title"
+        i18n-aria-label="@@toolbar.title.aria"
+        maxlength="200"
+        (input)="onTitleInput($event)"
+        (keydown)="onTitleKeydown($event)"
+      />
+    }
+
     <div
       [class]="'state-pill ' + pillStateClass()"
       role="status"
@@ -124,75 +146,53 @@
       }
     </div>
 
-    @if (isAnonymousOnSavedBlob()) {
-      <span
-        class="title-display"
-        [class.untitled]="!loadedBlobTitle()"
-      >
-        {{ loadedBlobTitle() || untitledLabel }}
-      </span>
-    } @else if (isSignedIn()) {
-      <input
-        class="title-input title-field"
-        type="text"
-        [value]="title()"
-        i18n-placeholder="@@toolbar.title.placeholder"
-        placeholder="Add a title..."
-        aria-label="Blob title"
-        i18n-aria-label="@@toolbar.title.aria"
-        maxlength="200"
-        (input)="onTitleInput($event)"
-        (keydown)="onTitleKeydown($event)"
-      />
-    }
-  </div>
-
-  <ng-container *jjSignedIn>
-    <button
-      type="button"
-      mat-flat-button
-      class="save-button"
-      color="primary"
-      [matTooltip]="saveTooltip()"
-      [disabled]="saveDisabled()"
-      (click)="onSaveClick()"
-    >
-      <jj-icon name="save" />
-      <span>{{ saveButtonLabel() }}</span>
-    </button>
-
-    @if (showOverflowMenu()) {
+    <ng-container *jjSignedIn>
       <button
         type="button"
-        mat-icon-button
-        [matMenuTriggerFor]="blobMenu"
-        matTooltip="More actions"
-        i18n-matTooltip="@@toolbar.overflow.tooltip"
-        aria-label="More actions for this blob"
-        i18n-aria-label="@@toolbar.overflow.aria"
+        mat-flat-button
+        class="save-button"
+        color="primary"
+        [matTooltip]="saveTooltip()"
+        [disabled]="saveDisabled()"
+        (click)="onSaveClick()"
       >
-        <jj-icon name="more-vert" />
+        <jj-icon name="save" />
+        <span>{{ saveButtonLabel() }}</span>
       </button>
-      <mat-menu #blobMenu="matMenu" class="jj-menu">
-        <button mat-menu-item type="button" (click)="onCopyShareLinkClick()">
-          <jj-icon name="link" />
-          <span i18n="@@toolbar.overflow.copyShareLink">Copy share link</span>
-        </button>
-        <button mat-menu-item type="button" (click)="onTogglePublicClick()">
-          <jj-icon [name]="isPublic() ? 'lock' : 'globe'" />
-          <span>{{ visibilityMenuLabel() }}</span>
-        </button>
+
+      @if (showOverflowMenu()) {
         <button
-          mat-menu-item
           type="button"
-          (click)="onDeleteBlobClick()"
+          mat-icon-button
+          [matMenuTriggerFor]="blobMenu"
+          matTooltip="More actions"
+          i18n-matTooltip="@@toolbar.overflow.tooltip"
+          aria-label="More actions for this blob"
+          i18n-aria-label="@@toolbar.overflow.aria"
         >
-          <jj-icon name="trash" />
-          <span i18n="@@toolbar.overflow.delete">Delete this blob</span>
+          <jj-icon name="more-vert" />
         </button>
-      </mat-menu>
-    }
-  </ng-container>
+        <mat-menu #blobMenu="matMenu" class="jj-menu">
+          <button mat-menu-item type="button" (click)="onCopyShareLinkClick()">
+            <jj-icon name="link" />
+            <span i18n="@@toolbar.overflow.copyShareLink">Copy share link</span>
+          </button>
+          <button mat-menu-item type="button" (click)="onTogglePublicClick()">
+            <jj-icon [name]="isPublic() ? 'lock' : 'globe'" />
+            <span>{{ visibilityMenuLabel() }}</span>
+          </button>
+          <button
+            mat-menu-item
+            type="button"
+            (click)="onDeleteBlobClick()"
+          >
+            <jj-icon name="trash" />
+            <span i18n="@@toolbar.overflow.delete">Delete this blob</span>
+          </button>
+        </mat-menu>
+      }
+    </ng-container>
+  </div>
 
   <span class="spacer"></span>
 
