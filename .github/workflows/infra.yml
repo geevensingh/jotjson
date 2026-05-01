@@ -20,21 +20,22 @@ name: Infra (Bicep)
 #       Azure secrets / OIDC policy for PR runs).
 #
 # Run titles are prefixed with a tag so the Actions list page
-# distinguishes intent at a glance:
-#   [deploy]         push to main (auto-deploy)
-#   [deploy/manual]  workflow_dispatch (manual override)
-#   [build-only]     pull_request (build job only; no validate/deploy)
-#   [<event_name>]   defensive default for any other trigger
+# distinguishes intent at a glance. Body is omitted for push and
+# workflow_dispatch because GitHub Actions expressions can't extract
+# the commit subject from a multi-line message; the row's commit SHA
+# and metadata still identify the run.
+#   [deploy]                 push to main (auto-deploy)
+#   [deploy/manual]          workflow_dispatch (manual override)
+#   [build-only] <PR title>  pull_request (build job only; no validate/deploy)
+#   [<event_name>]           defensive default for any other trigger
 # ----------------------------------------------------------------------
 
 run-name: >-
   ${{ (github.event_name == 'pull_request'
         && format('[build-only] {0}', github.event.pull_request.title))
-      || (github.event_name == 'workflow_dispatch'
-        && format('[deploy/manual] {0}', github.sha))
-      || (github.event_name == 'push'
-        && format('[deploy] {0}', github.event.head_commit.message || github.sha))
-      || format('[{0}] {1}', github.event_name, github.sha) }}
+      || (github.event_name == 'workflow_dispatch' && '[deploy/manual]')
+      || (github.event_name == 'push' && '[deploy]')
+      || format('[{0}]', github.event_name) }}
 
 on:
   push:
