@@ -351,12 +351,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  // Cap the slot so a long comment can't push the rest of the row
-  // off-screen. The user sees an ellipsis and tooltips for the full
-  // text on hover.
-  max-width: 32ch;
   // Allow the slot to shrink below its intrinsic min-width so flex
   // siblings (key, value, type-label) keep their natural sizes.
+  // Combined with `text-overflow: ellipsis` this gives a clean
+  // shrink-to-fit + truncate behavior driven by available row width
+  // rather than an arbitrary char cap.
   min-width: 0;
 }
 
@@ -369,14 +368,18 @@
 }
 
 .tree-comment-trailing {
-  // Inside `tree-row-right` the parent already provides a 6px gap;
-  // no explicit margin needed.
+  // Trailing comment sits on the leaf row between the value (or its
+  // date annotation) and the right-aligned `tree-row-right` cluster,
+  // matching JSONC source order: `"x": 5  // milliseconds  [number]`.
+  margin-left: 8px;
   flex: 0 1 auto;
 }
 
 .tree-comment-trailing--close {
   // On the close row the trailing comment sits beside the brace;
-  // the brace span has no flex gap, so add a small left margin.
+  // the brace span has no flex gap, so the same 8px left margin
+  // applies. Modifier kept for future divergence (e.g., distinct
+  // color for end-of-container vs end-of-value).
   margin-left: 8px;
 }
 

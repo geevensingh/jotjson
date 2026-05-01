@@ -1058,7 +1058,7 @@ describe('JsonTreeComponent', () => {
       expect(leading[0]).toBe('legal name on file');
     });
 
-    it('renders a trailing comment on a leaf row inside tree-row-right', async () => {
+    it('renders a trailing comment on a leaf row as a sibling of tree-row-right', async () => {
       await createWithComments(
         { id: 42 },
         makeMap([['$.id', makeBundle(undefined, 'uuid migration TBD')]])
@@ -1066,29 +1066,67 @@ describe('JsonTreeComponent', () => {
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]');
       expect(leafRow).withContext('leaf row should be rendered').not.toBeNull();
-      const right = leafRow!.querySelector('.tree-row-right');
-      expect(right).withContext('row-right span should exist').not.toBeNull();
-      const trailing = right!.querySelector('.tree-comment-trailing');
-      expect(trailing).withContext('trailing slot inside row-right').not.toBeNull();
+      const trailing = leafRow!.querySelector(':scope > .tree-comment-trailing');
+      expect(trailing)
+        .withContext('trailing slot is a direct child of the leaf row')
+        .not.toBeNull();
       expect(trailing!.textContent?.trim()).toBe('uuid migration TBD');
+      // Per M7k-2-fu the trailing slot lives outside `tree-row-right`
+      // so it sits next to the value, matching JSONC source order.
+      const right = leafRow!.querySelector(':scope > .tree-row-right')!;
+      expect(right.querySelector('.tree-comment-trailing'))
+        .withContext('trailing slot must NOT be inside tree-row-right')
+        .toBeNull();
     });
 
-    it('renders the trailing comment AFTER the type badge on leaf rows', async () => {
+    it('renders the trailing comment AFTER the value and BEFORE tree-row-right on leaf rows', async () => {
       prefs.update({ treeShowTypeLabels: true });
       await createWithComments(
         { id: 42 },
         makeMap([['$.id', makeBundle(undefined, 'inline note')]])
       );
       const host = fixture.nativeElement as HTMLElement;
-      const leafRow = host.querySelector('[data-path="$.id"]')!;
-      const right = leafRow.querySelector('.tree-row-right')!;
-      const children = Array.from(right.children) as HTMLElement[];
-      const badgeIndex = children.findIndex((c) => c.classList.contains('tree-type-badge'));
+      const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
+      const children = Array.from(leafRow.children) as HTMLElement[];
+      const valueIndex = children.findIndex((c) =>
+        c.classList.contains('tree-value-number')
+      );
       const trailingIndex = children.findIndex((c) =>
         c.classList.contains('tree-comment-trailing')
       );
-      expect(badgeIndex).toBeGreaterThanOrEqual(0);
-      expect(trailingIndex).toBeGreaterThan(badgeIndex);
+      const rightIndex = children.findIndex((c) =>
+        c.classList.contains('tree-row-right')
+      );
+      expect(valueIndex).withContext('value span').toBeGreaterThanOrEqual(0);
+      expect(trailingIndex).withContext('trailing comment').toBeGreaterThan(valueIndex);
+      expect(rightIndex).withContext('tree-row-right after trailing').toBeGreaterThan(trailingIndex);
+    });
+
+    it('renders the trailing comment AFTER the date annotation on string rows', async () => {
+      prefs.update({ treeShowDateAnnotations: true });
+      await createWithComments(
+        { when: '2024-01-15T00:00:00Z' },
+        makeMap([['$.when', makeBundle(undefined, 'logged at noon')]])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const leafRow = host.querySelector('[data-path="$.when"]') as HTMLElement;
+      const children = Array.from(leafRow.children) as HTMLElement[];
+      const trailingIndex = children.findIndex((c) =>
+        c.classList.contains('tree-comment-trailing')
+      );
+      // The date annotation lives inside the .tree-value-string's
+      // @case block, so it's a descendant - check its position within
+      // the row by querying its closest direct child of the row.
+      const dateAnn = leafRow.querySelector('.tree-date-annotation');
+      expect(dateAnn).withContext('date annotation should render').not.toBeNull();
+      // Order via DOM position comparison: date annotation must come
+      // before trailing comment.
+      const trailing = children[trailingIndex];
+      const positionMask = dateAnn!.compareDocumentPosition(trailing);
+      // DOCUMENT_POSITION_FOLLOWING = 4
+      expect(positionMask & Node.DOCUMENT_POSITION_FOLLOWING)
+        .withContext('trailing must follow date annotation in document order')
+        .toBeGreaterThan(0);
     });
 
     it('renders the trailing comment BEFORE the kebab on leaf rows', async () => {
@@ -1097,17 +1135,34 @@ describe('JsonTreeComponent', () => {
         makeMap([['$.id', makeBundle(undefined, 'inline note')]])
       );
       const host = fixture.nativeElement as HTMLElement;
-      const leafRow = host.querySelector('[data-path="$.id"]')!;
-      const right = leafRow.querySelector('.tree-row-right')!;
-      const children = Array.from(right.children) as HTMLElement[];
-      const trailingIndex = children.findIndex((c) =>
-        c.classList.contains('tree-comment-trailing')
+      const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
+      const trailing = leafRow.querySelector('.tree-comment-trailing');
+      const kebab = leafRow.querySelector('.tree-kebab-pill');
+      expect(trailing).withContext('trailing comment').not.toBeNull();
+      expect(kebab).withContext('kebab').not.toBeNull();
+      const positionMask = trailing!.compareDocumentPosition(kebab!);
+      expect(positionMask & Node.DOCUMENT_POSITION_FOLLOWING)
+        .withContext('kebab must follow trailing comment in document order')
+        .toBeGreaterThan(0);
+    });
+
+    it('does not impose a max-width on .tree-comment (flex-driven shrink instead)', async () => {
+      await createWithComments(
+        { id: 42 },
+        makeMap([['$.id', makeBundle(undefined, 'note')]])
       );
-      const kebabIndex = children.findIndex((c) =>
-        c.classList.contains('tree-kebab-pill')
-      );
-      expect(trailingIndex).toBeGreaterThanOrEqual(0);
-      expect(kebabIndex).toBeGreaterThan(trailingIndex);
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const trailing = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-comment-trailing'
+        ) as HTMLElement;
+        expect(trailing).withContext('trailing slot should render').toBeTruthy();
+        // The slot must not be capped by an arbitrary max-width; row
+        // width + min-width:0 + ellipsis already does the right thing.
+        expect(getComputedStyle(trailing).maxWidth).toBe('none');
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
     });
 
     it('renders the trailing-on-close comment on the container close row', async () => {
