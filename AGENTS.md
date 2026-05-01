@@ -415,6 +415,44 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
 - Test names describe behavior: `it('returns 404 when blob slug is unknown')`.
 - Run the full lint + test + build suite before declaring completion (see §7).
 
+### Fast inner loop
+
+For incremental work, prefer the fast inner loop over the full
+Definition of Done cycle (§7) on every iteration:
+
+- **`npm run verify:fast`** runs `lint` + `ng test` in one shot,
+  **without** the production build or i18n extraction. Use this as
+  the default check during iteration.
+- For focused iteration, pass `--include` through to `ng test`:
+  ```
+  npm run verify:fast -- --include='**/extract-json-banner/**'
+  ```
+  Runs only specs matching the glob - seconds instead of a full
+  ~1500-test suite.
+- **Skip `npm run extract-i18n`** unless you added, removed, or
+  renamed user-visible strings (`i18n=` attributes or `$localize`
+  tagged templates). It does a full Angular build (~20s) and is
+  wasted churn otherwise. When you do change strings, keep i18n
+  message IDs stable per §4 Internationalization.
+- **Skip `npm run build`** (and `build:prod`) during inner-loop
+  iteration. `npm run lint` already catches the same type errors via
+  `tsc --noEmit`. Run a build only when:
+  - You are about to declare a task done (DoD §7 #3), OR
+  - The change could affect bundle size, template-only errors, or
+    production-only optimisations (e.g., new lazy-loaded route).
+
+For sustained work on a single area, kick off long-lived watchers
+in background terminals so each save checks incrementally:
+
+```
+npx tsc --noEmit -p tsconfig.app.json --watch
+ng test --watch --browsers=ChromeHeadless --include='**/<focus>/**'
+```
+
+After the initial cold start, every save reports type errors and
+re-runs affected tests in seconds. Stop the watchers before running
+the full DoD cycle to avoid Karma port collisions.
+
 ## 6. Security & Privacy
 
 - **Never** log or transmit clipboard contents, editor contents, or PII beyond
@@ -429,6 +467,10 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
   the explicitly-public blob read path.
 
 ## 7. Definition of Done
+
+These checks run before declaring a task done, **not** on every save.
+For inner-loop iteration use `npm run verify:fast` (see §5 "Fast inner
+loop"); the steps below are the final sweep.
 
 Before finishing a task:
 1. `npm run lint` passes (frontend and `api/`). Lint is currently
