@@ -630,6 +630,21 @@ Before finishing a task:
   not let you act on a guess. Ask the question anyway and wait. Do
   not assume answers, do not build a plan on assumptions, do not
   proceed autonomously.
+- **Use `ask_user` to ask the user; never "make a best guess on
+  autopilot".** When you need user input on scope, behavior,
+  defaults, limits, or design, use the runtime's `ask_user` tool
+  (or its equivalent) -- do not phrase questions as plain prose
+  the user might miss. When the set of plausible answers is
+  discrete, pass them via the tool's `choices` array. This rule
+  applies in **every** runtime mode -- interactive, autopilot,
+  fleet, and background -- and regardless of whether the runtime
+  reports the user as available, busy, or away. "Making a best
+  guess on autopilot" is forbidden: an autonomous runtime is
+  **not** authorization to guess. If the user is unavailable, ask
+  anyway, then stop; do not start implementing. To stop cleanly,
+  use the runtime's plan-approval / completion channel (e.g.,
+  `exit_plan_mode` in plan mode, or a task-completion tool with
+  an ambiguity summary outside it), not free-form prose.
 - Treat user suggestions as proposals, not orders. Think critically
   about each one before acting.
 - When the user proposes an approach, evaluate whether it is sound,
