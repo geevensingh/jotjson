@@ -324,12 +324,22 @@
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
+  // Never compress the right cluster. Long leading/trailing JSONC
+  // comments shrink first via their own `min-width: 0` + ellipsis;
+  // without this guard the flex algorithm shrinks both items in
+  // parallel and squeezes `.tree-count` text below the natural width
+  // of "N keys"/"N items", which then wraps and pushes the badge to
+  // a second line.
+  flex-shrink: 0;
 
   .tree-count {
     color: rgba(127, 127, 127, 0.7);
     font-style: italic;
     // Decoration -> sans (DESIGN_SPEC.md tree font philosophy).
     font-family: var(--font-ui);
+    // The text contains an internal space ("N keys", "N items") and
+    // must never break across two lines.
+    white-space: nowrap;
   }
 
   .tree-type-badge,
@@ -364,7 +374,6 @@
   // right margin separates the leading comment from the key it
   // annotates, matching how it reads in the source.
   margin-right: 8px;
-  flex: 0 1 auto;
 }
 
 .tree-comment-trailing {
@@ -372,7 +381,6 @@
   // date annotation) and the right-aligned `tree-row-right` cluster,
   // matching JSONC source order: `"x": 5  // milliseconds  [number]`.
   margin-left: 8px;
-  flex: 0 1 auto;
 }
 
 .tree-comment-trailing--close {

@@ -1247,6 +1247,58 @@ describe('JsonTreeComponent', () => {
       expect(commentTexts('.tree-comment-leading')).toEqual([]);
       expect(commentTexts('.tree-comment-trailing')).toEqual([]);
     });
+
+    it('keeps the count cluster intact when a leading comment is much longer than the row', async () => {
+      // Regression for the bug reported 2026-05-01 (Screenshot
+      // 2026-05-01 151953.png): a very long leading comment squeezed
+      // .tree-row-right below the natural width of "N keys", which
+      // wrapped the count text at the internal space and pushed the
+      // type-badge to a second line. The fix is `flex-shrink: 0` on
+      // .tree-row-right plus `white-space: nowrap` on .tree-count.
+      const longComment =
+        'Customer record that is really long and record that is really long and record that is really really really long';
+      await createWithComments(
+        { foo: { user: { name: 'Alice', id: 42 } } },
+        makeMap([['$.foo.user', makeBundle(longComment)]])
+      );
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        // Force a narrow viewport so the row genuinely overflows.
+        const host = fixture.nativeElement as HTMLElement;
+        host.style.width = '480px';
+        host.style.maxWidth = '480px';
+        fixture.detectChanges();
+
+        const userRow = host.querySelector(
+          '[data-path="$.foo.user"]'
+        ) as HTMLElement | null;
+        expect(userRow).withContext('user open row should render').not.toBeNull();
+        const rowRight = userRow!.querySelector('.tree-row-right') as HTMLElement;
+        const count = userRow!.querySelector('.tree-count') as HTMLElement;
+        expect(rowRight).withContext('row-right cluster').not.toBeNull();
+        expect(count).withContext('count span').not.toBeNull();
+        expect(count.textContent?.trim()).toBe('2 keys');
+
+        // Computed-style guards: the actual fix.
+        expect(getComputedStyle(rowRight).flexShrink).toBe('0');
+        expect(getComputedStyle(count).whiteSpace).toBe('nowrap');
+
+        // Behavioral guard: the count text fits on a single line and
+        // the right cluster is no taller than the count itself.
+        const countLineHeight = parseFloat(getComputedStyle(count).lineHeight);
+        const countHeight = count.getBoundingClientRect().height;
+        if (Number.isFinite(countLineHeight)) {
+          // Single-line height should be <= 1.5 line-heights even
+          // accounting for sub-pixel rounding.
+          expect(countHeight).toBeLessThan(countLineHeight * 1.5);
+        }
+        expect(rowRight.getBoundingClientRect().height).toBeLessThan(
+          countHeight * 1.6
+        );
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
   });
 
   describe('decoration vs data fonts (tree font philosophy)', () => {
