@@ -43,13 +43,18 @@ export class AppComponent implements OnInit {
       loggerService.event('app.boot', {
         version: buildInfoModule.BUILD_INFO.version,
         sha: buildInfoModule.BUILD_INFO.sha,
-        branch: buildInfoModule.BUILD_INFO.branch
+        branch: buildInfoModule.BUILD_INFO.branch,
+        buildNumber: buildInfoModule.BUILD_INFO.buildNumber
       }, undefined);
       await loggerService.connect();
       routeTracker.flushPending();
       // Keep web-vitals in a lazy chunk; it emits one webVitals event on pagehide.
       void import('./core/telemetry/web-vitals').then(({ initWebVitals }) => {
-        return initWebVitals(loggerService, buildInfoModule.BUILD_INFO.version);
+        return initWebVitals(
+          loggerService,
+          buildInfoModule.BUILD_INFO.version,
+          buildInfoModule.BUILD_INFO.buildNumber
+        );
       });
     });
     void import('./core/update/app-update.service').then(({ AppUpdateService }) => {

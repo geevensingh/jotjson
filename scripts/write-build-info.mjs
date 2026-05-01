@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Build-info generator for JotJSON.
 //
-// Reads package.json version/repository metadata and CI-provided
-// GITHUB_SHA / GITHUB_REF_NAME values, then writes them into
+// Reads package.json version/repository metadata, CI-provided
+// GITHUB_SHA / GITHUB_REF_NAME values, and a git-derived
+// buildNumber (`git rev-list --count HEAD`), then writes them into
 // src/generated/build-info.ts so the Angular bundle can surface a
 // "what am I running?" indicator in the status bar.
 //
@@ -14,11 +15,13 @@
 //   - No GITHUB_SHA -> sha: 'dev'
 //   - No GITHUB_REF_NAME -> branch: ''
 //   - No package.json repository.url -> repoUrl: ''
+//   - Shallow git checkout / git unavailable -> buildNumber: 'unknown'
 //   - The generated file is gitignored; each build regenerates it.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, '..');
@@ -51,6 +54,47 @@ function normalizeRepositoryUrl(rawRepositoryUrl) {
   return repositoryUrl;
 }
 
+// Computes a monotonically non-decreasing build counter on `main`.
+// Returns 'unknown' (and warns) on shallow checkouts or when git is
+// unavailable -- a fake '0' would silently pollute telemetry. The
+// post-build assertion in ci.yml fails the workflow if a shipped
+// artifact contains 'unknown', surfacing a missing fetch-depth: 0.
+function getBuildNumber() {
+  try {
+    const isShallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    if (isShallow === 'true') {
+      console.warn(
+        "write-build-info: shallow git checkout detected; buildNumber set to 'unknown'. " +
+          'Set actions/checkout fetch-depth: 0 if this is the build that ships.'
+      );
+      return 'unknown';
+    }
+    const count = execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    if (count === '' || !/^\d+$/u.test(count)) {
+      console.warn(
+        `write-build-info: unexpected git rev-list output ${JSON.stringify(count)}; ` +
+          "buildNumber set to 'unknown'."
+      );
+      return 'unknown';
+    }
+    return count;
+  } catch (error) {
+    console.warn(
+      `write-build-info: failed to derive buildNumber from git (${error?.message ?? error}); ` +
+        "buildNumber set to 'unknown'."
+    );
+    return 'unknown';
+  }
+}
+
 const packageMetadata = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 const repositoryUrl = normalizeRepositoryUrl(packageMetadata.repository?.url);
 const payload = {
@@ -58,7 +102,8 @@ const payload = {
   sha: process.env.GITHUB_SHA?.toLowerCase() || 'dev',
   branch: process.env.GITHUB_REF_NAME || '',
   builtAt: new Date().toISOString(),
-  repoUrl: repositoryUrl
+  repoUrl: repositoryUrl,
+  buildNumber: getBuildNumber()
 };
 
 const contents =
@@ -70,6 +115,7 @@ const contents =
   '  readonly branch: string;\n' +
   '  readonly builtAt: string;\n' +
   '  readonly repoUrl: string;\n' +
+  '  readonly buildNumber: string;\n' +
   '}\n' +
   '\n' +
   'export const BUILD_INFO: BuildInfo = ' +

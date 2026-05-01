@@ -1256,23 +1256,88 @@ EU users would need a regional resource - out of scope for v1.
 ## Versioning
 
 JotJSON uses [semver](https://semver.org/) for `package.json` `version`. The
-build script surfaces the version + git SHA in the status bar (M7n).
+build script surfaces the version + a per-deploy build counter + git SHA in
+telemetry, and version + SHA in the status-bar badge.
 
-- **Initial**: `0.5.0` (set when M7n landed, acknowledging substantial pre-V1
-  development).
-- **Pre-V1**: stays at `0.5.0`. Do not bump per-milestone; the SHA on the
-  status-bar badge is the per-build identifier and conveys "still in pre-V1
-  development."
-- **V1 launch**: one-time bump to `1.0.0` via `npm version major` when the
-  remaining M7 polish items ship.
-- **Post-V1**:
-  - **Major** (`1.x.y` -> `2.0.0`): breaking user-visible changes - share-link
-    slug format change, incompatible blob schema, removing a feature.
-  - **Minor** (`1.0.0` -> `1.1.0`): backwards-compatible new features.
-  - **Patch** (`1.0.0` -> `1.0.1`): bug fixes only, no new features.
-- **Release ritual**: developer runs `npm version <type>` on `main`. This
-  commits the bump and creates an annotated tag in one step. CD deploys on
-  push-to-main, not on tag, so the tag does not double-deploy.
+### Manual SemVer + automatic build counter
+
+Two identifiers ship together in the generated `BUILD_INFO` (see
+`scripts/write-build-info.mjs` and `src/generated/build-info.ts`):
+
+- **`version`** - manual, comes from `package.json`. Bumped explicitly
+  by a contributor when the change warrants a SemVer move per the bump
+  rules below. Stays put for refactors, telemetry plumbing, doc edits,
+  CI changes, etc. The `package.json` SemVer is **not** an
+  every-deploy identifier.
+- **`buildNumber`** - automatic, comes from `git rev-list --count HEAD`
+  at build time. Monotonically non-decreasing on `main`. Used as a
+  human-orderable per-deploy identifier in telemetry and as a
+  decoration in the status-bar tooltip.
+- **`sha`** - automatic, comes from `git rev-parse HEAD`. The precise
+  per-deploy identifier; the short form is shown in the visible
+  status-bar row.
+
+The visible status-bar row shows `v{version} - {shortSha}` exactly as
+today (the short SHA already gives at-a-glance per-deploy uniqueness).
+The build counter appears only in the tooltip, and only on shipped
+builds (`sha !== 'dev'` and `buildNumber !== 'unknown'`).
+
+### Build counter fallback
+
+When `git rev-list --count HEAD` cannot be evaluated reliably -
+typically a shallow CI checkout, or git not on the PATH - the build
+script emits the sentinel `buildNumber: 'unknown'` rather than a
+misleading `'0'` or a truncated count. CI's `web` job runs a
+post-build assertion that fails the workflow if the shipped artifact
+contains `'unknown'`, so prod artifacts never ship under the
+sentinel. Local dev builds and non-artifact CI jobs (api, lint,
+infra) may legitimately emit `'unknown'`.
+
+### Telemetry stamping
+
+Both `appVersion` and `buildNumber` are stamped on `app.boot` and
+`webVitals` events as separate string fields - not a combined string
+- so triage queries can filter by either dimension. The
+build-identity carve-out in
+`src/app/core/telemetry/telemetry-message-ids.ts` exempts these
+dimensions from the closed-enum cardinality rule.
+
+### SemVer bump rules
+
+Every plan and every commit must record a SemVer bump decision
+(patch / minor / major / none). See `AGENTS.md` Section 7
+(Definition of Done) and Section 11 (Critical Thinking & Proactive
+Feedback / Planning) for the gate. Use these rules:
+
+- **Patch** (`x.y.Z+1`): user-visible bug fix that wasn't a feature
+  or a breaking change. Edit `package.json` in the same commit.
+- **Minor** (`x.Y+1.0`): new user-visible feature, backwards
+  compatible. Edit `package.json` in the same commit.
+- **Major** (`X+1.0.0`): breaking change, or the v1.0.0 cutover.
+  This is a user call - surface to the user before bumping.
+- **No bump**: refactors, tests, docs, deps, build/CI infrastructure,
+  telemetry plumbing, dev-only changes - anything that doesn't alter
+  user-visible behavior. State "no bump" in the response so the
+  decision is on the record.
+
+The build counter and the SHA already give per-deploy resolution, so
+there is no need to bump SemVer just to mark a deploy.
+
+### History
+
+- **Initial**: `0.5.0` (set when M7n landed, acknowledging substantial
+  pre-V1 development).
+- **Pre-V1**: stays at `0.5.0` for non-feature work; minor bumps
+  applied for new user-visible features per the rules above. The
+  build counter + SHA in the status-bar badge remain the per-build
+  identifier through pre-V1.
+- **V1 launch**: one-time bump to `1.0.0` via `npm version major`
+  when the remaining M7 polish items ship.
+- **Post-V1**: SemVer rules above apply unchanged.
+- **Release ritual**: developer runs `npm version <type>` on `main`.
+  This commits the bump and creates an annotated tag in one step. CD
+  deploys on push-to-main, not on tag, so the tag does not
+  double-deploy.
 
 ---
 

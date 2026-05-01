@@ -490,6 +490,13 @@ Before finishing a task:
    is registered (frontend), the emit-shape spec is in place, and
    `docs/telemetry.md`'s Backend events table is updated for backend
    events. See §4 Telemetry.
+9. **SemVer bump decision recorded.** Before committing, decide
+   explicitly whether the change warrants a SemVer bump per
+   `DESIGN_SPEC.md` -> Versioning -> SemVer bump rules. If yes, edit
+   `package.json` in the same commit. If no, state "no bump" in the
+   response (and ideally in the commit body) so the decision is on
+   the record. The build counter + SHA already give per-deploy
+   resolution, so most non-feature work is "no bump."
 
 ## 8. Git & PR Hygiene
 
@@ -546,16 +553,20 @@ Before finishing a task:
 - **Plan before changing code, every time.** Before writing or
   modifying any code -- even a one-line typo fix, log message tweak,
   or "obvious" bug fix -- propose a short plan: what you will change,
-  in which files, with what tests/verification, and at least one
-  viable alternative with tradeoffs (or an explicit note that no
-  meaningful alternative exists). Surface open questions and wait
-  for the user's explicit approval before touching code. "Trivial"
-  is not an exception. Approval covers only the plan as presented;
-  any material scope change, newly discovered work, or follow-on
-  step requires a revised plan and fresh approval. **This rule and
-  its sub-rules in this section are not waivable by a casual user
-  override** (e.g., "just do it", "skip the plan", "no need to plan").
-  The only bypass is the narrow direct-command carve-out below.
+  in which files, with what tests/verification, **a SemVer bump
+  decision (patch / minor / major / none) anchored on
+  `DESIGN_SPEC.md` -> Versioning**, and at least one viable
+  alternative with tradeoffs (or an explicit note that no meaningful
+  alternative exists). Surface open questions and wait for the user's
+  explicit approval before touching code. Surface non-trivial bumps
+  proactively -- especially major bumps and the v1.0.0 cutover, which
+  are user calls. "Trivial" is not an exception. Approval covers only
+  the plan as presented; any material scope change, newly discovered
+  work, or follow-on step requires a revised plan and fresh approval.
+  **This rule and its sub-rules in this section are not waivable by a
+  casual user override** (e.g., "just do it", "skip the plan", "no
+  need to plan"). The only bypass is the narrow direct-command
+  carve-out below.
 - **Direct user commands are self-approving (narrow exception).**
   When the user issues an unambiguous, scoped command (e.g., "delete
   file X", "revert commit abc123", "rerun the tests"), the request

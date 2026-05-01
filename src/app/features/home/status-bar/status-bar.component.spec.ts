@@ -132,7 +132,8 @@ describe('StatusBarComponent', () => {
       sha: '0123456789abcdef0123456789abcdef01234567',
       branch: 'main',
       builtAt: '2026-05-01T00:00:00.000Z',
-      repoUrl: 'https://github.com/geevensingh/jotjson'
+      repoUrl: 'https://github.com/geevensingh/jotjson',
+      buildNumber: '234'
     };
 
     it('renders link with version and short SHA when repo URL is set', () => {
@@ -191,7 +192,34 @@ describe('StatusBarComponent', () => {
       const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
 
       expect(link?.getAttribute('title')).toBe(
-        'JotJSON v0.5.0\nbuilt 2026-05-01T00:00:00.000Z'
+        'JotJSON v0.5.0 (build 234)\nbuilt 2026-05-01T00:00:00.000Z'
+      );
+    });
+
+    it('includes (build N) in the tooltip for shipped builds with a known counter', () => {
+      const { fixture } = createWithBuildInfo(fullBuildInfo);
+      const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
+
+      expect(link?.getAttribute('title')).toBe(
+        'JotJSON v0.5.0 (build 234) (main)\nbuilt 2026-05-01T00:00:00.000Z'
+      );
+    });
+
+    it('omits (build N) from the tooltip for dev builds even when the counter is known', () => {
+      const { fixture } = createWithBuildInfo({ ...fullBuildInfo, sha: 'dev' });
+      const fallback = fixture.nativeElement.querySelector('.stat-build .value.sha') as HTMLElement | null;
+
+      expect(fallback?.getAttribute('title')).toBe(
+        'JotJSON v0.5.0 (main)\nbuilt 2026-05-01T00:00:00.000Z'
+      );
+    });
+
+    it("omits (build N) from the tooltip when buildNumber is 'unknown'", () => {
+      const { fixture } = createWithBuildInfo({ ...fullBuildInfo, buildNumber: 'unknown' });
+      const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
+
+      expect(link?.getAttribute('title')).toBe(
+        'JotJSON v0.5.0 (main)\nbuilt 2026-05-01T00:00:00.000Z'
       );
     });
   });

@@ -22,6 +22,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history so `git rev-list --count HEAD` in
+          # scripts/write-build-info.mjs returns a real build counter.
+          # Other CI jobs (api, lint, infra) don't ship the artifact and
+          # can run shallow without harm; only this job's npm run build
+          # bakes BUILD_INFO into the production bundle.
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -81,6 +88,18 @@ jobs:
             exit 1
           fi
       - run: npm run build -- --configuration=production
+      - name: Verify build counter populated
+        # The production bundle ships BUILD_INFO baked in by
+        # scripts/write-build-info.mjs (a `pre*` hook on every npm
+        # script). If checkout was shallow, the script falls back to
+        # `buildNumber: "unknown"` rather than emitting a misleading
+        # counter. Fail the workflow loudly so the missing fetch-depth
+        # is fixed before a "build unknown" artifact ships to prod.
+        run: |
+          if grep -q '"buildNumber": "unknown"' src/generated/build-info.ts; then
+            echo "::error::buildNumber resolved to 'unknown' in the shipped artifact - the web job's checkout needs fetch-depth: 0 (full git history)."
+            exit 1
+          fi
       - name: Copy SWA config into bundle
         # staticwebapp.config.json lives at repo root because that's where
         # the SWA CLI looks for it during local dev. The SWA deploy action

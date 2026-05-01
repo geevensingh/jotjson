@@ -82,9 +82,12 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           (`app/app.component.ts`) once per page load, BEFORE
    *           `LoggerService.connect()` resolves (the buffered entry
    *           is replayed once the SDK is up).
-   * Props: { version: string; sha: string; branch: string; dirty: boolean }
+   * Props: { version: string; sha: string; branch: string; buildNumber: string }
    *   sourced from `BUILD_INFO` (`src/generated/build-info.ts`).
-   *   See preamble for the build-identity carve-out.
+   *   `buildNumber` is `git rev-list --count HEAD` from the build that
+   *   produced the artifact, or the sentinel `'unknown'` if the
+   *   checkout was shallow / git was unavailable. See preamble for
+   *   the build-identity carve-out.
    * Measurements: none.
    */
   'app.boot',
@@ -109,8 +112,11 @@ export const TELEMETRY_MESSAGE_IDS = [
    * close-on-hidden semantics are subtle; the package gets them
    * right.
    *
-   * Props: { appVersion: string } sourced from `BUILD_INFO.version`.
-   *   Like `app.boot`, this dimension is exempt from the
+   * Props: { appVersion: string; buildNumber: string }
+   *   `appVersion` sourced from `BUILD_INFO.version`; `buildNumber`
+   *   from `BUILD_INFO.buildNumber` (the `git rev-list --count HEAD`
+   *   counter, or `'unknown'` for shallow / dev builds).
+   *   Like `app.boot`, both dimensions are exempt from the
    *   closed-enum cardinality rule (one value per deploy across
    *   sessions; see preamble carve-out).
    * Measurements: { lcpMs?: number; inpMs?: number; cls?: number }.

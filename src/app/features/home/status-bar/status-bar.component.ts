@@ -58,8 +58,16 @@ export class StatusBarComponent {
   readonly commitUrl = this.hasCommitLink
     ? `${this.buildInfo.repoUrl}/commit/${this.buildSha}`
     : '';
+  readonly buildNumber = this.buildInfo.buildNumber;
+  readonly hasKnownBuildNumber = this.buildNumber !== 'unknown';
+  // Show the build counter in the tooltip only when it is both known and
+  // came from a real CI build (sha != 'dev'). Mixing a real-looking
+  // `build 391` with a `dev` SHA is a confusing signal; better to keep the
+  // dev tooltip flat and reserve the counter for shipped builds.
+  readonly showBuildNumber = this.hasKnownBuildNumber && !this.isDevBuild;
   readonly buildTitle =
     `JotJSON v${this.buildInfo.version}` +
+    (this.showBuildNumber ? ` (build ${this.buildNumber})` : '') +
     (this.buildInfo.branch ? ` (${this.buildInfo.branch})` : '') +
     `\nbuilt ${this.buildInfo.builtAt}`;
   readonly commitAriaLabel = $localize`:@@status.build.link.aria:Open commit ${

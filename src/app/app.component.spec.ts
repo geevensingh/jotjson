@@ -89,7 +89,8 @@ describe('AppComponent', () => {
       {
         version: jasmine.any(String),
         sha: jasmine.any(String),
-        branch: jasmine.any(String)
+        branch: jasmine.any(String),
+        buildNumber: jasmine.any(String)
       },
       undefined
     );
@@ -99,7 +100,8 @@ describe('AppComponent', () => {
   it('initializes web vitals after app.boot connect during lazy initialization', async () => {
     const initSpy = jasmine.createSpy<(
       logger: LoggerService,
-      appVersion: string
+      appVersion: string,
+      buildNumber: string
     ) => Promise<void>>('initWebVitals').and.resolveTo();
     const webVitalsModule = await import('./core/telemetry/web-vitals');
     webVitalsModule.__setInitWebVitalsImplForTesting(initSpy);
@@ -110,9 +112,10 @@ describe('AppComponent', () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       expect(initSpy).toHaveBeenCalledTimes(1);
-      const [logger, appVersion] = initSpy.calls.mostRecent().args;
+      const [logger, appVersion, buildNumber] = initSpy.calls.mostRecent().args;
       expect(logger).toBe(loggerServiceSpy);
       expect(appVersion).toEqual(jasmine.any(String));
+      expect(buildNumber).toEqual(jasmine.any(String));
     } finally {
       webVitalsModule.__resetInitWebVitalsImplForTesting();
     }

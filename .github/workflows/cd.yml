@@ -98,6 +98,11 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           submodules: true
           lfs: false
+          # Full history so the workflow_dispatch path's inline
+          # `npm run build` produces a real `buildNumber`. The
+          # workflow_run path doesn't rebuild (it downloads CI's
+          # prebuilt bundle) so depth is harmless there.
+          fetch-depth: 0
 
       # ------------------------------------------------------------------
       # Path 1: workflow_run - download prebuilt SPA bundle from CI.

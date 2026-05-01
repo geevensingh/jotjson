@@ -25,7 +25,8 @@ export interface WebVitalsApi {
 
 type InitWebVitalsImpl = (
   logger: LoggerService,
-  appVersion: string
+  appVersion: string,
+  buildNumber: string
 ) => Promise<void>;
 
 /**
@@ -37,7 +38,8 @@ type InitWebVitalsImpl = (
 export function setupWebVitals(
   api: WebVitalsApi,
   logger: LoggerService,
-  appVersion: string
+  appVersion: string,
+  buildNumber: string
 ): void {
   if (typeof window === 'undefined') {
     return;
@@ -77,7 +79,7 @@ export function setupWebVitals(
       measurements['cls'] = latestCls;
     }
 
-    logger.event('webVitals', { appVersion }, measurements);
+    logger.event('webVitals', { appVersion, buildNumber }, measurements);
   }, { once: true });
 }
 
@@ -88,7 +90,8 @@ export function setupWebVitals(
  */
 async function realInitWebVitals(
   logger: LoggerService,
-  appVersion: string
+  appVersion: string,
+  buildNumber: string
 ): Promise<void> {
   if (typeof window === 'undefined') {
     return;
@@ -107,7 +110,7 @@ async function realInitWebVitals(
     }
   };
 
-  setupWebVitals(webVitalsApi, logger, appVersion);
+  setupWebVitals(webVitalsApi, logger, appVersion, buildNumber);
 }
 
 let initWebVitalsImpl: InitWebVitalsImpl = realInitWebVitals;
@@ -124,7 +127,8 @@ export function __resetInitWebVitalsImplForTesting(): void {
 
 export function initWebVitals(
   logger: LoggerService,
-  appVersion: string
+  appVersion: string,
+  buildNumber: string
 ): Promise<void> {
-  return initWebVitalsImpl(logger, appVersion);
+  return initWebVitalsImpl(logger, appVersion, buildNumber);
 }
