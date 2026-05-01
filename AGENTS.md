@@ -103,17 +103,10 @@ Place new code in the correct bucket:
   button-toggle overrides in
   `src/app/features/profile/profile.component.scss` are reference
   examples.
-- Logging: use `LoggerService` (`src/app/core/telemetry/logger.service.ts`)
-  for any log a developer might consult. Direct `console.*` calls in
-  production code are permitted only in `src/app/core/telemetry/` and
-  `src/main.ts` (early-boot bootstrap errors). Test files (`*.spec.ts`,
-  `*.test.ts`) may reference `console.*` for spies and expectations.
-- Telemetry message IDs live in
-  `src/app/core/telemetry/telemetry-message-ids.ts` as a typed
-  literal-union. When you add a new token, add a JSDoc block above
-  it documenting **Severity**, **Fired by** (call site), and **Props**
-  (and **Exception** for error tokens). The file is the spec for our
-  telemetry events; keep its docs current when call sites change.
+- Logging and telemetry: see §4 Telemetry below for the unified rules
+  (frontend `LoggerService`, backend `trackEvent`, message-id catalog,
+  privacy guardrails). The TL;DR for Angular code is "use
+  `LoggerService` not `console.*` in production."
 
 ### Internationalization (i18n)
 - v1 ships in English only, but **all user-facing strings must be extractable**
@@ -159,6 +152,115 @@ Place new code in the correct bucket:
   - `500` server error - log full detail; respond with a generic
     message.
 - Auth: validate Entra External ID-issued JWTs on every protected route.
+
+### Telemetry
+
+JotJSON has a robust manual telemetry stack on both sides (Angular
+SPA + Azure Functions, both feeding the same Application Insights
+resource). When you add a feature, instrument it. The defaults
+below are calibrated against the unsampled / 100%-sampling reality
+of both pipelines, so noise is the larger risk than blind spots.
+
+**Default: yes.** New user-visible behavior, HTTP chokepoints,
+perf-sensitive paths, and recoverable error paths should emit
+telemetry. The judgment call is *what* to emit and *which sink* to
+use, not *whether* to emit.
+
+**Frontend pipeline** (`src/app/core/telemetry/`):
+
+- Use `LoggerService` for everything; direct `console.*` calls are
+  permitted only in `src/app/core/telemetry/` itself and `src/main.ts`
+  (early-boot bootstrap errors). Test files (`*.spec.ts`, `*.test.ts`)
+  may reference `console.*` for spies and expectations.
+- Pick the right sink up front (migrating later breaks history):
+  `logger.event(id, props?, measurements?)` -> `customEvents` for
+  successful product-analytics signals; `logger.info/warn(id, props?)`
+  -> `traces` for diagnostic / lifecycle / recoverable warnings;
+  `logger.error(id, cause, props?)` -> `exceptions`.
+- Register every new messageId in the frozen literal-union in
+  `src/app/core/telemetry/telemetry-message-ids.ts` with a JSDoc
+  block documenting **Severity**, **Fired by** (call site), **Props**,
+  **Measurements** (for `event` tokens), and **Exception** (for
+  `error` tokens). Banned: `as TelemetryMessageId` casts in
+  production code -- `check-spec-patterns.mjs` enforces this.
+
+**Backend pipeline** (`api/src/shared/telemetry.ts`):
+
+- Use `trackEvent(name, properties?, measurements?)`. Properties land
+  in `customDimensions`; numeric data in `customMeasurements`.
+- The backend does **not** maintain a literal-union catalog yet (only
+  four events live as of 2026-04-30). Raw string literals are
+  acceptable below ~10 events; revisit when the count grows.
+- Update the **Backend events** table in `docs/telemetry.md` whenever
+  you add a new backend event.
+- **Backend `trackEvent` has no sanitizer or redaction initializer.**
+  Unlike the SPA pipeline (which strips query strings, redacts
+  `Authorization`, and drops `?`-bearing envelopes via
+  `TelemetryService`'s privacy initializer), the backend ships
+  whatever you pass. **Never** pass raw exception messages,
+  request/response bodies, JWT claims, auth headers, URLs, query
+  strings, slugs, OIDs, or any user/session/request IDs. Sanitize at
+  the call site or do not emit.
+
+**When to instrument** (rubric):
+
+- YES: success counters for major user actions (save / paste / upload
+  / share / sign-in); auth, access-control, quota, and rate-limit
+  chokepoints; perf events crossing a slow threshold; recoverable
+  error paths with a closed-enum reason; product-analytics signals
+  that drive a known question.
+- NO: internal helpers and utilities; per-keystroke or per-row events
+  (too high-cardinality / high-volume); semantically redundant events
+  with no new question answered. Frontend + backend pairs are
+  **allowed and often desirable** when they capture different
+  lifecycle stages or different failure domains (e.g., `save.attempt`
+  on the frontend vs. `quota.exceeded` on the backend -- these answer
+  different questions and together form a funnel).
+
+**Privacy guardrails** (cross-link to §6 Security & Privacy):
+
+- Properties are closed-enum strings only (e.g., `'blob' | 'ruleSet'`,
+  `'true' | 'false'`, `'create' | 'clone'`). Never free-form text.
+- Numeric values use bucket dimensions via
+  `src/app/core/telemetry/buckets.ts` (`bucketBytes`, `bucketCount`)
+  plus raw measurement values; never raw bytes / counts as
+  dimensions.
+- Color values use coarse named buckets plus `isDefault`; never raw
+  hex.
+- **No per-user, per-session, per-request, per-document, or
+  per-correlation identifiers** in `customDimensions` or
+  `customMeasurements`. Build metadata (`appVersion`, `buildSha`) is
+  the only carve-out from the closed-enum cardinality rule.
+- Frontend already sets the authenticated-user context via Entra OID
+  through `setAuthenticatedUserContext`. Do **not** copy OID, email,
+  UPN, or display name into event props.
+- Do **not** invent custom session / request / correlation IDs.
+  Platform correlation already exists (W3C tracing,
+  `enableCorsCorrelation`). Add a custom correlation ID only with
+  explicit approval for a concrete debugging or incident need.
+
+**Volume control:** every new event is one of:
+
+- **One-shot** -- fires at most once per session / per worker
+  lifetime (e.g., `app.boot`, `monaco.loaded`).
+- **Thresholded** -- fires only when a measurement crosses a slow /
+  large / failure threshold (e.g., `parse.slow`, `tree.expand.slow`).
+- **Sampled** -- fires on a fraction of occurrences. Default is
+  **unsampled**; if you sample, document the rate in the messageId
+  JSDoc.
+- **Bounded-frequency** -- the call site is naturally bounded by user
+  action (one save click, one paste, one quota check). State the
+  bound in the JSDoc.
+
+**Test requirement:** every new event ships with at least one spec
+asserting its emit shape (name, properties, measurements). The repo
+pattern uses `__setTelemetryClientForTesting` /
+`__resetTelemetryInitForTesting` (backend) and the
+`TelemetryService` spy harness (frontend).
+
+See `docs/telemetry.md` for KQL examples, sinks table, bucketing
+helpers, the privacy initializer details, and the canonical Backend
+Events catalog.
 
 ### Naming
 - Files: `kebab-case.ts`. Angular: `thing.component.ts`, `thing.service.ts`,
@@ -341,6 +443,11 @@ Before finishing a task:
    set it up per the spec.
 6. No new TypeScript errors or console warnings introduced.
 7. Spec is updated if behavior or architecture changed.
+8. Telemetry decision recorded: explicitly decide whether the change
+   warrants a telemetry event. If you add one, ensure the messageId
+   is registered (frontend), the emit-shape spec is in place, and
+   `docs/telemetry.md`'s Backend events table is updated for backend
+   events. See §4 Telemetry.
 
 ## 8. Git & PR Hygiene
 
