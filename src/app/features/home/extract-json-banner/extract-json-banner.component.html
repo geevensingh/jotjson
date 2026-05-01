@@ -14,19 +14,13 @@
         >
       } @else {
         <span i18n="@@home.paste.extract.banner.message.multi"
-          >Found {{ blockCount() }} JSON blocks - they will be combined into an
+          >Found {{ blockCount() }} JSON blocks - they can be combined into an
           array.</span
         >
       }
-      @if (preservesComments()) {
+      @if (commentsWillBeDropped()) {
         <span
-          class="comments-chip comments-chip-preserved"
-          i18n="@@home.paste.extract.banner.commentsPreserved"
-          >Comments preserved</span
-        >
-      } @else {
-        <span
-          class="comments-chip comments-chip-dropped"
+          class="comment-status"
           i18n="@@home.paste.extract.banner.commentsDropped"
           >Comments will be dropped</span
         >
@@ -43,7 +37,7 @@
           (click)="extract.emit()"
           i18n="@@home.paste.extract.banner.actionSingle"
         >
-          <jj-icon name="download" />
+          <jj-icon name="extract" />
           <span>Extract JSON</span>
         </button>
       } @else {
@@ -56,7 +50,7 @@
           (click)="extract.emit()"
           i18n="@@home.paste.extract.banner.actionMulti"
         >
-          <jj-icon name="download" />
+          <jj-icon name="extract" />
           <span>Extract blocks as array</span>
         </button>
       }

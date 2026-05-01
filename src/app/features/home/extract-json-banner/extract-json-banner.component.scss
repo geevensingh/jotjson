@@ -2,20 +2,35 @@
   display: block;
 }
 
+// Banner uses a single flex row at wide widths so the actions stay
+// visually attached to the message. When the row cannot fit the actions,
+// `flex-wrap: wrap` drops them to a second line where they remain
+// right-aligned by `justify-content: space-between`. The optional
+// "Comments will be dropped" secondary line lives INSIDE `.banner-text`
+// (its own flex-column) so it stacks under the message rather than
+// pushing the actions away.
 .banner {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 8px 12px;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 6px;
   font-size: 0.9rem;
   margin: 0 0 8px 0;
-  flex-wrap: wrap;
 }
 
+// Inner column: message on row 1, optional comment-status line on row 2.
+// `flex: 1 1 auto` lets the text region take remaining width so the
+// actions sit on its right; `min-width: 0` lets long messages wrap
+// inside this column instead of forcing the whole banner to overflow.
 .banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -24,33 +39,40 @@
   display: inline-flex;
   gap: 4px;
   flex: 0 0 auto;
-  justify-content: flex-end;
 }
 
-.comments-chip {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  line-height: 1.4;
-  white-space: nowrap;
-  vertical-align: baseline;
-}
-
-.comments-chip-preserved {
-  background-color: var(--mat-sys-tertiary-container);
-  color: var(--mat-sys-on-tertiary-container);
-}
-
-.comments-chip-dropped {
-  background-color: var(--mat-sys-error-container);
-  color: var(--mat-sys-on-error-container);
+// Secondary line below the main message; surfaced only when the source
+// had JSONC comments AND the output format will drop them. Smaller and
+// dimmer than the message so it reads as a note, not a peer line.
+.comment-status {
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .extract-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  // Material 21 projects button content into `.mdc-button__label`, which
+  // is `display: inline` by default and does not honour any flex applied
+  // to the button host. To get the icon and text to centre vertically we
+  // have to reach into Material's own DOM. Angular's emulated
+  // encapsulation tags our selectors with `_ngcontent-X`, but the
+  // `.mdc-button__label` element is rendered by Material's button
+  // template and does not carry our component's _ngcontent attribute,
+  // so we have to use ::ng-deep.
+  //
+  // Note: we deliberately do NOT apply the `top: -2px` optical nudge
+  // used by the toolbar Save button. The banner has a sibling Dismiss
+  // button (mat-button, no icon) whose label is a bare text node with
+  // no <span> wrapper, so a `> span` shift would only move Extract's
+  // text and leave Dismiss on a different baseline. Centred flex
+  // alignment without the shift keeps both button labels on the same
+  // baseline.
+  ::ng-deep .mdc-button__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  ::ng-deep jj-icon {
+    flex: 0 0 auto;
+  }
 }

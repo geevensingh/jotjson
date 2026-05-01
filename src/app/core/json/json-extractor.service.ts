@@ -6,6 +6,15 @@ export interface ExtractedJson {
   text: string;
   blockCount: number;
   preservesComments: boolean;
+  /**
+   * True when at least one accepted candidate's slice contained a JSONC
+   * comment (`//` line or `/* ... *\/` block). Used by the home component
+   * to decide whether to surface a "Comments will be dropped" warning in
+   * the multi-block case (`!preservesComments && hasComments`). Comments
+   * inside JSON strings and `//`-like sequences in surrounding prose do
+   * NOT count.
+   */
+  hasComments: boolean;
 }
 
 interface Candidate {
@@ -13,6 +22,12 @@ interface Candidate {
   end: number;
   slice: string;
   value: unknown;
+  hasComments: boolean;
+}
+
+interface CloseScan {
+  closeIdx: number;
+  hasComments: boolean;
 }
 
 const MAX_INPUT_LENGTH = 1_048_576;
@@ -54,6 +69,11 @@ const CH_BOM = 0xfeff;
  * - >=2: `text` is `JSON.stringify` of the array of parsed values in source
  *         order. `preservesComments = false` because comments cannot
  *         survive `JSON.stringify`.
+ *
+ * `hasComments` is true when at least one accepted candidate's slice
+ * contained a JSONC comment. It is independent of `preservesComments`: it
+ * describes whether the SOURCE had comments; `preservesComments` describes
+ * whether the OUTPUT FORMAT can carry them.
  */
 @Injectable({ providedIn: 'root' })
 export class JsonExtractorService {
@@ -77,7 +97,8 @@ export class JsonExtractorService {
       return {
         text: applyEdits(slice, edits),
         blockCount: 1,
-        preservesComments: true
+        preservesComments: true,
+        hasComments: candidates[0].hasComments
       };
     }
 
@@ -88,7 +109,8 @@ export class JsonExtractorService {
         2
       ),
       blockCount: candidates.length,
-      preservesComments: false
+      preservesComments: false,
+      hasComments: candidates.some((c) => c.hasComments)
     };
   }
 
@@ -105,9 +127,9 @@ export class JsonExtractorService {
       }
 
       const start = i;
-      const closeIdx = this.findCloseIndex(text, start);
-      if (closeIdx !== -1) {
-        const slice = text.slice(start, closeIdx + 1);
+      const scan = this.findCloseIndex(text, start);
+      if (scan.closeIdx !== -1) {
+        const slice = text.slice(start, scan.closeIdx + 1);
         const result = this.parser.parse(slice);
         if (
           result.errors.length === 0 &&
@@ -116,11 +138,12 @@ export class JsonExtractorService {
         ) {
           candidates.push({
             start,
-            end: closeIdx + 1,
+            end: scan.closeIdx + 1,
             slice,
-            value: result.value
+            value: result.value,
+            hasComments: scan.hasComments
           });
-          i = closeIdx + 1;
+          i = scan.closeIdx + 1;
           continue;
         }
       }
@@ -131,12 +154,13 @@ export class JsonExtractorService {
     return candidates;
   }
 
-  private findCloseIndex(text: string, start: number): number {
+  private findCloseIndex(text: string, start: number): CloseScan {
     const n = text.length;
     let depth = 1;
     let inString = false;
     let inLineComment = false;
     let inBlockComment = false;
+    let hasComments = false;
     let i = start + 1;
 
     while (i < n) {
@@ -182,11 +206,13 @@ export class JsonExtractorService {
         const next = text.charCodeAt(i + 1);
         if (next === CH_SLASH) {
           inLineComment = true;
+          hasComments = true;
           i += 2;
           continue;
         }
         if (next === CH_STAR) {
           inBlockComment = true;
+          hasComments = true;
           i += 2;
           continue;
         }
@@ -196,11 +222,11 @@ export class JsonExtractorService {
         depth++;
       } else if (ch === CH_RBRACE || ch === CH_RBRACKET) {
         depth--;
-        if (depth === 0) return i;
+        if (depth === 0) return { closeIdx: i, hasComments };
       }
       i++;
     }
 
-    return -1;
+    return { closeIdx: -1, hasComments };
   }
 }

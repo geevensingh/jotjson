@@ -28,7 +28,8 @@ describe('IconComponent', () => {
     'info',
     'error',
     'flag',
-    'bookmark'
+    'bookmark',
+    'extract'
   ];
 
   async function createWith(name: JjIconName): Promise<ComponentFixture<IconComponent>> {

@@ -44,7 +44,10 @@
       <jotjson-extract-json-banner
         [visible]="extractBannerVisible()"
         [blockCount]="extractedCandidate()?.data?.blockCount ?? 0"
-        [preservesComments]="extractedCandidate()?.data?.preservesComments ?? true"
+        [commentsWillBeDropped]="
+          (extractedCandidate()?.data?.hasComments ?? false) &&
+          !(extractedCandidate()?.data?.preservesComments ?? true)
+        "
         (extract)="onExtractAccept()"
         (dismiss)="onExtractDismiss()"
       ></jotjson-extract-json-banner>

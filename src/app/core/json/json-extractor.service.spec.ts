@@ -177,4 +177,73 @@ describe('JsonExtractorService', () => {
       expect(JSON.parse(r!.text)).toEqual({ real: 1 });
     });
   });
+
+  describe('hasComments detection', () => {
+    it('reports hasComments: false for a single block with no comments', () => {
+      const r = svc.extractFromMixedText('before {"a":1} after');
+      expect(r).not.toBeNull();
+      expect(r!.hasComments).toBeFalse();
+    });
+
+    it('reports hasComments: true for a single block with a // line comment', () => {
+      const r = svc.extractFromMixedText('{ // hi\n "a": 1 }');
+      expect(r).not.toBeNull();
+      expect(r!.hasComments).toBeTrue();
+    });
+
+    it('reports hasComments: true for a single block with a /* */ block comment', () => {
+      const r = svc.extractFromMixedText('{ /* hi */ "a": 1 }');
+      expect(r).not.toBeNull();
+      expect(r!.hasComments).toBeTrue();
+    });
+
+    it('does NOT count // inside a JSON string value as a comment', () => {
+      const r = svc.extractFromMixedText(
+        'see {"url": "https://example.com/path"} done'
+      );
+      expect(r).not.toBeNull();
+      expect(r!.hasComments).toBeFalse();
+    });
+
+    it('does NOT count // in surrounding prose as a comment', () => {
+      // The // appears in prose between the JSON candidate and end-of-string.
+      // The outer scan loop only reacts to { and [, so prose // is invisible
+      // to comment detection.
+      const r = svc.extractFromMixedText('{"a":1} // not really a comment');
+      expect(r).not.toBeNull();
+      expect(r!.hasComments).toBeFalse();
+    });
+
+    it('reports hasComments: true when any multi-block candidate has comments', () => {
+      const r = svc.extractFromMixedText(
+        'request {"a":1} response { /* trace */ "b": 2 }'
+      );
+      expect(r).not.toBeNull();
+      expect(r!.blockCount).toBe(2);
+      expect(r!.hasComments).toBeTrue();
+    });
+
+    it('reports hasComments: false when no multi-block candidate has comments', () => {
+      const r = svc.extractFromMixedText('request {"a":1} response {"b":2}');
+      expect(r).not.toBeNull();
+      expect(r!.blockCount).toBe(2);
+      expect(r!.hasComments).toBeFalse();
+    });
+
+    it('LEAK GUARD: a failed outer wrapper containing a comment does not leak hasComments into the accepted inner block', () => {
+      // Outer `{ notJson: ... }` contains a /* block comment */ and is
+      // rejected by the parser (unquoted key). The scanner resumes at
+      // start+1 and accepts the inner `{"real":1}`, which has no comments.
+      // The rejected outer's comment must NOT propagate into the result.
+      const r = svc.extractFromMixedText(
+        'log { /* nope */ notJson: {"real":1} } end'
+      );
+      expect(r).not.toBeNull();
+      expect(r!.blockCount).toBe(1);
+      expect(JSON.parse(r!.text)).toEqual({ real: 1 });
+      expect(r!.hasComments)
+        .withContext('rejected outer wrapper must not leak its comment flag')
+        .toBeFalse();
+    });
+  });
 });

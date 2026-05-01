@@ -28,7 +28,13 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 export class ExtractJsonBannerComponent {
   readonly visible = input.required<boolean>();
   readonly blockCount = input.required<number>();
-  readonly preservesComments = input.required<boolean>();
+  /**
+   * When true, the banner shows a "Comments will be dropped" secondary line
+   * beneath the message. The host computes this from the extractor result
+   * as `hasComments && !preservesComments` so we only warn when the source
+   * actually contained comments AND the output format will lose them.
+   */
+  readonly commentsWillBeDropped = input.required<boolean>();
 
   readonly extract = output<void>();
   readonly dismiss = output<void>();

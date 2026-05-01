@@ -14,12 +14,15 @@ describe('ExtractJsonBannerComponent', () => {
   function create(inputs: {
     visible: boolean;
     blockCount: number;
-    preservesComments: boolean;
+    commentsWillBeDropped: boolean;
   }) {
     const fixture = TestBed.createComponent(ExtractJsonBannerComponent);
     fixture.componentRef.setInput('visible', inputs.visible);
     fixture.componentRef.setInput('blockCount', inputs.blockCount);
-    fixture.componentRef.setInput('preservesComments', inputs.preservesComments);
+    fixture.componentRef.setInput(
+      'commentsWillBeDropped',
+      inputs.commentsWillBeDropped
+    );
     fixture.detectChanges();
     return fixture;
   }
@@ -28,7 +31,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: false,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.banner')).toBeNull();
@@ -39,7 +42,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     const host = fixture.nativeElement as HTMLElement;
     const text = host.querySelector('.banner-text')?.textContent ?? '';
@@ -59,7 +62,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 3,
-      preservesComments: false
+      commentsWillBeDropped: true
     });
     const host = fixture.nativeElement as HTMLElement;
     const text = host.querySelector('.banner-text')?.textContent ?? '';
@@ -79,50 +82,48 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 3,
-      preservesComments: false
+      commentsWillBeDropped: true
     });
     const host = fixture.nativeElement as HTMLElement;
     const text = host.querySelector('.banner-text')?.textContent ?? '';
     expect(text).not.toContain('Comments will be removed.');
   });
 
-  it('renders the comments-preserved chip when preservesComments is true', () => {
+  it('does NOT render the comment-status line when commentsWillBeDropped is false', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     const host = fixture.nativeElement as HTMLElement;
-    const preservedChip = host.querySelector('.comments-chip-preserved');
-    const droppedChip = host.querySelector('.comments-chip-dropped');
-    expect(preservedChip).withContext('preserved chip rendered').not.toBeNull();
-    expect(droppedChip).withContext('dropped chip not rendered').toBeNull();
-    expect((preservedChip?.textContent ?? '').trim()).toBe(
-      'Comments preserved'
-    );
+    expect(host.querySelector('.comment-status'))
+      .withContext('comment-status line should be hidden')
+      .toBeNull();
+    // Both legacy chip variants should be gone entirely.
+    expect(host.querySelector('.comments-chip-preserved')).toBeNull();
+    expect(host.querySelector('.comments-chip-dropped')).toBeNull();
   });
 
-  it('renders the comments-dropped chip when preservesComments is false', () => {
+  it('renders the comment-status line with "Comments will be dropped" when commentsWillBeDropped is true', () => {
     const fixture = create({
       visible: true,
       blockCount: 2,
-      preservesComments: false
+      commentsWillBeDropped: true
     });
     const host = fixture.nativeElement as HTMLElement;
-    const preservedChip = host.querySelector('.comments-chip-preserved');
-    const droppedChip = host.querySelector('.comments-chip-dropped');
-    expect(droppedChip).withContext('dropped chip rendered').not.toBeNull();
-    expect(preservedChip).withContext('preserved chip not rendered').toBeNull();
-    expect((droppedChip?.textContent ?? '').trim()).toBe(
-      'Comments will be dropped'
-    );
+    const status = host.querySelector('.comment-status');
+    expect(status).withContext('comment-status rendered').not.toBeNull();
+    expect((status?.textContent ?? '').trim()).toBe('Comments will be dropped');
+    // Legacy chip styles must be absent.
+    expect(host.querySelector('.comments-chip-preserved')).toBeNull();
+    expect(host.querySelector('.comments-chip-dropped')).toBeNull();
   });
 
-  it('renders an icon inside the Extract button', () => {
+  it('renders the new "extract" icon (not "download") inside the Extract button', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     const host = fixture.nativeElement as HTMLElement;
     const extractButton = host.querySelector(
@@ -131,13 +132,24 @@ describe('ExtractJsonBannerComponent', () => {
     expect(extractButton).withContext('extract button rendered').not.toBeNull();
     const icon = extractButton?.querySelector('jj-icon');
     expect(icon).withContext('icon inside extract button').not.toBeNull();
+
+    // Regression guard: a typo in the @switch case key in icon.component
+    // would silently render no SVG content. Match a path commitment that
+    // is unique to the new extract icon (a top-left corner-bracket
+    // stroke that does NOT appear in the old "download" icon).
+    const paths = Array.from(icon!.querySelectorAll('path')).map(
+      (p) => p.getAttribute('d') ?? ''
+    );
+    expect(paths.some((d) => d.includes('M5 4v3') && d.includes('M5 4h3')))
+      .withContext('extract icon should render top-left corner bracket')
+      .toBeTrue();
   });
 
   it('emits extract exactly once when the Extract button is clicked', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     const spy = jasmine.createSpy('extract');
     fixture.componentInstance.extract.subscribe(spy);
@@ -156,7 +168,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     const spy = jasmine.createSpy('dismiss');
     fixture.componentInstance.dismiss.subscribe(spy);
@@ -178,7 +190,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     const spy = jasmine.createSpy('dismiss');
     fixture.componentInstance.dismiss.subscribe(spy);
@@ -196,7 +208,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     const host = fixture.nativeElement as HTMLElement;
     document.body.appendChild(host);
@@ -219,7 +231,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 4,
-      preservesComments: false
+      commentsWillBeDropped: true
     });
     const host = fixture.nativeElement as HTMLElement;
     document.body.appendChild(host);
@@ -244,7 +256,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: false,
       blockCount: 1,
-      preservesComments: true
+      commentsWillBeDropped: false
     });
     expect(() => fixture.componentInstance.focusExtractButton()).not.toThrow();
   });

@@ -167,6 +167,9 @@ describe('extractor on mixed-text fixtures', () => {
       .toBe(2);
     // Multi-block uses JSON.stringify array wrap; comments cannot survive.
     expect(extracted!.preservesComments).toBe(false);
+    // The HTTP-capture fixture has no JSONC comments in either body, so
+    // the source-side comment flag should also be false.
+    expect(extracted!.hasComments).toBe(false);
 
     // The wrapped output is a JSON array; parse and inspect each element to
     // avoid coupling the assertion to whitespace formatting.

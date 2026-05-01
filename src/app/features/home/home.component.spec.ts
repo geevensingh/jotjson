@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { Title } from '@angular/platform-browser';
+import { Title, By } from '@angular/platform-browser';
 import { of, throwError } from 'rxjs';
 import { HomeComponent } from './home.component';
 import { PreferencesService } from '../../core/preferences/preferences.service';
@@ -2267,7 +2267,8 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     spyOn(extractor, 'extractFromMixedText').and.returnValue({
       text: '{ "a": 1 }',
       blockCount: 1,
-      preservesComments: true
+      preservesComments: true,
+      hasComments: false
     });
 
     await component.onPaste();
@@ -2301,7 +2302,8 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     const extractSpy = spyOn(extractor, 'extractFromMixedText').and.returnValue({
       text: '{ "a": 1 }',
       blockCount: 1,
-      preservesComments: true
+      preservesComments: true,
+      hasComments: false
     });
 
     component.onEditorPaste({
@@ -2319,7 +2321,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
     component.extractedCandidate.set({
-      data: { text: 'stale', blockCount: 1, preservesComments: true },
+      data: { text: 'stale', blockCount: 1, preservesComments: true, hasComments: false },
       sourceVersion: 999,
       source: 'paste'
     });
@@ -2341,7 +2343,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
     component.extractedCandidate.set({
-      data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true },
+      data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true, hasComments: false },
       sourceVersion: 0,
       source: 'paste'
     });
@@ -2360,7 +2362,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     component.onValueChange('original text');
     const before = component.content();
     component.extractedCandidate.set({
-      data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true },
+      data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true, hasComments: false },
       sourceVersion: 999,
       source: 'paste'
     });
@@ -2379,7 +2381,8 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     spyOn(extractor, 'extractFromMixedText').and.returnValue({
       text: '{ "a": 1 }',
       blockCount: 1,
-      preservesComments: true
+      preservesComments: true,
+      hasComments: false
     });
 
     component.onEditorPaste({
@@ -2407,7 +2410,8 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     spyOn(extractor, 'extractFromMixedText').and.returnValue({
       text: '{ "a": 1 }',
       blockCount: 1,
-      preservesComments: true
+      preservesComments: true,
+      hasComments: false
     });
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
       type: 'text/plain'
@@ -2478,7 +2482,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     const component = fixture.componentInstance;
     const extractor = TestBed.inject(JsonExtractorService);
     const extractorSpy = spyOn(extractor, 'extractFromMixedText').and.returnValue(
-      { text: '{ "a": 1 }', blockCount: 2, preservesComments: false }
+      { text: '{ "a": 1 }', blockCount: 2, preservesComments: false, hasComments: false }
     );
     fixture.detectChanges();
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
@@ -2511,7 +2515,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'paste' },
-      { blockCount: 2, preservesComments: 0 }
+      { blockCount: 2, preservesComments: 0, hasComments: 0 }
     );
   });
 
@@ -2527,7 +2531,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0 }
+      { blockCount: 2, preservesComments: 0, hasComments: 0 }
     );
   });
 
@@ -2547,7 +2551,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.pick' },
-      { blockCount: 2, preservesComments: 0 }
+      { blockCount: 2, preservesComments: 0, hasComments: 0 }
     ]);
   });
 
@@ -2570,7 +2574,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.drag' },
-      { blockCount: 2, preservesComments: 0 }
+      { blockCount: 2, preservesComments: 0, hasComments: 0 }
     ]);
   });
 
@@ -2589,7 +2593,55 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls.length).toBe(1);
     expect(calls[0][0]).toBe('home.extract.banner.accept');
     expect(calls[0][1]).toEqual({ source: 'editor.paste' });
-    expect(calls[0][2]).toEqual({ blockCount: 2, preservesComments: 0 });
+    expect(calls[0][2]).toEqual({ blockCount: 2, preservesComments: 0, hasComments: 0 });
+  });
+
+  it('shown event reports hasComments:1 when source had JSONC comments', () => {
+    const { component, eventSpy, extractorSpy } = setupTelemetryBed();
+    extractorSpy.and.returnValue({
+      text: '[{"a":1},{"b":2}]',
+      blockCount: 2,
+      preservesComments: false,
+      hasComments: true
+    });
+
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1} {/*c*/"b":2}',
+      postPasteContent: 'INFO log {"a":1} {/*c*/"b":2}',
+      postPasteParses: false
+    });
+
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.extract.banner.shown',
+      { source: 'editor.paste' },
+      { blockCount: 2, preservesComments: 0, hasComments: 1 }
+    );
+  });
+
+  it('accept event mirrors hasComments:1 from the captured candidate', () => {
+    const { component, eventSpy, extractorSpy } = setupTelemetryBed();
+    extractorSpy.and.returnValue({
+      text: '[{"a":1},{"b":2}]',
+      blockCount: 2,
+      preservesComments: false,
+      hasComments: true
+    });
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1} {/*c*/"b":2}',
+      postPasteContent: 'INFO log {"a":1} {/*c*/"b":2}',
+      postPasteParses: false
+    });
+    eventSpy.calls.reset();
+
+    component.onExtractAccept();
+
+    const calls = bannerCalls(eventSpy);
+    expect(calls.length).toBe(1);
+    expect(calls[0]).toEqual([
+      'home.extract.banner.accept',
+      { source: 'editor.paste' },
+      { blockCount: 2, preservesComments: 0, hasComments: 1 }
+    ]);
   });
 
   it('onExtractDismiss fires dismiss with reason="user.click"', () => {
@@ -2646,7 +2698,8 @@ describe('HomeComponent extract-banner telemetry', () => {
     extractorSpy.and.returnValue({
       text: '{ "b": 2 }',
       blockCount: 1,
-      preservesComments: true
+      preservesComments: true,
+      hasComments: false
     });
 
     component.onEditorPaste({
@@ -2665,7 +2718,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[1]).toEqual([
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 1, preservesComments: 1 }
+      { blockCount: 1, preservesComments: 1, hasComments: 0 }
     ]);
   });
 
@@ -2780,6 +2833,115 @@ describe('HomeComponent extract-banner telemetry', () => {
     await waitForDoubleAnimationFrame();
 
     expect(focusSpy).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('HomeComponent extract-banner commentsWillBeDropped binding', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+  });
+
+  function readBannerCommentsWillBeDropped(
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>
+  ): boolean | null {
+    const debugEl = fixture.debugElement.query(
+      By.directive(ExtractJsonBannerComponent)
+    );
+    if (!debugEl) {
+      return null;
+    }
+    const banner = debugEl.componentInstance as ExtractJsonBannerComponent;
+    return banner.commentsWillBeDropped();
+  }
+
+  it('multi-block + hasComments:true makes the banner show "comments will be dropped"', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.extractedCandidate.set({
+      data: {
+        text: '[{"a":1},{"b":2}]',
+        blockCount: 2,
+        preservesComments: false,
+        hasComments: true
+      },
+      sourceVersion: 0,
+      source: 'paste'
+    });
+    fixture.detectChanges();
+
+    expect(readBannerCommentsWillBeDropped(fixture)).toBe(true);
+  });
+
+  it('multi-block + hasComments:false suppresses the comment-status line', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.extractedCandidate.set({
+      data: {
+        text: '[{"a":1},{"b":2}]',
+        blockCount: 2,
+        preservesComments: false,
+        hasComments: false
+      },
+      sourceVersion: 0,
+      source: 'paste'
+    });
+    fixture.detectChanges();
+
+    expect(readBannerCommentsWillBeDropped(fixture)).toBe(false);
+  });
+
+  it('single-block + hasComments:true suppresses the comment-status line (single-block preserves comments)', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.extractedCandidate.set({
+      data: {
+        text: '{ /* note */ "a": 1 }',
+        blockCount: 1,
+        preservesComments: true,
+        hasComments: true
+      },
+      sourceVersion: 0,
+      source: 'paste'
+    });
+    fixture.detectChanges();
+
+    expect(readBannerCommentsWillBeDropped(fixture)).toBe(false);
+  });
+
+  it('single-block + hasComments:false suppresses the comment-status line', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.extractedCandidate.set({
+      data: {
+        text: '{ "a": 1 }',
+        blockCount: 1,
+        preservesComments: true,
+        hasComments: false
+      },
+      sourceVersion: 0,
+      source: 'paste'
+    });
+    fixture.detectChanges();
+
+    expect(readBannerCommentsWillBeDropped(fixture)).toBe(false);
   });
 });
 

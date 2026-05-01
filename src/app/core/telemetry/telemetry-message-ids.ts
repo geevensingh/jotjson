@@ -398,11 +398,17 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   read); `'editor.paste'` = native Monaco paste inside the
    *   editor; `'upload.pick'` = toolbar Upload button; `'upload.drag'`
    *   = files dropped onto the document.
-   * Measurements: { blockCount: number; preservesComments: 0 | 1 }.
-   *   `blockCount` is the number of JSON blocks the extractor
-   *   recovered from the mixed text. `preservesComments` is 1 when
-   *   the extractor's output retains all source comments and 0
-   *   otherwise (numeric so AI can `avg()` / `sum()` it).
+   * Measurements: { blockCount: number; preservesComments: 0 | 1;
+   *   hasComments: 0 | 1 }. `blockCount` is the number of JSON blocks
+   *   the extractor recovered from the mixed text. `preservesComments`
+   *   is 1 when the extractor's output FORMAT retains comments (always
+   *   1 for single-block, always 0 for multi-block) and 0 otherwise.
+   *   `hasComments` is 1 when at least one accepted candidate's source
+   *   slice contained a JSONC comment and 0 otherwise. The product
+   *   `hasComments && !preservesComments` (i.e., `hasComments=1 &&
+   *   preservesComments=0`) is exactly when the banner shows the
+   *   "Comments will be dropped" warning. Numeric so AI can `avg()` /
+   *   `sum()` them.
    */
   'home.extract.banner.shown',
 
@@ -417,10 +423,10 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           with `reason='content.changed'` for this candidate.
    * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
    *   | 'upload.drag' } - mirrors `home.extract.banner.shown`.
-   * Measurements: { blockCount: number; preservesComments: 0 | 1 }
-   *   - mirrors `home.extract.banner.shown` so accept-rate by
-   *   block-count and comments-preservation can be computed by a
-   *   join.
+   * Measurements: { blockCount: number; preservesComments: 0 | 1;
+   *   hasComments: 0 | 1 } - mirrors `home.extract.banner.shown` so
+   *   accept-rate by block-count, comments-preservation, and
+   *   warning-exposure can be computed by a join.
    */
   'home.extract.banner.accept',
 

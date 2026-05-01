@@ -48,7 +48,8 @@ export type JjIconName =
   | 'info'
   | 'error'
   | 'flag'
-  | 'bookmark';
+  | 'bookmark'
+  | 'extract';
 
 @Component({
   selector: 'jj-icon',
@@ -270,6 +271,14 @@ export type JjIconName =
         }
         @case ('bookmark') {
           <path d="M6 4h12v17l-6-4-6 4z" />
+        }
+        @case ('extract') {
+          <path d="M5 4v3M5 4h3" />
+          <path d="M19 4v3M19 4h-3" />
+          <path d="M5 20v-3M5 20h3" />
+          <path d="M19 20v-3M19 20h-3" />
+          <path d="M10 9.5c-.7 0-1 .3-1 1v.5c0 .5-.5 1-1 1 .5 0 1 .3 1 1v.5c0 .7.3 1 1 1" />
+          <path d="M14 9.5c.7 0 1 .3 1 1v.5c0 .5.5 1 1 1-.5 0-1 .3-1 1v.5c0 .7-.3 1-1 1" />
         }
       }
     </svg>

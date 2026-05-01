@@ -300,7 +300,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       { source },
       {
         blockCount: data.blockCount,
-        preservesComments: data.preservesComments ? 1 : 0
+        preservesComments: data.preservesComments ? 1 : 0,
+        hasComments: data.hasComments ? 1 : 0
       }
     );
     // Conditional auto-focus: only when the user clicked the toolbar
@@ -844,7 +845,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       { source: candidate.source },
       {
         blockCount: candidate.data.blockCount,
-        preservesComments: candidate.data.preservesComments ? 1 : 0
+        preservesComments: candidate.data.preservesComments ? 1 : 0,
+        hasComments: candidate.data.hasComments ? 1 : 0
       }
     );
     // Clear the candidate FIRST so `setContent`'s banner-replace guard
