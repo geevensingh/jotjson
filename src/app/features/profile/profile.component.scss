@@ -220,6 +220,19 @@ dl {
   font-size: 0.875rem;
 }
 
+.pref-form-field {
+  @include md.compact-mat-form-field(36px, 6px);
+
+  // Match the visual width of the previous .pref-select so rows
+  // don't reflow.
+  min-width: 12rem;
+
+  &--number {
+    min-width: 6.5rem;
+    width: auto;
+  }
+}
+
 // ---------------------------------------------------------------
 // Dense, legible Material control overrides for the prefs surface.
 //

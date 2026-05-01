@@ -24,3 +24,15 @@
     font-size: #{$text-size};
   }
 }
+
+// Compact mat-form-field. $height should be one of the density-scale
+// container heights documented in
+// node_modules/@angular/material/form-field/_m3-form-field.scss
+// (56/52/48/44/40/36 px). $vertical-padding pairs with each height
+// per that table (16/14/12/10/8/6 px).
+@mixin compact-mat-form-field($height: 36px, $vertical-padding: 6px) {
+  --mat-form-field-container-height: #{$height};
+  --mat-form-field-container-vertical-padding: #{$vertical-padding};
+  --mat-form-field-filled-with-label-container-padding-top: #{$vertical-padding * 1.4};
+  --mat-form-field-filled-with-label-container-padding-bottom: #{$vertical-padding * 0.6};
+}

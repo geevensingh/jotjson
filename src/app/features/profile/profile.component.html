@@ -51,38 +51,42 @@
         </h3>
 
         <div class="pref-row">
-          <label for="pref-theme" i18n="@@profile.prefs.appearance.theme">Theme</label>
-          <select
-            id="pref-theme"
-            class="pref-select"
-            [ngModel]="theme()"
-            (ngModelChange)="onThemeChange($event)"
-          >
-            <option value="dark" i18n="@@profile.prefs.appearance.theme.dark">Dark</option>
-            <option value="light" i18n="@@profile.prefs.appearance.theme.light">Light</option>
-            <option value="system" i18n="@@profile.prefs.appearance.theme.system">
-              Match system
-            </option>
-          </select>
+          <span class="pref-label" id="pref-theme-label" i18n="@@profile.prefs.appearance.theme">Theme</span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-theme"
+              aria-labelledby="pref-theme-label"
+              [value]="theme()"
+              (selectionChange)="onThemeChange($event.value)"
+            >
+              <mat-option value="dark" i18n="@@profile.prefs.appearance.theme.dark">Dark</mat-option>
+              <mat-option value="light" i18n="@@profile.prefs.appearance.theme.light">Light</mat-option>
+              <mat-option value="system" i18n="@@profile.prefs.appearance.theme.system">
+                Match system
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
 
         <div class="pref-row">
-          <label for="pref-layout" i18n="@@profile.prefs.appearance.layout">
+          <span class="pref-label" id="pref-layout-label" i18n="@@profile.prefs.appearance.layout">
             Layout orientation
-          </label>
-          <select
-            id="pref-layout"
-            class="pref-select"
-            [ngModel]="layoutOrientation()"
-            (ngModelChange)="onLayoutOrientationChange($event)"
-          >
-            <option value="horizontal" i18n="@@profile.prefs.appearance.layout.horizontal">
-              Horizontal
-            </option>
-            <option value="vertical" i18n="@@profile.prefs.appearance.layout.vertical">
-              Vertical
-            </option>
-          </select>
+          </span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-layout"
+              aria-labelledby="pref-layout-label"
+              [value]="layoutOrientation()"
+              (selectionChange)="onLayoutOrientationChange($event.value)"
+            >
+              <mat-option value="horizontal" i18n="@@profile.prefs.appearance.layout.horizontal">
+                Horizontal
+              </mat-option>
+              <mat-option value="vertical" i18n="@@profile.prefs.appearance.layout.vertical">
+                Vertical
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
       </section>
 
@@ -92,20 +96,21 @@
         </h3>
 
         <div class="pref-row">
-          <label for="pref-font-size" i18n="@@profile.prefs.editor.fontSize">Font size</label>
-          <span class="pref-control-group">
+          <span class="pref-label" id="pref-font-size-label" i18n="@@profile.prefs.editor.fontSize">Font size</span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field pref-form-field--number">
             <input
+              matInput
               id="pref-font-size"
               type="number"
-              class="pref-number"
+              aria-labelledby="pref-font-size-label"
               [min]="fontSizeMin"
               [max]="fontSizeMax"
               step="1"
               [ngModel]="editorFontSize()"
               (ngModelChange)="onEditorFontSizeChange($event)"
             />
-            <span class="pref-suffix" aria-hidden="true">px</span>
-          </span>
+            <span matTextSuffix>px</span>
+          </mat-form-field>
         </div>
 
         <div class="pref-row">
@@ -136,20 +141,21 @@
         </h3>
 
         <div class="pref-row">
-          <label for="pref-tree-font-size" i18n="@@profile.prefs.tree.fontSize">Font size</label>
-          <span class="pref-control-group">
+          <span class="pref-label" id="pref-tree-font-size-label" i18n="@@profile.prefs.tree.fontSize">Font size</span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field pref-form-field--number">
             <input
+              matInput
               id="pref-tree-font-size"
               type="number"
-              class="pref-number"
+              aria-labelledby="pref-tree-font-size-label"
               [min]="fontSizeMin"
               [max]="fontSizeMax"
               step="1"
               [ngModel]="treeFontSize()"
               (ngModelChange)="onTreeFontSizeChange($event)"
             />
-            <span class="pref-suffix" aria-hidden="true">px</span>
-          </span>
+            <span matTextSuffix>px</span>
+          </mat-form-field>
         </div>
 
         <div class="pref-row pref-row--slider">
@@ -321,20 +327,22 @@
         </div>
 
         <div class="pref-row">
-          <label for="pref-tree-path-root" i18n="@@profile.prefs.tree.pathRoot">
+          <span class="pref-label" id="pref-tree-path-root-label" i18n="@@profile.prefs.tree.pathRoot">
             Copied path root
-          </label>
-          <select
-            id="pref-tree-path-root"
-            class="pref-select"
-            [ngModel]="treePathRoot()"
-            (ngModelChange)="onTreePathRootChange($event)"
-          >
-            <option value="jsonpath" i18n="@@profile.prefs.tree.pathRoot.jsonpath">JSONPath ($)</option>
-            <option value="none" i18n="@@profile.prefs.tree.pathRoot.none">None</option>
-            <option value="root" i18n="@@profile.prefs.tree.pathRoot.root">root</option>
-            <option value="data" i18n="@@profile.prefs.tree.pathRoot.data">Data</option>
-          </select>
+          </span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-tree-path-root"
+              aria-labelledby="pref-tree-path-root-label"
+              [value]="treePathRoot()"
+              (selectionChange)="onTreePathRootChange($event.value)"
+            >
+              <mat-option value="jsonpath" i18n="@@profile.prefs.tree.pathRoot.jsonpath">JSONPath ($)</mat-option>
+              <mat-option value="none" i18n="@@profile.prefs.tree.pathRoot.none">None</mat-option>
+              <mat-option value="root" i18n="@@profile.prefs.tree.pathRoot.root">root</mat-option>
+              <mat-option value="data" i18n="@@profile.prefs.tree.pathRoot.data">Data</mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
         <p class="pref-help-line" i18n="@@profile.prefs.tree.pathRoot.help">
           Prefix used when copying a tree row's path to the clipboard.
@@ -502,19 +510,21 @@
         </h3>
 
         <div class="pref-row">
-          <label for="pref-search-scope" i18n="@@profile.prefs.search.scope">
+          <span class="pref-label" id="pref-search-scope-label" i18n="@@profile.prefs.search.scope">
             Search scope
-          </label>
-          <select
-            id="pref-search-scope"
-            class="pref-select"
-            [ngModel]="searchScope()"
-            (ngModelChange)="onSearchScopeChange($event)"
-          >
-            <option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</option>
-            <option value="values" i18n="@@profile.prefs.search.scope.values">Values</option>
-            <option value="both" i18n="@@profile.prefs.search.scope.both">Keys and values</option>
-          </select>
+          </span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-search-scope"
+              aria-labelledby="pref-search-scope-label"
+              [value]="searchScope()"
+              (selectionChange)="onSearchScopeChange($event.value)"
+            >
+              <mat-option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</mat-option>
+              <mat-option value="values" i18n="@@profile.prefs.search.scope.values">Values</mat-option>
+              <mat-option value="both" i18n="@@profile.prefs.search.scope.both">Keys and values</mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
 
         <div class="pref-row">
@@ -557,22 +567,24 @@
         </p>
 
         <div class="pref-row">
-          <label for="pref-quota-strategy" i18n="@@profile.prefs.history.quotaStrategy">
+          <span class="pref-label" id="pref-quota-strategy-label" i18n="@@profile.prefs.history.quotaStrategy">
             When you reach the saved blob limit
-          </label>
-          <select
-            id="pref-quota-strategy"
-            class="pref-select"
-            [ngModel]="blobQuotaStrategy()"
-            (ngModelChange)="onBlobQuotaStrategyChange($event)"
-          >
-            <option value="auto_fifo" i18n="@@profile.prefs.history.quotaStrategy.autoFifo">
-              Automatically delete the oldest
-            </option>
-            <option value="manual" i18n="@@profile.prefs.history.quotaStrategy.manual">
-              Ask me to choose
-            </option>
-          </select>
+          </span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-quota-strategy"
+              aria-labelledby="pref-quota-strategy-label"
+              [value]="blobQuotaStrategy()"
+              (selectionChange)="onBlobQuotaStrategyChange($event.value)"
+            >
+              <mat-option value="auto_fifo" i18n="@@profile.prefs.history.quotaStrategy.autoFifo">
+                Automatically delete the oldest
+              </mat-option>
+              <mat-option value="manual" i18n="@@profile.prefs.history.quotaStrategy.manual">
+                Ask me to choose
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
       </section>
     </section>

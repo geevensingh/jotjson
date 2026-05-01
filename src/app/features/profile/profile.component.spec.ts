@@ -703,17 +703,19 @@ describe('ProfileComponent', () => {
       expect(toggles.length).toBeGreaterThan(0);
     });
 
-    it('wraps multi-piece controls in a pref-control-group', async () => {
+    it('wraps font-size inputs in a mat-form-field with a px suffix', async () => {
       const { fixture } = await create(signedIn);
       const root = fixture.nativeElement as HTMLElement;
 
       const fontSize = root.querySelector('#pref-font-size');
-      const fontSizeWrap = fontSize?.closest('.pref-control-group');
+      const fontSizeWrap = fontSize?.closest('mat-form-field');
       expect(fontSizeWrap).toBeTruthy();
-      expect(fontSizeWrap?.querySelector('.pref-suffix')?.textContent).toContain('px');
+      expect(fontSizeWrap?.textContent).toContain('px');
 
       const treeFontSize = root.querySelector('#pref-tree-font-size');
-      expect(treeFontSize?.closest('.pref-control-group')).toBeTruthy();
+      const treeFontSizeWrap = treeFontSize?.closest('mat-form-field');
+      expect(treeFontSizeWrap).toBeTruthy();
+      expect(treeFontSizeWrap?.textContent).toContain('px');
     });
 
     it('groups slider with its value suffix', async () => {
