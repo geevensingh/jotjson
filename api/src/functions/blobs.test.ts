@@ -651,3 +651,69 @@ describe('access.forbidden telemetry emission from blob handlers', () => {
     });
   });
 });
+
+describe('quota.exceeded telemetry emission from blob handlers', () => {
+  function manyBlobsForQuota(count: number): unknown[] {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `existing-${i}`,
+      slug: `slug-${i}`,
+      ownerId: 'u-1',
+      content: '{}',
+      isPublic: false,
+      createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+      updatedAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+      title: i === 0 ? 'oldest title' : undefined
+    }));
+  }
+
+  let mockTrackEvent: jest.Mock;
+
+  beforeEach(() => {
+    __resetTelemetryInitForTesting();
+    mockTrackEvent = jest.fn();
+    __setTelemetryClientForTestingT({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+  });
+
+  afterEach(() => {
+    __resetTelemetryInitForTesting();
+    __setTelemetryClientForTestingT(null);
+  });
+
+  it('postBlob manual-strategy 409 emits resource=blob, via=create with count and limit', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobsForQuota(100));
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: { blobQuotaStrategy: 'manual' }
+    });
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(409);
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'quota.exceeded',
+      properties: { resource: 'blob', authMode: 'required', via: 'create' },
+      measurements: { count: 100, limit: 100 }
+    });
+  });
+
+  // Defends the B2 scope decision: auto_fifo silent-delete must NOT
+  // emit quota.exceeded (deferred to a future blob.autoEvicted event).
+  // Without this test, accidentally hoisting the helper outside the
+  // strategy === 'manual' branch would not be caught.
+  it('postBlob auto_fifo path does NOT emit quota.exceeded', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobsForQuota(100));
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: { blobQuotaStrategy: 'auto_fifo' }
+    });
+    deleteBlobByIdSpy.mockResolvedValueOnce(true);
+    createBlob.mockResolvedValueOnce(sampleBlob);
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(201);
+    expect(deleteBlobByIdSpy).toHaveBeenCalledWith('existing-0', 'u-1');
+    expect(mockTrackEvent).not.toHaveBeenCalled();
+  });
+});

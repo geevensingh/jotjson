@@ -21,6 +21,25 @@ import { trackEvent } from './telemetry';
  */
 export type ForbiddenResource = 'blob' | 'ruleSet';
 
+/**
+ * Closed enum of resources that can return 409 due to quota exhaustion.
+ * Currently identical to ForbiddenResource but kept as a separate alias
+ * so each event's schema can drift independently if a future quota
+ * applies to a resource that has no ownership-mismatch path (or vice
+ * versa).
+ */
+export type QuotaResource = 'blob' | 'ruleSet';
+
+/**
+ * Closed enum of creation flows that can hit a quota. `'create'` covers
+ * both POST /api/blobs and POST /api/rule-sets; `'clone'` is reserved
+ * for POST /api/rule-sets/presets/{id}/clone (cloning a built-in
+ * preset). Extending this requires updating the `quotaExceeded()`
+ * callers and the quota.exceeded customDimensions schema documented in
+ * docs/telemetry.md.
+ */
+export type QuotaVia = 'create' | 'clone';
+
 /** 401 Unauthorized. */
 export function unauthorized(message: string): HttpResponseInit {
   return { status: 401, jsonBody: { error: message } };
@@ -49,6 +68,44 @@ export function forbidden(
 ): HttpResponseInit {
   trackEvent('access.forbidden', { resource, authMode: 'required' });
   return { status: 403, jsonBody: { error: message } };
+}
+
+/**
+ * 409 Conflict for free-tier quota exhaustion. Emits a single
+ * `quota.exceeded` customEvent with `{ resource, authMode: 'required',
+ * via }` properties and `{ count, limit }` measurements so quota
+ * pressure is queryable in App Insights. authMode is hardcoded
+ * 'required' because every current caller invokes quotaExceeded()
+ * AFTER requireAuth has resolved. `count` is the raw observed size at
+ * rejection time (not clamped to `limit`) so historical overages or
+ * post-deployment quota reductions remain visible in measurements.
+ *
+ * The response body keeps the pre-existing `code: 'quota_exceeded'`
+ * literal so any client code switching on it stays compatible.
+ */
+export function quotaExceeded(
+  message: string,
+  {
+    resource,
+    via,
+    count,
+    limit
+  }: {
+    resource: QuotaResource;
+    via: QuotaVia;
+    count: number;
+    limit: number;
+  }
+): HttpResponseInit {
+  trackEvent(
+    'quota.exceeded',
+    { resource, authMode: 'required', via },
+    { count, limit }
+  );
+  return {
+    status: 409,
+    jsonBody: { error: message, code: 'quota_exceeded' }
+  };
 }
 
 /**

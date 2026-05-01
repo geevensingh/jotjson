@@ -37,6 +37,7 @@ import {
   forbidden,
   internalError,
   notFound,
+  quotaExceeded,
   unauthorized
 } from '../shared/http';
 import { readUser } from '../shared/users';
@@ -132,13 +133,15 @@ export async function postBlob(
       const userDoc = await readUser(principal.id);
       const strategy = userDoc?.preferences?.blobQuotaStrategy ?? 'auto_fifo';
       if (strategy === 'manual') {
-        return {
-          status: 409,
-          jsonBody: {
-            error: `Blob quota of ${MAX_BLOBS_PER_USER} reached. Delete an existing blob and try again.`,
-            code: 'quota_exceeded'
+        return quotaExceeded(
+          `Blob quota of ${MAX_BLOBS_PER_USER} reached. Delete an existing blob and try again.`,
+          {
+            resource: 'blob',
+            via: 'create',
+            count: existing.length,
+            limit: MAX_BLOBS_PER_USER
           }
-        };
+        );
       }
       // auto_fifo: drop the oldest blob (by updatedAt, then createdAt as
       // tiebreaker - matches DESIGN_SPEC §Constraints).

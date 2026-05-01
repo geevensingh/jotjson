@@ -5,6 +5,7 @@ import {
   forbidden,
   internalError,
   notFound,
+  quotaExceeded,
   unauthorized
 } from './http';
 import {
@@ -74,6 +75,102 @@ describe('shared/http response helpers', () => {
     it('emits exactly once per call (no double-emit)', () => {
       forbidden('first', 'blob');
       forbidden('second', 'ruleSet');
+      expect(mockTrackEvent).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('quotaExceeded', () => {
+    let mockTrackEvent: jest.Mock;
+
+    beforeEach(() => {
+      __resetTelemetryInitForTesting();
+      mockTrackEvent = jest.fn();
+      __setTelemetryClientForTesting({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+    });
+
+    afterEach(() => {
+      __resetTelemetryInitForTesting();
+      __setTelemetryClientForTesting(null);
+    });
+
+    it('returns status 409 with the provided message and quota_exceeded code', () => {
+      const result = quotaExceeded('Blob quota of 100 reached', {
+        resource: 'blob',
+        via: 'create',
+        count: 100,
+        limit: 100
+      });
+      expect(result.status).toBe(409);
+      expect(result.jsonBody).toEqual({
+        error: 'Blob quota of 100 reached',
+        code: 'quota_exceeded'
+      });
+    });
+
+    it('emits quota.exceeded with resource=blob, via=create, and the supplied measurements', () => {
+      quotaExceeded('Blob quota of 100 reached', {
+        resource: 'blob',
+        via: 'create',
+        count: 100,
+        limit: 100
+      });
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+      expect(mockTrackEvent).toHaveBeenCalledWith({
+        name: 'quota.exceeded',
+        properties: { resource: 'blob', authMode: 'required', via: 'create' },
+        measurements: { count: 100, limit: 100 }
+      });
+    });
+
+    it('emits quota.exceeded with resource=ruleSet and via=create', () => {
+      quotaExceeded('Rule set quota of 20 reached', {
+        resource: 'ruleSet',
+        via: 'create',
+        count: 20,
+        limit: 20
+      });
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+      expect(mockTrackEvent).toHaveBeenCalledWith({
+        name: 'quota.exceeded',
+        properties: { resource: 'ruleSet', authMode: 'required', via: 'create' },
+        measurements: { count: 20, limit: 20 }
+      });
+    });
+
+    it('emits quota.exceeded with resource=ruleSet and via=clone', () => {
+      quotaExceeded('Rule set quota of 20 reached', {
+        resource: 'ruleSet',
+        via: 'clone',
+        count: 20,
+        limit: 20
+      });
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+      expect(mockTrackEvent).toHaveBeenCalledWith({
+        name: 'quota.exceeded',
+        properties: { resource: 'ruleSet', authMode: 'required', via: 'clone' },
+        measurements: { count: 20, limit: 20 }
+      });
+    });
+
+    it('passes count > limit through unchanged when the caller is over quota', () => {
+      // Defends the documented contract that count is the raw observed
+      // size, not clamped, so historical overages stay queryable.
+      quotaExceeded('Blob quota of 100 reached', {
+        resource: 'blob',
+        via: 'create',
+        count: 105,
+        limit: 100
+      });
+      expect(mockTrackEvent).toHaveBeenCalledWith({
+        name: 'quota.exceeded',
+        properties: { resource: 'blob', authMode: 'required', via: 'create' },
+        measurements: { count: 105, limit: 100 }
+      });
+    });
+
+    it('emits exactly once per call (no double-emit)', () => {
+      quotaExceeded('first', { resource: 'blob', via: 'create', count: 100, limit: 100 });
+      quotaExceeded('second', { resource: 'ruleSet', via: 'clone', count: 20, limit: 20 });
       expect(mockTrackEvent).toHaveBeenCalledTimes(2);
     });
   });

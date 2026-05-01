@@ -51,6 +51,7 @@ import {
   forbidden,
   internalError,
   notFound,
+  quotaExceeded,
   unauthorized
 } from '../shared/http';
 import { readUser, upsertUser } from '../shared/users';
@@ -121,13 +122,15 @@ export async function postRuleSet(
   try {
     const existing = await listRuleSetsByOwner(principal.id);
     if (existing.length >= MAX_RULE_SETS_PER_USER) {
-      return {
-        status: 409,
-        jsonBody: {
-          error: `Rule set quota of ${MAX_RULE_SETS_PER_USER} reached. Delete an existing set and try again.`,
-          code: 'quota_exceeded'
+      return quotaExceeded(
+        `Rule set quota of ${MAX_RULE_SETS_PER_USER} reached. Delete an existing set and try again.`,
+        {
+          resource: 'ruleSet',
+          via: 'create',
+          count: existing.length,
+          limit: MAX_RULE_SETS_PER_USER
         }
-      };
+      );
     }
     const created = await createRuleSet(principal.id, payload);
     return withEtag(201, created);
@@ -414,13 +417,15 @@ export async function clonePreset(
   try {
     const existing = await listRuleSetsByOwner(principal.id);
     if (existing.length >= MAX_RULE_SETS_PER_USER) {
-      return {
-        status: 409,
-        jsonBody: {
-          error: `Rule set quota of ${MAX_RULE_SETS_PER_USER} reached. Delete an existing set and try again.`,
-          code: 'quota_exceeded'
+      return quotaExceeded(
+        `Rule set quota of ${MAX_RULE_SETS_PER_USER} reached. Delete an existing set and try again.`,
+        {
+          resource: 'ruleSet',
+          via: 'clone',
+          count: existing.length,
+          limit: MAX_RULE_SETS_PER_USER
         }
-      };
+      );
     }
     const payload = presetToCreatePayload(preset);
     const created = await createRuleSet(principal.id, payload);

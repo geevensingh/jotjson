@@ -626,3 +626,52 @@ describe('access.forbidden telemetry emission from rule-set handlers', () => {
     });
   });
 });
+
+describe('quota.exceeded telemetry emission from rule-set handlers', () => {
+  let mockTrackEvent: jest.Mock;
+
+  beforeEach(() => {
+    __resetTelemetryInitForTesting();
+    mockTrackEvent = jest.fn();
+    __setTelemetryClientForTestingT({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+  });
+
+  afterEach(() => {
+    __resetTelemetryInitForTesting();
+    __setTelemetryClientForTestingT(null);
+  });
+
+  it('postRuleSet emits resource=ruleSet, via=create with count and limit', async () => {
+    listRuleSetsByOwner.mockResolvedValueOnce(
+      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` }))
+    );
+    const res = await postRuleSet(
+      makeRequest({ body: { name: 'x', rules: [] } }),
+      ctx
+    );
+    expect(res.status).toBe(409);
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'quota.exceeded',
+      properties: { resource: 'ruleSet', authMode: 'required', via: 'create' },
+      measurements: { count: 20, limit: 20 }
+    });
+  });
+
+  it('clonePreset emits resource=ruleSet, via=clone with count and limit', async () => {
+    listRuleSetsByOwner.mockResolvedValueOnce(
+      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` }))
+    );
+    const res = await clonePreset(
+      makeRequest({ params: { id: 'error-detection' } }),
+      ctx
+    );
+    expect(res.status).toBe(409);
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1);
+    expect(mockTrackEvent).toHaveBeenCalledWith({
+      name: 'quota.exceeded',
+      properties: { resource: 'ruleSet', authMode: 'required', via: 'clone' },
+      measurements: { count: 20, limit: 20 }
+    });
+  });
+});
