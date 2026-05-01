@@ -18,8 +18,6 @@ import { LoggerService } from '../../../core/telemetry/logger.service';
 import { SignedInDirective } from '../../directives/signed-in.directive';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 
-export type EditorMode = 'json' | 'jsonc';
-
 type ToolbarAction =
   | 'paste'
   | 'copy'
@@ -78,7 +76,6 @@ export class ToolbarComponent {
   private readonly prefs = inject(PreferencesService);
   private readonly loggerService = inject(LoggerService);
 
-  readonly mode = input<EditorMode>('json');
   readonly hasContent = input<boolean>(false);
   readonly title = input<string>('');
   readonly canSave = input<boolean>(false);
@@ -127,7 +124,6 @@ export class ToolbarComponent {
   readonly clear = output<void>();
   readonly format = output<void>();
   readonly minify = output<void>();
-  readonly modeChange = output<EditorMode>();
   readonly toggleTheme = output<void>();
   readonly toggleSelectionSync = output<void>();
   readonly paneLayoutChange = output<PaneLayout>();
@@ -329,10 +325,6 @@ export class ToolbarComponent {
   onDeleteBlobClick(): void {
     this.emitToolbarAction('deleteBlob');
     this.deleteBlob.emit();
-  }
-
-  onModeChange(next: EditorMode): void {
-    this.modeChange.emit(next);
   }
 
   onPaneLayoutChange(next: PaneLayout): void {

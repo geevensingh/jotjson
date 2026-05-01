@@ -308,7 +308,7 @@ The primary page. Available to **all users** (anonymous + registered).
     state changes.
 
 - **JSON Input Panel** (left or top, depending on layout preference)
-  - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON/JSONC-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size. Editor language mode auto-detects JSON vs JSONC based on content (presence of `//` or `/* */` comments) and can be toggled manually via a **JSON / JSONC** switch in the toolbar.
+  - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON/JSONC-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size. The editor and parser unconditionally accept comments and trailing commas; an editor "mode" tag (`json` vs `jsonc`) is auto-derived from content (presence of `//` or `/* */` comments) purely to drive the status-bar badge label and the download filename extension. There is no manual mode switch - mode reflects the document, not user choice.
   - **JSONC support**: the editor and parser accept JSON with Comments (single-line `//` and multi-line `/* */`), as well as trailing commas. Comments are stripped before parsing into the tree view but preserved in the raw editor text. When saving a blob, the original text (with comments) is stored; the parsed tree is derived on load. This uses a JSONC-aware parser (e.g., `jsonc-parser` from the VS Code ecosystem) rather than native `JSON.parse`.
   - "Paste JSON from Clipboard", "Upload File", "Download as File", "Clear", "Format / Pretty-Print", and "Minify" action buttons.
   - Real-time JSON validation with inline error messages (line + column of parse error).
@@ -333,7 +333,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - Uploading replaces the editor contents immediately - **no confirmation prompt** even when the editor already has content. Users can recover their prior content via the editor's built-in undo (Ctrl+Z) if needed.
     - The file name is shown in a subtle label near the editor (e.g., "Loaded: config.json") until the content is manually edited.
     - **Privacy note:** file contents are read entirely client-side and never uploaded to the server unless the user explicitly saves the blob.
-  - **Download as File** - a toolbar button saves the current editor content as a file to the user's device. Uses a client-side `Blob` + anchor `download` attribute - no server involvement. Default filename is the blob's title (slugified) or `jotjson-<slug>.json` for a saved blob, or `jotjson-untitled.json` for unsaved editor content. Extension is `.jsonc` when the editor is in JSONC mode (contains comments or user toggled JSONC), otherwise `.json`. Available to all users (anonymous + registered).
+  - **Download as File** - a toolbar button saves the current editor content as a file to the user's device. Uses a client-side `Blob` + anchor `download` attribute - no server involvement. Default filename is the blob's title (slugified) or `jotjson-<slug>.json` for a saved blob, or `jotjson-untitled.json` for unsaved editor content. Extension is `.jsonc` when the editor content contains comments (the auto-derived JSONC mode), otherwise `.json`. Available to all users (anonymous + registered).
 
 - **Tree View Panel** (right or bottom, depending on layout preference)
   - Renders the parsed JSON as a collapsible, interactive tree.

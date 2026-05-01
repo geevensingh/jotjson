@@ -3,7 +3,7 @@ import { BUILD_INFO_TOKEN } from '../../../core/build/build-info.token';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { JsonParseResult } from '../../../core/json/json-parser.service';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
-import { EditorMode } from '../../../shared/components/toolbar/toolbar.component';
+import { EditorMode } from '../editor-mode';
 import { computeTextStats, computeTreeStats, formatBytes } from './stats';
 
 /**

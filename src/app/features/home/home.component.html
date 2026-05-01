@@ -2,7 +2,6 @@
   <jotjson-drop-overlay [visible]="dropActive()" />
   <jj-app-header>
     <jj-toolbar
-      [mode]="mode()"
       [hasContent]="hasContent()"
       [title]="title()"
       [canSave]="canSave()"
@@ -24,7 +23,6 @@
       (clear)="onClear()"
       (format)="onFormat()"
       (minify)="onMinify()"
-      (modeChange)="onModeChange($event)"
       (paneLayoutChange)="onPaneLayoutChange($event)"
       (toggleTheme)="onToggleTheme()"
       (toggleSelectionSync)="onToggleSelectionSync()"

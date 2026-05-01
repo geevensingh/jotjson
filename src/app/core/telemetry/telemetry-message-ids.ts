@@ -651,9 +651,9 @@ export const TELEMETRY_MESSAGE_IDS = [
    *                      picker (post-`openFile`, gives funnel
    *                      completion).
    *
-   * NOT in this enum: mode toggle (json/jsonc), theme toggle,
-   * selection-sync toggle, pane-layout segmented control. Those
-   * mutate preferences and surface via `pref.changed` instead.
+   * NOT in this enum: theme toggle, selection-sync toggle,
+   * pane-layout segmented control. Those mutate preferences and
+   * surface via `pref.changed` instead.
    *
    * Props: { action: <closed-enum above> }.
    * Measurements: none.

@@ -61,10 +61,10 @@ import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-b
 import { JsonTreeComponent } from '../../shared/components/json-tree/json-tree.component';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import {
-  EditorMode,
   PaneLayout,
   ToolbarComponent
 } from '../../shared/components/toolbar/toolbar.component';
+import { EditorMode } from './editor-mode';
 import { StatusBarComponent } from './status-bar/status-bar.component';
 import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
 import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
@@ -1187,10 +1187,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     } catch {
       /* ignore */
     }
-  }
-
-  onModeChange(mode: EditorMode): void {
-    this.mode.set(mode);
   }
 
   /**

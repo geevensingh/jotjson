@@ -961,14 +961,6 @@ describe('ToolbarComponent', () => {
       triggerMenuItemClick(fixture, 'Delete this blob');
     }
 
-    function triggerModeToggleChange(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
-      findToggleSegment(fixture, 'mat-button-toggle-group.mode-toggle', 'jsonc')
-        .click();
-      fixture.detectChanges();
-    }
-
     function triggerThemeToggleButtonClick(
       fixture: ComponentFixture<ToolbarComponent>
     ): void {
@@ -1156,16 +1148,6 @@ describe('ToolbarComponent', () => {
       expectNoToolbarActionEvent(logger);
     });
 
-    it('does not emit toolbar.action for mode toggle changes', async () => {
-      const { fixture, logger } = await create();
-      configureActionFixture(fixture);
-      logger.event.calls.reset();
-
-      triggerModeToggleChange(fixture);
-
-      expectNoToolbarActionEvent(logger);
-    });
-
     it('does not emit toolbar.action for theme toggle clicks', async () => {
       const { fixture, logger } = await create();
       configureActionFixture(fixture);
@@ -1195,15 +1177,6 @@ describe('ToolbarComponent', () => {
 
       expectNoToolbarActionEvent(logger);
     });
-  });
-
-  it('onModeChange emits the new mode', async () => {
-    const { fixture } = await create();
-    const cmp = fixture.componentInstance;
-    const spy = jasmine.createSpy('modeChange');
-    cmp.modeChange.subscribe(spy);
-    cmp.onModeChange('jsonc');
-    expect(spy).toHaveBeenCalledWith('jsonc');
   });
 
   it('copyRequested output fires when button click is translated (direct emit path)', async () => {

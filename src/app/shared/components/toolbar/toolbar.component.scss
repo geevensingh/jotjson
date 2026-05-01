@@ -33,14 +33,6 @@
   display: none;
 }
 
-.mode-toggle {
-  font-family: v.$font-ui;
-  font-size: 12px;
-  height: 32px;
-
-  @include md.compact-mat-button-toggle(32px, 12px);
-}
-
 .pane-layout-group {
   font-family: v.$font-ui;
   font-size: 12px;

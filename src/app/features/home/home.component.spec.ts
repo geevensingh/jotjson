@@ -402,6 +402,45 @@ describe('HomeComponent (unit-level)', () => {
     expect(fixture.componentInstance.mode()).toBe('jsonc');
   });
 
+  describe('onDownload', () => {
+    function captureDownloadAnchor(): HTMLAnchorElement {
+      const realCreateElement = document.createElement.bind(document);
+      const anchor = realCreateElement('a');
+      spyOn(anchor, 'click');
+      spyOn(document, 'createElement').and.callFake(((tag: string) =>
+        tag === 'a' ? anchor : realCreateElement(tag)) as typeof document.createElement);
+      spyOn(URL, 'createObjectURL').and.returnValue('blob:fake');
+      spyOn(URL, 'revokeObjectURL');
+      return anchor;
+    }
+
+    it('uses .jsonc extension when content has comments (auto-detected)', () => {
+      const fixture = TestBed.createComponent(HomeComponent);
+      fixture.componentInstance.content.set('// note\n{"a":1}');
+      fixture.componentRef.changeDetectorRef.detectChanges();
+      TestBed.flushEffects();
+      expect(fixture.componentInstance.mode()).toBe('jsonc');
+
+      const anchor = captureDownloadAnchor();
+      fixture.componentInstance.onDownload();
+
+      expect(anchor.download).toBe('jotjson-untitled.jsonc');
+    });
+
+    it('uses .json extension for plain JSON content', () => {
+      const fixture = TestBed.createComponent(HomeComponent);
+      fixture.componentInstance.content.set('{"a":1}');
+      fixture.componentRef.changeDetectorRef.detectChanges();
+      TestBed.flushEffects();
+      expect(fixture.componentInstance.mode()).toBe('json');
+
+      const anchor = captureDownloadAnchor();
+      fixture.componentInstance.onDownload();
+
+      expect(anchor.download).toBe('jotjson-untitled.json');
+    });
+  });
+
   it('onFormat pretty-prints unformatted JSON', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1,"b":2}');
