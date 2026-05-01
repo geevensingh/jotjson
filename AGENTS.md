@@ -567,6 +567,20 @@ Before finishing a task:
   casual user override** (e.g., "just do it", "skip the plan", "no
   need to plan"). The only bypass is the narrow direct-command
   carve-out below.
+- **Plans involving meaningful UI changes must include a mockup.**
+  Any plan that proposes new components, new visual elements,
+  modified layouts, modified interaction patterns, or new
+  user-visible preferences must include at least one mockup of the
+  proposed end state before being presented for approval. Mockups
+  should exercise the key UX states (default, long content, empty
+  state, error state where relevant) and the key decisions (placement
+  of new elements, interaction with existing controls). Inline ASCII
+  text mockups are preferred for plan files; screenshots, markdown
+  tables, or sketches are acceptable when they convey the layout more
+  clearly. If you find yourself ready to present a UI-touching plan
+  with no mockup, add one first; do not present without it. Pure
+  backend, infrastructure, refactoring, or test-only plans are
+  exempt.
 - **Direct user commands are self-approving (narrow exception).**
   When the user issues an unambiguous, scoped command (e.g., "delete
   file X", "revert commit abc123", "rerun the tests"), the request
