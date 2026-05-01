@@ -31,10 +31,17 @@ A parallel `prod` stack can be added later if the split becomes useful.
 
 ## Deploy
 
-Trigger **Actions -> Deploy infra (Bicep) -> Run workflow**. The workflow
-ensures `rg-jotjson-dev` exists before running `az deployment group create`.
+Push to `main` (touching `infra/**` or `.github/workflows/infra.yml`)
+auto-deploys after the workflow's build + what-if jobs pass. For a
+manual redeploy (e.g., to roll back or reapply after manual Azure
+changes), trigger **Actions -> Infra (Bicep) -> Run workflow**. The
+workflow ensures `rg-jotjson-dev` exists before running
+`az deployment group create`.
 
-Manual equivalent:
+PRs run build only. `what-if` runs on push and on
+`workflow_dispatch`, then deploy runs gated on its success.
+
+Manual equivalent (bypasses CI; same template + parameters):
 
 ```powershell
 az group create --name rg-jotjson-dev --location eastus2

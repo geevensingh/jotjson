@@ -1,5 +1,25 @@
 name: Infra (Bicep)
 
+# ----------------------------------------------------------------------
+# Trigger -> behavior (READ BEFORE EDITING):
+#
+# 1. push to main (paths: infra/**, this file)
+#    -> build + what-if + auto-deploy. Deploy is gated on
+#       build/what-if success (the `az ... what-if` call must
+#       complete; it's a preview, not a content-aware gate).
+#       PR-time diff review is the meaningful safety check.
+#
+# 2. workflow_dispatch
+#    -> same path as push; manual override for redeploys (e.g.,
+#       rolling forward to a specific SHA, post-manual-Azure
+#       changes).
+#
+# 3. pull_request to main
+#    -> build only. validate (what-if) is skipped on PRs;
+#       expanding it to PRs is a separate decision (requires
+#       Azure secrets / OIDC policy for PR runs).
+# ----------------------------------------------------------------------
+
 on:
   push:
     branches: [main]
@@ -74,7 +94,10 @@ jobs:
   deploy:
     name: Deploy
     needs: [build, validate]
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    concurrency:
+      group: infra-deploy-dev
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: dev
     timeout-minutes: 15

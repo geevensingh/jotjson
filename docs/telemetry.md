@@ -784,16 +784,6 @@ directory at sign-in.
 If you hit a `wrong issuer` token error after sign-in, see
 [Cross-tenant gotcha](#cross-tenant-gotcha-read-this-if-wrong-issuer-hits-you).
 
-**Pre-deployment state.** Live now: the resource group, App Insights
-component, and Log Analytics workspace. Resolves only after the first
-`infra` deployment that brings the monitoring stack online (run via
-**Actions -> Deploy infra (Bicep) -> Run workflow**, or the manual
-`az deployment group create` command in `infra/README.md`): the
-`JotJSON monitoring (dev)` workbook entry, all four scheduled-query-rule
-alerts, and the action group `ag-jotjson-dev`. The Workbooks gallery
-itself and the Alerts blade itself will load before that deployment;
-they just won't list the JotJson resources yet.
-
 ### Overview
 
 An operator-facing monitoring layer sits on top of the instrumentation
@@ -892,8 +882,9 @@ webhook receivers.
    `threshold` value or the underlying KQL.
 4. Run `az bicep build --file infra/main.bicep` locally to validate.
 5. Commit and push (pre-V1: direct-to-main; post-V1: PR).
-6. The `infra.yml` workflow runs `az deployment group what-if` on push for
-   sanity; `workflow_dispatch` triggers actual deploy.
+6. The `infra.yml` workflow runs `az deployment group what-if` on push
+   for sanity, then auto-deploys on success. `workflow_dispatch` is
+   available as a manual redeploy override.
 
 ### Post-V1 follow-ups
 
