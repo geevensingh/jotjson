@@ -15,7 +15,9 @@ Frontend (Angular SPA)
 
 Backend (Azure Functions)
   context.log / unhandled errors --> Functions runtime --> Application Insights
-                                       (auto, via APPLICATIONINSIGHTS_CONNECTION_STRING)
+                                       (auto: requests / dependencies / exceptions)
+  trackEvent(name, props, measurements) --> applicationinsights TelemetryClient --> Application Insights
+                                       (manual customEvents from api/src/shared/telemetry.ts)
 
 Application Insights resource (Azure)
   appi-<resourceSuffix>            <-- classic AI schema:  traces, exceptions, ...
@@ -78,7 +80,7 @@ Classic AI schema (App Insights resource):
 | Table | Source |
 |---|---|
 | `traces` | `LoggerService.info/warn` (severity 1/2) |
-| `customEvents` | `TelemetryService.trackEvent` (currently called by ... not many call sites; future feature events go here) |
+| `customEvents` | Frontend product events via `LoggerService.event` (`pref.changed`, `toolbar.action`, `webVitals`, `paste.handle`, `share.created`, `auth.signedIn`, etc.) and backend events via `trackEvent` in `api/src/shared/telemetry.ts` (`auth.tokenAccepted`, `auth.tokenRejected`, `access.forbidden`, `quota.exceeded`). |
 | `exceptions` | `LoggerService.error` and `TelemetryErrorHandler` and replayed `boot.failed` envelopes |
 | `pageViews` | `RouteTracker` on each navigation |
 | `dependencies` | Auto-instrumented browser fetch/XHR (`disableAjaxTracking: false`); also outgoing calls from Functions |
@@ -207,6 +209,98 @@ Measurements are optional, and undefined keys are omitted:
 Privacy posture: the only custom dimension is `appVersion` from
 `BUILD_INFO.version`. No URLs, user IDs, editor or clipboard text, or other
 payload content are attached.
+
+---
+
+## Backend events
+
+Manual `customEvents` emitted from Azure Functions via the
+`trackEvent` helper in `api/src/shared/telemetry.ts`. The Functions
+runtime separately auto-instruments `requests` / `dependencies` /
+`exceptions`, but those pipelines do not produce `customEvents`;
+this section is exclusively about the four explicit events.
+
+The manual `TelemetryClient` is constructed lazily on first call,
+reads `APPLICATIONINSIGHTS_CONNECTION_STRING` from app settings, and
+becomes a permanent no-op after a one-shot `console.warn` if the
+connection string is missing. `useGlobalProviders: false` keeps it
+isolated from the host's OpenTelemetry providers.
+
+All four events run after `requireAuth`, so `authMode` reflects
+which auth gate the call passed (or for `auth.tokenRejected` was
+rejected by). Properties land in `customDimensions`; numeric data
+lands in `customMeasurements`.
+
+### Event catalog
+
+| Event | Source | Properties | Measurements |
+|---|---|---|---|
+| `auth.tokenAccepted` | `requireAuth` / `optionalAuth` in `api/src/shared/auth.ts` | `{authMode: 'required' \| 'optional'}` | none |
+| `auth.tokenRejected` | `requireAuth` in `api/src/shared/auth.ts` | `{reason, authMode: 'required'}` where `reason` is one of `missing_bearer`, `malformed`, `invalid_signature`, `expired`, `wrong_audience`, `wrong_issuer`, `no_kid` | none |
+| `access.forbidden` | `forbidden()` helper in `api/src/shared/http.ts` | `{resource: 'blob' \| 'ruleSet', authMode: 'required'}` | none |
+| `quota.exceeded` | `quotaExceeded()` helper in `api/src/shared/http.ts` | `{resource: 'blob' \| 'ruleSet', authMode: 'required', via: 'create' \| 'clone'}` | `{count, limit}` |
+
+Notes:
+
+- `auth.tokenAccepted` fires for both `required` and `optional` auth
+  paths. `auth.tokenRejected` only fires on `required`; bad tokens
+  on `optional` paths fall through as anonymous and emit nothing.
+- `access.forbidden` only emits via the `forbidden()` helper. A
+  handler that returns a hand-rolled 403 will not emit (none do
+  today).
+- `quota.exceeded` is **only** emitted on the manual-strategy 409
+  path. The `postBlob` `strategy = 'auto_fifo'` path silently
+  evicts the oldest blob and does NOT emit.
+- `count` is the raw current count (not clamped to `limit`) so
+  reductions in `limit` and historical overages remain queryable.
+
+No user content, blob bodies, slugs, rule-set ids, or free-form
+strings are emitted from any backend event. Every dimension is a
+closed enum or a bounded counter.
+
+### KQL examples
+
+```kusto
+// Auth funnel: required vs optional, accepted vs rejected.
+customEvents
+| where name in ('auth.tokenAccepted', 'auth.tokenRejected')
+| summarize count() by name,
+    authMode = tostring(customDimensions.authMode),
+    reason = tostring(customDimensions.reason)
+| order by name asc, authMode asc, reason asc
+```
+
+```kusto
+// Forbidden access by resource type, last 7 days.
+customEvents
+| where timestamp > ago(7d)
+| where name == 'access.forbidden'
+| summarize count() by resource = tostring(customDimensions.resource)
+```
+
+```kusto
+// Quota events with the count vs limit gap, last 30 days.
+customEvents
+| where timestamp > ago(30d)
+| where name == 'quota.exceeded'
+| extend
+    count_ = toreal(customMeasurements.count),
+    limit_ = toreal(customMeasurements.limit)
+| project timestamp, customDimensions, count_, limit_, gap = count_ - limit_
+| order by timestamp desc
+```
+
+```kusto
+// Schema drift guard: any unexpected property keys in the four
+// backend events? (Catches accidental new dimensions early.)
+customEvents
+| where name in ('auth.tokenAccepted', 'auth.tokenRejected',
+                  'access.forbidden', 'quota.exceeded')
+| extend keys = bag_keys(customDimensions)
+| mv-expand key = keys to typeof(string)
+| summarize count() by name, key
+| order by name asc, key asc
+```
 
 ---
 

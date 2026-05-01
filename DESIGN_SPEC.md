@@ -1007,8 +1007,10 @@ Azure Functions backend. The resource is provisioned in
 ### Connection-string flow
 
 - **Functions**: connection string injected as an app setting
-  (`APPLICATIONINSIGHTS_CONNECTION_STRING`) by Bicep; the Functions
-  runtime auto-instruments via `host.json`.
+  (`APPLICATIONINSIGHTS_CONNECTION_STRING`) by Bicep. The Functions
+  runtime auto-instruments via `host.json`, and the manual
+  `TelemetryClient` in `api/src/shared/telemetry.ts` reads the same
+  app setting on first use.
 - **SPA**: connection string is baked into `environment.prod.ts` at CI
   build time (in `ci.yml`'s `web` job on push-to-main, or inline in
   `cd.yml` on `workflow_dispatch`) from the
@@ -1050,6 +1052,53 @@ Manual instrumentation, driven through `core/telemetry/LoggerService`:
   (`enableAjaxErrorStatusText: false`).
 - **Browser perf timings** - on (no PII).
 
+### What we collect (Functions)
+
+Manual instrumentation via the `applicationinsights` `TelemetryClient`
+in `api/src/shared/telemetry.ts` running in the worker process. The
+Functions host **also** auto-instruments `requests` / `dependencies`
+/ `exceptions`; the manual SDK is dedicated to explicit
+`customEvents`. `useGlobalProviders: false` keeps the manual client
+isolated from any global OpenTelemetry providers the host may
+register. The client is lazily constructed on the first `trackEvent`
+call and warns once (then becomes a no-op) when the connection
+string is missing, so missing config never throws into a request
+path.
+
+- **Auth lifecycle** (`api/src/shared/auth.ts`):
+  - `auth.tokenAccepted` - properties `{authMode: 'required' |
+    'optional'}`. One emit per validated bearer.
+  - `auth.tokenRejected` - properties `{reason: 'missing_bearer' |
+    'malformed' | 'invalid_signature' | 'expired' | 'wrong_audience'
+    | 'wrong_issuer' | 'no_kid', authMode: 'required'}`. One emit
+    per rejected bearer. `optional`-mode requests never emit a
+    rejection; bad-but-optional tokens fall through as anonymous.
+- **Authorization** (`api/src/shared/http.ts` `forbidden()` helper):
+  - `access.forbidden` - properties `{resource: 'blob' | 'ruleSet',
+    authMode: 'required'}`. One emit per 403 response from the
+    helper.
+- **Quotas** (`api/src/shared/http.ts` `quotaExceeded()` helper):
+  - `quota.exceeded` - properties `{resource: 'blob' | 'ruleSet',
+    authMode: 'required', via: 'create' | 'clone'}`, measurements
+    `{count, limit}`. `count` is the user's current count (raw, not
+    clamped to `limit`) so quota reductions and historical overages
+    remain queryable; `limit` is the configured ceiling. One emit
+    per 409 response from the helper. The blob auto-FIFO path
+    (`postBlob` with `strategy = 'auto_fifo'`) silently evicts the
+    oldest blob and does **not** emit; only the manual-strategy 409
+    path emits.
+
+All backend events run after `requireAuth`, so `authMode` reflects
+which auth gate the call passed (or, for `auth.tokenRejected`, was
+rejected by). No user content, blob bodies, slugs, rule-set ids, or
+free-form strings are emitted - only closed-enum dimensions and
+bounded numeric measurements.
+
+See `docs/telemetry.md` for KQL examples and the routing details
+between the manual `customEvents` pipeline and the host's
+auto-instrumented `requests` / `dependencies` / `exceptions`
+pipelines.
+
 ### What we deliberately do NOT collect
 
 - **Editor or clipboard content.** The `LoggerService` API does not
@@ -1087,7 +1136,12 @@ forwarded; PII messages are dropped at the source by MSAL.
 
 ### Sampling
 
-- Functions: SDK default (adaptive sampling).
+- Functions: host-runtime adaptive sampling for auto-instrumented
+  `requests` / `dependencies` / `exceptions`. Manual `trackEvent`
+  calls (auth / access / quota events from
+  `api/src/shared/telemetry.ts`) are **unsampled** - the
+  `TelemetryClient` does not set a sampling percentage, so every
+  call ships.
 - SPA: 100% in v1.
 
 ### Sourcemaps
