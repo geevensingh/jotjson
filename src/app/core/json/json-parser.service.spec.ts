@@ -163,6 +163,115 @@ describe('JsonParserService', () => {
     });
   });
 
+  describe('parse - commentsByPath', () => {
+    it('returns an empty map when input has no comments (fast path)', () => {
+      const r = svc.parse('{"a":1,"b":[2,3]}');
+      expect(r.commentsByPath.size).toBe(0);
+    });
+
+    it('returns an empty map for empty input', () => {
+      const r = svc.parse('');
+      expect(r.commentsByPath.size).toBe(0);
+    });
+
+    it('attaches a same-line trailing line comment to the value path', () => {
+      const r = svc.parse('{\n  "x": 1 // primary\n}');
+      expect(r.commentsByPath.get('$.x')).toEqual({ trailing: 'primary' });
+    });
+
+    it('attaches a same-line trailing block comment to the value path', () => {
+      const r = svc.parse('{"x": 1 /* primary */}');
+      expect(r.commentsByPath.get('$.x')).toEqual({ trailing: 'primary' });
+    });
+
+    it('attaches a leading comment to the next value', () => {
+      const r = svc.parse('{\n  // legal name\n  "name": "Alice"\n}');
+      expect(r.commentsByPath.get('$.name')).toEqual({ leading: 'legal name' });
+    });
+
+    it('handles a top-of-document leading comment on the root', () => {
+      const r = svc.parse('// header\n{"x": 1}');
+      expect(r.commentsByPath.get('$')).toEqual({ leading: 'header' });
+    });
+
+    it('renders a same-line trailing comment after the close as a container trailing', () => {
+      const r = svc.parse('{\n  "foo": {\n    "x": 1\n  } // end of foo\n}');
+      expect(r.commentsByPath.get('$.foo')).toEqual({ trailing: 'end of foo' });
+      expect(r.commentsByPath.get('$.foo.x')).toBeUndefined();
+    });
+
+    it('attributes a comment-only container to the close row (rule 4)', () => {
+      const r = svc.parse('{\n  "tags": [\n    // populated at runtime\n  ]\n}');
+      expect(r.commentsByPath.get('$.tags')).toEqual({
+        trailing: 'populated at runtime'
+      });
+    });
+
+    it('preserves source order in nested arrays and uses canonical paths', () => {
+      const r = svc.parse(
+        '{\n  "foo": [\n    1, // first\n    2  /* second */\n  ]\n}'
+      );
+      expect(r.commentsByPath.get('$.foo[0]')).toEqual({ trailing: 'first' });
+      expect(r.commentsByPath.get('$.foo[1]')).toEqual({ trailing: 'second' });
+    });
+
+    it('attaches a comment between two properties to the next property as leading', () => {
+      const r = svc.parse(
+        '{\n  "a": 1,\n  // pre-b\n  "b": 2\n}'
+      );
+      expect(r.commentsByPath.get('$.b')).toEqual({ leading: 'pre-b' });
+      expect(r.commentsByPath.get('$.a')).toBeUndefined();
+    });
+
+    it('stacks multiple leading comments with newline separator', () => {
+      const r = svc.parse(
+        '{\n  // line 1\n  // line 2\n  "x": 1\n}'
+      );
+      expect(r.commentsByPath.get('$.x')).toEqual({
+        leading: 'line 1\nline 2'
+      });
+    });
+
+    it('preserves multi-line block comment body and attaches by start line', () => {
+      const r = svc.parse('{"x": 1 /* multi\n  line */}');
+      const bundle = r.commentsByPath.get('$.x');
+      expect(bundle?.trailing).toContain('multi');
+      expect(bundle?.trailing).toContain('line');
+    });
+
+    it('skips empty comments (// alone and /**/ alone)', () => {
+      const r = svc.parse('{\n  //\n  "x": 1, /**/\n  "y": 2\n}');
+      expect(r.commentsByPath.size).toBe(0);
+    });
+
+    it('attaches both a leading and a trailing comment to the same value', () => {
+      const r = svc.parse(
+        '{\n  // before x\n  "x": 1 // after x\n}'
+      );
+      expect(r.commentsByPath.get('$.x')).toEqual({
+        leading: 'before x',
+        trailing: 'after x'
+      });
+    });
+
+    it('attaches a comment after the root close to the root path as trailing', () => {
+      const r = svc.parse('{"x":1} // tail');
+      expect(r.commentsByPath.get('$')).toEqual({ trailing: 'tail' });
+    });
+
+    it('uses canonical paths for keys that need bracket quoting', () => {
+      const r = svc.parse('{"a.b": 1 // dotted\n}');
+      expect(r.commentsByPath.get('$["a.b"]')).toEqual({ trailing: 'dotted' });
+    });
+
+    it('does not invoke the harvest pass when text has no comment delimiters', () => {
+      // Sanity guard for the fast-path bail. A string-literal that
+      // looks like a path (no // or /*) must not trigger the harvest.
+      const r = svc.parse('{"path":"a/b/c"}');
+      expect(r.commentsByPath.size).toBe(0);
+    });
+  });
+
   describe('parse - error reporting', () => {
     it('reports structured errors with line/column', () => {
       const r = svc.parse('{"a":}');
