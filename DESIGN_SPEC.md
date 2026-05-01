@@ -871,6 +871,55 @@ for setup. The bypass cannot engage in any Azure-hosted environment.
   - Search with no matches: "No matches found for '...'"
 - **Validation error inline:** JSON parse errors appear as a red banner below the editor with the error message, line number, and column. The editor scrolls to and highlights the offending line.
 
+### Preferences card (Profile page) - control conventions
+
+This section locks the conventions used by the Preferences card on the Profile
+page so new preferences stay visually and behaviorally consistent;
+`src/app/features/profile/profile.component.{html,scss}` is the canonical
+example.
+
+**Row primitive:** every preference row is a `.pref-row` element rendered as
+`display: grid; grid-template-columns: 1fr auto`. The label sits in column 1 as
+a sibling `<span class="pref-label">`; the control sits in column 2. At
+`max-width: 480px`, the row collapses to a single column with the control
+flowing below the label.
+
+**Slide-toggle labels are externalized:** a bare `<mat-slide-toggle>` with no
+inner content and no `labelPosition` lives in column 2. Its visible label is a
+`<span class="pref-label" id="...">` in column 1, and the toggle is wired via
+`aria-labelledby`. Do not use the toggle's internal label; this avoids a
+`::ng-deep .mdc-form-field` flex hack.
+
+**Widget choice table:** use this picker to prevent future drift.
+
+| Setting kind | Widget |
+|---|---|
+| Binary on/off | `mat-slide-toggle` (label externalized per the rule above) |
+| Set membership / multi-select | `mat-checkbox` |
+| Choose-one with 2-3 short options (each label at most 6 chars) | `mat-button-toggle-group` |
+| Choose-one with 4+ options OR longer-label options | `mat-select` (inside `mat-form-field appearance="outline"`) |
+| Numeric quantity | `mat-form-field` + `matInput type="number"` + `matTextSuffix` |
+| Color | native `<input type="color">` + swatch + hex string (no Material widget exists for this) |
+
+Use `.pref-form-field` on Material form-field controls in this card. The at
+most 6 chars rule prevents button-toggle pills from wrapping and is why Theme,
+Layout, Path-root, Search-scope, and Quota-strategy stay as `mat-select` while
+Tab-size stays a button-toggle.
+
+**Sub-groups:** child preferences that depend on a parent toggle are wrapped in
+a `.pref-subgroup` block with an accent left border (`border-left: 2px solid
+var(--mat-sys-primary)`). Nested rows and help lines work the same as outside;
+specialized child layouts such as `.date-annotation-unit-grid` stay inside the
+subgroup.
+
+**Help text:** use a single `.pref-help-line` class. Always render it as a
+`<p>` sibling immediately after its `.pref-row`. Never place help copy
+inline-right of the control. Never use the now-removed `.pref-hint`,
+`.pref-help`, `.pref-help--inline`, or `.group-help` classes.
+
+Any new preference must follow these rules; any genuine exception must be
+justified in the PR/commit message and considered for a spec update.
+
 ---
 
 ## Project Structure (Angular)
