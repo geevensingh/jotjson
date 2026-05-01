@@ -152,6 +152,7 @@ export class JsonTreeComponent {
   private readonly logger = inject(LoggerService);
 
   readonly value = input<unknown>(undefined);
+  readonly viewResetToken = input<number>(0);
 
   /**
    * M6d-3 preview hook. When non-null, this list of rule sets replaces
@@ -665,6 +666,7 @@ export class JsonTreeComponent {
   });
 
   private hasInitializedExpansion = false;
+  private lastObservedResetToken = 0;
   private renderGeneration = 0;
   private cancelledRender = false;
 
@@ -720,12 +722,20 @@ export class JsonTreeComponent {
     });
 
     effect(() => {
+      const token = this.viewResetToken();
       const rootNode = this.root();
+      if (token > 0 && token !== this.lastObservedResetToken) {
+        this.lastObservedResetToken = token;
+        this.hasInitializedExpansion = false;
+      }
+      // Fires for every root or token change; invalidates any in-flight
+      // prior-run auto-fit rAF before it can emit stale telemetry.
+      this.autoFitGeneration += 1;
       this.dataSource.data = rootNode ? [rootNode] : [];
       if (!rootNode) {
         this.hasInitializedExpansion = false;
         // Use untracked to avoid creating a dependency on selectedPath
-        // here - we only want to react to value changes.
+        // here - we only want to react to value or token changes.
         untracked(() => this.selectedPath.set(null));
         return;
       }
@@ -737,9 +747,9 @@ export class JsonTreeComponent {
           this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth, true);
         }
       }
-      // Whenever the underlying value changes (and the resulting tree
-      // root re-renders), drop any stale selection. Predictable, no
-      // zombie state.
+      // Whenever the underlying value or reset token changes (and the
+      // resulting tree root re-renders), drop any stale selection.
+      // Predictable, no zombie state.
       untracked(() => this.selectedPath.set(null));
     });
 

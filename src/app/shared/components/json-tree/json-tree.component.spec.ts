@@ -513,6 +513,155 @@ describe('JsonTreeComponent', () => {
     });
   });
 
+  describe('view reset via viewResetToken', () => {
+    type AutoFitCall = [
+      'tree.expand.autoFit',
+      Record<string, unknown>,
+      Record<string, number>
+    ];
+
+    function autoFitCallsFor(eventSpy: jasmine.Spy): AutoFitCall[] {
+      const calls: readonly unknown[][] = eventSpy.calls.allArgs();
+      return calls.filter(
+        (args): args is AutoFitCall => args[0] === 'tree.expand.autoFit'
+      );
+    }
+
+    function expandToLevelCallsFor(
+      spy: jasmine.Spy
+    ): { depth: number; internal: boolean }[] {
+      const calls: readonly unknown[][] = spy.calls.allArgs();
+      return calls.map((args) => ({
+        depth: args[0] as number,
+        internal: (args[1] as boolean | undefined) ?? false
+      }));
+    }
+
+    it('re-runs auto-fit when token bumps with a new value', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      fixture.componentRef.setInput('value', { a: 1 });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      expect(autoFitCallsFor(eventSpy).length).toBe(1);
+
+      fixture.componentRef.setInput('viewResetToken', 1);
+      fixture.componentRef.setInput('value', { b: 2, c: 3 });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+
+      const autoFitCalls = autoFitCallsFor(eventSpy);
+      expect(autoFitCalls.length).toBe(2);
+      expect(autoFitCalls[1]![2]['totalNodes']).toBe(3);
+    });
+
+    it('re-arms the gate without firing expansion when token bumps on a null root', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      fixture.componentRef.setInput('viewResetToken', 1);
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      expect(autoFitCallsFor(eventSpy).length).toBe(0);
+
+      fixture.componentRef.setInput('value', { a: 1 });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+
+      const autoFitCalls = autoFitCallsFor(eventSpy);
+      expect(autoFitCalls.length).toBe(1);
+      expect(autoFitCalls[0]![2]['totalNodes']).toBe(2);
+    });
+
+    it('invalidates an in-flight auto-fit rAF when token bumps', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      fixture.componentRef.setInput('value', { a: 1 });
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('viewResetToken', 1);
+      fixture.componentRef.setInput('value', { b: 2 });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+
+      const autoFitCalls = autoFitCallsFor(eventSpy);
+      expect(autoFitCalls.length).toBe(1);
+      expect(autoFitCalls[0]![2]['totalNodes']).toBe(2);
+    });
+
+    it('does not double-fire for the initial token value of zero', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      fixture.componentRef.setInput('value', { a: 1 });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+
+      expect(autoFitCallsFor(eventSpy).length).toBe(1);
+    });
+
+    it('re-runs fixed-depth expansion on token bump when auto-fit is off', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      prefs.update({ treeAutoFitToWindow: false, defaultTreeExpansionDepth: 3 });
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      const expandSpy = spyOn(cmp, 'expandToLevel').and.callThrough();
+      fixture.componentRef.setInput('value', { a: { b: { c: 1 } } });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      expect(expandToLevelCallsFor(expandSpy)).toEqual([
+        { depth: 3, internal: true }
+      ]);
+      expect(autoFitCallsFor(eventSpy).length).toBe(0);
+
+      fixture.componentRef.setInput('viewResetToken', 1);
+      fixture.componentRef.setInput('value', { x: { y: 1 } });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+
+      expect(expandToLevelCallsFor(expandSpy)).toEqual([
+        { depth: 3, internal: true },
+        { depth: 3, internal: true }
+      ]);
+      expect(autoFitCallsFor(eventSpy).length).toBe(0);
+    });
+
+    it('drops stale auto-fit telemetry when typing changes the root', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      fixture.componentRef.setInput('value', { a: 1 });
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('value', { a: 2 });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+
+      expect(autoFitCallsFor(eventSpy).length).toBe(0);
+    });
+
+    it('clears selection when token bumps', async () => {
+      const callbacks = installAnimationFrameQueue();
+      const eventSpy = await createWithEventSpy(undefined);
+      cmp.__setAutoFitMeasurementsForTesting(20, 100);
+      fixture.componentRef.setInput('value', { a: 1 });
+      fixture.detectChanges();
+      runQueuedAnimationFrames(callbacks);
+      expect(autoFitCallsFor(eventSpy).length).toBe(1);
+      cmp.selectedPath.set('$.a');
+      fixture.detectChanges();
+      expect(cmp.selectedPath()).toBe('$.a');
+
+      fixture.componentRef.setInput('viewResetToken', 1);
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBeNull();
+      runQueuedAnimationFrames(callbacks);
+    });
+  });
+
   describe('searchHits', () => {
     beforeEach(async () => {
       await createWith({ alpha: 'hello', beta: { gamma: 'HELLO', delta: 7 } });

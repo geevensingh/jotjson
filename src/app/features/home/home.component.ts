@@ -189,6 +189,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     source: ExtractSource;
   } | null>(null);
   private readonly contentVersion = signal(0);
+  private readonly viewResetToken = signal(0);
+  readonly viewResetTokenValue = this.viewResetToken.asReadonly();
   readonly extractBannerVisible = computed(() => {
     const cand = this.extractedCandidate();
     return cand !== null && cand.sourceVersion === this.contentVersion();
@@ -258,6 +260,18 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.uploadError.set(null);
       }
     }
+  }
+
+  /**
+   * Replace the editor's document with `text` and signal the tree to re-arm
+   * its initial-expansion gate so it re-fits to the new content. Use this for
+   * discrete content-replacement actions (paste, blob load, URL-decode,
+   * extract-banner accept, file upload). Typing and reformat use `setContent`
+   * directly.
+   */
+  private replaceDocument(text: string): void {
+    this.setContent(text);
+    this.viewResetToken.update((token) => token + 1);
   }
 
   /**
@@ -506,7 +520,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (blob.id === this.lastHydratedInputId) return;
       this.lastHydratedInputId = blob.id;
       this.loadedBlob.set(blob);
-      this.setContent(blob.content);
+      this.replaceDocument(blob.content);
       this.title.set(blob.title ?? '');
       this.restoreSignInSnapshotOnce();
     });
@@ -760,7 +774,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const parseStartedAt = performance.now();
     const { unescaped, changed } = this.parser.tryUnescape(text);
     const parseMs = this.durationSince(parseStartedAt);
-    this.setContent(unescaped);
+    this.replaceDocument(unescaped);
     if (changed) {
       // Pretty-print the newly-unescaped payload so the user sees the real
       // structure rather than a single dense line (per issue #38).
@@ -853,7 +867,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     // does not additionally fire `home.extract.banner.dismiss` with
     // `reason='content.changed'` for the same candidate.
     this.extractedCandidate.set(null);
-    this.setContent(candidate.data.text);
+    this.replaceDocument(candidate.data.text);
   }
 
   onExtractDismiss(): void {
@@ -931,7 +945,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         const parseStartedAt = performance.now();
         const { unescaped } = this.parser.tryUnescape(result.text);
         const parseMs = this.durationSince(parseStartedAt);
-        this.setContent(unescaped);
+        this.replaceDocument(unescaped);
         this.runExtractorOnCurrentContent(
           source === 'pick' ? 'upload.pick' : 'upload.drag'
         );

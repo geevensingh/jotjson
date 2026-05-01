@@ -20,6 +20,7 @@ import { JsonExtractorService } from '../../core/json/json-extractor.service';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
+import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
 import {
   installMinimalMonacoStub,
   restoreMonacoStub
@@ -567,6 +568,131 @@ describe('HomeComponent (unit-level)', () => {
     });
 
     expect(eventSpy).not.toHaveBeenCalled();
+  });
+
+  describe('view reset on document replacement', () => {
+    function flushHomeEffects(
+      fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>
+    ): void {
+      fixture.componentRef.changeDetectorRef.detectChanges();
+      TestBed.flushEffects();
+    }
+
+    function createComponentWithClipboardText(
+      text: string
+    ): ReturnType<typeof TestBed.createComponent<HomeComponent>> {
+      const clipboardStub = {
+        readForPaste: async () => text,
+        checkOnce: async () => undefined,
+        startPolling: () => undefined,
+        stopPolling: () => undefined,
+        permissionState: signal<'prompt'>('prompt').asReadonly(),
+        hasJson: signal(false).asReadonly(),
+        preview: signal('').asReadonly()
+      } satisfies Partial<ClipboardPollingService>;
+      TestBed.overrideProvider(ClipboardPollingService, {
+        useValue: clipboardStub
+      });
+      return TestBed.createComponent(HomeComponent);
+    }
+
+    it('onPaste triggers re-fit on pasted content', async () => {
+      const fixture = createComponentWithClipboardText('{"pasted":true}');
+      const component = fixture.componentInstance;
+      component.onValueChange('{"existing":true}');
+      const tokenBeforePaste = component.viewResetTokenValue();
+
+      await component.onPaste();
+      await waitForDoubleAnimationFrame();
+
+      expect(component.content()).toBe('{"pasted":true}');
+      expect(component.viewResetTokenValue()).toBe(tokenBeforePaste + 1);
+    });
+
+    it('onPaste followed by sync onFormat bumps the token exactly once', async () => {
+      const escaped = '{\\r\\n    \\"a\\": 1,\\r\\n    \\"b\\": 2\\r\\n }';
+      const fixture = createComponentWithClipboardText(escaped);
+      const component = fixture.componentInstance;
+      const tokenBeforePaste = component.viewResetTokenValue();
+
+      await component.onPaste();
+      await waitForDoubleAnimationFrame();
+
+      expect(component.content()).toContain('\n');
+      expect(component.content()).toMatch(/"a":\s*1/);
+      expect(component.viewResetTokenValue()).toBe(tokenBeforePaste + 1);
+    });
+
+    it('onFormat alone does not bump the token', () => {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      component.onValueChange('{"a":1,"b":2}');
+      const tokenBeforeFormat = component.viewResetTokenValue();
+
+      component.onFormat();
+
+      expect(component.content()).toContain('\n');
+      expect(component.viewResetTokenValue()).toBe(tokenBeforeFormat);
+    });
+
+    it('initialBlob re-hydration with a new id triggers a token bump', () => {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      const firstBlob = makeIdentityBlob({
+        id: 'blob-a',
+        slug: 'slug-a',
+        content: '{"a":1}',
+        title: 'Blob A'
+      });
+      const sameIdBlob = makeIdentityBlob({
+        id: 'blob-a',
+        slug: 'slug-a-again',
+        content: '{"a":2}',
+        title: 'Blob A again'
+      });
+      const secondBlob = makeIdentityBlob({
+        id: 'blob-b',
+        slug: 'slug-b',
+        content: '{"b":2}',
+        title: 'Blob B'
+      });
+
+      fixture.componentRef.setInput('initialBlob', firstBlob);
+      flushHomeEffects(fixture);
+      const tokenAfterFirstBlob = component.viewResetTokenValue();
+
+      fixture.componentRef.setInput('initialBlob', sameIdBlob);
+      flushHomeEffects(fixture);
+      expect(component.viewResetTokenValue()).toBe(tokenAfterFirstBlob);
+      expect(component.content()).toBe('{"a":1}');
+
+      fixture.componentRef.setInput('initialBlob', secondBlob);
+      flushHomeEffects(fixture);
+
+      expect(component.content()).toBe('{"b":2}');
+      expect(component.viewResetTokenValue()).toBe(tokenAfterFirstBlob + 1);
+    });
+
+    it('onClear allows later typed content without a token bump', () => {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      component.onValueChange('{"before":true}');
+      flushHomeEffects(fixture);
+      const tokenBeforeClear = component.viewResetTokenValue();
+
+      expect(() => component.onClear()).not.toThrow();
+      flushHomeEffects(fixture);
+      expect(component.content()).toBe('');
+      expect(component.treeValue()).toBeUndefined();
+      expect(component.viewResetTokenValue()).toBe(tokenBeforeClear);
+
+      expect(() => component.onValueChange('{"after":true}')).not.toThrow();
+      flushHomeEffects(fixture);
+
+      expect(component.content()).toBe('{"after":true}');
+      expect(component.treeValue()).toEqual({ after: true });
+      expect(component.viewResetTokenValue()).toBe(tokenBeforeClear);
+    });
   });
 
   it('onCopyEscaped writes JSON.stringify of content to clipboard', async () => {
