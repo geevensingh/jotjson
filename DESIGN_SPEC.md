@@ -503,7 +503,23 @@ Available to **registered users** only. The route is auth-guarded.
   - **Editor**: font size (8-32 px, clamped), tab size (2 / 4),
     word wrap toggle.
   - **Tree**: font size (8-32 px, clamped), default expansion depth
-    (1-10, clamped), show type labels toggle.
+    (1-10, clamped), show type labels toggle, date annotations master
+    toggle (`treeShowDateAnnotations`).
+    - Date annotation sub-controls: year, month, day, hour, minute,
+      and second unit toggles independently enable/disable units in the
+      relative-time formatter; Use friendly phrases controls whether
+      `Intl.RelativeTimeFormat` uses `numeric: "auto"` (e.g.,
+      "yesterday", "tomorrow", "last month") or always-numeric output
+      (e.g., "in 1 day", "1 month ago"). All sub-controls are disabled
+      while `treeShowDateAnnotations` is off. All-units-off acts as a
+      hidden kill switch -- the annotation is suppressed entirely and
+      the master toggle is not auto-flipped. When the delta is smaller
+      than the smallest enabled unit, the formatter renders that
+      smallest-unit value as a decimal with adaptive precision: try
+      1 decimal place, then grow to 2, 3, and 4 until the rounded value
+      is non-zero; if all four levels still round to 0, accept 0.
+      Defaults preserve existing behavior: all six unit booleans are
+      `true`, and `friendlyForms` is `true`.
   - **Search**: scope (keys / values / keys and values), case
     sensitive toggle, regex mode toggle.
   - **History & storage**: recently-viewed tracking toggle (records

@@ -10,6 +10,30 @@ function valid(): unknown {
   return structuredClone(DEFAULT_PREFERENCES);
 }
 
+function dateAnnotationUnits(
+  enabled: boolean
+): UserPreferences['treeDateAnnotationUnits'] {
+  return {
+    year: enabled,
+    month: enabled,
+    day: enabled,
+    hour: enabled,
+    minute: enabled,
+    second: enabled
+  };
+}
+
+function mixedDateAnnotationUnits(): UserPreferences['treeDateAnnotationUnits'] {
+  return {
+    year: true,
+    month: false,
+    day: true,
+    hour: false,
+    minute: true,
+    second: false
+  };
+}
+
 describe('normalizePreferences', () => {
   it('accepts the default preferences unchanged', () => {
     const result = normalizePreferences(valid());
@@ -107,6 +131,85 @@ describe('normalizePreferences', () => {
     const input = valid() as Record<string, unknown>;
     input['treeEditorSelectionSync'] = true;
     expect(normalizePreferences(input).treeEditorSelectionSync).toBe(true);
+  });
+
+  it('rejects treeDateAnnotationUnits that is not an object', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeDateAnnotationUnits'] = 'all';
+    expect(() => normalizePreferences(bad)).toThrow(
+      /treeDateAnnotationUnits must be an object/
+    );
+  });
+
+  it('rejects unknown treeDateAnnotationUnits fields', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeDateAnnotationUnits'] = {
+      ...dateAnnotationUnits(true),
+      week: true
+    };
+    expect(() => normalizePreferences(bad)).toThrow(
+      /treeDateAnnotationUnits has unknown field "week"/
+    );
+  });
+
+  it('rejects non-boolean treeDateAnnotationUnits values', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeDateAnnotationUnits'] = {
+      ...dateAnnotationUnits(true),
+      month: 'yes'
+    };
+    expect(() => normalizePreferences(bad)).toThrow(
+      /treeDateAnnotationUnits.month must be a boolean/
+    );
+  });
+
+  it('rejects missing treeDateAnnotationUnits values', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeDateAnnotationUnits'] = {
+      year: true,
+      month: true,
+      day: true,
+      hour: true,
+      minute: true
+    };
+    expect(() => normalizePreferences(bad)).toThrow(
+      /treeDateAnnotationUnits.second must be a boolean/
+    );
+  });
+
+  it('rejects non-boolean treeDateAnnotationFriendlyForms', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['treeDateAnnotationFriendlyForms'] = 'yes';
+    expect(() => normalizePreferences(bad)).toThrow(
+      /treeDateAnnotationFriendlyForms must be a boolean/
+    );
+  });
+
+  it('round-trips treeDateAnnotationFriendlyForms=false', () => {
+    const input = valid() as Record<string, unknown>;
+    input['treeDateAnnotationFriendlyForms'] = false;
+    expect(normalizePreferences(input).treeDateAnnotationFriendlyForms).toBe(false);
+  });
+
+  it('accepts all treeDateAnnotationUnits enabled', () => {
+    const input = valid() as Record<string, unknown>;
+    const units = dateAnnotationUnits(true);
+    input['treeDateAnnotationUnits'] = units;
+    expect(normalizePreferences(input).treeDateAnnotationUnits).toEqual(units);
+  });
+
+  it('accepts all treeDateAnnotationUnits disabled', () => {
+    const input = valid() as Record<string, unknown>;
+    const units = dateAnnotationUnits(false);
+    input['treeDateAnnotationUnits'] = units;
+    expect(normalizePreferences(input).treeDateAnnotationUnits).toEqual(units);
+  });
+
+  it('accepts mixed treeDateAnnotationUnits values', () => {
+    const input = valid() as Record<string, unknown>;
+    const units = mixedDateAnnotationUnits();
+    input['treeDateAnnotationUnits'] = units;
+    expect(normalizePreferences(input).treeDateAnnotationUnits).toEqual(units);
   });
 
   it('accepts each valid treePathRoot value', () => {
@@ -341,6 +444,61 @@ describe('normalizeStoredPreferences', () => {
     stored.treeEditorSelectionSync = true;
     const result = normalizeStoredPreferences(stored);
     expect(result.treeEditorSelectionSync).toBe(true);
+  });
+
+  it('defaults missing date annotation preferences', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    delete stored['treeDateAnnotationUnits'];
+    delete stored['treeDateAnnotationFriendlyForms'];
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.treeDateAnnotationUnits).toEqual(dateAnnotationUnits(true));
+    expect(result.treeDateAnnotationFriendlyForms).toBe(true);
+  });
+
+  it('defaults malformed date annotation preferences', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    stored['treeDateAnnotationUnits'] = 'all';
+    stored['treeDateAnnotationFriendlyForms'] = 'yes';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.treeDateAnnotationUnits).toEqual(dateAnnotationUnits(true));
+    expect(result.treeDateAnnotationFriendlyForms).toBe(true);
+  });
+
+  it('backfills partial treeDateAnnotationUnits per key', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    stored['treeDateAnnotationUnits'] = {
+      year: false,
+      month: 'no',
+      day: false
+    };
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.treeDateAnnotationUnits).toEqual({
+      year: false,
+      month: true,
+      day: false,
+      hour: true,
+      minute: true,
+      second: true
+    });
+  });
+
+  it('preserves valid date annotation preferences', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES);
+    const units = mixedDateAnnotationUnits();
+    stored.treeDateAnnotationUnits = units;
+    stored.treeDateAnnotationFriendlyForms = false;
+    const result = normalizeStoredPreferences(stored);
+    expect(result.treeDateAnnotationUnits).toEqual(units);
+    expect(result.treeDateAnnotationFriendlyForms).toBe(false);
   });
 
   it('folds legacy defaultRuleSetIds (array) into activeRuleSetIds', () => {

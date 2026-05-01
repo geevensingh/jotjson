@@ -21,6 +21,15 @@ function fakePreferences(): UserPreferences {
     treeShowDateAnnotations: true,
     treeAssumeUtcForIsoDateTime: false,
     treeAssumeUtcForIsoDateOnly: false,
+    treeDateAnnotationUnits: {
+      year: true,
+      month: true,
+      day: true,
+      hour: true,
+      minute: true,
+      second: true
+    },
+    treeDateAnnotationFriendlyForms: true,
     recentlyViewedEnabled: true,
     treeEditorSelectionSync: true,
     searchCaseSensitive: false,

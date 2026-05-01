@@ -203,6 +203,103 @@
         </div>
 
         <div class="pref-substack">
+          <div
+            class="pref-date-annotation-group"
+            aria-labelledby="pref-date-annotation-units-heading"
+          >
+            <h4
+              id="pref-date-annotation-units-heading"
+              class="pref-subheading"
+              i18n="@@profile.prefs.tree.dateAnnotation.units.heading"
+            >
+              Relative-time units
+            </h4>
+
+            <div class="date-annotation-unit-grid">
+              <mat-slide-toggle
+                data-date-annotation-unit="year"
+                labelPosition="before"
+                [checked]="treeDateAnnotationUnits().year"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('year', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.year">Year</span>
+              </mat-slide-toggle>
+
+              <mat-slide-toggle
+                data-date-annotation-unit="month"
+                labelPosition="before"
+                [checked]="treeDateAnnotationUnits().month"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('month', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.month">Month</span>
+              </mat-slide-toggle>
+
+              <mat-slide-toggle
+                data-date-annotation-unit="day"
+                labelPosition="before"
+                [checked]="treeDateAnnotationUnits().day"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('day', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.day">Day</span>
+              </mat-slide-toggle>
+
+              <mat-slide-toggle
+                data-date-annotation-unit="hour"
+                labelPosition="before"
+                [checked]="treeDateAnnotationUnits().hour"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('hour', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.hour">Hour</span>
+              </mat-slide-toggle>
+
+              <mat-slide-toggle
+                data-date-annotation-unit="minute"
+                labelPosition="before"
+                [checked]="treeDateAnnotationUnits().minute"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('minute', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.minute">Minute</span>
+              </mat-slide-toggle>
+
+              <mat-slide-toggle
+                data-date-annotation-unit="second"
+                labelPosition="before"
+                [checked]="treeDateAnnotationUnits().second"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('second', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.second">Second</span>
+              </mat-slide-toggle>
+            </div>
+
+            <p
+              class="pref-hint date-annotation-unit-hint"
+              i18n="@@profile.prefs.tree.dateAnnotation.units.hint"
+            >
+              Smallest enabled unit is shown as a decimal when the delta is
+              smaller (e.g., '0.5 minutes ago').
+            </p>
+
+            <div class="pref-row pref-row--indented">
+              <mat-slide-toggle
+                data-date-annotation-friendly-forms
+                labelPosition="before"
+                [checked]="treeDateAnnotationFriendlyForms()"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationFriendlyFormsChange($event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.friendlyForms">
+                  Use friendly phrases (yesterday, tomorrow, last month, ...)
+                </span>
+              </mat-slide-toggle>
+            </div>
+          </div>
+
           <div class="pref-row pref-row--indented">
             <mat-slide-toggle
               labelPosition="before"

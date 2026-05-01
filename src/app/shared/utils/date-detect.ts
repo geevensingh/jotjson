@@ -208,7 +208,18 @@ export function parseAsDate(
   return null;
 }
 
-const REL_UNITS: Array<{ unit: Intl.RelativeTimeFormatUnit; ms: number }> = [
+type RelativeUnit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second';
+type RelativeUnitSettings = {
+  year: boolean;
+  month: boolean;
+  day: boolean;
+  hour: boolean;
+  minute: boolean;
+  second: boolean;
+};
+type RelativeUnitDefinition = { unit: RelativeUnit; ms: number };
+
+const REL_UNITS: RelativeUnitDefinition[] = [
   { unit: 'year', ms: 365.25 * 24 * 60 * 60 * 1000 },
   { unit: 'month', ms: 30.44 * 24 * 60 * 60 * 1000 },
   { unit: 'day', ms: 24 * 60 * 60 * 1000 },
@@ -217,16 +228,82 @@ const REL_UNITS: Array<{ unit: Intl.RelativeTimeFormatUnit; ms: number }> = [
   { unit: 'second', ms: 1000 }
 ];
 
-function formatRelative(date: Date, now: Date, locale?: string): string {
+const MAX_ADAPTIVE_FRACTION_DIGITS = 4;
+
+function getEnabledRelativeUnits(
+  enabledUnits?: RelativeUnitSettings
+): RelativeUnitDefinition[] {
+  return REL_UNITS.filter(({ unit }) => enabledUnits?.[unit] ?? true);
+}
+
+function roundToFractionDigits(value: number, fractionDigits: number): number {
+  const multiplier = 10 ** fractionDigits;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function roundWithAdaptivePrecision(value: number): number {
+  for (
+    let fractionDigits = 1;
+    fractionDigits <= MAX_ADAPTIVE_FRACTION_DIGITS;
+    fractionDigits += 1
+  ) {
+    const roundedValue = roundToFractionDigits(value, fractionDigits);
+    if (roundedValue !== 0 || fractionDigits === MAX_ADAPTIVE_FRACTION_DIGITS) {
+      return roundedValue;
+    }
+  }
+  return 0;
+}
+
+function hasDisabledSmallerUnit(
+  selectedUnit: RelativeUnit,
+  enabledUnits?: RelativeUnitSettings
+): boolean {
+  if (enabledUnits === undefined) return false;
+  const selectedIndex = REL_UNITS.findIndex(({ unit }) => unit === selectedUnit);
+  if (selectedIndex < 0) return false;
+  return REL_UNITS.slice(selectedIndex + 1).some(({ unit }) => !enabledUnits[unit]);
+}
+
+export function formatRelative(
+  date: Date,
+  now: Date,
+  locale?: string,
+  enabledUnits?: {
+    year: boolean;
+    month: boolean;
+    day: boolean;
+    hour: boolean;
+    minute: boolean;
+    second: boolean;
+  },
+  friendlyForms?: boolean
+): string | null {
+  const enabledRelativeUnits = getEnabledRelativeUnits(enabledUnits);
+  if (enabledRelativeUnits.length === 0) return null;
+
   const deltaMs = date.getTime() - now.getTime();
-  const abs = Math.abs(deltaMs);
+  const absoluteDeltaMs = Math.abs(deltaMs);
   const sign = deltaMs < 0 ? -1 : 1;
-  const choice = REL_UNITS.find(({ ms }) => abs >= ms) ?? REL_UNITS[REL_UNITS.length - 1];
-  const value = Math.round(abs / choice.ms) * sign;
+  const fittingUnit = enabledRelativeUnits.find(({ ms }) => absoluteDeltaMs >= ms);
+  const selectedUnit = fittingUnit ?? enabledRelativeUnits[enabledRelativeUnits.length - 1];
+  if (selectedUnit === undefined) return null;
+
+  const unitValue = absoluteDeltaMs / selectedUnit.ms;
+  const shouldKeepFractionalValue =
+    fittingUnit !== undefined && hasDisabledSmallerUnit(selectedUnit.unit, enabledUnits);
+  const absoluteValue = fittingUnit === undefined || shouldKeepFractionalValue
+    ? roundWithAdaptivePrecision(unitValue)
+    : Math.round(unitValue);
+  const value = absoluteValue * sign;
+  const numeric: 'auto' | 'always' = (friendlyForms ?? true) && Number.isInteger(value)
+    ? 'auto'
+    : 'always';
+
   try {
-    return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(value, choice.unit);
+    return new Intl.RelativeTimeFormat(locale, { numeric }).format(value, selectedUnit.unit);
   } catch {
-    return value < 0 ? `${-value} ${choice.unit}s ago` : `in ${value} ${choice.unit}s`;
+    return value < 0 ? `${-value} ${selectedUnit.unit}s ago` : `in ${value} ${selectedUnit.unit}s`;
   }
 }
 
@@ -238,8 +315,17 @@ function formatRelative(date: Date, now: Date, locale?: string): string {
 export function formatDateAnnotation(
   parsed: ParsedDate,
   now: Date,
-  locale?: string
-): string {
+  locale?: string,
+  enabledUnits?: {
+    year: boolean;
+    month: boolean;
+    day: boolean;
+    hour: boolean;
+    minute: boolean;
+    second: boolean;
+  },
+  friendlyForms?: boolean
+): string | null {
   const opts: Intl.DateTimeFormatOptions = parsed.hasTime
     ? { dateStyle: 'medium', timeStyle: 'short' }
     : { dateStyle: 'medium' };
@@ -249,6 +335,7 @@ export function formatDateAnnotation(
   } catch {
     absolute = parsed.date.toString();
   }
-  const relative = formatRelative(parsed.date, now, locale);
+  const relative = formatRelative(parsed.date, now, locale, enabledUnits, friendlyForms);
+  if (relative === null) return null;
   return `${absolute} \u2014 ${relative}`;
 }

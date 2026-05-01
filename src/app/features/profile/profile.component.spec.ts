@@ -1,13 +1,35 @@
-import { TestBed } from '@angular/core/testing';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
+import { signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatSlideToggleHarness } from '@angular/material/slide-toggle/testing';
 import { provideRouter } from '@angular/router';
 import { ProfileComponent } from './profile.component';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthUser } from '../../core/auth/auth-user';
-import { PreferencesService } from '../../core/preferences/preferences.service';
+import {
+  DEFAULT_PREFERENCES,
+  PreferencesService
+} from '../../core/preferences/preferences.service';
 import { RuleSetsService } from '../../core/api/rule-sets.service';
-import { FormattingRuleSet } from '../../core/api/models';
+import { FormattingRuleSet, UserPreferences } from '../../core/api/models';
 import { provideFakeAuth } from '../../../testing/auth.testing';
-import { signal } from '@angular/core';
+
+type DateAnnotationUnitKey = keyof UserPreferences['treeDateAnnotationUnits'];
+
+interface DateAnnotationUnitCase {
+  readonly key: DateAnnotationUnitKey;
+  readonly selector: string;
+}
+
+const DATE_ANNOTATION_UNIT_CASES: readonly DateAnnotationUnitCase[] = [
+  { key: 'year', selector: '[data-date-annotation-unit="year"]' },
+  { key: 'month', selector: '[data-date-annotation-unit="month"]' },
+  { key: 'day', selector: '[data-date-annotation-unit="day"]' },
+  { key: 'hour', selector: '[data-date-annotation-unit="hour"]' },
+  { key: 'minute', selector: '[data-date-annotation-unit="minute"]' },
+  { key: 'second', selector: '[data-date-annotation-unit="second"]' }
+];
+const DATE_ANNOTATION_FRIENDLY_FORMS_SELECTOR = '[data-date-annotation-friendly-forms]';
 
 describe('ProfileComponent', () => {
   async function create(overrides?: {
@@ -36,6 +58,38 @@ describe('ProfileComponent', () => {
     fixture.detectChanges();
     const prefs = TestBed.inject(PreferencesService);
     return { fixture, authStub, prefs };
+  }
+
+  function resetDateAnnotationPrefs(
+    fixture: ComponentFixture<ProfileComponent>,
+    prefs: PreferencesService,
+    treeShowDateAnnotations = true
+  ): void {
+    prefs.update({
+      treeShowDateAnnotations,
+      treeDateAnnotationUnits: { ...DEFAULT_PREFERENCES.treeDateAnnotationUnits },
+      treeDateAnnotationFriendlyForms: true
+    });
+    fixture.detectChanges();
+  }
+
+  async function getSlideToggle(
+    fixture: ComponentFixture<ProfileComponent>,
+    selector: string
+  ): Promise<MatSlideToggleHarness> {
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    return loader.getHarness(MatSlideToggleHarness.with({ selector }));
+  }
+
+  async function getDateAnnotationSubControlToggles(
+    fixture: ComponentFixture<ProfileComponent>
+  ): Promise<MatSlideToggleHarness[]> {
+    const toggles: MatSlideToggleHarness[] = [];
+    for (const unitCase of DATE_ANNOTATION_UNIT_CASES) {
+      toggles.push(await getSlideToggle(fixture, unitCase.selector));
+    }
+    toggles.push(await getSlideToggle(fixture, DATE_ANNOTATION_FRIENDLY_FORMS_SELECTOR));
+    return toggles;
   }
 
   it('renders the signed-out card when user is anonymous', async () => {
@@ -195,6 +249,101 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().treeShowDateAnnotations).toBe(false);
     fixture.componentInstance.onTreeShowDateAnnotationsChange(true);
     expect(prefs.prefs().treeShowDateAnnotations).toBe(true);
+  });
+
+  for (const unitCase of DATE_ANNOTATION_UNIT_CASES) {
+    it(`writes ${unitCase.key} relative-time unit as a partial patch when clicked`, async () => {
+      const { fixture, prefs } = await create({
+        user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+        isConfigured: true
+      });
+      resetDateAnnotationPrefs(fixture, prefs);
+      const updateSpy = spyOn(prefs, 'update').and.callThrough();
+      const beforeUnits = prefs.prefs().treeDateAnnotationUnits;
+
+      const toggle = await getSlideToggle(fixture, unitCase.selector);
+      await toggle.toggle();
+
+      expect(updateSpy.calls.count()).toBe(1);
+      const actualPatch: unknown = updateSpy.calls.mostRecent().args[0];
+      expect(actualPatch).toEqual({
+        treeDateAnnotationUnits: { [unitCase.key]: false }
+      });
+      expect(prefs.prefs().treeDateAnnotationUnits).toEqual({
+        ...beforeUnits,
+        [unitCase.key]: false
+      });
+    });
+  }
+
+  it('writes friendly relative-time forms when clicked', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    resetDateAnnotationPrefs(fixture, prefs);
+    const updateSpy = spyOn(prefs, 'update').and.callThrough();
+
+    const toggle = await getSlideToggle(fixture, DATE_ANNOTATION_FRIENDLY_FORMS_SELECTOR);
+    await toggle.toggle();
+
+    expect(updateSpy.calls.count()).toBe(1);
+    expect(updateSpy.calls.mostRecent().args[0]).toEqual({
+      treeDateAnnotationFriendlyForms: false
+    });
+    expect(prefs.prefs().treeDateAnnotationFriendlyForms).toBeFalse();
+  });
+
+  it('disables all date annotation sub-controls when annotations are off', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    resetDateAnnotationPrefs(fixture, prefs, false);
+
+    const toggles = await getDateAnnotationSubControlToggles(fixture);
+
+    for (const toggle of toggles) {
+      expect(await toggle.isDisabled()).toBeTrue();
+    }
+  });
+
+  it('enables all date annotation sub-controls when annotations are on', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    resetDateAnnotationPrefs(fixture, prefs, true);
+
+    const toggles = await getDateAnnotationSubControlToggles(fixture);
+
+    for (const toggle of toggles) {
+      expect(await toggle.isDisabled()).toBeFalse();
+    }
+  });
+
+  it('keeps date annotations enabled when all relative-time units are off', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    resetDateAnnotationPrefs(fixture, prefs, true);
+
+    for (const unitCase of DATE_ANNOTATION_UNIT_CASES) {
+      const toggle = await getSlideToggle(fixture, unitCase.selector);
+      await toggle.toggle();
+    }
+
+    expect(prefs.prefs().treeDateAnnotationUnits).toEqual({
+      year: false,
+      month: false,
+      day: false,
+      hour: false,
+      minute: false,
+      second: false
+    });
+    expect(prefs.prefs().treeShowDateAnnotations).toBeTrue();
+    expect(fixture.componentInstance.treeShowDateAnnotations()).toBeTrue();
   });
 
   it('writes treeAssumeUtcForIsoDateTime/Only through PreferencesService when toggled', async () => {

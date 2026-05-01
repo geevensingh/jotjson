@@ -160,6 +160,38 @@ dl {
   }
 }
 
+.pref-date-annotation-group {
+  margin-bottom: 0.75rem;
+}
+
+.pref-subheading {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface, inherit);
+}
+
+.date-annotation-unit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0.25rem 0 0.35rem;
+
+  .mat-mdc-slide-toggle {
+    width: 100%;
+  }
+}
+
+// stylelint-disable-next-line selector-pseudo-element-no-unknown
+.date-annotation-unit-grid .mat-mdc-slide-toggle ::ng-deep .mdc-form-field {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.date-annotation-unit-hint {
+  margin: 0 0 0.75rem;
+}
+
 .pref-hint {
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-size: 0.8125rem;

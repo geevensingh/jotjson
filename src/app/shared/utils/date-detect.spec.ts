@@ -2,6 +2,7 @@ import {
   __resetLocaleOrderCacheForTesting,
   detectLocaleDateOrder,
   formatDateAnnotation,
+  formatRelative,
   parseAsDate
 } from './date-detect';
 
@@ -147,7 +148,7 @@ describe('date-detect', () => {
     it('joins absolute date and relative time with em-dash', () => {
       const parsed = parseAsDate('2024-11-05T18:30:00Z')!;
       const now = new Date('2024-11-05T18:35:00Z');
-      const out = formatDateAnnotation(parsed, now, 'en-US');
+      const out = formatDateAnnotation(parsed, now, 'en-US')!;
       expect(out).toContain('\u2014');
       expect(out.toLowerCase()).toContain('5 minutes ago');
     });
@@ -155,7 +156,7 @@ describe('date-detect', () => {
     it('omits time component when source had no time', () => {
       const parsed = parseAsDate('2024-11-05')!;
       const now = new Date('2024-11-05T12:00:00Z');
-      const out = formatDateAnnotation(parsed, now, 'en-US');
+      const out = formatDateAnnotation(parsed, now, 'en-US')!;
       expect(out).toMatch(/Nov 5, 2024/);
       expect(out).not.toMatch(/AM|PM|\d:\d{2}/);
     });
@@ -163,8 +164,118 @@ describe('date-detect', () => {
     it('handles future dates', () => {
       const parsed = parseAsDate('2025-01-01')!;
       const now = new Date('2024-11-05T00:00:00Z');
-      const out = formatDateAnnotation(parsed, now, 'en-US');
+      const out = formatDateAnnotation(parsed, now, 'en-US')!;
       expect(out).toMatch(/in /);
+    });
+  });
+
+  describe('configurable units', () => {
+    const SECOND_MS = 1000;
+    const MINUTE_MS = 60 * SECOND_MS;
+    const HOUR_MS = 60 * MINUTE_MS;
+    const DAY_MS = 24 * HOUR_MS;
+    const MONTH_MS = 30.44 * DAY_MS;
+    const now = new Date('2024-11-05T12:00:00Z');
+    const allUnits = {
+      year: true,
+      month: true,
+      day: true,
+      hour: true,
+      minute: true,
+      second: true
+    };
+    const onlyYear = {
+      year: true,
+      month: false,
+      day: false,
+      hour: false,
+      minute: false,
+      second: false
+    };
+    const onlyMonth = {
+      year: false,
+      month: true,
+      day: false,
+      hour: false,
+      minute: false,
+      second: false
+    };
+    const onlyDay = {
+      year: false,
+      month: false,
+      day: true,
+      hour: false,
+      minute: false,
+      second: false
+    };
+    const noUnits = {
+      year: false,
+      month: false,
+      day: false,
+      hour: false,
+      minute: false,
+      second: false
+    };
+
+    function dateOffsetBy(offsetMs: number): Date {
+      return new Date(now.getTime() + offsetMs);
+    }
+
+    it('uses days when year and month are disabled for a 130-day past delta', () => {
+      const date = dateOffsetBy(-130 * DAY_MS);
+      const units = { ...allUnits, year: false, month: false };
+      expect(formatRelative(date, now, 'en-US', units)).toBe('130 days ago');
+    });
+
+    it('uses fractional minutes when seconds are disabled for a 30-second past delta', () => {
+      const date = dateOffsetBy(-30 * SECOND_MS);
+      const units = { ...allUnits, second: false };
+      expect(formatRelative(date, now, 'en-US', units)).toBe('0.5 minutes ago');
+    });
+
+    it('uses adaptive hour precision when seconds and minutes are disabled for a 30-second past delta', () => {
+      const date = dateOffsetBy(-30 * SECOND_MS);
+      const units = { ...allUnits, minute: false, second: false };
+      expect(formatRelative(date, now, 'en-US', units)).toBe('0.01 hours ago');
+    });
+
+    it('uses three decimal places when two decimal places would round a six-second delta to zero', () => {
+      const date = dateOffsetBy(-6 * SECOND_MS);
+      const units = { ...allUnits, minute: false, second: false };
+      expect(formatRelative(date, now, 'en-US', units)).toBe('0.002 hours ago');
+    });
+
+    it('caps adaptive precision at zero after four decimal places', () => {
+      const date = dateOffsetBy(SECOND_MS);
+      expect(formatRelative(date, now, 'en-US', onlyYear, true)).toBe('this year');
+      expect(formatRelative(date, now, 'en-US', onlyYear, false)).toBe('in 0 years');
+    });
+
+    it('returns null from relative and annotation formatters when all units are disabled', () => {
+      const date = dateOffsetBy(-30 * SECOND_MS);
+      const parsed = { date, hasTime: true };
+      expect(formatRelative(date, now, 'en-US', noUnits)).toBeNull();
+      expect(formatDateAnnotation(parsed, now, 'en-US', noUnits)).toBeNull();
+    });
+
+    it('uses friendly day forms for whole integer values when friendly forms are enabled', () => {
+      const date = dateOffsetBy(DAY_MS);
+      expect(formatRelative(date, now, 'en-US', onlyDay, true)).toBe('tomorrow');
+    });
+
+    it('uses numeric day forms for whole integer values when friendly forms are disabled', () => {
+      const date = dateOffsetBy(DAY_MS);
+      expect(formatRelative(date, now, 'en-US', onlyDay, false)).toBe('in 1 day');
+    });
+
+    it('uses friendly month forms for whole integer values when friendly forms are enabled', () => {
+      const date = dateOffsetBy(-MONTH_MS);
+      expect(formatRelative(date, now, 'en-US', onlyMonth, true)).toBe('last month');
+    });
+
+    it('uses numeric forms for fractional values even when friendly forms are enabled', () => {
+      const date = dateOffsetBy(1.5 * DAY_MS);
+      expect(formatRelative(date, now, 'en-US', onlyDay, true)).toBe('in 1.5 days');
     });
   });
 

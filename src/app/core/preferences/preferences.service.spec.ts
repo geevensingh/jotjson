@@ -56,9 +56,20 @@ type PartialTreeHighlightColors = {
   light?: Partial<UserPreferences['treeHighlightColors']['light']>;
 };
 
+type PartialTreeDateAnnotationUnits = Partial<UserPreferences['treeDateAnnotationUnits']>;
+
 function makeTreeHighlightPatch(treeHighlightColors: PartialTreeHighlightColors): Partial<UserPreferences> {
   return {
     treeHighlightColors: treeHighlightColors as unknown as UserPreferences['treeHighlightColors']
+  };
+}
+
+function makeTreeDateAnnotationUnitsPatch(
+  treeDateAnnotationUnits: PartialTreeDateAnnotationUnits
+): Partial<UserPreferences> {
+  return {
+    treeDateAnnotationUnits:
+      treeDateAnnotationUnits as unknown as UserPreferences['treeDateAnnotationUnits']
   };
 }
 
@@ -248,6 +259,79 @@ describe('PreferencesService', () => {
     );
   });
 
+  it('merges deep treeDateAnnotationUnits shape from storage', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        treeDateAnnotationUnits: { year: false }
+      })
+    );
+    const svc = TestBed.inject(PreferencesService);
+
+    expect(svc.prefs().treeDateAnnotationUnits).toEqual({
+      ...DEFAULT_PREFERENCES.treeDateAnnotationUnits,
+      year: false
+    });
+  });
+
+  it('backfills partial nested treeDateAnnotationUnits from the server', async () => {
+    const partial: UserPreferences = {
+      ...DEFAULT_PREFERENCES,
+      treeDateAnnotationUnits: {
+        year: false,
+        minute: false
+      } as UserPreferences['treeDateAnnotationUnits']
+    };
+    const svc = TestBed.inject(PreferencesService);
+    api.getMe.and.returnValue(of(makeUser(partial)));
+    auth.signInAs('u-1');
+    TestBed.flushEffects();
+    await svc.__waitForSync();
+
+    expect(svc.prefs().treeDateAnnotationUnits).toEqual({
+      ...DEFAULT_PREFERENCES.treeDateAnnotationUnits,
+      year: false,
+      minute: false
+    });
+  });
+
+  it('preserves untouched booleans when patching treeDateAnnotationUnits partially', () => {
+    const svc = TestBed.inject(PreferencesService);
+
+    svc.update(makeTreeDateAnnotationUnitsPatch({ year: false }));
+
+    expect(svc.prefs().treeDateAnnotationUnits).toEqual({
+      ...DEFAULT_PREFERENCES.treeDateAnnotationUnits,
+      year: false
+    });
+  });
+
+  it('applies full treeDateAnnotationUnits patches', () => {
+    const svc = TestBed.inject(PreferencesService);
+    const fullUnits: UserPreferences['treeDateAnnotationUnits'] = {
+      year: false,
+      month: false,
+      day: true,
+      hour: false,
+      minute: true,
+      second: false
+    };
+
+    svc.update({ treeDateAnnotationUnits: fullUnits });
+
+    expect(svc.prefs().treeDateAnnotationUnits).toEqual(fullUnits);
+  });
+
+  it('applies treeDateAnnotationFriendlyForms boolean patches', () => {
+    const svc = TestBed.inject(PreferencesService);
+
+    svc.update({ treeDateAnnotationFriendlyForms: false });
+    expect(svc.prefs().treeDateAnnotationFriendlyForms).toBeFalse();
+
+    svc.update({ treeDateAnnotationFriendlyForms: true });
+    expect(svc.prefs().treeDateAnnotationFriendlyForms).toBeTrue();
+  });
+
   describe('pref.changed telemetry', () => {
     it('emits a string event for a changed theme', () => {
       const svc = TestBed.inject(PreferencesService);
@@ -285,6 +369,23 @@ describe('PreferencesService', () => {
       );
     });
 
+    it('emits a count event with enabled-unit measurement for treeDateAnnotationUnits', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeDateAnnotationUnitsPatch({ year: false, second: false }));
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeDateAnnotationUnits',
+          source: 'user',
+          kind: 'count',
+          countBucket: '<100'
+        },
+        { count: 4 }
+      );
+    });
+
     it('emits boolean dimensions as strings', () => {
       const svc = TestBed.inject(PreferencesService);
 
@@ -293,6 +394,23 @@ describe('PreferencesService', () => {
       expect(logger.event).toHaveBeenCalledOnceWith(
         'pref.changed',
         { key: 'treeShowTypeLabels', source: 'user', kind: 'boolean', value: 'false' },
+        undefined
+      );
+    });
+
+    it('emits a boolean event for treeDateAnnotationFriendlyForms', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ treeDateAnnotationFriendlyForms: false });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeDateAnnotationFriendlyForms',
+          source: 'user',
+          kind: 'boolean',
+          value: 'false'
+        },
         undefined
       );
     });

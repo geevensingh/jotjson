@@ -31,6 +31,7 @@ const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
 type ThemeName = 'dark' | 'light';
 type ColorKey = keyof ThemeColorSet;
+type TreeDateAnnotationUnit = keyof UserPreferences['treeDateAnnotationUnits'];
 
 interface HighlightFieldDescriptor {
   readonly key: ColorKey;
@@ -97,6 +98,12 @@ export class ProfileComponent implements OnInit {
   readonly treeShowTypeLabels = computed(() => this.prefs().treeShowTypeLabels);
   readonly treeShowDateAnnotations = computed(
     () => this.prefs().treeShowDateAnnotations
+  );
+  readonly treeDateAnnotationUnits = computed(
+    () => this.prefs().treeDateAnnotationUnits
+  );
+  readonly treeDateAnnotationFriendlyForms = computed(
+    () => this.prefs().treeDateAnnotationFriendlyForms
   );
   readonly treeAssumeUtcForIsoDateTime = computed(
     () => this.prefs().treeAssumeUtcForIsoDateTime
@@ -212,6 +219,19 @@ export class ProfileComponent implements OnInit {
 
   onTreeShowDateAnnotationsChange(value: boolean): void {
     this.prefsService.update({ treeShowDateAnnotations: value });
+  }
+
+  onTreeDateAnnotationUnitChange(unit: TreeDateAnnotationUnit, value: boolean): void {
+    const patch: Partial<UserPreferences['treeDateAnnotationUnits']> = {
+      [unit]: value
+    };
+    this.prefsService.update({
+      treeDateAnnotationUnits: patch as UserPreferences['treeDateAnnotationUnits']
+    });
+  }
+
+  onTreeDateAnnotationFriendlyFormsChange(value: boolean): void {
+    this.prefsService.update({ treeDateAnnotationFriendlyForms: value });
   }
 
   onTreeAssumeUtcForIsoDateTimeChange(value: boolean): void {

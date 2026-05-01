@@ -1842,7 +1842,13 @@ export class JsonTreeComponent {
       assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly
     });
     if (!parsed) return null;
-    return formatDateAnnotation(parsed, new Date(this.nowSignal()));
+    return formatDateAnnotation(
+      parsed,
+      new Date(this.nowSignal()),
+      undefined,
+      prefs.treeDateAnnotationUnits,
+      prefs.treeDateAnnotationFriendlyForms
+    );
   }
 
   /**

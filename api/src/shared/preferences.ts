@@ -20,6 +20,15 @@ export interface TreeHighlightColors {
   light: ThemeColorSet;
 }
 
+export interface TreeDateAnnotationUnits {
+  year: boolean;
+  month: boolean;
+  day: boolean;
+  hour: boolean;
+  minute: boolean;
+  second: boolean;
+}
+
 export interface UserPreferences {
   theme: 'dark' | 'light' | 'system';
   editorFontSize: number;
@@ -46,6 +55,8 @@ export interface UserPreferences {
   treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
+  treeDateAnnotationUnits: TreeDateAnnotationUnits;
+  treeDateAnnotationFriendlyForms: boolean;
   treeAssumeUtcForIsoDateTime: boolean;
   treeAssumeUtcForIsoDateOnly: boolean;
   /**
@@ -116,6 +127,19 @@ export interface UserPreferences {
   treeHighlightColors: TreeHighlightColors;
 }
 
+const DEFAULT_TREE_DATE_ANNOTATION_UNITS: TreeDateAnnotationUnits = {
+  year: true,
+  month: true,
+  day: true,
+  hour: true,
+  minute: true,
+  second: true
+};
+
+function defaultTreeDateAnnotationUnits(): TreeDateAnnotationUnits {
+  return { ...DEFAULT_TREE_DATE_ANNOTATION_UNITS };
+}
+
 export const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'system',
   editorFontSize: 14,
@@ -126,6 +150,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeFontSize: 13,
   treeShowTypeLabels: true,
   treeShowDateAnnotations: true,
+  treeDateAnnotationUnits: defaultTreeDateAnnotationUnits(),
+  treeDateAnnotationFriendlyForms: true,
   treeAssumeUtcForIsoDateTime: true,
   treeAssumeUtcForIsoDateOnly: true,
   activeRuleSetIds: [],
@@ -196,6 +222,14 @@ const TREE_PATH_ROOTS: readonly UserPreferences['treePathRoot'][] = [
   'root',
   'data'
 ] as const;
+const ANNOTATION_UNIT_KEYS: readonly (keyof TreeDateAnnotationUnits)[] = [
+  'year',
+  'month',
+  'day',
+  'hour',
+  'minute',
+  'second'
+] as const;
 
 /**
  * Whitelist of accepted preference keys on the wire. Stored docs may
@@ -215,6 +249,8 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'treeFontSize',
   'treeShowTypeLabels',
   'treeShowDateAnnotations',
+  'treeDateAnnotationUnits',
+  'treeDateAnnotationFriendlyForms',
   'treeAssumeUtcForIsoDateTime',
   'treeAssumeUtcForIsoDateOnly',
   'recentlyViewedEnabled',
@@ -272,6 +308,12 @@ export function normalizeStoredPreferences(
     // (sync on) - matches DEFAULT_PREFERENCES.
     view.treeEditorSelectionSync = true;
   }
+  if (typeof view.treeDateAnnotationFriendlyForms !== 'boolean') {
+    view.treeDateAnnotationFriendlyForms = true;
+  }
+  view.treeDateAnnotationUnits = normalizeStoredAnnotationUnits(
+    view.treeDateAnnotationUnits
+  );
   delete view.historyTrackingMode;
   // Stored docs written before issue #83 had `defaultRuleSetIds` (the
   // M6f-5 name) or, even earlier, the singular `defaultRuleSetId`.
@@ -337,6 +379,39 @@ function assertHex(value: unknown, field: string): string {
     throw new PreferenceValidationError(`${field} must be a #RRGGBB hex color`);
   }
   return value.toLowerCase();
+}
+
+function normalizeStoredAnnotationUnits(input: unknown): TreeDateAnnotationUnits {
+  if (!isRecord(input)) {
+    return defaultTreeDateAnnotationUnits();
+  }
+  return {
+    year: typeof input['year'] === 'boolean' ? input['year'] : true,
+    month: typeof input['month'] === 'boolean' ? input['month'] : true,
+    day: typeof input['day'] === 'boolean' ? input['day'] : true,
+    hour: typeof input['hour'] === 'boolean' ? input['hour'] : true,
+    minute: typeof input['minute'] === 'boolean' ? input['minute'] : true,
+    second: typeof input['second'] === 'boolean' ? input['second'] : true
+  };
+}
+
+function normalizeAnnotationUnits(input: unknown, field: string): TreeDateAnnotationUnits {
+  if (!isRecord(input)) {
+    throw new PreferenceValidationError(`${field} must be an object`);
+  }
+  for (const key of Object.keys(input)) {
+    if (!(ANNOTATION_UNIT_KEYS as readonly string[]).includes(key)) {
+      throw new PreferenceValidationError(`${field} has unknown field "${key}"`);
+    }
+  }
+  return {
+    year: assertBool(input['year'], `${field}.year`),
+    month: assertBool(input['month'], `${field}.month`),
+    day: assertBool(input['day'], `${field}.day`),
+    hour: assertBool(input['hour'], `${field}.hour`),
+    minute: assertBool(input['minute'], `${field}.minute`),
+    second: assertBool(input['second'], `${field}.second`)
+  };
 }
 
 function normalizeColorSet(input: unknown, field: string): ThemeColorSet {
@@ -409,6 +484,14 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     treeFontSize: assertInt(raw['treeFontSize'], 'treeFontSize', 8, 32),
     treeShowTypeLabels: assertBool(raw['treeShowTypeLabels'], 'treeShowTypeLabels'),
     treeShowDateAnnotations: assertBool(raw['treeShowDateAnnotations'], 'treeShowDateAnnotations'),
+    treeDateAnnotationUnits: normalizeAnnotationUnits(
+      raw['treeDateAnnotationUnits'],
+      'treeDateAnnotationUnits'
+    ),
+    treeDateAnnotationFriendlyForms: assertBool(
+      raw['treeDateAnnotationFriendlyForms'],
+      'treeDateAnnotationFriendlyForms'
+    ),
     treeAssumeUtcForIsoDateTime: assertBool(
       raw['treeAssumeUtcForIsoDateTime'],
       'treeAssumeUtcForIsoDateTime'

@@ -39,6 +39,15 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeFontSize: 13,
   treeShowTypeLabels: true,
   treeShowDateAnnotations: true,
+  treeDateAnnotationUnits: {
+    year: true,
+    month: true,
+    day: true,
+    hour: true,
+    minute: true,
+    second: true
+  },
+  treeDateAnnotationFriendlyForms: true,
   treeAssumeUtcForIsoDateTime: true,
   treeAssumeUtcForIsoDateOnly: true,
   activeRuleSetIds: [],
@@ -92,6 +101,7 @@ function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light'
  */
 function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   const remoteColors: PartialTreeHighlightColors = remote.treeHighlightColors ?? {};
+  const remoteUnits: PartialTreeDateAnnotationUnits = remote.treeDateAnnotationUnits ?? {};
   const allowed = Object.keys(DEFAULT_PREFERENCES) as (keyof UserPreferences)[];
   const remoteRecord = { ...(remote as Record<string, unknown>) };
   if (!Array.isArray(remoteRecord['activeRuleSetIds'])) {
@@ -103,7 +113,7 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   }
   const filtered: Partial<UserPreferences> = {};
   for (const key of allowed) {
-    if (key === 'treeHighlightColors') continue;
+    if (key === 'treeHighlightColors' || key === 'treeDateAnnotationUnits') continue;
     if (remoteRecord[key] !== undefined) {
       (filtered as Record<string, unknown>)[key] = remoteRecord[key];
     }
@@ -111,6 +121,10 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   return {
     ...structuredClone(DEFAULT_PREFERENCES),
     ...filtered,
+    treeDateAnnotationUnits: {
+      ...DEFAULT_PREFERENCES.treeDateAnnotationUnits,
+      ...remoteUnits
+    },
     treeHighlightColors: {
       dark: {
         ...DEFAULT_PREFERENCES.treeHighlightColors.dark,
@@ -126,6 +140,8 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
 
 type PreferenceChangeSource = 'user' | 'init' | 'sync';
 type TopLevelPreferenceKey = Exclude<keyof UserPreferences, 'treeHighlightColors'>;
+type TreeDateAnnotationUnits = UserPreferences['treeDateAnnotationUnits'];
+type PartialTreeDateAnnotationUnits = Partial<TreeDateAnnotationUnits>;
 type TreeHighlightTheme = keyof TreeHighlightColors;
 type TreeHighlightColorSlot = keyof ThemeColorSet;
 type PartialTreeHighlightColors = {
@@ -147,6 +163,8 @@ const PREFERENCE_KEYS = [
   'treeFontSize',
   'treeShowTypeLabels',
   'treeShowDateAnnotations',
+  'treeDateAnnotationUnits',
+  'treeDateAnnotationFriendlyForms',
   'treeAssumeUtcForIsoDateTime',
   'treeAssumeUtcForIsoDateOnly',
   'activeRuleSetIds',
@@ -190,6 +208,16 @@ function deepMergeColors(
   };
 }
 
+function deepMergeUnits(
+  previousUnits: TreeDateAnnotationUnits,
+  nextUnits: PartialTreeDateAnnotationUnits | undefined
+): TreeDateAnnotationUnits {
+  return {
+    ...previousUnits,
+    ...(nextUnits ?? {})
+  };
+}
+
 function mergePreferencePatch(
   previousPreferences: UserPreferences,
   nextPreferences: Partial<UserPreferences>
@@ -197,6 +225,10 @@ function mergePreferencePatch(
   return structuredClone({
     ...previousPreferences,
     ...nextPreferences,
+    treeDateAnnotationUnits: deepMergeUnits(
+      previousPreferences.treeDateAnnotationUnits,
+      nextPreferences.treeDateAnnotationUnits
+    ),
     treeHighlightColors: deepMergeColors(
       previousPreferences.treeHighlightColors,
       nextPreferences.treeHighlightColors
@@ -210,6 +242,17 @@ function deepEqualPreferenceValue(left: unknown, right: unknown): boolean {
 
 function booleanDimension(value: boolean): 'true' | 'false' {
   return value ? 'true' : 'false';
+}
+
+function countEnabledDateAnnotationUnits(units: TreeDateAnnotationUnits): number {
+  let enabledCount = 0;
+  if (units.year) enabledCount += 1;
+  if (units.month) enabledCount += 1;
+  if (units.day) enabledCount += 1;
+  if (units.hour) enabledCount += 1;
+  if (units.minute) enabledCount += 1;
+  if (units.second) enabledCount += 1;
+  return enabledCount;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -424,6 +467,16 @@ export class PreferencesService {
         return;
       case 'treeShowDateAnnotations':
         this.emitBooleanPreferenceChange(key, preferences.treeShowDateAnnotations, source);
+        return;
+      case 'treeDateAnnotationUnits':
+        this.emitCountPreferenceChange(
+          key,
+          countEnabledDateAnnotationUnits(preferences.treeDateAnnotationUnits),
+          source
+        );
+        return;
+      case 'treeDateAnnotationFriendlyForms':
+        this.emitBooleanPreferenceChange(key, preferences.treeDateAnnotationFriendlyForms, source);
         return;
       case 'treeAssumeUtcForIsoDateTime':
         this.emitBooleanPreferenceChange(key, preferences.treeAssumeUtcForIsoDateTime, source);

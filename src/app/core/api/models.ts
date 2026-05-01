@@ -75,6 +75,15 @@ export interface UserPreferences {
   treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
+  treeDateAnnotationUnits: {
+    year: boolean;
+    month: boolean;
+    day: boolean;
+    hour: boolean;
+    minute: boolean;
+    second: boolean;
+  };
+  treeDateAnnotationFriendlyForms: boolean;
   treeAssumeUtcForIsoDateTime: boolean;
   treeAssumeUtcForIsoDateOnly: boolean;
   recentlyViewedEnabled: boolean;

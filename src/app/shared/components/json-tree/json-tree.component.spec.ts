@@ -1065,6 +1065,74 @@ describe('JsonTreeComponent', () => {
       expect(getAnnotationSpans().length).toBe(0);
     });
 
+    it('renders enabled day units when larger units are disabled', async () => {
+      jasmine.clock().install();
+      try {
+        const dayMs = 24 * 60 * 60 * 1000;
+        const baseNow = Date.UTC(2024, 10, 5, 12, 0, 0);
+        const createdIso = new Date(baseNow - 130 * dayMs).toISOString();
+        jasmine.clock().mockDate(new Date(baseNow));
+
+        await createWith({ created: createdIso }, () => {
+          prefs.update({
+            treeDateAnnotationUnits: {
+              year: false,
+              month: false,
+              day: true,
+              hour: true,
+              minute: true,
+              second: true
+            }
+          });
+        });
+
+        const annotationText = getAnnotationSpans()[0]?.textContent ?? '';
+        expect(annotationText).toContain('130 days ago');
+        expect(annotationText).not.toContain('4 months ago');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('does not render an annotation when all relative units are disabled', async () => {
+      await createWith({ created: '2024-11-05T18:30:00Z' });
+      prefs.update({
+        treeDateAnnotationUnits: {
+          year: false,
+          month: false,
+          day: false,
+          hour: false,
+          minute: false,
+          second: false
+        }
+      });
+      fixture.detectChanges();
+      expect(getAnnotationSpans().length).toBe(0);
+    });
+
+    it('uses friendly relative forms only when the pref is true', async () => {
+      jasmine.clock().install();
+      try {
+        const dayMs = 24 * 60 * 60 * 1000;
+        const baseNow = Date.UTC(2024, 10, 5, 12, 0, 0);
+        const dueIso = new Date(baseNow + dayMs).toISOString();
+        jasmine.clock().mockDate(new Date(baseNow));
+
+        await createWith({ due: dueIso });
+        const friendlyAnnotationText = getAnnotationSpans()[0]?.textContent ?? '';
+        expect(friendlyAnnotationText).toContain('tomorrow');
+
+        prefs.update({ treeDateAnnotationFriendlyForms: false });
+        fixture.detectChanges();
+
+        const numericAnnotationText = getAnnotationSpans()[0]?.textContent ?? '';
+        expect(numericAnnotationText).toContain('in 1 day');
+        expect(numericAnnotationText).not.toContain('tomorrow');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
     it('does not annotate non-date strings', async () => {
       await createWith({ message: 'hello world', code: '12345' });
       expect(getAnnotationSpans().length).toBe(0);
