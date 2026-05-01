@@ -18,10 +18,15 @@
 .banner-text {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .banner-actions {
   display: inline-flex;
+  align-items: center;
   gap: 4px;
   flex: 0 0 auto;
   justify-content: flex-end;
@@ -30,13 +35,12 @@
 .comments-chip {
   display: inline-flex;
   align-items: center;
-  margin-left: 8px;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 999px;
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.5;
   white-space: nowrap;
-  vertical-align: baseline;
 }
 
 .comments-chip-preserved {
@@ -49,8 +53,22 @@
   color: var(--mat-sys-on-error-container);
 }
 
+// Material 21 projects all non-mat-icon button content into a default-inline
+// `<span class="mdc-button__label">`. With our jj-icon's `line-height: 0`,
+// that inline-flex element baselines to its bottom edge and the icon drifts
+// above the text. Force the label wrapper to flex so jj-icon and the text
+// label center vertically inside the button. ::ng-deep is required because
+// Material's button template owns the .mdc-button__label span and it does
+// not carry our component's _ngcontent attribute. Same pattern as the
+// toolbar Save button.
 .extract-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  ::ng-deep .mdc-button__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  ::ng-deep jj-icon {
+    flex: 0 0 auto;
+  }
 }
