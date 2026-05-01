@@ -379,6 +379,16 @@
             </span>
           </span>
 
+          @if (showComments() && trailingComment(node); as tc) {
+            <span
+              class="tree-comment tree-comment-trailing"
+              [matTooltip]="trailingCommentTooltipPrefix + tc"
+              matTooltipShowDelay="500"
+              matTooltipPosition="above"
+              >{{ commentFirstLine(tc) }}</span
+            >
+          }
+
           <span class="tree-row-right">
             <span class="tree-count">{{ containerCountText(node) }}</span>
             @if (showTypeBadges()) {
@@ -404,11 +414,20 @@
           <ng-container matTreeNodeOutlet></ng-container>
           @if (treeControl.isExpanded(node)) {
             <div class="tree-row tree-row--close">
+              @if (showComments() && closeLeadingComment(node); as cl) {
+                <span
+                  class="tree-comment tree-comment-leading tree-comment-leading--close"
+                  [matTooltip]="closeLeadingCommentTooltipPrefix + cl"
+                  matTooltipShowDelay="500"
+                  matTooltipPosition="above"
+                  >{{ commentFirstLine(cl) }}</span
+                >
+              }
               <span class="tree-value-brace">{{ node.type === 'array' ? ']' : '}' }}</span>
-              @if (showComments() && trailingComment(node); as tc) {
+              @if (showComments() && closeTrailingComment(node); as tc) {
                 <span
                   class="tree-comment tree-comment-trailing tree-comment-trailing--close"
-                  [matTooltip]="trailingCommentTooltipPrefix + tc"
+                  [matTooltip]="closeTrailingCommentTooltipPrefix + tc"
                   matTooltipShowDelay="500"
                   matTooltipPosition="above"
                   >{{ commentFirstLine(tc) }}</span

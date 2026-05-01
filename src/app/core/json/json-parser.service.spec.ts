@@ -194,16 +194,16 @@ describe('JsonParserService', () => {
       expect(r.commentsByPath.get('$')).toEqual({ leading: 'header' });
     });
 
-    it('renders a same-line trailing comment after the close as a container trailing', () => {
+    it('renders a same-line trailing comment after the close as a container close-trailing', () => {
       const r = svc.parse('{\n  "foo": {\n    "x": 1\n  } // end of foo\n}');
-      expect(r.commentsByPath.get('$.foo')).toEqual({ trailing: 'end of foo' });
+      expect(r.commentsByPath.get('$.foo')).toEqual({ closeTrailing: 'end of foo' });
       expect(r.commentsByPath.get('$.foo.x')).toBeUndefined();
     });
 
-    it('attributes a comment-only container to the close row (rule 4)', () => {
+    it('attributes a comment-only container to the close row as closeLeading (rule 4)', () => {
       const r = svc.parse('{\n  "tags": [\n    // populated at runtime\n  ]\n}');
       expect(r.commentsByPath.get('$.tags')).toEqual({
-        trailing: 'populated at runtime'
+        closeLeading: 'populated at runtime'
       });
     });
 
@@ -254,9 +254,9 @@ describe('JsonParserService', () => {
       });
     });
 
-    it('attaches a comment after the root close to the root path as trailing', () => {
+    it('attaches a comment after the root close to the root path as close-trailing', () => {
       const r = svc.parse('{"x":1} // tail');
-      expect(r.commentsByPath.get('$')).toEqual({ trailing: 'tail' });
+      expect(r.commentsByPath.get('$')).toEqual({ closeTrailing: 'tail' });
     });
 
     it('uses canonical paths for keys that need bracket quoting', () => {
@@ -269,6 +269,89 @@ describe('JsonParserService', () => {
       // looks like a path (no // or /*) must not trigger the harvest.
       const r = svc.parse('{"path":"a/b/c"}');
       expect(r.commentsByPath.size).toBe(0);
+    });
+
+    it('attaches a comment on the same line as a container open brace as the container trailing', () => {
+      const r = svc.parse('{\n  "foo": { // about foo\n    "x": 1\n  }\n}');
+      expect(r.commentsByPath.get('$.foo')).toEqual({ trailing: 'about foo' });
+      expect(r.commentsByPath.get('$.foo.x')).toBeUndefined();
+    });
+
+    it('attaches a block comment on the open-brace line with whitespace tail as container trailing', () => {
+      const r = svc.parse('{\n  "foo": [ /* about foo */\n    1\n  ]\n}');
+      expect(r.commentsByPath.get('$.foo')).toEqual({ trailing: 'about foo' });
+    });
+
+    it('treats a one-line block comment followed by content on the same line as leading on the next value', () => {
+      // The tail after `*/` is `  "bar": 1 }`, NOT whitespace -- so this
+      // falls through to leading-on-next-value, NOT open-row trailing.
+      const r = svc.parse('{ "foo": { /* before bar */ "bar": 1 } }');
+      expect(r.commentsByPath.get('$.foo.bar')).toEqual({ leading: 'before bar' });
+      expect(r.commentsByPath.get('$.foo')?.trailing).toBeUndefined();
+    });
+
+    it('treats a multi-line block comment in an open-brace position as leading on the next value', () => {
+      // The comment itself contains a `\n`, so rule 3a is disqualified
+      // even if the line tail after `*/` is whitespace.
+      const r = svc.parse('{\n  "foo": { /* multi\nline */\n    "bar": 1\n  }\n}');
+      expect(r.commentsByPath.get('$.foo.bar')?.leading).toContain('multi');
+      expect(r.commentsByPath.get('$.foo.bar')?.leading).toContain('line');
+      expect(r.commentsByPath.get('$.foo')?.trailing).toBeUndefined();
+    });
+
+    it('attributes the user-reported foo/bar/section-header case correctly', () => {
+      // Regression for the bug reported 2026-05-01: the open-brace
+      // line comment and a between-siblings comment were both queued
+      // in pendingLeading and merged onto the next sibling's leading
+      // slot, hiding the second comment behind commentFirstLine().
+      const r = svc.parse(
+        '{\n  "foo": { // explaination of foo\n    /*section header for bar*/\n    "bar": {} // value of bar\n  }\n}'
+      );
+      expect(r.commentsByPath.get('$.foo')).toEqual({
+        trailing: 'explaination of foo'
+      });
+      expect(r.commentsByPath.get('$.foo.bar')).toEqual({
+        leading: 'section header for bar',
+        closeTrailing: 'value of bar'
+      });
+    });
+
+    it('separates closeLeading and closeTrailing on the same container when both are present', () => {
+      // Regression for the bug reported 2026-05-01 (second test case):
+      // an orphan comment between the last child and the close brace,
+      // plus a same-line trailing on the close brace, were both being
+      // routed to closeTrailing and merged with `\n`, hiding the
+      // second comment behind commentFirstLine().
+      const r = svc.parse(
+        '{\n  "foo": { // explaination of foo\n    /*section header for bar*/\n    "bar": {} // value of bar\n    /*end of section for bar */\n  } // closing comment of foo\n}'
+      );
+      expect(r.commentsByPath.get('$.foo')).toEqual({
+        trailing: 'explaination of foo',
+        closeLeading: 'end of section for bar',
+        closeTrailing: 'closing comment of foo'
+      });
+      expect(r.commentsByPath.get('$.foo.bar')).toEqual({
+        leading: 'section header for bar',
+        closeTrailing: 'value of bar'
+      });
+    });
+
+    it('stacks multiple pre-close orphan comments under closeLeading with newline separator', () => {
+      const r = svc.parse(
+        '{\n  "foo": [\n    1,\n    /* first orphan */\n    /* second orphan */\n  ]\n}'
+      );
+      expect(r.commentsByPath.get('$.foo')).toEqual({
+        closeLeading: 'first orphan\nsecond orphan'
+      });
+    });
+
+    it('routes a single pre-close orphan comment to closeLeading even when no closeTrailing is present', () => {
+      const r = svc.parse(
+        '{\n  "foo": {\n    "x": 1\n    /* trailing orphan */\n  }\n}'
+      );
+      expect(r.commentsByPath.get('$.foo')).toEqual({
+        closeLeading: 'trailing orphan'
+      });
     });
   });
 

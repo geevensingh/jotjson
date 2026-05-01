@@ -1012,23 +1012,61 @@ describe('JsonTreeComponent', () => {
   describe('JSONC comment rendering (M7k)', () => {
     function makeBundle(
       leading?: string,
-      trailing?: string
-    ): { leading?: string; trailing?: string } {
-      const bundle: { leading?: string; trailing?: string } = {};
+      trailing?: string,
+      closeTrailing?: string,
+      closeLeading?: string
+    ): {
+      leading?: string;
+      trailing?: string;
+      closeLeading?: string;
+      closeTrailing?: string;
+    } {
+      const bundle: {
+        leading?: string;
+        trailing?: string;
+        closeLeading?: string;
+        closeTrailing?: string;
+      } = {};
       if (leading !== undefined) bundle.leading = leading;
       if (trailing !== undefined) bundle.trailing = trailing;
+      if (closeLeading !== undefined) bundle.closeLeading = closeLeading;
+      if (closeTrailing !== undefined) bundle.closeTrailing = closeTrailing;
       return bundle;
     }
 
     function makeMap(
-      entries: Array<[string, { leading?: string; trailing?: string }]>
-    ): ReadonlyMap<string, { leading?: string; trailing?: string }> {
+      entries: Array<[
+        string,
+        {
+          leading?: string;
+          trailing?: string;
+          closeLeading?: string;
+          closeTrailing?: string;
+        }
+      ]>
+    ): ReadonlyMap<
+      string,
+      {
+        leading?: string;
+        trailing?: string;
+        closeLeading?: string;
+        closeTrailing?: string;
+      }
+    > {
       return new Map(entries);
     }
 
     async function createWithComments(
       value: unknown,
-      comments: ReadonlyMap<string, { leading?: string; trailing?: string }>
+      comments: ReadonlyMap<
+        string,
+        {
+          leading?: string;
+          trailing?: string;
+          closeLeading?: string;
+          closeTrailing?: string;
+        }
+      >
     ): Promise<void> {
       await createWith(value);
       fixture.componentRef.setInput('commentsByPath', comments);
@@ -1168,7 +1206,7 @@ describe('JsonTreeComponent', () => {
     it('renders the trailing-on-close comment on the container close row', async () => {
       await createWithComments(
         { user: { name: 'Alice' } },
-        makeMap([['$.user', makeBundle(undefined, 'end of user')]])
+        makeMap([['$.user', makeBundle(undefined, undefined, 'end of user')]])
       );
       const host = fixture.nativeElement as HTMLElement;
       const closeRow = host.querySelector('.tree-row--close');
@@ -1176,6 +1214,184 @@ describe('JsonTreeComponent', () => {
       const trailing = closeRow!.querySelector('.tree-comment-trailing');
       expect(trailing).withContext('trailing slot on close row').not.toBeNull();
       expect(trailing!.textContent?.trim()).toBe('end of user');
+    });
+
+    it('renders both closeLeading (before brace) and closeTrailing (after brace) on the container close row', async () => {
+      // Regression for the user-reported bug 2026-05-01 (second test
+      // case): an orphan comment between the last child and the close
+      // brace (closeLeading) plus a same-line trailing on the close
+      // brace (closeTrailing) must both render on the close row, with
+      // closeLeading appearing in DOM order before the brace and
+      // closeTrailing after.
+      await createWithComments(
+        { foo: { bar: 1 } },
+        makeMap([
+          [
+            '$.foo',
+            makeBundle(
+              undefined,
+              undefined,
+              'closing comment of foo',
+              'end of section for bar'
+            )
+          ]
+        ])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const closeRow = host.querySelector('.tree-row--close') as HTMLElement;
+      expect(closeRow).withContext('close row should be rendered').not.toBeNull();
+
+      const leading = closeRow.querySelector(
+        '.tree-comment-leading.tree-comment-leading--close'
+      ) as HTMLElement | null;
+      const trailing = closeRow.querySelector(
+        '.tree-comment-trailing.tree-comment-trailing--close'
+      ) as HTMLElement | null;
+      const brace = closeRow.querySelector(
+        '.tree-value-brace'
+      ) as HTMLElement | null;
+
+      expect(leading)
+        .withContext('closeLeading slot should render')
+        .not.toBeNull();
+      expect(leading!.textContent?.trim()).toBe('end of section for bar');
+
+      expect(trailing)
+        .withContext('closeTrailing slot should render')
+        .not.toBeNull();
+      expect(trailing!.textContent?.trim()).toBe('closing comment of foo');
+
+      expect(brace).withContext('close brace should render').not.toBeNull();
+
+      const leadingBeforeBrace =
+        leading!.compareDocumentPosition(brace!) &
+        Node.DOCUMENT_POSITION_FOLLOWING;
+      expect(leadingBeforeBrace)
+        .withContext('closeLeading must appear before the close brace')
+        .toBeGreaterThan(0);
+
+      const trailingAfterBrace =
+        brace!.compareDocumentPosition(trailing!) &
+        Node.DOCUMENT_POSITION_FOLLOWING;
+      expect(trailingAfterBrace)
+        .withContext('closeTrailing must appear after the close brace')
+        .toBeGreaterThan(0);
+    });
+
+    it('merges closeLeading and closeTrailing into the trailing slot on an empty inline container', async () => {
+      // Empty containers render via the leaf template -- there is no
+      // separate close row -- so both closeLeading and closeTrailing
+      // must be merged with the (empty here) trailing into the single
+      // trailing slot. Otherwise a nullish-coalesce fallback would
+      // hide the second comment, recreating the merge-loses-comment
+      // bug class M7k-fu3 / fu4 exist to fix.
+      await createWithComments(
+        { foo: {} },
+        makeMap([
+          ['$.foo', makeBundle(undefined, undefined, 'tail', 'hello')]
+        ])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const trailing = host.querySelector(
+        '.tree-comment-trailing'
+      ) as HTMLElement | null;
+      expect(trailing)
+        .withContext('merged trailing slot should render on empty container')
+        .not.toBeNull();
+      // In-row text is single-line + ellipsis (first line); tooltip
+      // carries the full multi-line merged text in source order.
+      expect(trailing!.textContent?.trim()).toBe('hello');
+      const debugEl = fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((de) =>
+          (de.nativeElement as HTMLElement).classList.contains(
+            'tree-comment-trailing'
+          )
+        );
+      expect(debugEl)
+        .withContext('trailing-comment tooltip directive')
+        .toBeDefined();
+      const tooltipMessage = debugEl!.injector.get(MatTooltip).message;
+      expect(tooltipMessage).toContain('hello');
+      expect(tooltipMessage).toContain('tail');
+      // Source order: closeLeading (hello) before closeTrailing (tail).
+      expect(tooltipMessage.indexOf('hello')).toBeLessThan(
+        tooltipMessage.indexOf('tail')
+      );
+    });
+
+    it('merges trailing, closeLeading, and closeTrailing on an empty inline container with all three populated', async () => {
+      await createWithComments(
+        { foo: {} },
+        makeMap([['$.foo', makeBundle(undefined, 'open', 'tail', 'mid')]])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const trailing = host.querySelector(
+        '.tree-comment-trailing'
+      ) as HTMLElement | null;
+      expect(trailing).not.toBeNull();
+      expect(trailing!.textContent?.trim()).toBe('open');
+      const debugEl = fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((de) =>
+          (de.nativeElement as HTMLElement).classList.contains(
+            'tree-comment-trailing'
+          )
+        );
+      expect(debugEl).toBeDefined();
+      const tooltipMessage = debugEl!.injector.get(MatTooltip).message;
+      // All three comments must appear in source order: trailing
+      // (open-row), closeLeading (between brace and close), closeTrailing
+      // (after close).
+      expect(tooltipMessage).toContain('open');
+      expect(tooltipMessage).toContain('mid');
+      expect(tooltipMessage).toContain('tail');
+      expect(tooltipMessage.indexOf('open')).toBeLessThan(
+        tooltipMessage.indexOf('mid')
+      );
+      expect(tooltipMessage.indexOf('mid')).toBeLessThan(
+        tooltipMessage.indexOf('tail')
+      );
+    });
+
+    it('renders an open-row trailing comment on a container open row', async () => {
+      // Regression for the user-reported bug 2026-05-01: a comment on
+      // the same line as a container's open brace must render on the
+      // container's open row (sibling of tree-row-right), not as the
+      // next sibling's leading slot.
+      await createWithComments(
+        { foo: { bar: 1 } },
+        makeMap([['$.foo', makeBundle(undefined, 'explaination of foo')]])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const openRow = host.querySelector('[data-path="$.foo"]') as HTMLElement;
+      expect(openRow).withContext('foo open row should render').not.toBeNull();
+      // The trailing comment is a direct child of the open row, NOT
+      // of the close row.
+      const closeRow = host.querySelector('.tree-row--close');
+      const openRowTrailing = openRow.querySelector(
+        ':scope > .tree-comment-trailing'
+      );
+      const closeRowTrailing = closeRow?.querySelector(
+        '.tree-comment-trailing'
+      );
+      expect(openRowTrailing)
+        .withContext('open-row trailing slot must render')
+        .not.toBeNull();
+      expect(openRowTrailing!.textContent?.trim()).toBe('explaination of foo');
+      expect(closeRowTrailing)
+        .withContext('close-row trailing slot must NOT render')
+        .toBeFalsy();
+      // The trailing slot sits before tree-row-right in DOM order,
+      // mirroring the leaf-row pattern.
+      const rowRight = openRow.querySelector(
+        ':scope > .tree-row-right'
+      ) as HTMLElement;
+      expect(rowRight).not.toBeNull();
+      const positionMask = openRowTrailing!.compareDocumentPosition(rowRight);
+      expect(positionMask & Node.DOCUMENT_POSITION_FOLLOWING)
+        .withContext('tree-row-right must follow trailing comment')
+        .toBeGreaterThan(0);
     });
 
     it('renders only the first line of a multi-line comment in the inline slot', async () => {

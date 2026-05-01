@@ -21,21 +21,37 @@ export interface JsonParseError {
 }
 
 /**
- * A bundle of leading and/or trailing JSONC comments attached to a
- * single canonical path (e.g. `$.foo[0]`).
+ * A bundle of leading / trailing / close-trailing JSONC comments
+ * attached to a single canonical path (e.g. `$.foo[0]`).
  *
- * Both fields, when present, may carry multiple stacked comments
+ * Each field, when present, may carry multiple stacked comments
  * separated by `\n`. Each rendering layer is responsible for picking a
  * single-line preview (e.g. the first line) and surfacing the full
  * multi-comment text via tooltip.
  *
- * For container nodes (objects and arrays), `trailing` is rendered on
- * the close row of the container, not the open row. See M7k Decision E
- * in DESIGN_SPEC.md.
+ * - `leading`: rendered before the key on the value row (or container
+ *   open row).
+ * - `trailing`: rendered on the value's primary row -- after the value
+ *   for leaves, after the open brace for containers.
+ * - `closeLeading`: rendered on the close row of a container, BEFORE
+ *   the close brace. Carries comments that appear between the
+ *   container's last child (or its open brace, for comment-only
+ *   containers) and the close brace, on their own source line(s).
+ * - `closeTrailing`: rendered on the close row of a container, AFTER
+ *   the close brace. Carries comments that appear on the same source
+ *   line as the close brace, after it. Both close-row fields are
+ *   only meaningful for object / array nodes. For nodes that render
+ *   inline as a single row (primitives and empty containers),
+ *   renderers MERGE `trailing`, `closeLeading`, and `closeTrailing`
+ *   into the single trailing slot so that no comment is hidden.
+ *
+ * See DESIGN_SPEC.md M7k Decision B for the full attachment ruleset.
  */
 export interface CommentBundle {
   leading?: string;
   trailing?: string;
+  closeLeading?: string;
+  closeTrailing?: string;
 }
 
 export interface JsonParseResult {
@@ -324,19 +340,25 @@ export class JsonParserService {
 
   /**
    * Harvests JSONC comments from `text` and groups them by canonical
-   * path (`$`, `$.foo`, `$.foo[0]`, etc.). Each path may carry leading
-   * comments (rules 3 and 5), trailing comments on the value or open
-   * row (rule 1), and trailing comments on the close row (rules 2, 4,
-   * and 6 -- see DESIGN_SPEC.md M7k Decision B).
+   * path (`$`, `$.foo`, `$.foo[0]`, etc.). Each path may carry up to
+   * three slots:
    *
-   * For container nodes (object, array), `trailing` is the close-row
-   * trailing slot. The renderer disambiguates value-row vs close-row
-   * placement by inspecting the node's kind, so a single
-   * `CommentBundle` shape suffices.
+   * - `leading`: comment(s) before the next value (rules 3 and 5).
+   * - `trailing`: comment(s) on the value's primary row -- the same
+   *   line as a leaf's end token (rule 1), or the same line as a
+   *   container's open brace with a whitespace-only tail (rule 3a,
+   *   container open-row trailing).
+   * - `closeLeading`: comment(s) on a container's close row, BEFORE
+   *   the close token. Sourced from the pending-leading queue
+   *   drained at the container close when no following value arrived
+   *   (rule 4 -- comment-only containers and comments on their own
+   *   line(s) between the last child and the close brace).
+   * - `closeTrailing`: comment(s) on the same line as a container's
+   *   close token, after that token (rule 2).
    *
-   * Multiple comments stacked on the same anchor are joined with
-   * `\n`. The renderer is expected to show only the first line in
-   * the row preview and surface the rest via tooltip.
+   * Multiple comments stacked on the same slot are joined with `\n`.
+   * The renderer shows only the first line in the row preview and
+   * surfaces the rest via tooltip.
    *
    * Empty comments (a line comment with nothing after `//`, or a block
    * comment with nothing between the delimiters) are skipped.
@@ -363,6 +385,14 @@ export class JsonParserService {
     let closeJustSeenOffset = -1;
     let closeJustSeenLine = -1;
 
+    // Most-recently-opened container, used by rule 3a (open-row
+    // trailing). Naturally overwritten by nested opens; never needs
+    // explicit clearing because the line check below bounds it to
+    // the open-brace line only.
+    let lastContainerOpenPath: string | null = null;
+    let lastContainerOpenEndOffset = -1;
+    let lastContainerOpenLine = -1;
+
     const flushPendingAsLeading = (path: string): void => {
       if (pendingLeading.length === 0) return;
       const merged = pendingLeading.join('\n');
@@ -385,6 +415,28 @@ export class JsonParserService {
           : body;
       } else {
         map.set(path, { trailing: body });
+      }
+    };
+
+    const appendCloseLeading = (path: string, body: string): void => {
+      const existing = map.get(path);
+      if (existing) {
+        existing.closeLeading = existing.closeLeading
+          ? existing.closeLeading + '\n' + body
+          : body;
+      } else {
+        map.set(path, { closeLeading: body });
+      }
+    };
+
+    const appendCloseTrailing = (path: string, body: string): void => {
+      const existing = map.get(path);
+      if (existing) {
+        existing.closeTrailing = existing.closeTrailing
+          ? existing.closeTrailing + '\n' + body
+          : body;
+      } else {
+        map.set(path, { closeTrailing: body });
       }
     };
 
@@ -411,18 +463,48 @@ export class JsonParserService {
       const path = containerPathStack.pop();
       if (path === undefined) return;
       // Rule 4: comments queued INSIDE this container with no following
-      // value before the close attach as trailing on this container's
-      // close row.
+      // value before the close attach to the close row's leading slot
+      // (rendered before the close brace, in source order).
       if (pendingLeading.length > 0) {
         const merged = pendingLeading.join('\n');
         pendingLeading.length = 0;
-        appendTrailing(path, merged);
+        appendCloseLeading(path, merged);
       }
       const endOffset = offset + length;
       closeJustSeenPath = path;
       closeJustSeenOffset = endOffset;
       closeJustSeenLine = startLine;
       onValueComplete(path, endOffset, startLine);
+    };
+
+    // For rule 3a: a comment is open-row-trailing on a container only
+    // if (a) it starts on the same line as the open brace, (b) it
+    // begins after the open token, (c) the comment itself is
+    // single-line (block comments may not contain `\n`), and (d) the
+    // remainder of the source line after the comment is whitespace
+    // only. Condition (d) disambiguates `"foo": { /* a */ "bar": 1 }`
+    // (leading on bar) from `"foo": { // a\n  "bar": 1\n}` (open-row
+    // trailing on foo).
+    const isOpenRowTrailing = (
+      offset: number,
+      length: number,
+      startLine: number
+    ): boolean => {
+      if (lastContainerOpenPath === null) return false;
+      if (startLine !== lastContainerOpenLine) return false;
+      if (offset < lastContainerOpenEndOffset) return false;
+      const body = text.slice(offset, offset + length);
+      if (body.includes('\n')) return false;
+      let i = offset + length;
+      while (i < text.length && text.charCodeAt(i) !== 10 /* \n */) {
+        const ch = text.charCodeAt(i);
+        // ASCII whitespace: space, tab, \r, \v, \f.
+        if (ch !== 32 && ch !== 9 && ch !== 13 && ch !== 11 && ch !== 12) {
+          return false;
+        }
+        i++;
+      }
+      return true;
     };
 
     visit(
@@ -432,12 +514,18 @@ export class JsonParserService {
           const path = this.pathToString([...pathSupplier()]);
           containerPathStack.push(path);
           onValueStart(path);
+          lastContainerOpenPath = path;
+          lastContainerOpenEndOffset = offset + length;
+          lastContainerOpenLine = startLine;
         },
         onObjectEnd: onContainerEnd,
         onArrayBegin: (offset, length, startLine, _sc, pathSupplier) => {
           const path = this.pathToString([...pathSupplier()]);
           containerPathStack.push(path);
           onValueStart(path);
+          lastContainerOpenPath = path;
+          lastContainerOpenEndOffset = offset + length;
+          lastContainerOpenLine = startLine;
         },
         onArrayEnd: onContainerEnd,
         onLiteralValue: (
@@ -465,7 +553,7 @@ export class JsonParserService {
             startLine === closeJustSeenLine &&
             offset >= closeJustSeenOffset
           ) {
-            appendTrailing(closeJustSeenPath, body);
+            appendCloseTrailing(closeJustSeenPath, body);
             return;
           }
 
@@ -478,6 +566,15 @@ export class JsonParserService {
             offset >= lastValueEndOffset
           ) {
             appendTrailing(lastValuePath, body);
+            return;
+          }
+
+          // Rule 3a: open-row trailing on container -- comment sits
+          // on the same line as a container's open brace, after the
+          // brace, with a whitespace-only line tail (so we don't
+          // misclassify inline `{ /* x */ "k": v }` as open-row).
+          if (isOpenRowTrailing(offset, length, startLine)) {
+            appendTrailing(lastContainerOpenPath as string, body);
             return;
           }
 

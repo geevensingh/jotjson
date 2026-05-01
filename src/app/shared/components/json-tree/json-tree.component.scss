@@ -391,6 +391,14 @@
   margin-left: 8px;
 }
 
+.tree-comment-leading--close {
+  // On the close row the leading comment sits BEFORE the brace,
+  // mirroring how `[closeLeading] }  [closeTrailing]` reads in
+  // source order. The base `.tree-comment-leading` rule already
+  // supplies a right margin to separate it from the brace; this
+  // modifier exists for future divergence.
+}
+
 .tree-type-badge {
   display: inline-block;
   font-size: 0.77em;
