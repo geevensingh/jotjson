@@ -26,3 +26,31 @@
   flex: 0 0 auto;
   justify-content: flex-end;
 }
+
+.comments-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.comments-chip-preserved {
+  background-color: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+}
+
+.comments-chip-dropped {
+  background-color: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.extract-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

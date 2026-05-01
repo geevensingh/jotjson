@@ -1,5 +1,12 @@
 @if (visible()) {
-  <mat-card class="banner" role="status" aria-live="polite" appearance="outlined">
+  <mat-card
+    class="banner"
+    role="status"
+    aria-live="polite"
+    appearance="outlined"
+    tabindex="-1"
+    (keydown.escape)="dismiss.emit()"
+  >
     <span class="banner-text">
       @if (blockCount() === 1) {
         <span i18n="@@home.paste.extract.banner.message.single"
@@ -8,30 +15,49 @@
       } @else {
         <span i18n="@@home.paste.extract.banner.message.multi"
           >Found {{ blockCount() }} JSON blocks - they will be combined into an
-          array. Comments will be removed.</span
+          array.</span
+        >
+      }
+      @if (preservesComments()) {
+        <span
+          class="comments-chip comments-chip-preserved"
+          i18n="@@home.paste.extract.banner.commentsPreserved"
+          >Comments preserved</span
+        >
+      } @else {
+        <span
+          class="comments-chip comments-chip-dropped"
+          i18n="@@home.paste.extract.banner.commentsDropped"
+          >Comments will be dropped</span
         >
       }
     </span>
     <span class="banner-actions">
       @if (blockCount() === 1) {
         <button
+          #extractButton
           type="button"
           mat-button
           color="primary"
+          class="extract-button"
           (click)="extract.emit()"
           i18n="@@home.paste.extract.banner.actionSingle"
         >
-          Extract JSON
+          <jj-icon name="download" />
+          <span>Extract JSON</span>
         </button>
       } @else {
         <button
+          #extractButton
           type="button"
           mat-button
           color="primary"
+          class="extract-button"
           (click)="extract.emit()"
           i18n="@@home.paste.extract.banner.actionMulti"
         >
-          Extract blocks as array
+          <jj-icon name="download" />
+          <span>Extract blocks as array</span>
         </button>
       }
       <button

@@ -2,10 +2,12 @@ import {
   ChangeDetectionStrategy,
   Component,
   input,
-  output
+  output,
+  viewChildren
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
 
 /**
  * Banner shown above the editor when the JSON extractor finds one or more
@@ -18,7 +20,7 @@ import { MatCardModule } from '@angular/material/card';
 @Component({
   selector: 'jotjson-extract-json-banner',
   standalone: true,
-  imports: [MatButtonModule, MatCardModule],
+  imports: [MatButtonModule, MatCardModule, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './extract-json-banner.component.html',
   styleUrl: './extract-json-banner.component.scss'
@@ -30,4 +32,21 @@ export class ExtractJsonBannerComponent {
 
   readonly extract = output<void>();
   readonly dismiss = output<void>();
+
+  /**
+   * The Extract button - either the single-block or the multi-block variant
+   * depending on `blockCount`. Only one is rendered at a time, so we use
+   * `viewChildren` (returning at most one match) and focus the first.
+   */
+  private readonly extractButtons =
+    viewChildren<HTMLButtonElement>('extractButton');
+
+  /**
+   * Move keyboard focus to the rendered Extract button. Called by the host
+   * after a paste-driven banner show so keyboard users don't have to tab in.
+   * Safe to call before the button is in the DOM - it is a no-op then.
+   */
+  focusExtractButton(): void {
+    this.extractButtons()[0]?.focus();
+  }
 }

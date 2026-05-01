@@ -1418,35 +1418,49 @@
         <source>Found JSON inside your paste.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/extract-json-banner/extract-json-banner.component.html</context>
-          <context context-type="linenumber">6,9</context>
+          <context context-type="linenumber">13,16</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.paste.extract.banner.message.multi" datatype="html">
-        <source>Found <x id="INTERPOLATION" equiv-text="{{ blockCount() }}"/> JSON blocks - they will be combined into an array. Comments will be removed.</source>
+        <source>Found <x id="INTERPOLATION" equiv-text="{{ blockCount() }}"/> JSON blocks - they will be combined into an array.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/extract-json-banner/extract-json-banner.component.html</context>
-          <context context-type="linenumber">10,11</context>
+          <context context-type="linenumber">17,18</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.paste.extract.banner.commentsPreserved" datatype="html">
+        <source>Comments preserved</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/extract-json-banner/extract-json-banner.component.html</context>
+          <context context-type="linenumber">25,29</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="home.paste.extract.banner.commentsDropped" datatype="html">
+        <source>Comments will be dropped</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/extract-json-banner/extract-json-banner.component.html</context>
+          <context context-type="linenumber">31,35</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.paste.extract.banner.actionSingle" datatype="html">
-        <source> Extract JSON </source>
+        <source><x id="START_TAG_JJ_ICON" ctype="x-jj_icon" equiv-text="&lt;jj-icon name=&quot;download&quot; /&gt;"/><x id="CLOSE_TAG_JJ_ICON" ctype="x-jj_icon" equiv-text="&lt;jj-icon name=&quot;download&quot; /&gt;"/><x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span&gt;"/>Extract JSON<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/extract-json-banner/extract-json-banner.component.html</context>
-          <context context-type="linenumber">24,27</context>
+          <context context-type="linenumber">46,48</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.paste.extract.banner.actionMulti" datatype="html">
-        <source> Extract blocks as array </source>
+        <source><x id="START_TAG_JJ_ICON" ctype="x-jj_icon" equiv-text="&lt;jj-icon name=&quot;download&quot; /&gt;"/><x id="CLOSE_TAG_JJ_ICON" ctype="x-jj_icon" equiv-text="&lt;jj-icon name=&quot;download&quot; /&gt;"/><x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span&gt;"/>Extract blocks as array<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/extract-json-banner/extract-json-banner.component.html</context>
-          <context context-type="linenumber">34,37</context>
+          <context context-type="linenumber">59,61</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.paste.extract.banner.dismiss" datatype="html">
         <source> Dismiss </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/extract-json-banner/extract-json-banner.component.html</context>
-          <context context-type="linenumber">43,46</context>
+          <context context-type="linenumber">69,72</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.dropOverlay.message" datatype="html">
