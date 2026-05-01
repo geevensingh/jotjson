@@ -121,6 +121,29 @@
         (input)="onTitleInput($event)"
         (keydown)="onTitleKeydown($event)"
       />
+      <button
+        type="button"
+        mat-icon-button
+        class="title-suggest-wand"
+        [matTooltip]="wandTooltip"
+        [attr.aria-label]="wandAriaLabel"
+        [matMenuTriggerFor]="suggestionsMenu"
+        [disabled]="!wandEnabled()"
+        (click)="onWandClick()"
+      >
+        <jj-icon name="wand" />
+      </button>
+      <mat-menu #suggestionsMenu="matMenu" class="jj-menu">
+        @for (candidate of suggestedTitles(); track candidate.value) {
+          <button
+            mat-menu-item
+            type="button"
+            (click)="onSuggestionSelected(candidate)"
+          >
+            <span>{{ candidate.value }}</span>
+          </button>
+        }
+      </mat-menu>
     }
 
     <div

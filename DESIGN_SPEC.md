@@ -308,6 +308,32 @@ The primary page. Available to **all users** (anonymous + registered).
     `Sign in to save` label compacts to `Sign in`.
   - The pill lives in an `aria-live="polite"` region so screen readers announce
     state changes.
+  - **Title suggestions** (M7r): when signed in, a small wand icon button sits
+    between the title input and the state pill. It is enabled only when the
+    title is empty and the editor has non-empty content; clicking it opens a
+    menu of 2-7 candidate titles inferred from the current document. Picking
+    a candidate writes it into the title input. The candidates are computed
+    **lazily on click** (not per keystroke) by composing a registry of pure
+    strategy functions in `core/title-suggester/` -- ordered by confidence
+    and deduplicated case-insensitively -- against the already-memoized
+    parsed value plus the most recent uploaded/dropped file's name (cleared
+    on paste, manual clear, blob load, blob delete, and sign-in restore;
+    preserved across format/minify/title-edit). Strategies cover known
+    formats (`package.json`, Kubernetes manifests, OpenAPI / Swagger, JSON
+    Schema, GeoJSON, ARM templates, `tsconfig`, GitHub Actions workflows,
+    Postman collections), HAL `_links.self.href` and `selfUrl` / `self_url`,
+    common identifier fields (`name > title > displayName > subject > label
+    > id > slug`, with UUID/numeric/long values rejected for `id`/`slug`),
+    type discriminators (`@type`, `__typename`, `resourceType`), top-level
+    keys, the first sentence of `description`/`summary`, generic shape
+    descriptions (`Object with N keys`, `List of N items`, `Number {value}`,
+    etc.), the first 40 characters of the raw text, and a final `Untitled`
+    fallback. A post-dedupe synthetic floor (`Untitled - YYYY-MM-DD` then
+    `Untitled (n)`) guarantees at least 2 menu items so the button is
+    never useful-but-empty. **Privacy:** acceptance fires the
+    `toolbar.titleSuggestionAccepted` telemetry event with the strategy
+    `source` and the menu's candidate count -- the candidate's literal text
+    is never logged. Hidden on narrow viewports alongside the title input.
 
 - **JSON Input Panel** (left or top, depending on layout preference)
   - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON/JSONC-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size. The editor and parser unconditionally accept comments and trailing commas; an editor "mode" tag (`json` vs `jsonc`) is auto-derived from content (presence of `//` or `/* */` comments) purely to drive the status-bar badge label and the download filename extension. There is no manual mode switch - mode reflects the document, not user choice.
@@ -1333,7 +1359,9 @@ there is no need to bump SemVer just to mark a deploy.
 
 - **Initial**: `0.5.0` (set when M7n landed, acknowledging substantial
   pre-V1 development).
-- **Pre-V1**: stays at `0.5.0` for non-feature work; minor bumps
+- **0.6.0**: M7r title suggester (wand button) - new user-visible
+  feature on the home toolbar.
+- **Pre-V1**: stays at `0.6.0` for non-feature work; minor bumps
   applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
   identifier through pre-V1.
@@ -1617,6 +1645,7 @@ there is no need to bump SemVer just to mark a deploy.
    - **M7o**: Bring-your-own Functions migration. Move the API off SWA managed Functions onto a standalone Azure Function App (Consumption plan) linked to the SWA via Standard-tier linked backends. Enables Cosmos DB authentication via the Function App's system-assigned managed identity (eliminating the `COSMOS_KEY` primary-key fallback in `api/src/shared/cosmos.ts`), and removes the SWA managed-Functions `Authorization`-header rewrite quirk along with the `X-Jotjson-Authorization` workaround in `verifyAccessToken`. Out of scope for v1 unless we add a second Azure resource that needs MI auth (e.g., Blob Storage for avatars/exports in §Profile post-v1).
    - ~~**M7p**: Extract JSON from mixed-text paste - when a paste contains prose plus one or more JSON object/array literals (logs, `curl -v` transcripts, etc.), surface a non-destructive banner offering one-click extraction. Single block preserves comments via `jsonc-parser` `format()`; multiple blocks combine into a JSON array (comments lost). Primitives are not extracted. 1 MB input cap. Banner auto-clears when content changes (Home page §1).~~ (done)
    - ~~**M7q**: Tree row context menu + double-click copy - per-row right-click and kebab-button context menu in the tree view, with copy key / copy value / copy path / search by key / search by value / collapse / expand-all-from-here / expand-to-depth +1..+5. Items adapt to row kind, expansion state, and embedded mode. Double-click a row copies its value (raw text for primitives, pretty-printed JSON for containers). Keyboard-fired contextmenu is deferred to a future M7 (Home page §Tree View Panel).~~ (done)
+   - ~~**M7r**: Title suggester (wand button) - heuristic suggestions for the document title. A small wand icon button between the title input and the state pill (signed-in users only) opens a menu of 2-7 candidate titles inferred from the current document. Computed lazily on click via a registry of pure strategy functions in `src/app/core/title-suggester/`, ordered by confidence and deduplicated case-insensitively, against the already-memoized parsed value plus the most recent uploaded/dropped file's name. Strategies cover known formats (`package.json`, Kubernetes, OpenAPI/Swagger, JSON Schema, GeoJSON, ARM, `tsconfig`, GitHub Actions workflows, Postman), HAL self-links, common identifier fields, type discriminators, top-level keys, descriptions, generic shape descriptions, and last-resort `firstChars` / `Untitled` fallbacks. A post-dedupe synthetic floor (`Untitled - YYYY-MM-DD` then `Untitled (n)`) guarantees at least 2 menu entries. The candidate's literal text is never logged in telemetry; only the strategy `source` and total candidate count.~~ (done)
 
 ---
 

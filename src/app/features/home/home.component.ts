@@ -55,6 +55,8 @@ import {
   JsonExtractorService,
   ExtractedJson
 } from '../../core/json/json-extractor.service';
+import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
+import type { SuggestionCandidate } from '../../core/title-suggester/types';
 import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
@@ -146,6 +148,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly prefs = inject(PreferencesService);
   private readonly parser = inject(JsonParserService);
   private readonly extractor = inject(JsonExtractorService);
+  private readonly titleSuggester = inject(TitleSuggesterService);
   private readonly auth = inject(AuthService);
   private readonly blobs = inject(BlobService);
   private readonly router = inject(Router);
@@ -335,6 +338,30 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly saveError = signal<string | null>(null);
 
   /**
+   * Tracks the most recent file name that populated the editor (M7p).
+   * Set in `onFilesReceived` (covers both upload-picker and drag-drop)
+   * and used by the title-suggester's `filename` strategy.
+   *
+   * Cleared when the document is replaced through any non-file path:
+   * paste, manual `clear`, blob load (route nav to /s/:slug), blob
+   * delete, sign-in restore. A second drag-drop overwrites it with the
+   * new file's name.
+   *
+   * Format / minify / title-edit do NOT clear it -- those keep the
+   * "current document started as <foo>.json" association.
+   */
+  readonly lastFilename = signal<string | null>(null);
+
+  /**
+   * Title-suggester result list (M7p). Populated lazily by
+   * `onSuggestRequested` when the user clicks the wand button. The
+   * mat-menu reads from here. Empty by default and reset whenever
+   * `lastFilename` is cleared so a stale list doesn't outlive its
+   * context.
+   */
+  readonly suggestedTitlesForMenu = signal<readonly SuggestionCandidate[]>([]);
+
+  /**
    * Tracks the id of the blob whose content we've most recently hydrated
    * the editor from. Used by the hydration effect to avoid re-hydrating
    * from an input that hasn't changed (even if the effect re-runs for
@@ -382,6 +409,22 @@ export class HomeComponent implements OnInit, OnDestroy {
   );
 
   readonly isBlobPublic = computed(() => !!this.loadedBlob()?.isPublic);
+
+  /**
+   * Title-suggester wand-enable predicate (M7p). The wand should be
+   * actionable only when:
+   *   - the title field is empty (otherwise we'd be overwriting a
+   *     deliberate value), AND
+   *   - there is non-empty editor content (otherwise there's nothing
+   *     to suggest from).
+   *
+   * The synthetic-floor in `TitleSuggesterService` guarantees >=2
+   * candidates from any non-empty content, so we don't peek at the
+   * candidate count to decide enable/disable.
+   */
+  readonly wandEnabled = computed(
+    () => this.title().trim().length === 0 && this.hasContent()
+  );
 
   readonly clipboardState = computed<
     'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'
@@ -522,6 +565,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.loadedBlob.set(blob);
       this.replaceDocument(blob.content);
       this.title.set(blob.title ?? '');
+      this.lastFilename.set(null);
+      this.suggestedTitlesForMenu.set([]);
       this.restoreSignInSnapshotOnce();
     });
 
@@ -775,6 +820,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     const { unescaped, changed } = this.parser.tryUnescape(text);
     const parseMs = this.durationSince(parseStartedAt);
     this.replaceDocument(unescaped);
+    // M7p title-suggester: paste replaces the document; any prior
+    // file-name association is no longer relevant and the suggestion
+    // list (if computed earlier) is now stale.
+    this.lastFilename.set(null);
+    this.suggestedTitlesForMenu.set([]);
     if (changed) {
       // Pretty-print the newly-unescaped payload so the user sees the real
       // structure rather than a single dense line (per issue #38).
@@ -946,6 +996,12 @@ export class HomeComponent implements OnInit, OnDestroy {
         const { unescaped } = this.parser.tryUnescape(result.text);
         const parseMs = this.durationSince(parseStartedAt);
         this.replaceDocument(unescaped);
+        // M7p title-suggester: remember the source filename so the
+        // wand button can offer it as a candidate. The UX rule is
+        // "covers both upload-picker AND drag-drop"; this is the
+        // shared chokepoint.
+        this.lastFilename.set(filename);
+        this.suggestedTitlesForMenu.set([]);
         this.runExtractorOnCurrentContent(
           source === 'pick' ? 'upload.pick' : 'upload.drag'
         );
@@ -1040,6 +1096,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.setContent('');
     this.title.set('');
     this.loadedBlob.set(null);
+    this.lastFilename.set(null);
+    this.suggestedTitlesForMenu.set([]);
     // Clear the draft synchronously. The `content` -> draft effect is async
     // and may be cancelled when this component is destroyed by the
     // subsequent router.navigate below, leaving stale blob content in the
@@ -1052,6 +1110,25 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   onTitleChange(next: string): void {
     this.title.set(next);
+  }
+
+  /**
+   * Title-suggester wand-button click (M7p). Computes candidates
+   * synchronously using the already-memoized `parseResult` (no
+   * double-parse) plus the last-known filename, and writes them into
+   * `suggestedTitlesForMenu` so the toolbar's mat-menu can paint them
+   * on the same click. Service intentionally has no async hop --
+   * the mat-menu opens immediately after this handler returns.
+   */
+  onSuggestRequested(): void {
+    const parsed = this.parseResult();
+    const result = this.titleSuggester.suggest({
+      jsonText: this.content(),
+      parsed: parsed.empty ? undefined : parsed.value,
+      hasParseErrors: parsed.errors.length > 0,
+      filename: this.lastFilename()
+    });
+    this.suggestedTitlesForMenu.set(result);
   }
 
   onSignInRequested(): void {
@@ -1087,6 +1164,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (parsedSnapshot.slug === (this.loadedBlob()?.slug ?? null)) {
         this.setContent(parsedSnapshot.content);
         this.title.set(parsedSnapshot.title);
+        // M7p: snapshot-restore replaces the document; any prior
+        // file-name association predates the round-trip and is gone.
+        this.lastFilename.set(null);
+        this.suggestedTitlesForMenu.set([]);
       }
       this.clearSignInRestoreSnapshot();
     } catch {
@@ -1319,6 +1400,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.loadedBlob.set(null);
       this.setContent('');
       this.title.set('');
+      this.lastFilename.set(null);
+      this.suggestedTitlesForMenu.set([]);
       this.snack.open(
         $localize`:@@share.delete.success:Blob deleted.`,
         $localize`:@@common.dismiss:Dismiss`,

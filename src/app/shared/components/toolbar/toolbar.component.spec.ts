@@ -719,7 +719,7 @@ describe('ToolbarComponent', () => {
       return child.className;
     }
 
-    it('signed-in: renders [title-input, state-pill, save-button] in order', async () => {
+    it('signed-in: renders [title-input, wand, suggestionsMenu, state-pill, save-button] in order', async () => {
       const { fixture } = await create({ signedIn: true });
       setToolbarInputs(fixture, {
         isSavedBlob: false,
@@ -731,10 +731,14 @@ describe('ToolbarComponent', () => {
         fixture,
         '.identity-control'
       );
-      expect(identityControl.children.length).toBe(3);
+      expect(identityControl.children.length).toBe(5);
       expect(classOfChild(identityControl, 0)).toContain('title-input');
-      expect(classOfChild(identityControl, 1)).toContain('state-pill');
-      expect(classOfChild(identityControl, 2)).toContain('save-button');
+      expect(classOfChild(identityControl, 1)).toContain('title-suggest-wand');
+      expect(identityControl.children.item(2)?.tagName.toLowerCase()).toBe(
+        'mat-menu'
+      );
+      expect(classOfChild(identityControl, 3)).toContain('state-pill');
+      expect(classOfChild(identityControl, 4)).toContain('save-button');
     });
 
     it('anonymous on saved blob: renders [title-display, state-pill (with CTA)] in order', async () => {
@@ -1496,6 +1500,113 @@ describe('ToolbarComponent', () => {
       cmp.pasteRequested.subscribe(spy);
       cmp.pasteRequested.emit();
       expect(spy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('M7p title-suggester wand', () => {
+    function findWandButton(
+      fixture: ComponentFixture<ToolbarComponent>
+    ): HTMLButtonElement | null {
+      return queryByCss<HTMLButtonElement>(fixture, '.title-suggest-wand');
+    }
+
+    it('renders the wand button when signed in', async () => {
+      const { fixture } = await create({ signedIn: true });
+      expect(findWandButton(fixture)).not.toBeNull();
+    });
+
+    it('does not render the wand for an anonymous viewer of a saved blob', async () => {
+      // Anonymous-on-saved-blob renders a span title-display, not the
+      // input branch where the wand lives.
+      const { fixture } = await create({ signedIn: false });
+      setToolbarInputs(fixture, {
+        isSavedBlob: true,
+        loadedBlobTitle: 'My Blob'
+      });
+      expect(findWandButton(fixture)).toBeNull();
+    });
+
+    it('is disabled when wandEnabled is false', async () => {
+      const { fixture } = await create({ signedIn: true });
+      fixture.componentRef.setInput('wandEnabled', false);
+      fixture.detectChanges();
+      expect(findWandButton(fixture)?.disabled).toBe(true);
+    });
+
+    it('is enabled when wandEnabled is true', async () => {
+      const { fixture } = await create({ signedIn: true });
+      fixture.componentRef.setInput('wandEnabled', true);
+      fixture.detectChanges();
+      expect(findWandButton(fixture)?.disabled).toBe(false);
+    });
+
+    it('emits suggestRequested on click', async () => {
+      const { fixture } = await create({ signedIn: true });
+      fixture.componentRef.setInput('wandEnabled', true);
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      const spy = jasmine.createSpy('suggestRequested');
+      cmp.suggestRequested.subscribe(spy);
+      findWandButton(fixture)?.click();
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT call any suggestion code on plain user typing', async () => {
+      // Lazy-on-click: typing in the editor should not run the
+      // suggester. We assert this by spying on the suggestRequested
+      // output emitter -- it should never fire just by the wand
+      // button being present.
+      const { fixture } = await create({ signedIn: true });
+      const cmp = fixture.componentInstance;
+      const spy = jasmine.createSpy('suggestRequested');
+      cmp.suggestRequested.subscribe(spy);
+      // Simulate the parent updating inputs (as it would on every
+      // keystroke for hasContent / wandEnabled).
+      fixture.componentRef.setInput('wandEnabled', true);
+      fixture.componentRef.setInput('hasContent', true);
+      fixture.detectChanges();
+      fixture.componentRef.setInput('wandEnabled', false);
+      fixture.detectChanges();
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('calls onSuggestionSelected with the candidate and emits titleChange', async () => {
+      const { fixture, logger } = await create({ signedIn: true });
+      const cmp = fixture.componentInstance;
+      const spy = jasmine.createSpy('titleChange');
+      cmp.titleChange.subscribe(spy);
+      cmp.onSuggestionSelected({
+        value: 'My Title',
+        source: 'namedField',
+        confidence: 75
+      });
+      expect(spy).toHaveBeenCalledWith('My Title');
+      expect(logger.event).toHaveBeenCalledWith(
+        'toolbar.titleSuggestionAccepted',
+        { source: 'namedField' },
+        { candidateCount: 0 }
+      );
+    });
+
+    it('reports the menu candidate count on selection telemetry', async () => {
+      const { fixture, logger } = await create({ signedIn: true });
+      fixture.componentRef.setInput('suggestedTitles', [
+        { value: 'A', source: 'filename', confidence: 95 },
+        { value: 'B', source: 'namedField', confidence: 75 },
+        { value: 'C', source: 'firstChars', confidence: 10 }
+      ]);
+      fixture.detectChanges();
+      const cmp = fixture.componentInstance;
+      cmp.onSuggestionSelected({
+        value: 'A',
+        source: 'filename',
+        confidence: 95
+      });
+      expect(logger.event).toHaveBeenCalledWith(
+        'toolbar.titleSuggestionAccepted',
+        { source: 'filename' },
+        { candidateCount: 3 }
+      );
     });
   });
 });

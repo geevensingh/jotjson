@@ -724,6 +724,36 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'toolbar.action',
 
+  /**
+   * Kind: event
+   * Fired by: `ToolbarComponent.onSuggestionSelected`
+   *           (`shared/components/toolbar/toolbar.component.ts`) when
+   *           the user accepts (clicks) one of the suggestions in
+   *           the title-suggestion menu. Fired ONLY on selection --
+   *           neither opening the menu, hovering items, nor dismissing
+   *           it without a selection emits this event.
+   *
+   * Privacy: AGENTS.md S6. The candidate's literal text is NEVER
+   * logged. Only the strategy `source` (which is a closed enum from
+   * `core/title-suggester/types.ts`) and the menu's total candidate
+   * count are recorded. The strategy enum is a fixed list, not
+   * user-derived, so cardinality is bounded.
+   *
+   * Props: { source: SuggestionSource } where SuggestionSource is
+   *   the closed enum from `core/title-suggester/types.ts`:
+   *   `filename | packageJson | kubernetes | openapi | jsonSchema |
+   *    geojson | armTemplate | tsconfig | githubActionsWorkflow |
+   *    postmanCollection | selfUrl | namedField | typeField |
+   *    topLevelKeys | descriptionFallback | arrayShape | objectShape |
+   *    primitive | firstChars | untitled | dateStamped |
+   *    numberedUntitled`.
+   * Measurements: { candidateCount: number } -- raw 2..7, the size
+   *   of the menu the user picked from (post-cap, post-floor). Useful
+   *   for understanding whether users pick the first option or scan
+   *   the whole list.
+   */
+  'toolbar.titleSuggestionAccepted',
+
   // Profile / preferences
 
   /**

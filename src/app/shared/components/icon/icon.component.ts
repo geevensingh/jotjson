@@ -49,7 +49,8 @@ export type JjIconName =
   | 'error'
   | 'flag'
   | 'bookmark'
-  | 'extract';
+  | 'extract'
+  | 'wand';
 
 @Component({
   selector: 'jj-icon',
@@ -279,6 +280,15 @@ export type JjIconName =
           <path d="M19 20v-3M19 20h-3" />
           <path d="M10 9.5c-.7 0-1 .3-1 1v.5c0 .5-.5 1-1 1 .5 0 1 .3 1 1v.5c0 .7.3 1 1 1" />
           <path d="M14 9.5c.7 0 1 .3 1 1v.5c0 .5.5 1 1 1-.5 0-1 .3-1 1v.5c0 .7-.3 1-1 1" />
+        }
+        @case ('wand') {
+          <path d="M5 19 L13 11" />
+          <path d="M16 5 L16 11" />
+          <path d="M13 8 L19 8" />
+          <path d="M6 5 L6 7" />
+          <path d="M5 6 L7 6" />
+          <path d="M19 14 L19 16" />
+          <path d="M18 15 L20 15" />
         }
       }
     </svg>

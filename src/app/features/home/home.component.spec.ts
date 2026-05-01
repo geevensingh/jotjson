@@ -3418,3 +3418,105 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     expect(snack.open).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('HomeComponent M7p title-suggester wiring', () => {
+  setupMinimalMonacoStub();
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])]
+    });
+  });
+
+  afterEach(async () => {
+    await waitForDoubleAnimationFrame();
+  });
+
+  it('lastFilename and suggestedTitlesForMenu start empty', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    expect(fixture.componentInstance.lastFilename()).toBeNull();
+    expect(fixture.componentInstance.suggestedTitlesForMenu()).toEqual([]);
+  });
+
+  it('wandEnabled is false when title is set', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{"a":1}');
+    fixture.componentInstance.title.set('My Title');
+    expect(fixture.componentInstance.wandEnabled()).toBe(false);
+  });
+
+  it('wandEnabled is false when content is empty', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('   ');
+    fixture.componentInstance.title.set('');
+    expect(fixture.componentInstance.wandEnabled()).toBe(false);
+  });
+
+  it('wandEnabled is true when title is empty AND content is non-empty', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{"a":1}');
+    fixture.componentInstance.title.set('');
+    expect(fixture.componentInstance.wandEnabled()).toBe(true);
+  });
+
+  it('onSuggestRequested populates suggestedTitlesForMenu using current content', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{"name":"alice"}');
+    fixture.componentInstance.lastFilename.set('users-export.json');
+    fixture.componentInstance.onSuggestRequested();
+    const candidates = fixture.componentInstance.suggestedTitlesForMenu();
+    expect(candidates.length).toBeGreaterThanOrEqual(2);
+    // Filename and namedField produce different values ("users-export"
+    // vs "alice"), so neither dedupes the other away.
+    expect(candidates.some((c) => c.source === 'filename')).toBe(true);
+    expect(candidates.some((c) => c.source === 'namedField')).toBe(true);
+  });
+
+  it('onClear clears lastFilename and suggestedTitlesForMenu', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.lastFilename.set('something.json');
+    fixture.componentInstance.suggestedTitlesForMenu.set([
+      { value: 'A', source: 'filename', confidence: 95 }
+    ]);
+    fixture.componentInstance.onClear();
+    expect(fixture.componentInstance.lastFilename()).toBeNull();
+    expect(fixture.componentInstance.suggestedTitlesForMenu()).toEqual([]);
+  });
+
+  it('onPaste clears any existing lastFilename', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.lastFilename.set('prior.json');
+    spyOn(
+      TestBed.inject(ClipboardPollingService),
+      'readForPaste'
+    ).and.resolveTo('{"pasted":true}');
+    await fixture.componentInstance.onPaste();
+    expect(fixture.componentInstance.lastFilename()).toBeNull();
+    expect(fixture.componentInstance.suggestedTitlesForMenu()).toEqual([]);
+  });
+
+  it('onSuggestRequested with empty content returns []', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('');
+    fixture.componentInstance.onSuggestRequested();
+    expect(fixture.componentInstance.suggestedTitlesForMenu()).toEqual([]);
+  });
+
+  it('onUpload of a JSON file sets lastFilename to the file name', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const file = new File(['{"x":1}'], 'config.json', { type: 'application/json' });
+    await fixture.componentInstance.onUpload(file);
+    expect(fixture.componentInstance.lastFilename()).toBe('config.json');
+  });
+
+  it('onFormat preserves lastFilename', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const file = new File(['{"x":1}'], 'config.json', { type: 'application/json' });
+    await fixture.componentInstance.onUpload(file);
+    expect(fixture.componentInstance.lastFilename()).toBe('config.json');
+    fixture.componentInstance.onFormat();
+    expect(fixture.componentInstance.lastFilename()).toBe('config.json');
+  });
+});

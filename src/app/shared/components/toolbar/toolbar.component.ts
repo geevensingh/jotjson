@@ -17,6 +17,7 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { SignedInDirective } from '../../directives/signed-in.directive';
 import { IconComponent, JjIconName } from '../icon/icon.component';
+import type { SuggestionCandidate } from '../../../core/title-suggester/types';
 
 type ToolbarAction =
   | 'paste'
@@ -94,6 +95,24 @@ export class ToolbarComponent {
   readonly isPublic = input<boolean>(false);
 
   /**
+   * Title-suggester candidates (M7p). Lazily populated by the parent
+   * AFTER the user clicks the wand button -- the wand handler emits
+   * `suggestRequested` synchronously, the parent computes candidates
+   * and writes them back through this input, then mat-menu opens.
+   *
+   * Empty when the wand has never been clicked or content is empty.
+   */
+  readonly suggestedTitles = input<readonly SuggestionCandidate[]>([]);
+
+  /**
+   * Whether the wand button itself should be enabled (M7p). True when
+   * the title field is empty AND there is non-empty editor content.
+   * Computed by the parent so this component does not need direct
+   * access to the full editor text.
+   */
+  readonly wandEnabled = input<boolean>(false);
+
+  /**
    * 4-state pane layout (issue #39 follow-up). Driven by the parent
    * via `[paneLayout]`; segment changes raise `paneLayoutChange`,
    * which the parent translates back into the two underlying
@@ -133,6 +152,15 @@ export class ToolbarComponent {
   readonly copyShareLink = output<void>();
   readonly togglePublic = output<void>();
   readonly deleteBlob = output<void>();
+
+  /**
+   * Title-suggester wand click (M7p). Fires synchronously when the
+   * user clicks the wand button. The parent handler MUST populate
+   * `[suggestedTitles]` synchronously in response so the mat-menu
+   * (which opens on the same click via `[matMenuTriggerFor]`) sees
+   * the freshly-computed list.
+   */
+  readonly suggestRequested = output<void>();
 
   private readonly fileInput =
     viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
@@ -203,6 +231,9 @@ export class ToolbarComponent {
     () => this.isSavedBlob() && !this.isSignedIn()
   );
   readonly untitledLabel = $localize`:@@toolbar.title.untitled:Untitled`;
+
+  readonly wandAriaLabel = $localize`:@@toolbar.titleSuggestion.action.aria:Suggest a title`;
+  readonly wandTooltip = $localize`:@@toolbar.titleSuggestion.action.tooltip:Suggest a title`;
 
   readonly saveDisabled = computed(() => !this.canSave() || this.saveInFlight());
 
@@ -325,6 +356,33 @@ export class ToolbarComponent {
   onDeleteBlobClick(): void {
     this.emitToolbarAction('deleteBlob');
     this.deleteBlob.emit();
+  }
+
+  /**
+   * Wand-button click (M7p). Asks the parent to compute candidates
+   * synchronously -- the parent writes the result back via
+   * `[suggestedTitles]` BEFORE the mat-menu's `[matMenuTriggerFor]`
+   * paints its items. We don't emit telemetry on open: only acceptance
+   * counts as a real signal of usefulness (per AGENTS.md S6).
+   */
+  onWandClick(): void {
+    this.suggestRequested.emit();
+  }
+
+  /**
+   * Menu-item click (M7p). Sets the title field to the candidate's
+   * value and records `toolbar.titleSuggestionAccepted` with the
+   * source strategy and the menu's total candidate count. The
+   * candidate's literal text is NEVER logged -- privacy per
+   * AGENTS.md S6.
+   */
+  onSuggestionSelected(candidate: SuggestionCandidate): void {
+    this.titleChange.emit(candidate.value);
+    this.loggerService.event(
+      'toolbar.titleSuggestionAccepted',
+      { source: candidate.source },
+      { candidateCount: this.suggestedTitles().length }
+    );
   }
 
   onPaneLayoutChange(next: PaneLayout): void {

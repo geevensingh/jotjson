@@ -15,6 +15,8 @@
       [clipboardPreview]="clipboardPreview()"
       [paneLayout]="paneLayout()"
       [loadedBlobTitle]="loadedBlob()?.title ?? null"
+      [suggestedTitles]="suggestedTitlesForMenu()"
+      [wandEnabled]="wandEnabled()"
       (pasteRequested)="onPaste()"
       (copyRequested)="onCopy()"
       (copyEscaped)="onCopyEscaped()"
@@ -32,6 +34,7 @@
       (copyShareLink)="onCopyShareLink()"
       (togglePublic)="onTogglePublic()"
       (deleteBlob)="onDeleteBlob()"
+      (suggestRequested)="onSuggestRequested()"
     ></jj-toolbar>
   </jj-app-header>
 
