@@ -18,7 +18,23 @@ name: Infra (Bicep)
 #    -> build only. validate (what-if) is skipped on PRs;
 #       expanding it to PRs is a separate decision (requires
 #       Azure secrets / OIDC policy for PR runs).
+#
+# Run titles are prefixed with a tag so the Actions list page
+# distinguishes intent at a glance:
+#   [deploy]         push to main (auto-deploy)
+#   [deploy/manual]  workflow_dispatch (manual override)
+#   [build-only]     pull_request (build job only; no validate/deploy)
+#   [<event_name>]   defensive default for any other trigger
 # ----------------------------------------------------------------------
+
+run-name: >-
+  ${{ (github.event_name == 'pull_request'
+        && format('[build-only] {0}', github.event.pull_request.title))
+      || (github.event_name == 'workflow_dispatch'
+        && format('[deploy/manual] {0}', github.sha))
+      || (github.event_name == 'push'
+        && format('[deploy] {0}', github.event.head_commit.message || github.sha))
+      || format('[{0}] {1}', github.event_name, github.sha) }}
 
 on:
   push:
@@ -131,4 +147,24 @@ jobs:
               entraSpaClientId="${ENTRA_SPA_CLIENT_ID}" \
               entraApiClientId="${ENTRA_API_CLIENT_ID}" \
               entraApiAudience="${ENTRA_API_AUDIENCE}"
+      - name: Summary
+        if: ${{ always() && !cancelled() }}
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            {
+              echo "## Deployed"
+              echo ""
+              echo "- Resource group: rg-jotjson-dev"
+              echo "- Commit: ${{ github.sha }}"
+              echo "- Trigger: ${{ github.event_name }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Deploy failed"
+              echo ""
+              echo "- Resource group: rg-jotjson-dev"
+              echo "- Commit: ${{ github.sha }}"
+              echo "- Trigger: ${{ github.event_name }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
