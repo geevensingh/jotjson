@@ -89,8 +89,7 @@ describe('AppComponent', () => {
       {
         version: jasmine.any(String),
         sha: jasmine.any(String),
-        branch: jasmine.any(String),
-        dirty: jasmine.any(Boolean)
+        branch: jasmine.any(String)
       },
       undefined
     );

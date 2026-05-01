@@ -60,7 +60,59 @@
   color: rgb(60, 100, 200);
 }
 
+.stat-build {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .stat-build .sha {
   opacity: 0.6;
   font-size: 11px;
+}
+
+.build-link {
+  color: inherit;
+  text-decoration: none;
+  opacity: 0.6;
+  font-size: 11px;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+}
+
+.build-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: opacity 120ms ease, background 120ms ease;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+    background: rgba(127, 127, 127, 0.15);
+  }
+
+  &:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 1px;
+  }
 }

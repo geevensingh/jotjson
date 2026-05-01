@@ -43,8 +43,7 @@ export class AppComponent implements OnInit {
       loggerService.event('app.boot', {
         version: buildInfoModule.BUILD_INFO.version,
         sha: buildInfoModule.BUILD_INFO.sha,
-        branch: buildInfoModule.BUILD_INFO.branch,
-        dirty: buildInfoModule.BUILD_INFO.dirty
+        branch: buildInfoModule.BUILD_INFO.branch
       }, undefined);
       await loggerService.connect();
       routeTracker.flushPending();

@@ -72,13 +72,28 @@
     <span class="stat stat-mode" [class.mode-jsonc]="mode() === 'jsonc'">
       <span class="value mode">{{ modeLabel() }}</span>
     </span>
-    <span
-      class="stat stat-build"
-      [title]="buildTitle"
-      aria-label="Build commit"
-      i18n-aria-label="@@status.build.aria"
-    >
-      <span class="value sha">{{ buildSha }}</span>
+    <span class="stat stat-build" aria-live="off">
+      @if (hasCommitLink) {
+        <a
+          class="build-link value"
+          [href]="commitUrl"
+          target="_blank"
+          rel="noopener"
+          [title]="buildTitle"
+          [attr.aria-label]="commitAriaLabel"
+        >v{{ buildVersion }} - {{ shortSha }}</a>
+        <button
+          type="button"
+          class="build-copy"
+          (click)="copySha()"
+          aria-label="Copy commit SHA"
+          i18n-aria-label="@@status.build.copy.aria"
+        >
+          <jj-icon name="copy" [size]="14"></jj-icon>
+        </button>
+      } @else {
+        <span class="value sha" [title]="buildTitle">v{{ buildVersion }} - {{ shortSha }}</span>
+      }
     </span>
   </div>
 </div>

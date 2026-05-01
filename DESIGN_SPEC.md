@@ -1198,6 +1198,29 @@ EU users would need a regional resource - out of scope for v1.
 
 ---
 
+## Versioning
+
+JotJSON uses [semver](https://semver.org/) for `package.json` `version`. The
+build script surfaces the version + git SHA in the status bar (M7n).
+
+- **Initial**: `0.5.0` (set when M7n landed, acknowledging substantial pre-V1
+  development).
+- **Pre-V1**: stays at `0.5.0`. Do not bump per-milestone; the SHA on the
+  status-bar badge is the per-build identifier and conveys "still in pre-V1
+  development."
+- **V1 launch**: one-time bump to `1.0.0` via `npm version major` when the
+  remaining M7 polish items ship.
+- **Post-V1**:
+  - **Major** (`1.x.y` -> `2.0.0`): breaking user-visible changes - share-link
+    slug format change, incompatible blob schema, removing a feature.
+  - **Minor** (`1.0.0` -> `1.1.0`): backwards-compatible new features.
+  - **Patch** (`1.0.0` -> `1.0.1`): bug fixes only, no new features.
+- **Release ritual**: developer runs `npm version <type>` on `main`. This
+  commits the bump and creates an annotated tag in one step. CD deploys on
+  push-to-main, not on tag, so the tag does not double-deploy.
+
+---
+
 ## Milestones
 
 1. ~~**Project scaffolding** - Angular app, Azure Functions project, Cosmos DB setup, CI/CD pipeline.~~ (done)

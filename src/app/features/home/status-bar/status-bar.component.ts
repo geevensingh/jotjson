@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { BUILD_INFO_TOKEN } from '../../../core/build/build-info.token';
+import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { JsonParseResult } from '../../../core/json/json-parser.service';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { EditorMode } from '../../../shared/components/toolbar/toolbar.component';
-import { BUILD_INFO } from '../../../../generated/build-info';
 import { computeTextStats, computeTreeStats, formatBytes } from './stats';
 
 /**
@@ -12,6 +14,7 @@ import { computeTextStats, computeTreeStats, formatBytes } from './stats';
 @Component({
   selector: 'jj-status-bar',
   standalone: true,
+  imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './status-bar.component.html',
   styleUrl: './status-bar.component.scss'
@@ -44,13 +47,30 @@ export class StatusBarComponent {
 
   readonly placeholder = '-';
 
-  // Short-term build info (pre-M7n): displays the local-git commit SHA so
-  // users can report exactly what they were running. M7n will replace this
-  // with a CI-authoritative version + SHA pair.
-  readonly buildSha = BUILD_INFO.sha + (BUILD_INFO.dirty ? '*' : '');
+  private readonly buildInfo = inject(BUILD_INFO_TOKEN);
+  private readonly clipboardCopy = inject(ClipboardCopyService);
+
+  readonly buildVersion = this.buildInfo.version;
+  readonly buildSha = this.buildInfo.sha;
+  readonly isDevBuild = this.buildSha === 'dev';
+  readonly shortSha = this.isDevBuild ? 'dev' : this.buildSha.slice(0, 7);
+  readonly hasCommitLink = !this.isDevBuild && this.buildInfo.repoUrl !== '';
+  readonly commitUrl = this.hasCommitLink
+    ? `${this.buildInfo.repoUrl}/commit/${this.buildSha}`
+    : '';
   readonly buildTitle =
-    `JotJSON v${BUILD_INFO.version}` +
-    (BUILD_INFO.branch ? ` (${BUILD_INFO.branch})` : '') +
-    `\nbuilt ${BUILD_INFO.builtAt}` +
-    (BUILD_INFO.dirty ? ' (working tree dirty)' : '');
+    `JotJSON v${this.buildInfo.version}` +
+    (this.buildInfo.branch ? ` (${this.buildInfo.branch})` : '') +
+    `\nbuilt ${this.buildInfo.builtAt}`;
+  readonly commitAriaLabel = $localize`:@@status.build.link.aria:Open commit ${
+    this.shortSha
+  }:shortSha: on GitHub`;
+
+  copySha(): void {
+    void this.clipboardCopy.copyWithToast(this.buildSha, {
+      success: $localize`:@@status.build.copy.success:Copied commit SHA`,
+      failed: $localize`:@@status.build.copy.failed:Failed to copy commit SHA`,
+      unsupported: $localize`:@@status.build.copy.unsupported:Clipboard unavailable`
+    });
+  }
 }
