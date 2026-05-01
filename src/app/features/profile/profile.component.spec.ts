@@ -677,17 +677,28 @@ describe('ProfileComponent', () => {
       isConfigured: true
     };
 
-    it('places every settings slide-toggle with its label before the thumb', async () => {
+    it('externalizes every settings slide-toggle label into a sibling pref-label', async () => {
       const { fixture } = await create(signedIn);
       const root = fixture.nativeElement as HTMLElement;
       const toggles = Array.from(
-        root.querySelectorAll('.pref-row mat-slide-toggle')
+        root.querySelectorAll<HTMLElement>('.pref-row mat-slide-toggle')
       );
       for (const toggle of toggles) {
-        const hasLabelPositionBefore = toggle.getAttribute('labelPosition') === 'before';
-        const prevSibling = toggle.previousElementSibling;
-        const hasExternalLabel = prevSibling?.tagName === 'LABEL';
-        expect(hasLabelPositionBefore || hasExternalLabel).toBe(true);
+        expect(toggle.getAttribute('labelPosition')).not.toBe('before');
+        const previousSibling = toggle.previousElementSibling;
+        expect(previousSibling)
+          .withContext(`expected a sibling label preceding ${toggle.id}`)
+          .toBeTruthy();
+        expect(previousSibling?.classList.contains('pref-label'))
+          .withContext(`previous sibling of ${toggle.id} should be .pref-label`)
+          .toBe(true);
+        expect(previousSibling?.id)
+          .withContext(`pref-label preceding ${toggle.id} must have an id`)
+          .toBeTruthy();
+        const innerButton = toggle.querySelector<HTMLButtonElement>('button');
+        expect(innerButton?.getAttribute('aria-labelledby'))
+          .withContext(`button inside ${toggle.id} should reference the label id`)
+          .toBe(previousSibling?.id ?? null);
       }
       expect(toggles.length).toBeGreaterThan(0);
     });

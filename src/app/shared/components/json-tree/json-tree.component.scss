@@ -135,7 +135,7 @@
   // priority order documented in DESIGN_SPEC.md §Features 7.
   background: var(--tree-row-format-bg, transparent);
   // 4px left-edge accent strip carries the rule's optional
-  // `borderColor`, mirroring the `.pref-substack` pattern on /profile
+  // `borderColor`, mirroring the `.pref-subgroup` pattern on /profile
   // so the strip does not collide with the selection outline below.
   box-shadow: inset 4px 0 0 var(--tree-row-format-border, transparent);
 

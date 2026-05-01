@@ -121,13 +121,12 @@
         </div>
 
         <div class="pref-row">
+          <span class="pref-label" id="pref-word-wrap-label" i18n="@@profile.prefs.editor.wordWrap">Word wrap</span>
           <mat-slide-toggle
-            labelPosition="before"
+            aria-labelledby="pref-word-wrap-label"
             [checked]="editorWordWrap()"
             (change)="onEditorWordWrapChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.editor.wordWrap">Word wrap</span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
       </section>
 
@@ -175,34 +174,32 @@
             </mat-slider>
             <span class="pref-suffix" aria-hidden="true">{{ defaultTreeExpansionDepth() }}</span>
           </span>
-          <span class="pref-help" i18n="@@profile.prefs.tree.expansionDepth.help">
-            How deep the tree starts expanded when a blob loads.
-          </span>
         </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.tree.expansionDepth.help">
+          How deep the tree starts expanded when a blob loads.
+        </p>
 
         <div class="pref-row">
+          <span class="pref-label" id="pref-show-type-labels-label" i18n="@@profile.prefs.tree.showTypeLabels">Show type labels</span>
           <mat-slide-toggle
-            labelPosition="before"
+            aria-labelledby="pref-show-type-labels-label"
             [checked]="treeShowTypeLabels()"
             (change)="onTreeShowTypeLabelsChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.tree.showTypeLabels">Show type labels</span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
 
         <div class="pref-row">
+          <span class="pref-label" id="pref-show-date-annotations-label" i18n="@@profile.prefs.tree.showDateAnnotations">
+            Show date annotations
+          </span>
           <mat-slide-toggle
-            labelPosition="before"
+            aria-labelledby="pref-show-date-annotations-label"
             [checked]="treeShowDateAnnotations()"
             (change)="onTreeShowDateAnnotationsChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.tree.showDateAnnotations">
-              Show date annotations
-            </span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
 
-        <div class="pref-substack">
+        <div class="pref-subgroup">
           <div
             class="pref-date-annotation-group"
             aria-labelledby="pref-date-annotation-units-heading"
@@ -272,7 +269,7 @@
             </div>
 
             <p
-              class="pref-hint date-annotation-unit-hint"
+              class="pref-help-line date-annotation-unit-hint"
               i18n="@@profile.prefs.tree.dateAnnotation.units.hint"
             >
               Smallest enabled unit is shown as a decimal when the delta is
@@ -280,52 +277,47 @@
             </p>
 
             <div class="pref-row pref-row--indented">
+              <span class="pref-label" id="pref-friendly-forms-label" i18n="@@profile.prefs.tree.dateAnnotation.friendlyForms">
+                Use friendly phrases (yesterday, tomorrow, last month, ...)
+              </span>
               <mat-slide-toggle
                 data-date-annotation-friendly-forms
-                labelPosition="before"
+                aria-labelledby="pref-friendly-forms-label"
                 [checked]="treeDateAnnotationFriendlyForms()"
                 [disabled]="!treeShowDateAnnotations()"
                 (change)="onTreeDateAnnotationFriendlyFormsChange($event.checked)"
-              >
-                <span i18n="@@profile.prefs.tree.dateAnnotation.friendlyForms">
-                  Use friendly phrases (yesterday, tomorrow, last month, ...)
-                </span>
-              </mat-slide-toggle>
+              ></mat-slide-toggle>
             </div>
           </div>
 
           <div class="pref-row pref-row--indented">
+            <span class="pref-label" id="pref-assume-utc-date-time-label" i18n="@@profile.prefs.tree.assumeUtcDateTime">
+              Treat ISO date-time without timezone as UTC
+            </span>
             <mat-slide-toggle
-              labelPosition="before"
+              aria-labelledby="pref-assume-utc-date-time-label"
               [checked]="treeAssumeUtcForIsoDateTime()"
               [disabled]="!treeShowDateAnnotations()"
               (change)="onTreeAssumeUtcForIsoDateTimeChange($event.checked)"
-            >
-              <span i18n="@@profile.prefs.tree.assumeUtcDateTime">
-                Treat ISO date-time without timezone as UTC
-              </span>
-            </mat-slide-toggle>
+            ></mat-slide-toggle>
           </div>
 
           <div class="pref-row pref-row--indented">
+            <span class="pref-label" id="pref-assume-utc-date-only-label" i18n="@@profile.prefs.tree.assumeUtcDateOnly">
+              Treat ISO date-only as UTC midnight
+            </span>
             <mat-slide-toggle
-              labelPosition="before"
+              aria-labelledby="pref-assume-utc-date-only-label"
               [checked]="treeAssumeUtcForIsoDateOnly()"
               [disabled]="!treeShowDateAnnotations()"
               (change)="onTreeAssumeUtcForIsoDateOnlyChange($event.checked)"
-            >
-              <span i18n="@@profile.prefs.tree.assumeUtcDateOnly">
-                Treat ISO date-only as UTC midnight
-              </span>
-            </mat-slide-toggle>
+            ></mat-slide-toggle>
           </div>
 
-          <div class="pref-row pref-row--indented">
-            <span class="pref-hint" i18n="@@profile.prefs.tree.assumeUtcHint">
-              Avoids local-timezone shifts for log timestamps and other
-              timezone-less ISO 8601 values.
-            </span>
-          </div>
+          <p class="pref-help-line pref-help-line--indented" i18n="@@profile.prefs.tree.assumeUtcHint">
+            Avoids local-timezone shifts for log timestamps and other
+            timezone-less ISO 8601 values.
+          </p>
         </div>
 
         <div class="pref-row">
@@ -343,29 +335,26 @@
             <option value="root" i18n="@@profile.prefs.tree.pathRoot.root">root</option>
             <option value="data" i18n="@@profile.prefs.tree.pathRoot.data">Data</option>
           </select>
-          <span class="pref-help" i18n="@@profile.prefs.tree.pathRoot.help">
-            Prefix used when copying a tree row's path to the clipboard.
-          </span>
         </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.tree.pathRoot.help">
+          Prefix used when copying a tree row's path to the clipboard.
+        </p>
 
         <div class="pref-row">
+          <span class="pref-label" id="pref-selection-sync-label" i18n="@@profile.prefs.tree.selectionSync">
+            Sync tree and editor selections
+          </span>
           <mat-slide-toggle
-            labelPosition="before"
+            aria-labelledby="pref-selection-sync-label"
             [checked]="treeEditorSelectionSync()"
             (change)="onTreeEditorSelectionSyncChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.tree.selectionSync">
-              Sync tree and editor selections
-            </span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
-        <div class="pref-row">
-          <span class="pref-hint" i18n="@@profile.prefs.tree.selectionSync.help">
-            When on, selecting a tree row reveals the matching range in the
-            editor, and moving the editor cursor selects the matching tree
-            row.
-          </span>
-        </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.tree.selectionSync.help">
+          When on, selecting a tree row reveals the matching range in the
+          editor, and moving the editor cursor selects the matching tree
+          row.
+        </p>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-default-rule-sets">
@@ -385,7 +374,7 @@
 
         @if (ruleSetsEmpty()) {
           <p
-            class="pref-help pref-help--inline"
+            class="pref-help-line"
             i18n="@@profile.prefs.defaultRuleSets.empty"
           >
             No rule sets yet. Use "Clone preset" in the toolbar above the
@@ -393,7 +382,7 @@
           </p>
         } @else if (ruleSetOptions() === null) {
           <p
-            class="pref-help pref-help--inline"
+            class="pref-help-line"
             i18n="@@profile.prefs.defaultRuleSets.loading"
           >
             Loading rule sets...
@@ -529,23 +518,21 @@
         </div>
 
         <div class="pref-row">
+          <span class="pref-label" id="pref-search-case-sensitive-label" i18n="@@profile.prefs.search.caseSensitive">Case sensitive</span>
           <mat-slide-toggle
-            labelPosition="before"
+            aria-labelledby="pref-search-case-sensitive-label"
             [checked]="searchCaseSensitive()"
             (change)="onSearchCaseSensitiveChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.search.caseSensitive">Case sensitive</span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
 
         <div class="pref-row">
+          <span class="pref-label" id="pref-search-regex-mode-label" i18n="@@profile.prefs.search.regexMode">Regular expression mode</span>
           <mat-slide-toggle
-            labelPosition="before"
+            aria-labelledby="pref-search-regex-mode-label"
             [checked]="searchRegexMode()"
             (change)="onSearchRegexModeChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.search.regexMode">Regular expression mode</span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
       </section>
 
@@ -555,18 +542,19 @@
         </h3>
 
         <div class="pref-row">
-          <label for="pref-recently-viewed" i18n="@@profile.prefs.recentlyViewed.label">
+          <span class="pref-label" id="pref-recently-viewed-label" i18n="@@profile.prefs.recentlyViewed.label">
             Track recently viewed blobs
-          </label>
+          </span>
           <mat-slide-toggle
             id="pref-recently-viewed"
+            aria-labelledby="pref-recently-viewed-label"
             [checked]="recentlyViewedEnabled()"
             (change)="onRecentlyViewedEnabledChange($event.checked)"
           ></mat-slide-toggle>
-          <span class="pref-help" i18n="@@profile.prefs.recentlyViewed.help">
-            When on, JotJSON remembers which shared blobs you have opened so you can find them again on the Recently viewed page.
-          </span>
         </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.recentlyViewed.help">
+          When on, JotJSON remembers which shared blobs you have opened so you can find them again on the Recently viewed page.
+        </p>
 
         <div class="pref-row">
           <label for="pref-quota-strategy" i18n="@@profile.prefs.history.quotaStrategy">
