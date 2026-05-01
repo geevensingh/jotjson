@@ -19,23 +19,32 @@ name: Infra (Bicep)
 #       expanding it to PRs is a separate decision (requires
 #       Azure secrets / OIDC policy for PR runs).
 #
-# Run titles are prefixed with a tag so the Actions list page
-# distinguishes intent at a glance. Body is omitted for push and
-# workflow_dispatch because GitHub Actions expressions can't extract
-# the commit subject from a multi-line message; the row's commit SHA
-# and metadata still identify the run.
-#   [deploy]                 push to main (auto-deploy)
-#   [deploy/manual]          workflow_dispatch (manual override)
-#   [build-only] <PR title>  pull_request (build job only; no validate/deploy)
-#   [<event_name>]           defensive default for any other trigger
+# Run titles per trigger:
+#   push to main          <commit subject>            (GitHub default;
+#                                                      push always = deploy
+#                                                      via the deploy job's
+#                                                      if-gate, so the
+#                                                      absence of an explicit
+#                                                      tag implicitly means
+#                                                      a deploy)
+#   workflow_dispatch     [deploy/manual]
+#   pull_request          [build-only] <PR title>
+#   any other event       <event-specific default>    (GitHub default)
+#
+# We fall back to GitHub's default for push because GitHub Actions
+# expressions have no string-split/substring/replace and therefore can't
+# extract just the commit subject from a multi-line message; an empty
+# (whitespace) run-name causes GitHub to use its built-in default, which
+# auto-extracts the subject. PR runs use pull_request.title (already
+# single-line). workflow_dispatch has no inherent context to surface, so
+# we just emit the tag.
 # ----------------------------------------------------------------------
 
 run-name: >-
   ${{ (github.event_name == 'pull_request'
         && format('[build-only] {0}', github.event.pull_request.title))
       || (github.event_name == 'workflow_dispatch' && '[deploy/manual]')
-      || (github.event_name == 'push' && '[deploy]')
-      || format('[{0}]', github.event_name) }}
+      || '' }}
 
 on:
   push:
