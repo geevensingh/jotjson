@@ -128,7 +128,36 @@ if (-not $SkipInstall) {
   }
 }
 
-# --- 4. Launch Windows Terminal tabs ---------------------------------
+# --- 4. Verify dev ports are free ------------------------------------
+
+Write-Step "Checking dev ports are free"
+
+$devPorts = 4200, 7071, 9876
+$held = @()
+foreach ($port in $devPorts) {
+  $listeners = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+  foreach ($listener in $listeners) {
+    $proc = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+    $held += [pscustomobject]@{
+      Port = $port
+      ProcessId = $listener.OwningProcess
+      Name = if ($proc) { $proc.ProcessName } else { '<gone>' }
+    }
+  }
+}
+
+if ($held.Count -gt 0) {
+  Write-Host ""
+  Write-Host "Dev ports already in use:" -ForegroundColor Red
+  foreach ($entry in $held) {
+    Write-Host ("  port {0,-5} held by PID {1} ({2})" -f $entry.Port, $entry.ProcessId, $entry.Name) -ForegroundColor Red
+  }
+  Write-Host ""
+  Write-Host "Run scripts\dev-stop.ps1 to free them, then re-run scripts\dev.ps1." -ForegroundColor Yellow
+  exit 1
+}
+
+# --- 5. Launch Windows Terminal tabs ---------------------------------
 
 Write-Step "Launching Windows Terminal tabs"
 
@@ -194,3 +223,4 @@ if (-not $SkipTests) {
 }
 Write-Host ""
 Write-Host "Close the Windows Terminal tabs to stop each process."
+Write-Host "If ports stay stuck after closing tabs, run scripts\dev-stop.ps1." -ForegroundColor DarkGray

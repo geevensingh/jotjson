@@ -93,6 +93,11 @@ your env files exist, and opens a Windows Terminal with three tabs:
 `web` (ng serve), `api` (func start), and `tests` (ng test + jest
 --watch split pane). Use `-SkipTests` to skip the tests tab.
 
+If a previous run left zombies on dev ports 4200, 7071, or 9876, run
+`scripts/dev-stop.ps1` to free them. `scripts/dev.ps1` also pre-flight checks
+those ports on launch and tells you to run `dev-stop.ps1` first if any are
+already in use.
+
 **Manual (any OS):**
 
 ```bash
