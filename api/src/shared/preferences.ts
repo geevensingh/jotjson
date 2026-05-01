@@ -55,6 +55,13 @@ export interface UserPreferences {
   treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
+  /**
+   * When true, JSONC line/block comments harvested by the parser are
+   * surfaced in the tree view as dimmed inline annotations next to
+   * their nearest value. Default true; this is the named feature of
+   * M7k. See DESIGN_SPEC.md - Home Page Tree.
+   */
+  treeShowComments: boolean;
   treeDateAnnotationUnits: TreeDateAnnotationUnits;
   treeDateAnnotationFriendlyForms: boolean;
   treeAssumeUtcForIsoDateTime: boolean;
@@ -162,6 +169,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeFontSize: 13,
   treeShowTypeLabels: true,
   treeShowDateAnnotations: true,
+  treeShowComments: true,
   treeDateAnnotationUnits: defaultTreeDateAnnotationUnits(),
   treeDateAnnotationFriendlyForms: true,
   treeAssumeUtcForIsoDateTime: true,
@@ -262,6 +270,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'treeFontSize',
   'treeShowTypeLabels',
   'treeShowDateAnnotations',
+  'treeShowComments',
   'treeDateAnnotationUnits',
   'treeDateAnnotationFriendlyForms',
   'treeAssumeUtcForIsoDateTime',
@@ -324,6 +333,12 @@ export function normalizeStoredPreferences(
   }
   if (typeof view.treeDateAnnotationFriendlyForms !== 'boolean') {
     view.treeDateAnnotationFriendlyForms = true;
+  }
+  if (typeof view.treeShowComments !== 'boolean') {
+    // `treeShowComments` was added in M7k. Stored docs from before its
+    // introduction default to true (the named feature ships visible) -
+    // matches DEFAULT_PREFERENCES.
+    view.treeShowComments = true;
   }
   view.treeDateAnnotationUnits = normalizeStoredAnnotationUnits(
     view.treeDateAnnotationUnits
@@ -498,6 +513,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     treeFontSize: assertInt(raw['treeFontSize'], 'treeFontSize', 8, 32),
     treeShowTypeLabels: assertBool(raw['treeShowTypeLabels'], 'treeShowTypeLabels'),
     treeShowDateAnnotations: assertBool(raw['treeShowDateAnnotations'], 'treeShowDateAnnotations'),
+    treeShowComments: assertBool(raw['treeShowComments'], 'treeShowComments'),
     treeDateAnnotationUnits: normalizeAnnotationUnits(
       raw['treeDateAnnotationUnits'],
       'treeDateAnnotationUnits'

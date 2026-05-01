@@ -15,6 +15,10 @@
  * onto `keyStyle` only, while `backgroundColor` and `borderColor`
  * always project onto `rowStyle` regardless of target (the row paints
  * the background; the inline tokens paint the foreground).
+ *
+ * Non-participation: JSONC comments (M7k) are not a match target. Rules
+ * see only keys and values; the comment-bundle map is rendered by the
+ * tree as decoration and never reaches this engine.
  */
 
 import type {

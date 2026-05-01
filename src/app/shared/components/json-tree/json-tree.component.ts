@@ -342,11 +342,12 @@ export class JsonTreeComponent {
     () => this.prefs.prefs().treeShowDateAnnotations
   );
   /**
-   * Master toggle for rendering JSONC comment slots in the tree.
-   * Currently always-on; M7k-3 wires this to the `treeShowComments`
-   * user preference and adds a Profile toggle to disable.
+   * Master toggle for rendering JSONC comment slots in the tree. Bound
+   * to the `treeShowComments` user preference; default true. The
+   * `commentsByPath` map is computed regardless - hiding comments is a
+   * cheap render-side toggle that doesn't re-trigger the parser.
    */
-  readonly showComments = computed(() => true);
+  readonly showComments = computed(() => this.prefs.prefs().treeShowComments);
   readonly treeFontSize = computed(() => this.prefs.prefs().treeFontSize);
   readonly treeFontSizePx = computed(() => `${this.treeFontSize()}px`);
 

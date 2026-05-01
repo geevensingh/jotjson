@@ -106,6 +106,7 @@ export class ProfileComponent implements OnInit {
   readonly treeShowDateAnnotations = computed(
     () => this.prefs().treeShowDateAnnotations
   );
+  readonly treeShowComments = computed(() => this.prefs().treeShowComments);
   readonly treeDateAnnotationUnits = computed(
     () => this.prefs().treeDateAnnotationUnits
   );
@@ -230,6 +231,10 @@ export class ProfileComponent implements OnInit {
 
   onTreeShowDateAnnotationsChange(value: boolean): void {
     this.prefsService.update({ treeShowDateAnnotations: value });
+  }
+
+  onTreeShowCommentsChange(value: boolean): void {
+    this.prefsService.update({ treeShowComments: value });
   }
 
   onTreeDateAnnotationUnitChange(unit: TreeDateAnnotationUnit, value: boolean): void {

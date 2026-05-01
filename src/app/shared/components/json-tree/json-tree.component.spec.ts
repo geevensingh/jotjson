@@ -1228,6 +1228,25 @@ describe('JsonTreeComponent', () => {
       const trailing = commentTexts('.tree-comment-trailing');
       expect(trailing).toEqual(['shown']);
     });
+
+    it('hides every comment slot when treeShowComments is false', async () => {
+      await createWithComments(
+        { user: { name: 'Alice' }, version: 3 },
+        makeMap([
+          ['$.user', makeBundle('Customer record', 'end of user')],
+          ['$.version', makeBundle(undefined, 'see issue #128')]
+        ])
+      );
+      // Sanity check: comments visible by default.
+      expect(commentTexts('.tree-comment-leading').length).toBeGreaterThan(0);
+      expect(commentTexts('.tree-comment-trailing').length).toBeGreaterThan(0);
+
+      prefs.update({ treeShowComments: false });
+      fixture.detectChanges();
+
+      expect(commentTexts('.tree-comment-leading')).toEqual([]);
+      expect(commentTexts('.tree-comment-trailing')).toEqual([]);
+    });
   });
 
   describe('decoration vs data fonts (tree font philosophy)', () => {

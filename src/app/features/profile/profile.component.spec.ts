@@ -329,6 +329,19 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().treeShowDateAnnotations).toBe(true);
   });
 
+  it('writes treeShowComments through PreferencesService when toggled', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true
+    });
+    fixture.componentInstance.onTreeShowCommentsChange(false);
+    expect(prefs.prefs().treeShowComments).toBe(false);
+    expect(fixture.componentInstance.treeShowComments()).toBe(false);
+    fixture.componentInstance.onTreeShowCommentsChange(true);
+    expect(prefs.prefs().treeShowComments).toBe(true);
+    expect(fixture.componentInstance.treeShowComments()).toBe(true);
+  });
+
   for (const unitCase of DATE_ANNOTATION_UNIT_CASES) {
     it(`writes ${unitCase.key} relative-time unit as a partial patch when clicked`, async () => {
       const { fixture, prefs } = await create({

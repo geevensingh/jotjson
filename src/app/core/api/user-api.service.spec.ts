@@ -19,6 +19,7 @@ function fakePreferences(): UserPreferences {
     treeFontSize: 14,
     treeShowTypeLabels: true,
     treeShowDateAnnotations: true,
+    treeShowComments: true,
     treeAssumeUtcForIsoDateTime: false,
     treeAssumeUtcForIsoDateOnly: false,
     treeDateAnnotationUnits: {

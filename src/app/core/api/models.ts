@@ -75,6 +75,13 @@ export interface UserPreferences {
   treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
+  /**
+   * When true, JSONC line/block comments harvested by the parser are
+   * surfaced in the tree view as dimmed inline annotations next to the
+   * value (or before the key for leading comments). Default true; this
+   * is the named feature of M7k. See DESIGN_SPEC.md - Home Page Tree.
+   */
+  treeShowComments: boolean;
   treeDateAnnotationUnits: {
     year: boolean;
     month: boolean;

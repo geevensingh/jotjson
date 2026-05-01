@@ -39,6 +39,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeFontSize: 13,
   treeShowTypeLabels: true,
   treeShowDateAnnotations: true,
+  treeShowComments: true,
   treeDateAnnotationUnits: {
     year: true,
     month: true,
@@ -173,6 +174,7 @@ const PREFERENCE_KEYS = [
   'treeFontSize',
   'treeShowTypeLabels',
   'treeShowDateAnnotations',
+  'treeShowComments',
   'treeDateAnnotationUnits',
   'treeDateAnnotationFriendlyForms',
   'treeAssumeUtcForIsoDateTime',
@@ -478,6 +480,9 @@ export class PreferencesService {
         return;
       case 'treeShowDateAnnotations':
         this.emitBooleanPreferenceChange(key, preferences.treeShowDateAnnotations, source);
+        return;
+      case 'treeShowComments':
+        this.emitBooleanPreferenceChange(key, preferences.treeShowComments, source);
         return;
       case 'treeDateAnnotationUnits':
         this.emitCountPreferenceChange(

@@ -339,6 +339,23 @@
         </div>
 
         <div class="pref-row">
+          <span class="pref-label" id="pref-show-comments-label" i18n="@@profile.prefs.tree.showComments">
+            Show JSONC comments
+          </span>
+          <mat-slide-toggle
+            aria-labelledby="pref-show-comments-label"
+            [checked]="treeShowComments()"
+            (change)="onTreeShowCommentsChange($event.checked)"
+          ></mat-slide-toggle>
+        </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.tree.showComments.help">
+          Surfaces line and block comments from JSONC documents next to
+          their nearest value in the tree view. Comments are still
+          tolerated by the parser when this is off; they're just not
+          rendered.
+        </p>
+
+        <div class="pref-row">
           <span class="pref-label" id="pref-tree-path-root-label" i18n="@@profile.prefs.tree.pathRoot">
             Copied path root
           </span>

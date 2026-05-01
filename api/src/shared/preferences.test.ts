@@ -485,6 +485,33 @@ describe('normalizeStoredPreferences', () => {
     expect(result.treeDateAnnotationFriendlyForms).toBe(true);
   });
 
+  it('defaults missing treeShowComments to true', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    delete stored['treeShowComments'];
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.treeShowComments).toBe(true);
+  });
+
+  it('defaults non-boolean treeShowComments (null) to true', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
+      string,
+      unknown
+    >;
+    stored['treeShowComments'] = null;
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.treeShowComments).toBe(true);
+  });
+
+  it('preserves an explicit treeShowComments=false', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES);
+    stored.treeShowComments = false;
+    const result = normalizeStoredPreferences(stored);
+    expect(result.treeShowComments).toBe(false);
+  });
+
   it('defaults malformed date annotation preferences', () => {
     const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
       string,
