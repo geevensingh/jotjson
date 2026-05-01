@@ -713,6 +713,18 @@ describe('ProfileComponent', () => {
       expect(wrap).toBeTruthy();
       expect(wrap?.querySelector('.pref-suffix')).toBeTruthy();
     });
+
+    it('does not pin the date-annotation unit toggles to label-before', async () => {
+      const { fixture } = await create(signedIn);
+      const root = fixture.nativeElement as HTMLElement;
+      const unitToggles = Array.from(
+        root.querySelectorAll('.date-annotation-unit-grid mat-slide-toggle')
+      );
+      expect(unitToggles.length).toBe(6);
+      for (const toggle of unitToggles) {
+        expect(toggle.getAttribute('labelPosition')).not.toBe('before');
+      }
+    });
   });
 });
 
