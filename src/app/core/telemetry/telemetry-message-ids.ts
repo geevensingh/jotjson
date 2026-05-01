@@ -388,6 +388,68 @@ export const TELEMETRY_MESSAGE_IDS = [
   'upload.handle',
 
   /**
+   * Kind: event
+   * Fired by: `HomeComponent.replaceExtractedCandidate`
+   *           (`features/home/home.component.ts`) when a non-null
+   *           extracted-JSON candidate is installed and the M7p
+   *           extract banner therefore becomes visible.
+   * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
+   *   | 'upload.drag' }. `'paste'` = toolbar Paste button (clipboard
+   *   read); `'editor.paste'` = native Monaco paste inside the
+   *   editor; `'upload.pick'` = toolbar Upload button; `'upload.drag'`
+   *   = files dropped onto the document.
+   * Measurements: { blockCount: number; preservesComments: 0 | 1 }.
+   *   `blockCount` is the number of JSON blocks the extractor
+   *   recovered from the mixed text. `preservesComments` is 1 when
+   *   the extractor's output retains all source comments and 0
+   *   otherwise (numeric so AI can `avg()` / `sum()` it).
+   */
+  'home.extract.banner.shown',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.onExtractAccept`
+   *           (`features/home/home.component.ts`) when the user
+   *           clicks the banner's Extract button. Emitted before
+   *           the candidate is cleared and `setContent` is called,
+   *           so the banner-replace path inside `setContent` does
+   *           NOT additionally fire `home.extract.banner.dismiss`
+   *           with `reason='content.changed'` for this candidate.
+   * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
+   *   | 'upload.drag' } - mirrors `home.extract.banner.shown`.
+   * Measurements: { blockCount: number; preservesComments: 0 | 1 }
+   *   - mirrors `home.extract.banner.shown` so accept-rate by
+   *   block-count and comments-preservation can be computed by a
+   *   join.
+   */
+  'home.extract.banner.accept',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` whenever a previously-visible M7p
+   *           extract banner becomes invisible.
+   *           - `onExtractDismiss` (the user clicked the banner's
+   *             Dismiss button, or pressed Esc): `reason='user.click'`.
+   *           - `setContent` and `replaceExtractedCandidate`: the
+   *             content version bumped (typing, format, hydrate,
+   *             clear) or a fresh paste/upload installed a new
+   *             candidate that replaces the old one:
+   *             `reason='content.changed'`.
+   *           Accept does NOT emit this event - see
+   *           `home.extract.banner.accept`.
+   * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
+   *   | 'upload.drag'; reason: 'user.click' | 'content.changed' }.
+   *   `source` is whatever path produced the candidate that is now
+   *   being dismissed (carried on the `extractedCandidate` signal).
+   * Measurements: { blockCount: number }. Accept-vs-dismiss skew
+   *   by block-count; `preservesComments` is intentionally not
+   *   replicated here since it is queryable via the matching
+   *   `home.extract.banner.shown` event for the same source/session
+   *   (one-to-one prior to dismiss).
+   */
+  'home.extract.banner.dismiss',
+
+  /**
    * Severity: warn
    * Fired by: `HomeComponent.onToggleVisibility`
    *           (`features/home/home.component.ts`)

@@ -84,6 +84,14 @@ import { validateAndReadSingleFile } from '../../core/upload/upload-file-validat
 type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
 type UploadSource = 'drag' | 'pick';
 
+/**
+ * Origin path that surfaced the current M7p extract candidate. Used as a
+ * dimension on `home.extract.banner.{shown,accept,dismiss}` telemetry and
+ * to gate the auto-focus-on-show behaviour (only `'paste'` auto-focuses
+ * so Ctrl+V or drag-drop don't steal focus from a typing user).
+ */
+type ExtractSource = 'paste' | 'editor.paste' | 'upload.pick' | 'upload.drag';
+
 type SignInRestoreSnapshot = {
   slug: string | null;
   content: string;
@@ -168,14 +176,17 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /**
    * M7p extract-from-mixed-text. Holds the most recent extractor result
-   * paired with the contentVersion at the time it was produced. The banner
-   * predicate (`extractBannerVisible`) compares that token to the current
-   * version so any subsequent content mutation auto-hides the banner without
-   * needing an effect.
+   * paired with the contentVersion at the time it was produced and the
+   * source path that surfaced it (used as a telemetry dimension on
+   * `home.extract.banner.{shown,accept,dismiss}`). The banner predicate
+   * (`extractBannerVisible`) compares `sourceVersion` to the current
+   * version so any subsequent content mutation auto-hides the banner
+   * without needing an effect.
    */
   readonly extractedCandidate = signal<{
     data: ExtractedJson;
     sourceVersion: number;
+    source: ExtractSource;
   } | null>(null);
   private readonly contentVersion = signal(0);
   readonly extractBannerVisible = computed(() => {
@@ -204,6 +215,28 @@ export class HomeComponent implements OnInit, OnDestroy {
    * upload, clear, ...).
    */
   private setContent(text: string): void {
+    // M7p banner-visible -> banner-gone via content change. Emit
+    // `home.extract.banner.dismiss` with `reason='content.changed'`
+    // BEFORE bumping contentVersion (so the predicate still recognises
+    // the candidate as visible). The candidate is then cleared so the
+    // accept-then-setContent path in `onExtractAccept` does not double
+    // count - that handler clears the candidate itself before calling
+    // here.
+    const previousCandidate = this.extractedCandidate();
+    if (
+      previousCandidate !== null &&
+      previousCandidate.sourceVersion === this.contentVersion()
+    ) {
+      this.logger.event(
+        'home.extract.banner.dismiss',
+        {
+          source: previousCandidate.source,
+          reason: 'content.changed'
+        },
+        { blockCount: previousCandidate.data.blockCount }
+      );
+      this.extractedCandidate.set(null);
+    }
     this.content.set(text);
     this.contentVersion.update((v) => v + 1);
     // Tree<->editor selection sync (issue #42): clear any in-flight
@@ -224,6 +257,59 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (result.empty || result.errors.length === 0) {
         this.uploadError.set(null);
       }
+    }
+  }
+
+  /**
+   * Single funnel for installing or clearing the M7p extract candidate.
+   * Emits `home.extract.banner.dismiss(content.changed)` for any
+   * previously-visible candidate it replaces, then writes the new value
+   * and emits `home.extract.banner.shown` for non-null installs. Also
+   * conditionally moves keyboard focus to the banner's Extract button
+   * when `source === 'paste'`.
+   */
+  private replaceExtractedCandidate(
+    data: ExtractedJson | null,
+    source: ExtractSource | null
+  ): void {
+    const previousCandidate = this.extractedCandidate();
+    const wasVisible =
+      previousCandidate !== null &&
+      previousCandidate.sourceVersion === this.contentVersion();
+    if (wasVisible) {
+      this.logger.event(
+        'home.extract.banner.dismiss',
+        {
+          source: previousCandidate.source,
+          reason: 'content.changed'
+        },
+        { blockCount: previousCandidate.data.blockCount }
+      );
+    }
+    if (data === null || source === null) {
+      this.extractedCandidate.set(null);
+      return;
+    }
+    this.extractedCandidate.set({
+      data,
+      sourceVersion: this.contentVersion(),
+      source
+    });
+    this.logger.event(
+      'home.extract.banner.shown',
+      { source },
+      {
+        blockCount: data.blockCount,
+        preservesComments: data.preservesComments ? 1 : 0
+      }
+    );
+    // Conditional auto-focus: only when the user clicked the toolbar
+    // Paste button. Other surfaces (Ctrl+V, file upload, drag-drop)
+    // intentionally do not steal focus from a typist mid-edit. Defer
+    // by a microtask so the banner has a chance to render before
+    // `focusExtractButton()` runs.
+    if (source === 'paste') {
+      queueMicrotask(() => this.bannerRef()?.focusExtractButton());
     }
   }
 
@@ -368,6 +454,14 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private readonly tree = viewChild(JsonTreeComponent);
   private readonly editor = viewChild(JsonEditorComponent);
+  /**
+   * View reference to the M7p extract banner. Used by
+   * `replaceExtractedCandidate` to call `focusExtractButton()` after a
+   * paste-driven banner show. Other surfaces (Ctrl+V via the editor, file
+   * upload, drag-drop) intentionally do NOT auto-focus to avoid stealing
+   * keyboard focus from a typing user.
+   */
+  private readonly bannerRef = viewChild(ExtractJsonBannerComponent);
 
   /**
    * Loop-suppression sentinels for tree<->editor selection sync (issue
@@ -672,7 +766,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.onFormat();
     }
 
-    this.runExtractorOnCurrentContent();
+    this.runExtractorOnCurrentContent('paste');
     const syncHandlerMs = this.durationSince(handlerStartedAt);
     this.afterFirstPaint(handlerStartedAt, (firstPaintMs) => {
       const measurements: TelemetryMeasurements = {
@@ -696,25 +790,25 @@ export class HomeComponent implements OnInit, OnDestroy {
    * JSON block buried inside log lines or prose. Used by both the toolbar
    * Paste path and the file-load path (drag/drop or Upload), since a
    * `.log`/`.txt` file can carry the same mixed-text shape as a paste.
+   * The `source` argument is recorded on the candidate signal so the
+   * `home.extract.banner.{shown,accept,dismiss}` events can attribute
+   * outcomes to the originating surface.
    */
-  private runExtractorOnCurrentContent(): void {
+  private runExtractorOnCurrentContent(source: ExtractSource): void {
     const parsed = this.parser.parse(this.content());
     const isObjectOrArray =
       parsed.errors.length === 0 &&
       typeof parsed.value === 'object' &&
       parsed.value !== null;
     if (isObjectOrArray) {
-      this.extractedCandidate.set(null);
+      this.replaceExtractedCandidate(null, null);
       return;
     }
     const extracted = this.extractor.extractFromMixedText(this.content());
     if (extracted) {
-      this.extractedCandidate.set({
-        data: extracted,
-        sourceVersion: this.contentVersion()
-      });
+      this.replaceExtractedCandidate(extracted, source);
     } else {
-      this.extractedCandidate.set(null);
+      this.replaceExtractedCandidate(null, null);
     }
   }
 
@@ -731,28 +825,44 @@ export class HomeComponent implements OnInit, OnDestroy {
     postPasteParses: boolean;
   }): void {
     if (event.postPasteParses) {
-      this.extractedCandidate.set(null);
+      this.replaceExtractedCandidate(null, null);
       return;
     }
     const extracted = this.extractor.extractFromMixedText(event.pastedText);
     if (extracted) {
-      this.extractedCandidate.set({
-        data: extracted,
-        sourceVersion: this.contentVersion()
-      });
+      this.replaceExtractedCandidate(extracted, 'editor.paste');
     } else {
-      this.extractedCandidate.set(null);
+      this.replaceExtractedCandidate(null, null);
     }
   }
 
   onExtractAccept(): void {
-    const cand = this.extractedCandidate();
-    if (!cand) return;
-    this.setContent(cand.data.text);
+    const candidate = this.extractedCandidate();
+    if (!candidate) return;
+    this.logger.event(
+      'home.extract.banner.accept',
+      { source: candidate.source },
+      {
+        blockCount: candidate.data.blockCount,
+        preservesComments: candidate.data.preservesComments ? 1 : 0
+      }
+    );
+    // Clear the candidate FIRST so `setContent`'s banner-replace guard
+    // does not additionally fire `home.extract.banner.dismiss` with
+    // `reason='content.changed'` for the same candidate.
     this.extractedCandidate.set(null);
+    this.setContent(candidate.data.text);
   }
 
   onExtractDismiss(): void {
+    const candidate = this.extractedCandidate();
+    if (candidate !== null) {
+      this.logger.event(
+        'home.extract.banner.dismiss',
+        { source: candidate.source, reason: 'user.click' },
+        { blockCount: candidate.data.blockCount }
+      );
+    }
     this.extractedCandidate.set(null);
   }
 
@@ -820,7 +930,9 @@ export class HomeComponent implements OnInit, OnDestroy {
         const { unescaped } = this.parser.tryUnescape(result.text);
         const parseMs = this.durationSince(parseStartedAt);
         this.setContent(unescaped);
-        this.runExtractorOnCurrentContent();
+        this.runExtractorOnCurrentContent(
+          source === 'pick' ? 'upload.pick' : 'upload.drag'
+        );
         // Surface upload-source validation errors as a persistent in-pane
         // banner (issue #36, spec §294). parseResult() shares its memoized
         // parse with the editor's render path, so this is not an extra

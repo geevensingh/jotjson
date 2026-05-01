@@ -19,6 +19,7 @@ import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { JsonExtractorService } from '../../core/json/json-extractor.service';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
+import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import {
   installMinimalMonacoStub,
   restoreMonacoStub
@@ -2280,7 +2281,8 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     const component = fixture.componentInstance;
     component.extractedCandidate.set({
       data: { text: 'stale', blockCount: 1, preservesComments: true },
-      sourceVersion: 999
+      sourceVersion: 999,
+      source: 'paste'
     });
     const extractor = TestBed.inject(JsonExtractorService);
     const extractSpy = spyOn(extractor, 'extractFromMixedText').and.callThrough();
@@ -2301,7 +2303,8 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     const component = fixture.componentInstance;
     component.extractedCandidate.set({
       data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true },
-      sourceVersion: 0
+      sourceVersion: 0,
+      source: 'paste'
     });
     expect(component.extractBannerVisible()).toBe(true);
 
@@ -2319,7 +2322,8 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     const before = component.content();
     component.extractedCandidate.set({
       data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true },
-      sourceVersion: 999
+      sourceVersion: 999,
+      source: 'paste'
     });
 
     component.onExtractDismiss();
@@ -2329,7 +2333,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     expect(component.extractBannerVisible()).toBe(false);
   });
 
-  it('banner auto-clears via the version predicate when content changes by typing', () => {
+  it('banner is cleared when content changes by typing', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
     const extractor = TestBed.inject(JsonExtractorService);
@@ -2347,12 +2351,14 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     expect(component.extractBannerVisible()).toBe(true);
 
     // Simulate the editor's contentChange (typing) path which routes through
-    // setContent and bumps contentVersion - the banner predicate should now
-    // return false even though the candidate object is still in memory.
+    // setContent. setContent now also explicitly clears the candidate (and
+    // emits home.extract.banner.dismiss(content.changed) - covered in the
+    // telemetry describe), so both the predicate AND the underlying signal
+    // report no banner.
     component.onValueChange('user types more');
 
     expect(component.extractBannerVisible()).toBe(false);
-    expect(component.extractedCandidate()).not.toBeNull();
+    expect(component.extractedCandidate()).toBeNull();
   });
 
   it('drag/drop file with mixed text shows the extract banner', async () => {
@@ -2393,6 +2399,348 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     expect(extractSpy).not.toHaveBeenCalled();
     expect(component.extractBannerVisible()).toBe(false);
     expect(component.extractedCandidate()).toBeNull();
+  });
+});
+
+describe('HomeComponent extract-banner telemetry', () => {
+  setupMinimalMonacoStub();
+
+  class FakeDropController {
+    readonly dropActive = signal(false);
+    registeredHandler?: (files: readonly File[]) => void;
+    readonly dispose = jasmine.createSpy('dispose');
+    readonly registerEditorHandler = jasmine
+      .createSpy('registerEditorHandler')
+      .and.callFake((handler: (files: readonly File[]) => void) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
+  function setupTelemetryBed(): {
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>;
+    component: HomeComponent;
+    eventSpy: jasmine.Spy;
+    extractorSpy: jasmine.Spy;
+    drop: FakeDropController;
+  } {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    const drop = new FakeDropController();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: DocumentDropController, useValue: drop }
+      ]
+    });
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    const extractor = TestBed.inject(JsonExtractorService);
+    const extractorSpy = spyOn(extractor, 'extractFromMixedText').and.returnValue(
+      { text: '{ "a": 1 }', blockCount: 2, preservesComments: false }
+    );
+    fixture.detectChanges();
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    return { fixture, component, eventSpy, extractorSpy, drop };
+  }
+
+  function bannerCalls(spy: jasmine.Spy): unknown[][] {
+    return spy.calls
+      .allArgs()
+      .filter(
+        (args) =>
+          typeof args[0] === 'string' &&
+          (args[0] as string).startsWith('home.extract.banner.')
+      );
+  }
+
+  afterEach(() => {
+    clearHomeStorage();
+  });
+
+  it('toolbar paste fires shown with source="paste"', async () => {
+    const { component, eventSpy } = setupTelemetryBed();
+    spyOn(navigator.clipboard, 'readText').and.returnValue(
+      Promise.resolve('INFO log {"a":1}')
+    );
+
+    await component.onPaste();
+    await waitForDoubleAnimationFrame();
+
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.extract.banner.shown',
+      { source: 'paste' },
+      { blockCount: 2, preservesComments: 0 }
+    );
+  });
+
+  it('native editor paste fires shown with source="editor.paste"', () => {
+    const { component, eventSpy } = setupTelemetryBed();
+
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1}',
+      postPasteContent: 'INFO log {"a":1}',
+      postPasteParses: false
+    });
+
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.extract.banner.shown',
+      { source: 'editor.paste' },
+      { blockCount: 2, preservesComments: 0 }
+    );
+  });
+
+  it('Upload pick fires shown with source="upload.pick"', async () => {
+    const { component, eventSpy } = setupTelemetryBed();
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain'
+    });
+
+    await component.onUpload(file);
+    await waitForDoubleAnimationFrame();
+
+    const shownCalls = bannerCalls(eventSpy).filter(
+      (args) => args[0] === 'home.extract.banner.shown'
+    );
+    expect(shownCalls.length).toBe(1);
+    expect(shownCalls[0]).toEqual([
+      'home.extract.banner.shown',
+      { source: 'upload.pick' },
+      { blockCount: 2, preservesComments: 0 }
+    ]);
+  });
+
+  it('drag-drop fires shown with source="upload.drag"', async () => {
+    const { eventSpy, drop } = setupTelemetryBed();
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain'
+    });
+    expect(drop.registeredHandler).toBeDefined();
+
+    drop.registeredHandler!([file]);
+    await waitForTaskQueue();
+    await waitForTaskQueue();
+    await waitForDoubleAnimationFrame();
+
+    const shownCalls = bannerCalls(eventSpy).filter(
+      (args) => args[0] === 'home.extract.banner.shown'
+    );
+    expect(shownCalls.length).toBe(1);
+    expect(shownCalls[0]).toEqual([
+      'home.extract.banner.shown',
+      { source: 'upload.drag' },
+      { blockCount: 2, preservesComments: 0 }
+    ]);
+  });
+
+  it('onExtractAccept fires accept and does NOT fire dismiss(content.changed)', () => {
+    const { component, eventSpy } = setupTelemetryBed();
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1}',
+      postPasteContent: 'INFO log {"a":1}',
+      postPasteParses: false
+    });
+    eventSpy.calls.reset();
+
+    component.onExtractAccept();
+
+    const calls = bannerCalls(eventSpy);
+    expect(calls.length).toBe(1);
+    expect(calls[0][0]).toBe('home.extract.banner.accept');
+    expect(calls[0][1]).toEqual({ source: 'editor.paste' });
+    expect(calls[0][2]).toEqual({ blockCount: 2, preservesComments: 0 });
+  });
+
+  it('onExtractDismiss fires dismiss with reason="user.click"', () => {
+    const { component, eventSpy } = setupTelemetryBed();
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1}',
+      postPasteContent: 'INFO log {"a":1}',
+      postPasteParses: false
+    });
+    eventSpy.calls.reset();
+
+    component.onExtractDismiss();
+
+    const calls = bannerCalls(eventSpy);
+    expect(calls.length).toBe(1);
+    expect(calls[0]).toEqual([
+      'home.extract.banner.dismiss',
+      { source: 'editor.paste', reason: 'user.click' },
+      { blockCount: 2 }
+    ]);
+  });
+
+  it('typing while the banner is visible fires dismiss with reason="content.changed"', () => {
+    const { component, eventSpy } = setupTelemetryBed();
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1}',
+      postPasteContent: 'INFO log {"a":1}',
+      postPasteParses: false
+    });
+    expect(component.extractBannerVisible()).toBe(true);
+    eventSpy.calls.reset();
+
+    component.onValueChange('user types more');
+
+    expect(component.extractBannerVisible()).toBe(false);
+    const calls = bannerCalls(eventSpy);
+    expect(calls.length).toBe(1);
+    expect(calls[0]).toEqual([
+      'home.extract.banner.dismiss',
+      { source: 'editor.paste', reason: 'content.changed' },
+      { blockCount: 2 }
+    ]);
+  });
+
+  it('a second paste replacing a visible banner fires dismiss(old) + shown(new)', async () => {
+    const { component, eventSpy, extractorSpy } = setupTelemetryBed();
+    spyOn(navigator.clipboard, 'readText').and.returnValue(
+      Promise.resolve('INFO log {"a":1}')
+    );
+    await component.onPaste();
+    await waitForDoubleAnimationFrame();
+    expect(component.extractBannerVisible()).toBe(true);
+    eventSpy.calls.reset();
+    extractorSpy.and.returnValue({
+      text: '{ "b": 2 }',
+      blockCount: 1,
+      preservesComments: true
+    });
+
+    component.onEditorPaste({
+      pastedText: 'log {"b":2}',
+      postPasteContent: 'log {"b":2}',
+      postPasteParses: false
+    });
+
+    const calls = bannerCalls(eventSpy);
+    expect(calls.length).toBe(2);
+    expect(calls[0]).toEqual([
+      'home.extract.banner.dismiss',
+      { source: 'paste', reason: 'content.changed' },
+      { blockCount: 2 }
+    ]);
+    expect(calls[1]).toEqual([
+      'home.extract.banner.shown',
+      { source: 'editor.paste' },
+      { blockCount: 1, preservesComments: 1 }
+    ]);
+  });
+
+  it('candidate carries source="paste" only on toolbar Paste path', async () => {
+    const { component } = setupTelemetryBed();
+    spyOn(navigator.clipboard, 'readText').and.returnValue(
+      Promise.resolve('INFO log {"a":1}')
+    );
+
+    await component.onPaste();
+    await waitForDoubleAnimationFrame();
+
+    expect(component.extractedCandidate()?.source).toBe('paste');
+  });
+
+  it('candidate carries source="editor.paste" on native editor paste', () => {
+    const { component } = setupTelemetryBed();
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1}',
+      postPasteContent: 'INFO log {"a":1}',
+      postPasteParses: false
+    });
+    expect(component.extractedCandidate()?.source).toBe('editor.paste');
+  });
+
+  it('candidate carries source="upload.pick" on Upload-button path', async () => {
+    const { component } = setupTelemetryBed();
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain'
+    });
+    await component.onUpload(file);
+    await waitForDoubleAnimationFrame();
+    expect(component.extractedCandidate()?.source).toBe('upload.pick');
+  });
+
+  it('candidate carries source="upload.drag" on drag-drop path', async () => {
+    const { component, drop } = setupTelemetryBed();
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain'
+    });
+    drop.registeredHandler!([file]);
+    await waitForTaskQueue();
+    await waitForTaskQueue();
+    await waitForDoubleAnimationFrame();
+    expect(component.extractedCandidate()?.source).toBe('upload.drag');
+  });
+
+  it('toolbar paste auto-focuses the banner Extract button', async () => {
+    const focusSpy = spyOn(
+      ExtractJsonBannerComponent.prototype,
+      'focusExtractButton'
+    );
+    const { component } = setupTelemetryBed();
+    spyOn(navigator.clipboard, 'readText').and.returnValue(
+      Promise.resolve('INFO log {"a":1}')
+    );
+
+    await component.onPaste();
+    await waitForDoubleAnimationFrame();
+    await waitForTaskQueue();
+
+    expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('native editor paste does NOT auto-focus the banner Extract button', async () => {
+    const focusSpy = spyOn(
+      ExtractJsonBannerComponent.prototype,
+      'focusExtractButton'
+    );
+    const { component } = setupTelemetryBed();
+
+    component.onEditorPaste({
+      pastedText: 'INFO log {"a":1}',
+      postPasteContent: 'INFO log {"a":1}',
+      postPasteParses: false
+    });
+    await waitForTaskQueue();
+
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
+  it('Upload pick does NOT auto-focus the banner Extract button', async () => {
+    const focusSpy = spyOn(
+      ExtractJsonBannerComponent.prototype,
+      'focusExtractButton'
+    );
+    const { component } = setupTelemetryBed();
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain'
+    });
+
+    await component.onUpload(file);
+    await waitForDoubleAnimationFrame();
+    await waitForTaskQueue();
+
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
+  it('drag-drop does NOT auto-focus the banner Extract button', async () => {
+    const focusSpy = spyOn(
+      ExtractJsonBannerComponent.prototype,
+      'focusExtractButton'
+    );
+    const { drop } = setupTelemetryBed();
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain'
+    });
+
+    drop.registeredHandler!([file]);
+    await waitForTaskQueue();
+    await waitForTaskQueue();
+    await waitForDoubleAnimationFrame();
+
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 });
 
