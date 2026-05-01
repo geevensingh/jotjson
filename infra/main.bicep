@@ -37,6 +37,9 @@ param entraApiClientId string = ''
 @description('Expected audience claim for API access tokens. Typically api://<entraApiClientId>. Empty disables JWT validation in the API.')
 param entraApiAudience string = ''
 
+@description('Email address to receive M7i operational alerts (boot.failed, app.unhandled, fn-5xx, auth-config). Empty disables email receivers; alerts still fire and surface in the Azure portal Alerts blade. See issue #94 for follow-up.')
+param notificationEmail string = ''
+
 var resourceSuffix = toLower('${appName}-${environmentName}')
 var tags = {
   app: appName
@@ -67,6 +70,38 @@ module insights 'modules/appInsights.bicep' = {
   params: {
     name: 'appi-${resourceSuffix}'
     location: location
+    tags: tags
+  }
+}
+
+module monitoringActions 'modules/actionGroup.bicep' = {
+  name: 'monitoringActions'
+  params: {
+    name: 'ag-${resourceSuffix}'
+    shortName: 'jotjson'
+    tags: tags
+    notificationEmail: notificationEmail
+  }
+}
+
+module monitoringWorkbook 'modules/monitoringWorkbook.bicep' = {
+  name: 'monitoringWorkbook'
+  params: {
+    environmentName: environmentName
+    resourceNameSeed: resourceSuffix
+    location: location
+    componentId: insights.outputs.componentId
+    tags: tags
+  }
+}
+
+module monitoringAlerts 'modules/alerts.bicep' = {
+  name: 'monitoringAlerts'
+  params: {
+    namePrefix: resourceSuffix
+    location: location
+    workspaceId: insights.outputs.workspaceId
+    actionGroupId: monitoringActions.outputs.id
     tags: tags
   }
 }
@@ -119,3 +154,4 @@ output dnsNameServers array = empty(dnsZoneName) ? [] : dns.outputs.nameServers
 output cosmosEndpoint string = cosmos.outputs.endpoint
 output storageAccountName string = storage.outputs.accountName
 output appInsightsConnectionString string = insights.outputs.connectionString
+output monitoringWorkbookId string = monitoringWorkbook.outputs.id

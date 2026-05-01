@@ -771,3 +771,113 @@ exceptions
 - [Kusto Explorer (desktop)](https://learn.microsoft.com/azure/data-explorer/kusto/tools/kusto-explorer)
 - [App Insights Classic vs Workspace schema mapping](https://learn.microsoft.com/azure/azure-monitor/app/convert-classic-resource#data-structure-changes)
 - [`@microsoft/applicationinsights-web` SDK docs](https://learn.microsoft.com/azure/azure-monitor/app/javascript-sdk)
+
+---
+
+## Dashboards & alerts (M7i)
+
+### Overview
+
+M7i adds an operator-facing monitoring layer on top of the instrumentation
+documented earlier in this file: a workbook with five sections (Health,
+Performance, Auth & Access, API, Quotas) and four scheduled-query-rule alerts
+wired to a single action group.
+
+The action group ships with no receivers by default; issue #94 tracks wiring up
+`notificationEmail`. Alerts still evaluate and surface in the Azure portal
+Alerts blade with no receivers configured. Emails are added by passing a
+non-empty `notificationEmail` parameter at deploy time.
+
+### Workbook vs alert schema split
+
+The M7i workbook and alerts intentionally query different Azure Monitor targets.
+This is the easiest part to get wrong when editing these resources.
+
+- **Workbook** queries target the App Insights component directly
+  (`Microsoft.Insights/components`) and use the **classic** App Insights tables:
+  `customEvents`, `requests`, `dependencies`, `exceptions`, `pageViews`,
+  `traces`. Custom dimensions live under `customDimensions`, custom
+  measurements under `customMeasurements`. Time column is `timestamp`. HTTP
+  result code is `resultCode`. `success` is a boolean.
+- **Alerts** (scheduled-query-rules) target the **Log Analytics workspace**
+  (`Microsoft.OperationalInsights/workspaces`) and must use the **`App*`**
+  schema: `AppEvents`, `AppRequests`, `AppDependencies`, `AppExceptions`,
+  `AppPageViews`, `AppTraces`. Custom dimensions live under `Properties`,
+  custom measurements under `Measurements`. Time column is `TimeGenerated`.
+  HTTP result code is `ResultCode`. `Success` is a string (`"True"` /
+  `"False"`).
+
+Editing rule: if you copy a query from the workbook into an alert (or vice
+versa), you **must** translate the table name, the custom-dimension column name,
+the time column, and the case of the success/result-code columns. Mixing schemas
+silently breaks evaluation; queries return 0 rows or fail.
+
+### Workbook sections
+
+- **Health** -- overall request volume / failure rate, top exception types,
+  `app.boot` version distribution from `customDimensions.appVersion` on the
+  `app.boot` event.
+- **Performance** -- Web Vitals (`webVitals` event), `parse.slow` event volume,
+  p50/p95 request duration.
+- **Auth & Access** -- `auth.tokenAccepted` / `auth.tokenRejected` event split,
+  rejection-reason breakdown.
+- **API** -- Functions request rate, 4xx/5xx breakdown, p95 duration by
+  operation.
+- **Quotas** -- `quota.exceeded` event volume, top quota types.
+
+### Alerts
+
+- **boot.failed** -- detects any exception with
+  `Properties.messageId == 'boot.failed'`. Threshold: `count > 0` over a
+  15-minute window. Severity: 1. Indicates the SPA failed to boot
+  (catastrophic). Tuning: none; this should always fire on the first occurrence.
+- **app.unhandled** -- detects exceptions with
+  `Properties.messageId == 'app.unhandled'`. Threshold: `count >= 5` over a
+  15-minute window. Severity: 2. Tuning: issue #89 (dynamic thresholds).
+- **fn-5xx** -- detects Functions 5xx absolute count. Threshold: `count >= 2`
+  over a 15-minute window. Severity: 2. Tuning: issue #87 (convert to
+  rate-based once traffic exists).
+- **auth-config** -- detects the narrow `auth.tokenRejected` filter with
+  `Properties.reason in ('wrong_audience', 'wrong_issuer')`. Threshold:
+  `count > 0` over a 15-minute window. Severity: 1. Indicates token-validation
+  config drift. Broader auth-rejection alert: issue #91.
+
+### Receivers (action group)
+
+The action group defaults to empty: no email, SMS, Teams, or webhook receivers.
+Alerts still fire and are visible in Azure portal -> Monitor -> Alerts.
+
+To add an email receiver, pass `notificationEmail=<address>` at deploy time:
+
+```sh
+az deployment group create \
+  --resource-group <rg> \
+  --template-file infra/main.bicep \
+  --parameters notificationEmail=alerts@example.com
+```
+
+This is tracked by issue #94. Issue #92 covers expanding to SMS / Teams /
+webhook receivers.
+
+### Tuning thresholds
+
+1. Open the workbook; pick a relevant section (for example, "API" for
+   `fn-5xx`).
+2. Look at the actual baseline rate over the last 7-30 days.
+3. Edit the relevant alert resource in `infra/modules/alerts.bicep`. Update the
+   `threshold` value or the underlying KQL.
+4. Run `az bicep build --file infra/main.bicep` locally to validate.
+5. Commit and push (pre-V1: direct-to-main; post-V1: PR).
+6. The `infra.yml` workflow runs `az deployment group what-if` on push for
+   sanity; `workflow_dispatch` triggers actual deploy.
+
+### Post-V1 follow-ups
+
+- #87 fn-5xx -> rate-based
+- #88 availability tests
+- #89 dynamic thresholds
+- #90 MSAL alert
+- #91 broad auth-rejection alert
+- #92 more receivers
+- #93 stg/prod params
+- #94 wire `notificationEmail`

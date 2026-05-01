@@ -1,0 +1,233 @@
+@description('Environment short name for the displayName, e.g. dev.')
+param environmentName string
+
+@description('Stable suffix used to derive a deterministic GUID for the workbook resource name, e.g. jotjson-dev-monitoring.')
+param resourceNameSeed string
+
+@description('Azure region for the workbook resource.')
+param location string
+
+@description('Resource ID of the Application Insights component the workbook queries.')
+param componentId string
+
+@description('Tags applied to the resource.')
+param tags object = {}
+
+var workbookContentTemplate = '''
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# JotJSON monitoring (__ENVIRONMENT_NAME__)\n\nFirst-look dashboard for app health, performance, auth, API, and quotas. See `docs/telemetry.md` for KQL conventions and the full event catalog."
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 1. Health"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "exceptions\n| where timestamp > ago(24h)\n| where tostring(customDimensions.messageId) == 'app.unhandled'\n| summarize exceptions = count() by bin(timestamp, 1h)\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "exceptions\n| where timestamp > ago(7d)\n| where tostring(customDimensions.messageId) == 'boot.failed'\n| summarize exceptions = count() by bin(timestamp, 1h)\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "exceptions\n| where timestamp > ago(24h)\n| summarize exceptions = count(), latest = max(timestamp) by outerType = tostring(outerType), innermostType = tostring(innermostType)\n| order by exceptions desc\n| take 10",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(7d)\n| where name == 'app.boot'\n| summarize sessions = count() by bin(timestamp, 1d), version = tostring(customDimensions.version)\n| render barchart with (kind=stacked)",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 2. Performance"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(24h)\n| where name == 'webVitals'\n| summarize lcp_p75 = percentile(todouble(customMeasurements['lcpMs']), 75), inp_p75 = percentile(todouble(customMeasurements['inpMs']), 75), cls_p75 = percentile(todouble(customMeasurements['cls']), 75) by bin(timestamp, 1h)\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(24h)\n| where name in ('parse.slow', 'tree.build.slow', 'tree.render.slow', 'tree.expand.slow')\n| summarize events = count() by name\n| order by events desc",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 3. Auth & Access"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(24h)\n| where name in ('auth.tokenAccepted', 'auth.tokenRejected')\n| summarize events = count() by bin(timestamp, 1h), name\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(24h)\n| where name == 'auth.tokenRejected'\n| summarize rejections = count() by reason = tostring(customDimensions.reason)\n| order by rejections desc",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "piechart"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(24h)\n| where name == 'access.forbidden'\n| summarize forbidden = count() by resource = tostring(customDimensions.resource)\n| order by forbidden desc",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 4. API"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp > ago(24h)\n| extend series = strcat(name, ' ', tostring(resultCode))\n| summarize requests = count() by bin(timestamp, 1h), series\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "dependencies\n| where timestamp > ago(24h)\n| summarize p95_duration = percentile(duration, 95), calls = count() by name, type, target\n| order by p95_duration desc\n| take 20",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where timestamp > ago(24h)\n| summarize total = count(), failures = countif(success == false) by bin(timestamp, 1h)\n| extend failure_rate_percent = 100.0 * todouble(failures) / todouble(total)\n| project timestamp, failure_rate_percent, failures, total\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 5. Quotas"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(30d)\n| where name == 'quota.exceeded'\n| summarize quota_exceeded = count() by resource = tostring(customDimensions.resource)\n| order by quota_exceeded desc",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(30d)\n| where name == 'quota.exceeded'\n| extend count_value = todouble(customMeasurements.count), limit_value = todouble(customMeasurements.limit)\n| summarize count_value = max(count_value), limit_value = max(limit_value) by bin(timestamp, 1d), resource = tostring(customDimensions.resource)\n| extend gap = count_value - limit_value\n| project timestamp, resource, count_value, limit_value, gap\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    }
+  ],
+  "fallbackResourceIds": ["__COMPONENT_ID__"],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
+'''
+
+var workbookContent = replace(replace(workbookContentTemplate, '__ENVIRONMENT_NAME__', environmentName), '__COMPONENT_ID__', componentId)
+
+resource workbook 'Microsoft.Insights/workbooks@2022-04-01' = {
+  name: guid(resourceNameSeed)
+  location: location
+  tags: tags
+  kind: 'shared'
+  properties: {
+    displayName: 'JotJSON monitoring (${environmentName})'
+    serializedData: workbookContent
+    version: 'Notebook/1.0'
+    sourceId: componentId
+    category: 'workbook'
+  }
+}
+
+output id string = workbook.id
+output displayName string = workbook.properties.displayName
