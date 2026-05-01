@@ -1,6 +1,7 @@
 import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatCheckboxHarness } from '@angular/material/checkbox/testing';
 import { MatSlideToggleHarness } from '@angular/material/slide-toggle/testing';
 import { provideRouter } from '@angular/router';
 import { ProfileComponent } from './profile.component';
@@ -81,15 +82,23 @@ describe('ProfileComponent', () => {
     return loader.getHarness(MatSlideToggleHarness.with({ selector }));
   }
 
-  async function getDateAnnotationSubControlToggles(
+  async function getUnitCheckbox(
+    fixture: ComponentFixture<ProfileComponent>,
+    selector: string
+  ): Promise<MatCheckboxHarness> {
+    const loader = TestbedHarnessEnvironment.loader(fixture);
+    return loader.getHarness(MatCheckboxHarness.with({ selector }));
+  }
+
+  async function getDateAnnotationSubControls(
     fixture: ComponentFixture<ProfileComponent>
-  ): Promise<MatSlideToggleHarness[]> {
-    const toggles: MatSlideToggleHarness[] = [];
+  ): Promise<{ isDisabled(): Promise<boolean> }[]> {
+    const controls: { isDisabled(): Promise<boolean> }[] = [];
     for (const unitCase of DATE_ANNOTATION_UNIT_CASES) {
-      toggles.push(await getSlideToggle(fixture, unitCase.selector));
+      controls.push(await getUnitCheckbox(fixture, unitCase.selector));
     }
-    toggles.push(await getSlideToggle(fixture, DATE_ANNOTATION_FRIENDLY_FORMS_SELECTOR));
-    return toggles;
+    controls.push(await getSlideToggle(fixture, DATE_ANNOTATION_FRIENDLY_FORMS_SELECTOR));
+    return controls;
   }
 
   it('renders the signed-out card when user is anonymous', async () => {
@@ -261,8 +270,8 @@ describe('ProfileComponent', () => {
       const updateSpy = spyOn(prefs, 'update').and.callThrough();
       const beforeUnits = prefs.prefs().treeDateAnnotationUnits;
 
-      const toggle = await getSlideToggle(fixture, unitCase.selector);
-      await toggle.toggle();
+      const checkbox = await getUnitCheckbox(fixture, unitCase.selector);
+      await checkbox.toggle();
 
       expect(updateSpy.calls.count()).toBe(1);
       const actualPatch: unknown = updateSpy.calls.mostRecent().args[0];
@@ -301,10 +310,10 @@ describe('ProfileComponent', () => {
     });
     resetDateAnnotationPrefs(fixture, prefs, false);
 
-    const toggles = await getDateAnnotationSubControlToggles(fixture);
+    const controls = await getDateAnnotationSubControls(fixture);
 
-    for (const toggle of toggles) {
-      expect(await toggle.isDisabled()).toBeTrue();
+    for (const control of controls) {
+      expect(await control.isDisabled()).toBeTrue();
     }
   });
 
@@ -315,10 +324,10 @@ describe('ProfileComponent', () => {
     });
     resetDateAnnotationPrefs(fixture, prefs, true);
 
-    const toggles = await getDateAnnotationSubControlToggles(fixture);
+    const controls = await getDateAnnotationSubControls(fixture);
 
-    for (const toggle of toggles) {
-      expect(await toggle.isDisabled()).toBeFalse();
+    for (const control of controls) {
+      expect(await control.isDisabled()).toBeFalse();
     }
   });
 
@@ -330,8 +339,8 @@ describe('ProfileComponent', () => {
     resetDateAnnotationPrefs(fixture, prefs, true);
 
     for (const unitCase of DATE_ANNOTATION_UNIT_CASES) {
-      const toggle = await getSlideToggle(fixture, unitCase.selector);
-      await toggle.toggle();
+      const checkbox = await getUnitCheckbox(fixture, unitCase.selector);
+      await checkbox.toggle();
     }
 
     expect(prefs.prefs().treeDateAnnotationUnits).toEqual({
@@ -611,7 +620,9 @@ describe('ProfileComponent', () => {
       ]);
       fixture.detectChanges();
       const labels = Array.from(
-        (fixture.nativeElement as HTMLElement).querySelectorAll('mat-checkbox')
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.pref-checkbox-list mat-checkbox'
+        )
       ).map((el) => (el.textContent ?? '').trim());
       expect(labels).toEqual(['Alpha', 'Mike', 'Zebra']);
     });
@@ -727,15 +738,15 @@ describe('ProfileComponent', () => {
       expect(wrap?.querySelector('.pref-suffix')).toBeTruthy();
     });
 
-    it('does not pin the date-annotation unit toggles to label-before', async () => {
+    it('does not pin the date-annotation unit checkboxes to label-before', async () => {
       const { fixture } = await create(signedIn);
       const root = fixture.nativeElement as HTMLElement;
-      const unitToggles = Array.from(
-        root.querySelectorAll('.date-annotation-unit-grid mat-slide-toggle')
+      const unitCheckboxes = Array.from(
+        root.querySelectorAll('.date-annotation-unit-grid mat-checkbox')
       );
-      expect(unitToggles.length).toBe(6);
-      for (const toggle of unitToggles) {
-        expect(toggle.getAttribute('labelPosition')).not.toBe('before');
+      expect(unitCheckboxes.length).toBe(6);
+      for (const checkbox of unitCheckboxes) {
+        expect(checkbox.getAttribute('labelPosition')).not.toBe('before');
       }
     });
   });

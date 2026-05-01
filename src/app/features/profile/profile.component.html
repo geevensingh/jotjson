@@ -219,59 +219,59 @@
             </h4>
 
             <div class="date-annotation-unit-grid">
-              <mat-slide-toggle
+              <mat-checkbox
                 data-date-annotation-unit="year"
                 [checked]="treeDateAnnotationUnits().year"
                 [disabled]="!treeShowDateAnnotations()"
                 (change)="onTreeDateAnnotationUnitChange('year', $event.checked)"
               >
                 <span i18n="@@profile.prefs.tree.dateAnnotation.units.year">Years</span>
-              </mat-slide-toggle>
+              </mat-checkbox>
 
-              <mat-slide-toggle
+              <mat-checkbox
                 data-date-annotation-unit="month"
                 [checked]="treeDateAnnotationUnits().month"
                 [disabled]="!treeShowDateAnnotations()"
                 (change)="onTreeDateAnnotationUnitChange('month', $event.checked)"
               >
                 <span i18n="@@profile.prefs.tree.dateAnnotation.units.month">Months</span>
-              </mat-slide-toggle>
+              </mat-checkbox>
 
-              <mat-slide-toggle
+              <mat-checkbox
                 data-date-annotation-unit="day"
                 [checked]="treeDateAnnotationUnits().day"
                 [disabled]="!treeShowDateAnnotations()"
                 (change)="onTreeDateAnnotationUnitChange('day', $event.checked)"
               >
                 <span i18n="@@profile.prefs.tree.dateAnnotation.units.day">Days</span>
-              </mat-slide-toggle>
+              </mat-checkbox>
 
-              <mat-slide-toggle
+              <mat-checkbox
                 data-date-annotation-unit="hour"
                 [checked]="treeDateAnnotationUnits().hour"
                 [disabled]="!treeShowDateAnnotations()"
                 (change)="onTreeDateAnnotationUnitChange('hour', $event.checked)"
               >
                 <span i18n="@@profile.prefs.tree.dateAnnotation.units.hour">Hours</span>
-              </mat-slide-toggle>
+              </mat-checkbox>
 
-              <mat-slide-toggle
+              <mat-checkbox
                 data-date-annotation-unit="minute"
                 [checked]="treeDateAnnotationUnits().minute"
                 [disabled]="!treeShowDateAnnotations()"
                 (change)="onTreeDateAnnotationUnitChange('minute', $event.checked)"
               >
                 <span i18n="@@profile.prefs.tree.dateAnnotation.units.minute">Minutes</span>
-              </mat-slide-toggle>
+              </mat-checkbox>
 
-              <mat-slide-toggle
+              <mat-checkbox
                 data-date-annotation-unit="second"
                 [checked]="treeDateAnnotationUnits().second"
                 [disabled]="!treeShowDateAnnotations()"
                 (change)="onTreeDateAnnotationUnitChange('second', $event.checked)"
               >
                 <span i18n="@@profile.prefs.tree.dateAnnotation.units.second">Seconds</span>
-              </mat-slide-toggle>
+              </mat-checkbox>
             </div>
 
             <p
