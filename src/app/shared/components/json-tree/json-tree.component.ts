@@ -16,12 +16,16 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { MatDividerModule } from '@angular/material/divider';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
-import { JsonParserService } from '../../../core/json/json-parser.service';
+import {
+  CommentBundle,
+  JsonParserService
+} from '../../../core/json/json-parser.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { bucketCount } from '../../../core/telemetry/buckets';
@@ -137,7 +141,7 @@ const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
 @Component({
   selector: 'jj-json-tree',
   standalone: true,
-  imports: [FormsModule, MatMenuModule, MatTreeModule, MatDividerModule, IconComponent, JsonBreadcrumbComponent],
+  imports: [FormsModule, MatMenuModule, MatTooltipModule, MatTreeModule, MatDividerModule, IconComponent, JsonBreadcrumbComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
   styleUrl: './json-tree.component.scss'
@@ -170,6 +174,25 @@ export class JsonTreeComponent {
    * `evaluateNode` automatically.
    */
   readonly overrideRuleSets = input<FormattingRuleSet[] | null>(null);
+
+  /**
+   * JSONC comments harvested from the source text, grouped by the
+   * canonical path string of the node they attach to (e.g. `$.foo[0]`).
+   * Threaded through from the parser so the tree never has to look at
+   * the raw text.
+   *
+   * `null` (default) means no comment data is available - the tree
+   * renders without comment slots. The rule-editor live preview
+   * intentionally omits this input so formatting-rule effects are not
+   * obscured by editorial annotations.
+   *
+   * For container nodes, `bundle.trailing` is rendered on the close
+   * row of the container. The renderer disambiguates by inspecting
+   * node kind. See `CommentBundle` and DESIGN_SPEC.md M7k Decision E.
+   */
+  readonly commentsByPath = input<ReadonlyMap<string, CommentBundle> | null>(
+    null
+  );
 
   readonly embeddedMode = input<boolean>(false);
 
@@ -285,6 +308,13 @@ export class JsonTreeComponent {
   readonly breadcrumbCopyPathTitle = $localize`:@@tree.breadcrumb.copyPath.title:Copy JSON path`;
   readonly breadcrumbCopyPathAriaLabel = $localize`:@@tree.breadcrumb.copyPath.aria:Copy JSON path of selected row`;
 
+  // M7k. Tooltip prefixes for inline JSONC comment slots. Rendered as
+  // `Leading comment: <full text>` / `Trailing comment: <full text>` on
+  // hover so screen readers and the visible tooltip body distinguish
+  // them from the value's own tooltip.
+  readonly leadingCommentTooltipPrefix = $localize`:@@tree.comment.leading.tooltipPrefix:Leading comment: `;
+  readonly trailingCommentTooltipPrefix = $localize`:@@tree.comment.trailing.tooltipPrefix:Trailing comment: `;
+
   readonly treeControl = new NestedTreeControl<TreeNode, string>(
     (n) => n.children ?? [],
     { trackBy: (n) => n.pathString }
@@ -311,6 +341,12 @@ export class JsonTreeComponent {
   readonly showDateAnnotations = computed(
     () => this.prefs.prefs().treeShowDateAnnotations
   );
+  /**
+   * Master toggle for rendering JSONC comment slots in the tree.
+   * Currently always-on; M7k-3 wires this to the `treeShowComments`
+   * user preference and adds a Profile toggle to disable.
+   */
+  readonly showComments = computed(() => true);
   readonly treeFontSize = computed(() => this.prefs.prefs().treeFontSize);
   readonly treeFontSizePx = computed(() => `${this.treeFontSize()}px`);
 
@@ -2088,6 +2124,41 @@ export class JsonTreeComponent {
 
   segmentIsIndex(node: TreeNode): boolean {
     return typeof node.segment === 'number';
+  }
+
+  /**
+   * Returns the leading-comment text attached to `node`'s path, or
+   * `null` when there is no comment data or no leading comment for
+   * this node. The renderer uses this for the inline slot before the
+   * key on value rows and on container open rows.
+   */
+  leadingComment(node: TreeNode): string | null {
+    const map = this.commentsByPath();
+    if (!map) return null;
+    return map.get(node.pathString)?.leading ?? null;
+  }
+
+  /**
+   * Returns the trailing-comment text attached to `node`'s path, or
+   * `null` when there is no comment data or no trailing comment for
+   * this node. For primitive nodes the renderer places this on the
+   * value row, after the type label. For container nodes the
+   * renderer places this on the close row, after the close brace.
+   */
+  trailingComment(node: TreeNode): string | null {
+    const map = this.commentsByPath();
+    if (!map) return null;
+    return map.get(node.pathString)?.trailing ?? null;
+  }
+
+  /**
+   * First-line preview of a comment for the inline slot. Multi-line
+   * or stacked comments collapse to their first line in the row;
+   * the full text is surfaced via `matTooltip` on hover.
+   */
+  commentFirstLine(text: string): string {
+    const newlineIndex = text.indexOf('\n');
+    return newlineIndex === -1 ? text : text.slice(0, newlineIndex);
   }
 
   private emitSlowExpandIfNeeded(timeMs: number, depth: number, nodeCount: number): void {

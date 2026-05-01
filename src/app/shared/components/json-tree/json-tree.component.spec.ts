@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
+import { By } from '@angular/platform-browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
 import { JsonTreeComponent } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
@@ -1004,6 +1006,172 @@ describe('JsonTreeComponent', () => {
       const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
       expect(text).toContain('{}');
       expect(text).toContain('0 keys');
+    });
+  });
+
+  describe('JSONC comment rendering (M7k)', () => {
+    function makeBundle(
+      leading?: string,
+      trailing?: string
+    ): { leading?: string; trailing?: string } {
+      const bundle: { leading?: string; trailing?: string } = {};
+      if (leading !== undefined) bundle.leading = leading;
+      if (trailing !== undefined) bundle.trailing = trailing;
+      return bundle;
+    }
+
+    function makeMap(
+      entries: Array<[string, { leading?: string; trailing?: string }]>
+    ): ReadonlyMap<string, { leading?: string; trailing?: string }> {
+      return new Map(entries);
+    }
+
+    async function createWithComments(
+      value: unknown,
+      comments: ReadonlyMap<string, { leading?: string; trailing?: string }>
+    ): Promise<void> {
+      await createWith(value);
+      fixture.componentRef.setInput('commentsByPath', comments);
+      fixture.detectChanges();
+    }
+
+    function commentTexts(selector: string): string[] {
+      const host = fixture.nativeElement as HTMLElement;
+      return Array.from(host.querySelectorAll<HTMLElement>(selector)).map(
+        (el) => el.textContent?.trim() ?? ''
+      );
+    }
+
+    it('renders no comment slots when commentsByPath is null (default)', async () => {
+      await createWith({ name: 'Alice' });
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelectorAll('.tree-comment').length).toBe(0);
+    });
+
+    it('renders a leading comment before the key on a leaf row', async () => {
+      await createWithComments(
+        { name: 'Alice' },
+        makeMap([['$.name', makeBundle('legal name on file')]])
+      );
+      const leading = commentTexts('.tree-comment-leading');
+      expect(leading.length).toBe(1);
+      expect(leading[0]).toBe('legal name on file');
+    });
+
+    it('renders a trailing comment on a leaf row inside tree-row-right', async () => {
+      await createWithComments(
+        { id: 42 },
+        makeMap([['$.id', makeBundle(undefined, 'uuid migration TBD')]])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const leafRow = host.querySelector('[data-path="$.id"]');
+      expect(leafRow).withContext('leaf row should be rendered').not.toBeNull();
+      const right = leafRow!.querySelector('.tree-row-right');
+      expect(right).withContext('row-right span should exist').not.toBeNull();
+      const trailing = right!.querySelector('.tree-comment-trailing');
+      expect(trailing).withContext('trailing slot inside row-right').not.toBeNull();
+      expect(trailing!.textContent?.trim()).toBe('uuid migration TBD');
+    });
+
+    it('renders the trailing comment AFTER the type badge on leaf rows', async () => {
+      prefs.update({ treeShowTypeLabels: true });
+      await createWithComments(
+        { id: 42 },
+        makeMap([['$.id', makeBundle(undefined, 'inline note')]])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const leafRow = host.querySelector('[data-path="$.id"]')!;
+      const right = leafRow.querySelector('.tree-row-right')!;
+      const children = Array.from(right.children) as HTMLElement[];
+      const badgeIndex = children.findIndex((c) => c.classList.contains('tree-type-badge'));
+      const trailingIndex = children.findIndex((c) =>
+        c.classList.contains('tree-comment-trailing')
+      );
+      expect(badgeIndex).toBeGreaterThanOrEqual(0);
+      expect(trailingIndex).toBeGreaterThan(badgeIndex);
+    });
+
+    it('renders the trailing comment BEFORE the kebab on leaf rows', async () => {
+      await createWithComments(
+        { id: 42 },
+        makeMap([['$.id', makeBundle(undefined, 'inline note')]])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const leafRow = host.querySelector('[data-path="$.id"]')!;
+      const right = leafRow.querySelector('.tree-row-right')!;
+      const children = Array.from(right.children) as HTMLElement[];
+      const trailingIndex = children.findIndex((c) =>
+        c.classList.contains('tree-comment-trailing')
+      );
+      const kebabIndex = children.findIndex((c) =>
+        c.classList.contains('tree-kebab-pill')
+      );
+      expect(trailingIndex).toBeGreaterThanOrEqual(0);
+      expect(kebabIndex).toBeGreaterThan(trailingIndex);
+    });
+
+    it('renders the trailing-on-close comment on the container close row', async () => {
+      await createWithComments(
+        { user: { name: 'Alice' } },
+        makeMap([['$.user', makeBundle(undefined, 'end of user')]])
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const closeRow = host.querySelector('.tree-row--close');
+      expect(closeRow).withContext('close row should be rendered').not.toBeNull();
+      const trailing = closeRow!.querySelector('.tree-comment-trailing');
+      expect(trailing).withContext('trailing slot on close row').not.toBeNull();
+      expect(trailing!.textContent?.trim()).toBe('end of user');
+    });
+
+    it('renders only the first line of a multi-line comment in the inline slot', async () => {
+      await createWithComments(
+        { version: 3 },
+        makeMap([
+          [
+            '$.version',
+            makeBundle(undefined, 'first line\nsecond line\nthird line')
+          ]
+        ])
+      );
+      const trailing = commentTexts('.tree-comment-trailing');
+      expect(trailing[0]).toBe('first line');
+    });
+
+    it('exposes the full multi-line text via matTooltip', async () => {
+      const fullText = 'first line\nsecond line';
+      await createWithComments(
+        { version: 3 },
+        makeMap([['$.version', makeBundle(undefined, fullText)]])
+      );
+      const debugEl = fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((de) =>
+          (de.nativeElement as HTMLElement).classList.contains(
+            'tree-comment-trailing'
+          )
+        );
+      expect(debugEl).withContext('trailing-comment tooltip directive').toBeDefined();
+      const tooltip = debugEl!.injector.get(MatTooltip);
+      expect(tooltip.message).toContain(fullText);
+      expect(tooltip.message).toContain('Trailing comment:');
+    });
+
+    it('renders a leading comment on a container open row', async () => {
+      await createWithComments(
+        { user: { name: 'Alice' } },
+        makeMap([['$.user', makeBundle('Customer record')]])
+      );
+      const leading = commentTexts('.tree-comment-leading');
+      expect(leading).toContain('Customer record');
+    });
+
+    it('does not render comment slots that are not in the map', async () => {
+      await createWithComments(
+        { kept: 1, dropped: 2 },
+        makeMap([['$.kept', makeBundle(undefined, 'shown')]])
+      );
+      const trailing = commentTexts('.tree-comment-trailing');
+      expect(trailing).toEqual(['shown']);
     });
   });
 
