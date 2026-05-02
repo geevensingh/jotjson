@@ -117,6 +117,7 @@ module swa 'modules/staticWebApp.bicep' = {
     appSettings: {
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
       COSMOS_DATABASE: cosmos.outputs.databaseName
+      COSMOS_KEY: cosmos.outputs.primaryKey
       BLOB_STORAGE_ACCOUNT: storage.outputs.accountName
       AVATAR_CONTAINER: storage.outputs.avatarsContainer
       EXPORT_CONTAINER: storage.outputs.exportsContainer

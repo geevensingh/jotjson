@@ -68,3 +68,6 @@ output endpoint string = account.properties.documentEndpoint
 output accountName string = account.name
 output accountId string = account.id
 output databaseName string = db.name
+
+@secure()
+output primaryKey string = account.listKeys().primaryMasterKey
