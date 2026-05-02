@@ -304,6 +304,19 @@
                 <span class="tree-count">{{ containerCountText(node) }}</span>
               }
               <span class="tree-type-badge">{{ typeLabel(node) }}</span>
+              @if (extractCandidate(node); as extractable) {
+                <button
+                  type="button"
+                  class="tree-extract-pill"
+                  (click)="onExtractButtonClick(node, $event)"
+                  i18n-title="@@tree.extract.button.title"
+                  title="Extract embedded JSON"
+                  i18n-aria-label="@@tree.extract.button.aria"
+                  aria-label="Extract embedded JSON from this string"
+                >
+                  <jj-icon name="extract" [size]="15" />
+                </button>
+              }
               <button
                 type="button"
                 class="tree-kebab-pill"
@@ -327,6 +340,19 @@
               }
               @if (node.type === 'array' || node.type === 'object') {
                 <span class="tree-count">{{ containerCountText(node) }}</span>
+              }
+              @if (extractCandidate(node); as extractable) {
+                <button
+                  type="button"
+                  class="tree-extract-pill"
+                  (click)="onExtractButtonClick(node, $event)"
+                  i18n-title="@@tree.extract.button.title"
+                  title="Extract embedded JSON"
+                  i18n-aria-label="@@tree.extract.button.aria"
+                  aria-label="Extract embedded JSON from this string"
+                >
+                  <jj-icon name="extract" [size]="15" />
+                </button>
               }
               <button
                 type="button"
@@ -498,6 +524,12 @@
     <button mat-menu-item type="button" (click)="copyPathFromMenu(cn)">
       {{ ctxCopyPathLabel }}
     </button>
+    @if (extractCandidate(cn)) {
+      <button mat-menu-item type="button" (click)="onExtractMenuClick(cn)">
+        <jj-icon name="extract" [size]="18" />
+        <span i18n="@@tree.extract.menu.label">Extract embedded JSON</span>
+      </button>
+    }
     @if (showSearchByKey(cn) || showSearchByValue(cn)) {
       <mat-divider />
     }

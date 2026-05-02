@@ -438,6 +438,7 @@
   font-size: var(--tree-font-size, 13px);
 }
 
+.tree-extract-pill,
 .tree-kebab-pill {
   display: inline-flex;
   align-items: center;
@@ -446,7 +447,7 @@
   height: 20px;
   color: rgba(127, 127, 127, 0.6);
   border: 0;
-  background: transparent;
+  background: none;
   cursor: pointer;
   padding: 0;
   border-radius: 3px;

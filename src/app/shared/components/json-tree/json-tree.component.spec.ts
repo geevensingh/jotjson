@@ -3,11 +3,12 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
-import { JsonTreeComponent } from './json-tree.component';
+import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { bucketCount } from '../../../core/telemetry/buckets';
+import type { ExtractedJson } from '../../../core/json/json-extractor.service';
 import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
 import type {
   FormattingRule,
@@ -3084,6 +3085,212 @@ describe('JsonTreeComponent', () => {
         selectionUpDistance: 0,
       });
       expect(writeText).toHaveBeenCalled();
+    });
+  });
+
+  describe('embedded JSON extraction UI', () => {
+    const embeddedJson = 'prefix {"ok": true} suffix';
+
+    function replacementFor(text = '{\n  "ok": true\n}'): ExtractedJson {
+      return {
+        text,
+        blockCount: 1,
+        preservesComments: true,
+        hasComments: false,
+      };
+    }
+
+    function candidatesFor(
+      rawString: string,
+      replacement: ExtractedJson = replacementFor(),
+    ): ReadonlyMap<string, ExtractedJson> {
+      return new Map<string, ExtractedJson>([[rawString, replacement]]);
+    }
+
+    function setExtractCandidates(
+      rawString: string,
+      replacement: ExtractedJson = replacementFor(),
+    ): void {
+      fixture.componentRef.setInput('extractCandidates', candidatesFor(rawString, replacement));
+      fixture.detectChanges();
+    }
+
+    function extractButtonFor(pathString: string): HTMLButtonElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${pathString}"] .tree-extract-pill`,
+      ) as HTMLButtonElement | null;
+    }
+
+    async function openMenuFor(pathString: string): Promise<void> {
+      const kebab = (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${pathString}"] .tree-kebab-pill`,
+      ) as HTMLButtonElement | null;
+      expect(kebab).withContext(`found a kebab for ${pathString}`).toBeTruthy();
+      kebab!.click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    function extractMenuItem(): HTMLButtonElement | null {
+      return (
+        Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        ).find((item) => (item.textContent ?? '').includes('Extract embedded JSON')) ?? null
+      );
+    }
+
+    function closeOpenMenus(): void {
+      document.body
+        .querySelectorAll('.cdk-overlay-backdrop')
+        .forEach((backdrop) => (backdrop as HTMLElement).click());
+      fixture.detectChanges();
+    }
+
+    it('does not render the extract button when extractCandidates is null', async () => {
+      await createWith({ payload: embeddedJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      expect(extractButtonFor('$.payload')).toBeNull();
+    });
+
+    it('does not render the extract button when the node type is not string', async () => {
+      await createWith({ count: 42 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates('42');
+
+      expect(extractButtonFor('$.count')).toBeNull();
+    });
+
+    it('does not render the extract button when the string has no candidate', async () => {
+      await createWith({ payload: embeddedJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates('other string');
+
+      expect(extractButtonFor('$.payload')).toBeNull();
+    });
+
+    it('renders the extract button when the string has a candidate', async () => {
+      await createWith({ payload: embeddedJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates(embeddedJson);
+
+      expect(extractButtonFor('$.payload')).not.toBeNull();
+    });
+
+    it('clicking the extract button emits extractRequest with rowButton source', async () => {
+      const replacement = replacementFor('{\n  "answer": 42\n}');
+      await createWith({ payload: embeddedJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates(embeddedJson, replacement);
+      fixture.componentRef.setInput('extractSourceVersion', 7);
+      fixture.detectChanges();
+      const events: TreeExtractRequest[] = [];
+      cmp.extractRequest.subscribe((request) => events.push(request));
+
+      const button = extractButtonFor('$.payload');
+      expect(button).toBeTruthy();
+      button!.click();
+
+      expect(events).toEqual([
+        {
+          path: ['payload'],
+          sourceVersion: 7,
+          replacement,
+          source: 'rowButton',
+        },
+      ]);
+    });
+
+    it('clicking the extract button does not toggle row selection', async () => {
+      await createWith({ payload: embeddedJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates(embeddedJson);
+      const selectionEvents: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => selectionEvents.push(path));
+
+      const button = extractButtonFor('$.payload');
+      expect(button).toBeTruthy();
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      const stopSpy = spyOn(event, 'stopPropagation').and.callThrough();
+      button!.dispatchEvent(event);
+      fixture.detectChanges();
+
+      expect(stopSpy).toHaveBeenCalled();
+      expect(cmp.selectedPath()).toBeNull();
+      expect(selectionEvents).toEqual([]);
+    });
+
+    it('renders the context-menu extract item only when a candidate exists', async () => {
+      await createWith({ payload: embeddedJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      try {
+        await openMenuFor('$.payload');
+        expect(extractMenuItem()).toBeNull();
+        closeOpenMenus();
+
+        setExtractCandidates(embeddedJson);
+        await openMenuFor('$.payload');
+        expect(extractMenuItem()).not.toBeNull();
+      } finally {
+        closeOpenMenus();
+      }
+    });
+
+    it('clicking the context-menu extract item emits extractRequest with contextMenu source', async () => {
+      const replacement = replacementFor('{\n  "menu": true\n}');
+      await createWith({ payload: embeddedJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates(embeddedJson, replacement);
+      fixture.componentRef.setInput('extractSourceVersion', 11);
+      fixture.detectChanges();
+      const events: TreeExtractRequest[] = [];
+      cmp.extractRequest.subscribe((request) => events.push(request));
+
+      try {
+        await openMenuFor('$.payload');
+        const item = extractMenuItem();
+        expect(item).toBeTruthy();
+        item!.click();
+        fixture.detectChanges();
+
+        expect(events).toEqual([
+          {
+            path: ['payload'],
+            sourceVersion: 11,
+            replacement,
+            source: 'contextMenu',
+          },
+        ]);
+      } finally {
+        closeOpenMenus();
+      }
+    });
+
+    it('uses a numeric sentinel sourceVersion when extractSourceVersion is null', async () => {
+      await createWith({ payload: embeddedJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates(embeddedJson);
+      const events: TreeExtractRequest[] = [];
+      cmp.extractRequest.subscribe((request) => events.push(request));
+
+      const button = extractButtonFor('$.payload');
+      expect(button).toBeTruthy();
+      button!.click();
+
+      expect(events.length).toBe(1);
+      expect(typeof events[0]?.sourceVersion).toBe('number');
+      expect(events[0]?.sourceVersion).toBe(-1);
     });
   });
 

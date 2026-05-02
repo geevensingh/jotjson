@@ -23,6 +23,7 @@ import { NestedTreeControl } from '@angular/cdk/tree';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { CommentBundle, JsonParserService } from '../../../core/json/json-parser.service';
+import type { ExtractedJson } from '../../../core/json/json-extractor.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { bucketCount } from '../../../core/telemetry/buckets';
@@ -101,6 +102,13 @@ export interface TreeNode {
   type: JsonValueType;
   depth: number;
   children?: TreeNode[];
+}
+
+export interface TreeExtractRequest {
+  path: (string | number)[];
+  sourceVersion: number;
+  replacement: ExtractedJson;
+  source: 'rowButton' | 'contextMenu';
 }
 
 interface TreeBuildCounter {
@@ -198,6 +206,9 @@ export class JsonTreeComponent {
    */
   readonly commentsByPath = input<ReadonlyMap<string, CommentBundle> | null>(null);
 
+  readonly extractCandidates = input<ReadonlyMap<string, ExtractedJson> | null>(null);
+  readonly extractSourceVersion = input<number | null>(null);
+
   readonly embeddedMode = input<boolean>(false);
 
   /**
@@ -263,6 +274,7 @@ export class JsonTreeComponent {
    * consumers must tolerate that.
    */
   readonly selectionChange = output<readonly (string | number)[] | null>();
+  readonly extractRequest = output<TreeExtractRequest>();
 
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
@@ -1415,6 +1427,29 @@ export class JsonTreeComponent {
     this.contextNode.set(node);
     this.selectedPath.set(node.pathString);
     this.logger.info('tree.contextMenu.opened', { source: 'kebab' });
+  }
+
+  extractCandidate(node: TreeNode): ExtractedJson | null {
+    if (node.type !== 'string' || typeof node.value !== 'string') return null;
+    const map = this.extractCandidates();
+    if (!map) return null;
+    return map.get(node.value) ?? null;
+  }
+
+  onExtractButtonClick(node: TreeNode, event: MouseEvent): void {
+    event.stopPropagation();
+    this.emitExtract(node, 'rowButton');
+  }
+
+  onExtractMenuClick(node: TreeNode): void {
+    this.emitExtract(node, 'contextMenu');
+  }
+
+  private emitExtract(node: TreeNode, source: 'rowButton' | 'contextMenu'): void {
+    const candidate = this.extractCandidate(node);
+    if (!candidate) return;
+    const sourceVersion = this.extractSourceVersion() ?? -1;
+    this.extractRequest.emit({ path: node.path, sourceVersion, replacement: candidate, source });
   }
 
   /**
