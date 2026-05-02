@@ -849,6 +849,18 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'ruleSets.applied',
 
+  // Tree string extractor (M7s)
+
+  /**
+   * Severity: warn
+   * Fired by: `TreeStringExtractorService.handleWorkerFailure`
+   *           (`core/json/tree-string-extractor.service.ts`) when the
+   *           Web Worker cannot be created, cannot accept a scan request,
+   *           errors, or reports a structured-clone message failure.
+   * Props: { reason: 'factory' | 'postMessage' | 'error' | 'messageerror' }.
+   */
+  'tree.stringExtractor.workerUnavailable',
+
   // Tree row context menu (M7q)
 
   /**
