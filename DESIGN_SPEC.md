@@ -211,20 +211,84 @@ a set are atomic and reads are single-document. The 50-rule cap (see
 §Features 7) keeps every document well below Cosmos's 2 MB item limit.
 
 #### FormattingRule
-```
-{
-  id: string,
-  target: "key" | "value" | "key_and_value",
-  matchType: "exact" | "contains" | "starts_with" | "ends_with",  # `regex` deferred to v1.1; see §Features 7
-  matchValue: string,              # the literal to match (e.g., "error", "200"); max 200 chars
-  caseSensitive: boolean,
-  style: FormattingStyle
+```ts
+type FormattingRule = FormattingRuleSimple | FormattingRulePair;
+
+type FormattingRuleMatchType =
+  | 'exact'
+  | 'contains'
+  | 'starts_with'
+  | 'ends_with'; // `regex` deferred to v1.1; see §Features 7
+
+interface FormattingRuleSimple {
+  id: string;
+  kind?: 'simple'; // Missing legacy kind is read as 'simple'.
+  target: 'key' | 'value' | 'key_and_value';
+  matchType: FormattingRuleMatchType;
+  matchValue: string; // literal to match (e.g., 'error', '200'); max 200 chars
+  caseSensitive: boolean;
+  style: FormattingStyle;
 }
+
+interface FormattingRulePair {
+  id: string;
+  kind: 'pair';
+  keyMatch: KeyMatch;
+  valueMatch: ValueMatch;
+  style: FormattingStyle;
+}
+
+interface KeyMatch {
+  matchType: FormattingRuleMatchType;
+  matchValue: string; // max 200 chars
+  caseSensitive: boolean;
+}
+
+type ValueMatch =
+  | {
+      kind: 'text';
+      matchType: FormattingRuleMatchType;
+      matchValue: string; // max 200 chars
+      caseSensitive: boolean;
+    }
+  | {
+      kind: 'predicate';
+      predicate: ValuePredicate;
+    };
+
+// First-ship closed set: 16 values. The union is intentionally extensible.
+type ValuePredicate =
+  | 'is_null'
+  | 'is_not_null'
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'is_string'
+  | 'is_not_string'
+  | 'is_number'
+  | 'is_not_number'
+  | 'is_integer'
+  | 'is_not_integer'
+  | 'is_boolean'
+  | 'is_not_boolean'
+  | 'is_object'
+  | 'is_not_object'
+  | 'is_array'
+  | 'is_not_array';
+
+// Deferred format predicates for a follow-up iteration:
+// 'is_date', 'is_uuid', 'is_url', 'is_email',
+// 'is_ipv4', 'is_ipv6', 'is_path', 'is_date_time'.
 ```
+
+Legacy top-level fields (`target`, `matchType`, `matchValue`, and
+`caseSensitive`) are valid only when `kind` is missing or resolves to
+`'simple'`. Pair rules use explicit `keyMatch` and `valueMatch`
+sub-objects so they can express a true cross-field AND.
 
 The rule's user-visible label (shown in hover tooltips and the editor's
 matched-rule list) is auto-generated from its match config -
-e.g. `key contains "error"`, `value exact "200"`. Rules have no
+e.g. `key contains "error"`, `value exact "200"`, or
+`key exact "testHeader" AND value is not null`. Rules have no
 human-edited `name` field in v1; this keeps the model and editor
 simpler and avoids untranslatable user-supplied strings in the
 hover-tooltip flow.
@@ -611,7 +675,16 @@ Available to **registered users** only.
     a post-v1 follow-up that introduces an explicit `position` field.
 
 - **Rule Builder UI** - for each rule:
-  - **Target:** pick whether the rule applies to keys, values, or both.
+  - **Target:** four-option selector:
+    - "Key" maps to a simple rule with `target: "key"`.
+    - "Value" maps to a simple rule with `target: "value"`.
+    - "Key or value (either)" maps to a simple rule with
+      `target: "key_and_value"`; the wire field is not renamed.
+    - "Key + value (both must match)" maps to `kind: "pair"` with
+      separate `keyMatch` and `valueMatch` sub-objects.
+    New and renamed editor strings must use stable Angular i18n IDs in
+    `<area>.<element>.<purpose>` form, e.g.
+    `@@ruleEditor.target.keyOrValue` and `@@ruleEditor.target.pair`.
   - **Match type:** exact match, contains, starts with, or ends with.
     (`regex` is **deferred to v1.1**; see "Regex policy" below.)
   - **Match value:** the literal string to match against (max 200 chars).
@@ -635,18 +708,116 @@ Available to **registered users** only.
     spamming 400s.
 
 - **Match semantics:**
-  - Rules match the **rendered text** the user sees in the tree, not
-    the underlying JSON literal. So a `value contains "200"` rule
-    matches the JSON number `200` (rendered as `200`), the JSON string
-    `"200"` (rendered as `"200"` - the quotes are styling, not part of
-    the matched text), `null`/`true`/`false` (rendered as their literal
+  - Simple text rules (`kind` missing or `kind: "simple"`) match the
+    **rendered text** the user sees in the tree, not the underlying
+    JSON literal. So a `value contains "200"` rule matches the JSON
+    number `200` (rendered as `200`), the JSON string `"200"`
+    (rendered as `"200"` - the quotes are styling, not part of the
+    matched text), `null`/`true`/`false` (rendered as their literal
     text). This keeps the user's mental model "what I see is what
-    matches".
-  - **Container nodes** (object `{}` and array `[]` rows) are excluded
-    from value-target rules - they have no scalar value text to match.
-    They remain eligible for key-target rules via their property name.
+    matches" for text matching.
+  - Simple `target: "key_and_value"` keeps the legacy OR-on-fields
+    semantics. It uses one text condition and applies when the key, the
+    value, or both match. The editor labels this mode "Key or value
+    (either)" so it is not confused with pair rules.
+  - Pair rules (`kind: "pair"`) are a true cross-field AND: `keyMatch`
+    and `valueMatch` must both match the same node before any style is
+    applied. Key matching is text-only. Value matching can be text or
+    one of the value predicates in the truth table below.
+  - **Container nodes** (object `{}` and array `[]` rows) remain
+    excluded from simple value-target text rules because they have no
+    scalar value text to match. They remain eligible for key-target
+    rules via their property name. Pair value predicates can evaluate
+    object and array container rows via `valueKind` and `isEmpty`; pair
+    value text matches are skipped when `valueText` is `null`.
   - Rules whose match config is structurally invalid (empty
-    `matchValue`, unknown enum, etc.) are skipped at evaluation time.
+    `matchValue`, unknown enum, unknown `kind`, etc.) are skipped at
+    evaluation time by clients that read them defensively. API writes
+    reject malformed or unknown rule shapes before persistence.
+
+#### Predicate truth table
+
+Pair-rule predicates evaluate against the deterministic formatting value
+kind described below. The first-ship predicate set is intentionally a
+16-value closed set covering existence, emptiness, and JSON type checks.
+
+- `is_null`: true iff `valueKind === 'null'`.
+- `is_string`/`is_number`/`is_integer`/`is_boolean`/`is_object`/`is_array`: true iff `valueKind === '<type>'`. Their `is_not_X` forms are negations.
+- `is_number` and `is_integer` are mutually exclusive (matches `value-classifier.ts:154-157`). Document that users wanting "any numeric" combine the two.
+- `is_empty`: true iff `(valueKind === 'string' && valueText === '') || (valueKind === 'array' && isEmpty) || (valueKind === 'object' && isEmpty)`. False for `null`, `0`, `false`, `'   '` (whitespace).
+- `is_not_empty`: inverse.
+
+| Predicate | True when |
+|---|---|
+| `is_null` | `valueKind === 'null'` |
+| `is_not_null` | negation of `is_null` |
+| `is_empty` | `(valueKind === 'string' && valueText === '') || (valueKind === 'array' && isEmpty) || (valueKind === 'object' && isEmpty)` |
+| `is_not_empty` | inverse of `is_empty` |
+| `is_string` | `valueKind === 'string'` |
+| `is_not_string` | negation of `is_string` |
+| `is_number` | `valueKind === 'number'` |
+| `is_not_number` | negation of `is_number` |
+| `is_integer` | `valueKind === 'integer'` |
+| `is_not_integer` | negation of `is_integer` |
+| `is_boolean` | `valueKind === 'boolean'` |
+| `is_not_boolean` | negation of `is_boolean` |
+| `is_object` | `valueKind === 'object'` |
+| `is_not_object` | negation of `is_object` |
+| `is_array` | `valueKind === 'array'` |
+| `is_not_array` | negation of `is_array` |
+
+`is_number` and `is_integer` are mutually exclusive, matching the
+existing classifier behavior in `src/app/shared/utils/value-classifier.ts`
+lines 154-157. Users who want "any numeric" combine the two, usually as
+two rules that share the same style.
+
+`is_empty` is false for `null`, `0`, `false`, and `'   '` (whitespace).
+Whitespace-only strings are non-empty because only the exact empty string
+matches.
+
+#### Lifecycle
+
+Pair and predicate rules use the same evaluation lifecycle as today's
+text rules: `evaluateFormattingRules` runs lazily per node during tree
+rendering, the result is memoized by the per-node cache in
+`json-tree.component.ts`, and evaluation automatically re-runs when JSON
+content or active rule sets change. There is no pre-pass at content-load
+time and no manual trigger. The memo cache key must include `valueKind`
+and `isEmpty` in addition to the existing key/value text and rule-set
+fingerprint so predicates do not reuse stale text-match results.
+
+#### Deterministic classifier
+
+Predicate evaluation must not depend on user preferences such as
+`treeAssumeUtcForIsoDateTime`; the same saved rule set must highlight the
+same nodes for every viewer, tab, and device. Formatting predicates
+therefore use a dedicated deterministic helper at
+`src/app/shared/utils/formatting-value-kind.ts`, separate from the
+preference-sensitive search classifier in
+`src/app/shared/utils/value-classifier.ts`. The helper classifies the JSON
+value into `valueKind` and `isEmpty` for the engine.
+
+#### Stale-tab graceful degradation
+
+Clients must read rules with the defensive pattern
+`rule.kind ?? 'simple'`. Consumers that encounter an unknown `kind`
+skip that rule rather than throwing, and must not read legacy fields such as
+`matchValue` until after the rule is known to be simple. No
+version-mismatch force-refresh is required in v1. On the API side,
+create/update validators enforce a closed set for `kind`,
+`valueMatch.kind`, `predicate`, `target`, and `matchType`, and reject
+unknown fields so invalid future shapes are not persisted by current
+servers.
+
+#### Deferred / out-of-scope (this iteration)
+
+- Format predicates: `is_date`, `is_uuid`, `is_url`, `is_email`,
+  `is_ipv4`, `is_ipv6`, `is_path`, `is_date_time`.
+- N-ary clause-list rules beyond the single key/value pair AND.
+- Predicates on the key side; keys remain text-only.
+- Wire-field rename of `target: "key_and_value"`; only the
+  user-visible label changes.
+- Built-in preset using pair rules.
 
 - **Regex policy (v1):** the `regex` match type is **not shipped in
   v1**. Native JavaScript regex has no execution timeout, and a
@@ -692,8 +863,15 @@ Available to **registered users** only.
     matchedRules: { setId, ruleId, label }[]
   }
   ```
-  - Rules with `target=key` produce `keyStyle` only;
-    `target=value` -> `valueStyle`; `target=key_and_value` -> both.
+  - For `kind: "simple"`, the legacy `target` wire field is
+    unchanged: `target=key` -> `keyStyle`, `target=value` ->
+    `valueStyle`, and `target=key_and_value` ("Key or value (either)"
+    in the editor) styles whichever side's single text condition
+    matched, or both if both sides matched.
+  - For `kind: "pair"` ("Key + value (both must match)" in the
+    editor), `keyMatch` and `valueMatch` must both match the same node
+    before style applies; inline style projects to both `keyStyle` and
+    `valueStyle` on a match.
   - `backgroundColor` and `borderColor` always project onto `rowStyle`
     (they paint the row, not the inline tokens).
   - Within a set: rules merged in array order; later rules override
