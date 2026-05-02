@@ -252,6 +252,14 @@ export class RuleEditorComponent implements OnInit {
     },
     { value: 'is_array', label: $localize`:@@ruleEditor.predicate.isArray:is an array` },
     { value: 'is_not_array', label: $localize`:@@ruleEditor.predicate.isNotArray:is not an array` },
+    {
+      value: 'has_content',
+      label: $localize`:@@ruleEditor.predicate.hasContent:has content (not null and not empty)`,
+    },
+    {
+      value: 'lacks_content',
+      label: $localize`:@@ruleEditor.predicate.lacksContent:lacks content (null or empty)`,
+    },
   ];
   readonly noneLabel = $localize`:@@ruleEditor.style.none:(none)`;
 

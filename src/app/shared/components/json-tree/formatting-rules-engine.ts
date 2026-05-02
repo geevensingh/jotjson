@@ -221,6 +221,8 @@ function isValidPredicate(predicate: unknown): predicate is ValuePredicate {
     case 'is_not_null':
     case 'is_empty':
     case 'is_not_empty':
+    case 'has_content':
+    case 'lacks_content':
     case 'is_string':
     case 'is_not_string':
     case 'is_number':
@@ -262,6 +264,10 @@ function evaluatePredicate(predicate: ValuePredicate, node: RuleEngineNode): boo
       );
     case 'is_not_empty':
       return !evaluatePredicate('is_empty', node);
+    case 'lacks_content':
+      return evaluatePredicate('is_null', node) || evaluatePredicate('is_empty', node);
+    case 'has_content':
+      return !evaluatePredicate('lacks_content', node);
     case 'is_string':
       return node.valueKind === 'string';
     case 'is_not_string':

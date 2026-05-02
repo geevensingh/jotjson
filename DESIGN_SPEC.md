@@ -256,12 +256,14 @@ type ValueMatch =
       predicate: ValuePredicate;
     };
 
-// First-ship closed set: 16 values. The union is intentionally extensible.
+// First-ship closed set: 18 values. The union is intentionally extensible.
 type ValuePredicate =
   | 'is_null'
   | 'is_not_null'
   | 'is_empty'
   | 'is_not_empty'
+  | 'has_content'
+  | 'lacks_content'
   | 'is_string'
   | 'is_not_string'
   | 'is_number'
@@ -740,14 +742,17 @@ Available to **registered users** only.
 #### Predicate truth table
 
 Pair-rule predicates evaluate against the deterministic formatting value
-kind described below. The first-ship predicate set is intentionally a
-16-value closed set covering existence, emptiness, and JSON type checks.
+kind described below. The first-ship predicate set is intentionally an
+18-value closed set covering existence, emptiness, content, and JSON type
+checks.
 
 - `is_null`: true iff `valueKind === 'null'`.
 - `is_string`/`is_number`/`is_integer`/`is_boolean`/`is_object`/`is_array`: true iff `valueKind === '<type>'`. Their `is_not_X` forms are negations.
 - `is_number` and `is_integer` are mutually exclusive (matches `value-classifier.ts:154-157`). Document that users wanting "any numeric" combine the two.
 - `is_empty`: true iff `(valueKind === 'string' && valueText === '') || (valueKind === 'array' && isEmpty) || (valueKind === 'object' && isEmpty)`. False for `null`, `0`, `false`, `'   '` (whitespace).
 - `is_not_empty`: inverse.
+- `has_content`: true iff `is_not_null && is_not_empty`; matches values that are not null and not empty, including whitespace strings, numbers, booleans, and non-empty containers.
+- `lacks_content`: inverse of `has_content`; true for `null`, `""`, `[]`, and `{}`.
 
 | Predicate | True when |
 |---|---|
@@ -755,6 +760,8 @@ kind described below. The first-ship predicate set is intentionally a
 | `is_not_null` | negation of `is_null` |
 | `is_empty` | `(valueKind === 'string' && valueText === '') || (valueKind === 'array' && isEmpty) || (valueKind === 'object' && isEmpty)` |
 | `is_not_empty` | inverse of `is_empty` |
+| `has_content` | `is_not_null && is_not_empty` |
+| `lacks_content` | inverse of `has_content`; `null`, `""`, `[]`, or `{}` |
 | `is_string` | `valueKind === 'string'` |
 | `is_not_string` | negation of `is_string` |
 | `is_number` | `valueKind === 'number'` |
@@ -773,9 +780,11 @@ existing classifier behavior in `src/app/shared/utils/value-classifier.ts`
 lines 154-157. Users who want "any numeric" combine the two, usually as
 two rules that share the same style.
 
+`has_content` and `lacks_content` are mutually exclusive and exhaustive.
 `is_empty` is false for `null`, `0`, `false`, and `'   '` (whitespace).
-Whitespace-only strings are non-empty because only the exact empty string
-matches.
+`has_content` still excludes `null`, but includes whitespace strings,
+numbers, booleans, and non-empty containers because only the exact empty
+string matches.
 
 #### Lifecycle
 
@@ -900,6 +909,7 @@ servers.
   - `status-codes` ("Status Codes") - color-codes a fixed list of common HTTP response code values via `exact` matches: `200`, `201`, `204` (green); `400`, `401`, `403`, `404` (amber); `500`, `502`, `503` (red). Individual rules per code rather than a single regex - a documented v1 trade-off until the regex match type lands in v1.1.
   - `null-finder` ("Null Finder") - highlights all `null` values with a yellow background.
   - `status-highlights` ("Status Highlights") - color-codes outcome and lifecycle vocabulary on both keys and values, case-insensitive. Green: `success`, `succeeded`, `passed` (`contains`), `ok` (`exact` - avoids partial matches like "took" / "look" / "broken" while still catching `{"status":"OK"}`). Amber: `warning`, `pending`, `retry` (`contains`), `warn` (`exact` - avoids "Warner" / "warned" while catching `{"level":"warn"}`).
+  - `test-header-content` ("Test Header Content") - highlights values under keys named `test-header`, `testHeader`, or `test_header` with case-insensitive exact matching (so `Test-Header`, `TESTHEADER`, etc. also match). It uses complementary pair-value predicates: `has_content` paints red, `lacks_content` paints green; because those predicates are mutually exclusive, a matched node's tooltip gets exactly one label. Whitespace-only strings like `"   "` are treated as content (red) because `is_empty` is strict-literal-empty. The preset paints row backgrounds, so when it is active with another row-background preset such as `null-finder`, the final color follows cross-set `createdAt ASC` precedence.
 
 - **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set, rule-set name <= 80 chars, rule matchValue <= 200 chars. Enforced server-side as hardcoded constants in `api/src/shared/limits.ts` (mirrors the 100-blob cap pattern); raising them later is one edit.
 
@@ -1541,8 +1551,12 @@ there is no need to bump SemVer just to mark a deploy.
   pre-V1 development).
 - **0.6.0**: M7r title suggester (wand button) - new user-visible
   feature on the home toolbar.
-- **Pre-V1**: stays at `0.6.0` for non-feature work; minor bumps
-  applied for new user-visible features per the rules above. The
+- **0.7.0**: Pair-rule formatting - `kind: simple|pair` rules with
+  key/value AND matching and value predicates.
+- **0.7.1**: Test Header Content preset - adds `has_content` /
+  `lacks_content` value predicates for null-or-empty highlighting.
+- **Pre-V1**: stays at the current pre-v1 version for non-feature work;
+  minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
   identifier through pre-V1.
 - **V1 launch**: one-time bump to `1.0.0` via `npm version major`

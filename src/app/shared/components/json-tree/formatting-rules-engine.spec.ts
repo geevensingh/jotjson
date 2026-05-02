@@ -351,6 +351,139 @@ describe('evaluateFormattingRules', () => {
       );
     }
 
+    const contentPredicateCases: readonly {
+      label: string;
+      node: Partial<RuleEngineNode>;
+      lacksContent: boolean;
+      hasContent: boolean;
+    }[] = [
+      {
+        label: 'null',
+        node: { valueKind: 'null', valueText: 'null' },
+        lacksContent: true,
+        hasContent: false,
+      },
+      {
+        label: 'empty string',
+        node: { valueKind: 'string', valueText: '' },
+        lacksContent: true,
+        hasContent: false,
+      },
+      {
+        label: 'empty array',
+        node: { valueKind: 'array', valueText: null, isContainer: true, isEmpty: true },
+        lacksContent: true,
+        hasContent: false,
+      },
+      {
+        label: 'empty object',
+        node: { valueKind: 'object', valueText: null, isContainer: true, isEmpty: true },
+        lacksContent: true,
+        hasContent: false,
+      },
+      {
+        label: 'whitespace string',
+        node: { valueKind: 'string', valueText: '   ' },
+        lacksContent: false,
+        hasContent: true,
+      },
+      {
+        label: 'non-empty string',
+        node: { valueKind: 'string', valueText: 'hello' },
+        lacksContent: false,
+        hasContent: true,
+      },
+      {
+        label: 'integer 42',
+        node: { valueKind: 'integer', valueText: '42' },
+        lacksContent: false,
+        hasContent: true,
+      },
+      {
+        label: 'integer zero',
+        node: { valueKind: 'integer', valueText: '0' },
+        lacksContent: false,
+        hasContent: true,
+      },
+      {
+        label: 'boolean true',
+        node: { valueKind: 'boolean', valueText: 'true' },
+        lacksContent: false,
+        hasContent: true,
+      },
+      {
+        label: 'boolean false',
+        node: { valueKind: 'boolean', valueText: 'false' },
+        lacksContent: false,
+        hasContent: true,
+      },
+      {
+        label: 'non-empty array',
+        node: { valueKind: 'array', valueText: null, isContainer: true, isEmpty: false },
+        lacksContent: false,
+        hasContent: true,
+      },
+      {
+        label: 'non-empty object',
+        node: { valueKind: 'object', valueText: null, isContainer: true, isEmpty: false },
+        lacksContent: false,
+        hasContent: true,
+      },
+    ];
+
+    it('matches has_content and lacks_content according to the content truth table', () => {
+      for (const contentPredicateCase of contentPredicateCases) {
+        const lacksContentMatched =
+          predicateResult('lacks_content', contentPredicateCase.node) !== EMPTY_RULE_RESULT;
+        const hasContentMatched =
+          predicateResult('has_content', contentPredicateCase.node) !== EMPTY_RULE_RESULT;
+
+        expect(lacksContentMatched)
+          .withContext(`${contentPredicateCase.label} lacks_content result`)
+          .toBe(contentPredicateCase.lacksContent);
+        expect(hasContentMatched)
+          .withContext(`${contentPredicateCase.label} has_content result`)
+          .toBe(contentPredicateCase.hasContent);
+      }
+    });
+
+    it('keeps has_content and lacks_content mutually exclusive', () => {
+      for (const contentPredicateCase of contentPredicateCases) {
+        const lacksContentMatched =
+          predicateResult('lacks_content', contentPredicateCase.node) !== EMPTY_RULE_RESULT;
+        const hasContentMatched =
+          predicateResult('has_content', contentPredicateCase.node) !== EMPTY_RULE_RESULT;
+
+        expect(lacksContentMatched && hasContentMatched)
+          .withContext(`${contentPredicateCase.label} should not match both content predicates`)
+          .toBe(false);
+      }
+    });
+
+    it('accepts has_content and lacks_content through the predicate validator gate', () => {
+      const validPredicateCases: readonly {
+        predicate: ValuePredicate;
+        node: Partial<RuleEngineNode>;
+      }[] = [
+        { predicate: 'has_content', node: { valueKind: 'string', valueText: 'present' } },
+        { predicate: 'lacks_content', node: { valueKind: 'null', valueText: 'null' } },
+      ];
+
+      for (const validPredicateCase of validPredicateCases) {
+        const result = predicateResult(validPredicateCase.predicate, validPredicateCase.node);
+
+        expect(result.matchedRules)
+          .withContext(`${validPredicateCase.predicate} should pass isValidPredicate`)
+          .toEqual([
+            {
+              setId: 's1',
+              ruleId: 'pair-r1',
+              label: `key exact "status" AND value ${validPredicateCase.predicate}`,
+            },
+          ]);
+      }
+    });
+
     it('matches is_null only for JSON null, not the string literal "null"', () => {
       expect(
         predicateResult('is_null', { valueKind: 'null', valueText: 'null' }).keyStyle.bold,
@@ -667,6 +800,50 @@ describe('evaluateFormattingRules', () => {
       });
       const result = evaluateFormattingRules([a, b], node({ key: 'foo' }));
       expect(result.keyStyle.color).toBe('#0000ff');
+    });
+
+    it('lets a later null-finder set override testHeader lacks_content background', () => {
+      const testHeaderContentSet = set(
+        [
+          pairRule({
+            id: 'test-header-lacks-content',
+            keyMatch: { matchType: 'exact', matchValue: 'testHeader', caseSensitive: false },
+            valueMatch: { kind: 'predicate', predicate: 'lacks_content' },
+            style: { backgroundColor: '#c8e6c9' },
+          }),
+        ],
+        {
+          id: 'test-header-content',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      );
+      const nullFinderSet = set(
+        [
+          rule({
+            id: 'null-value-highlight',
+            target: 'value',
+            matchType: 'exact',
+            matchValue: 'null',
+            caseSensitive: false,
+            style: { backgroundColor: '#fff59d' },
+          }),
+        ],
+        {
+          id: 'null-finder',
+          createdAt: '2026-01-02T00:00:00Z',
+        },
+      );
+
+      const result = evaluateFormattingRules(
+        [testHeaderContentSet, nullFinderSet],
+        node({ key: 'testHeader', valueKind: 'null', valueText: 'null' }),
+      );
+
+      expect(result.rowStyle.backgroundColor).toBe('#fff59d');
+      expect(result.matchedRules.map((matchedRule) => matchedRule.setId)).toEqual([
+        'test-header-content',
+        'null-finder',
+      ]);
     });
 
     it('matchedRules carries the source setId for each match', () => {

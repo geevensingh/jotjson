@@ -55,6 +55,8 @@ export type ValuePredicate =
   | 'is_not_null'
   | 'is_empty'
   | 'is_not_empty'
+  | 'has_content'
+  | 'lacks_content'
   | 'is_string'
   | 'is_not_string'
   | 'is_number'
@@ -100,6 +102,8 @@ const VALUE_PREDICATES: readonly ValuePredicate[] = [
   'is_not_null',
   'is_empty',
   'is_not_empty',
+  'has_content',
+  'lacks_content',
   'is_string',
   'is_not_string',
   'is_number',

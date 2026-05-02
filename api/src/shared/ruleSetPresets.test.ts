@@ -8,9 +8,15 @@ import { assertRule, assertRuleSetPayload } from './ruleSets';
 import { PRESET_RULE_SETS, findPreset, listPresets, presetToCreatePayload } from './ruleSetPresets';
 
 describe('built-in rule-set presets', () => {
-  it('exposes the four spec presets in a stable order', () => {
-    const ids = PRESET_RULE_SETS.map((p) => p.id);
-    expect(ids).toEqual(['error-detection', 'status-codes', 'null-finder', 'status-highlights']);
+  it('exposes the five spec presets in a stable order', () => {
+    const ids = PRESET_RULE_SETS.map((preset) => preset.id);
+    expect(ids).toEqual([
+      'error-detection',
+      'status-codes',
+      'null-finder',
+      'status-highlights',
+      'test-header-content',
+    ]);
   });
 
   it('uses kebab-case preset IDs (not UUIDs)', () => {
@@ -134,6 +140,58 @@ describe('built-in rule-set presets', () => {
       'pending',
       'retry',
     ]);
+  });
+
+  describe('test-header-content preset', () => {
+    it('ships complementary pair rules for each supported key spelling', () => {
+      const redBackgroundColor = '#ffcdd2';
+      const greenBackgroundColor = '#c8e6c9';
+      const expectedRuleIds = [
+        'kebab-has',
+        'kebab-lacks',
+        'camel-has',
+        'camel-lacks',
+        'snake-has',
+        'snake-lacks',
+      ];
+      const expectedSpellings = ['test-header', 'testHeader', 'test_header'];
+      const preset = findPreset('test-header-content')!;
+      expect(preset).toBeDefined();
+      expect(preset.rules).toHaveLength(6);
+      expect(preset.rules.map((rule) => rule.id)).toEqual(expectedRuleIds);
+
+      const pairRules = preset.rules.map((rule, index) => {
+        const normalized = assertRule(rule, `presets.${preset.id}[${index}]`);
+        expect(normalized).toEqual(rule);
+        expect(rule.kind).toBe('pair');
+        if (rule.kind !== 'pair') {
+          throw new Error(`Expected ${rule.id} to be a pair rule`);
+        }
+        expect(rule.keyMatch.matchType).toBe('exact');
+        expect(rule.keyMatch.caseSensitive).toBe(false);
+        expect(rule.valueMatch.kind).toBe('predicate');
+        return rule;
+      });
+
+      for (const spelling of expectedSpellings) {
+        const rulesForSpelling = pairRules.filter((rule) => rule.keyMatch.matchValue === spelling);
+        expect(rulesForSpelling).toHaveLength(2);
+
+        const hasContentRules = rulesForSpelling.filter(
+          (rule) =>
+            rule.valueMatch.kind === 'predicate' && rule.valueMatch.predicate === 'has_content',
+        );
+        expect(hasContentRules).toHaveLength(1);
+        expect(hasContentRules[0]?.style.backgroundColor).toBe(redBackgroundColor);
+
+        const lacksContentRules = rulesForSpelling.filter(
+          (rule) =>
+            rule.valueMatch.kind === 'predicate' && rule.valueMatch.predicate === 'lacks_content',
+        );
+        expect(lacksContentRules).toHaveLength(1);
+        expect(lacksContentRules[0]?.style.backgroundColor).toBe(greenBackgroundColor);
+      }
+    });
   });
 
   it('findPreset returns undefined for unknown ids', () => {

@@ -34,6 +34,11 @@ const PREFERENCES_STORAGE_KEY = 'jotjson.preferences.v1';
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
 const PAIR_TEXT_COLOR = '#ff0000';
 const PAIR_STYLE: FormattingStyle = { textColor: PAIR_TEXT_COLOR };
+const TEST_HEADER_HAS_CONTENT_BACKGROUND = '#ffcdd2';
+const TEST_HEADER_LACKS_CONTENT_BACKGROUND = '#c8e6c9';
+const TEST_HEADER_SPELLINGS = ['test-header', 'testHeader', 'test_header'] as const;
+
+type TestHeaderSpelling = (typeof TEST_HEADER_SPELLINGS)[number];
 
 interface EditorSetupOptions {
   initialCache?: FormattingRuleSet[] | null;
@@ -104,6 +109,68 @@ function predicatePairRule(
     valueMatch: { kind: 'predicate', predicate },
     ...overrides,
   });
+}
+
+function testHeaderContentRule(
+  ruleId: string,
+  keyMatchValue: TestHeaderSpelling,
+  predicate: ValuePredicate,
+  backgroundColor: string,
+): FormattingRulePair {
+  return {
+    id: ruleId,
+    kind: 'pair',
+    keyMatch: { matchType: 'exact', matchValue: keyMatchValue, caseSensitive: false },
+    valueMatch: { kind: 'predicate', predicate },
+    style: { backgroundColor },
+  };
+}
+
+const TEST_HEADER_CONTENT_RULES: readonly FormattingRulePair[] = [
+  testHeaderContentRule(
+    'kebab-has',
+    'test-header',
+    'has_content',
+    TEST_HEADER_HAS_CONTENT_BACKGROUND,
+  ),
+  testHeaderContentRule(
+    'kebab-lacks',
+    'test-header',
+    'lacks_content',
+    TEST_HEADER_LACKS_CONTENT_BACKGROUND,
+  ),
+  testHeaderContentRule(
+    'camel-has',
+    'testHeader',
+    'has_content',
+    TEST_HEADER_HAS_CONTENT_BACKGROUND,
+  ),
+  testHeaderContentRule(
+    'camel-lacks',
+    'testHeader',
+    'lacks_content',
+    TEST_HEADER_LACKS_CONTENT_BACKGROUND,
+  ),
+  testHeaderContentRule(
+    'snake-has',
+    'test_header',
+    'has_content',
+    TEST_HEADER_HAS_CONTENT_BACKGROUND,
+  ),
+  testHeaderContentRule(
+    'snake-lacks',
+    'test_header',
+    'lacks_content',
+    TEST_HEADER_LACKS_CONTENT_BACKGROUND,
+  ),
+];
+
+function testHeaderDocument(value: unknown): Record<TestHeaderSpelling, unknown> {
+  return {
+    'test-header': value,
+    testHeader: value,
+    test_header: value,
+  };
 }
 
 function futureRule(): FormattingRule {
@@ -271,6 +338,31 @@ function expectNotMatched(component: JsonTreeComponent, key: string): void {
 function expectPairInlineStyle(result: RuleEngineResult): void {
   expect(result.keyStyle.color).toBe(PAIR_TEXT_COLOR);
   expect(result.valueStyle.color).toBe(PAIR_TEXT_COLOR);
+}
+
+function expectRowBackground(
+  component: JsonTreeComponent,
+  key: string,
+  expectedBackgroundColor: string,
+  context: string,
+): RuleEngineResult {
+  const result = expectMatched(component, key);
+  expect(result.rowStyle.backgroundColor)
+    .withContext(`${context} row background`)
+    .toBe(expectedBackgroundColor);
+  expect(result.matchedRules.length).withContext(`${context} matched rule count`).toBe(1);
+  return result;
+}
+
+function expectSingleMatchedRuleTooltip(component: JsonTreeComponent, key: string): void {
+  const node = findTreeNode(component, key);
+  const result = component.ruleResultFor(node);
+  expect(result.matchedRules.length).withContext(`${key} matched rule count`).toBe(1);
+  const matchedRuleTitle = component.matchedRuleTitle(node);
+  expect(matchedRuleTitle).withContext(`${key} matched rule title`).not.toBeNull();
+  expect(matchedRuleTitle ?? '')
+    .withContext(`${key} matched rule title`)
+    .not.toContain('\n');
 }
 
 function engineNode(overrides: Partial<RuleEngineNode> = {}): RuleEngineNode {
@@ -592,6 +684,80 @@ describe('pair rule editor and engine round trip', () => {
         expect(actualNames)
           .withContext(predicateCase.predicate)
           .toEqual(predicateCase.matchingNames);
+      }
+    });
+  });
+
+  describe('test-header-content preset', () => {
+    it('paints null and empty values green for all test-header spellings', () => {
+      const greenCases: readonly { label: string; value: unknown }[] = [
+        { label: 'null', value: null },
+        { label: 'empty string', value: '' },
+        { label: 'empty array', value: [] },
+        { label: 'empty object', value: {} },
+      ];
+
+      for (const testCase of greenCases) {
+        const treeSetup = setupTree(testHeaderDocument(testCase.value), TEST_HEADER_CONTENT_RULES);
+
+        for (const key of TEST_HEADER_SPELLINGS) {
+          expectRowBackground(
+            treeSetup.component,
+            key,
+            TEST_HEADER_LACKS_CONTENT_BACKGROUND,
+            `${testCase.label} ${key}`,
+          );
+        }
+
+        if (testCase.value === null) {
+          expectSingleMatchedRuleTooltip(treeSetup.component, 'testHeader');
+        }
+      }
+    });
+
+    it('paints content values red for all test-header spellings', () => {
+      const redCases: readonly { label: string; value: unknown }[] = [
+        { label: 'whitespace string', value: '   ' },
+        { label: 'non-empty string', value: 'hello' },
+        { label: 'positive number', value: 42 },
+        { label: 'zero', value: 0 },
+        { label: 'true', value: true },
+        { label: 'false', value: false },
+        { label: 'non-empty array', value: [1, 2] },
+        { label: 'non-empty object', value: { x: 1 } },
+      ];
+
+      for (const testCase of redCases) {
+        const treeSetup = setupTree(testHeaderDocument(testCase.value), TEST_HEADER_CONTENT_RULES);
+
+        for (const key of TEST_HEADER_SPELLINGS) {
+          expectRowBackground(
+            treeSetup.component,
+            key,
+            TEST_HEADER_HAS_CONTENT_BACKGROUND,
+            `${testCase.label} ${key}`,
+          );
+        }
+      }
+    });
+
+    it('matches test-header keys case-insensitively', () => {
+      const treeSetup = setupTree(
+        {
+          'Test-Header': 'hello',
+          TESTHEADER: 'hello',
+          TestHeader: 'hello',
+        },
+        TEST_HEADER_CONTENT_RULES,
+      );
+
+      for (const key of ['Test-Header', 'TESTHEADER', 'TestHeader'] as const) {
+        expectRowBackground(
+          treeSetup.component,
+          key,
+          TEST_HEADER_HAS_CONTENT_BACKGROUND,
+          `${key} case-insensitive match`,
+        );
       }
     });
   });

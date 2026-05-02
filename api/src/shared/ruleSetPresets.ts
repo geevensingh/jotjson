@@ -268,6 +268,93 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
 };
 
 /**
+ * Test Header Content - highlights `test-header`, `testHeader`, and
+ * `test_header` pairs based on whether the value carries content, so
+ * test header fields with payload stand out red and missing / empty
+ * payloads show as green.
+ *
+ * The `has_content` and `lacks_content` predicates are complementary:
+ * for any matched key, exactly one rule fires, keeping the matched-rule
+ * tooltip clean. This preset paints row backgrounds, so it can collide
+ * with other row-bg presets such as `null-finder`; cross-set precedence
+ * then depends on rule-set `createdAt` order. Note that `"   "` matches
+ * `has_content` (red), because the engine's `is_empty` check is strict-
+ * literal-empty.
+ */
+const TEST_HEADER_CONTENT: RuleSetPreset = {
+  id: 'test-header-content',
+  name: 'Test Header Content',
+  rules: [
+    {
+      id: 'kebab-has',
+      kind: 'pair',
+      keyMatch: {
+        matchType: 'exact',
+        matchValue: 'test-header',
+        caseSensitive: false,
+      },
+      valueMatch: { kind: 'predicate', predicate: 'has_content' },
+      style: STYLE_RED_BG,
+    },
+    {
+      id: 'kebab-lacks',
+      kind: 'pair',
+      keyMatch: {
+        matchType: 'exact',
+        matchValue: 'test-header',
+        caseSensitive: false,
+      },
+      valueMatch: { kind: 'predicate', predicate: 'lacks_content' },
+      style: STYLE_GREEN_BG,
+    },
+    {
+      id: 'camel-has',
+      kind: 'pair',
+      keyMatch: {
+        matchType: 'exact',
+        matchValue: 'testHeader',
+        caseSensitive: false,
+      },
+      valueMatch: { kind: 'predicate', predicate: 'has_content' },
+      style: STYLE_RED_BG,
+    },
+    {
+      id: 'camel-lacks',
+      kind: 'pair',
+      keyMatch: {
+        matchType: 'exact',
+        matchValue: 'testHeader',
+        caseSensitive: false,
+      },
+      valueMatch: { kind: 'predicate', predicate: 'lacks_content' },
+      style: STYLE_GREEN_BG,
+    },
+    {
+      id: 'snake-has',
+      kind: 'pair',
+      keyMatch: {
+        matchType: 'exact',
+        matchValue: 'test_header',
+        caseSensitive: false,
+      },
+      valueMatch: { kind: 'predicate', predicate: 'has_content' },
+      style: STYLE_RED_BG,
+    },
+    {
+      id: 'snake-lacks',
+      kind: 'pair',
+      keyMatch: {
+        matchType: 'exact',
+        matchValue: 'test_header',
+        caseSensitive: false,
+      },
+      valueMatch: { kind: 'predicate', predicate: 'lacks_content' },
+      style: STYLE_GREEN_BG,
+    },
+  ],
+};
+
+/**
  * Ordered list of presets returned by `GET /api/rule-set-presets`.
  * Order is stable so the UI's "Clone preset" menu doesn't shuffle
  * between requests.
@@ -277,6 +364,7 @@ export const PRESET_RULE_SETS: readonly RuleSetPreset[] = [
   STATUS_CODES,
   NULL_FINDER,
   STATUS_HIGHLIGHTS,
+  TEST_HEADER_CONTENT,
 ] as const;
 
 const PRESET_BY_ID: ReadonlyMap<string, RuleSetPreset> = new Map(
