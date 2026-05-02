@@ -373,8 +373,10 @@ The primary page. Available to **all users** (anonymous + registered).
   - The pill lives in an `aria-live="polite"` region so screen readers announce
     state changes.
   - **Title suggestions** (M7r): when signed in, a small wand icon button sits
-    between the title input and the state pill. It is enabled only when the
-    title is empty and the editor has non-empty content; clicking it opens a
+    between the title input and the state pill. It is enabled whenever the
+    editor has non-empty content (the user can also click it to look for a
+    better title than they typed -- picking a candidate replaces whatever is
+    in the title input). Clicking it opens a
     menu of 2-7 candidate titles inferred from the current document. Picking
     a candidate writes it into the title input. The candidates are computed
     **lazily on click** (not per keystroke) by composing a registry of pure

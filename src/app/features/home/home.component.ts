@@ -391,18 +391,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly isBlobPublic = computed(() => !!this.loadedBlob()?.isPublic);
 
   /**
-   * Title-suggester wand-enable predicate (M7p). The wand should be
-   * actionable only when:
-   *   - the title field is empty (otherwise we'd be overwriting a
-   *     deliberate value), AND
-   *   - there is non-empty editor content (otherwise there's nothing
-   *     to suggest from).
+   * Title-suggester wand-enable predicate (M7r). The wand is enabled
+   * whenever the editor has non-empty content. Picking a candidate from
+   * the menu replaces whatever is currently in the title input -- the
+   * user explicitly asked for a suggestion by clicking, and an explicit
+   * click is treated as a deliberate write (same precedent as
+   * autocomplete dropdowns).
    *
    * The synthetic-floor in `TitleSuggesterService` guarantees >=2
    * candidates from any non-empty content, so we don't peek at the
    * candidate count to decide enable/disable.
    */
-  readonly wandEnabled = computed(() => this.title().trim().length === 0 && this.hasContent());
+  readonly wandEnabled = computed(() => this.hasContent());
 
   readonly clipboardState = computed<'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'>(
     () => {

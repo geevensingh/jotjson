@@ -101,10 +101,9 @@ export class ToolbarComponent {
   readonly suggestedTitles = input<readonly SuggestionCandidate[]>([]);
 
   /**
-   * Whether the wand button itself should be enabled (M7p). True when
-   * the title field is empty AND there is non-empty editor content.
-   * Computed by the parent so this component does not need direct
-   * access to the full editor text.
+   * Whether the wand button itself should be enabled (M7r). True when
+   * the editor has non-empty content. Computed by the parent so this
+   * component does not need direct access to the full editor text.
    */
   readonly wandEnabled = input<boolean>(false);
 

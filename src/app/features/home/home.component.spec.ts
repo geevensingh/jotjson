@@ -3392,17 +3392,24 @@ describe('HomeComponent M7p title-suggester wiring', () => {
     expect(fixture.componentInstance.suggestedTitlesForMenu()).toEqual([]);
   });
 
-  it('wandEnabled is false when title is set', () => {
+  it('wandEnabled is true when title is set as long as content is non-empty', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1}');
     fixture.componentInstance.title.set('My Title');
-    expect(fixture.componentInstance.wandEnabled()).toBe(false);
+    expect(fixture.componentInstance.wandEnabled()).toBe(true);
   });
 
   it('wandEnabled is false when content is empty', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('   ');
     fixture.componentInstance.title.set('');
+    expect(fixture.componentInstance.wandEnabled()).toBe(false);
+  });
+
+  it('wandEnabled is false when content is empty even if title is set', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('');
+    fixture.componentInstance.title.set('My Title');
     expect(fixture.componentInstance.wandEnabled()).toBe(false);
   });
 
