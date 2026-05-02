@@ -1,18 +1,18 @@
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { Title, By } from '@angular/platform-browser';
-import { of, throwError } from 'rxjs';
+import { EMPTY, Subject, of, throwError } from 'rxjs';
 import { HomeComponent } from './home.component';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { DraftService } from '../../core/preferences/draft.service';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import { provideRouter, Router } from '@angular/router';
-import { BlobService } from '../../core/api/blob.service';
+import { BlobService, type BlobSyncEvent } from '../../core/api/blob.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import type { JsonBlob } from '../../core/api/models';
+import type { BlobHighlight, JsonBlob } from '../../core/api/models';
 import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
@@ -24,7 +24,10 @@ import { bucketBytes } from '../../core/telemetry/buckets';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
 import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
-import type { TreeExtractRequest } from '../../shared/components/json-tree/json-tree.component';
+import {
+  JsonTreeComponent,
+  type TreeExtractRequest,
+} from '../../shared/components/json-tree/json-tree.component';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -193,13 +196,14 @@ describe('HomeComponent (unit-level)', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1}');
     fixture.componentInstance.title.set('hello');
-    fixture.componentInstance.loadedBlob.set({
+    fixture.componentInstance.__loadBlobForTesting({
       id: 'id-1',
       slug: 'slug-1',
       content: '{"a":1}',
       title: 'hello',
       ownerId: 'me',
       isPublic: false,
+      highlights: [{ path: '$.a', color: '#ffff00', cascade: false }],
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
@@ -208,6 +212,7 @@ describe('HomeComponent (unit-level)', () => {
     expect(fixture.componentInstance.content()).toBe('');
     expect(fixture.componentInstance.title()).toBe('');
     expect(fixture.componentInstance.loadedBlob()).toBeNull();
+    expect(fixture.componentInstance.highlights()).toEqual([]);
   });
 
   it('onClear() on /s/:slug does not re-hydrate from a resolved initialBlob (regression)', () => {
@@ -852,81 +857,67 @@ describe('HomeComponent dirty computed (issue #84)', () => {
   }
 
   function loadBlob(component: HomeComponent, jsonBlob: JsonBlob): void {
-    component.loadedBlob.set(jsonBlob);
-    component.content.set(jsonBlob.content);
-    component.title.set(jsonBlob.title ?? '');
+    component.__loadBlobForTesting(jsonBlob);
   }
 
-  it('returns false when loadedBlob is null for a draft', () => {
+  it('returns true for an unsaved buffer when the user types content', () => {
     const component = createComponent();
     component.content.set('{"draft":true}');
-    component.title.set('Draft title');
+    expect(component.dirty()).toBeTrue();
+  });
+
+  it('returns false after loading a blob without edits', () => {
+    const component = createComponent();
+    loadBlob(component, makeIdentityBlob());
     expect(component.dirty()).toBeFalse();
   });
 
-  it('returns false when blob content and title match exactly', () => {
+  it('returns true when loaded content changes', () => {
     const component = createComponent();
-    const jsonBlob = makeIdentityBlob();
-    loadBlob(component, jsonBlob);
-    expect(component.dirty()).toBeFalse();
-  });
-
-  it('returns true when content differs by one character', () => {
-    const component = createComponent();
-    const jsonBlob = makeIdentityBlob({ content: '{"saved":"a"}' });
-    loadBlob(component, jsonBlob);
+    loadBlob(component, makeIdentityBlob({ content: '{"saved":"a"}' }));
     component.content.set('{"saved":"b"}');
     expect(component.dirty()).toBeTrue();
   });
 
-  it('returns true when title differs by one character', () => {
+  it('returns true when loaded title changes', () => {
     const component = createComponent();
-    const jsonBlob = makeIdentityBlob({ title: 'Saved title' });
-    loadBlob(component, jsonBlob);
+    loadBlob(component, makeIdentityBlob({ title: 'Saved title' }));
     component.title.set('Saved titles');
     expect(component.dirty()).toBeTrue();
   });
 
-  it('returns false when content differs only by EOL style', () => {
+  it('returns true when a loaded blob gains a highlight', () => {
     const component = createComponent();
-    const jsonBlob = makeIdentityBlob({ content: '{\r\n  "saved": true\r\n}' });
-    loadBlob(component, jsonBlob);
-    component.content.set('{\n  "saved": true\n}');
-    expect(component.dirty()).toBeFalse();
-  });
-
-  it('returns false when title differs only by surrounding whitespace', () => {
-    const component = createComponent();
-    const jsonBlob = makeIdentityBlob({ title: 'Saved title' });
-    loadBlob(component, jsonBlob);
-    component.title.set('  Saved title  ');
-    expect(component.dirty()).toBeFalse();
-  });
-
-  it('returns false for an untitled blob when local title is empty', () => {
-    const component = createComponent();
-    const undefinedTitleBlob = makeIdentityBlob({ title: undefined });
-    loadBlob(component, undefinedTitleBlob);
-    component.title.set('');
-    expect(component.dirty()).toBeFalse();
-
-    const nullTitleBlob = {
-      ...makeIdentityBlob({ id: 'identity-blob-2' }),
-      title: null,
-    } as unknown as JsonBlob;
-    loadBlob(component, nullTitleBlob);
-    component.title.set('');
-    expect(component.dirty()).toBeFalse();
-  });
-
-  it('returns false again after an edit is reverted exactly', () => {
-    const component = createComponent();
-    const jsonBlob = makeIdentityBlob({ content: '{"saved":true}' });
-    loadBlob(component, jsonBlob);
-    component.content.set('{"saved":false}');
+    const highlight: BlobHighlight = { path: '$.saved', color: '#ffff00', cascade: false };
+    loadBlob(component, makeIdentityBlob());
+    component.onHighlightsChange([highlight]);
     expect(component.dirty()).toBeTrue();
-    component.content.set(jsonBlob.content);
-    component.title.set(jsonBlob.title ?? '');
+  });
+
+  it('returns true when a loaded highlight is removed', () => {
+    const component = createComponent();
+    const highlight: BlobHighlight = { path: '$.saved', color: '#ffff00', cascade: false };
+    loadBlob(component, makeIdentityBlob({ highlights: [highlight] }));
+    component.onHighlightsChange([]);
+    expect(component.dirty()).toBeTrue();
+  });
+
+  it('returns false when a highlight is added and removed back to the loaded state', () => {
+    const component = createComponent();
+    const highlight: BlobHighlight = { path: '$.saved', color: '#ffff00', cascade: false };
+    loadBlob(component, makeIdentityBlob());
+    component.onHighlightsChange([highlight]);
+    expect(component.dirty()).toBeTrue();
+    component.onHighlightsChange([]);
+    expect(component.dirty()).toBeFalse();
+  });
+
+  it('ignores highlight array order when comparing against the loaded state', () => {
+    const component = createComponent();
+    const firstHighlight: BlobHighlight = { path: '$.a', color: '#ffff00', cascade: false };
+    const secondHighlight: BlobHighlight = { path: '$.b', color: '#00ff00', cascade: true };
+    loadBlob(component, makeIdentityBlob({ highlights: [firstHighlight, secondHighlight] }));
+    component.onHighlightsChange([secondHighlight, firstHighlight]);
     expect(component.dirty()).toBeFalse();
   });
 });
@@ -955,9 +946,7 @@ describe('HomeComponent canSave computed (issue #84)', () => {
   }
 
   function loadBlob(component: HomeComponent, jsonBlob: JsonBlob): void {
-    component.loadedBlob.set(jsonBlob);
-    component.content.set(jsonBlob.content);
-    component.title.set(jsonBlob.title ?? '');
+    component.__loadBlobForTesting(jsonBlob);
   }
 
   it('returns false when anonymous draft has no content', () => {
@@ -1050,7 +1039,7 @@ describe('HomeComponent sign-in restore (issue #84)', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
     const signInSpy = spyOn(TestBed.inject(AuthService), 'signIn');
-    component.loadedBlob.set(makeIdentityBlob({ slug: 'abc123' }));
+    component.__loadBlobForTesting(makeIdentityBlob({ slug: 'abc123' }));
     component.content.set('{"edited":true}');
     component.title.set('Edited title');
 
@@ -1182,7 +1171,7 @@ describe('HomeComponent draft persistence skip (issue #84)', () => {
     flushComponentEffects(fixture);
     setSpy.calls.reset();
 
-    fixture.componentInstance.loadedBlob.set(makeIdentityBlob());
+    fixture.componentInstance.__loadBlobForTesting(makeIdentityBlob());
     fixture.componentInstance.onValueChange('{"shared":true}');
     flushComponentEffects(fixture);
 
@@ -1510,6 +1499,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     create: jasmine.Spy;
     update: jasmine.Spy;
     get: jasmine.Spy;
+    events$: typeof EMPTY;
   }
 
   interface StubQuotaService {
@@ -1549,6 +1539,7 @@ describe('HomeComponent save() branching (M4a)', () => {
             : of(opts.updateResult ?? blob()),
         ),
       get: jasmine.createSpy('get').and.returnValue(of(blob())),
+      events$: EMPTY,
     };
 
     const quota: StubQuotaService = {
@@ -1616,7 +1607,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     const created = blob({ id: 'fork-id', slug: 'forkslug', ownerId: 'u1' });
     const { fixture, stub, router } = setup({ userId: 'u1', createResult: created });
     spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.loadedBlob.set(blob({ ownerId: 'someone-else' }));
+    fixture.componentInstance.__loadBlobForTesting(blob({ ownerId: 'someone-else' }));
     fixture.componentInstance.content.set('{"forked":true}');
     await fixture.componentInstance.onSave();
     expect(stub.create).toHaveBeenCalled();
@@ -1624,15 +1615,26 @@ describe('HomeComponent save() branching (M4a)', () => {
   });
 
   it('update path: owner updates in place (same slug, no navigation) without share.created', async () => {
-    const updated = blob({ id: 'id-1', slug: 'slug-1', ownerId: 'u1', title: 'New' });
+    const updated = blob({
+      id: 'id-1',
+      slug: 'slug-1',
+      ownerId: 'u1',
+      content: '{"a":2}',
+      title: 'New',
+    });
     const { fixture, stub, router } = setup({ userId: 'u1', updateResult: updated });
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     const navSpy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.loadedBlob.set(blob({ id: 'id-1', ownerId: 'u1' }));
+    fixture.componentInstance.__loadBlobForTesting(blob({ id: 'id-1', ownerId: 'u1' }));
     fixture.componentInstance.content.set('{"a":2}');
     fixture.componentInstance.title.set('New');
     await fixture.componentInstance.onSave();
-    expect(stub.update).toHaveBeenCalledWith('id-1', { content: '{"a":2}', title: 'New' });
+    expect(stub.update).toHaveBeenCalledWith('id-1', {
+      content: '{"a":2}',
+      title: 'New',
+      isPublic: false,
+      highlights: [],
+    });
     expect(stub.create).not.toHaveBeenCalled();
     expect(navSpy).not.toHaveBeenCalled();
     expect(fixture.componentInstance.loadedBlob()).toEqual(updated);
@@ -1709,6 +1711,295 @@ describe('HomeComponent save() branching (M4a)', () => {
   });
 });
 
+describe('HomeComponent manual highlights save flow (Phase 4)', () => {
+  setupMinimalMonacoStub();
+
+  const blob = (overrides: Partial<JsonBlob> = {}): JsonBlob => ({
+    id: 'blob-1',
+    slug: 'abc123',
+    content: '{"foo":1,"bar":2}',
+    title: 'Saved title',
+    ownerId: 'owner-me',
+    isPublic: false,
+    version: 1,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    ...overrides,
+  });
+
+  const highlightFoo: BlobHighlight = { path: '$.foo', color: '#ffff00', cascade: false };
+  const highlightBar: BlobHighlight = { path: '$.bar', color: '#00ff00', cascade: true };
+
+  function setup(
+    opts: { userId?: string; updateResult?: JsonBlob | Error; dialogResult?: boolean } = {},
+  ) {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+
+    const eventsSubject = new Subject<BlobSyncEvent>();
+    const stub = {
+      create: jasmine.createSpy('create').and.returnValue(of(blob())),
+      update: jasmine
+        .createSpy('update')
+        .and.callFake(() =>
+          opts.updateResult instanceof Error
+            ? throwError(() => opts.updateResult as Error)
+            : of(opts.updateResult ?? blob()),
+        ),
+      get: jasmine.createSpy('get').and.returnValue(of(blob())),
+      events$: eventsSubject.asObservable(),
+    };
+    const fakeAuth: Partial<AuthService> = {
+      user: (() => ({
+        id: opts.userId ?? 'owner-me',
+        displayName: 'Test User',
+      })) as AuthService['user'],
+      isSignedIn: (() => true) as AuthService['isSignedIn'],
+      isConfigured: true,
+    };
+    const dialogRef = { afterClosed: () => of(opts.dialogResult === true) };
+    const dialog = { open: jasmine.createSpy('open').and.returnValue(dialogRef) };
+    const snack = { open: jasmine.createSpy('open') };
+    const quota = {
+      notifyAutoDeleted: jasmine.createSpy('notifyAutoDeleted').and.resolveTo(),
+      notifyQuotaExceededManual: jasmine.createSpy('notifyQuotaExceededManual').and.resolveTo(),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        provideRouter([]),
+        { provide: BlobService, useValue: stub },
+        { provide: AuthService, useValue: fakeAuth },
+        { provide: MatDialog, useValue: dialog },
+        { provide: MatSnackBar, useValue: snack },
+        { provide: QuotaNotificationService, useValue: quota },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(HomeComponent);
+    return { fixture, stub, eventsSubject, dialog, snack };
+  }
+
+  afterEach(() => clearHomeStorage());
+
+  it('save round-trips highlights and clears dirty from the server response', async () => {
+    const serverHighlight: BlobHighlight = { path: '$.foo', color: '#00ff00', cascade: false };
+    const updated = blob({ highlights: [serverHighlight], version: 2 });
+    const { fixture, stub } = setup({ updateResult: updated });
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(blob({ highlights: [] }));
+
+    component.onHighlightsChange([highlightFoo]);
+    expect(component.dirty()).toBeTrue();
+    await component.onSave();
+
+    expect(stub.update).toHaveBeenCalledWith('blob-1', {
+      content: '{"foo":1,"bar":2}',
+      title: 'Saved title',
+      isPublic: false,
+      highlights: [highlightFoo],
+    });
+    expect(component.highlights()).toEqual([serverHighlight]);
+    expect(component.dirty()).toBeFalse();
+  });
+
+  it('prunes stale highlight paths when content parses successfully', async () => {
+    const { fixture, stub } = setup({
+      updateResult: blob({ content: '{"bar":2}', highlights: [] }),
+    });
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(
+      blob({ content: '{"foo":1,"bar":2}', highlights: [highlightFoo] }),
+    );
+    component.content.set('{"bar":2}');
+
+    await component.onSave();
+
+    expect(stub.update.calls.mostRecent().args[1]).toEqual({
+      content: '{"bar":2}',
+      title: 'Saved title',
+      isPublic: false,
+      highlights: [],
+    });
+  });
+
+  it('preserves highlights on save when content has a syntax error', async () => {
+    const updated = blob({ content: '{"foo":', highlights: [highlightFoo] });
+    const { fixture, stub } = setup({ updateResult: updated });
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(blob({ content: '{"foo":1}', highlights: [highlightFoo] }));
+    component.content.set('{"foo":');
+
+    await component.onSave();
+
+    expect(stub.update.calls.mostRecent().args[1]).toEqual({
+      content: '{"foo":',
+      title: 'Saved title',
+      isPublic: false,
+      highlights: [highlightFoo],
+    });
+  });
+
+  it('keeps dirty true when highlights change while save is in flight', async () => {
+    const { fixture, stub } = setup();
+    const component = fixture.componentInstance;
+    const updateSubject = new Subject<JsonBlob>();
+    stub.update.and.returnValue(updateSubject.asObservable());
+    component.__loadBlobForTesting(blob({ highlights: [] }));
+    component.onHighlightsChange([highlightFoo]);
+
+    const savePromise = component.onSave();
+    expect(component.saveInFlight()).toBeTrue();
+    component.onHighlightsChange([highlightFoo, highlightBar]);
+    updateSubject.next(blob({ highlights: [highlightFoo], version: 2 }));
+    updateSubject.complete();
+    await savePromise;
+
+    expect(component.highlights()).toEqual([highlightFoo, highlightBar]);
+    expect(component.dirty()).toBeTrue();
+  });
+
+  it('shows a conflict toast when a 412 refetch event arrives during save', async () => {
+    const { fixture, stub, eventsSubject, snack } = setup();
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(blob({ highlights: [] }));
+    component.onHighlightsChange([highlightFoo]);
+    stub.update.and.callFake(() => {
+      eventsSubject.next({
+        kind: 'conflict',
+        id: 'blob-1',
+        blob: blob({ version: 2 }),
+        status: 412,
+      });
+      return throwError(() => Object.assign(new Error('conflict'), { status: 412 }));
+    });
+
+    await component.onSave();
+
+    expect(snack.open).toHaveBeenCalledWith(
+      'Reloaded - this blob was changed in another tab',
+      'Dismiss',
+      { duration: 5000 },
+    );
+    expect(component.saveError()).toBeNull();
+  });
+
+  it('silently adopts remote coarse fields that were not edited locally', () => {
+    const { fixture, eventsSubject, dialog } = setup();
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(blob({ content: '{"foo":1}' }));
+
+    eventsSubject.next({
+      kind: 'conflict',
+      id: 'blob-1',
+      blob: blob({ content: '{"foo":2}', version: 2 }),
+      status: 412,
+    });
+
+    expect(component.content()).toBe('{"foo":2}');
+    expect(component.dirty()).toBeFalse();
+    expect(dialog.open).not.toHaveBeenCalled();
+  });
+
+  it('prompts when local and remote coarse fields both changed', async () => {
+    const { fixture, eventsSubject, dialog } = setup({ dialogResult: false });
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(blob({ content: '{"foo":1}' }));
+    component.content.set('{"foo":"local"}');
+
+    eventsSubject.next({
+      kind: 'conflict',
+      id: 'blob-1',
+      blob: blob({ content: '{"foo":"remote"}', version: 2 }),
+      status: 412,
+    });
+    await waitForTaskQueue();
+
+    expect(dialog.open).toHaveBeenCalled();
+    expect(component.content()).toBe('{"foo":"remote"}');
+  });
+
+  it('merges disjoint local and remote highlight paths on conflict', () => {
+    const { fixture, eventsSubject } = setup();
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(blob({ highlights: [] }));
+    component.onHighlightsChange([highlightFoo]);
+
+    eventsSubject.next({
+      kind: 'conflict',
+      id: 'blob-1',
+      blob: blob({ highlights: [highlightBar], version: 2 }),
+      status: 412,
+    });
+
+    expect(component.highlights()).toEqual([highlightBar, highlightFoo]);
+    expect(component.dirty()).toBeTrue();
+  });
+
+  it('keeps the local highlight when local and remote edit the same path', () => {
+    const { fixture, eventsSubject } = setup();
+    const component = fixture.componentInstance;
+    const remoteFoo: BlobHighlight = { path: '$.foo', color: '#00ff00', cascade: true };
+    component.__loadBlobForTesting(blob({ highlights: [] }));
+    component.onHighlightsChange([highlightFoo]);
+
+    eventsSubject.next({
+      kind: 'conflict',
+      id: 'blob-1',
+      blob: blob({ highlights: [remoteFoo], version: 2 }),
+      status: 412,
+    });
+
+    expect(component.highlights()).toEqual([highlightFoo]);
+    expect(component.dirty()).toBeTrue();
+  });
+
+  it('keeps a local highlight delete over a remote recolor on the same path', () => {
+    const { fixture, eventsSubject } = setup();
+    const component = fixture.componentInstance;
+    const remoteFoo: BlobHighlight = { path: '$.foo', color: '#00ff00', cascade: true };
+    component.__loadBlobForTesting(blob({ highlights: [highlightFoo] }));
+    component.onHighlightsChange([]);
+
+    eventsSubject.next({
+      kind: 'conflict',
+      id: 'blob-1',
+      blob: blob({ highlights: [remoteFoo], version: 2 }),
+      status: 412,
+    });
+
+    expect(component.highlights()).toEqual([]);
+    expect(component.dirty()).toBeTrue();
+  });
+
+  it('passes highlights into the tree and consumes highlight changes from the tree', () => {
+    const { fixture } = setup({ userId: 'owner-me' });
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(blob({ highlights: [highlightFoo], ownerId: 'owner-me' }));
+    fixture.detectChanges();
+
+    const tree = fixture.debugElement.query(By.directive(JsonTreeComponent))
+      .componentInstance as JsonTreeComponent;
+    expect(tree.highlights()).toEqual([highlightFoo]);
+    expect(tree.canEditHighlights()).toBeTrue();
+
+    tree.highlightsChange.emit([highlightBar]);
+
+    expect(component.highlights()).toEqual([highlightBar]);
+  });
+
+  it('passes canEditHighlights false when the signed-in user is not the owner', () => {
+    const { fixture } = setup({ userId: 'viewer-me' });
+    fixture.componentInstance.__loadBlobForTesting(blob({ ownerId: 'owner-me' }));
+    fixture.detectChanges();
+
+    const tree = fixture.debugElement.query(By.directive(JsonTreeComponent))
+      .componentInstance as JsonTreeComponent;
+    expect(tree.canEditHighlights()).toBeFalse();
+  });
+});
+
 describe('HomeComponent browser-title effect (M4a)', () => {
   setupMinimalMonacoStub();
   const PREFS_KEY = 'jotjson.preferences.v1';
@@ -1743,7 +2034,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const titleSvc = TestBed.inject(Title);
     const spy = spyOn(titleSvc, 'setTitle');
-    fixture.componentInstance.loadedBlob.set({
+    fixture.componentInstance.__loadBlobForTesting({
       id: 'b1',
       slug: 's1',
       content: '{}',
@@ -1754,8 +2045,6 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     });
-    fixture.componentInstance.content.set('{}');
-    fixture.componentInstance.title.set('My Config');
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
     expect(spy).toHaveBeenCalledWith('My Config | JotJSON');
@@ -1765,7 +2054,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const titleSvc = TestBed.inject(Title);
     const spy = spyOn(titleSvc, 'setTitle');
-    fixture.componentInstance.loadedBlob.set({
+    fixture.componentInstance.__loadBlobForTesting({
       id: 'b1',
       slug: 's1',
       content: '{}',
@@ -1775,8 +2064,6 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     });
-    fixture.componentInstance.content.set('{}');
-    fixture.componentInstance.title.set('');
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
     expect(spy).toHaveBeenCalledWith('Untitled | JotJSON');
@@ -1817,9 +2104,8 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
       title: 'Saved title',
     });
 
-    fixture.componentInstance.loadedBlob.set(jsonBlob);
+    fixture.componentInstance.__loadBlobForTesting(jsonBlob);
     fixture.componentInstance.content.set('{"saved":false}');
-    fixture.componentInstance.title.set('Saved title');
     flushComponentEffects(fixture);
 
     expect(mostRecentTitle(titleSpy)).toBe('* Saved title | JotJSON');
@@ -1834,9 +2120,8 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
       title: 'Saved title',
     });
 
-    fixture.componentInstance.loadedBlob.set(jsonBlob);
+    fixture.componentInstance.__loadBlobForTesting(jsonBlob);
     fixture.componentInstance.content.set('{"saved":false}');
-    fixture.componentInstance.title.set('Saved title');
     flushComponentEffects(fixture);
     expect(mostRecentTitle(titleSpy)).toBe('* Saved title | JotJSON');
 
@@ -1846,7 +2131,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     expect(mostRecentTitle(titleSpy)).toBe('Saved title | JotJSON');
   });
 
-  it('does not add a star prefix to the draft fallback title', () => {
+  it('adds a star prefix to the dirty draft fallback title', () => {
     const titleService = TestBed.inject(Title);
     const titleSpy = spyOn(titleService, 'setTitle');
     const fixture = TestBed.createComponent(HomeComponent);
@@ -1858,7 +2143,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     expect(mostRecentTitle(titleSpy)).toContain(
       'JotJSON - JSON viewer, formatter, and tree explorer',
     );
-    expect(mostRecentTitle(titleSpy).startsWith('* ')).toBeFalse();
+    expect(mostRecentTitle(titleSpy).startsWith('* ')).toBeTrue();
   });
 
   it('removes the star prefix after a successful save resets dirty state', async () => {
@@ -1876,6 +2161,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
       create: jasmine.createSpy('create').and.returnValue(of(updatedBlob)),
       update: jasmine.createSpy('update').and.returnValue(of(updatedBlob)),
       get: jasmine.createSpy('get').and.returnValue(of(originalBlob)),
+      events$: EMPTY,
     };
     TestBed.overrideProvider(BlobService, { useValue: blobService });
     signInFakeUser(TestBed.inject(AuthService), {
@@ -1885,7 +2171,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     const titleSpy = spyOn(titleService, 'setTitle');
     const fixture = TestBed.createComponent(HomeComponent);
 
-    fixture.componentInstance.loadedBlob.set(originalBlob);
+    fixture.componentInstance.__loadBlobForTesting(originalBlob);
     fixture.componentInstance.content.set(updatedBlob.content);
     fixture.componentInstance.title.set('Saved title');
     flushComponentEffects(fixture);
@@ -1897,6 +2183,8 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     expect(blobService.update).toHaveBeenCalledWith('identity-blob-1', {
       content: '{"saved":false}',
       title: 'Saved title',
+      isPublic: false,
+      highlights: [],
     });
     expect(mostRecentTitle(titleSpy)).toBe('Saved title | JotJSON');
   });
@@ -1971,6 +2259,7 @@ describe('HomeComponent blob actions (M4b)', () => {
             : of(undefined),
         ),
       get: jasmine.createSpy('get').and.returnValue(of(blob())),
+      events$: EMPTY,
     };
 
     const fakeAuth: Partial<AuthService> = {
@@ -2020,7 +2309,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     });
 
     const fixture = TestBed.createComponent(HomeComponent);
-    if (opts.loaded) fixture.componentInstance.loadedBlob.set(opts.loaded);
+    if (opts.loaded) fixture.componentInstance.__loadBlobForTesting(opts.loaded);
     return { fixture, stub, dialog, snack, clipboardStub };
   }
 

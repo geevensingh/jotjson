@@ -19,6 +19,36 @@ export function indexHighlights(highlights: readonly BlobHighlight[]): Map<strin
   return index;
 }
 
+export function highlightsEqual(
+  leftHighlights: readonly BlobHighlight[],
+  rightHighlights: readonly BlobHighlight[],
+): boolean {
+  if (leftHighlights.length !== rightHighlights.length) {
+    return false;
+  }
+
+  const leftSorted = [...leftHighlights].sort(compareHighlightPath);
+  const rightSorted = [...rightHighlights].sort(compareHighlightPath);
+  for (let index = 0; index < leftSorted.length; index += 1) {
+    const leftHighlight = leftSorted[index];
+    const rightHighlight = rightSorted[index];
+    if (
+      leftHighlight === undefined ||
+      rightHighlight === undefined ||
+      leftHighlight.path !== rightHighlight.path ||
+      leftHighlight.color !== rightHighlight.color ||
+      leftHighlight.cascade !== rightHighlight.cascade
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function compareHighlightPath(leftHighlight: BlobHighlight, rightHighlight: BlobHighlight): number {
+  return leftHighlight.path.localeCompare(rightHighlight.path);
+}
+
 /**
  * Resolve a single row's path against the index. Walks the ancestor
  * chain only if no own entry exists.

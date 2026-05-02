@@ -32,7 +32,7 @@ const SK_BLOCK_COMMENT = 13;
 const SK_EOF = 17;
 import { AuthService } from '../../core/auth/auth.service';
 import { BlobService } from '../../core/api/blob.service';
-import type { CreateBlobResponse, JsonBlob } from '../../core/api/models';
+import type { BlobHighlight, CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { DraftService } from '../../core/preferences/draft.service';
 import { persistedSignal } from '../../core/preferences/persisted-signal';
 import { LoggerService } from '../../core/telemetry/logger.service';
@@ -60,6 +60,7 @@ import {
   JsonTreeComponent,
   type TreeExtractRequest,
 } from '../../shared/components/json-tree/json-tree.component';
+import { highlightsEqual } from '../../shared/components/json-tree/highlight-resolver';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/toolbar.component';
 import { EditorMode } from './editor-mode';
@@ -99,11 +100,16 @@ type SignInRestoreSnapshot = {
   title: string;
 };
 
+type LoadedSnapshot = {
+  content: string;
+  title: string;
+  isPublic: boolean;
+  highlights: readonly BlobHighlight[];
+};
+
 const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 
 const TREE_EXTRACT_SCAN_DEBOUNCE_MS = 1000;
-
-const normalizeEol = (source: string): string => source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -117,6 +123,20 @@ const isSignInRestoreSnapshot = (value: unknown): value is SignInRestoreSnapshot
     typeof value['title'] === 'string'
   );
 };
+
+function sameHighlightEntry(
+  leftHighlight: BlobHighlight | undefined,
+  rightHighlight: BlobHighlight | undefined,
+): boolean {
+  if (leftHighlight === undefined || rightHighlight === undefined) {
+    return leftHighlight === rightHighlight;
+  }
+  return (
+    leftHighlight.path === rightHighlight.path &&
+    leftHighlight.color === rightHighlight.color &&
+    leftHighlight.cascade === rightHighlight.cascade
+  );
+}
 
 /**
  * Primary editor + tree experience. Home is an anonymous page - persistence
@@ -328,8 +348,13 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** The currently-loaded server blob, if any. Null when editing an anonymous draft. */
   readonly loadedBlob = signal<JsonBlob | null>(null);
   readonly title = signal<string>('');
+  readonly isPublic = signal<boolean>(false);
+  readonly highlights = signal<readonly BlobHighlight[]>([]);
   readonly saveInFlight = signal<boolean>(false);
   readonly saveError = signal<string | null>(null);
+
+  private readonly loadedSnapshot = signal<LoadedSnapshot | null>(null);
+  private readonly mutatedPaths = signal<Set<string>>(new Set<string>());
 
   /**
    * Tracks the most recent file name that populated the editor (M7p).
@@ -380,11 +405,15 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly hasContent = computed(() => this.content().trim().length > 0);
 
   readonly dirty = computed(() => {
-    const blob = this.loadedBlob();
-    if (!blob) return false;
+    const snapshot = this.loadedSnapshot();
+    if (snapshot === null) {
+      return this.content().length > 0 || this.title().length > 0 || this.highlights().length > 0;
+    }
     return (
-      normalizeEol(this.content()) !== normalizeEol(blob.content) ||
-      this.title().trim() !== (blob.title ?? '').trim()
+      this.content() !== snapshot.content ||
+      this.title() !== snapshot.title ||
+      this.isPublic() !== snapshot.isPublic ||
+      !highlightsEqual(this.highlights(), snapshot.highlights)
     );
   });
 
@@ -402,7 +431,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       (this.loadedBlob() === null || !this.isOwnedBlob() || this.dirty()),
   );
 
-  readonly isBlobPublic = computed(() => !!this.loadedBlob()?.isPublic);
+  readonly isBlobPublic = computed(() => this.loadedBlob() !== null && this.isPublic());
 
   /**
    * Title-suggester wand-enable predicate (M7r). The wand is enabled
@@ -554,9 +583,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
       if (blob.id === this.lastHydratedInputId) return;
       this.lastHydratedInputId = blob.id;
-      this.loadedBlob.set(blob);
-      this.replaceDocument(blob.content);
-      this.title.set(blob.title ?? '');
+      this.applyLoadedBlob(blob);
       this.lastFilename.set(null);
       this.suggestedTitlesForMenu.set([]);
       this.restoreSignInSnapshotOnce();
@@ -588,6 +615,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.treeValueChanges$
       .pipe(debounceTime(TREE_EXTRACT_SCAN_DEBOUNCE_MS), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.scanTreeStringLeaves(value));
+
+    this.blobs.events$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((event) => {
+      const blob = this.loadedBlob();
+      if (event.kind === 'conflict' && blob?.id === event.id) {
+        void this.handleBlobConflict(event.blob);
+      }
+    });
 
     effect(() => {
       const scanInFlight = this.treeStringExtractor.scanInFlight();
@@ -637,6 +671,253 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.clipboard.stopPolling();
       }
     });
+  }
+
+  private applyLoadedBlob(blob: JsonBlob): void {
+    const snapshot = this.snapshotFromBlob(blob);
+    this.loadedBlob.set(blob);
+    this.replaceDocument(snapshot.content);
+    this.title.set(snapshot.title);
+    this.isPublic.set(snapshot.isPublic);
+    this.highlights.set(snapshot.highlights);
+    this.loadedSnapshot.set(snapshot);
+    this.mutatedPaths.set(new Set<string>());
+  }
+
+  private applySavedBlobResponse(blob: JsonBlob, submitted: LoadedSnapshot): void {
+    const snapshot = this.snapshotFromBlob(blob);
+    this.loadedBlob.set(blob);
+    if (this.content() === submitted.content && this.content() !== snapshot.content) {
+      this.replaceDocument(snapshot.content);
+    }
+    if (this.title() === submitted.title) {
+      this.title.set(snapshot.title);
+    }
+    if (this.isPublic() === submitted.isPublic) {
+      this.isPublic.set(snapshot.isPublic);
+    }
+    if (highlightsEqual(this.highlights(), submitted.highlights)) {
+      this.highlights.set(snapshot.highlights);
+    }
+    this.loadedSnapshot.set(snapshot);
+    this.mutatedPaths.set(new Set<string>());
+  }
+
+  private snapshotFromBlob(blob: JsonBlob): LoadedSnapshot {
+    return {
+      content: blob.content,
+      title: blob.title ?? '',
+      isPublic: blob.isPublic,
+      highlights: [...(blob.highlights ?? [])],
+    };
+  }
+
+  private currentSnapshot(): LoadedSnapshot {
+    return {
+      content: this.content(),
+      title: this.title(),
+      isPublic: this.isPublic(),
+      highlights: [...this.highlights()],
+    };
+  }
+
+  private resetLoadedBlobState(): void {
+    this.loadedBlob.set(null);
+    this.isPublic.set(false);
+    this.highlights.set([]);
+    this.loadedSnapshot.set(null);
+    this.mutatedPaths.set(new Set<string>());
+  }
+
+  private resetHighlightsForDocumentReplacement(): void {
+    const removedHighlights = this.highlights();
+    this.highlights.set([]);
+    this.mutatedPaths.update((mutatedPaths) => {
+      const mergedPaths = new Set(mutatedPaths);
+      for (const highlight of removedHighlights) {
+        mergedPaths.add(highlight.path);
+      }
+      return mergedPaths;
+    });
+    if (this.loadedBlob() === null) {
+      this.loadedSnapshot.set(null);
+    }
+  }
+
+  __loadBlobForTesting(blob: JsonBlob): void {
+    this.applyLoadedBlob(blob);
+  }
+
+  onHighlightsChange(nextHighlights: readonly BlobHighlight[]): void {
+    const previousHighlights = this.highlights();
+    this.highlights.set([...nextHighlights]);
+    const changedPaths = this.changedHighlightPaths(previousHighlights, nextHighlights);
+    if (changedPaths.size === 0) {
+      return;
+    }
+    this.mutatedPaths.update((mutatedPaths) => {
+      const mergedPaths = new Set(mutatedPaths);
+      for (const path of changedPaths) {
+        mergedPaths.add(path);
+      }
+      return mergedPaths;
+    });
+  }
+
+  private changedHighlightPaths(
+    previousHighlights: readonly BlobHighlight[],
+    nextHighlights: readonly BlobHighlight[],
+  ): Set<string> {
+    const previousByPath = new Map(
+      previousHighlights.map((highlight) => [highlight.path, highlight]),
+    );
+    const nextByPath = new Map(nextHighlights.map((highlight) => [highlight.path, highlight]));
+    const paths = new Set([...previousByPath.keys(), ...nextByPath.keys()]);
+    const changedPaths = new Set<string>();
+    for (const path of paths) {
+      if (!sameHighlightEntry(previousByPath.get(path), nextByPath.get(path))) {
+        changedPaths.add(path);
+      }
+    }
+    return changedPaths;
+  }
+
+  private pruneHighlightsForSave(
+    content: string,
+    highlights: readonly BlobHighlight[],
+  ): readonly BlobHighlight[] {
+    const parsed = this.parser.parse(content);
+    if (parsed.errors.length > 0 || parsed.ast === undefined) {
+      return highlights;
+    }
+
+    const reachablePaths = new Set<string>();
+    this.collectReachablePaths(parsed.ast, reachablePaths);
+    return highlights.filter((highlight) => reachablePaths.has(highlight.path));
+  }
+
+  private collectReachablePaths(node: JsoncNode, reachablePaths: Set<string>): void {
+    reachablePaths.add(this.parser.pathToString(this.parser.pathForNode(node)));
+    for (const child of node.children ?? []) {
+      this.collectReachablePaths(child, reachablePaths);
+    }
+  }
+
+  private async handleBlobConflict(remoteBlob: JsonBlob): Promise<void> {
+    this.snack.open(
+      $localize`:@@blobs.conflict.toast:Reloaded - this blob was changed in another tab`,
+      $localize`:@@common.dismiss:Dismiss`,
+      { duration: 5000 },
+    );
+
+    const baseSnapshot = this.loadedSnapshot();
+    if (baseSnapshot === null) {
+      this.applyLoadedBlob(remoteBlob);
+      return;
+    }
+
+    const localSnapshot = this.currentSnapshot();
+    const remoteSnapshot = this.snapshotFromBlob(remoteBlob);
+    const contentConflicts =
+      localSnapshot.content !== baseSnapshot.content &&
+      remoteSnapshot.content !== baseSnapshot.content &&
+      localSnapshot.content !== remoteSnapshot.content;
+    const titleConflicts =
+      localSnapshot.title !== baseSnapshot.title &&
+      remoteSnapshot.title !== baseSnapshot.title &&
+      localSnapshot.title !== remoteSnapshot.title;
+    const publicConflicts =
+      localSnapshot.isPublic !== baseSnapshot.isPublic &&
+      remoteSnapshot.isPublic !== baseSnapshot.isPublic &&
+      localSnapshot.isPublic !== remoteSnapshot.isPublic;
+    const replaceRemote =
+      contentConflicts || titleConflicts || publicConflicts
+        ? await this.promptConflictResolution()
+        : false;
+
+    const nextContent = this.rebaseCoarseField(
+      baseSnapshot.content,
+      localSnapshot.content,
+      remoteSnapshot.content,
+      contentConflicts,
+      replaceRemote,
+    );
+    const nextTitle = this.rebaseCoarseField(
+      baseSnapshot.title,
+      localSnapshot.title,
+      remoteSnapshot.title,
+      titleConflicts,
+      replaceRemote,
+    );
+    const nextIsPublic = this.rebaseCoarseField(
+      baseSnapshot.isPublic,
+      localSnapshot.isPublic,
+      remoteSnapshot.isPublic,
+      publicConflicts,
+      replaceRemote,
+    );
+    const nextHighlights = this.rebaseHighlights(
+      remoteSnapshot.highlights,
+      localSnapshot.highlights,
+      this.mutatedPaths(),
+    );
+
+    this.loadedBlob.set(remoteBlob);
+    this.loadedSnapshot.set(remoteSnapshot);
+    if (this.content() !== nextContent) {
+      this.replaceDocument(nextContent);
+    }
+    this.title.set(nextTitle);
+    this.isPublic.set(nextIsPublic);
+    this.highlights.set(nextHighlights);
+    this.mutatedPaths.set(new Set<string>());
+  }
+
+  private rebaseCoarseField<T>(
+    baseValue: T,
+    localValue: T,
+    remoteValue: T,
+    conflicts: boolean,
+    replaceRemote: boolean,
+  ): T {
+    if (conflicts) {
+      return replaceRemote ? localValue : remoteValue;
+    }
+    return localValue !== baseValue ? localValue : remoteValue;
+  }
+
+  private async promptConflictResolution(): Promise<boolean> {
+    const data: ConfirmDialogData = {
+      title: $localize`:@@blobs.conflict.title:Blob changed in another tab`,
+      message: $localize`:@@blobs.conflict.message:Your local changes conflict with the latest version. Discard your changes or replace the remote version on your next save?`,
+      confirmLabel: $localize`:@@blobs.conflict.replaceRemote:Replace remote`,
+      cancelLabel: $localize`:@@blobs.conflict.discardMine:Discard my changes`,
+    };
+    const ref = this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(
+      ConfirmDialogComponent,
+      { data, width: '420px', autoFocus: 'dialog' },
+    );
+    return (await firstValueFrom(ref.afterClosed())) === true;
+  }
+
+  private rebaseHighlights(
+    remoteHighlights: readonly BlobHighlight[],
+    localHighlights: readonly BlobHighlight[],
+    mutatedPaths: ReadonlySet<string>,
+  ): readonly BlobHighlight[] {
+    const mergedByPath = new Map(remoteHighlights.map((highlight) => [highlight.path, highlight]));
+    const localByPath = new Map(localHighlights.map((highlight) => [highlight.path, highlight]));
+    for (const path of mutatedPaths) {
+      const localHighlight = localByPath.get(path);
+      if (localHighlight === undefined) {
+        mergedByPath.delete(path);
+      } else {
+        mergedByPath.set(path, localHighlight);
+      }
+    }
+    return [...mergedByPath.values()].sort((leftHighlight, rightHighlight) =>
+      leftHighlight.path.localeCompare(rightHighlight.path),
+    );
   }
 
   private scanTreeStringLeaves(value: unknown): void {
@@ -896,6 +1177,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const { unescaped, changed } = this.parser.tryUnescape(text);
     const parseMs = this.durationSince(parseStartedAt);
     this.replaceDocument(unescaped);
+    this.resetHighlightsForDocumentReplacement();
     // M7p title-suggester: paste replaces the document; any prior
     // file-name association is no longer relevant and the suggestion
     // list (if computed earlier) is now stale.
@@ -988,6 +1270,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     // `reason='content.changed'` for the same candidate.
     this.extractedCandidate.set(null);
     this.replaceDocument(candidate.data.text);
+    this.resetHighlightsForDocumentReplacement();
   }
 
   onExtractDismiss(): void {
@@ -1061,6 +1344,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         const { unescaped } = this.parser.tryUnescape(result.text);
         const parseMs = this.durationSince(parseStartedAt);
         this.replaceDocument(unescaped);
+        this.resetHighlightsForDocumentReplacement();
         // M7p title-suggester: remember the source filename so the
         // wand button can offer it as a candidate. The UX rule is
         // "covers both upload-picker AND drag-drop"; this is the
@@ -1158,7 +1442,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   onClear(): void {
     this.setContent('');
     this.title.set('');
-    this.loadedBlob.set(null);
+    this.resetLoadedBlobState();
     this.lastFilename.set(null);
     this.suggestedTitlesForMenu.set([]);
     // Clear the draft synchronously. The `content` -> draft effect is async
@@ -1260,33 +1544,39 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.saveError.set(null);
 
     const existing = this.loadedBlob();
-    const content = this.content();
-    const trimmedTitle = this.title().trim();
+    const submitted = this.currentSnapshot();
+    const trimmedTitle = submitted.title.trim();
     const titlePatch = trimmedTitle.length > 0 ? trimmedTitle : undefined;
+    const highlights = this.pruneHighlightsForSave(submitted.content, submitted.highlights);
 
     try {
       if (existing && existing.ownerId === user.id) {
         const updated = await new Promise<JsonBlob>((resolve, reject) => {
           this.blobs
-            .update(existing.id, { content, title: titlePatch })
+            .update(existing.id, {
+              content: submitted.content,
+              title: titlePatch,
+              isPublic: submitted.isPublic,
+              highlights: [...highlights],
+            })
             .subscribe({ next: resolve, error: reject });
         });
-        this.loadedBlob.set(updated);
-        this.title.set(updated.title ?? '');
+        this.applySavedBlobResponse(updated, submitted);
       } else {
         const created = await new Promise<CreateBlobResponse>((resolve, reject) => {
-          this.blobs.create(content, titlePatch, false).subscribe({ next: resolve, error: reject });
+          this.blobs
+            .create(submitted.content, titlePatch, false)
+            .subscribe({ next: resolve, error: reject });
         });
         this.logger.event(
           'share.created',
           { visibility: 'private' },
-          { sizeBytes: new Blob([content]).size },
+          { sizeBytes: new Blob([submitted.content]).size },
         );
         // Strip the auxiliary quota marker before we treat it as a JsonBlob
         // so loadedBlob stays clean.
         const { autoDeleted, ...blob } = created;
-        this.loadedBlob.set(blob);
-        this.title.set(blob.title ?? '');
+        this.applySavedBlobResponse(blob, submitted);
         void this.router.navigate(['/s', blob.slug]);
         if (autoDeleted) {
           void this.quota.notifyAutoDeleted(autoDeleted);
@@ -1294,6 +1584,9 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
     } catch (error) {
       const httpError = error as { status?: number; error?: { code?: string } };
+      if (httpError.status === 412) {
+        return;
+      }
       if (httpError.status === 409 && httpError.error?.code === 'quota_exceeded') {
         void this.quota.notifyQuotaExceededManual();
         this.saveError.set(
@@ -1408,10 +1701,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (!blob) return;
     const user = this.auth.user();
     if (!user || user.id !== blob.ownerId) return;
-    const next = !blob.isPublic;
+    const next = !this.isPublic();
     try {
       const updated = await firstValueFrom(this.blobs.update(blob.id, { isPublic: next }));
       this.loadedBlob.set(updated);
+      this.isPublic.set(updated.isPublic);
+      this.loadedSnapshot.set(this.snapshotFromBlob(updated));
       this.logger.event(
         'share.visibility.changed',
         { newVisibility: updated.isPublic ? 'public' : 'private' },
@@ -1422,6 +1717,10 @@ export class HomeComponent implements OnInit, OnDestroy {
         : $localize`:@@share.visibility.private:Blob is now private.`;
       this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, { duration: 3000 });
     } catch (error) {
+      const httpError = error as { status?: number };
+      if (httpError.status === 412) {
+        return;
+      }
       this.logger.warn('share.visibility.failed');
       void error;
       this.snack.open(
@@ -1455,9 +1754,9 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     try {
       await firstValueFrom(this.blobs.delete(blob.id));
-      this.loadedBlob.set(null);
       this.setContent('');
       this.title.set('');
+      this.resetLoadedBlobState();
       this.lastFilename.set(null);
       this.suggestedTitlesForMenu.set([]);
       this.snack.open(
