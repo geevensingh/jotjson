@@ -19,7 +19,7 @@
     "test": "ng test --watch=false --browsers=ChromeHeadless",
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
     "verify:fast": "npm run lint && ng test --watch=false --browsers=ChromeHeadless",
-    "lint": "tsc --noEmit -p tsconfig.app.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs && node scripts/check-prod-patterns.mjs",
+    "lint": "tsc --noEmit -p tsconfig.app.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs && node scripts/check-prod-patterns.mjs && prettier --check .",
     "check:ascii": "node scripts/check-ascii.mjs",
     "check:spec-patterns": "node scripts/check-spec-patterns.mjs",
     "check:prod-patterns": "node scripts/check-prod-patterns.mjs",
