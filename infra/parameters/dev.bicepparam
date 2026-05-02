@@ -18,3 +18,7 @@ param entraAuthority = ''
 param entraSpaClientId = ''
 param entraApiClientId = ''
 param entraApiAudience = ''
+
+// Operational alerts receiver. See issue #94 and the 5/1 incident
+// retrospective in plan.md for context on why this is set in source.
+param notificationEmail = 'jotjsonadmin@gmail.com'

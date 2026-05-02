@@ -33,8 +33,7 @@ resource bootFailedAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
           query: '''
 AppExceptions
 | where TimeGenerated > ago(15m)
-| where tostring(Properties.messageId) == 'boot.failed'
-| summarize count = count()'''
+| where tostring(Properties.messageId) == 'boot.failed' '''
           timeAggregation: 'Count'
           threshold: 0
           operator: 'GreaterThan'
@@ -74,8 +73,7 @@ resource appUnhandledAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' =
           query: '''
 AppExceptions
 | where TimeGenerated > ago(15m)
-| where tostring(Properties.messageId) == 'app.unhandled'
-| summarize count = count()'''
+| where tostring(Properties.messageId) == 'app.unhandled' '''
           timeAggregation: 'Count'
           threshold: 5
           operator: 'GreaterThan'
@@ -115,7 +113,7 @@ resource functions5xxAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' =
           query: '''
 AppRequests
 | where TimeGenerated > ago(15m)
-| summarize failureCount = countif(ResultCode startswith '5')'''
+| where ResultCode startswith '5' '''
           timeAggregation: 'Count'
           threshold: 2
           operator: 'GreaterThanOrEqual'
@@ -156,8 +154,7 @@ resource authConfigAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
 AppEvents
 | where TimeGenerated > ago(15m)
 | where Name == 'auth.tokenRejected'
-| where tostring(Properties.reason) in ('wrong_audience', 'wrong_issuer')
-| summarize count = count()'''
+| where tostring(Properties.reason) in ('wrong_audience', 'wrong_issuer') '''
           timeAggregation: 'Count'
           threshold: 0
           operator: 'GreaterThan'
