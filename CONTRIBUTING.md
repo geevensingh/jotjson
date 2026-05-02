@@ -34,16 +34,22 @@ frameworks, or cloud services without prior approval.
    (`infra/README.md` -> "Auth setup" walks through provisioning). Leaving the
    placeholders in place is fine if you don't need to exercise auth locally;
    the toolbar will show a disabled "Sign in (not configured)" button.
-3. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
+3. **Install dependencies**: run `npm install`. The `prepare` script
+   auto-installs a husky pre-commit hook that runs `prettier --write` on staged
+   files, so mis-formatted files are fixed at commit time and prettier failures
+   rarely reach CI. `.prettierignore` still applies, including hand-formatted
+   `*.md` files; to skip the hook for a specific commit (rarely needed), use
+   `git commit --no-verify`.
+4. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
    `inject()`, Signals, kebab-case filenames, co-located `*.spec.ts`).
-4. **Test** - add or update tests for any logic change. No test = not done.
-5. **Validate** locally:
+5. **Test** - add or update tests for any logic change. No test = not done.
+6. **Validate** locally:
    - `npm run lint:all` (root lint + api workspace lint - canonical local gate)
    - `npm test` (frontend and `api/`)
    - `npm run build` / `ng build --configuration production`
-6. **Commit** in small, focused commits with imperative subjects
+7. **Commit** in small, focused commits with imperative subjects
    (e.g., `Add slug collision check to BlobService`).
-7. **Open a PR** using the template. Fill in all sections.
+8. **Open a PR** using the template. Fill in all sections.
 
 ## Commit Messages
 

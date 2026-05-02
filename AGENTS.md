@@ -495,6 +495,16 @@ Before finishing a task:
    failed and the exact fix command. File-level (and where
    available, line-level) failures are surfaced as inline
    annotations on the PR Files Changed view.
+
+   A husky pre-commit hook installed by `npm install`'s `prepare`
+   script runs `prettier --write` on staged files at `git commit`
+   time, so locally mis-formatted files are auto-fixed before the
+   commit lands with no manual hook setup after a fresh clone. It only
+   formats files matching the `lint-staged` glob in `package.json`, and
+   `.prettierignore` exclusions (notably `*.md` and other
+   hand-formatted files) are respected automatically. The hook does not
+   run tsc, ASCII, or pattern checks; those still surface only in
+   `npm run lint:all` and CI.
 2. `npm test` passes (frontend and `api/`).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
 4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the
