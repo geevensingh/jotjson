@@ -1,6 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { FormattingRule, FormattingRuleSet } from '../../../../core/api/models';
+import {
+  FormattingRule,
+  FormattingRulePair,
+  FormattingRuleSet,
+  FormattingRuleSimple,
+  KeyMatch,
+  ValueMatch,
+} from '../../../../core/api/models';
 import { JsonTreeComponent } from '../../../../shared/components/json-tree/json-tree.component';
 import { meetsAA, THEME_DEFAULTS } from '../../../../shared/utils/contrast';
 
@@ -16,6 +23,8 @@ const SAMPLE: Readonly<Record<string, unknown>> = Object.freeze({
   status: 500,
   error: 'TypeError',
   errorType: 'error',
+  testHeader: 'present',
+  testHeaderNull: null,
   message: 'Cannot read properties of undefined',
   user: {
     id: 42,
@@ -85,6 +94,8 @@ export class RulePreviewComponent {
 }
 
 function evaluateRule(rule: FormattingRule): ContrastFailure | null {
+  const label = contrastLabel(rule);
+  if (label === null) return null;
   const text = rule.style.textColor;
   const bg = rule.style.backgroundColor;
   // Rule contributes neither a foreground nor a background -> nothing
@@ -109,10 +120,51 @@ function evaluateRule(rule: FormattingRule): ContrastFailure | null {
   }
   return {
     ruleId: rule.id,
-    label: truncate(rule.matchValue),
+    label: truncate(label),
     failsLight,
     failsDark,
   };
+}
+
+function contrastLabel(rule: FormattingRule): string | null {
+  if (isSimpleRule(rule)) return rule.matchValue;
+  if (!isPairRule(rule)) return null;
+  const emptyLabel = $localize`:@@rulePreview.contrast.empty:(empty)`;
+  const andLabel = $localize`:@@rulePreview.contrast.and:AND`;
+  const keyLabel = rule.keyMatch.matchValue.trim() || emptyLabel;
+  if (rule.valueMatch.kind === 'text') {
+    return `${keyLabel} ${andLabel} ${rule.valueMatch.matchValue.trim() || emptyLabel}`;
+  }
+  return `${keyLabel} ${andLabel} ${rule.valueMatch.predicate}`;
+}
+
+function isSimpleRule(rule: FormattingRule): rule is FormattingRuleSimple {
+  if ((rule.kind ?? 'simple') !== 'simple') return false;
+  if (!('matchValue' in rule)) return false;
+  return typeof rule.matchValue === 'string' && hasStyleObject(rule);
+}
+
+function isPairRule(rule: FormattingRule): rule is FormattingRulePair {
+  if (rule.kind !== 'pair') return false;
+  if (!('keyMatch' in rule) || !('valueMatch' in rule)) return false;
+  return (
+    isTextMatchConfig(rule.keyMatch) && isValueMatchConfig(rule.valueMatch) && hasStyleObject(rule)
+  );
+}
+
+function hasStyleObject(rule: FormattingRule): boolean {
+  return rule.style !== null && typeof rule.style === 'object';
+}
+
+function isTextMatchConfig(value: unknown): value is KeyMatch {
+  if (value === null || typeof value !== 'object') return false;
+  return 'matchValue' in value && typeof value.matchValue === 'string';
+}
+
+function isValueMatchConfig(value: unknown): value is ValueMatch {
+  if (value === null || typeof value !== 'object' || !('kind' in value)) return false;
+  if (value.kind === 'text') return isTextMatchConfig(value);
+  return value.kind === 'predicate' && 'predicate' in value && typeof value.predicate === 'string';
 }
 
 const HEX6_RE = /^#[0-9a-fA-F]{6}$/;
@@ -124,7 +176,7 @@ function isValidHex(value: string | undefined): boolean {
 function truncate(value: string): string {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
-    return '(empty)';
+    return $localize`:@@rulePreview.contrast.empty:(empty)`;
   }
   if (trimmed.length <= MAX_LABEL_LENGTH) {
     return trimmed;

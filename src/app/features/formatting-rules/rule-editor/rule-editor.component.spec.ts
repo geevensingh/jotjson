@@ -17,7 +17,12 @@ import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { JsonTreeComponent } from '../../../shared/components/json-tree/json-tree.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
-import type { FormattingRule, FormattingRuleSet } from '../../../core/api/models';
+import type {
+  FormattingRule,
+  FormattingRulePair,
+  FormattingRuleSet,
+  FormattingRuleSimple,
+} from '../../../core/api/models';
 
 function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
   return {
@@ -32,9 +37,10 @@ function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet 
   };
 }
 
-function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+function rule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
   return {
     id: 'r1',
+    kind: 'simple',
     target: 'value',
     matchType: 'contains',
     matchValue: 'foo',
@@ -42,6 +48,37 @@ function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     style: { backgroundColor: '#ffe4b5' },
     ...overrides,
   };
+}
+
+function pairRule(overrides: Partial<FormattingRulePair> = {}): FormattingRulePair {
+  return {
+    id: 'pair-1',
+    kind: 'pair',
+    keyMatch: { matchType: 'exact', matchValue: 'testHeader', caseSensitive: false },
+    valueMatch: { kind: 'predicate', predicate: 'is_not_null' },
+    style: { backgroundColor: '#ffe4b5', textColor: '#1f2937' },
+    ...overrides,
+  };
+}
+
+function unknownRule(): FormattingRule {
+  return {
+    id: 'future-rule',
+    kind: 'future',
+    style: { backgroundColor: '#ffe4b5' },
+  } as unknown as FormattingRule;
+}
+
+function expectSimpleRule(value: FormattingRule | undefined): FormattingRuleSimple {
+  expect(value).toBeTruthy();
+  expect(value!.kind ?? 'simple').toBe('simple');
+  return value as FormattingRuleSimple;
+}
+
+function expectPairRule(value: FormattingRule | undefined): FormattingRulePair {
+  expect(value).toBeTruthy();
+  expect(value!.kind).toBe('pair');
+  return value as FormattingRulePair;
 }
 
 interface SetupOpts {
@@ -180,7 +217,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       expect(ctx.fixture.componentInstance.editable()!.rules.length).toBe(2);
       ctx.fixture.componentInstance.patchRule(0, { matchValue: 'baz' });
       ctx.fixture.componentInstance.patchStyle(0, { bold: true });
-      const r0 = ctx.fixture.componentInstance.editable()!.rules[0];
+      const r0 = expectSimpleRule(ctx.fixture.componentInstance.editable()!.rules[0]);
       expect(r0.matchValue).toBe('baz');
       expect(r0.style.bold).toBeTrue();
       expect(r0.style.backgroundColor).toBe('#ffe4b5');
@@ -214,6 +251,50 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     it('ruleLabel formats target/match/value', () => {
       const ctx = loaded();
       expect(ctx.fixture.componentInstance.ruleLabel(rule())).toBe('value contains "foo"');
+    });
+
+    it('ruleLabel formats pair rules and skips unknown future kinds', () => {
+      const ctx = loaded();
+      expect(ctx.fixture.componentInstance.ruleLabel(pairRule())).toBe(
+        'key exact "testHeader" AND value is not null',
+      );
+      expect(ctx.fixture.componentInstance.ruleLabel(unknownRule())).toBe('Unknown rule (skipped)');
+    });
+
+    it('preserves separate simple and pair drafts while toggling selector mode', () => {
+      const ctx = loaded(
+        ruleSet({
+          rules: [
+            rule({
+              id: 'r1',
+              target: 'value',
+              matchType: 'contains',
+              matchValue: 'simple-draft',
+            }),
+          ],
+        }),
+      );
+      const cmp = ctx.fixture.componentInstance;
+
+      expect(cmp.selectorModeFor(cmp.editable()!.rules[0])).toBe('value');
+      cmp.setSelectorMode(0, 'pair');
+      let activePair = expectPairRule(cmp.editable()!.rules[0]);
+      cmp.patchPairKeyMatch(0, { matchValue: 'testHeader' });
+      cmp.setPairValueMatchMode(0, 'predicate');
+      cmp.setPairPredicate(0, 'is_not_null');
+      activePair = expectPairRule(cmp.editable()!.rules[0]);
+      expect(activePair.keyMatch.matchValue).toBe('testHeader');
+      expect(activePair.valueMatch.kind).toBe('predicate');
+
+      cmp.setSelectorMode(0, 'key_or_value');
+      const activeSimple = expectSimpleRule(cmp.editable()!.rules[0]);
+      expect(activeSimple.target).toBe('key_and_value');
+      expect(activeSimple.matchValue).toBe('simple-draft');
+
+      cmp.setSelectorMode(0, 'pair');
+      const restoredPair = expectPairRule(cmp.editable()!.rules[0]);
+      expect(restoredPair.keyMatch.matchValue).toBe('testHeader');
+      expect(restoredPair.valueMatch.kind).toBe('predicate');
     });
   });
 
@@ -261,6 +342,45 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       expect(v.kind).toBe('invalid');
       if (v.kind === 'invalid') {
         expect(v.reasons.some((r) => r.includes('missing a match value'))).toBeTrue();
+      }
+    });
+
+    it('validates pair rules by key text and value text only when value mode is text', () => {
+      const ctx = loaded(
+        ruleSet({
+          rules: [
+            pairRule({
+              keyMatch: { matchType: 'exact', matchValue: 'testHeader', caseSensitive: false },
+              valueMatch: {
+                kind: 'text',
+                matchType: 'contains',
+                matchValue: '',
+                caseSensitive: false,
+              },
+            }),
+          ],
+        }),
+      );
+      expect(ctx.fixture.componentInstance.validity().kind).toBe('invalid');
+
+      ctx.fixture.componentInstance.setPairValueMatchMode(0, 'predicate');
+      expect(ctx.fixture.componentInstance.validity().kind).toBe('valid');
+    });
+
+    it('renders unknown future rule kinds as skipped in the rule list', () => {
+      const ctx = loaded(ruleSet({ rules: [unknownRule()] }));
+      ctx.fixture.detectChanges();
+      const root = ctx.fixture.nativeElement as HTMLElement;
+      expect(root.textContent).toContain('Unknown rule (skipped)');
+      expect(root.textContent).toContain('Unknown rule format from a newer version');
+    });
+
+    it('treats unknown future rule kinds as invalid without throwing', () => {
+      const ctx = loaded(ruleSet({ rules: [unknownRule()] }));
+      const v = ctx.fixture.componentInstance.validity();
+      expect(v.kind).toBe('invalid');
+      if (v.kind === 'invalid') {
+        expect(v.reasons.some((reason) => reason.includes('unsupported format'))).toBeTrue();
       }
     });
   });
@@ -605,7 +725,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       expect(draft!.id).toBe('rs-1');
       expect(draft!.version).toBe(5);
       expect(draft!.userId).toBe('oid-1');
-      expect(draft!.rules[0].matchValue).toBe('foo');
+      expect(expectSimpleRule(draft!.rules[0]).matchValue).toBe('foo');
     });
 
     it('reflects live edits to editable() reactively', () => {
@@ -615,7 +735,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       cmp.setName('Renamed live');
       expect(cmp.previewDraft()!.name).toBe('Renamed live');
       cmp.patchRule(0, { matchValue: 'newpattern' });
-      expect(cmp.previewDraft()!.rules[0].matchValue).toBe('newpattern');
+      expect(expectSimpleRule(cmp.previewDraft()!.rules[0]).matchValue).toBe('newpattern');
     });
   });
 

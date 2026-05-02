@@ -15,6 +15,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -40,7 +42,13 @@ import {
   FormattingIcon,
   FormattingRule,
   FormattingRuleMatchType,
+  FormattingRulePair,
   FormattingRuleSet,
+  FormattingRuleSimple,
+  FormattingStyle,
+  KeyMatch,
+  ValueMatch,
+  ValuePredicate,
 } from '../../../core/api/models';
 import { AppHeaderComponent } from '../../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -74,15 +82,57 @@ type PillState =
   | { kind: 'editing' }
   | { kind: 'idle' };
 
+type RuleKind = 'simple' | 'pair' | 'unknown';
+type SelectorMode = 'key' | 'value' | 'key_or_value' | 'pair';
+type SimpleTarget = FormattingRuleSimple['target'];
+type SimpleDraft = Pick<
+  FormattingRuleSimple,
+  'target' | 'matchType' | 'matchValue' | 'caseSensitive'
+>;
+type PairDraft = Pick<FormattingRulePair, 'keyMatch' | 'valueMatch'>;
+type TextValueMatch = Extract<ValueMatch, { kind: 'text' }>;
+type PairValueMatchMode = ValueMatch['kind'];
+
+interface RuleDraftCache {
+  simple: SimpleDraft | null;
+  pair: PairDraft | null;
+}
+
+interface PredicateOption {
+  value: ValuePredicate;
+  label: string;
+}
+
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const MATCH_VALUE_MAX = 200;
 const MAX_RULES = 50;
 const SAVE_DEBOUNCE_MS = 500;
 const SAVED_FLASH_MS = 2000;
 
-const DEFAULT_NEW_RULE_STYLE = (): FormattingRule['style'] => ({
+const DEFAULT_NEW_RULE_STYLE = (): FormattingStyle => ({
   backgroundColor: '#ffe4b5',
   textColor: '#1f2937',
+});
+
+const DEFAULT_SIMPLE_DRAFT = (target: SimpleTarget = 'value'): SimpleDraft => ({
+  target,
+  matchType: 'contains',
+  matchValue: '',
+  caseSensitive: false,
+});
+
+const DEFAULT_PAIR_DRAFT = (): PairDraft => ({
+  keyMatch: {
+    matchType: 'exact',
+    matchValue: '',
+    caseSensitive: false,
+  },
+  valueMatch: {
+    kind: 'text',
+    matchType: 'contains',
+    matchValue: '',
+    caseSensitive: false,
+  },
 });
 
 /**
@@ -127,6 +177,8 @@ const DEFAULT_NEW_RULE_STYLE = (): FormattingRule['style'] => ({
     IconComponent,
     MatButtonModule,
     MatButtonToggleModule,
+    MatFormFieldModule,
+    MatSelectModule,
     MatSlideToggleModule,
     MatTooltipModule,
     RouterLink,
@@ -155,16 +207,71 @@ export class RuleEditorComponent implements OnInit {
   readonly savedFlash = signal<boolean>(false);
 
   readonly icons: readonly FormattingIcon[] = FORMATTING_ICONS;
-  readonly targetOptions: readonly FormattingRule['target'][] = ['key', 'value', 'key_and_value'];
+  readonly selectorModeOptions: readonly SelectorMode[] = ['key', 'value', 'key_or_value', 'pair'];
   readonly matchTypeOptions: readonly FormattingRuleMatchType[] = [
     'exact',
     'contains',
     'starts_with',
     'ends_with',
   ];
+  readonly predicateOptions: readonly PredicateOption[] = [
+    { value: 'is_null', label: $localize`:@@ruleEditor.predicate.isNull:is null` },
+    { value: 'is_not_null', label: $localize`:@@ruleEditor.predicate.isNotNull:is not null` },
+    {
+      value: 'is_empty',
+      label: $localize`:@@ruleEditor.predicate.isEmpty:is empty (empty string, [], {})`,
+    },
+    { value: 'is_not_empty', label: $localize`:@@ruleEditor.predicate.isNotEmpty:is not empty` },
+    { value: 'is_string', label: $localize`:@@ruleEditor.predicate.isString:is a string` },
+    {
+      value: 'is_not_string',
+      label: $localize`:@@ruleEditor.predicate.isNotString:is not a string`,
+    },
+    {
+      value: 'is_number',
+      label: $localize`:@@ruleEditor.predicate.isNumber:is a number (non-integer)`,
+    },
+    {
+      value: 'is_not_number',
+      label: $localize`:@@ruleEditor.predicate.isNotNumber:is not a number`,
+    },
+    { value: 'is_integer', label: $localize`:@@ruleEditor.predicate.isInteger:is an integer` },
+    {
+      value: 'is_not_integer',
+      label: $localize`:@@ruleEditor.predicate.isNotInteger:is not an integer`,
+    },
+    { value: 'is_boolean', label: $localize`:@@ruleEditor.predicate.isBoolean:is a boolean` },
+    {
+      value: 'is_not_boolean',
+      label: $localize`:@@ruleEditor.predicate.isNotBoolean:is not a boolean`,
+    },
+    { value: 'is_object', label: $localize`:@@ruleEditor.predicate.isObject:is an object` },
+    {
+      value: 'is_not_object',
+      label: $localize`:@@ruleEditor.predicate.isNotObject:is not an object`,
+    },
+    { value: 'is_array', label: $localize`:@@ruleEditor.predicate.isArray:is an array` },
+    { value: 'is_not_array', label: $localize`:@@ruleEditor.predicate.isNotArray:is not an array` },
+  ];
+  readonly noneLabel = $localize`:@@ruleEditor.style.none:(none)`;
+
+  private readonly ruleDrafts = signal<ReadonlyMap<string, RuleDraftCache>>(new Map());
 
   /** `true` while either a 412 conflict banner is up or a Reload is in flight. */
   readonly formDisabled = computed(() => this.conflict() || this.reloading());
+
+  readonly selectorMode = computed<ReadonlyMap<string, SelectorMode>>(() => {
+    const editable = this.editable();
+    const modes = new Map<string, SelectorMode>();
+    if (!editable) return modes;
+    for (const rule of editable.rules) {
+      const mode = this.selectorModeFromRule(rule);
+      if (mode !== null) {
+        modes.set(rule.id, mode);
+      }
+    }
+    return modes;
+  });
 
   readonly validity = computed<Validity>(() => {
     const e = this.editable();
@@ -183,12 +290,26 @@ export class RuleEditorComponent implements OnInit {
     let hasEmptyMatchValue = false;
     let hasLongMatchValue = false;
     let hasBadHex = false;
+    let hasMalformedRule = false;
     for (const rule of e.rules) {
-      if (rule.matchValue.trim() === '') hasEmptyMatchValue = true;
-      if (rule.matchValue.length > MATCH_VALUE_MAX) hasLongMatchValue = true;
+      if (this.isSimpleRule(rule)) {
+        if (rule.matchValue.trim() === '') hasEmptyMatchValue = true;
+        if (rule.matchValue.length > MATCH_VALUE_MAX) hasLongMatchValue = true;
+      } else if (this.isPairRule(rule)) {
+        if (rule.keyMatch.matchValue.trim() === '') hasEmptyMatchValue = true;
+        if (rule.keyMatch.matchValue.length > MATCH_VALUE_MAX) hasLongMatchValue = true;
+        if (rule.valueMatch.kind === 'text') {
+          if (rule.valueMatch.matchValue.trim() === '') hasEmptyMatchValue = true;
+          if (rule.valueMatch.matchValue.length > MATCH_VALUE_MAX) hasLongMatchValue = true;
+        }
+      } else {
+        hasMalformedRule = true;
+      }
+
+      if (!this.isKnownRule(rule)) continue;
       const colors = [rule.style.backgroundColor, rule.style.textColor, rule.style.borderColor];
-      for (const c of colors) {
-        if (c && !HEX_COLOR.test(c)) hasBadHex = true;
+      for (const color of colors) {
+        if (color && !HEX_COLOR.test(color)) hasBadHex = true;
       }
     }
     if (hasEmptyMatchValue) {
@@ -199,6 +320,11 @@ export class RuleEditorComponent implements OnInit {
     if (hasLongMatchValue) {
       reasons.push(
         $localize`:@@ruleEditor.validity.matchValueLong:One or more rules have a match value that is too long (max 200 characters).`,
+      );
+    }
+    if (hasMalformedRule) {
+      reasons.push(
+        $localize`:@@ruleEditor.validity.malformedRule:One or more rules use an unsupported format and must be removed or converted before saving.`,
       );
     }
     if (hasBadHex) {
@@ -260,10 +386,51 @@ export class RuleEditorComponent implements OnInit {
 
   /** Auto-generated label per F1: e.g. `key contains "error"`. */
   ruleLabel(rule: FormattingRule): string {
-    const targetLabel = rule.target === 'key_and_value' ? 'key+value' : rule.target;
-    const verb = rule.matchType.replace(/_/g, ' ');
-    const value = rule.matchValue ? `"${rule.matchValue}"` : '(empty)';
-    return `${targetLabel} ${verb} ${value}`;
+    if (this.isPairRule(rule)) {
+      return `${this.textMatchLabel($localize`:@@ruleEditor.ruleLabel.target.key:key`, rule.keyMatch)} ${$localize`:@@ruleEditor.ruleLabel.and:AND`} ${this.valueMatchLabel(rule.valueMatch)}`;
+    }
+    if (this.isSimpleRule(rule)) {
+      const targetLabel = this.simpleTargetLabel(rule.target);
+      return this.textMatchLabel(targetLabel, rule);
+    }
+    return $localize`:@@ruleEditor.ruleLabel.unknown:Unknown rule (skipped)`;
+  }
+
+  selectorModeFor(rule: FormattingRule): SelectorMode | null {
+    return this.selectorMode().get(rule.id) ?? null;
+  }
+
+  isSimpleRule(rule: FormattingRule): rule is FormattingRuleSimple {
+    if (this.ruleKind(rule) !== 'simple') return false;
+    if (
+      !('target' in rule) ||
+      !('matchType' in rule) ||
+      !('matchValue' in rule) ||
+      !('caseSensitive' in rule)
+    ) {
+      return false;
+    }
+    return (
+      this.isSimpleTarget(rule.target) &&
+      this.isMatchType(rule.matchType) &&
+      typeof rule.matchValue === 'string' &&
+      typeof rule.caseSensitive === 'boolean' &&
+      this.hasStyleObject(rule)
+    );
+  }
+
+  isPairRule(rule: FormattingRule): rule is FormattingRulePair {
+    if (this.ruleKind(rule) !== 'pair') return false;
+    if (!('keyMatch' in rule) || !('valueMatch' in rule)) return false;
+    return (
+      this.isTextMatchConfig(rule.keyMatch) &&
+      this.isValueMatchConfig(rule.valueMatch) &&
+      this.hasStyleObject(rule)
+    );
+  }
+
+  isKnownRule(rule: FormattingRule): rule is FormattingRuleSimple | FormattingRulePair {
+    return this.isSimpleRule(rule) || this.isPairRule(rule);
   }
 
   /** Joined list of validity reasons for the pill tooltip. */
@@ -334,11 +501,13 @@ export class RuleEditorComponent implements OnInit {
     this.conflict.set(false);
     this.reloading.set(false);
     this.savedFlash.set(false);
+    this.ruleDrafts.set(new Map());
     this.savedFlashToken += 1;
   }
 
   private hydrateFrom(set: FormattingRuleSet): void {
     const cloned = this.cloneRules(set.rules);
+    this.ruleDrafts.set(this.draftCacheForRules(cloned));
     this.editable.set({ name: set.name, rules: cloned });
     this.serverMeta.set({
       id: set.id,
@@ -389,14 +558,17 @@ export class RuleEditorComponent implements OnInit {
     if (this.formDisabled()) return;
     const current = this.editable();
     if (!current) return;
-    const newRule: FormattingRule = {
+    const newRule: FormattingRuleSimple = {
       id: this.newRuleId(),
-      target: 'value',
-      matchType: 'contains',
-      matchValue: '',
-      caseSensitive: false,
+      kind: 'simple',
+      ...DEFAULT_SIMPLE_DRAFT('value'),
       style: DEFAULT_NEW_RULE_STYLE(),
     };
+    this.ruleDrafts.update((caches) => {
+      const nextCaches = new Map(caches);
+      nextCaches.set(newRule.id, { simple: this.simpleDraftFromRule(newRule), pair: null });
+      return nextCaches;
+    });
     this.editable.set({ ...current, rules: [...current.rules, newRule] });
     // M6g-2: focus the new rule's match-value input so users can start
     // typing immediately. afterNextRender waits for the @for to render
@@ -409,7 +581,14 @@ export class RuleEditorComponent implements OnInit {
     const current = this.editable();
     if (!current) return;
     const next = current.rules.slice();
-    next.splice(index, 1);
+    const [removed] = next.splice(index, 1);
+    if (removed) {
+      this.ruleDrafts.update((caches) => {
+        const nextCaches = new Map(caches);
+        nextCaches.delete(removed.id);
+        return nextCaches;
+      });
+    }
     this.editable.set({ ...current, rules: next });
     // M6g-2: pick a sensible focus target so keyboard users do not lose
     // their place. Prefer the rule that filled index `index` (the next
@@ -447,18 +626,180 @@ export class RuleEditorComponent implements OnInit {
     const current = this.editable();
     if (!current) return;
     const next = current.rules.slice();
-    const merged = { ...next[index], ...patch };
+    const rule = next[index];
+    if (!rule || !this.isSimpleRule(rule)) return;
+    const merged: FormattingRuleSimple = {
+      ...rule,
+      kind: 'simple',
+      target: 'target' in patch && this.isSimpleTarget(patch.target) ? patch.target : rule.target,
+      matchType:
+        'matchType' in patch && this.isMatchType(patch.matchType)
+          ? patch.matchType
+          : rule.matchType,
+      matchValue:
+        'matchValue' in patch && typeof patch.matchValue === 'string'
+          ? patch.matchValue
+          : rule.matchValue,
+      caseSensitive:
+        'caseSensitive' in patch && typeof patch.caseSensitive === 'boolean'
+          ? patch.caseSensitive
+          : rule.caseSensitive,
+      style: patch.style ? { ...rule.style, ...patch.style } : { ...rule.style },
+    };
     next[index] = merged;
+    this.cacheActiveDraft(merged);
     this.editable.set({ ...current, rules: next });
   }
 
-  patchStyle(index: number, patch: Partial<FormattingRule['style']>): void {
+  patchPairKeyMatch(index: number, patch: Partial<KeyMatch>): void {
     if (this.formDisabled()) return;
     const current = this.editable();
     if (!current) return;
     const next = current.rules.slice();
     const rule = next[index];
-    next[index] = { ...rule, style: { ...rule.style, ...patch } };
+    if (!rule || !this.isPairRule(rule)) return;
+    const merged: FormattingRulePair = {
+      ...rule,
+      keyMatch: {
+        ...rule.keyMatch,
+        matchType: this.isMatchType(patch.matchType) ? patch.matchType : rule.keyMatch.matchType,
+        matchValue:
+          typeof patch.matchValue === 'string' ? patch.matchValue : rule.keyMatch.matchValue,
+        caseSensitive:
+          typeof patch.caseSensitive === 'boolean'
+            ? patch.caseSensitive
+            : rule.keyMatch.caseSensitive,
+      },
+      valueMatch: this.cloneValueMatch(rule.valueMatch),
+      style: { ...rule.style },
+    };
+    next[index] = merged;
+    this.cacheActiveDraft(merged);
+    this.editable.set({ ...current, rules: next });
+  }
+
+  patchPairValueTextMatch(index: number, patch: Partial<TextValueMatch>): void {
+    if (this.formDisabled()) return;
+    const current = this.editable();
+    if (!current) return;
+    const next = current.rules.slice();
+    const rule = next[index];
+    if (!rule || !this.isPairRule(rule) || rule.valueMatch.kind !== 'text') return;
+    const mergedValueMatch: TextValueMatch = {
+      ...rule.valueMatch,
+      matchType: this.isMatchType(patch.matchType) ? patch.matchType : rule.valueMatch.matchType,
+      matchValue:
+        typeof patch.matchValue === 'string' ? patch.matchValue : rule.valueMatch.matchValue,
+      caseSensitive:
+        typeof patch.caseSensitive === 'boolean'
+          ? patch.caseSensitive
+          : rule.valueMatch.caseSensitive,
+    };
+    const merged: FormattingRulePair = {
+      ...rule,
+      keyMatch: { ...rule.keyMatch },
+      valueMatch: mergedValueMatch,
+      style: { ...rule.style },
+    };
+    next[index] = merged;
+    this.cacheActiveDraft(merged);
+    this.editable.set({ ...current, rules: next });
+  }
+
+  setPairValueMatchMode(index: number, value: unknown): void {
+    if (this.formDisabled()) return;
+    const mode = this.asPairValueMatchMode(value);
+    if (mode === null) return;
+    const current = this.editable();
+    if (!current) return;
+    const next = current.rules.slice();
+    const rule = next[index];
+    if (!rule || !this.isPairRule(rule) || rule.valueMatch.kind === mode) return;
+    const valueMatch: ValueMatch =
+      mode === 'text'
+        ? {
+            kind: 'text',
+            matchType: 'contains',
+            matchValue: '',
+            caseSensitive: false,
+          }
+        : {
+            kind: 'predicate',
+            predicate: 'is_not_null',
+          };
+    const merged: FormattingRulePair = {
+      ...rule,
+      keyMatch: { ...rule.keyMatch },
+      valueMatch,
+      style: { ...rule.style },
+    };
+    next[index] = merged;
+    this.cacheActiveDraft(merged);
+    this.editable.set({ ...current, rules: next });
+  }
+
+  setPairPredicate(index: number, value: unknown): void {
+    if (this.formDisabled()) return;
+    if (!this.isValuePredicate(value)) return;
+    const current = this.editable();
+    if (!current) return;
+    const next = current.rules.slice();
+    const rule = next[index];
+    if (!rule || !this.isPairRule(rule) || rule.valueMatch.kind !== 'predicate') return;
+    const merged: FormattingRulePair = {
+      ...rule,
+      keyMatch: { ...rule.keyMatch },
+      valueMatch: { kind: 'predicate', predicate: value },
+      style: { ...rule.style },
+    };
+    next[index] = merged;
+    this.cacheActiveDraft(merged);
+    this.editable.set({ ...current, rules: next });
+  }
+
+  setSelectorMode(index: number, value: unknown): void {
+    if (this.formDisabled()) return;
+    const mode = this.asSelectorMode(value);
+    if (mode === null) return;
+    const current = this.editable();
+    if (!current) return;
+    const next = current.rules.slice();
+    const rule = next[index];
+    if (!rule) return;
+
+    const cache = this.cacheWithActiveDraft(rule);
+    const style = this.styleFromRule(rule);
+    const nextRule =
+      mode === 'pair'
+        ? this.ruleFromPairDraft(rule.id, cache.pair ?? DEFAULT_PAIR_DRAFT(), style)
+        : this.ruleFromSimpleDraft(
+            rule.id,
+            {
+              ...(cache.simple ?? DEFAULT_SIMPLE_DRAFT()),
+              target: this.targetFromSelectorMode(mode),
+            },
+            style,
+          );
+
+    next[index] = nextRule;
+    this.ruleDrafts.update((caches) => {
+      const nextCaches = new Map(caches);
+      nextCaches.set(nextRule.id, this.cacheWithActiveDraft(nextRule, cache));
+      return nextCaches;
+    });
+    this.editable.set({ ...current, rules: next });
+  }
+
+  patchStyle(index: number, patch: Partial<FormattingStyle>): void {
+    if (this.formDisabled()) return;
+    const current = this.editable();
+    if (!current) return;
+    const next = current.rules.slice();
+    const rule = next[index];
+    if (!rule || !this.isKnownRule(rule)) return;
+    const merged = { ...rule, style: { ...rule.style, ...patch } };
+    next[index] = merged;
+    this.cacheActiveDraft(merged);
     this.editable.set({ ...current, rules: next });
   }
 
@@ -618,6 +959,231 @@ export class RuleEditorComponent implements OnInit {
     );
   }
 
+  private rawRuleKind(rule: FormattingRule): unknown {
+    return rule.kind ?? 'simple';
+  }
+
+  private ruleKind(rule: FormattingRule): RuleKind {
+    const kind = this.rawRuleKind(rule);
+    if (kind === 'simple' || kind === 'pair') return kind;
+    return 'unknown';
+  }
+
+  private selectorModeFromRule(rule: FormattingRule): SelectorMode | null {
+    if (this.isPairRule(rule)) return 'pair';
+    if (!this.isSimpleRule(rule)) return null;
+    switch (rule.target) {
+      case 'key':
+        return 'key';
+      case 'value':
+        return 'value';
+      case 'key_and_value':
+        return 'key_or_value';
+      default:
+        return null;
+    }
+  }
+
+  private asSelectorMode(value: unknown): SelectorMode | null {
+    switch (value) {
+      case 'key':
+      case 'value':
+      case 'key_or_value':
+      case 'pair':
+        return value;
+      default:
+        return null;
+    }
+  }
+
+  private asPairValueMatchMode(value: unknown): PairValueMatchMode | null {
+    return value === 'text' || value === 'predicate' ? value : null;
+  }
+
+  private targetFromSelectorMode(mode: Exclude<SelectorMode, 'pair'>): SimpleTarget {
+    switch (mode) {
+      case 'key':
+        return 'key';
+      case 'value':
+        return 'value';
+      case 'key_or_value':
+        return 'key_and_value';
+    }
+  }
+
+  private simpleTargetLabel(target: SimpleTarget): string {
+    switch (target) {
+      case 'key':
+        return $localize`:@@ruleEditor.ruleLabel.target.key:key`;
+      case 'value':
+        return $localize`:@@ruleEditor.ruleLabel.target.value:value`;
+      case 'key_and_value':
+        return $localize`:@@ruleEditor.ruleLabel.target.keyOrValue:key or value`;
+    }
+  }
+
+  private textMatchLabel(label: string, match: KeyMatch | TextValueMatch): string {
+    const verb = this.matchTypeLabel(match.matchType);
+    const value = match.matchValue
+      ? `"${match.matchValue}"`
+      : $localize`:@@ruleEditor.ruleLabel.empty:(empty)`;
+    return `${label} ${verb} ${value}`;
+  }
+
+  private matchTypeLabel(matchType: FormattingRuleMatchType): string {
+    switch (matchType) {
+      case 'exact':
+        return $localize`:@@ruleEditor.ruleLabel.matchType.exact:exact`;
+      case 'contains':
+        return $localize`:@@ruleEditor.ruleLabel.matchType.contains:contains`;
+      case 'starts_with':
+        return $localize`:@@ruleEditor.ruleLabel.matchType.startsWith:starts with`;
+      case 'ends_with':
+        return $localize`:@@ruleEditor.ruleLabel.matchType.endsWith:ends with`;
+    }
+  }
+
+  private valueMatchLabel(match: ValueMatch): string {
+    const valueLabel = $localize`:@@ruleEditor.ruleLabel.target.value:value`;
+    if (match.kind === 'text') return this.textMatchLabel(valueLabel, match);
+    return `${valueLabel} ${this.predicateLabel(match.predicate)}`;
+  }
+
+  private predicateLabel(predicate: ValuePredicate): string {
+    return this.predicateOptions.find((option) => option.value === predicate)?.label ?? predicate;
+  }
+
+  private isSimpleTarget(value: unknown): value is SimpleTarget {
+    return value === 'key' || value === 'value' || value === 'key_and_value';
+  }
+
+  private isMatchType(value: unknown): value is FormattingRuleMatchType {
+    return (
+      value === 'exact' || value === 'contains' || value === 'starts_with' || value === 'ends_with'
+    );
+  }
+
+  private isValuePredicate(value: unknown): value is ValuePredicate {
+    return this.predicateOptions.some((option) => option.value === value);
+  }
+
+  private hasStyleObject(rule: FormattingRule): boolean {
+    return rule.style !== null && typeof rule.style === 'object';
+  }
+
+  private isTextMatchConfig(value: unknown): value is KeyMatch | TextValueMatch {
+    if (value === null || typeof value !== 'object') return false;
+    if (!('matchType' in value) || !('matchValue' in value) || !('caseSensitive' in value)) {
+      return false;
+    }
+    return (
+      this.isMatchType(value.matchType) &&
+      typeof value.matchValue === 'string' &&
+      typeof value.caseSensitive === 'boolean'
+    );
+  }
+
+  private isValueMatchConfig(value: unknown): value is ValueMatch {
+    if (value === null || typeof value !== 'object' || !('kind' in value)) return false;
+    if (value.kind === 'text') return this.isTextMatchConfig(value);
+    return (
+      value.kind === 'predicate' && 'predicate' in value && this.isValuePredicate(value.predicate)
+    );
+  }
+
+  private cacheActiveDraft(rule: FormattingRule): void {
+    this.ruleDrafts.update((caches) => {
+      const nextCaches = new Map(caches);
+      nextCaches.set(rule.id, this.cacheWithActiveDraft(rule));
+      return nextCaches;
+    });
+  }
+
+  private cacheWithActiveDraft(
+    rule: FormattingRule,
+    base: RuleDraftCache = this.ruleDrafts().get(rule.id) ?? { simple: null, pair: null },
+  ): RuleDraftCache {
+    if (this.isSimpleRule(rule)) {
+      return { ...base, simple: this.simpleDraftFromRule(rule) };
+    }
+    if (this.isPairRule(rule)) {
+      return { ...base, pair: this.pairDraftFromRule(rule) };
+    }
+    return base;
+  }
+
+  private simpleDraftFromRule(rule: FormattingRuleSimple): SimpleDraft {
+    return {
+      target: rule.target,
+      matchType: rule.matchType,
+      matchValue: rule.matchValue,
+      caseSensitive: rule.caseSensitive,
+    };
+  }
+
+  private pairDraftFromRule(rule: FormattingRulePair): PairDraft {
+    return {
+      keyMatch: { ...rule.keyMatch },
+      valueMatch: this.cloneValueMatch(rule.valueMatch),
+    };
+  }
+
+  private ruleFromSimpleDraft(
+    id: string,
+    draft: SimpleDraft,
+    style: FormattingStyle,
+  ): FormattingRuleSimple {
+    return {
+      id,
+      kind: 'simple',
+      target: draft.target,
+      matchType: draft.matchType,
+      matchValue: draft.matchValue,
+      caseSensitive: draft.caseSensitive,
+      style: { ...style },
+    };
+  }
+
+  private ruleFromPairDraft(
+    id: string,
+    draft: PairDraft,
+    style: FormattingStyle,
+  ): FormattingRulePair {
+    return {
+      id,
+      kind: 'pair',
+      keyMatch: { ...draft.keyMatch },
+      valueMatch: this.cloneValueMatch(draft.valueMatch),
+      style: { ...style },
+    };
+  }
+
+  private cloneValueMatch(match: ValueMatch): ValueMatch {
+    if (match.kind === 'text') {
+      return {
+        kind: 'text',
+        matchType: match.matchType,
+        matchValue: match.matchValue,
+        caseSensitive: match.caseSensitive,
+      };
+    }
+    return { kind: 'predicate', predicate: match.predicate };
+  }
+
+  private styleFromRule(rule: FormattingRule): FormattingStyle {
+    return this.hasStyleObject(rule) ? { ...rule.style } : DEFAULT_NEW_RULE_STYLE();
+  }
+
+  private draftCacheForRules(
+    rules: readonly FormattingRule[],
+  ): ReadonlyMap<string, RuleDraftCache> {
+    const caches = new Map<string, RuleDraftCache>();
+    for (const rule of rules) {
+      caches.set(rule.id, this.cacheWithActiveDraft(rule, { simple: null, pair: null }));
+    }
+    return caches;
+  }
+
   private flashSaved(): void {
     this.savedFlashToken += 1;
     const token = this.savedFlashToken;
@@ -630,27 +1196,64 @@ export class RuleEditorComponent implements OnInit {
   private fingerprint(e: Editable): string {
     return JSON.stringify({
       name: e.name,
-      rules: e.rules.map((r) => ({
-        id: r.id,
-        target: r.target,
-        matchType: r.matchType,
-        matchValue: r.matchValue,
-        caseSensitive: r.caseSensitive,
-        style: {
-          backgroundColor: r.style.backgroundColor ?? null,
-          textColor: r.style.textColor ?? null,
-          borderColor: r.style.borderColor ?? null,
-          bold: r.style.bold ?? false,
-          italic: r.style.italic ?? false,
-          underline: r.style.underline ?? false,
-          icon: r.style.icon ?? null,
-        },
-      })),
+      rules: e.rules.map((rule) => this.ruleFingerprint(rule)),
     });
   }
 
+  private ruleFingerprint(rule: FormattingRule): unknown {
+    const ruleId = rule.id;
+    const ruleKind = this.rawRuleKind(rule);
+    if (this.isSimpleRule(rule)) {
+      return {
+        id: rule.id,
+        kind: 'simple',
+        target: rule.target,
+        matchType: rule.matchType,
+        matchValue: rule.matchValue,
+        caseSensitive: rule.caseSensitive,
+        style: this.styleFingerprint(rule.style),
+      };
+    }
+    if (this.isPairRule(rule)) {
+      return {
+        id: rule.id,
+        kind: 'pair',
+        keyMatch: { ...rule.keyMatch },
+        valueMatch: this.cloneValueMatch(rule.valueMatch),
+        style: this.styleFingerprint(rule.style),
+      };
+    }
+    return {
+      id: ruleId,
+      kind: ruleKind,
+      skipped: true,
+    };
+  }
+
+  private styleFingerprint(style: FormattingStyle): unknown {
+    return {
+      backgroundColor: style.backgroundColor ?? null,
+      textColor: style.textColor ?? null,
+      borderColor: style.borderColor ?? null,
+      bold: style.bold ?? false,
+      italic: style.italic ?? false,
+      underline: style.underline ?? false,
+      icon: style.icon ?? null,
+    };
+  }
+
   private cloneRules(rules: FormattingRule[]): FormattingRule[] {
-    return rules.map((r) => ({ ...r, style: { ...r.style } }));
+    return rules.map((rule) => this.cloneRule(rule));
+  }
+
+  private cloneRule(rule: FormattingRule): FormattingRule {
+    if (this.isSimpleRule(rule)) {
+      return this.ruleFromSimpleDraft(rule.id, this.simpleDraftFromRule(rule), rule.style);
+    }
+    if (this.isPairRule(rule)) {
+      return this.ruleFromPairDraft(rule.id, this.pairDraftFromRule(rule), rule.style);
+    }
+    return rule;
   }
 
   private newRuleId(): string {

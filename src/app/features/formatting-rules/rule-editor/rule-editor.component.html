@@ -182,220 +182,414 @@
             </header>
 
             <div class="rule-grid">
-              <div class="rule-field">
+              <div class="rule-field rule-field--wide">
                 <label [attr.for]="'target-' + rule.id" i18n="@@ruleEditor.targetLabel"
                   >Target</label
                 >
                 <mat-button-toggle-group
+                  class="target-toggle-group"
                   [id]="'target-' + rule.id"
-                  [value]="rule.target"
+                  [value]="selectorModeFor(rule)"
                   [disabled]="formDisabled()"
-                  (change)="patchRule(i, { target: $event.value })"
+                  (change)="setSelectorMode(i, $event.value)"
                   hideSingleSelectionIndicator
                 >
                   <mat-button-toggle value="key" i18n="@@ruleEditor.target.key"
-                    >Key</mat-button-toggle
+                    >Key only</mat-button-toggle
                   >
                   <mat-button-toggle value="value" i18n="@@ruleEditor.target.value"
-                    >Value</mat-button-toggle
+                    >Value only</mat-button-toggle
                   >
-                  <mat-button-toggle value="key_and_value" i18n="@@ruleEditor.target.both"
-                    >Both</mat-button-toggle
+                  <mat-button-toggle value="key_or_value" i18n="@@ruleEditor.target.both"
+                    >Key or value (either)</mat-button-toggle
                   >
-                </mat-button-toggle-group>
-              </div>
-
-              <div class="rule-field">
-                <label [attr.for]="'match-type-' + rule.id" i18n="@@ruleEditor.matchTypeLabel"
-                  >Match type</label
-                >
-                <mat-button-toggle-group
-                  [id]="'match-type-' + rule.id"
-                  [value]="rule.matchType"
-                  [disabled]="formDisabled()"
-                  (change)="patchRule(i, { matchType: $event.value })"
-                  hideSingleSelectionIndicator
-                >
-                  <mat-button-toggle value="exact" i18n="@@ruleEditor.matchType.exact"
-                    >Exact</mat-button-toggle
-                  >
-                  <mat-button-toggle value="contains" i18n="@@ruleEditor.matchType.contains"
-                    >Contains</mat-button-toggle
-                  >
-                  <mat-button-toggle value="starts_with" i18n="@@ruleEditor.matchType.startsWith"
-                    >Starts with</mat-button-toggle
-                  >
-                  <mat-button-toggle value="ends_with" i18n="@@ruleEditor.matchType.endsWith"
-                    >Ends with</mat-button-toggle
+                  <mat-button-toggle value="pair" i18n="@@ruleEditor.target.pair"
+                    >Key + value (both must match)</mat-button-toggle
                   >
                 </mat-button-toggle-group>
               </div>
 
-              <div class="rule-field rule-field--wide">
-                <label [attr.for]="'match-value-' + rule.id" i18n="@@ruleEditor.matchValueLabel"
-                  >Match value</label
-                >
-                <input
-                  [id]="'match-value-' + rule.id"
-                  type="text"
-                  class="match-value-input"
-                  [value]="rule.matchValue"
-                  [disabled]="formDisabled()"
-                  maxlength="200"
-                  (input)="
-                    patchRule(i, {
-                      matchValue: $any($event.target).value,
-                    })
-                  "
-                />
-              </div>
+              @if (isSimpleRule(rule)) {
+                <div class="rule-field">
+                  <label [attr.for]="'match-type-' + rule.id" i18n="@@ruleEditor.matchTypeLabel"
+                    >Match type</label
+                  >
+                  <mat-button-toggle-group
+                    [id]="'match-type-' + rule.id"
+                    [value]="rule.matchType"
+                    [disabled]="formDisabled()"
+                    (change)="patchRule(i, { matchType: $event.value })"
+                    hideSingleSelectionIndicator
+                  >
+                    <mat-button-toggle value="exact" i18n="@@ruleEditor.matchType.exact"
+                      >Exact</mat-button-toggle
+                    >
+                    <mat-button-toggle value="contains" i18n="@@ruleEditor.matchType.contains"
+                      >Contains</mat-button-toggle
+                    >
+                    <mat-button-toggle value="starts_with" i18n="@@ruleEditor.matchType.startsWith"
+                      >Starts with</mat-button-toggle
+                    >
+                    <mat-button-toggle value="ends_with" i18n="@@ruleEditor.matchType.endsWith"
+                      >Ends with</mat-button-toggle
+                    >
+                  </mat-button-toggle-group>
+                </div>
 
-              <div class="rule-field rule-field--toggle">
-                <mat-slide-toggle
-                  [checked]="rule.caseSensitive"
-                  [disabled]="formDisabled()"
-                  (change)="patchRule(i, { caseSensitive: $event.checked })"
-                  i18n="@@ruleEditor.caseSensitiveLabel"
-                  >Case sensitive</mat-slide-toggle
-                >
-              </div>
+                <div class="rule-field">
+                  <label [attr.for]="'match-value-' + rule.id" i18n="@@ruleEditor.matchValueLabel"
+                    >Match value</label
+                  >
+                  <input
+                    [id]="'match-value-' + rule.id"
+                    type="text"
+                    class="match-value-input"
+                    [value]="rule.matchValue"
+                    [disabled]="formDisabled()"
+                    maxlength="200"
+                    (input)="
+                      patchRule(i, {
+                        matchValue: $any($event.target).value,
+                      })
+                    "
+                  />
+                </div>
+
+                <div class="rule-field rule-field--toggle">
+                  <mat-slide-toggle
+                    [checked]="rule.caseSensitive"
+                    [disabled]="formDisabled()"
+                    (change)="patchRule(i, { caseSensitive: $event.checked })"
+                    i18n="@@ruleEditor.caseSensitiveLabel"
+                    >Case sensitive</mat-slide-toggle
+                  >
+                </div>
+              } @else if (isPairRule(rule)) {
+                <div class="pair-match-grid">
+                  <fieldset class="match-block">
+                    <legend i18n="@@ruleEditor.pair.keyHeading">Key match</legend>
+                    <div class="rule-field">
+                      <label
+                        [attr.for]="'key-match-type-' + rule.id"
+                        i18n="@@ruleEditor.pair.keyMatchTypeLabel"
+                        >Key match type</label
+                      >
+                      <mat-button-toggle-group
+                        [id]="'key-match-type-' + rule.id"
+                        [value]="rule.keyMatch.matchType"
+                        [disabled]="formDisabled()"
+                        (change)="patchPairKeyMatch(i, { matchType: $event.value })"
+                        hideSingleSelectionIndicator
+                      >
+                        <mat-button-toggle value="exact" i18n="@@ruleEditor.matchType.exact"
+                          >Exact</mat-button-toggle
+                        >
+                        <mat-button-toggle value="contains" i18n="@@ruleEditor.matchType.contains"
+                          >Contains</mat-button-toggle
+                        >
+                        <mat-button-toggle
+                          value="starts_with"
+                          i18n="@@ruleEditor.matchType.startsWith"
+                          >Starts with</mat-button-toggle
+                        >
+                        <mat-button-toggle value="ends_with" i18n="@@ruleEditor.matchType.endsWith"
+                          >Ends with</mat-button-toggle
+                        >
+                      </mat-button-toggle-group>
+                    </div>
+
+                    <div class="rule-field">
+                      <label
+                        [attr.for]="'key-match-value-' + rule.id"
+                        i18n="@@ruleEditor.pair.keyMatchValueLabel"
+                        >Key match value</label
+                      >
+                      <input
+                        [id]="'key-match-value-' + rule.id"
+                        type="text"
+                        class="match-value-input"
+                        [value]="rule.keyMatch.matchValue"
+                        [disabled]="formDisabled()"
+                        maxlength="200"
+                        (input)="
+                          patchPairKeyMatch(i, {
+                            matchValue: $any($event.target).value,
+                          })
+                        "
+                      />
+                    </div>
+
+                    <div class="rule-field rule-field--toggle">
+                      <mat-slide-toggle
+                        [checked]="rule.keyMatch.caseSensitive"
+                        [disabled]="formDisabled()"
+                        (change)="patchPairKeyMatch(i, { caseSensitive: $event.checked })"
+                        i18n="@@ruleEditor.pair.keyCaseSensitiveLabel"
+                        >Key case sensitive</mat-slide-toggle
+                      >
+                    </div>
+                  </fieldset>
+
+                  <fieldset class="match-block">
+                    <legend i18n="@@ruleEditor.pair.valueHeading">Value match</legend>
+                    <div class="rule-field">
+                      <label
+                        [attr.for]="'value-match-mode-' + rule.id"
+                        i18n="@@ruleEditor.pair.valueModeLabel"
+                        >Value match mode</label
+                      >
+                      <mat-button-toggle-group
+                        [id]="'value-match-mode-' + rule.id"
+                        [value]="rule.valueMatch.kind"
+                        [disabled]="formDisabled()"
+                        (change)="setPairValueMatchMode(i, $event.value)"
+                        hideSingleSelectionIndicator
+                      >
+                        <mat-button-toggle value="text" i18n="@@ruleEditor.valueMatch.text"
+                          >Text</mat-button-toggle
+                        >
+                        <mat-button-toggle
+                          value="predicate"
+                          i18n="@@ruleEditor.valueMatch.predicate"
+                          >Predicate</mat-button-toggle
+                        >
+                      </mat-button-toggle-group>
+                    </div>
+
+                    @if (rule.valueMatch.kind === 'text') {
+                      <div class="rule-field">
+                        <label
+                          [attr.for]="'value-match-type-' + rule.id"
+                          i18n="@@ruleEditor.pair.valueMatchTypeLabel"
+                          >Value match type</label
+                        >
+                        <mat-button-toggle-group
+                          [id]="'value-match-type-' + rule.id"
+                          [value]="rule.valueMatch.matchType"
+                          [disabled]="formDisabled()"
+                          (change)="patchPairValueTextMatch(i, { matchType: $event.value })"
+                          hideSingleSelectionIndicator
+                        >
+                          <mat-button-toggle value="exact" i18n="@@ruleEditor.matchType.exact"
+                            >Exact</mat-button-toggle
+                          >
+                          <mat-button-toggle value="contains" i18n="@@ruleEditor.matchType.contains"
+                            >Contains</mat-button-toggle
+                          >
+                          <mat-button-toggle
+                            value="starts_with"
+                            i18n="@@ruleEditor.matchType.startsWith"
+                            >Starts with</mat-button-toggle
+                          >
+                          <mat-button-toggle
+                            value="ends_with"
+                            i18n="@@ruleEditor.matchType.endsWith"
+                            >Ends with</mat-button-toggle
+                          >
+                        </mat-button-toggle-group>
+                      </div>
+
+                      <div class="rule-field">
+                        <label
+                          [attr.for]="'value-match-value-' + rule.id"
+                          i18n="@@ruleEditor.pair.valueMatchValueLabel"
+                          >Value match value</label
+                        >
+                        <input
+                          [id]="'value-match-value-' + rule.id"
+                          type="text"
+                          class="match-value-input"
+                          [value]="rule.valueMatch.matchValue"
+                          [disabled]="formDisabled()"
+                          maxlength="200"
+                          (input)="
+                            patchPairValueTextMatch(i, {
+                              matchValue: $any($event.target).value,
+                            })
+                          "
+                        />
+                      </div>
+
+                      <div class="rule-field rule-field--toggle">
+                        <mat-slide-toggle
+                          [checked]="rule.valueMatch.caseSensitive"
+                          [disabled]="formDisabled()"
+                          (change)="
+                            patchPairValueTextMatch(i, {
+                              caseSensitive: $event.checked,
+                            })
+                          "
+                          i18n="@@ruleEditor.pair.valueCaseSensitiveLabel"
+                          >Value case sensitive</mat-slide-toggle
+                        >
+                      </div>
+                    } @else {
+                      <mat-form-field class="predicate-select-field" appearance="outline">
+                        <mat-label i18n="@@ruleEditor.predicate.label">Value predicate</mat-label>
+                        <mat-select
+                          [value]="rule.valueMatch.predicate"
+                          [disabled]="formDisabled()"
+                          (selectionChange)="setPairPredicate(i, $event.value)"
+                          aria-label="Value predicate"
+                          i18n-aria-label="@@ruleEditor.predicate.ariaLabel"
+                        >
+                          @for (option of predicateOptions; track option.value) {
+                            <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                          }
+                        </mat-select>
+                        <mat-hint i18n="@@ruleEditor.predicate.helper">
+                          Number and Integer are mutually exclusive. Combine both rules to match any
+                          numeric.
+                        </mat-hint>
+                      </mat-form-field>
+                    }
+                  </fieldset>
+                </div>
+              } @else {
+                <p class="unknown-rule" i18n="@@ruleEditor.unknownRule.message">
+                  Unknown rule format from a newer version. This rule is skipped until you remove it
+                  or convert it.
+                </p>
+              }
             </div>
 
-            <fieldset class="style-block" [disabled]="formDisabled()">
-              <legend i18n="@@ruleEditor.styleHeading">Style</legend>
+            @if (isKnownRule(rule)) {
+              <fieldset class="style-block" [disabled]="formDisabled()">
+                <legend i18n="@@ruleEditor.styleHeading">Style</legend>
 
-              <div class="style-row">
-                <label
-                  [attr.for]="'bg-' + rule.id"
-                  class="style-color-label"
-                  i18n="@@ruleEditor.style.background"
-                  >Background</label
-                >
-                <input
-                  [id]="'bg-' + rule.id"
-                  type="color"
-                  class="style-color"
-                  [value]="rule.style.backgroundColor || '#ffffff'"
-                  [attr.aria-describedby]="'bg-' + rule.id + '-hex'"
-                  (input)="
-                    patchStyle(i, {
-                      backgroundColor: $any($event.target).value,
-                    })
-                  "
-                />
-                <code [id]="'bg-' + rule.id + '-hex'" class="style-hex">{{
-                  rule.style.backgroundColor || '(none)'
-                }}</code>
-              </div>
-
-              <div class="style-row">
-                <label
-                  [attr.for]="'text-' + rule.id"
-                  class="style-color-label"
-                  i18n="@@ruleEditor.style.textColor"
-                  >Text</label
-                >
-                <input
-                  [id]="'text-' + rule.id"
-                  type="color"
-                  class="style-color"
-                  [value]="rule.style.textColor || '#000000'"
-                  [attr.aria-describedby]="'text-' + rule.id + '-hex'"
-                  (input)="
-                    patchStyle(i, {
-                      textColor: $any($event.target).value,
-                    })
-                  "
-                />
-                <code [id]="'text-' + rule.id + '-hex'" class="style-hex">{{
-                  rule.style.textColor || '(none)'
-                }}</code>
-              </div>
-
-              <div class="style-row">
-                <label
-                  [attr.for]="'border-' + rule.id"
-                  class="style-color-label"
-                  i18n="@@ruleEditor.style.borderColor"
-                  >Border</label
-                >
-                <input
-                  [id]="'border-' + rule.id"
-                  type="color"
-                  class="style-color"
-                  [value]="rule.style.borderColor || '#000000'"
-                  [attr.aria-describedby]="'border-' + rule.id + '-hex'"
-                  (input)="
-                    patchStyle(i, {
-                      borderColor: $any($event.target).value,
-                    })
-                  "
-                />
-                <code [id]="'border-' + rule.id + '-hex'" class="style-hex">{{
-                  rule.style.borderColor || '(none)'
-                }}</code>
-              </div>
-
-              <div class="style-toggles">
-                <label class="style-toggle">
+                <div class="style-row">
+                  <label
+                    [attr.for]="'bg-' + rule.id"
+                    class="style-color-label"
+                    i18n="@@ruleEditor.style.background"
+                    >Background</label
+                  >
                   <input
-                    type="checkbox"
-                    [checked]="rule.style.bold || false"
-                    (change)="
+                    [id]="'bg-' + rule.id"
+                    type="color"
+                    class="style-color"
+                    [value]="rule.style.backgroundColor || '#ffffff'"
+                    [attr.aria-describedby]="'bg-' + rule.id + '-hex'"
+                    (input)="
                       patchStyle(i, {
-                        bold: $any($event.target).checked,
+                        backgroundColor: $any($event.target).value,
                       })
                     "
-                  /><span i18n="@@ruleEditor.style.bold">Bold</span>
-                </label>
-                <label class="style-toggle">
-                  <input
-                    type="checkbox"
-                    [checked]="rule.style.italic || false"
-                    (change)="
-                      patchStyle(i, {
-                        italic: $any($event.target).checked,
-                      })
-                    "
-                  /><span i18n="@@ruleEditor.style.italic">Italic</span>
-                </label>
-                <label class="style-toggle">
-                  <input
-                    type="checkbox"
-                    [checked]="rule.style.underline || false"
-                    (change)="
-                      patchStyle(i, {
-                        underline: $any($event.target).checked,
-                      })
-                    "
-                  /><span i18n="@@ruleEditor.style.underline">Underline</span>
-                </label>
-              </div>
+                  />
+                  <code [id]="'bg-' + rule.id + '-hex'" class="style-hex">{{
+                    rule.style.backgroundColor || noneLabel
+                  }}</code>
+                </div>
 
-              <div class="style-row">
-                <label
-                  [attr.for]="'icon-' + rule.id"
-                  class="style-color-label"
-                  i18n="@@ruleEditor.style.icon"
-                  >Icon</label
-                >
-                <select
-                  [id]="'icon-' + rule.id"
-                  class="style-icon-select"
-                  [value]="rule.style.icon || ''"
-                  [disabled]="formDisabled()"
-                  (change)="setIcon(i, $any($event.target).value)"
-                >
-                  <option value="" i18n="@@ruleEditor.style.icon.none"> (none) </option>
-                  @for (icon of icons; track icon) {
-                    <option [value]="icon">{{ icon }}</option>
+                <div class="style-row">
+                  <label
+                    [attr.for]="'text-' + rule.id"
+                    class="style-color-label"
+                    i18n="@@ruleEditor.style.textColor"
+                    >Text</label
+                  >
+                  <input
+                    [id]="'text-' + rule.id"
+                    type="color"
+                    class="style-color"
+                    [value]="rule.style.textColor || '#000000'"
+                    [attr.aria-describedby]="'text-' + rule.id + '-hex'"
+                    (input)="
+                      patchStyle(i, {
+                        textColor: $any($event.target).value,
+                      })
+                    "
+                  />
+                  <code [id]="'text-' + rule.id + '-hex'" class="style-hex">{{
+                    rule.style.textColor || noneLabel
+                  }}</code>
+                </div>
+
+                <div class="style-row">
+                  <label
+                    [attr.for]="'border-' + rule.id"
+                    class="style-color-label"
+                    i18n="@@ruleEditor.style.borderColor"
+                    >Border</label
+                  >
+                  <input
+                    [id]="'border-' + rule.id"
+                    type="color"
+                    class="style-color"
+                    [value]="rule.style.borderColor || '#000000'"
+                    [attr.aria-describedby]="'border-' + rule.id + '-hex'"
+                    (input)="
+                      patchStyle(i, {
+                        borderColor: $any($event.target).value,
+                      })
+                    "
+                  />
+                  <code [id]="'border-' + rule.id + '-hex'" class="style-hex">{{
+                    rule.style.borderColor || noneLabel
+                  }}</code>
+                </div>
+
+                <div class="style-toggles">
+                  <label class="style-toggle">
+                    <input
+                      type="checkbox"
+                      [checked]="rule.style.bold || false"
+                      (change)="
+                        patchStyle(i, {
+                          bold: $any($event.target).checked,
+                        })
+                      "
+                    /><span i18n="@@ruleEditor.style.bold">Bold</span>
+                  </label>
+                  <label class="style-toggle">
+                    <input
+                      type="checkbox"
+                      [checked]="rule.style.italic || false"
+                      (change)="
+                        patchStyle(i, {
+                          italic: $any($event.target).checked,
+                        })
+                      "
+                    /><span i18n="@@ruleEditor.style.italic">Italic</span>
+                  </label>
+                  <label class="style-toggle">
+                    <input
+                      type="checkbox"
+                      [checked]="rule.style.underline || false"
+                      (change)="
+                        patchStyle(i, {
+                          underline: $any($event.target).checked,
+                        })
+                      "
+                    /><span i18n="@@ruleEditor.style.underline">Underline</span>
+                  </label>
+                </div>
+
+                <div class="style-row">
+                  <label
+                    [attr.for]="'icon-' + rule.id"
+                    class="style-color-label"
+                    i18n="@@ruleEditor.style.icon"
+                    >Icon</label
+                  >
+                  <select
+                    [id]="'icon-' + rule.id"
+                    class="style-icon-select"
+                    [value]="rule.style.icon || ''"
+                    [disabled]="formDisabled()"
+                    (change)="setIcon(i, $any($event.target).value)"
+                  >
+                    <option value="" i18n="@@ruleEditor.style.icon.none"> (none) </option>
+                    @for (icon of icons; track icon) {
+                      <option [value]="icon">{{ icon }}</option>
+                    }
+                  </select>
+                  @if (rule.style.icon) {
+                    <jj-icon [name]="rule.style.icon" class="icon-preview" />
                   }
-                </select>
-                @if (rule.style.icon) {
-                  <jj-icon [name]="rule.style.icon" class="icon-preview" />
-                }
-              </div>
-            </fieldset>
+                </div>
+              </fieldset>
+            }
           </li>
         }
       </ul>

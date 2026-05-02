@@ -3,12 +3,18 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { RulePreviewComponent } from './rule-preview.component';
 import { JsonTreeComponent } from '../../../../shared/components/json-tree/json-tree.component';
-import type { FormattingRule, FormattingRuleSet } from '../../../../core/api/models';
+import type {
+  FormattingRule,
+  FormattingRulePair,
+  FormattingRuleSet,
+  FormattingRuleSimple,
+} from '../../../../core/api/models';
 import { provideFakeAuth } from '../../../../../testing/auth.testing';
 
-function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+function rule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
   return {
     id: 'r1',
+    kind: 'simple',
     target: 'value',
     matchType: 'contains',
     matchValue: 'TypeError',
@@ -16,6 +22,35 @@ function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     style: { backgroundColor: '#ffcdd2' },
     ...overrides,
   };
+}
+
+function pairRule(overrides: Partial<FormattingRulePair> = {}): FormattingRulePair {
+  return {
+    id: 'pair-1',
+    kind: 'pair',
+    keyMatch: {
+      matchType: 'exact',
+      matchValue: 'testHeader',
+      caseSensitive: false,
+    },
+    valueMatch: { kind: 'predicate', predicate: 'is_not_null' },
+    style: { textColor: '#123456', bold: true },
+    ...overrides,
+  };
+}
+
+function unknownRule(): FormattingRule {
+  return {
+    id: 'future-rule',
+    kind: 'future',
+    style: { textColor: '#ffffff' },
+  } as unknown as FormattingRule;
+}
+
+function expectSimpleRule(value: FormattingRule | undefined): FormattingRuleSimple {
+  expect(value).toBeTruthy();
+  expect(value!.kind ?? 'simple').toBe('simple');
+  return value as FormattingRuleSimple;
 }
 
 function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
@@ -95,7 +130,7 @@ describe('RulePreviewComponent', () => {
 
     const next = tree.overrideRuleSets();
     expect(next![0].name).toBe('After');
-    expect(next![0].rules[0].matchValue).toBe('message');
+    expect(expectSimpleRule(next![0].rules[0]).matchValue).toBe('message');
   });
 
   it('binds embeddedMode=true on the inner JsonTreeComponent (M6d-3-fu2)', async () => {
@@ -105,6 +140,64 @@ describe('RulePreviewComponent', () => {
     ).componentInstance as JsonTreeComponent;
     expect(tree.embeddedMode()).toBeTrue();
   });
+
+  it('includes pair-rule sample fields for predicate preview coverage', async () => {
+    await create(ruleSet());
+    const tree = fixture.debugElement.query(
+      (el) => el.componentInstance instanceof JsonTreeComponent,
+    ).componentInstance as JsonTreeComponent;
+    const sample = tree.value() as Record<string, unknown>;
+    expect(sample['testHeader']).toBe('present');
+    expect(sample['testHeaderNull']).toBeNull();
+  });
+
+  it('projects pair-rule inline style to both key and value tokens when both sides match', async () => {
+    await create(ruleSet({ rules: [pairRule()] }));
+    const tree = fixture.debugElement.query(
+      (el) => el.componentInstance instanceof JsonTreeComponent,
+    ).componentInstance as JsonTreeComponent;
+    const node = findSampleNode(tree, 'testHeader');
+    const vars = tree.ruleStyleVars(node);
+    expect(vars?.['--tree-key-color']).toBe('#123456');
+    expect(vars?.['--tree-value-color']).toBe('#123456');
+    expect(vars?.['--tree-key-weight']).toBe('700');
+    expect(vars?.['--tree-value-weight']).toBe('700');
+  });
+
+  it('does not project pair-rule style when only the key side matches', async () => {
+    await create(
+      ruleSet({
+        rules: [
+          pairRule({
+            keyMatch: {
+              matchType: 'exact',
+              matchValue: 'testHeaderNull',
+              caseSensitive: false,
+            },
+            valueMatch: { kind: 'predicate', predicate: 'is_not_null' },
+          }),
+        ],
+      }),
+    );
+    const tree = fixture.debugElement.query(
+      (el) => el.componentInstance instanceof JsonTreeComponent,
+    ).componentInstance as JsonTreeComponent;
+    const node = findSampleNode(tree, 'testHeaderNull');
+    expect(tree.ruleStyleVars(node)).toBeNull();
+  });
+
+  it('skips unknown future rule kinds in preview contrast checks without crashing', async () => {
+    await create(ruleSet({ rules: [unknownRule()] }));
+    expect(fixture.componentInstance.contrastFailures()).toEqual([]);
+  });
+
+  function findSampleNode(tree: JsonTreeComponent, key: string) {
+    const root = tree.root();
+    expect(root).toBeTruthy();
+    const node = root!.children!.find((child) => child.segment === key);
+    expect(node).withContext(`expected sample to contain key "${key}"`).toBeTruthy();
+    return node!;
+  }
 
   describe('contrast warning (M6g-3)', () => {
     it('hides the banner when every rule passes AA in both themes', async () => {
