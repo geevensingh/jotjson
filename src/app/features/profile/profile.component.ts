@@ -44,24 +44,29 @@ interface HighlightFieldDescriptor {
 
 const HIGHLIGHT_FIELDS: readonly HighlightFieldDescriptor[] = [
   {
+    key: 'searchHighlightColor',
+    inputId: (theme) => `pref-highlight-${theme}-search`,
+    i18nId: '@@profile.prefs.highlightColors.search',
+  },
+  {
     key: 'selectionColor',
-    inputId: (t) => `pref-highlight-${t}-selection`,
+    inputId: (theme) => `pref-highlight-${theme}-selection`,
     i18nId: '@@profile.prefs.highlightColors.selection',
   },
   {
     key: 'matchingValueColor',
-    inputId: (t) => `pref-highlight-${t}-matching`,
+    inputId: (theme) => `pref-highlight-${theme}-matching`,
     i18nId: '@@profile.prefs.highlightColors.matching',
   },
   {
     key: 'ancestorColor',
-    inputId: (t) => `pref-highlight-${t}-ancestor`,
+    inputId: (theme) => `pref-highlight-${theme}-ancestor`,
     i18nId: '@@profile.prefs.highlightColors.ancestor',
   },
   {
-    key: 'searchHighlightColor',
-    inputId: (t) => `pref-highlight-${t}-search`,
-    i18nId: '@@profile.prefs.highlightColors.search',
+    key: 'manualHighlightColor',
+    inputId: (theme) => `pref-highlight-${theme}-manual`,
+    i18nId: '@@profile.prefs.highlightColors.manual',
   },
 ];
 

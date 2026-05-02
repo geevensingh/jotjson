@@ -45,12 +45,14 @@ function fakePreferences(): UserPreferences {
         matchingValueColor: '#111111',
         ancestorColor: '#222222',
         searchHighlightColor: '#333333',
+        manualHighlightColor: '#444444',
       },
       light: {
         selectionColor: '#aaaaaa',
         matchingValueColor: '#bbbbbb',
         ancestorColor: '#cccccc',
         searchHighlightColor: '#dddddd',
+        manualHighlightColor: '#eeeeee',
       },
     },
   };

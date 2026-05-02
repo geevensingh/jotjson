@@ -485,8 +485,8 @@
         </h3>
         <p class="group-help" i18n="@@profile.prefs.highlightColors.help">
           Pick colors used to highlight selected nodes, ancestors of the selection, matching values,
-          and search hits. Each theme has its own set; only the currently active theme is shown
-          live.
+          search hits, and the default color used by the "Highlight" action in the row context menu.
+          Each theme has its own set; only the currently active theme is shown live.
         </p>
 
         @for (theme of highlightThemes; track theme) {
@@ -508,6 +508,9 @@
               <div class="pref-row highlight-row">
                 <label [attr.for]="field.inputId(theme)">
                   @switch (field.key) {
+                    @case ('searchHighlightColor') {
+                      <span i18n="@@profile.prefs.highlightColors.search"> Search highlight </span>
+                    }
                     @case ('selectionColor') {
                       <span i18n="@@profile.prefs.highlightColors.selection"> Selection </span>
                     }
@@ -517,8 +520,10 @@
                     @case ('ancestorColor') {
                       <span i18n="@@profile.prefs.highlightColors.ancestor"> Ancestors </span>
                     }
-                    @case ('searchHighlightColor') {
-                      <span i18n="@@profile.prefs.highlightColors.search"> Search highlight </span>
+                    @case ('manualHighlightColor') {
+                      <span i18n="@@profile.prefs.highlightColors.manual">
+                        Manual highlight (default)
+                      </span>
                     }
                   }
                 </label>

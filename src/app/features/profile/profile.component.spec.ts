@@ -604,10 +604,10 @@ describe('ProfileComponent', () => {
       });
     }
 
-    it('renders 8 color inputs (4 per theme)', async () => {
+    it('renders 10 color inputs (5 per theme)', async () => {
       const { fixture } = await createSignedIn();
       const inputs = (fixture.nativeElement as HTMLElement).querySelectorAll('input[type="color"]');
-      expect(inputs.length).toBe(8);
+      expect(inputs.length).toBe(10);
     });
 
     it('changes only the targeted field and preserves the other dark/light fields', async () => {
@@ -619,7 +619,18 @@ describe('ProfileComponent', () => {
       expect(after.dark.matchingValueColor).toBe(before.dark.matchingValueColor);
       expect(after.dark.ancestorColor).toBe(before.dark.ancestorColor);
       expect(after.dark.searchHighlightColor).toBe(before.dark.searchHighlightColor);
+      expect(after.dark.manualHighlightColor).toBe(before.dark.manualHighlightColor);
       expect(after.light).toEqual(before.light);
+    });
+
+    it('updates manualHighlightColor through the preferences signal', async () => {
+      const { fixture, prefs } = await createSignedIn();
+      const before = prefs.prefs().treeHighlightColors;
+      fixture.componentInstance.onHighlightColorChange('light', 'manualHighlightColor', '#fedcba');
+      const after = prefs.prefs().treeHighlightColors;
+      expect(after.light.manualHighlightColor).toBe('#fedcba');
+      expect(after.light.selectionColor).toBe(before.light.selectionColor);
+      expect(after.dark).toEqual(before.dark);
     });
 
     it('rejects malformed hex values without changing prefs', async () => {
@@ -651,9 +662,28 @@ describe('ProfileComponent', () => {
       fixture.componentInstance.onResetActiveThemeColors();
       const colors = prefs.prefs().treeHighlightColors;
       // Dark restored
-      expect(colors.dark.selectionColor).not.toBe('#111111');
+      expect(colors.dark.selectionColor).toBe(
+        DEFAULT_PREFERENCES.treeHighlightColors.dark.selectionColor,
+      );
       // Light override preserved
       expect(colors.light.selectionColor).toBe('#222222');
+    });
+
+    it('reset restores manualHighlightColor for both themes when each theme is active', async () => {
+      const { fixture, prefs } = await createSignedIn();
+      prefs.update({ theme: 'dark' });
+      fixture.componentInstance.onHighlightColorChange('dark', 'manualHighlightColor', '#111111');
+      fixture.componentInstance.onResetActiveThemeColors();
+      expect(prefs.prefs().treeHighlightColors.dark.manualHighlightColor).toBe(
+        DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
+      );
+
+      prefs.update({ theme: 'light' });
+      fixture.componentInstance.onHighlightColorChange('light', 'manualHighlightColor', '#222222');
+      fixture.componentInstance.onResetActiveThemeColors();
+      expect(prefs.prefs().treeHighlightColors.light.manualHighlightColor).toBe(
+        DEFAULT_PREFERENCES.treeHighlightColors.light.manualHighlightColor,
+      );
     });
   });
 

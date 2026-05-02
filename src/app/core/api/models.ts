@@ -49,6 +49,7 @@ export interface ThemeColorSet {
   matchingValueColor: string;
   ancestorColor: string;
   searchHighlightColor: string;
+  manualHighlightColor: string;
 }
 
 export interface TreeHighlightColors {

@@ -64,12 +64,14 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
       matchingValueColor: '#3e3d32',
       ancestorColor: '#2a2d2e',
       searchHighlightColor: '#6a4c00',
+      manualHighlightColor: '#7e6500',
     },
     light: {
       selectionColor: '#cce4f7',
       matchingValueColor: '#fff4cc',
       ancestorColor: '#ececec',
       searchHighlightColor: '#ffe082',
+      manualHighlightColor: '#fff59d',
     },
   },
 };
@@ -195,6 +197,7 @@ const TREE_HIGHLIGHT_COLOR_SLOTS = [
   'matchingValueColor',
   'ancestorColor',
   'searchHighlightColor',
+  'manualHighlightColor',
 ] as const satisfies readonly TreeHighlightColorSlot[];
 
 function deepMergeColors(
@@ -313,6 +316,7 @@ export class PreferencesService {
       style.setProperty('--highlight-matching', colors.matchingValueColor);
       style.setProperty('--highlight-ancestor', colors.ancestorColor);
       style.setProperty('--highlight-search', colors.searchHighlightColor);
+      style.setProperty('--highlight-manual', colors.manualHighlightColor);
     });
 
     if (typeof window !== 'undefined' && window.matchMedia) {

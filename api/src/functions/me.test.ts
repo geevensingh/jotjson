@@ -154,6 +154,51 @@ describe('PUT /api/me/preferences', () => {
     expect(saved.updatedAt).not.toBe('t0');
   });
 
+  it('accepts valid manualHighlightColor values', async () => {
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: DEFAULT_PREFERENCES,
+      createdAt: 't0',
+      updatedAt: 't0',
+    });
+    upsertUser.mockImplementationOnce(async (doc) => doc);
+    const updated = structuredClone(DEFAULT_PREFERENCES);
+    updated.treeHighlightColors.dark.manualHighlightColor = '#abcdef';
+    updated.treeHighlightColors.light.manualHighlightColor = '#123456';
+    const res = await putMePreferences(makeRequest(updated), ctx);
+    expect(res.status).toBe(200);
+    const body = res.jsonBody as typeof DEFAULT_PREFERENCES;
+    expect(body.treeHighlightColors.dark.manualHighlightColor).toBe('#abcdef');
+    expect(body.treeHighlightColors.light.manualHighlightColor).toBe('#123456');
+  });
+
+  it('rejects malformed manualHighlightColor values', async () => {
+    const bad = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+    const colors = bad['treeHighlightColors'] as Record<string, Record<string, unknown>>;
+    colors['dark']['manualHighlightColor'] = '#fff';
+    const res = await putMePreferences(makeRequest(bad), ctx);
+    expect(res.status).toBe(400);
+    expect(upsertUser).not.toHaveBeenCalled();
+  });
+
+  it('fills default manualHighlightColor values for stale PUT clients', async () => {
+    readUser.mockResolvedValueOnce(null);
+    upsertUser.mockImplementationOnce(async (doc) => doc);
+    const stale = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+    const colors = stale['treeHighlightColors'] as Record<string, Record<string, unknown>>;
+    delete colors['dark']['manualHighlightColor'];
+    delete colors['light']['manualHighlightColor'];
+    const res = await putMePreferences(makeRequest(stale), ctx);
+    expect(res.status).toBe(200);
+    const body = res.jsonBody as typeof DEFAULT_PREFERENCES;
+    expect(body.treeHighlightColors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
+    );
+    expect(body.treeHighlightColors.light.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.light.manualHighlightColor,
+    );
+  });
+
   it('creates the document on first write if it does not exist', async () => {
     readUser.mockResolvedValueOnce(null);
     upsertUser.mockImplementationOnce(async (doc) => doc);

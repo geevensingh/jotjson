@@ -255,6 +255,7 @@ describe('normalizePreferences', () => {
       matchingValueColor: '#fff',
       ancestorColor: '#000000',
       searchHighlightColor: '#123456',
+      manualHighlightColor: '#fff59d',
     };
     expect(() => normalizePreferences(bad)).toThrow(/selectionColor/);
   });
@@ -266,9 +267,32 @@ describe('normalizePreferences', () => {
       matchingValueColor: '#DEADBE',
       ancestorColor: '#012345',
       searchHighlightColor: '#6A4C00',
+      manualHighlightColor: '#7E6500',
     };
     const out = normalizePreferences(input);
     expect(out.treeHighlightColors.dark.selectionColor).toBe('#aabbcc');
+    expect(out.treeHighlightColors.dark.manualHighlightColor).toBe('#7e6500');
+  });
+
+  it('defaults missing manualHighlightColor to theme defaults for stale clients', () => {
+    const input = valid() as Record<string, unknown>;
+    const colors = input['treeHighlightColors'] as Record<string, Record<string, unknown>>;
+    delete colors['dark']['manualHighlightColor'];
+    delete colors['light']['manualHighlightColor'];
+    const out = normalizePreferences(input);
+    expect(out.treeHighlightColors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
+    );
+    expect(out.treeHighlightColors.light.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.light.manualHighlightColor,
+    );
+  });
+
+  it('rejects malformed manualHighlightColor', () => {
+    const bad = valid() as Record<string, unknown>;
+    const colors = bad['treeHighlightColors'] as Record<string, Record<string, unknown>>;
+    colors['dark']['manualHighlightColor'] = '#fff';
+    expect(() => normalizePreferences(bad)).toThrow(/manualHighlightColor/);
   });
 
   it('rejects unknown color-set fields', () => {
@@ -471,6 +495,20 @@ describe('normalizeStoredPreferences', () => {
     delete stored['treeShowComments'];
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
     expect(result.treeShowComments).toBe(true);
+  });
+
+  it('defaults missing stored manualHighlightColor for both themes', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+    const colors = stored['treeHighlightColors'] as Record<string, Record<string, unknown>>;
+    delete colors['dark']['manualHighlightColor'];
+    delete colors['light']['manualHighlightColor'];
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.treeHighlightColors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
+    );
+    expect(result.treeHighlightColors.light.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.light.manualHighlightColor,
+    );
   });
 
   it('defaults non-boolean treeShowComments (null) to true', () => {

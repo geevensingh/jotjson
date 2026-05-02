@@ -226,7 +226,27 @@ describe('PreferencesService', () => {
     expect(colors.dark.searchHighlightColor).toBe(
       DEFAULT_PREFERENCES.treeHighlightColors.dark.searchHighlightColor,
     );
+    expect(colors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
+    );
     expect(colors.light).toEqual(DEFAULT_PREFERENCES.treeHighlightColors.light);
+  });
+
+  it('backfills missing manualHighlightColor when hydrating legacy stored colors', () => {
+    const legacyColors = structuredClone(
+      DEFAULT_PREFERENCES.treeHighlightColors,
+    ) as unknown as Record<string, Record<string, unknown>>;
+    delete legacyColors['dark']?.['manualHighlightColor'];
+    delete legacyColors['light']?.['manualHighlightColor'];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ treeHighlightColors: legacyColors }));
+    const svc = TestBed.inject(PreferencesService);
+    const colors = svc.prefs().treeHighlightColors;
+    expect(colors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
+    );
+    expect(colors.light.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.light.manualHighlightColor,
+    );
   });
 
   it('backfills partial nested treeHighlightColors from the server', async () => {
@@ -249,9 +269,15 @@ describe('PreferencesService', () => {
     expect(colors.dark.matchingValueColor).toBe(
       DEFAULT_PREFERENCES.treeHighlightColors.dark.matchingValueColor,
     );
+    expect(colors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
+    );
     expect(colors.light.ancestorColor).toBe('#fefefe');
     expect(colors.light.selectionColor).toBe(
       DEFAULT_PREFERENCES.treeHighlightColors.light.selectionColor,
+    );
+    expect(colors.light.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.light.manualHighlightColor,
     );
   });
 

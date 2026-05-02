@@ -13,6 +13,7 @@ export interface ThemeColorSet {
   matchingValueColor: string;
   ancestorColor: string;
   searchHighlightColor: string;
+  manualHighlightColor: string;
 }
 
 export interface TreeHighlightColors {
@@ -192,12 +193,14 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
       matchingValueColor: '#3e3d32',
       ancestorColor: '#2a2d2e',
       searchHighlightColor: '#6a4c00',
+      manualHighlightColor: '#7e6500',
     },
     light: {
       selectionColor: '#cce4f7',
       matchingValueColor: '#fff4cc',
       ancestorColor: '#ececec',
       searchHighlightColor: '#ffe082',
+      manualHighlightColor: '#fff59d',
     },
   },
 };
@@ -301,6 +304,7 @@ const COLOR_SET_KEYS: readonly (keyof ThemeColorSet)[] = [
   'matchingValueColor',
   'ancestorColor',
   'searchHighlightColor',
+  'manualHighlightColor',
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -346,6 +350,7 @@ export function normalizeStoredPreferences(prefs: UserPreferences): UserPreferen
     view.treeShowComments = true;
   }
   view.treeDateAnnotationUnits = normalizeStoredAnnotationUnits(view.treeDateAnnotationUnits);
+  view.treeHighlightColors = normalizeStoredHighlightColors(view.treeHighlightColors);
   delete view.historyTrackingMode;
   // Stored docs written before issue #83 had `defaultRuleSetIds` (the
   // M6f-5 name) or, even earlier, the singular `defaultRuleSetId`.
@@ -419,6 +424,40 @@ function normalizeStoredAnnotationUnits(input: unknown): TreeDateAnnotationUnits
   };
 }
 
+function normalizeStoredHex(value: unknown, fallback: string): string {
+  return typeof value === 'string' && HEX_COLOR.test(value) ? value.toLowerCase() : fallback;
+}
+
+function normalizeStoredColorSet(input: unknown, defaults: ThemeColorSet): ThemeColorSet {
+  if (!isRecord(input)) {
+    return { ...defaults };
+  }
+  return {
+    selectionColor: normalizeStoredHex(input['selectionColor'], defaults.selectionColor),
+    matchingValueColor: normalizeStoredHex(
+      input['matchingValueColor'],
+      defaults.matchingValueColor,
+    ),
+    ancestorColor: normalizeStoredHex(input['ancestorColor'], defaults.ancestorColor),
+    searchHighlightColor: normalizeStoredHex(
+      input['searchHighlightColor'],
+      defaults.searchHighlightColor,
+    ),
+    manualHighlightColor: normalizeStoredHex(
+      input['manualHighlightColor'],
+      defaults.manualHighlightColor,
+    ),
+  };
+}
+
+function normalizeStoredHighlightColors(input: unknown): TreeHighlightColors {
+  const colors = isRecord(input) ? input : {};
+  return {
+    dark: normalizeStoredColorSet(colors['dark'], DEFAULT_PREFERENCES.treeHighlightColors.dark),
+    light: normalizeStoredColorSet(colors['light'], DEFAULT_PREFERENCES.treeHighlightColors.light),
+  };
+}
+
 function normalizeAnnotationUnits(input: unknown, field: string): TreeDateAnnotationUnits {
   if (!isRecord(input)) {
     throw new PreferenceValidationError(`${field} must be an object`);
@@ -438,7 +477,7 @@ function normalizeAnnotationUnits(input: unknown, field: string): TreeDateAnnota
   };
 }
 
-function normalizeColorSet(input: unknown, field: string): ThemeColorSet {
+function normalizeColorSet(input: unknown, field: string, defaults: ThemeColorSet): ThemeColorSet {
   if (!isRecord(input)) {
     throw new PreferenceValidationError(`${field} must be an object`);
   }
@@ -452,6 +491,10 @@ function normalizeColorSet(input: unknown, field: string): ThemeColorSet {
     matchingValueColor: assertHex(input['matchingValueColor'], `${field}.matchingValueColor`),
     ancestorColor: assertHex(input['ancestorColor'], `${field}.ancestorColor`),
     searchHighlightColor: assertHex(input['searchHighlightColor'], `${field}.searchHighlightColor`),
+    manualHighlightColor:
+      input['manualHighlightColor'] !== undefined
+        ? assertHex(input['manualHighlightColor'], `${field}.manualHighlightColor`)
+        : defaults.manualHighlightColor,
   };
 }
 
@@ -538,8 +581,16 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     seenClipboardBanner: assertBool(raw['seenClipboardBanner'], 'seenClipboardBanner'),
     treePathRoot: assertEnum(raw['treePathRoot'], TREE_PATH_ROOTS, 'treePathRoot'),
     treeHighlightColors: {
-      dark: normalizeColorSet(colors['dark'], 'treeHighlightColors.dark'),
-      light: normalizeColorSet(colors['light'], 'treeHighlightColors.light'),
+      dark: normalizeColorSet(
+        colors['dark'],
+        'treeHighlightColors.dark',
+        DEFAULT_PREFERENCES.treeHighlightColors.dark,
+      ),
+      light: normalizeColorSet(
+        colors['light'],
+        'treeHighlightColors.light',
+        DEFAULT_PREFERENCES.treeHighlightColors.light,
+      ),
     },
     activeRuleSetIds: normalizeActiveRuleSetIds(raw),
   };

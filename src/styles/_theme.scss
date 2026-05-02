@@ -15,6 +15,7 @@
   --highlight-matching: #{$highlight-matching-dark};
   --highlight-ancestor: #{$highlight-ancestor-dark};
   --highlight-search: #{$highlight-search-dark};
+  --highlight-manual: #{$highlight-manual-dark};
 }
 
 .theme-light {
@@ -25,6 +26,7 @@
   --highlight-matching: #{$highlight-matching-light};
   --highlight-ancestor: #{$highlight-ancestor-light};
   --highlight-search: #{$highlight-search-light};
+  --highlight-manual: #{$highlight-manual-light};
 }
 
 @media (prefers-color-scheme: light) {
@@ -36,5 +38,6 @@
     --highlight-matching: #{$highlight-matching-light};
     --highlight-ancestor: #{$highlight-ancestor-light};
     --highlight-search: #{$highlight-search-light};
+    --highlight-manual: #{$highlight-manual-light};
   }
 }
