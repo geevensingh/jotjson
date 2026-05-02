@@ -3,11 +3,7 @@ import { Observable, of, throwError } from 'rxjs';
 import { MatDialogRef } from '@angular/material/dialog';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
-import type {
-  FormattingRule,
-  FormattingRuleSet,
-  RuleSetPreset
-} from '../../../core/api/models';
+import type { FormattingRule, FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
 import { ClonePresetDialogComponent } from './clone-preset-dialog.component';
 
 function rule(id: string): FormattingRule {
@@ -17,7 +13,7 @@ function rule(id: string): FormattingRule {
     matchType: 'contains',
     matchValue: 'x',
     caseSensitive: false,
-    style: {}
+    style: {},
   };
 }
 
@@ -26,7 +22,7 @@ function makePreset(over: Partial<RuleSetPreset> = {}): RuleSetPreset {
     id: 'preset-' + (over.id ?? Math.random().toString(36).slice(2, 8)),
     name: 'Preset',
     rules: [rule('r1')],
-    ...over
+    ...over,
   };
 }
 
@@ -39,7 +35,7 @@ function makeSet(over: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
     version: 1,
     createdAt: '2026-04-27T00:00:00Z',
     updatedAt: '2026-04-27T00:00:00Z',
-    ...over
+    ...over,
   };
 }
 
@@ -51,10 +47,7 @@ describe('ClonePresetDialogComponent', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [ClonePresetDialogComponent],
-      providers: [
-        ...provideFakeAuth(),
-        { provide: MatDialogRef, useValue: { close } }
-      ]
+      providers: [...provideFakeAuth(), { provide: MatDialogRef, useValue: { close } }],
     });
   });
 
@@ -70,12 +63,10 @@ describe('ClonePresetDialogComponent', () => {
       // Never emits - simulates pending request.
       new Observable<RuleSetPreset[]>(() => {
         /* no-op subscriber */
-      })
+      }),
     );
     const fixture = render();
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
-      'Loading presets'
-    );
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Loading presets');
   });
 
   it('lists presets returned from the service, with rule counts', () => {
@@ -83,13 +74,11 @@ describe('ClonePresetDialogComponent', () => {
     spyOn(ruleSets, 'listPresets').and.returnValue(
       of([
         makePreset({ id: 'a', name: 'Alpha', rules: [rule('1')] }),
-        makePreset({ id: 'b', name: 'Beta', rules: [rule('1'), rule('2')] })
-      ])
+        makePreset({ id: 'b', name: 'Beta', rules: [rule('1'), rule('2')] }),
+      ]),
     );
     const fixture = render();
-    const buttons = (fixture.nativeElement as HTMLElement).querySelectorAll(
-      '.preset-button'
-    );
+    const buttons = (fixture.nativeElement as HTMLElement).querySelectorAll('.preset-button');
     expect(buttons.length).toBe(2);
     expect(buttons[0].textContent).toContain('Alpha');
     expect(buttons[0].textContent).toContain('1 rule');
@@ -99,13 +88,9 @@ describe('ClonePresetDialogComponent', () => {
 
   it('shows an inline error if loading presets fails', () => {
     const ruleSets = TestBed.inject(RuleSetsService);
-    spyOn(ruleSets, 'listPresets').and.returnValue(
-      throwError(() => new Error('boom'))
-    );
+    spyOn(ruleSets, 'listPresets').and.returnValue(throwError(() => new Error('boom')));
     const fixture = render();
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
-      'Could not load presets'
-    );
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Could not load presets');
   });
 
   it('clones the picked preset and closes with the result on success', fakeAsync(() => {
@@ -117,7 +102,7 @@ describe('ClonePresetDialogComponent', () => {
 
     const fixture = render();
     const button = (fixture.nativeElement as HTMLElement).querySelector(
-      '.preset-button'
+      '.preset-button',
     ) as HTMLButtonElement;
     button.click();
     tick();
@@ -134,16 +119,14 @@ describe('ClonePresetDialogComponent', () => {
 
     const fixture = render();
     const button = (fixture.nativeElement as HTMLElement).querySelector(
-      '.preset-button'
+      '.preset-button',
     ) as HTMLButtonElement;
     button.click();
     tick();
     fixture.detectChanges();
 
     expect(close).not.toHaveBeenCalled();
-    const err = (fixture.nativeElement as HTMLElement).querySelector(
-      '[data-testid="clone-error"]'
-    );
+    const err = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="clone-error"]');
     expect(err).not.toBeNull();
     expect(err?.textContent).toContain('Clone failed');
     // Buttons re-enabled.
@@ -157,12 +140,12 @@ describe('ClonePresetDialogComponent', () => {
     spyOn(ruleSets, 'clonePreset').and.returnValue(
       new Observable<FormattingRuleSet>(() => {
         /* no-op subscriber */
-      })
+      }),
     );
 
     const fixture = render();
     const button = (fixture.nativeElement as HTMLElement).querySelector(
-      '.preset-button'
+      '.preset-button',
     ) as HTMLButtonElement;
     button.click();
     fixture.detectChanges();
@@ -175,7 +158,7 @@ describe('ClonePresetDialogComponent', () => {
     spyOn(ruleSets, 'listPresets').and.returnValue(of([]));
     const fixture = render();
     const cancel = Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll('button')
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
     ).find((b) => b.textContent?.trim() === 'Cancel') as HTMLButtonElement;
     cancel.click();
     expect(close).toHaveBeenCalledWith();

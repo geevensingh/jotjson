@@ -25,12 +25,22 @@ const ALLOWED = new Set([
   0x251c, // BOX DRAWINGS LIGHT VERTICAL AND RIGHT
   0x2514, // BOX DRAWINGS LIGHT UP AND RIGHT
   0x25b6, // BLACK RIGHT-POINTING TRIANGLE  - arrowheads in DESIGN_SPEC diagrams
-  0x25bc  // BLACK DOWN-POINTING TRIANGLE
+  0x25bc, // BLACK DOWN-POINTING TRIANGLE
 ]);
 
 // File types to skip entirely. These are binaries shipped with the repo whose
 // bytes are not meaningful as UTF-8 text.
-const BINARY_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.woff', '.woff2']);
+const BINARY_EXT = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.ico',
+  '.pdf',
+  '.woff',
+  '.woff2',
+]);
 
 function listTrackedFiles() {
   // `--cached` = files in the index (tracked).
@@ -43,13 +53,10 @@ function listTrackedFiles() {
   const out = execFileSync(
     'git',
     ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
-    { encoding: 'buffer' }
+    { encoding: 'buffer' },
   );
   // -z emits NUL-terminated paths to survive unusual filenames.
-  return out
-    .toString('utf8')
-    .split('\0')
-    .filter(Boolean);
+  return out.toString('utf8').split('\0').filter(Boolean);
 }
 
 function isBinaryPath(path) {
@@ -90,7 +97,7 @@ function scan(path) {
         line,
         col,
         cp,
-        char: ch
+        char: ch,
       });
     }
     if (ch === '\n') {
@@ -121,7 +128,9 @@ function main() {
   console.error(`check-ascii: ${allViolations.length} disallowed non-ASCII codepoint(s) found:`);
   console.error('');
   for (const v of allViolations) {
-    console.error(`  ${v.path}:${v.line}:${v.col}  ${formatCodepoint(v.cp)}  ${JSON.stringify(v.char)}`);
+    console.error(
+      `  ${v.path}:${v.line}:${v.col}  ${formatCodepoint(v.cp)}  ${JSON.stringify(v.char)}`,
+    );
   }
   console.error('');
   console.error('If a codepoint is genuinely needed, add it (with a comment) to the ALLOWED');

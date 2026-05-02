@@ -1,10 +1,7 @@
 import { Injectable } from '@angular/core';
 import { TITLE_CAP, TITLE_MAX_CHARS } from './constants';
 import { STRATEGIES } from './strategies';
-import {
-  dateStampedCandidate,
-  numberedUntitledCandidate
-} from './strategies/synthetic-floor';
+import { dateStampedCandidate, numberedUntitledCandidate } from './strategies/synthetic-floor';
 import type { SuggestionCandidate, SuggestionInput } from './types';
 
 /**
@@ -46,9 +43,7 @@ export class TitleSuggesterService {
   }
 }
 
-function composeFinalList(
-  raw: SuggestionCandidate[]
-): readonly SuggestionCandidate[] {
+function composeFinalList(raw: SuggestionCandidate[]): readonly SuggestionCandidate[] {
   const sorted = [...raw].sort((a, b) => b.confidence - a.confidence);
   const truncated = sorted.map(truncate);
   const seen = new Set<string>();
@@ -68,10 +63,7 @@ function composeFinalList(
   return ensureMinimumTwo(capped, survivingKeys);
 }
 
-function ensureMinimumTwo(
-  list: SuggestionCandidate[],
-  seen: Set<string>
-): SuggestionCandidate[] {
+function ensureMinimumTwo(list: SuggestionCandidate[], seen: Set<string>): SuggestionCandidate[] {
   if (list.length >= 2) return list;
   const result = [...list];
 
@@ -100,7 +92,7 @@ function truncate(candidate: SuggestionCandidate): SuggestionCandidate {
   if (candidate.value.length <= TITLE_MAX_CHARS) return candidate;
   return {
     ...candidate,
-    value: candidate.value.slice(0, TITLE_MAX_CHARS)
+    value: candidate.value.slice(0, TITLE_MAX_CHARS),
   };
 }
 

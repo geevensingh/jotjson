@@ -21,7 +21,10 @@ export class BlobService {
     return this.http.post<CreateBlobResponse>(this.base, { content, title, isPublic });
   }
 
-  update(id: string, patch: Partial<Pick<JsonBlob, 'content' | 'title' | 'isPublic'>>): Observable<JsonBlob> {
+  update(
+    id: string,
+    patch: Partial<Pick<JsonBlob, 'content' | 'title' | 'isPublic'>>,
+  ): Observable<JsonBlob> {
     return this.http.put<JsonBlob>(`${this.base}/${id}`, patch);
   }
 

@@ -25,7 +25,7 @@ export class UserApiService {
       catchError((error: HttpErrorResponse) => {
         if (error.status === 404) return of(null);
         throw error;
-      })
+      }),
     );
   }
 

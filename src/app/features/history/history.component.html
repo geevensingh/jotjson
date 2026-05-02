@@ -13,7 +13,8 @@
         class="clear-button"
         (click)="clearHistory()"
         i18n="@@history.clear.action"
-      >Clear history</button>
+        >Clear history</button
+      >
     }
   </header>
 
@@ -67,7 +68,8 @@
           class="date-clear"
           (click)="clearDateRange()"
           i18n="@@history.filter.date.clear"
-        >Clear dates</button>
+          >Clear dates</button
+        >
       }
     </div>
     @if (dateRangeError()) {
@@ -97,29 +99,24 @@
     @if (hasActiveFilters()) {
       <div class="empty-state">
         <jj-icon name="search" class="empty-icon" />
-        <p
-          class="empty-message"
-          i18n="@@history.empty.filters"
-        >No history entries match your filters.</p>
+        <p class="empty-message" i18n="@@history.empty.filters"
+          >No history entries match your filters.</p
+        >
         <button
           mat-stroked-button
           type="button"
           (click)="clearAllFilters()"
           i18n="@@history.filters.clearAction"
-        >Clear filters</button>
+          >Clear filters</button
+        >
       </div>
     } @else {
       <div class="empty-state">
         <jj-icon name="history" class="empty-icon" />
-        <p
-          class="empty-message"
-          i18n="@@history.empty"
-        >No recently viewed blobs yet. Open a shared link to see it appear here.</p>
-        <a
-          mat-flat-button
-          color="primary"
-          routerLink="/"
-          i18n="@@history.empty.cta"
+        <p class="empty-message" i18n="@@history.empty"
+          >No recently viewed blobs yet. Open a shared link to see it appear here.</p
+        >
+        <a mat-flat-button color="primary" routerLink="/" i18n="@@history.empty.cta"
           >Open the editor</a
         >
       </div>
@@ -168,7 +165,8 @@
           [disabled]="loadingMore()"
           (click)="loadMore()"
           i18n="@@history.loadMore"
-        >Load more</button>
+          >Load more</button
+        >
       </div>
     }
   }

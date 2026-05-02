@@ -18,7 +18,7 @@ function entry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
     title: 'My Blob',
     accessedAt: '2024-01-01T00:00:00Z',
     action: 'viewed',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -36,25 +36,21 @@ function setup(opts: SetupOpts = {}) {
   const stub = {
     list: jasmine.createSpy('list').and.callFake(() => {
       listCalls += 1;
-      const result =
-        listCalls === 1 ? opts.listResult : opts.listSecondResult ?? opts.listResult;
-      return result instanceof Error
-        ? throwError(() => result)
-        : of(result ?? { entries: [] });
+      const result = listCalls === 1 ? opts.listResult : (opts.listSecondResult ?? opts.listResult);
+      return result instanceof Error ? throwError(() => result) : of(result ?? { entries: [] });
     }),
-    clear: jasmine.createSpy('clear').and.callFake(() =>
-      opts.clearResult instanceof Error
-        ? throwError(() => opts.clearResult as Error)
-        : of(undefined)
-    )
+    clear: jasmine
+      .createSpy('clear')
+      .and.callFake(() =>
+        opts.clearResult instanceof Error
+          ? throwError(() => opts.clearResult as Error)
+          : of(undefined),
+      ),
   };
   const dialogRef = { afterClosed: () => of(!!opts.confirm) };
   const dialog = { open: jasmine.createSpy('open').and.returnValue(dialogRef) };
   const snack = { open: jasmine.createSpy('open') };
-  const logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
-    'event',
-    'warn'
-  ]);
+  const logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'warn']);
 
   TestBed.configureTestingModule({
     imports: [HistoryComponent],
@@ -64,8 +60,8 @@ function setup(opts: SetupOpts = {}) {
       { provide: HistoryService, useValue: stub },
       { provide: MatDialog, useValue: dialog },
       { provide: MatSnackBar, useValue: snack },
-      { provide: LoggerService, useValue: logger }
-    ]
+      { provide: LoggerService, useValue: logger },
+    ],
   });
 
   const fixture = TestBed.createComponent(HistoryComponent);
@@ -75,7 +71,7 @@ function setup(opts: SetupOpts = {}) {
 describe('HistoryComponent', () => {
   it('ngOnInit loads the first page and marks state ready', async () => {
     const { fixture, stub } = setup({
-      listResult: { entries: [entry()] }
+      listResult: { entries: [entry()] },
     });
     await fixture.componentInstance.reload();
     expect(stub.list).toHaveBeenCalledWith({ pageSize: 50 });
@@ -109,9 +105,9 @@ describe('HistoryComponent', () => {
         entries: [
           entry({ id: 'a', accessedAt: now.toISOString() }),
           entry({ id: 'b', accessedAt: yesterday.toISOString() }),
-          entry({ id: 'c', accessedAt: older.toISOString() })
-        ]
-      }
+          entry({ id: 'c', accessedAt: older.toISOString() }),
+        ],
+      },
     });
     await fixture.componentInstance.reload();
     const groups = fixture.componentInstance.dayGroups();
@@ -124,7 +120,7 @@ describe('HistoryComponent', () => {
 
   it('exposes hasMore when the server returns a continuation token', async () => {
     const { fixture } = setup({
-      listResult: { entries: [entry()], continuationToken: 'abc' }
+      listResult: { entries: [entry()], continuationToken: 'abc' },
     });
     await fixture.componentInstance.reload();
     expect(fixture.componentInstance.hasMore()).toBe(true);
@@ -133,13 +129,13 @@ describe('HistoryComponent', () => {
   it('loadMore appends the next page using the continuation token', async () => {
     const { fixture, stub } = setup({
       listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' },
-      listSecondResult: { entries: [entry({ id: 'b' })] }
+      listSecondResult: { entries: [entry({ id: 'b' })] },
     });
     await fixture.componentInstance.reload();
     await fixture.componentInstance.loadMore();
     expect(stub.list).toHaveBeenCalledWith({
       pageSize: 50,
-      continuationToken: 'tok'
+      continuationToken: 'tok',
     });
     expect(fixture.componentInstance.entries().map((e) => e.id)).toEqual(['a', 'b']);
     expect(fixture.componentInstance.hasMore()).toBe(false);
@@ -156,7 +152,7 @@ describe('HistoryComponent', () => {
   it('clearHistory clears entries when confirmed', async () => {
     const { fixture, stub, dialog, snack } = setup({
       listResult: { entries: [entry()] },
-      confirm: true
+      confirm: true,
     });
     await fixture.componentInstance.reload();
     await fixture.componentInstance.clearHistory();
@@ -169,7 +165,7 @@ describe('HistoryComponent', () => {
   it('clearHistory is a no-op when cancelled', async () => {
     const { fixture, stub } = setup({
       listResult: { entries: [entry()] },
-      confirm: false
+      confirm: false,
     });
     await fixture.componentInstance.reload();
     await fixture.componentInstance.clearHistory();
@@ -181,7 +177,7 @@ describe('HistoryComponent', () => {
     const { fixture, snack } = setup({
       listResult: { entries: [entry()] },
       confirm: true,
-      clearResult: new Error('boom')
+      clearResult: new Error('boom'),
     });
     spyOn(console, 'warn');
     await fixture.componentInstance.reload();
@@ -196,11 +192,7 @@ describe('HistoryComponent', () => {
     const spy = spyOn(router, 'navigate').and.resolveTo(true);
     await fixture.componentInstance.openEntry(entry({ slug: 'abc' }));
     expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
-    expect(logger.event).toHaveBeenCalledOnceWith(
-      'history.entry.restored',
-      undefined,
-      undefined
-    );
+    expect(logger.event).toHaveBeenCalledOnceWith('history.entry.restored', undefined, undefined);
   });
 
   it('openEntry is a no-op when slug is missing', async () => {
@@ -226,7 +218,7 @@ describe('HistoryComponent', () => {
     const router = TestBed.inject(Router);
     const spy = spyOn(router, 'navigate').and.rejectWith(new Error('blocked'));
     await expectAsync(
-      fixture.componentInstance.openEntry(entry({ slug: 'abc' }))
+      fixture.componentInstance.openEntry(entry({ slug: 'abc' })),
     ).toBeRejectedWithError('blocked');
     expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
     expect(logger.event).not.toHaveBeenCalled();
@@ -244,9 +236,7 @@ describe('HistoryComponent', () => {
     const c = fixture.componentInstance;
     expect(c.displayLabel(entry({ title: 'Hi' }))).toBe('Hi');
     expect(c.displayLabel(entry({ title: '  ', slug: 'abc' }))).toBe('/s/abc');
-    expect(c.displayLabel(entry({ title: undefined, slug: undefined }))).toBe(
-      '(deleted blob)'
-    );
+    expect(c.displayLabel(entry({ title: undefined, slug: undefined }))).toBe('(deleted blob)');
   });
 
   it('applySearchTerm updates the search term and reloads with q', async () => {
@@ -302,7 +292,7 @@ describe('HistoryComponent', () => {
 
   it('loadMore forwards the active search term as q', async () => {
     const { fixture, stub } = setup({
-      listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' }
+      listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' },
     });
     await fixture.componentInstance.reload();
     fixture.componentInstance.applySearchTerm('foo');
@@ -314,7 +304,7 @@ describe('HistoryComponent', () => {
     expect(stub.list).toHaveBeenCalledWith({
       pageSize: 50,
       continuationToken: 'tok',
-      q: 'foo'
+      q: 'foo',
     });
   });
 
@@ -328,7 +318,7 @@ describe('HistoryComponent', () => {
     await Promise.resolve();
     expect(stub.list).toHaveBeenCalledWith({
       pageSize: 50,
-      from: '2024-02-15T00:00:00Z'
+      from: '2024-02-15T00:00:00Z',
     });
   });
 
@@ -342,7 +332,7 @@ describe('HistoryComponent', () => {
     await Promise.resolve();
     expect(stub.list).toHaveBeenCalledWith({
       pageSize: 50,
-      to: '2024-02-15T23:59:59.999Z'
+      to: '2024-02-15T23:59:59.999Z',
     });
   });
 
@@ -408,8 +398,7 @@ describe('HistoryComponent', () => {
     let observerCallback: (entries: { isIntersecting: boolean }[]) => void = () => {};
     const observe = jasmine.createSpy('observe');
     const disconnect = jasmine.createSpy('disconnect');
-    const originalIO = (globalThis as { IntersectionObserver?: unknown })
-      .IntersectionObserver;
+    const originalIO = (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
     class FakeIO {
       constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
         observerCallback = cb;
@@ -427,7 +416,7 @@ describe('HistoryComponent', () => {
     try {
       const { fixture, stub } = setup({
         listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' },
-        listSecondResult: { entries: [entry({ id: 'b' })] }
+        listSecondResult: { entries: [entry({ id: 'b' })] },
       });
       fixture.detectChanges();
       await fixture.whenStable();
@@ -442,7 +431,7 @@ describe('HistoryComponent', () => {
       await Promise.resolve();
       expect(stub.list).toHaveBeenCalledWith({
         pageSize: 50,
-        continuationToken: 'tok'
+        continuationToken: 'tok',
       });
       fixture.destroy();
       expect(disconnect).toHaveBeenCalled();
@@ -454,8 +443,7 @@ describe('HistoryComponent', () => {
 
   it('IntersectionObserver does not trigger loadMore when there is no next page', async () => {
     let observerCallback: (entries: { isIntersecting: boolean }[]) => void = () => {};
-    const originalIO = (globalThis as { IntersectionObserver?: unknown })
-      .IntersectionObserver;
+    const originalIO = (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
     class FakeIO {
       constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
         observerCallback = cb;
@@ -472,7 +460,7 @@ describe('HistoryComponent', () => {
       FakeIO as unknown as typeof IntersectionObserver;
     try {
       const { fixture, stub } = setup({
-        listResult: { entries: [entry({ id: 'a' })] }
+        listResult: { entries: [entry({ id: 'a' })] },
       });
       fixture.detectChanges();
       await fixture.whenStable();

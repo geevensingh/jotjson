@@ -47,8 +47,8 @@ async function main() {
       sharp(svg, { density: 384 })
         .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png({ compressionLevel: 9 })
-        .toBuffer()
-    )
+        .toBuffer(),
+    ),
   );
   const ico = await pngToIco(icoFrames);
   const icoPath = resolve(publicDir, 'favicon.ico');

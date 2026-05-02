@@ -29,7 +29,7 @@ function getClient(): TelemetryClient | null {
   if (!connectionString) {
     if (!warnedMissingConnectionString) {
       console.warn(
-        'Application Insights connection string is not configured; telemetry events will not be sent.'
+        'Application Insights connection string is not configured; telemetry events will not be sent.',
       );
       warnedMissingConnectionString = true;
     }
@@ -39,7 +39,7 @@ function getClient(): TelemetryClient | null {
   }
 
   cachedClient = new TelemetryClient(connectionString, {
-    useGlobalProviders: false
+    useGlobalProviders: false,
   });
   return cachedClient;
 }
@@ -48,7 +48,7 @@ function getClient(): TelemetryClient | null {
 export function trackEvent(
   name: string,
   properties?: TelemetryProperties,
-  measurements?: TelemetryMeasurements
+  measurements?: TelemetryMeasurements,
 ): void {
   const client = getClient();
   if (client === null) {
@@ -59,9 +59,7 @@ export function trackEvent(
 }
 
 /** Sets the telemetry client override for unit tests. */
-export function __setTelemetryClientForTesting(
-  client: TelemetryClient | null
-): void {
+export function __setTelemetryClientForTesting(client: TelemetryClient | null): void {
   testOverride = client;
 }
 

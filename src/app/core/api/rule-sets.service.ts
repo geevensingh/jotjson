@@ -1,32 +1,12 @@
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
-import {
-  DestroyRef,
-  Injectable,
-  Signal,
-  computed,
-  effect,
-  inject,
-  signal
-} from '@angular/core';
+import { DestroyRef, Injectable, Signal, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import {
-  Observable,
-  Subject,
-  catchError,
-  fromEvent,
-  of,
-  tap,
-  throwError
-} from 'rxjs';
+import { Observable, Subject, catchError, fromEvent, of, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { LoggerService } from '../telemetry/logger.service';
-import type {
-  FormattingRuleSet,
-  RuleSetPayload,
-  RuleSetPreset
-} from './models';
+import type { FormattingRuleSet, RuleSetPayload, RuleSetPreset } from './models';
 
 /**
  * One pending write that has not yet been acknowledged by the server.
@@ -176,9 +156,7 @@ export class RuleSetsService {
   });
 
   /** Total number of pending writes (queue head + in-flight). */
-  readonly pendingWriteCount = computed(
-    () => this._queue().length + (this._inFlight() ? 1 : 0)
-  );
+  readonly pendingWriteCount = computed(() => this._queue().length + (this._inFlight() ? 1 : 0));
 
   /**
    * Conflict / error events from drain failures. UI surfaces these as
@@ -318,9 +296,9 @@ export class RuleSetsService {
   }
 
   list(): Observable<FormattingRuleSet[]> {
-    return this.http.get<FormattingRuleSet[]>(this.base).pipe(
-      tap((sets) => this._serverSnapshot.set(sets))
-    );
+    return this.http
+      .get<FormattingRuleSet[]>(this.base)
+      .pipe(tap((sets) => this._serverSnapshot.set(sets)));
   }
 
   get(id: string): Observable<FormattingRuleSet> {
@@ -328,7 +306,7 @@ export class RuleSetsService {
       // Seed the snapshot so a subsequent offline `update()` can
       // synthesize an optimistic value from cache (rule-editor cold
       // start opens via `get`, not `list`).
-      tap((set) => this.applyServerSet(set))
+      tap((set) => this.applyServerSet(set)),
     );
   }
 
@@ -338,17 +316,13 @@ export class RuleSetsService {
         this.applyServerSet(created);
         this.logger.info('ruleSets.created', {
           ruleCount: created.rules.length,
-          source: 'manual'
+          source: 'manual',
         });
-      })
+      }),
     );
   }
 
-  update(
-    id: string,
-    payload: RuleSetPayload,
-    version: number
-  ): Observable<FormattingRuleSet> {
+  update(id: string, payload: RuleSetPayload, version: number): Observable<FormattingRuleSet> {
     if (this.shouldQueue()) {
       const userId = this.auth.user()?.id;
       if (userId) {
@@ -365,7 +339,7 @@ export class RuleSetsService {
         tap((next) => {
           this.applyServerSet(next);
           this.logger.info('ruleSets.updated', {
-            ruleCount: next.rules.length
+            ruleCount: next.rules.length,
           });
         }),
         catchError((err: HttpErrorResponse) => {
@@ -382,7 +356,7 @@ export class RuleSetsService {
             }
           }
           return throwError(() => err);
-        })
+        }),
       );
   }
 
@@ -408,7 +382,7 @@ export class RuleSetsService {
           }
         }
         return throwError(() => err);
-      })
+      }),
     );
   }
 
@@ -420,16 +394,16 @@ export class RuleSetsService {
     return this.http
       .post<FormattingRuleSet>(
         `${environment.apiBaseUrl}/rule-set-presets/${encodeURIComponent(presetId)}/clone`,
-        {}
+        {},
       )
       .pipe(
         tap((created) => {
           this.applyServerSet(created);
           this.logger.info('ruleSets.created', {
             ruleCount: created.rules.length,
-            source: 'preset'
+            source: 'preset',
           });
-        })
+        }),
       );
   }
 
@@ -475,28 +449,26 @@ export class RuleSetsService {
    * call-sites read clearly.
    */
   refresh(): void {
-    this.list().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      error: () => {
-        /* surface via syncState if/when we add it; silent for now */
-      }
-    });
+    this.list()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        error: () => {
+          /* surface via syncState if/when we add it; silent for now */
+        },
+      });
   }
 
   // ---- offline pattern internals -------------------------------------
 
   private shouldQueue(): boolean {
-    return (
-      !navigator.onLine ||
-      this._queue().length > 0 ||
-      this._inFlight() !== null
-    );
+    return !navigator.onLine || this._queue().length > 0 || this._inFlight() !== null;
   }
 
   private enqueueUpdate(
     userId: string,
     id: string,
     payload: RuleSetPayload,
-    baseVersion: number
+    baseVersion: number,
   ): Observable<FormattingRuleSet> {
     // Need a current cached entry to synthesize an optimistic result.
     // Editor flows always satisfy this because `get(id)` runs on cold
@@ -509,14 +481,14 @@ export class RuleSetsService {
       ...current,
       name: payload.name,
       rules: payload.rules,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
     const item: QueuedWrite = {
       kind: 'update',
       userId,
       id,
       payload,
-      baseVersion
+      baseVersion,
     };
     this._queue.update((q) => coalesce(q, item, this._inFlight() !== null));
     // Kick a drain immediately - if we're online, the queue should
@@ -560,11 +532,9 @@ export class RuleSetsService {
     if (head.kind === 'update') {
       const headers = new HttpHeaders({ 'If-Match': `"${head.baseVersion}"` });
       this.http
-        .put<FormattingRuleSet>(
-          `${this.base}/${encodeURIComponent(head.id)}`,
-          head.payload,
-          { headers }
-        )
+        .put<FormattingRuleSet>(`${this.base}/${encodeURIComponent(head.id)}`, head.payload, {
+          headers,
+        })
         .subscribe({
           next: (set) => {
             if (gen !== this._drainGen) return;
@@ -576,32 +546,30 @@ export class RuleSetsService {
           error: (err: HttpErrorResponse) => {
             if (gen !== this._drainGen) return;
             this.handleDrainError(head, err);
-          }
+          },
         });
     } else {
-      this.http
-        .delete<void>(`${this.base}/${encodeURIComponent(head.id)}`)
-        .subscribe({
-          next: () => {
-            if (gen !== this._drainGen) return;
+      this.http.delete<void>(`${this.base}/${encodeURIComponent(head.id)}`).subscribe({
+        next: () => {
+          if (gen !== this._drainGen) return;
+          this._inFlight.set(null);
+          this.applyServerDelete(head.id);
+          this.logger.info('ruleSets.deleted');
+          this.tryDrain();
+        },
+        error: (err: HttpErrorResponse) => {
+          if (gen !== this._drainGen) return;
+          // Idempotent delete: if the server says it doesn't exist,
+          // treat as success and drop the queue head.
+          if (err.status === 404 && head.kind === 'delete') {
             this._inFlight.set(null);
             this.applyServerDelete(head.id);
-            this.logger.info('ruleSets.deleted');
             this.tryDrain();
-          },
-          error: (err: HttpErrorResponse) => {
-            if (gen !== this._drainGen) return;
-            // Idempotent delete: if the server says it doesn't exist,
-            // treat as success and drop the queue head.
-            if (err.status === 404 && head.kind === 'delete') {
-              this._inFlight.set(null);
-              this.applyServerDelete(head.id);
-              this.tryDrain();
-              return;
-            }
-            this.handleDrainError(head, err);
+            return;
           }
-        });
+          this.handleDrainError(head, err);
+        },
+      });
     }
   }
 
@@ -653,7 +621,7 @@ export class RuleSetsService {
     const currentActives = this.preferences.prefs().activeRuleSetIds;
     if (currentActives.includes(id)) {
       this.preferences.update({
-        activeRuleSetIds: currentActives.filter((x) => x !== id)
+        activeRuleSetIds: currentActives.filter((x) => x !== id),
       });
     }
   }
@@ -696,7 +664,7 @@ export class RuleSetsService {
  */
 function projectQueue(
   snapshot: FormattingRuleSet[],
-  writes: readonly QueuedWrite[]
+  writes: readonly QueuedWrite[],
 ): FormattingRuleSet[] {
   let working = snapshot.slice();
   for (const item of writes) {
@@ -711,7 +679,7 @@ function projectQueue(
       ...current,
       name: item.payload.name,
       rules: item.payload.rules,
-      updatedAt: current.updatedAt
+      updatedAt: current.updatedAt,
     };
   }
   return working;
@@ -732,7 +700,7 @@ function projectQueue(
 function coalesce(
   queue: readonly QueuedWrite[],
   next: QueuedWrite,
-  headInFlight: boolean
+  headInFlight: boolean,
 ): QueuedWrite[] {
   const startIndex = headInFlight ? 1 : 0;
   if (next.kind === 'delete') {
@@ -758,7 +726,7 @@ function coalesce(
       userId: existing.userId,
       id: existing.id,
       payload: next.payload,
-      baseVersion: existing.baseVersion
+      baseVersion: existing.baseVersion,
     };
     const out = queue.slice();
     out[i] = merged;

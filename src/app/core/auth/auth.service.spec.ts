@@ -1,9 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  EventMessage,
-  EventType,
-  InteractionRequiredAuthError
-} from '@azure/msal-browser';
+import { EventMessage, EventType, InteractionRequiredAuthError } from '@azure/msal-browser';
 import { MsalBroadcastService } from '@azure/msal-angular';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
@@ -14,7 +10,7 @@ import {
   FakeMsalBroadcastService,
   FakeMsalClient,
   makeAccount,
-  provideFakeAuth
+  provideFakeAuth,
 } from '../../../testing/auth.testing';
 
 describe('AuthService', () => {
@@ -23,22 +19,19 @@ describe('AuthService', () => {
   let telemetryServiceSpy: jasmine.SpyObj<TelemetryService>;
 
   function configureAuthTestingModule(): void {
-    loggerServiceSpy = jasmine.createSpyObj<LoggerService>(
-      'LoggerService',
-      ['event', 'warn']
-    );
-    telemetryServiceSpy = jasmine.createSpyObj<TelemetryService>(
-      'TelemetryService',
-      ['setUser', 'flush']
-    );
+    loggerServiceSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'warn']);
+    telemetryServiceSpy = jasmine.createSpyObj<TelemetryService>('TelemetryService', [
+      'setUser',
+      'flush',
+    ]);
     telemetryServiceSpy.flush.and.resolveTo();
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         ...provideFakeAuth(fake),
         { provide: LoggerService, useValue: loggerServiceSpy },
-        { provide: TelemetryService, useValue: telemetryServiceSpy }
-      ]
+        { provide: TelemetryService, useValue: telemetryServiceSpy },
+      ],
     });
   }
 
@@ -104,8 +97,8 @@ describe('AuthService', () => {
       fake.accounts = [
         makeAccount({
           idToken: 'raw.id.token',
-          loginHint: 'opaque-hint-123'
-        })
+          loginHint: 'opaque-hint-123',
+        }),
       ];
       await auth.signOut();
       expect(fake.lastLogoutRequest?.idTokenHint).toBe('raw.id.token');
@@ -117,8 +110,8 @@ describe('AuthService', () => {
       fake.accounts = [
         makeAccount({
           idToken: undefined,
-          loginHint: 'opaque-hint'
-        })
+          loginHint: 'opaque-hint',
+        }),
       ];
       fake.nextSilentIdToken = 'freshly-acquired.id.token';
       await auth.signOut();
@@ -132,8 +125,8 @@ describe('AuthService', () => {
       fake.accounts = [
         makeAccount({
           idToken: undefined,
-          loginHint: undefined
-        })
+          loginHint: undefined,
+        }),
       ];
       fake.silentShouldThrow = new Error('interaction required');
       await auth.signOut();
@@ -189,9 +182,9 @@ describe('AuthService', () => {
         makeAccount({
           idTokenClaims: {
             sub: 'sub-only',
-            preferred_username: 'pref@example.com'
-          } as Record<string, unknown>
-        })
+            preferred_username: 'pref@example.com',
+          } as Record<string, unknown>,
+        }),
       ];
       await auth.initializeFromRedirect();
       expect(auth.user()?.id).toBe('sub-only');
@@ -217,17 +210,17 @@ describe('AuthService', () => {
       enabled: true,
       userId: 'dev-user-1',
       displayName: 'Dev User',
-      email: 'dev-user-1@dev.local'
+      email: 'dev-user-1@dev.local',
     };
     const USER_A: AuthUser = {
       id: 'user-a',
       displayName: 'User A',
-      email: 'user-a@example.com'
+      email: 'user-a@example.com',
     };
     const USER_B: AuthUser = {
       id: 'user-b',
       displayName: 'User B',
-      email: 'user-b@example.com'
+      email: 'user-b@example.com',
     };
 
     let savedDevAuth: DevAuthCfg | undefined;
@@ -264,9 +257,9 @@ describe('AuthService', () => {
     }
 
     function signedInEventCount(): number {
-      return loggerServiceSpy.event.calls.allArgs()
-        .filter((callArguments) => callArguments[0] === 'auth.signedIn')
-        .length;
+      return loggerServiceSpy.event.calls
+        .allArgs()
+        .filter((callArguments) => callArguments[0] === 'auth.signedIn').length;
     }
 
     it('emits auth.signedIn with dev mode on a null-to-user transition', () => {
@@ -278,7 +271,7 @@ describe('AuthService', () => {
       expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
         'auth.signedIn',
         { mode: 'dev' },
-        undefined
+        undefined,
       );
     });
 
@@ -291,7 +284,7 @@ describe('AuthService', () => {
       expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
         'auth.signedIn',
         { mode: 'msal' },
-        undefined
+        undefined,
       );
     });
 
@@ -346,7 +339,7 @@ describe('AuthService', () => {
       expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
         'auth.signedOut',
         { mode: 'dev' },
-        undefined
+        undefined,
       );
       expect(callOrder).toEqual(['event', 'setCurrentUser']);
     });
@@ -382,7 +375,7 @@ describe('AuthService', () => {
       expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
         'auth.signedOut',
         { mode: 'msal' },
-        undefined
+        undefined,
       );
       expect(telemetryServiceSpy.flush).toHaveBeenCalledTimes(1);
       expect(fake.logoutRedirectCalls).toBe(0);
@@ -420,7 +413,7 @@ describe('AuthService', () => {
       enabled: true,
       userId: 'dev-user-1',
       displayName: 'Dev User',
-      email: 'dev-user-1@dev.local'
+      email: 'dev-user-1@dev.local',
     };
 
     type EnvWithDevAuth = typeof environment & {
@@ -551,10 +544,9 @@ describe('AuthService', () => {
       setDevAuth({ ...VALID_DEV_AUTH });
       const auth = freshAuth();
       auth.signIn();
-      const broadcast = TestBed.inject(MsalBroadcastService) as unknown as
-        FakeMsalBroadcastService;
+      const broadcast = TestBed.inject(MsalBroadcastService) as unknown as FakeMsalBroadcastService;
       const fakeMsg = {
-        eventType: EventType.LOGOUT_SUCCESS
+        eventType: EventType.LOGOUT_SUCCESS,
       } as unknown as EventMessage;
       broadcast.msalSubject$.next(fakeMsg);
       // The synthetic LOGOUT_SUCCESS would clear the user in MSAL mode.
@@ -568,7 +560,7 @@ describe('AuthService', () => {
         enabled: true,
         userId: 'BAD UPPER!',
         displayName: 'Whoops',
-        email: 'oops@dev.local'
+        email: 'oops@dev.local',
       });
       const auth = freshAuth();
       auth.signIn();

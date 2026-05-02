@@ -24,7 +24,7 @@ import { IconComponent } from '../icon/icon.component';
   imports: [MatButtonModule, MatTooltipModule, RouterLink, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app-header.component.html',
-  styleUrl: './app-header.component.scss'
+  styleUrl: './app-header.component.scss',
 })
 export class AppHeaderComponent {
   private readonly auth = inject(AuthService);

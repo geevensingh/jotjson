@@ -74,7 +74,9 @@
     height: 1rem;
   }
 
-  &:hover { background: rgba(127, 127, 127, 0.12); }
+  &:hover {
+    background: rgba(127, 127, 127, 0.12);
+  }
   &:focus-visible {
     outline: 2px solid var(--mat-sys-primary, #1976d2);
     outline-offset: 2px;
@@ -85,7 +87,9 @@
   background: var(--mat-sys-primary, #1976d2);
   border-color: var(--mat-sys-primary, #1976d2);
   color: var(--mat-sys-on-primary, #fff);
-  &:hover { filter: brightness(0.95); }
+  &:hover {
+    filter: brightness(0.95);
+  }
 }
 
 .date-range {
@@ -122,7 +126,9 @@
   cursor: pointer;
   font-size: 0.85rem;
   padding: 0.35rem 0.5rem;
-  &:hover { text-decoration: underline; }
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 .date-error {
@@ -139,7 +145,9 @@
   border-radius: 8px;
   background: rgba(127, 127, 127, 0.08);
   border: 1px solid rgba(127, 127, 127, 0.2);
-  transition: border-color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
 
   &:focus-within {
     border-color: var(--mat-sys-primary, #1976d2);

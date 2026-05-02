@@ -92,13 +92,13 @@ export class JsonExtractorService {
       const slice = candidates[0].slice;
       const edits = format(slice, undefined, {
         tabSize: 2,
-        insertSpaces: true
+        insertSpaces: true,
       });
       return {
         text: applyEdits(slice, edits),
         blockCount: 1,
         preservesComments: true,
-        hasComments: candidates[0].hasComments
+        hasComments: candidates[0].hasComments,
       };
     }
 
@@ -106,11 +106,11 @@ export class JsonExtractorService {
       text: JSON.stringify(
         candidates.map((c) => c.value),
         null,
-        2
+        2,
       ),
       blockCount: candidates.length,
       preservesComments: false,
-      hasComments: candidates.some((c) => c.hasComments)
+      hasComments: candidates.some((c) => c.hasComments),
     };
   }
 
@@ -141,7 +141,7 @@ export class JsonExtractorService {
             end: scan.closeIdx + 1,
             slice,
             value: result.value,
-            hasComments: scan.hasComments
+            hasComments: scan.hasComments,
           });
           i = scan.closeIdx + 1;
           continue;
@@ -173,11 +173,7 @@ export class JsonExtractorService {
       }
 
       if (inBlockComment) {
-        if (
-          ch === CH_STAR &&
-          i + 1 < n &&
-          text.charCodeAt(i + 1) === CH_SLASH
-        ) {
+        if (ch === CH_STAR && i + 1 < n && text.charCodeAt(i + 1) === CH_SLASH) {
           inBlockComment = false;
           i += 2;
           continue;

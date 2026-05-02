@@ -24,12 +24,12 @@ export const githubActionsWorkflowStrategy: SuggestionStrategy = (input) => {
     return {
       value: name,
       source: 'githubActionsWorkflow',
-      confidence: 85
+      confidence: 85,
     };
   }
   return {
     value: $localize`:@@toolbar.titleSuggestion.shape.workflow:Workflow`,
     source: 'githubActionsWorkflow',
-    confidence: 85
+    confidence: 85,
   };
 };

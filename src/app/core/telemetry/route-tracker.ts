@@ -1,9 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import {
-  ActivatedRouteSnapshot,
-  NavigationEnd,
-  Router
-} from '@angular/router';
+import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { TelemetryService } from './telemetry.service';
 

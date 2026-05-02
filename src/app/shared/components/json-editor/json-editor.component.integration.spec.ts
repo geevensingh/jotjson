@@ -51,17 +51,13 @@ async function waitUntilReady(component: JsonEditorComponent): Promise<void> {
   const start = Date.now();
   while (!probe(component).ready()) {
     if (Date.now() - start > READY_TIMEOUT_MS) {
-      throw new Error(
-        `JsonEditorComponent did not become ready within ${READY_TIMEOUT_MS}ms`
-      );
+      throw new Error(`JsonEditorComponent did not become ready within ${READY_TIMEOUT_MS}ms`);
     }
     await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
   }
 }
 
-async function mountSizedFixture(
-  initialValue: string
-): Promise<{
+async function mountSizedFixture(initialValue: string): Promise<{
   fixture: ReturnType<typeof TestBed.createComponent<JsonEditorComponent>>;
   hostEl: HTMLElement;
   component: JsonEditorComponent;
@@ -69,7 +65,7 @@ async function mountSizedFixture(
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [JsonEditorComponent],
-    providers: [...provideFakeAuth()]
+    providers: [...provideFakeAuth()],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(JsonEditorComponent);
@@ -145,4 +141,3 @@ describe('JsonEditorComponent (browser integration)', () => {
     }
   });
 });
-

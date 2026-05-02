@@ -8,10 +8,7 @@
  * App Insights traces; the customEvents telemetry surface is wired
  * separately in shared/telemetry.ts.
  */
-import type {
-  HttpResponseInit,
-  InvocationContext
-} from '@azure/functions';
+import type { HttpResponseInit, InvocationContext } from '@azure/functions';
 import { trackEvent } from './telemetry';
 
 /**
@@ -62,10 +59,7 @@ export function notFound(message: string): HttpResponseInit {
  * every current caller invokes forbidden() AFTER requireAuth has
  * resolved, never from an optional-auth path.
  */
-export function forbidden(
-  message: string,
-  resource: ForbiddenResource
-): HttpResponseInit {
+export function forbidden(message: string, resource: ForbiddenResource): HttpResponseInit {
   trackEvent('access.forbidden', { resource, authMode: 'required' });
   return { status: 403, jsonBody: { error: message } };
 }
@@ -89,22 +83,18 @@ export function quotaExceeded(
     resource,
     via,
     count,
-    limit
+    limit,
   }: {
     resource: QuotaResource;
     via: QuotaVia;
     count: number;
     limit: number;
-  }
+  },
 ): HttpResponseInit {
-  trackEvent(
-    'quota.exceeded',
-    { resource, authMode: 'required', via },
-    { count, limit }
-  );
+  trackEvent('quota.exceeded', { resource, authMode: 'required', via }, { count, limit });
   return {
     status: 409,
-    jsonBody: { error: message, code: 'quota_exceeded' }
+    jsonBody: { error: message, code: 'quota_exceeded' },
   };
 }
 
@@ -118,7 +108,7 @@ export function quotaExceeded(
 export function internalError(
   context: InvocationContext,
   where: string,
-  error: unknown
+  error: unknown,
 ): HttpResponseInit {
   context.error(`${where} error`, error);
   return { status: 500, jsonBody: { error: 'Internal error' } };

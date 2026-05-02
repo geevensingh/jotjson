@@ -1,9 +1,5 @@
 import { parseTree } from 'jsonc-parser';
-import {
-  computeTextStats,
-  computeTreeStats,
-  formatBytes
-} from './stats';
+import { computeTextStats, computeTreeStats, formatBytes } from './stats';
 
 describe('stats', () => {
   describe('computeTextStats', () => {

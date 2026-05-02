@@ -7,7 +7,7 @@ describe('ExtractJsonBannerComponent', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [ExtractJsonBannerComponent],
-      providers: [provideNoopAnimations()]
+      providers: [provideNoopAnimations()],
     });
   });
 
@@ -19,10 +19,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = TestBed.createComponent(ExtractJsonBannerComponent);
     fixture.componentRef.setInput('visible', inputs.visible);
     fixture.componentRef.setInput('blockCount', inputs.blockCount);
-    fixture.componentRef.setInput(
-      'commentsWillBeDropped',
-      inputs.commentsWillBeDropped
-    );
+    fixture.componentRef.setInput('commentsWillBeDropped', inputs.commentsWillBeDropped);
     fixture.detectChanges();
     return fixture;
   }
@@ -31,7 +28,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: false,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.banner')).toBeNull();
@@ -42,39 +39,35 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     const host = fixture.nativeElement as HTMLElement;
     const text = host.querySelector('.banner-text')?.textContent ?? '';
     expect(text).toContain('Found JSON inside your paste.');
 
     const actionButtons = Array.from(
-      host.querySelectorAll('.banner-actions button')
+      host.querySelectorAll('.banner-actions button'),
     ) as HTMLButtonElement[];
     const labels = actionButtons.map((b) => (b.textContent ?? '').trim());
     expect(labels.some((label) => label.includes('Extract JSON'))).toBe(true);
-    expect(
-      labels.some((label) => label.includes('Extract blocks as array'))
-    ).toBe(false);
+    expect(labels.some((label) => label.includes('Extract blocks as array'))).toBe(false);
   });
 
   it('shows multi-block message and Extract blocks as array action when blockCount >= 2', () => {
     const fixture = create({
       visible: true,
       blockCount: 3,
-      commentsWillBeDropped: true
+      commentsWillBeDropped: true,
     });
     const host = fixture.nativeElement as HTMLElement;
     const text = host.querySelector('.banner-text')?.textContent ?? '';
     expect(text).toContain('Found 3 JSON blocks');
 
     const actionButtons = Array.from(
-      host.querySelectorAll('.banner-actions button')
+      host.querySelectorAll('.banner-actions button'),
     ) as HTMLButtonElement[];
     const labels = actionButtons.map((b) => (b.textContent ?? '').trim());
-    expect(
-      labels.some((label) => label.includes('Extract blocks as array'))
-    ).toBe(true);
+    expect(labels.some((label) => label.includes('Extract blocks as array'))).toBe(true);
     expect(labels.some((label) => label === 'Extract JSON')).toBe(false);
   });
 
@@ -82,7 +75,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 3,
-      commentsWillBeDropped: true
+      commentsWillBeDropped: true,
     });
     const host = fixture.nativeElement as HTMLElement;
     const text = host.querySelector('.banner-text')?.textContent ?? '';
@@ -93,7 +86,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.comment-status'))
@@ -108,7 +101,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 2,
-      commentsWillBeDropped: true
+      commentsWillBeDropped: true,
     });
     const host = fixture.nativeElement as HTMLElement;
     const status = host.querySelector('.comment-status');
@@ -123,12 +116,10 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     const host = fixture.nativeElement as HTMLElement;
-    const extractButton = host.querySelector(
-      '.extract-button'
-    ) as HTMLButtonElement | null;
+    const extractButton = host.querySelector('.extract-button') as HTMLButtonElement | null;
     expect(extractButton).withContext('extract button rendered').not.toBeNull();
     const icon = extractButton?.querySelector('jj-icon');
     expect(icon).withContext('icon inside extract button').not.toBeNull();
@@ -137,9 +128,7 @@ describe('ExtractJsonBannerComponent', () => {
     // would silently render no SVG content. Match a path commitment that
     // is unique to the new extract icon (a top-left corner-bracket
     // stroke that does NOT appear in the old "download" icon).
-    const paths = Array.from(icon!.querySelectorAll('path')).map(
-      (p) => p.getAttribute('d') ?? ''
-    );
+    const paths = Array.from(icon!.querySelectorAll('path')).map((p) => p.getAttribute('d') ?? '');
     expect(paths.some((d) => d.includes('M5 4v3') && d.includes('M5 4h3')))
       .withContext('extract icon should render top-left corner bracket')
       .toBeTrue();
@@ -149,15 +138,13 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     const spy = jasmine.createSpy('extract');
     fixture.componentInstance.extract.subscribe(spy);
 
     const host = fixture.nativeElement as HTMLElement;
-    const extractBtn = host.querySelector(
-      '.extract-button'
-    ) as HTMLButtonElement | null;
+    const extractBtn = host.querySelector('.extract-button') as HTMLButtonElement | null;
     expect(extractBtn).withContext('Extract button rendered').toBeTruthy();
     extractBtn!.click();
 
@@ -168,18 +155,16 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     const spy = jasmine.createSpy('dismiss');
     fixture.componentInstance.dismiss.subscribe(spy);
 
     const host = fixture.nativeElement as HTMLElement;
     const buttons = Array.from(
-      host.querySelectorAll('.banner-actions button')
+      host.querySelectorAll('.banner-actions button'),
     ) as HTMLButtonElement[];
-    const dismissBtn = buttons.find(
-      (b) => (b.textContent ?? '').trim() === 'Dismiss'
-    );
+    const dismissBtn = buttons.find((b) => (b.textContent ?? '').trim() === 'Dismiss');
     expect(dismissBtn).withContext('Dismiss button rendered').toBeTruthy();
     dismissBtn!.click();
 
@@ -190,7 +175,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     const spy = jasmine.createSpy('dismiss');
     fixture.componentInstance.dismiss.subscribe(spy);
@@ -208,14 +193,12 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     const host = fixture.nativeElement as HTMLElement;
     document.body.appendChild(host);
     try {
-      const extractBtn = host.querySelector(
-        '.extract-button'
-      ) as HTMLButtonElement | null;
+      const extractBtn = host.querySelector('.extract-button') as HTMLButtonElement | null;
       expect(extractBtn).withContext('extract button rendered').not.toBeNull();
       expect(document.activeElement).not.toBe(extractBtn);
 
@@ -231,18 +214,14 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: true,
       blockCount: 4,
-      commentsWillBeDropped: true
+      commentsWillBeDropped: true,
     });
     const host = fixture.nativeElement as HTMLElement;
     document.body.appendChild(host);
     try {
-      const extractBtn = host.querySelector(
-        '.extract-button'
-      ) as HTMLButtonElement | null;
+      const extractBtn = host.querySelector('.extract-button') as HTMLButtonElement | null;
       expect(extractBtn).withContext('extract button rendered').not.toBeNull();
-      expect((extractBtn?.textContent ?? '').trim()).toContain(
-        'Extract blocks as array'
-      );
+      expect((extractBtn?.textContent ?? '').trim()).toContain('Extract blocks as array');
 
       fixture.componentInstance.focusExtractButton();
 
@@ -256,7 +235,7 @@ describe('ExtractJsonBannerComponent', () => {
     const fixture = create({
       visible: false,
       blockCount: 1,
-      commentsWillBeDropped: false
+      commentsWillBeDropped: false,
     });
     expect(() => fixture.componentInstance.focusExtractButton()).not.toThrow();
   });

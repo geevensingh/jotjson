@@ -1,10 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  output
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { ClipboardPollingService } from '../../../core/clipboard/clipboard-polling.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
@@ -26,7 +20,7 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
   imports: [MatButtonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './clipboard-banner.component.html',
-  styleUrl: './clipboard-banner.component.scss'
+  styleUrl: './clipboard-banner.component.scss',
 })
 export class ClipboardBannerComponent {
   private readonly clipboard = inject(ClipboardPollingService);

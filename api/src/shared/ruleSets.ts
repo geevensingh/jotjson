@@ -33,7 +33,7 @@ import {
   MAX_RULES_PER_SET,
   MAX_RULE_MATCH_VALUE_LENGTH,
   MAX_RULE_SETS_PER_USER,
-  MAX_RULE_SET_NAME_LENGTH
+  MAX_RULE_SET_NAME_LENGTH,
 } from './limits';
 
 // -------- Document types --------
@@ -53,14 +53,7 @@ export type RuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
  * because new icons require a spec amendment, not a user-supplied
  * free-form string.
  */
-export type FormattingIcon =
-  | 'warning'
-  | 'check'
-  | 'star'
-  | 'info'
-  | 'error'
-  | 'flag'
-  | 'bookmark';
+export type FormattingIcon = 'warning' | 'check' | 'star' | 'info' | 'error' | 'flag' | 'bookmark';
 
 const FORMATTING_ICONS: readonly FormattingIcon[] = [
   'warning',
@@ -69,7 +62,7 @@ const FORMATTING_ICONS: readonly FormattingIcon[] = [
   'info',
   'error',
   'flag',
-  'bookmark'
+  'bookmark',
 ] as const;
 
 const RULE_TARGETS: readonly RuleTarget[] = ['key', 'value', 'key_and_value'] as const;
@@ -78,7 +71,7 @@ const MATCH_TYPES: readonly RuleMatchType[] = [
   'exact',
   'contains',
   'starts_with',
-  'ends_with'
+  'ends_with',
 ] as const;
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -140,15 +133,9 @@ export class RuleSetVersionConflictError extends Error {
 
 // -------- Validators --------
 
-function assertEnum<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-  field: string
-): T {
+function assertEnum<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
   if (typeof value !== 'string' || !(allowed as readonly string[]).includes(value)) {
-    throw new RuleSetValidationError(
-      `${field} must be one of ${allowed.join(', ')}`
-    );
+    throw new RuleSetValidationError(`${field} must be one of ${allowed.join(', ')}`);
   }
   return value as T;
 }
@@ -178,17 +165,10 @@ const STYLE_KEYS = new Set([
   'italic',
   'underline',
   'borderColor',
-  'icon'
+  'icon',
 ]);
 
-const RULE_KEYS = new Set([
-  'id',
-  'target',
-  'matchType',
-  'matchValue',
-  'caseSensitive',
-  'style'
-]);
+const RULE_KEYS = new Set(['id', 'target', 'matchType', 'matchValue', 'caseSensitive', 'style']);
 
 const RULE_SET_PAYLOAD_KEYS = new Set(['name', 'rules']);
 
@@ -241,7 +221,7 @@ export function assertRule(value: unknown, field: string): FormattingRule {
   }
   if (matchValue.length > MAX_RULE_MATCH_VALUE_LENGTH) {
     throw new RuleSetValidationError(
-      `${field}.matchValue too long - max ${MAX_RULE_MATCH_VALUE_LENGTH} chars (got ${matchValue.length})`
+      `${field}.matchValue too long - max ${MAX_RULE_MATCH_VALUE_LENGTH} chars (got ${matchValue.length})`,
     );
   }
   return {
@@ -250,7 +230,7 @@ export function assertRule(value: unknown, field: string): FormattingRule {
     matchType: assertEnum(value['matchType'], MATCH_TYPES, `${field}.matchType`),
     matchValue,
     caseSensitive: assertBool(value['caseSensitive'], `${field}.caseSensitive`),
-    style: assertStyle(value['style'], `${field}.style`)
+    style: assertStyle(value['style'], `${field}.style`),
   };
 }
 
@@ -280,7 +260,7 @@ export function assertRuleSetPayload(payload: unknown): UpdateRuleSetPayload {
   }
   if (name.length > MAX_RULE_SET_NAME_LENGTH) {
     throw new RuleSetValidationError(
-      `name too long - max ${MAX_RULE_SET_NAME_LENGTH} chars (got ${name.length})`
+      `name too long - max ${MAX_RULE_SET_NAME_LENGTH} chars (got ${name.length})`,
     );
   }
 
@@ -290,7 +270,7 @@ export function assertRuleSetPayload(payload: unknown): UpdateRuleSetPayload {
   }
   if (rawRules.length > MAX_RULES_PER_SET) {
     throw new RuleSetValidationError(
-      `Too many rules - max ${MAX_RULES_PER_SET} per set (got ${rawRules.length})`
+      `Too many rules - max ${MAX_RULES_PER_SET} per set (got ${rawRules.length})`,
     );
   }
   const rules: FormattingRule[] = [];
@@ -333,9 +313,8 @@ export async function listRuleSetsByOwner(userId: string): Promise<RuleSetDocume
   if (typeof userId !== 'string' || userId.length === 0) return [];
   const { resources } = await getRuleSetsContainer()
     .items.query<RuleSetDocument>({
-      query:
-        'SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt ASC',
-      parameters: [{ name: '@userId', value: userId }]
+      query: 'SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt ASC',
+      parameters: [{ name: '@userId', value: userId }],
     })
     .fetchAll();
   return resources;
@@ -347,16 +326,11 @@ export async function listRuleSetsByOwner(userId: string): Promise<RuleSetDocume
  * different partition (shouldn't happen given our `(id, userId)`
  * lookup, but defensive). Throws on infra failures.
  */
-export async function readRuleSet(
-  id: string,
-  userId: string
-): Promise<RuleSetDocument | null> {
+export async function readRuleSet(id: string, userId: string): Promise<RuleSetDocument | null> {
   if (typeof id !== 'string' || id.length === 0) return null;
   if (typeof userId !== 'string' || userId.length === 0) return null;
   try {
-    const { resource } = await getRuleSetsContainer()
-      .item(id, userId)
-      .read<RuleSetDocument>();
+    const { resource } = await getRuleSetsContainer().item(id, userId).read<RuleSetDocument>();
     return resource ?? null;
   } catch (error) {
     if ((error as { code?: number }).code === 404) return null;
@@ -375,7 +349,7 @@ export async function findRuleSetById(id: string): Promise<RuleSetDocument | nul
   const { resources } = await getRuleSetsContainer()
     .items.query<RuleSetDocument>({
       query: 'SELECT * FROM c WHERE c.id = @id',
-      parameters: [{ name: '@id', value: id }]
+      parameters: [{ name: '@id', value: id }],
     })
     .fetchAll();
   return resources[0] ?? null;
@@ -388,7 +362,7 @@ export async function findRuleSetById(id: string): Promise<RuleSetDocument | nul
  */
 export async function createRuleSet(
   userId: string,
-  input: CreateRuleSetInput
+  input: CreateRuleSetInput,
 ): Promise<RuleSetDocument> {
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new RuleSetValidationError('userId is required');
@@ -401,10 +375,10 @@ export async function createRuleSet(
     rules: input.rules,
     version: 1,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
-  const response: ItemResponse<RuleSetDocument> = await getRuleSetsContainer()
-    .items.create<RuleSetDocument>(doc);
+  const response: ItemResponse<RuleSetDocument> =
+    await getRuleSetsContainer().items.create<RuleSetDocument>(doc);
   return response.resource ?? doc;
 }
 
@@ -420,11 +394,11 @@ export async function createRuleSet(
 export async function replaceRuleSet(
   existing: RuleSetDocument,
   payload: UpdateRuleSetPayload,
-  expectedVersion: number
+  expectedVersion: number,
 ): Promise<RuleSetDocument> {
   if (existing.version !== expectedVersion) {
     throw new RuleSetVersionConflictError(
-      `Rule set was modified by another writer (expected version ${expectedVersion}, found ${existing.version})`
+      `Rule set was modified by another writer (expected version ${expectedVersion}, found ${existing.version})`,
     );
   }
   const next: RuleSetDocument = {
@@ -434,7 +408,7 @@ export async function replaceRuleSet(
     rules: payload.rules,
     version: existing.version + 1,
     createdAt: existing.createdAt,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
   const response: ItemResponse<RuleSetDocument> = await getRuleSetsContainer()
     .item(existing.id, existing.userId)
@@ -462,5 +436,5 @@ export {
   MAX_RULES_PER_SET,
   MAX_RULE_MATCH_VALUE_LENGTH,
   MAX_RULE_SETS_PER_USER,
-  MAX_RULE_SET_NAME_LENGTH
+  MAX_RULE_SET_NAME_LENGTH,
 };

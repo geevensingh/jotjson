@@ -2,13 +2,9 @@ import {
   EMPTY_RULE_RESULT,
   describeRule,
   evaluateFormattingRules,
-  type RuleEngineNode
+  type RuleEngineNode,
 } from './formatting-rules-engine';
-import type {
-  FormattingRule,
-  FormattingRuleSet,
-  FormattingStyle
-} from '../../../core/api/models';
+import type { FormattingRule, FormattingRuleSet, FormattingStyle } from '../../../core/api/models';
 
 function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
   return {
@@ -18,13 +14,13 @@ function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     matchValue: 'error',
     caseSensitive: false,
     style: {},
-    ...overrides
+    ...overrides,
   };
 }
 
 function set(
   rules: FormattingRule[],
-  overrides: Partial<FormattingRuleSet> = {}
+  overrides: Partial<FormattingRuleSet> = {},
 ): FormattingRuleSet {
   return {
     id: 's1',
@@ -34,7 +30,7 @@ function set(
     version: 1,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -87,7 +83,7 @@ describe('evaluateFormattingRules', () => {
         target: 'key',
         matchType: 'starts_with',
         matchValue: 'pre_',
-        style: BOLD
+        style: BOLD,
       });
       const result = evaluateFormattingRules([set([r])], node({ key: 'pre_thing' }));
       expect(result.keyStyle.bold).toBe(true);
@@ -98,7 +94,7 @@ describe('evaluateFormattingRules', () => {
         target: 'key',
         matchType: 'ends_with',
         matchValue: '_id',
-        style: BOLD
+        style: BOLD,
       });
       const result = evaluateFormattingRules([set([r])], node({ key: 'user_id' }));
       expect(result.keyStyle.bold).toBe(true);
@@ -109,12 +105,9 @@ describe('evaluateFormattingRules', () => {
         target: 'value',
         matchType: 'exact',
         matchValue: '200',
-        style: BLUE_TEXT
+        style: BLUE_TEXT,
       });
-      const result = evaluateFormattingRules(
-        [set([r])],
-        node({ key: 'status', valueText: '200' })
-      );
+      const result = evaluateFormattingRules([set([r])], node({ key: 'status', valueText: '200' }));
       expect(result.valueStyle.color).toBe('#0000ff');
       expect(result.keyStyle).toEqual({});
     });
@@ -124,12 +117,9 @@ describe('evaluateFormattingRules', () => {
         target: 'value',
         matchType: 'exact',
         matchValue: 'foo',
-        style: BOLD
+        style: BOLD,
       });
-      const result = evaluateFormattingRules(
-        [set([r])],
-        node({ key: 'foo', valueText: 'bar' })
-      );
+      const result = evaluateFormattingRules([set([r])], node({ key: 'foo', valueText: 'bar' }));
       expect(result).toBe(EMPTY_RULE_RESULT);
     });
 
@@ -138,12 +128,9 @@ describe('evaluateFormattingRules', () => {
         target: 'key',
         matchType: 'exact',
         matchValue: 'bar',
-        style: BOLD
+        style: BOLD,
       });
-      const result = evaluateFormattingRules(
-        [set([r])],
-        node({ key: 'foo', valueText: 'bar' })
-      );
+      const result = evaluateFormattingRules([set([r])], node({ key: 'foo', valueText: 'bar' }));
       expect(result).toBe(EMPTY_RULE_RESULT);
     });
   });
@@ -153,7 +140,7 @@ describe('evaluateFormattingRules', () => {
       const r = rule({ matchValue: 'ERROR' });
       const result = evaluateFormattingRules(
         [set([r, rule({ id: 'r-style', matchValue: 'ERROR', style: BOLD })])],
-        node({ key: 'errorMessage' })
+        node({ key: 'errorMessage' }),
       );
       expect(result.keyStyle.bold).toBe(true);
     });
@@ -178,7 +165,7 @@ describe('evaluateFormattingRules', () => {
     it('only key matches: styles only the key side', () => {
       const result = evaluateFormattingRules(
         [set([keyAndValue(BOLD)])],
-        node({ key: 'foo', valueText: 'something-else' })
+        node({ key: 'foo', valueText: 'something-else' }),
       );
       expect(result.keyStyle.bold).toBe(true);
       expect(result.valueStyle).toEqual({});
@@ -187,7 +174,7 @@ describe('evaluateFormattingRules', () => {
     it('only value matches: styles only the value side', () => {
       const result = evaluateFormattingRules(
         [set([keyAndValue(BOLD)])],
-        node({ key: 'whatever', valueText: 'foo' })
+        node({ key: 'whatever', valueText: 'foo' }),
       );
       expect(result.valueStyle.bold).toBe(true);
       expect(result.keyStyle).toEqual({});
@@ -196,7 +183,7 @@ describe('evaluateFormattingRules', () => {
     it('both match: styles both sides', () => {
       const result = evaluateFormattingRules(
         [set([keyAndValue(BOLD)])],
-        node({ key: 'foo', valueText: 'foo' })
+        node({ key: 'foo', valueText: 'foo' }),
       );
       expect(result.keyStyle.bold).toBe(true);
       expect(result.valueStyle.bold).toBe(true);
@@ -205,21 +192,15 @@ describe('evaluateFormattingRules', () => {
     it('records exactly one matchedRules entry regardless of how many sides matched', () => {
       const result = evaluateFormattingRules(
         [set([keyAndValue(BOLD)])],
-        node({ key: 'foo', valueText: 'foo' })
+        node({ key: 'foo', valueText: 'foo' }),
       );
       expect(result.matchedRules.length).toBe(1);
     });
 
     it('row-level style fires whether key or value matched', () => {
       const r = keyAndValue(RED_BG);
-      const onlyKey = evaluateFormattingRules(
-        [set([r])],
-        node({ key: 'foo', valueText: 'x' })
-      );
-      const onlyValue = evaluateFormattingRules(
-        [set([r])],
-        node({ key: 'x', valueText: 'foo' })
-      );
+      const onlyKey = evaluateFormattingRules([set([r])], node({ key: 'foo', valueText: 'x' }));
+      const onlyValue = evaluateFormattingRules([set([r])], node({ key: 'x', valueText: 'foo' }));
       expect(onlyKey.rowStyle.backgroundColor).toBe('#ff0000');
       expect(onlyValue.rowStyle.backgroundColor).toBe('#ff0000');
     });
@@ -230,13 +211,13 @@ describe('evaluateFormattingRules', () => {
       target: 'value',
       matchType: 'exact',
       matchValue: 'whatever',
-      style: BOLD
+      style: BOLD,
     });
 
     it('value-target rule is skipped on container nodes (F8)', () => {
       const result = evaluateFormattingRules(
         [set([valueRule])],
-        node({ key: 'wrapper', valueText: null, isContainer: true })
+        node({ key: 'wrapper', valueText: null, isContainer: true }),
       );
       expect(result).toBe(EMPTY_RULE_RESULT);
     });
@@ -245,7 +226,7 @@ describe('evaluateFormattingRules', () => {
       const r = rule({ target: 'key', matchType: 'exact', matchValue: 'wrapper', style: BOLD });
       const result = evaluateFormattingRules(
         [set([r])],
-        node({ key: 'wrapper', valueText: null, isContainer: true })
+        node({ key: 'wrapper', valueText: null, isContainer: true }),
       );
       expect(result.keyStyle.bold).toBe(true);
     });
@@ -255,11 +236,11 @@ describe('evaluateFormattingRules', () => {
         target: 'key_and_value',
         matchType: 'exact',
         matchValue: 'wrapper',
-        style: BOLD
+        style: BOLD,
       });
       const result = evaluateFormattingRules(
         [set([r])],
-        node({ key: 'wrapper', valueText: null, isContainer: true })
+        node({ key: 'wrapper', valueText: null, isContainer: true }),
       );
       expect(result.keyStyle.bold).toBe(true);
       expect(result.valueStyle).toEqual({});
@@ -269,10 +250,7 @@ describe('evaluateFormattingRules', () => {
   describe('root and array elements have null key', () => {
     it('skips key-target rules when key is null (root)', () => {
       const r = rule({ target: 'key', matchValue: 'whatever', style: BOLD });
-      const result = evaluateFormattingRules(
-        [set([r])],
-        node({ key: null, valueText: '42' })
-      );
+      const result = evaluateFormattingRules([set([r])], node({ key: null, valueText: '42' }));
       expect(result).toBe(EMPTY_RULE_RESULT);
     });
 
@@ -281,12 +259,9 @@ describe('evaluateFormattingRules', () => {
         target: 'value',
         matchType: 'exact',
         matchValue: '42',
-        style: BLUE_TEXT
+        style: BLUE_TEXT,
       });
-      const result = evaluateFormattingRules(
-        [set([r])],
-        node({ key: null, valueText: '42' })
-      );
+      const result = evaluateFormattingRules([set([r])], node({ key: null, valueText: '42' }));
       expect(result.valueStyle.color).toBe('#0000ff');
     });
   });
@@ -295,20 +270,14 @@ describe('evaluateFormattingRules', () => {
     it('later rule overrides earlier on same property', () => {
       const r1 = rule({ id: 'r1', matchValue: 'foo', style: { textColor: '#ff0000' } });
       const r2 = rule({ id: 'r2', matchValue: 'foo', style: { textColor: '#0000ff' } });
-      const result = evaluateFormattingRules(
-        [set([r1, r2])],
-        node({ key: 'foo' })
-      );
+      const result = evaluateFormattingRules([set([r1, r2])], node({ key: 'foo' }));
       expect(result.keyStyle.color).toBe('#0000ff');
     });
 
     it('absent property in later rule does NOT clobber earlier', () => {
       const r1 = rule({ id: 'r1', matchValue: 'foo', style: { textColor: '#ff0000', bold: true } });
       const r2 = rule({ id: 'r2', matchValue: 'foo', style: { italic: true } });
-      const result = evaluateFormattingRules(
-        [set([r1, r2])],
-        node({ key: 'foo' })
-      );
+      const result = evaluateFormattingRules([set([r1, r2])], node({ key: 'foo' }));
       expect(result.keyStyle.color).toBe('#ff0000');
       expect(result.keyStyle.bold).toBe(true);
       expect(result.keyStyle.italic).toBe(true);
@@ -317,20 +286,14 @@ describe('evaluateFormattingRules', () => {
     it('explicit false in later rule clobbers earlier true', () => {
       const r1 = rule({ id: 'r1', matchValue: 'foo', style: BOLD });
       const r2 = rule({ id: 'r2', matchValue: 'foo', style: NOT_BOLD });
-      const result = evaluateFormattingRules(
-        [set([r1, r2])],
-        node({ key: 'foo' })
-      );
+      const result = evaluateFormattingRules([set([r1, r2])], node({ key: 'foo' }));
       expect(result.keyStyle.bold).toBe(false);
     });
 
     it('records both rules in matchedRules in evaluation order', () => {
       const r1 = rule({ id: 'r1', matchValue: 'foo', style: BOLD });
       const r2 = rule({ id: 'r2', matchValue: 'foo', style: NOT_BOLD });
-      const result = evaluateFormattingRules(
-        [set([r1, r2])],
-        node({ key: 'foo' })
-      );
+      const result = evaluateFormattingRules([set([r1, r2])], node({ key: 'foo' }));
       expect(result.matchedRules.map((m) => m.ruleId)).toEqual(['r1', 'r2']);
     });
   });
@@ -338,10 +301,10 @@ describe('evaluateFormattingRules', () => {
   describe('cross-set merge order', () => {
     it('later set overrides earlier set on same property', () => {
       const a = set([rule({ matchValue: 'foo', style: { textColor: '#ff0000' } })], {
-        id: 'set-a'
+        id: 'set-a',
       });
       const b = set([rule({ matchValue: 'foo', style: { textColor: '#0000ff' } })], {
-        id: 'set-b'
+        id: 'set-b',
       });
       const result = evaluateFormattingRules([a, b], node({ key: 'foo' }));
       expect(result.keyStyle.color).toBe('#0000ff');
@@ -353,7 +316,7 @@ describe('evaluateFormattingRules', () => {
       const result = evaluateFormattingRules([a, b], node({ key: 'foo' }));
       expect(result.matchedRules).toEqual([
         { setId: 'set-a', ruleId: 'r-a', label: 'key contains "foo"' },
-        { setId: 'set-b', ruleId: 'r-b', label: 'key contains "foo"' }
+        { setId: 'set-b', ruleId: 'r-b', label: 'key contains "foo"' },
       ]);
     });
   });
@@ -361,10 +324,7 @@ describe('evaluateFormattingRules', () => {
   describe('row-level style projection', () => {
     it('backgroundColor goes to rowStyle for any matched target', () => {
       const r = rule({ target: 'value', matchType: 'exact', matchValue: '200', style: RED_BG });
-      const result = evaluateFormattingRules(
-        [set([r])],
-        node({ key: 'status', valueText: '200' })
-      );
+      const result = evaluateFormattingRules([set([r])], node({ key: 'status', valueText: '200' }));
       expect(result.rowStyle.backgroundColor).toBe('#ff0000');
     });
 
@@ -373,7 +333,7 @@ describe('evaluateFormattingRules', () => {
         target: 'key',
         matchType: 'exact',
         matchValue: 'foo',
-        style: { borderColor: '#cccccc' }
+        style: { borderColor: '#cccccc' },
       });
       const result = evaluateFormattingRules([set([r])], node({ key: 'foo' }));
       expect(result.rowStyle.borderColor).toBe('#cccccc');
@@ -396,12 +356,9 @@ describe('evaluateFormattingRules', () => {
         target: 'value',
         matchType: 'exact',
         matchValue: '200',
-        style: BOLD
+        style: BOLD,
       });
-      const result = evaluateFormattingRules(
-        [set([r])],
-        node({ key: 'status', valueText: '200' })
-      );
+      const result = evaluateFormattingRules([set([r])], node({ key: 'status', valueText: '200' }));
       expect(result.valueStyle.bold).toBe(true);
     });
 
@@ -410,11 +367,11 @@ describe('evaluateFormattingRules', () => {
         target: 'value',
         matchType: 'exact',
         matchValue: '200',
-        style: BOLD
+        style: BOLD,
       });
       const result = evaluateFormattingRules(
         [set([r])],
-        node({ key: 'status', valueText: '"200"' })
+        node({ key: 'status', valueText: '"200"' }),
       );
       expect(result).toBe(EMPTY_RULE_RESULT);
     });
@@ -448,10 +405,7 @@ describe('evaluateFormattingRules', () => {
     it('latest icon wins when two rules both project icons', () => {
       const r1 = rule({ id: 'r1', matchValue: 'foo', style: { icon: 'warning' } });
       const r2 = rule({ id: 'r2', matchValue: 'foo', style: { icon: 'error' } });
-      const result = evaluateFormattingRules(
-        [set([r1, r2])],
-        node({ key: 'foo' })
-      );
+      const result = evaluateFormattingRules([set([r1, r2])], node({ key: 'foo' }));
       expect(result.keyStyle.icon).toBe('error');
     });
 
@@ -467,12 +421,9 @@ describe('evaluateFormattingRules', () => {
         target: 'value',
         matchType: 'exact',
         matchValue: '200',
-        style: { icon: 'check' }
+        style: { icon: 'check' },
       });
-      const result = evaluateFormattingRules(
-        [set([r])],
-        node({ key: 'status', valueText: '200' })
-      );
+      const result = evaluateFormattingRules([set([r])], node({ key: 'status', valueText: '200' }));
       expect(result.valueStyle.icon).toBe('check');
       expect(result.keyStyle.icon).toBeUndefined();
     });
@@ -481,11 +432,11 @@ describe('evaluateFormattingRules', () => {
   describe('performance baseline', () => {
     it('evaluates 10 rules over 1,000 nodes in well under 50 ms', () => {
       const rules: FormattingRule[] = Array.from({ length: 10 }, (_, i) =>
-        rule({ id: `r${i}`, matchValue: `marker-${i}`, style: BOLD })
+        rule({ id: `r${i}`, matchValue: `marker-${i}`, style: BOLD }),
       );
       const sets = [set(rules)];
       const nodes: RuleEngineNode[] = Array.from({ length: 1000 }, (_, i) =>
-        node({ key: `key-${i % 50}`, valueText: `val-${i}` })
+        node({ key: `key-${i % 50}`, valueText: `val-${i}` }),
       );
       const start = performance.now();
       for (const n of nodes) {
@@ -499,28 +450,28 @@ describe('evaluateFormattingRules', () => {
 
 describe('describeRule', () => {
   it('renders a key-target contains rule', () => {
-    expect(describeRule(rule({ target: 'key', matchType: 'contains', matchValue: 'error' })))
-      .toBe('key contains "error"');
+    expect(describeRule(rule({ target: 'key', matchType: 'contains', matchValue: 'error' }))).toBe(
+      'key contains "error"',
+    );
   });
 
   it('renders a value-target exact rule', () => {
-    expect(describeRule(rule({ target: 'value', matchType: 'exact', matchValue: '200' })))
-      .toBe('value exact "200"');
+    expect(describeRule(rule({ target: 'value', matchType: 'exact', matchValue: '200' }))).toBe(
+      'value exact "200"',
+    );
   });
 
   it('renders a key_and_value-target starts_with rule', () => {
     expect(
-      describeRule(
-        rule({ target: 'key_and_value', matchType: 'starts_with', matchValue: 'x_' })
-      )
+      describeRule(rule({ target: 'key_and_value', matchType: 'starts_with', matchValue: 'x_' })),
     ).toBe('key or value starts_with "x_"');
   });
 
   it('annotates case-sensitive rules', () => {
     expect(
       describeRule(
-        rule({ target: 'key', matchType: 'ends_with', matchValue: '_id', caseSensitive: true })
-      )
+        rule({ target: 'key', matchType: 'ends_with', matchValue: '_id', caseSensitive: true }),
+      ),
     ).toBe('key ends_with "_id" (case-sensitive)');
   });
 

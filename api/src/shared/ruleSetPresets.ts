@@ -73,7 +73,7 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'error',
       caseSensitive: false,
-      style: STYLE_RED_BG
+      style: STYLE_RED_BG,
     },
     {
       id: 'err',
@@ -81,7 +81,7 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'err',
       caseSensitive: false,
-      style: STYLE_RED_BG
+      style: STYLE_RED_BG,
     },
     {
       id: 'exception',
@@ -89,7 +89,7 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'exception',
       caseSensitive: false,
-      style: STYLE_RED_BG
+      style: STYLE_RED_BG,
     },
     {
       id: 'fault',
@@ -97,7 +97,7 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'fault',
       caseSensitive: false,
-      style: STYLE_RED_BG
+      style: STYLE_RED_BG,
     },
     {
       id: 'failure',
@@ -105,7 +105,7 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'failure',
       caseSensitive: false,
-      style: STYLE_RED_BG
+      style: STYLE_RED_BG,
     },
     {
       id: 'failed',
@@ -113,9 +113,9 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'failed',
       caseSensitive: false,
-      style: STYLE_RED_BG
-    }
-  ]
+      style: STYLE_RED_BG,
+    },
+  ],
 };
 
 /**
@@ -140,7 +140,7 @@ function statusRule(code: string, bg: { backgroundColor: string }): FormattingRu
     matchType: 'exact',
     matchValue: code,
     caseSensitive: false,
-    style: bg
+    style: bg,
   };
 }
 
@@ -150,8 +150,8 @@ const STATUS_CODES: RuleSetPreset = {
   rules: [
     ...STATUS_CODES_2XX.map((c) => statusRule(c, STYLE_GREEN_BG)),
     ...STATUS_CODES_4XX.map((c) => statusRule(c, STYLE_AMBER_BG)),
-    ...STATUS_CODES_5XX.map((c) => statusRule(c, STYLE_RED_BG))
-  ]
+    ...STATUS_CODES_5XX.map((c) => statusRule(c, STYLE_RED_BG)),
+  ],
 };
 
 /**
@@ -171,9 +171,9 @@ const NULL_FINDER: RuleSetPreset = {
       matchType: 'exact',
       matchValue: 'null',
       caseSensitive: true,
-      style: STYLE_YELLOW_BG
-    }
-  ]
+      style: STYLE_YELLOW_BG,
+    },
+  ],
 };
 
 /**
@@ -205,7 +205,7 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'success',
       caseSensitive: false,
-      style: STYLE_GREEN_BG
+      style: STYLE_GREEN_BG,
     },
     {
       id: 'succeeded',
@@ -213,7 +213,7 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'succeeded',
       caseSensitive: false,
-      style: STYLE_GREEN_BG
+      style: STYLE_GREEN_BG,
     },
     {
       id: 'passed',
@@ -221,7 +221,7 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'passed',
       caseSensitive: false,
-      style: STYLE_GREEN_BG
+      style: STYLE_GREEN_BG,
     },
     {
       id: 'ok',
@@ -229,7 +229,7 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
       matchType: 'exact',
       matchValue: 'ok',
       caseSensitive: false,
-      style: STYLE_GREEN_BG
+      style: STYLE_GREEN_BG,
     },
     // Amber - warnings / in-progress
     {
@@ -238,7 +238,7 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'warning',
       caseSensitive: false,
-      style: STYLE_AMBER_BG
+      style: STYLE_AMBER_BG,
     },
     {
       id: 'warn',
@@ -246,7 +246,7 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
       matchType: 'exact',
       matchValue: 'warn',
       caseSensitive: false,
-      style: STYLE_AMBER_BG
+      style: STYLE_AMBER_BG,
     },
     {
       id: 'pending',
@@ -254,7 +254,7 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'pending',
       caseSensitive: false,
-      style: STYLE_AMBER_BG
+      style: STYLE_AMBER_BG,
     },
     {
       id: 'retry',
@@ -262,9 +262,9 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'retry',
       caseSensitive: false,
-      style: STYLE_AMBER_BG
-    }
-  ]
+      style: STYLE_AMBER_BG,
+    },
+  ],
 };
 
 /**
@@ -276,11 +276,11 @@ export const PRESET_RULE_SETS: readonly RuleSetPreset[] = [
   ERROR_DETECTION,
   STATUS_CODES,
   NULL_FINDER,
-  STATUS_HIGHLIGHTS
+  STATUS_HIGHLIGHTS,
 ] as const;
 
 const PRESET_BY_ID: ReadonlyMap<string, RuleSetPreset> = new Map(
-  PRESET_RULE_SETS.map((preset) => [preset.id, preset])
+  PRESET_RULE_SETS.map((preset) => [preset.id, preset]),
 );
 
 export function listPresets(): readonly RuleSetPreset[] {
@@ -302,7 +302,7 @@ export function presetToCreatePayload(preset: RuleSetPreset): UpdateRuleSetPaylo
     name: preset.name,
     rules: preset.rules.map((rule) => ({
       ...rule,
-      style: { ...rule.style }
-    }))
+      style: { ...rule.style },
+    })),
   };
 }

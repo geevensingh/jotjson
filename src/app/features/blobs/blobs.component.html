@@ -30,17 +30,8 @@
   } @else if (isEmpty()) {
     <div class="empty-state">
       <jj-icon name="save" class="empty-icon" />
-      <p
-        class="empty-message"
-        i18n="@@blobs.empty"
-      >You haven't saved any JSON blobs yet.</p>
-      <a
-        mat-flat-button
-        color="primary"
-        routerLink="/"
-        i18n="@@blobs.empty.cta"
-        >Open the editor</a
-      >
+      <p class="empty-message" i18n="@@blobs.empty">You haven't saved any JSON blobs yet.</p>
+      <a mat-flat-button color="primary" routerLink="/" i18n="@@blobs.empty.cta">Open the editor</a>
     </div>
   } @else {
     <ul class="blob-list">

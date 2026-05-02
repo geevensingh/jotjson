@@ -3,7 +3,7 @@ import {
   detectLocaleDateOrder,
   formatDateAnnotation,
   formatRelative,
-  parseAsDate
+  parseAsDate,
 } from './date-detect';
 
 describe('date-detect', () => {
@@ -115,7 +115,7 @@ describe('date-detect', () => {
       'a really long string that contains digits 1234 mixed in',
       '01',
       '2024',
-      'Foo 99, 9999'
+      'Foo 99, 9999',
     ].forEach((input) => {
       it(`rejects ${JSON.stringify(input)}`, () => {
         expect(parseAsDate(input)).toBeNull();
@@ -182,7 +182,7 @@ describe('date-detect', () => {
       day: true,
       hour: true,
       minute: true,
-      second: true
+      second: true,
     };
     const onlyYear = {
       year: true,
@@ -190,7 +190,7 @@ describe('date-detect', () => {
       day: false,
       hour: false,
       minute: false,
-      second: false
+      second: false,
     };
     const onlyMonth = {
       year: false,
@@ -198,7 +198,7 @@ describe('date-detect', () => {
       day: false,
       hour: false,
       minute: false,
-      second: false
+      second: false,
     };
     const onlyDay = {
       year: false,
@@ -206,7 +206,7 @@ describe('date-detect', () => {
       day: true,
       hour: false,
       minute: false,
-      second: false
+      second: false,
     };
     const noUnits = {
       year: false,
@@ -214,7 +214,7 @@ describe('date-detect', () => {
       day: false,
       hour: false,
       minute: false,
-      second: false
+      second: false,
     };
 
     function dateOffsetBy(offsetMs: number): Date {
@@ -282,7 +282,7 @@ describe('date-detect', () => {
   describe('parseAsDate - assumeUtcForIsoDateTime', () => {
     it('parses timezone-less ISO date-time as UTC when opt is true', () => {
       const withOpt = parseAsDate('2026-01-31T23:59:59.999', undefined, {
-        assumeUtcForIsoDateTime: true
+        assumeUtcForIsoDateTime: true,
       })!;
       const reference = new Date('2026-01-31T23:59:59.999Z');
       expect(withOpt.date.getTime()).toBe(reference.getTime());
@@ -296,28 +296,28 @@ describe('date-detect', () => {
 
     it('does not modify ISO strings that already have Z', () => {
       const parsed = parseAsDate('2026-01-31T23:59:59Z', undefined, {
-        assumeUtcForIsoDateTime: true
+        assumeUtcForIsoDateTime: true,
       })!;
       expect(parsed.date.getTime()).toBe(new Date('2026-01-31T23:59:59Z').getTime());
     });
 
     it('does not modify ISO strings that already have a positive offset', () => {
       const parsed = parseAsDate('2026-01-31T23:59:59+05:00', undefined, {
-        assumeUtcForIsoDateTime: true
+        assumeUtcForIsoDateTime: true,
       })!;
       expect(parsed.date.getTime()).toBe(new Date('2026-01-31T23:59:59+05:00').getTime());
     });
 
     it('does not modify ISO strings that already have a negative offset', () => {
       const parsed = parseAsDate('2026-01-31T23:59:59-08:00', undefined, {
-        assumeUtcForIsoDateTime: true
+        assumeUtcForIsoDateTime: true,
       })!;
       expect(parsed.date.getTime()).toBe(new Date('2026-01-31T23:59:59-08:00').getTime());
     });
 
     it('handles 7-digit fractional seconds (.NET round-trip) as UTC', () => {
       const parsed = parseAsDate('2026-01-31T23:59:59.9999999', undefined, {
-        assumeUtcForIsoDateTime: true
+        assumeUtcForIsoDateTime: true,
       })!;
       // JS truncates beyond ms; the parsed instant matches the millisecond-precision UTC equivalent.
       expect(parsed.date.getTime()).toBe(new Date('2026-01-31T23:59:59.999Z').getTime());
@@ -327,7 +327,7 @@ describe('date-detect', () => {
   describe('parseAsDate - assumeUtcForIsoDateOnly', () => {
     it('parses YYYY-MM-DD as UTC midnight when opt is true', () => {
       const parsed = parseAsDate('2026-01-31', undefined, {
-        assumeUtcForIsoDateOnly: true
+        assumeUtcForIsoDateOnly: true,
       })!;
       expect(parsed.date.getTime()).toBe(Date.UTC(2026, 0, 31));
       expect(parsed.hasTime).toBe(false);

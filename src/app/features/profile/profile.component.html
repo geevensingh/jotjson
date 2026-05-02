@@ -4,9 +4,7 @@
 
   @if (isSignedIn()) {
     <section class="card" aria-labelledby="profile-account">
-      <h2 id="profile-account" class="card-title" i18n="@@profile.identity.title">
-        Account
-      </h2>
+      <h2 id="profile-account" class="card-title" i18n="@@profile.identity.title"> Account </h2>
 
       <dl>
         <dt i18n="@@profile.displayName.label">Display name</dt>
@@ -25,12 +23,7 @@
       </dl>
 
       <div class="actions">
-        <button
-          type="button"
-          mat-stroked-button
-          color="warn"
-          (click)="onSignOut()"
-        >
+        <button type="button" mat-stroked-button color="warn" (click)="onSignOut()">
           <jj-icon name="sign-out" />
           <span i18n="@@profile.signOut">Sign out</span>
         </button>
@@ -38,12 +31,8 @@
     </section>
 
     <section class="card prefs-card" aria-labelledby="profile-prefs">
-      <h2 id="profile-prefs" class="card-title" i18n="@@profile.prefs.title">
-        Preferences
-      </h2>
-      <p class="card-subtitle" i18n="@@profile.prefs.subtitle">
-        Changes save automatically.
-      </p>
+      <h2 id="profile-prefs" class="card-title" i18n="@@profile.prefs.title"> Preferences </h2>
+      <p class="card-subtitle" i18n="@@profile.prefs.subtitle"> Changes save automatically. </p>
 
       <section class="prefs-group" aria-labelledby="prefs-appearance">
         <h3 id="prefs-appearance" class="group-title" i18n="@@profile.prefs.appearance.title">
@@ -51,7 +40,9 @@
         </h3>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-theme-label" i18n="@@profile.prefs.appearance.theme">Theme</span>
+          <span class="pref-label" id="pref-theme-label" i18n="@@profile.prefs.appearance.theme"
+            >Theme</span
+          >
           <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
             <mat-select
               id="pref-theme"
@@ -59,8 +50,12 @@
               [value]="theme()"
               (selectionChange)="onThemeChange($event.value)"
             >
-              <mat-option value="dark" i18n="@@profile.prefs.appearance.theme.dark">Dark</mat-option>
-              <mat-option value="light" i18n="@@profile.prefs.appearance.theme.light">Light</mat-option>
+              <mat-option value="dark" i18n="@@profile.prefs.appearance.theme.dark"
+                >Dark</mat-option
+              >
+              <mat-option value="light" i18n="@@profile.prefs.appearance.theme.light"
+                >Light</mat-option
+              >
               <mat-option value="system" i18n="@@profile.prefs.appearance.theme.system">
                 Match system
               </mat-option>
@@ -91,13 +86,17 @@
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-editor">
-        <h3 id="prefs-editor" class="group-title" i18n="@@profile.prefs.editor.title">
-          Editor
-        </h3>
+        <h3 id="prefs-editor" class="group-title" i18n="@@profile.prefs.editor.title"> Editor </h3>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-font-size-label" i18n="@@profile.prefs.editor.fontSize">Font size</span>
-          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field pref-form-field--number">
+          <span class="pref-label" id="pref-font-size-label" i18n="@@profile.prefs.editor.fontSize"
+            >Font size</span
+          >
+          <mat-form-field
+            appearance="outline"
+            subscriptSizing="dynamic"
+            class="pref-form-field pref-form-field--number"
+          >
             <input
               matInput
               id="pref-font-size"
@@ -126,7 +125,9 @@
         </div>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-word-wrap-label" i18n="@@profile.prefs.editor.wordWrap">Word wrap</span>
+          <span class="pref-label" id="pref-word-wrap-label" i18n="@@profile.prefs.editor.wordWrap"
+            >Word wrap</span
+          >
           <mat-slide-toggle
             aria-labelledby="pref-word-wrap-label"
             [checked]="editorWordWrap()"
@@ -136,13 +137,20 @@
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-tree">
-        <h3 id="prefs-tree" class="group-title" i18n="@@profile.prefs.tree.title">
-          Tree
-        </h3>
+        <h3 id="prefs-tree" class="group-title" i18n="@@profile.prefs.tree.title"> Tree </h3>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-tree-font-size-label" i18n="@@profile.prefs.tree.fontSize">Font size</span>
-          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field pref-form-field--number">
+          <span
+            class="pref-label"
+            id="pref-tree-font-size-label"
+            i18n="@@profile.prefs.tree.fontSize"
+            >Font size</span
+          >
+          <mat-form-field
+            appearance="outline"
+            subscriptSizing="dynamic"
+            class="pref-form-field pref-form-field--number"
+          >
             <input
               matInput
               id="pref-tree-font-size"
@@ -198,7 +206,12 @@
         </p>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-show-type-labels-label" i18n="@@profile.prefs.tree.showTypeLabels">Show type labels</span>
+          <span
+            class="pref-label"
+            id="pref-show-type-labels-label"
+            i18n="@@profile.prefs.tree.showTypeLabels"
+            >Show type labels</span
+          >
           <mat-slide-toggle
             aria-labelledby="pref-show-type-labels-label"
             [checked]="treeShowTypeLabels()"
@@ -207,7 +220,11 @@
         </div>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-show-date-annotations-label" i18n="@@profile.prefs.tree.showDateAnnotations">
+          <span
+            class="pref-label"
+            id="pref-show-date-annotations-label"
+            i18n="@@profile.prefs.tree.showDateAnnotations"
+          >
             Show date annotations
           </span>
           <mat-slide-toggle
@@ -290,12 +307,16 @@
               class="pref-help-line date-annotation-unit-hint"
               i18n="@@profile.prefs.tree.dateAnnotation.units.hint"
             >
-              Smallest enabled unit is shown as a decimal when the delta is
-              smaller (e.g., '0.5 minutes ago').
+              Smallest enabled unit is shown as a decimal when the delta is smaller (e.g., '0.5
+              minutes ago').
             </p>
 
             <div class="pref-row pref-row--indented">
-              <span class="pref-label" id="pref-friendly-forms-label" i18n="@@profile.prefs.tree.dateAnnotation.friendlyForms">
+              <span
+                class="pref-label"
+                id="pref-friendly-forms-label"
+                i18n="@@profile.prefs.tree.dateAnnotation.friendlyForms"
+              >
                 Use friendly phrases (yesterday, tomorrow, last month, ...)
               </span>
               <mat-slide-toggle
@@ -309,7 +330,11 @@
           </div>
 
           <div class="pref-row pref-row--indented">
-            <span class="pref-label" id="pref-assume-utc-date-time-label" i18n="@@profile.prefs.tree.assumeUtcDateTime">
+            <span
+              class="pref-label"
+              id="pref-assume-utc-date-time-label"
+              i18n="@@profile.prefs.tree.assumeUtcDateTime"
+            >
               Treat ISO date-time without timezone as UTC
             </span>
             <mat-slide-toggle
@@ -321,7 +346,11 @@
           </div>
 
           <div class="pref-row pref-row--indented">
-            <span class="pref-label" id="pref-assume-utc-date-only-label" i18n="@@profile.prefs.tree.assumeUtcDateOnly">
+            <span
+              class="pref-label"
+              id="pref-assume-utc-date-only-label"
+              i18n="@@profile.prefs.tree.assumeUtcDateOnly"
+            >
               Treat ISO date-only as UTC midnight
             </span>
             <mat-slide-toggle
@@ -332,14 +361,20 @@
             ></mat-slide-toggle>
           </div>
 
-          <p class="pref-help-line pref-help-line--indented" i18n="@@profile.prefs.tree.assumeUtcHint">
-            Avoids local-timezone shifts for log timestamps and other
-            timezone-less ISO 8601 values.
+          <p
+            class="pref-help-line pref-help-line--indented"
+            i18n="@@profile.prefs.tree.assumeUtcHint"
+          >
+            Avoids local-timezone shifts for log timestamps and other timezone-less ISO 8601 values.
           </p>
         </div>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-show-comments-label" i18n="@@profile.prefs.tree.showComments">
+          <span
+            class="pref-label"
+            id="pref-show-comments-label"
+            i18n="@@profile.prefs.tree.showComments"
+          >
             Show JSONC comments
           </span>
           <mat-slide-toggle
@@ -349,14 +384,17 @@
           ></mat-slide-toggle>
         </div>
         <p class="pref-help-line" i18n="@@profile.prefs.tree.showComments.help">
-          Surfaces line and block comments from JSONC documents next to
-          their nearest value in the tree view. Comments are still
-          tolerated by the parser when this is off; they're just not
+          Surfaces line and block comments from JSONC documents next to their nearest value in the
+          tree view. Comments are still tolerated by the parser when this is off; they're just not
           rendered.
         </p>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-tree-path-root-label" i18n="@@profile.prefs.tree.pathRoot">
+          <span
+            class="pref-label"
+            id="pref-tree-path-root-label"
+            i18n="@@profile.prefs.tree.pathRoot"
+          >
             Copied path root
           </span>
           <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
@@ -366,7 +404,9 @@
               [value]="treePathRoot()"
               (selectionChange)="onTreePathRootChange($event.value)"
             >
-              <mat-option value="jsonpath" i18n="@@profile.prefs.tree.pathRoot.jsonpath">JSONPath ($)</mat-option>
+              <mat-option value="jsonpath" i18n="@@profile.prefs.tree.pathRoot.jsonpath"
+                >JSONPath ($)</mat-option
+              >
               <mat-option value="none" i18n="@@profile.prefs.tree.pathRoot.none">None</mat-option>
               <mat-option value="root" i18n="@@profile.prefs.tree.pathRoot.root">root</mat-option>
               <mat-option value="data" i18n="@@profile.prefs.tree.pathRoot.data">Data</mat-option>
@@ -378,7 +418,11 @@
         </p>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-selection-sync-label" i18n="@@profile.prefs.tree.selectionSync">
+          <span
+            class="pref-label"
+            id="pref-selection-sync-label"
+            i18n="@@profile.prefs.tree.selectionSync"
+          >
             Sync tree and editor selections
           </span>
           <mat-slide-toggle
@@ -388,9 +432,8 @@
           ></mat-slide-toggle>
         </div>
         <p class="pref-help-line" i18n="@@profile.prefs.tree.selectionSync.help">
-          When on, selecting a tree row reveals the matching range in the
-          editor, and moving the editor cursor selects the matching tree
-          row.
+          When on, selecting a tree row reveals the matching range in the editor, and moving the
+          editor cursor selects the matching tree row.
         </p>
       </section>
 
@@ -403,25 +446,18 @@
           Default rule sets
         </h3>
         <p class="group-help" i18n="@@profile.prefs.defaultRuleSets.help">
-          Highlight matches from these formatting rule sets when viewing
-          JSON. The same selection appears as chips in the toolbar above
-          the tree on the home page; changes here apply across all your
-          devices.
+          Highlight matches from these formatting rule sets when viewing JSON. The same selection
+          appears as chips in the toolbar above the tree on the home page; changes here apply across
+          all your devices.
         </p>
 
         @if (ruleSetsEmpty()) {
-          <p
-            class="pref-help-line"
-            i18n="@@profile.prefs.defaultRuleSets.empty"
-          >
-            No rule sets yet. Use "Clone preset" in the toolbar above the
-            tree on the home page to get started.
+          <p class="pref-help-line" i18n="@@profile.prefs.defaultRuleSets.empty">
+            No rule sets yet. Use "Clone preset" in the toolbar above the tree on the home page to
+            get started.
           </p>
         } @else if (ruleSetOptions() === null) {
-          <p
-            class="pref-help-line"
-            i18n="@@profile.prefs.defaultRuleSets.loading"
-          >
+          <p class="pref-help-line" i18n="@@profile.prefs.defaultRuleSets.loading">
             Loading rule sets...
           </p>
         } @else {
@@ -448,9 +484,9 @@
           Highlights
         </h3>
         <p class="group-help" i18n="@@profile.prefs.highlightColors.help">
-          Pick colors used to highlight selected nodes, ancestors of the
-          selection, matching values, and search hits. Each theme has its
-          own set; only the currently active theme is shown live.
+          Pick colors used to highlight selected nodes, ancestors of the selection, matching values,
+          and search hits. Each theme has its own set; only the currently active theme is shown
+          live.
         </p>
 
         @for (theme of highlightThemes; track theme) {
@@ -462,9 +498,7 @@
                 <span i18n="@@profile.prefs.highlightColors.lightTheme">Light theme</span>
               }
               @if (isActiveTheme(theme)) {
-                <span
-                  class="active-tag"
-                  i18n="@@profile.prefs.highlightColors.activeTag"
+                <span class="active-tag" i18n="@@profile.prefs.highlightColors.activeTag"
                   >(active)</span
                 >
               }
@@ -475,24 +509,16 @@
                 <label [attr.for]="field.inputId(theme)">
                   @switch (field.key) {
                     @case ('selectionColor') {
-                      <span i18n="@@profile.prefs.highlightColors.selection">
-                        Selection
-                      </span>
+                      <span i18n="@@profile.prefs.highlightColors.selection"> Selection </span>
                     }
                     @case ('matchingValueColor') {
-                      <span i18n="@@profile.prefs.highlightColors.matching">
-                        Matching values
-                      </span>
+                      <span i18n="@@profile.prefs.highlightColors.matching"> Matching values </span>
                     }
                     @case ('ancestorColor') {
-                      <span i18n="@@profile.prefs.highlightColors.ancestor">
-                        Ancestors
-                      </span>
+                      <span i18n="@@profile.prefs.highlightColors.ancestor"> Ancestors </span>
                     }
                     @case ('searchHighlightColor') {
-                      <span i18n="@@profile.prefs.highlightColors.search">
-                        Search highlight
-                      </span>
+                      <span i18n="@@profile.prefs.highlightColors.search"> Search highlight </span>
                     }
                   }
                 </label>
@@ -502,22 +528,14 @@
                     class="pref-color"
                     [id]="field.inputId(theme)"
                     [value]="treeHighlightColors()[theme][field.key]"
-                    (input)="
-                      onHighlightColorChange(
-                        theme,
-                        field.key,
-                        $any($event.target).value
-                      )
-                    "
+                    (input)="onHighlightColorChange(theme, field.key, $any($event.target).value)"
                   />
                   <span
                     class="pref-color-swatch"
                     [style.background]="treeHighlightColors()[theme][field.key]"
                     aria-hidden="true"
                   ></span>
-                  <code class="pref-color-hex">{{
-                    treeHighlightColors()[theme][field.key]
-                  }}</code>
+                  <code class="pref-color-hex">{{ treeHighlightColors()[theme][field.key] }}</code>
                 </span>
               </div>
             }
@@ -534,9 +552,7 @@
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-search">
-        <h3 id="prefs-search" class="group-title" i18n="@@profile.prefs.search.title">
-          Search
-        </h3>
+        <h3 id="prefs-search" class="group-title" i18n="@@profile.prefs.search.title"> Search </h3>
 
         <div class="pref-row">
           <span class="pref-label" id="pref-search-scope-label" i18n="@@profile.prefs.search.scope">
@@ -550,14 +566,23 @@
               (selectionChange)="onSearchScopeChange($event.value)"
             >
               <mat-option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</mat-option>
-              <mat-option value="values" i18n="@@profile.prefs.search.scope.values">Values</mat-option>
-              <mat-option value="both" i18n="@@profile.prefs.search.scope.both">Keys and values</mat-option>
+              <mat-option value="values" i18n="@@profile.prefs.search.scope.values"
+                >Values</mat-option
+              >
+              <mat-option value="both" i18n="@@profile.prefs.search.scope.both"
+                >Keys and values</mat-option
+              >
             </mat-select>
           </mat-form-field>
         </div>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-search-case-sensitive-label" i18n="@@profile.prefs.search.caseSensitive">Case sensitive</span>
+          <span
+            class="pref-label"
+            id="pref-search-case-sensitive-label"
+            i18n="@@profile.prefs.search.caseSensitive"
+            >Case sensitive</span
+          >
           <mat-slide-toggle
             aria-labelledby="pref-search-case-sensitive-label"
             [checked]="searchCaseSensitive()"
@@ -566,7 +591,12 @@
         </div>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-search-regex-mode-label" i18n="@@profile.prefs.search.regexMode">Regular expression mode</span>
+          <span
+            class="pref-label"
+            id="pref-search-regex-mode-label"
+            i18n="@@profile.prefs.search.regexMode"
+            >Regular expression mode</span
+          >
           <mat-slide-toggle
             aria-labelledby="pref-search-regex-mode-label"
             [checked]="searchRegexMode()"
@@ -581,7 +611,11 @@
         </h3>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-recently-viewed-label" i18n="@@profile.prefs.recentlyViewed.label">
+          <span
+            class="pref-label"
+            id="pref-recently-viewed-label"
+            i18n="@@profile.prefs.recentlyViewed.label"
+          >
             Track recently viewed blobs
           </span>
           <mat-slide-toggle
@@ -592,11 +626,16 @@
           ></mat-slide-toggle>
         </div>
         <p class="pref-help-line" i18n="@@profile.prefs.recentlyViewed.help">
-          When on, JotJSON remembers which shared blobs you have opened so you can find them again on the Recently viewed page.
+          When on, JotJSON remembers which shared blobs you have opened so you can find them again
+          on the Recently viewed page.
         </p>
 
         <div class="pref-row">
-          <span class="pref-label" id="pref-quota-strategy-label" i18n="@@profile.prefs.history.quotaStrategy">
+          <span
+            class="pref-label"
+            id="pref-quota-strategy-label"
+            i18n="@@profile.prefs.history.quotaStrategy"
+          >
             When you reach the saved blob limit
           </span>
           <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
@@ -623,8 +662,7 @@
         You are signed out
       </h2>
       <p i18n="@@profile.signedOut.body">
-        Sign in to view your profile, save persistent links, and keep history
-        across devices.
+        Sign in to view your profile, save persistent links, and keep history across devices.
       </p>
       @if (isConfigured) {
         <button type="button" mat-flat-button color="primary" (click)="onSignIn()">

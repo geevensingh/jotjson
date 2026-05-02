@@ -111,9 +111,7 @@ function validateContent(content: unknown): string {
   }
   const bytes = Buffer.byteLength(content, 'utf8');
   if (bytes > MAX_BLOB_BYTES) {
-    throw new BlobValidationError(
-      `content too large - max ${MAX_BLOB_BYTES} bytes (got ${bytes})`
-    );
+    throw new BlobValidationError(`content too large - max ${MAX_BLOB_BYTES} bytes (got ${bytes})`);
   }
   return content;
 }
@@ -127,7 +125,7 @@ function validateTitle(title: unknown): string | undefined {
   if (trimmed.length === 0) return undefined;
   if (trimmed.length > MAX_TITLE_LENGTH) {
     throw new BlobValidationError(
-      `title too long - max ${MAX_TITLE_LENGTH} characters (got ${trimmed.length})`
+      `title too long - max ${MAX_TITLE_LENGTH} characters (got ${trimmed.length})`,
     );
   }
   return trimmed;
@@ -150,7 +148,7 @@ export async function findBlobByIdOrSlug(idOrSlug: string): Promise<BlobDocument
   const { resources } = await getBlobsContainer()
     .items.query<BlobDocument>({
       query: 'SELECT * FROM c WHERE c.id = @key OR c.slug = @key',
-      parameters: [{ name: '@key', value: idOrSlug }]
+      parameters: [{ name: '@key', value: idOrSlug }],
     })
     .fetchAll();
   return resources[0] ?? null;
@@ -160,7 +158,7 @@ async function slugExists(slug: string): Promise<boolean> {
   const { resources } = await getBlobsContainer()
     .items.query<{ id: string }>({
       query: 'SELECT VALUE c.id FROM c WHERE c.slug = @slug',
-      parameters: [{ name: '@slug', value: slug }]
+      parameters: [{ name: '@slug', value: slug }],
     })
     .fetchAll();
   return resources.length > 0;
@@ -170,10 +168,7 @@ async function slugExists(slug: string): Promise<boolean> {
  * Create a new blob. Generates a unique slug by retrying on collision up to
  * MAX_SLUG_ATTEMPTS times before giving up.
  */
-export async function createBlob(
-  ownerId: string,
-  input: CreateBlobInput
-): Promise<BlobDocument> {
+export async function createBlob(ownerId: string, input: CreateBlobInput): Promise<BlobDocument> {
   if (typeof ownerId !== 'string' || ownerId.length === 0) {
     throw new BlobValidationError('ownerId is required');
   }
@@ -191,7 +186,7 @@ export async function createBlob(
   }
   if (!slug) {
     throw new SlugGenerationError(
-      `Failed to generate a unique slug after ${MAX_SLUG_ATTEMPTS} attempts`
+      `Failed to generate a unique slug after ${MAX_SLUG_ATTEMPTS} attempts`,
     );
   }
 
@@ -204,11 +199,11 @@ export async function createBlob(
     ownerId,
     isPublic,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 
-  const response: ItemResponse<BlobDocument> = await getBlobsContainer()
-    .items.create<BlobDocument>(doc);
+  const response: ItemResponse<BlobDocument> =
+    await getBlobsContainer().items.create<BlobDocument>(doc);
   return response.resource ?? doc;
 }
 
@@ -219,7 +214,7 @@ export async function createBlob(
  */
 export async function updateBlob(
   existing: BlobDocument,
-  patch: UpdateBlobPatch
+  patch: UpdateBlobPatch,
 ): Promise<BlobDocument> {
   const next: BlobDocument = { ...existing };
   if (patch.content !== undefined) {
@@ -249,10 +244,7 @@ export async function updateBlob(
  * `false` if it did not exist. Callers must have already verified ownership
  * via `findBlobByIdOrSlug` + owner check.
  */
-export async function deleteBlobById(
-  id: string,
-  ownerId: string
-): Promise<boolean> {
+export async function deleteBlobById(id: string, ownerId: string): Promise<boolean> {
   try {
     await getBlobsContainer().item(id, ownerId).delete();
     return true;
@@ -269,15 +261,12 @@ export async function deleteBlobById(
  * cost). Not paginated - callers are capped at 100 blobs per user by the
  * quota enforced on insert.
  */
-export async function listBlobsByOwner(
-  ownerId: string
-): Promise<BlobDocument[]> {
+export async function listBlobsByOwner(ownerId: string): Promise<BlobDocument[]> {
   if (typeof ownerId !== 'string' || ownerId.length === 0) return [];
   const { resources } = await getBlobsContainer()
     .items.query<BlobDocument>({
-      query:
-        'SELECT * FROM c WHERE c.ownerId = @ownerId ORDER BY c.updatedAt DESC',
-      parameters: [{ name: '@ownerId', value: ownerId }]
+      query: 'SELECT * FROM c WHERE c.ownerId = @ownerId ORDER BY c.updatedAt DESC',
+      parameters: [{ name: '@ownerId', value: ownerId }],
     })
     .fetchAll();
   return resources;

@@ -1,15 +1,6 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  OnInit,
-  inject,
-  signal
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import {
-  MatDialogModule,
-  MatDialogRef
-} from '@angular/material/dialog';
+import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import type { FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
 
@@ -143,13 +134,12 @@ type DialogState = 'loading' | 'ready' | 'error' | 'cloning';
       .status--error {
         color: var(--error-fg, #d32f2f);
       }
-    `
-  ]
+    `,
+  ],
 })
 export class ClonePresetDialogComponent implements OnInit {
-  readonly ref = inject<MatDialogRef<ClonePresetDialogComponent, ClonePresetDialogResult>>(
-    MatDialogRef
-  );
+  readonly ref =
+    inject<MatDialogRef<ClonePresetDialogComponent, ClonePresetDialogResult>>(MatDialogRef);
   private readonly ruleSets = inject(RuleSetsService);
 
   readonly presets = signal<readonly RuleSetPreset[]>([]);
@@ -162,7 +152,7 @@ export class ClonePresetDialogComponent implements OnInit {
         this.presets.set(list);
         this.state.set('ready');
       },
-      error: () => this.state.set('error')
+      error: () => this.state.set('error'),
     });
   }
 
@@ -177,7 +167,7 @@ export class ClonePresetDialogComponent implements OnInit {
       error: () => {
         this.cloneError.set(true);
         this.state.set('ready');
-      }
+      },
     });
   }
 }

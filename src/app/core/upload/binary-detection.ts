@@ -47,7 +47,10 @@ function bytes(...values: number[]): Uint8Array {
  * and non-printable-ratio tiers catch their content.
  */
 export const BINARY_MAGIC_CATALOG: readonly MagicSignature[] = [
-  { name: 'png', checks: [{ offset: 0, bytes: bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) }] },
+  {
+    name: 'png',
+    checks: [{ offset: 0, bytes: bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) }],
+  },
   { name: 'jpeg', checks: [{ offset: 0, bytes: bytes(0xff, 0xd8, 0xff) }] },
   { name: 'gif87a', checks: [{ offset: 0, bytes: bytes(0x47, 0x49, 0x46, 0x38, 0x37, 0x61) }] },
   { name: 'gif89a', checks: [{ offset: 0, bytes: bytes(0x47, 0x49, 0x46, 0x38, 0x39, 0x61) }] },
@@ -55,15 +58,15 @@ export const BINARY_MAGIC_CATALOG: readonly MagicSignature[] = [
     name: 'webp',
     checks: [
       { offset: 0, bytes: bytes(0x52, 0x49, 0x46, 0x46) },
-      { offset: 8, bytes: bytes(0x57, 0x45, 0x42, 0x50) }
-    ]
+      { offset: 8, bytes: bytes(0x57, 0x45, 0x42, 0x50) },
+    ],
   },
   {
     name: 'wav',
     checks: [
       { offset: 0, bytes: bytes(0x52, 0x49, 0x46, 0x46) },
-      { offset: 8, bytes: bytes(0x57, 0x41, 0x56, 0x45) }
-    ]
+      { offset: 8, bytes: bytes(0x57, 0x41, 0x56, 0x45) },
+    ],
   },
   { name: 'tiffLe', checks: [{ offset: 0, bytes: bytes(0x49, 0x49, 0x2a, 0x00) }] },
   { name: 'tiffBe', checks: [{ offset: 0, bytes: bytes(0x4d, 0x4d, 0x00, 0x2a) }] },
@@ -94,14 +97,31 @@ export const BINARY_MAGIC_CATALOG: readonly MagicSignature[] = [
       {
         offset: 0,
         bytes: bytes(
-          0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66,
-          0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00
-        )
-      }
-    ]
+          0x53,
+          0x51,
+          0x4c,
+          0x69,
+          0x74,
+          0x65,
+          0x20,
+          0x66,
+          0x6f,
+          0x72,
+          0x6d,
+          0x61,
+          0x74,
+          0x20,
+          0x33,
+          0x00,
+        ),
+      },
+    ],
   },
   { name: 'jvmClass', checks: [{ offset: 0, bytes: bytes(0xca, 0xfe, 0xba, 0xbe) }] },
-  { name: 'oleCfbf', checks: [{ offset: 0, bytes: bytes(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1) }] }
+  {
+    name: 'oleCfbf',
+    checks: [{ offset: 0, bytes: bytes(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1) }],
+  },
 ];
 
 function matchesAt(buffer: Uint8Array, offset: number, expected: Uint8Array): boolean {
@@ -122,12 +142,7 @@ export function matchesBinaryMagic(buffer: Uint8Array): boolean {
 }
 
 export function detectEncoding(buffer: Uint8Array): DetectedEncoding {
-  if (
-    buffer.length >= 3 &&
-    buffer[0] === 0xef &&
-    buffer[1] === 0xbb &&
-    buffer[2] === 0xbf
-  ) {
+  if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
     return 'utf-8';
   }
   if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
@@ -146,9 +161,7 @@ export function detectEncoding(buffer: Uint8Array): DetectedEncoding {
  * BOM is stripped by TextDecoder by default for both UTF-8 and
  * UTF-16, so the returned text never starts with U+FEFF.
  */
-export function decodeWithBom(
-  buffer: Uint8Array
-): { text: string; encoding: DetectedEncoding } {
+export function decodeWithBom(buffer: Uint8Array): { text: string; encoding: DetectedEncoding } {
   const encoding = detectEncoding(buffer);
   const decoder = new TextDecoder(encoding, { fatal: false });
   const text = decoder.decode(buffer);
@@ -178,7 +191,7 @@ function isNonPrintableCodePoint(codePoint: number): boolean {
 
 export function hasHighNonPrintableRatio(
   text: string,
-  threshold: number = NON_PRINTABLE_RATIO_THRESHOLD
+  threshold: number = NON_PRINTABLE_RATIO_THRESHOLD,
 ): boolean {
   let nonPrintable = 0;
   let totalCodePoints = 0;

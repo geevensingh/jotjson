@@ -41,16 +41,14 @@ describe('TitleSuggesterService', () => {
         label: 'E',
         '@type': 'F',
         description: 'G is a thing',
-        summary: 'H is a thing'
+        summary: 'H is a thing',
       });
       const result = service.suggest(inputFor(json));
       expect(result.length).toBeLessThanOrEqual(7);
     });
 
     it('orders strategies by confidence descending', () => {
-      const result = service.suggest(
-        inputFor('{"name":"alice"}', 'config.json')
-      );
+      const result = service.suggest(inputFor('{"name":"alice"}', 'config.json'));
       // filename (95) > namedField (75)
       expect(result[0]?.source).toBe('filename');
       expect(result[1]?.source).toBe('namedField');
@@ -67,12 +65,8 @@ describe('TitleSuggesterService', () => {
   describe('dedupe', () => {
     it('collapses case-insensitive duplicates and keeps the higher-confidence entry', () => {
       // filename "alice" and namedField "Alice" should collapse, keep filename.
-      const result = service.suggest(
-        inputFor('{"name":"Alice"}', 'alice.json')
-      );
-      const matching = result.filter(
-        (c) => c.value.toLowerCase().trim() === 'alice'
-      );
+      const result = service.suggest(inputFor('{"name":"Alice"}', 'alice.json'));
+      const matching = result.filter((c) => c.value.toLowerCase().trim() === 'alice');
       expect(matching.length).toBe(1);
       expect(matching[0]?.source).toBe('filename');
     });
@@ -85,7 +79,7 @@ describe('TitleSuggesterService', () => {
         '{"name":"jotjson","scripts":{}}',
         '{"openapi":"3.0.0","info":{"title":"Petstore","version":"1.0"}}',
         '{"foo":"bar","baz":1}',
-        '[{"id":1},{"id":2}]'
+        '[{"id":1},{"id":2}]',
       ];
       for (const json of cases) {
         const result = service.suggest(inputFor(json));
@@ -109,16 +103,12 @@ describe('TitleSuggesterService', () => {
       const result = service.suggest(inputFor('Untitled'));
       // 'Untitled' is unparseable as JSON, so primitive doesn't fire.
       // firstChars = "Untitled", untitled = "Untitled" -- they collide.
-      const untitledEntries = result.filter(
-        (c) => c.value.toLowerCase().trim() === 'untitled'
-      );
+      const untitledEntries = result.filter((c) => c.value.toLowerCase().trim() === 'untitled');
       expect(untitledEntries.length).toBe(1);
       expect(result.length).toBeGreaterThanOrEqual(2);
       // Synthetic floor should have appended a dateStamped or numbered.
       expect(
-        result.some(
-          (c) => c.source === 'dateStamped' || c.source === 'numberedUntitled'
-        )
+        result.some((c) => c.source === 'dateStamped' || c.source === 'numberedUntitled'),
       ).toBe(true);
     });
   });
@@ -140,9 +130,7 @@ describe('TitleSuggesterService', () => {
 
   describe('filename strategy', () => {
     it('uses filename when set, with extension stripped', () => {
-      const result = service.suggest(
-        inputFor('{}', 'nginx-deployment.json')
-      );
+      const result = service.suggest(inputFor('{}', 'nginx-deployment.json'));
       const filenameEntry = result.find((c) => c.source === 'filename');
       expect(filenameEntry?.value).toBe('nginx-deployment');
     });
@@ -153,9 +141,7 @@ describe('TitleSuggesterService', () => {
     });
 
     it('strips path components', () => {
-      const result = service.suggest(
-        inputFor('{}', 'C:\\Users\\me\\Downloads\\my-config.json')
-      );
+      const result = service.suggest(inputFor('{}', 'C:\\Users\\me\\Downloads\\my-config.json'));
       const filenameEntry = result.find((c) => c.source === 'filename');
       expect(filenameEntry?.value).toBe('my-config');
     });
@@ -163,25 +149,21 @@ describe('TitleSuggesterService', () => {
 
   describe('package.json strategy', () => {
     it('fires on filename match', () => {
-      const result = service.suggest(
-        inputFor('{"name":"foo","version":"1.0"}', 'package.json')
-      );
+      const result = service.suggest(inputFor('{"name":"foo","version":"1.0"}', 'package.json'));
       const entry = result.find((c) => c.source === 'packageJson');
       expect(entry?.value).toBe('foo@1.0');
     });
 
     it('fires when scripts marker is present', () => {
       const result = service.suggest(
-        inputFor('{"name":"jotjson","version":"0.5.0","scripts":{"build":""}}')
+        inputFor('{"name":"jotjson","version":"0.5.0","scripts":{"build":""}}'),
       );
       const entry = result.find((c) => c.source === 'packageJson');
       expect(entry?.value).toBe('jotjson@0.5.0');
     });
 
     it('does not fire on bare {name, version} without marker keys or matching filename', () => {
-      const result = service.suggest(
-        inputFor('{"name":"foo","version":"1.0"}', 'random.json')
-      );
+      const result = service.suggest(inputFor('{"name":"foo","version":"1.0"}', 'random.json'));
       expect(result.find((c) => c.source === 'packageJson')).toBeUndefined();
     });
   });
@@ -189,18 +171,14 @@ describe('TitleSuggesterService', () => {
   describe('kubernetes strategy', () => {
     it('formats kind + metadata.name', () => {
       const result = service.suggest(
-        inputFor(
-          '{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"nginx"}}'
-        )
+        inputFor('{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"nginx"}}'),
       );
       const entry = result.find((c) => c.source === 'kubernetes');
       expect(entry?.value).toBe('Deployment: nginx');
     });
 
     it('skips when metadata.name is missing', () => {
-      const result = service.suggest(
-        inputFor('{"apiVersion":"v1","kind":"Pod","metadata":{}}')
-      );
+      const result = service.suggest(inputFor('{"apiVersion":"v1","kind":"Pod","metadata":{}}'));
       expect(result.find((c) => c.source === 'kubernetes')).toBeUndefined();
     });
   });
@@ -208,9 +186,7 @@ describe('TitleSuggesterService', () => {
   describe('openapi strategy', () => {
     it('handles OpenAPI 3.x', () => {
       const result = service.suggest(
-        inputFor(
-          '{"openapi":"3.0.0","info":{"title":"Petstore","version":"1.0"}}'
-        )
+        inputFor('{"openapi":"3.0.0","info":{"title":"Petstore","version":"1.0"}}'),
       );
       const entry = result.find((c) => c.source === 'openapi');
       expect(entry?.value).toBe('Petstore v1.0');
@@ -218,16 +194,14 @@ describe('TitleSuggesterService', () => {
 
     it('handles Swagger 2.0', () => {
       const result = service.suggest(
-        inputFor('{"swagger":"2.0","info":{"title":"My API","version":"v1"}}')
+        inputFor('{"swagger":"2.0","info":{"title":"My API","version":"v1"}}'),
       );
       const entry = result.find((c) => c.source === 'openapi');
       expect(entry?.value).toBe('My API vv1');
     });
 
     it('skips when info.title is missing', () => {
-      const result = service.suggest(
-        inputFor('{"openapi":"3.0.0","info":{"version":"1.0"}}')
-      );
+      const result = service.suggest(inputFor('{"openapi":"3.0.0","info":{"version":"1.0"}}'));
       expect(result.find((c) => c.source === 'openapi')).toBeUndefined();
     });
   });
@@ -235,7 +209,7 @@ describe('TitleSuggesterService', () => {
   describe('selfUrl strategy', () => {
     it('handles selfUrl camelCase', () => {
       const result = service.suggest(
-        inputFor('{"selfUrl":"https://api.example.com/v1/users/alice"}')
+        inputFor('{"selfUrl":"https://api.example.com/v1/users/alice"}'),
       );
       const entry = result.find((c) => c.source === 'selfUrl');
       expect(entry?.value).toBe('alice');
@@ -243,7 +217,7 @@ describe('TitleSuggesterService', () => {
 
     it('handles self_url snake_case', () => {
       const result = service.suggest(
-        inputFor('{"self_url":"https://api.example.com/v1/orders/123"}')
+        inputFor('{"self_url":"https://api.example.com/v1/orders/123"}'),
       );
       const entry = result.find((c) => c.source === 'selfUrl');
       expect(entry?.value).toBe('123');
@@ -251,9 +225,7 @@ describe('TitleSuggesterService', () => {
 
     it('handles HAL _links.self.href', () => {
       const result = service.suggest(
-        inputFor(
-          '{"_links":{"self":{"href":"https://api.example.com/v1/users/bob"}}}'
-        )
+        inputFor('{"_links":{"self":{"href":"https://api.example.com/v1/users/bob"}}}'),
       );
       const entry = result.find((c) => c.source === 'selfUrl');
       expect(entry?.value).toBe('bob');
@@ -261,16 +233,14 @@ describe('TitleSuggesterService', () => {
 
     it('strips trailing .json extension', () => {
       const result = service.suggest(
-        inputFor('{"selfUrl":"https://api.example.com/v1/users/alice.json"}')
+        inputFor('{"selfUrl":"https://api.example.com/v1/users/alice.json"}'),
       );
       const entry = result.find((c) => c.source === 'selfUrl');
       expect(entry?.value).toBe('alice');
     });
 
     it('handles trailing slash', () => {
-      const result = service.suggest(
-        inputFor('{"selfUrl":"https://api.example.com/v1/users/"}')
-      );
+      const result = service.suggest(inputFor('{"selfUrl":"https://api.example.com/v1/users/"}'));
       const entry = result.find((c) => c.source === 'selfUrl');
       expect(entry?.value).toBe('users');
     });
@@ -286,17 +256,15 @@ describe('TitleSuggesterService', () => {
     });
 
     it('skips URLs without a usable path', () => {
-      const result = service.suggest(
-        inputFor('{"selfUrl":"https://example.com/"}')
-      );
+      const result = service.suggest(inputFor('{"selfUrl":"https://example.com/"}'));
       expect(result.find((c) => c.source === 'selfUrl')).toBeUndefined();
     });
 
     it('prefers selfUrl over _links.self.href when both present', () => {
       const result = service.suggest(
         inputFor(
-          '{"selfUrl":"https://api.example.com/v1/a/direct","_links":{"self":{"href":"https://api.example.com/v1/a/hal"}}}'
-        )
+          '{"selfUrl":"https://api.example.com/v1/a/direct","_links":{"self":{"href":"https://api.example.com/v1/a/hal"}}}',
+        ),
       );
       const entry = result.find((c) => c.source === 'selfUrl');
       expect(entry?.value).toBe('direct');
@@ -305,33 +273,25 @@ describe('TitleSuggesterService', () => {
 
   describe('namedField strategy', () => {
     it('priority chain: name beats title', () => {
-      const result = service.suggest(
-        inputFor('{"name":"X","title":"Y"}')
-      );
+      const result = service.suggest(inputFor('{"name":"X","title":"Y"}'));
       const entry = result.find((c) => c.source === 'namedField');
       expect(entry?.value).toBe('X');
     });
 
     it('uses subject when name/title/displayName absent', () => {
-      const result = service.suggest(
-        inputFor('{"subject":"Re: meeting notes"}')
-      );
+      const result = service.suggest(inputFor('{"subject":"Re: meeting notes"}'));
       const entry = result.find((c) => c.source === 'namedField');
       expect(entry?.value).toBe('Re: meeting notes');
     });
 
     it('uses label when higher-priority absent', () => {
-      const result = service.suggest(
-        inputFor('{"label":"Production","id":"abc"}')
-      );
+      const result = service.suggest(inputFor('{"label":"Production","id":"abc"}'));
       const entry = result.find((c) => c.source === 'namedField');
       expect(entry?.value).toBe('Production');
     });
 
     it('rejects UUID-shaped id', () => {
-      const result = service.suggest(
-        inputFor('{"id":"550e8400-e29b-41d4-a716-446655440000"}')
-      );
+      const result = service.suggest(inputFor('{"id":"550e8400-e29b-41d4-a716-446655440000"}'));
       expect(result.find((c) => c.source === 'namedField')).toBeUndefined();
     });
 
@@ -341,9 +301,7 @@ describe('TitleSuggesterService', () => {
     });
 
     it('accepts human-readable slug', () => {
-      const result = service.suggest(
-        inputFor('{"slug":"my-cool-blob"}')
-      );
+      const result = service.suggest(inputFor('{"slug":"my-cool-blob"}'));
       const entry = result.find((c) => c.source === 'namedField');
       expect(entry?.value).toBe('my-cool-blob');
     });
@@ -351,9 +309,7 @@ describe('TitleSuggesterService', () => {
 
   describe('typeField strategy', () => {
     it('reads @type', () => {
-      const result = service.suggest(
-        inputFor('{"@type":"Person","name":"Alice"}')
-      );
+      const result = service.suggest(inputFor('{"@type":"Person","name":"Alice"}'));
       // namedField wins display, but typeField should also fire.
       const entry = result.find((c) => c.source === 'typeField');
       expect(entry?.value).toBe('Person');
@@ -372,9 +328,7 @@ describe('TitleSuggesterService', () => {
     });
 
     it('priority: @type beats __typename', () => {
-      const result = service.suggest(
-        inputFor('{"@type":"A","__typename":"B"}')
-      );
+      const result = service.suggest(inputFor('{"@type":"A","__typename":"B"}'));
       const entry = result.find((c) => c.source === 'typeField');
       expect(entry?.value).toBe('A');
     });
@@ -387,18 +341,14 @@ describe('TitleSuggesterService', () => {
 
   describe('descriptionFallback strategy', () => {
     it('takes first sentence from description', () => {
-      const result = service.suggest(
-        inputFor('{"description":"A short blurb. Second sentence."}')
-      );
+      const result = service.suggest(inputFor('{"description":"A short blurb. Second sentence."}'));
       const entry = result.find((c) => c.source === 'descriptionFallback');
       expect(entry?.value).toBe('A short blurb');
     });
 
     it('truncates long single sentences', () => {
       const long = 'word '.repeat(50);
-      const result = service.suggest(
-        inputFor(JSON.stringify({ description: long }))
-      );
+      const result = service.suggest(inputFor(JSON.stringify({ description: long })));
       const entry = result.find((c) => c.source === 'descriptionFallback');
       expect(entry?.value.endsWith('...')).toBe(true);
       expect(entry?.value.length).toBeLessThanOrEqual(70);
@@ -411,18 +361,14 @@ describe('TitleSuggesterService', () => {
     });
 
     it('prefers description over summary when both present', () => {
-      const result = service.suggest(
-        inputFor('{"description":"a","summary":"b"}')
-      );
+      const result = service.suggest(inputFor('{"description":"a","summary":"b"}'));
       const entry = result.find((c) => c.source === 'descriptionFallback');
       expect(entry?.value).toBe('a');
     });
 
     it('skips when both absent', () => {
       const result = service.suggest(inputFor('{"foo":"bar"}'));
-      expect(
-        result.find((c) => c.source === 'descriptionFallback')
-      ).toBeUndefined();
+      expect(result.find((c) => c.source === 'descriptionFallback')).toBeUndefined();
     });
   });
 

@@ -19,18 +19,16 @@ export const primitiveStrategy: SuggestionStrategy = (input) => {
     return {
       value: $localize`:@@toolbar.titleSuggestion.shape.numberValue:Number ${v}:value:`,
       source: 'primitive',
-      confidence: 25
+      confidence: 25,
     };
   }
   if (typeof v === 'string') {
     const preview =
-      v.length > FIRST_CHARS_PREVIEW_LEN
-        ? `${v.slice(0, FIRST_CHARS_PREVIEW_LEN)}...`
-        : v;
+      v.length > FIRST_CHARS_PREVIEW_LEN ? `${v.slice(0, FIRST_CHARS_PREVIEW_LEN)}...` : v;
     return {
       value: $localize`:@@toolbar.titleSuggestion.shape.stringValue:String: ${preview}:value:`,
       source: 'primitive',
-      confidence: 25
+      confidence: 25,
     };
   }
   if (typeof v === 'boolean') {
@@ -39,14 +37,14 @@ export const primitiveStrategy: SuggestionStrategy = (input) => {
         ? $localize`:@@toolbar.titleSuggestion.shape.booleanTrue:true`
         : $localize`:@@toolbar.titleSuggestion.shape.booleanFalse:false`,
       source: 'primitive',
-      confidence: 25
+      confidence: 25,
     };
   }
   if (v === null) {
     return {
       value: $localize`:@@toolbar.titleSuggestion.shape.nullValue:null`,
       source: 'primitive',
-      confidence: 25
+      confidence: 25,
     };
   }
   return null;

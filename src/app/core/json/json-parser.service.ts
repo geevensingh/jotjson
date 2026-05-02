@@ -6,7 +6,7 @@ import {
   Node as JsoncNode,
   getLocation,
   getNodePath,
-  visit
+  visit,
 } from 'jsonc-parser';
 import { bucketBytes } from '../telemetry/buckets';
 import { isColdAndMark } from '../telemetry/cold-flag';
@@ -77,7 +77,7 @@ export class JsonParserService {
         ast: undefined,
         errors: [],
         empty: true,
-        commentsByPath: EMPTY_COMMENT_MAP
+        commentsByPath: EMPTY_COMMENT_MAP,
       };
     }
 
@@ -92,12 +92,10 @@ export class JsonParserService {
     const rawErrors: ParseError[] = [];
     const ast = parseTree(stripped, rawErrors, {
       allowTrailingComma: true,
-      disallowComments: false
+      disallowComments: false,
     });
 
-    const errors = rawErrors.map((parseError) =>
-      this.toError(parseError, stripped)
-    );
+    const errors = rawErrors.map((parseError) => this.toError(parseError, stripped));
     const value = ast ? this.nodeToValue(ast) : undefined;
     const commentsByPath = this.harvestComments(stripped);
 
@@ -106,7 +104,7 @@ export class JsonParserService {
       ast,
       errors,
       empty: false,
-      commentsByPath
+      commentsByPath,
     };
     const timeMs = performance.now() - start;
     if (timeMs > 50) {
@@ -115,9 +113,9 @@ export class JsonParserService {
         'parse.slow',
         {
           cold: isColdAndMark('parse.slow'),
-          sizeBytesBucket: bucketBytes(sizeBytes)
+          sizeBytesBucket: bucketBytes(sizeBytes),
         },
-        { timeMs, sizeBytes }
+        { timeMs, sizeBytes },
       );
     }
     return result;
@@ -175,10 +173,7 @@ export class JsonParserService {
    * the equivalent in-tree formatter) so the leading `$` invariant
    * holds.
    */
-  formatPathForClipboard(
-    canonical: string,
-    mode: 'jsonpath' | 'none' | 'root' | 'data'
-  ): string {
+  formatPathForClipboard(canonical: string, mode: 'jsonpath' | 'none' | 'root' | 'data'): string {
     switch (mode) {
       case 'jsonpath':
         return canonical;
@@ -232,11 +227,7 @@ export class JsonParserService {
 
     // Strategy 1 (quoted): the text is itself a JSON string literal like
     // '"{\"a\":1}"'. JSON.parse extracts the inner string.
-    if (
-      trimmed.length >= 2 &&
-      trimmed.startsWith('"') &&
-      trimmed.endsWith('"')
-    ) {
+    if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
       try {
         const inner = JSON.parse(trimmed) as unknown;
         if (typeof inner === 'string') candidates.push(inner);
@@ -297,7 +288,7 @@ export class JsonParserService {
     const errors: ParseError[] = [];
     parseTree(text, errors, {
       allowTrailingComma: true,
-      disallowComments: false
+      disallowComments: false,
     });
     return errors.length === 0;
   }
@@ -309,7 +300,7 @@ export class JsonParserService {
       offset: parseError.offset,
       length: parseError.length,
       line,
-      column
+      column,
     };
   }
 
@@ -368,9 +359,7 @@ export class JsonParserService {
    * substrings appearing inside string literals) still cost only one
    * extra visit pass with no comment callbacks.
    */
-  private harvestComments(
-    text: string
-  ): ReadonlyMap<string, CommentBundle> {
+  private harvestComments(text: string): ReadonlyMap<string, CommentBundle> {
     if (!/\/\/|\/\*/.test(text)) return EMPTY_COMMENT_MAP;
 
     const map = new Map<string, CommentBundle>();
@@ -399,9 +388,7 @@ export class JsonParserService {
       pendingLeading.length = 0;
       const existing = map.get(path);
       if (existing) {
-        existing.leading = existing.leading
-          ? existing.leading + '\n' + merged
-          : merged;
+        existing.leading = existing.leading ? existing.leading + '\n' + merged : merged;
       } else {
         map.set(path, { leading: merged });
       }
@@ -410,9 +397,7 @@ export class JsonParserService {
     const appendTrailing = (path: string, body: string): void => {
       const existing = map.get(path);
       if (existing) {
-        existing.trailing = existing.trailing
-          ? existing.trailing + '\n' + body
-          : body;
+        existing.trailing = existing.trailing ? existing.trailing + '\n' + body : body;
       } else {
         map.set(path, { trailing: body });
       }
@@ -421,9 +406,7 @@ export class JsonParserService {
     const appendCloseLeading = (path: string, body: string): void => {
       const existing = map.get(path);
       if (existing) {
-        existing.closeLeading = existing.closeLeading
-          ? existing.closeLeading + '\n' + body
-          : body;
+        existing.closeLeading = existing.closeLeading ? existing.closeLeading + '\n' + body : body;
       } else {
         map.set(path, { closeLeading: body });
       }
@@ -445,21 +428,13 @@ export class JsonParserService {
       closeJustSeenPath = null;
     };
 
-    const onValueComplete = (
-      path: string,
-      endOffset: number,
-      endLine: number
-    ): void => {
+    const onValueComplete = (path: string, endOffset: number, endLine: number): void => {
       lastValuePath = path;
       lastValueEndOffset = endOffset;
       lastValueEndLine = endLine;
     };
 
-    const onContainerEnd = (
-      offset: number,
-      length: number,
-      startLine: number
-    ): void => {
+    const onContainerEnd = (offset: number, length: number, startLine: number): void => {
       const path = containerPathStack.pop();
       if (path === undefined) return;
       // Rule 4: comments queued INSIDE this container with no following
@@ -485,11 +460,7 @@ export class JsonParserService {
     // only. Condition (d) disambiguates `"foo": { /* a */ "bar": 1 }`
     // (leading on bar) from `"foo": { // a\n  "bar": 1\n}` (open-row
     // trailing on foo).
-    const isOpenRowTrailing = (
-      offset: number,
-      length: number,
-      startLine: number
-    ): boolean => {
+    const isOpenRowTrailing = (offset: number, length: number, startLine: number): boolean => {
       if (lastContainerOpenPath === null) return false;
       if (startLine !== lastContainerOpenLine) return false;
       if (offset < lastContainerOpenEndOffset) return false;
@@ -528,14 +499,7 @@ export class JsonParserService {
           lastContainerOpenLine = startLine;
         },
         onArrayEnd: onContainerEnd,
-        onLiteralValue: (
-          _value,
-          offset,
-          length,
-          startLine,
-          _sc,
-          pathSupplier
-        ) => {
+        onLiteralValue: (_value, offset, length, startLine, _sc, pathSupplier) => {
           const path = this.pathToString([...pathSupplier()]);
           onValueStart(path);
           onValueComplete(path, offset + length, startLine);
@@ -583,9 +547,9 @@ export class JsonParserService {
           // arrives, `onContainerEnd` drains this queue as the
           // container's close-row trailing (rule 4).
           pendingLeading.push(body);
-        }
+        },
       },
-      { disallowComments: false, allowTrailingComma: true }
+      { disallowComments: false, allowTrailingComma: true },
     );
 
     return map;

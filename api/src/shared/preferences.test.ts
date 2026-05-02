@@ -3,23 +3,21 @@ import {
   normalizePreferences,
   normalizeStoredPreferences,
   PreferenceValidationError,
-  UserPreferences
+  UserPreferences,
 } from './preferences';
 
 function valid(): unknown {
   return structuredClone(DEFAULT_PREFERENCES);
 }
 
-function dateAnnotationUnits(
-  enabled: boolean
-): UserPreferences['treeDateAnnotationUnits'] {
+function dateAnnotationUnits(enabled: boolean): UserPreferences['treeDateAnnotationUnits'] {
   return {
     year: enabled,
     month: enabled,
     day: enabled,
     hour: enabled,
     minute: enabled,
-    second: enabled
+    second: enabled,
   };
 }
 
@@ -30,7 +28,7 @@ function mixedDateAnnotationUnits(): UserPreferences['treeDateAnnotationUnits'] 
     day: true,
     hour: false,
     minute: true,
-    second: false
+    second: false,
   };
 }
 
@@ -102,9 +100,7 @@ describe('normalizePreferences', () => {
   it('rejects a non-boolean seenClipboardBanner', () => {
     const bad = valid() as Record<string, unknown>;
     bad['seenClipboardBanner'] = 'nope';
-    expect(() => normalizePreferences(bad)).toThrow(
-      /seenClipboardBanner must be a boolean/
-    );
+    expect(() => normalizePreferences(bad)).toThrow(/seenClipboardBanner must be a boolean/);
   });
 
   it('round-trips seenClipboardBanner=true', () => {
@@ -116,9 +112,7 @@ describe('normalizePreferences', () => {
   it('rejects a non-boolean treeEditorSelectionSync', () => {
     const bad = valid() as Record<string, unknown>;
     bad['treeEditorSelectionSync'] = 'yes';
-    expect(() => normalizePreferences(bad)).toThrow(
-      /treeEditorSelectionSync must be a boolean/
-    );
+    expect(() => normalizePreferences(bad)).toThrow(/treeEditorSelectionSync must be a boolean/);
   });
 
   it('round-trips treeEditorSelectionSync=false', () => {
@@ -136,19 +130,17 @@ describe('normalizePreferences', () => {
   it('rejects treeDateAnnotationUnits that is not an object', () => {
     const bad = valid() as Record<string, unknown>;
     bad['treeDateAnnotationUnits'] = 'all';
-    expect(() => normalizePreferences(bad)).toThrow(
-      /treeDateAnnotationUnits must be an object/
-    );
+    expect(() => normalizePreferences(bad)).toThrow(/treeDateAnnotationUnits must be an object/);
   });
 
   it('rejects unknown treeDateAnnotationUnits fields', () => {
     const bad = valid() as Record<string, unknown>;
     bad['treeDateAnnotationUnits'] = {
       ...dateAnnotationUnits(true),
-      week: true
+      week: true,
     };
     expect(() => normalizePreferences(bad)).toThrow(
-      /treeDateAnnotationUnits has unknown field "week"/
+      /treeDateAnnotationUnits has unknown field "week"/,
     );
   });
 
@@ -156,10 +148,10 @@ describe('normalizePreferences', () => {
     const bad = valid() as Record<string, unknown>;
     bad['treeDateAnnotationUnits'] = {
       ...dateAnnotationUnits(true),
-      month: 'yes'
+      month: 'yes',
     };
     expect(() => normalizePreferences(bad)).toThrow(
-      /treeDateAnnotationUnits.month must be a boolean/
+      /treeDateAnnotationUnits.month must be a boolean/,
     );
   });
 
@@ -170,10 +162,10 @@ describe('normalizePreferences', () => {
       month: true,
       day: true,
       hour: true,
-      minute: true
+      minute: true,
     };
     expect(() => normalizePreferences(bad)).toThrow(
-      /treeDateAnnotationUnits.second must be a boolean/
+      /treeDateAnnotationUnits.second must be a boolean/,
     );
   });
 
@@ -181,7 +173,7 @@ describe('normalizePreferences', () => {
     const bad = valid() as Record<string, unknown>;
     bad['treeDateAnnotationFriendlyForms'] = 'yes';
     expect(() => normalizePreferences(bad)).toThrow(
-      /treeDateAnnotationFriendlyForms must be a boolean/
+      /treeDateAnnotationFriendlyForms must be a boolean/,
     );
   });
 
@@ -235,9 +227,7 @@ describe('normalizePreferences', () => {
   it('rejects a non-boolean treeAutoFitToWindow', () => {
     const bad = valid() as Record<string, unknown>;
     bad['treeAutoFitToWindow'] = 'yes';
-    expect(() => normalizePreferences(bad)).toThrow(
-      /treeAutoFitToWindow must be a boolean/
-    );
+    expect(() => normalizePreferences(bad)).toThrow(/treeAutoFitToWindow must be a boolean/);
   });
 
   it('round-trips treeAutoFitToWindow=true', () => {
@@ -264,7 +254,7 @@ describe('normalizePreferences', () => {
       selectionColor: 'red',
       matchingValueColor: '#fff',
       ancestorColor: '#000000',
-      searchHighlightColor: '#123456'
+      searchHighlightColor: '#123456',
     };
     expect(() => normalizePreferences(bad)).toThrow(/selectionColor/);
   });
@@ -275,7 +265,7 @@ describe('normalizePreferences', () => {
       selectionColor: '#AABBCC',
       matchingValueColor: '#DEADBE',
       ancestorColor: '#012345',
-      searchHighlightColor: '#6A4C00'
+      searchHighlightColor: '#6A4C00',
     };
     const out = normalizePreferences(input);
     expect(out.treeHighlightColors.dark.selectionColor).toBe('#aabbcc');
@@ -285,7 +275,7 @@ describe('normalizePreferences', () => {
     const bad = valid() as Record<string, unknown>;
     (bad['treeHighlightColors'] as Record<string, Record<string, unknown>>)['dark'] = {
       ...(bad['treeHighlightColors'] as Record<string, Record<string, unknown>>)['dark'],
-      extraColor: '#ffffff'
+      extraColor: '#ffffff',
     };
     expect(() => normalizePreferences(bad)).toThrow(/extraColor/);
   });
@@ -301,7 +291,7 @@ describe('normalizePreferences', () => {
   it('requires both dark and light color sets', () => {
     const bad = valid() as Record<string, unknown>;
     (bad['treeHighlightColors'] as Record<string, unknown>) = {
-      dark: (bad['treeHighlightColors'] as Record<string, unknown>)['dark']
+      dark: (bad['treeHighlightColors'] as Record<string, unknown>)['dark'],
     };
     expect(() => normalizePreferences(bad)).toThrow();
   });
@@ -312,9 +302,9 @@ describe('normalizePreferences', () => {
       const bad = valid() as Record<string, unknown>;
       bad[key] = 'whatever';
       expect(() => normalizePreferences(bad)).toThrow(
-        new RegExp(`Unknown preference key "${key}"`)
+        new RegExp(`Unknown preference key "${key}"`),
       );
-    }
+    },
   );
 
   it('defaults activeRuleSetIds to [] when missing on the wire (stale-client tolerance)', () => {
@@ -440,20 +430,14 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('defaults missing treeEditorSelectionSync to true', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     delete stored['treeEditorSelectionSync'];
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
     expect(result.treeEditorSelectionSync).toBe(true);
   });
 
   it('defaults non-boolean treeEditorSelectionSync (null) to true', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     stored['treeEditorSelectionSync'] = null;
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
     expect(result.treeEditorSelectionSync).toBe(true);
@@ -474,10 +458,7 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('defaults missing date annotation preferences', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     delete stored['treeDateAnnotationUnits'];
     delete stored['treeDateAnnotationFriendlyForms'];
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
@@ -486,20 +467,14 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('defaults missing treeShowComments to true', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     delete stored['treeShowComments'];
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
     expect(result.treeShowComments).toBe(true);
   });
 
   it('defaults non-boolean treeShowComments (null) to true', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     stored['treeShowComments'] = null;
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
     expect(result.treeShowComments).toBe(true);
@@ -513,10 +488,7 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('defaults malformed date annotation preferences', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     stored['treeDateAnnotationUnits'] = 'all';
     stored['treeDateAnnotationFriendlyForms'] = 'yes';
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
@@ -525,14 +497,11 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('backfills partial treeDateAnnotationUnits per key', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     stored['treeDateAnnotationUnits'] = {
       year: false,
       month: 'no',
-      day: false
+      day: false,
     };
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
     expect(result.treeDateAnnotationUnits).toEqual({
@@ -541,7 +510,7 @@ describe('normalizeStoredPreferences', () => {
       day: false,
       hour: true,
       minute: true,
-      second: true
+      second: true,
     });
   });
 
@@ -556,10 +525,7 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('folds legacy defaultRuleSetIds (array) into activeRuleSetIds', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     delete stored['activeRuleSetIds'];
     stored['defaultRuleSetIds'] = ['rs-1', 'rs-2'];
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
@@ -568,10 +534,7 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('folds ancient defaultRuleSetId (singular) into activeRuleSetIds', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     delete stored['activeRuleSetIds'];
     stored['defaultRuleSetId'] = 'rs-1';
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
@@ -580,10 +543,7 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('canonical activeRuleSetIds wins over legacy defaultRuleSetIds when both are present', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     stored['activeRuleSetIds'] = ['canonical-1'];
     stored['defaultRuleSetIds'] = ['legacy-1', 'legacy-2'];
     stored['defaultRuleSetId'] = 'ancient-1';
@@ -594,10 +554,7 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('strips legacy keys even when activeRuleSetIds is canonical', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     stored['activeRuleSetIds'] = ['rs-1'];
     stored['defaultRuleSetIds'] = ['stale'];
     stored['defaultRuleSetId'] = 'stale-singular';
@@ -608,10 +565,7 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('combines both legacy shapes when canonical is missing (singular leads, then array)', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     delete stored['activeRuleSetIds'];
     stored['defaultRuleSetIds'] = ['rs-2'];
     stored['defaultRuleSetId'] = 'rs-1';
@@ -620,10 +574,7 @@ describe('normalizeStoredPreferences', () => {
   });
 
   it('does not duplicate when singular legacy id already appears in legacy array', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     delete stored['activeRuleSetIds'];
     stored['defaultRuleSetIds'] = ['rs-1', 'rs-2'];
     stored['defaultRuleSetId'] = 'rs-1';

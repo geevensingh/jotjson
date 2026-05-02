@@ -10,7 +10,7 @@ describe('ClipboardCopyService', () => {
   function setClipboard(value: { writeText?: jasmine.Spy } | undefined): void {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
-      value
+      value,
     });
   }
 
@@ -18,10 +18,7 @@ describe('ClipboardCopyService', () => {
     originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     snackOpen = jasmine.createSpy('open');
     TestBed.configureTestingModule({
-      providers: [
-        ClipboardCopyService,
-        { provide: MatSnackBar, useValue: { open: snackOpen } }
-      ]
+      providers: [ClipboardCopyService, { provide: MatSnackBar, useValue: { open: snackOpen } }],
     });
     service = TestBed.inject(ClipboardCopyService);
   });
@@ -40,7 +37,7 @@ describe('ClipboardCopyService', () => {
   const messages = {
     success: 'Copied!',
     failed: 'Could not copy.',
-    unsupported: 'Copy is not supported in this browser.'
+    unsupported: 'Copy is not supported in this browser.',
   };
 
   it('opens the unsupported snackbar and resolves false when navigator.clipboard is missing', fakeAsync(() => {
@@ -79,9 +76,7 @@ describe('ClipboardCopyService', () => {
   }));
 
   it('opens the failure snackbar and resolves false when writeText rejects', fakeAsync(() => {
-    const writeText = jasmine
-      .createSpy('writeText')
-      .and.rejectWith(new Error('denied'));
+    const writeText = jasmine.createSpy('writeText').and.rejectWith(new Error('denied'));
     setClipboard({ writeText });
     let result: boolean | undefined;
     void service.copyWithToast('hello', messages).then((r) => (result = r));
@@ -98,7 +93,7 @@ describe('ClipboardCopyService', () => {
     void service.copyWithToast('hello', messages, {
       successDurationMs: 1234,
       failedDurationMs: 5678,
-      unsupportedDurationMs: 9012
+      unsupportedDurationMs: 9012,
     });
     flushMicrotasks();
     expect(snackOpen.calls.mostRecent().args[2]).toEqual({ duration: 1234 });

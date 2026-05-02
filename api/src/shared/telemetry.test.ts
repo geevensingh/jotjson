@@ -2,7 +2,7 @@ import { TelemetryClient } from 'applicationinsights';
 import {
   __resetTelemetryInitForTesting,
   __setTelemetryClientForTesting,
-  trackEvent
+  trackEvent,
 } from './telemetry';
 
 function makeMockClient(): {
@@ -11,12 +11,12 @@ function makeMockClient(): {
 } {
   const trackEventMock = jest.fn();
   const partialClient: Partial<TelemetryClient> = {
-    trackEvent: trackEventMock
+    trackEvent: trackEventMock,
   };
 
   return {
     client: partialClient as TelemetryClient,
-    trackEventMock
+    trackEventMock,
   };
 }
 
@@ -48,14 +48,12 @@ describe('shared/telemetry Application Insights events', () => {
     expect(trackEventMock).toHaveBeenCalledWith({
       name: 'test.event',
       properties: { foo: 'bar' },
-      measurements: { count: 1 }
+      measurements: { count: 1 },
     });
   });
 
   it('warns once when the connection string is missing', () => {
-    const warnSpy = jest
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     trackEvent('test.event.one');
     trackEvent('test.event.two');
@@ -65,9 +63,7 @@ describe('shared/telemetry Application Insights events', () => {
   });
 
   it('re-arms the missing connection string warning after reset', () => {
-    const warnSpy = jest
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     trackEvent('test.event.beforeReset');
     __resetTelemetryInitForTesting();

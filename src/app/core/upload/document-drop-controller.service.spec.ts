@@ -19,13 +19,13 @@ function makeDragEvent(type: string, init: DragEventInit = {}): DragEvent {
     value: {
       types,
       files,
-      items: files.map(() => ({ kind: 'file' }))
-    }
+      items: files.map(() => ({ kind: 'file' })),
+    },
   });
   if (init.relatedTarget !== undefined) {
     Object.defineProperty(event, 'relatedTarget', {
       configurable: true,
-      value: init.relatedTarget
+      value: init.relatedTarget,
     });
   }
   return event;
@@ -47,7 +47,7 @@ describe('DocumentDropController', () => {
     actionSubject = new Subject<void>();
     snackRef = jasmine.createSpyObj<MatSnackBarRef<TextOnlySnackBar>>('SnackBarRef', [
       'onAction',
-      'dismiss'
+      'dismiss',
     ]);
     snackRef.onAction.and.returnValue(actionSubject.asObservable());
     snackOpen = jasmine.createSpy('snack.open').and.returnValue(snackRef);
@@ -58,8 +58,8 @@ describe('DocumentDropController', () => {
       providers: [
         DocumentDropController,
         { provide: MatSnackBar, useValue: { open: snackOpen } },
-        { provide: Router, useValue: { navigateByUrl } }
-      ]
+        { provide: Router, useValue: { navigateByUrl } },
+      ],
     });
     controller = TestBed.inject(DocumentDropController);
   });
@@ -139,9 +139,7 @@ describe('DocumentDropController', () => {
     document.dispatchEvent(makeDragEvent('dragenter'));
     expect(controller.dropActive()).toBeTrue();
 
-    document.dispatchEvent(
-      makeDragEvent('dragleave', { relatedTarget: document.body })
-    );
+    document.dispatchEvent(makeDragEvent('dragleave', { relatedTarget: document.body }));
     expect(controller.dropActive()).toBeTrue();
   });
 
@@ -167,7 +165,7 @@ describe('DocumentDropController', () => {
 
     Object.defineProperty(Document.prototype, 'hidden', {
       configurable: true,
-      get: () => true
+      get: () => true,
     });
     document.dispatchEvent(new Event('visibilitychange'));
     expect(controller.dropActive()).toBeFalse();

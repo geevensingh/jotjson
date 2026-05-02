@@ -35,9 +35,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     switchMap((token) => {
       if (!token) return next(req);
       const authed = req.clone({
-        setHeaders: { 'X-Jotjson-Authorization': `Bearer ${token}` }
+        setHeaders: { 'X-Jotjson-Authorization': `Bearer ${token}` },
       });
       return next(authed);
-    })
+    }),
   );
 };

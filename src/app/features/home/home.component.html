@@ -38,10 +38,13 @@
     ></jj-toolbar>
   </jj-app-header>
 
-  <div class="split"
+  <div
+    class="split"
     [class.editor-only]="paneVisibility() === 'editor-only'"
     [class.tree-only]="paneVisibility() === 'tree-only'"
-    [style]="splitStyle()" #splitHost>
+    [style]="splitStyle()"
+    #splitHost
+  >
     <section class="pane pane-editor" aria-label="JSON input">
       <jj-clipboard-banner></jj-clipboard-banner>
       <jotjson-extract-json-banner

@@ -2,10 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import type { JsonParseError } from '../../../core/json/json-parser.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
-import {
-  installMinimalMonacoStub,
-  restoreMonacoStub
-} from '../../../../testing/monaco.testing';
+import { installMinimalMonacoStub, restoreMonacoStub } from '../../../../testing/monaco.testing';
 import { JsonEditorComponent } from './json-editor.component';
 import { __resetMonacoLoaderForTesting } from './monaco-loader';
 
@@ -58,11 +55,9 @@ interface FakeMonaco {
     selectionStartLineNumber: number,
     selectionStartColumn: number,
     positionLineNumber: number,
-    positionColumn: number
+    positionColumn: number,
   ) => FakeSelection;
-  __selectionConstructorCalls: Array<
-    [number, number, number, number]
-  >;
+  __selectionConstructorCalls: Array<[number, number, number, number]>;
 }
 
 interface FakeResizeObserver {
@@ -72,9 +67,7 @@ interface FakeResizeObserver {
 }
 
 interface MonacoRequireStub {
-  config: jasmine.Spy<(
-    configuration: { paths: Record<string, string> }
-  ) => void>;
+  config: jasmine.Spy<(configuration: { paths: Record<string, string> }) => void>;
   (modules: string[], onReady: () => void): void;
 }
 
@@ -101,8 +94,8 @@ function makeFakeEditor(initial: string): FakeEditor {
     getOffsetAt: jasmine
       .createSpy('getOffsetAt')
       .and.callFake((position: { lineNumber: number; column: number }) =>
-        toOffset(position.lineNumber, position.column)
-      )
+        toOffset(position.lineNumber, position.column),
+      ),
   };
   return {
     getValue: jasmine.createSpy('getValue').and.callFake(() => current),
@@ -111,13 +104,13 @@ function makeFakeEditor(initial: string): FakeEditor {
     }),
     getModel: jasmine.createSpy('getModel').and.returnValue(model),
     onDidChangeModelContent: jasmine.createSpy('onDidChangeModelContent').and.returnValue({
-      dispose: () => undefined
+      dispose: () => undefined,
     }),
     onDidChangeCursorPosition: jasmine.createSpy('onDidChangeCursorPosition').and.returnValue({
-      dispose: () => undefined
+      dispose: () => undefined,
     }),
     onDidPaste: jasmine.createSpy('onDidPaste').and.returnValue({
-      dispose: () => undefined
+      dispose: () => undefined,
     }),
     updateOptions: jasmine.createSpy('updateOptions'),
     dispose: jasmine.createSpy('dispose'),
@@ -132,7 +125,7 @@ function makeFakeEditor(initial: string): FakeEditor {
             endColumn: number;
           };
           text: string;
-        }>
+        }>,
       ) => {
         for (const e of edits) {
           const start = toOffset(e.range.startLineNumber, e.range.startColumn);
@@ -140,13 +133,11 @@ function makeFakeEditor(initial: string): FakeEditor {
           current = current.substring(0, start) + e.text + current.substring(end);
         }
         return true;
-      }
+      },
     ),
     layout: jasmine.createSpy('layout'),
     setSelection: jasmine.createSpy('setSelection'),
-    revealRangeInCenterIfOutsideViewport: jasmine.createSpy(
-      'revealRangeInCenterIfOutsideViewport'
-    )
+    revealRangeInCenterIfOutsideViewport: jasmine.createSpy('revealRangeInCenterIfOutsideViewport'),
   };
 }
 
@@ -157,13 +148,13 @@ function makeFakeMonaco(editor: FakeEditor): FakeMonaco {
     selectionStartLineNumber: number,
     selectionStartColumn: number,
     positionLineNumber: number,
-    positionColumn: number
+    positionColumn: number,
   ): FakeSelection {
     selectionCalls.push([
       selectionStartLineNumber,
       selectionStartColumn,
       positionLineNumber,
-      positionColumn
+      positionColumn,
     ]);
     // Selection's normalized start/end fields - smaller (line, col) is
     // start, larger is end - regardless of which corner the caller
@@ -171,11 +162,8 @@ function makeFakeMonaco(editor: FakeEditor): FakeMonaco {
     // first) leaves these the same; only the active cursor differs.
     const startLineFirst =
       selectionStartLineNumber < positionLineNumber ||
-      (selectionStartLineNumber === positionLineNumber &&
-        selectionStartColumn <= positionColumn);
-    this.startLineNumber = startLineFirst
-      ? selectionStartLineNumber
-      : positionLineNumber;
+      (selectionStartLineNumber === positionLineNumber && selectionStartColumn <= positionColumn);
+    this.startLineNumber = startLineFirst ? selectionStartLineNumber : positionLineNumber;
     this.startColumn = startLineFirst ? selectionStartColumn : positionColumn;
     this.endLineNumber = startLineFirst ? positionLineNumber : selectionStartLineNumber;
     this.endColumn = startLineFirst ? positionColumn : selectionStartColumn;
@@ -186,12 +174,12 @@ function makeFakeMonaco(editor: FakeEditor): FakeMonaco {
       create: jasmine.createSpy('create').and.returnValue(editor),
       defineTheme: jasmine.createSpy('defineTheme'),
       setTheme: jasmine.createSpy('setTheme'),
-      setModelMarkers: jasmine.createSpy('setModelMarkers')
+      setModelMarkers: jasmine.createSpy('setModelMarkers'),
     },
     json: { jsonDefaults: { setDiagnosticsOptions: jasmine.createSpy('setDiagnosticsOptions') } },
     MarkerSeverity: { Error: FAKE_MARKER_ERROR_SEVERITY },
     Selection: FakeSelectionCtor as unknown as FakeMonaco['Selection'],
-    __selectionConstructorCalls: selectionCalls
+    __selectionConstructorCalls: selectionCalls,
   };
 }
 
@@ -206,15 +194,12 @@ describe('JsonEditorComponent', () => {
   let minimalMonacoInstalled = false;
 
   async function createFixtureWithoutSettling(
-    initial = '{"a":1}'
+    initial = '{"a":1}',
   ): Promise<ComponentFixture<JsonEditorComponent>> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [JsonEditorComponent],
-      providers: [
-        ...provideFakeAuth(),
-        { provide: LoggerService, useValue: logger }
-      ]
+      providers: [...provideFakeAuth(), { provide: LoggerService, useValue: logger }],
     }).compileComponents();
     const nextFixture = TestBed.createComponent(JsonEditorComponent);
     nextFixture.componentRef.setInput('value', initial);
@@ -236,10 +221,7 @@ describe('JsonEditorComponent', () => {
 
     editor = makeFakeEditor('{"a":1}');
     monaco = makeFakeMonaco(editor);
-    logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
-      'error',
-      'event'
-    ]);
+    logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['error', 'event']);
     minimalMonacoInstalled = false;
 
     originalMonaco = (window as unknown as { monaco?: unknown }).monaco;
@@ -249,7 +231,7 @@ describe('JsonEditorComponent', () => {
     resizeObserver = {
       observe: jasmine.createSpy('observe'),
       unobserve: jasmine.createSpy('unobserve'),
-      disconnect: jasmine.createSpy('disconnect')
+      disconnect: jasmine.createSpy('disconnect'),
     };
     (window as unknown as { ResizeObserver: unknown }).ResizeObserver = function () {
       return resizeObserver;
@@ -289,10 +271,11 @@ describe('JsonEditorComponent', () => {
         onReady();
       },
       {
-        config: jasmine.createSpy<(
-          configuration: { paths: Record<string, string> }
-        ) => void>('require.config')
-      }
+        config:
+          jasmine.createSpy<(configuration: { paths: Record<string, string> }) => void>(
+            'require.config',
+          ),
+      },
     );
     window.require = requireStub;
   }
@@ -304,10 +287,11 @@ describe('JsonEditorComponent', () => {
         onReady();
       },
       {
-        config: jasmine.createSpy<(
-          configuration: { paths: Record<string, string> }
-        ) => void>('require.config')
-      }
+        config:
+          jasmine.createSpy<(configuration: { paths: Record<string, string> }) => void>(
+            'require.config',
+          ),
+      },
     );
     window.require = requireStub;
   }
@@ -329,11 +313,9 @@ describe('JsonEditorComponent', () => {
     installMonacoLoaderScriptPlaceholder();
     installRequireThatLoadsFakeMonaco();
     await create();
-    expect(logger.event).toHaveBeenCalledOnceWith(
-      'monaco.loaded',
-      undefined,
-      { loadTimeMs: jasmine.any(Number) }
-    );
+    expect(logger.event).toHaveBeenCalledOnceWith('monaco.loaded', undefined, {
+      loadTimeMs: jasmine.any(Number),
+    });
     const measurements = logger.event.calls.mostRecent().args[2];
     if (!measurements) {
       fail('monaco.loaded measurements were not captured');
@@ -400,7 +382,7 @@ describe('JsonEditorComponent', () => {
     monaco.editor.setModelMarkers.calls.reset();
 
     const errs: JsonParseError[] = [
-      { message: 'Unexpected token', offset: 5, length: 1, line: 2, column: 3 }
+      { message: 'Unexpected token', offset: 5, length: 1, line: 2, column: 3 },
     ];
     fixture.componentRef.setInput('errors', errs);
     fixture.detectChanges();
@@ -428,7 +410,7 @@ describe('JsonEditorComponent', () => {
   it('clears markers when errors input becomes empty', async () => {
     await create('{"a":1}');
     fixture.componentRef.setInput('errors', [
-      { message: 'oops', offset: 0, length: 1, line: 1, column: 1 }
+      { message: 'oops', offset: 0, length: 1, line: 1, column: 1 },
     ]);
     fixture.detectChanges();
     monaco.editor.setModelMarkers.calls.reset();
@@ -464,8 +446,8 @@ describe('JsonEditorComponent', () => {
           startLineNumber: 1,
           startColumn: 1,
           endLineNumber: 1,
-          endColumn: text.length + 1
-        }
+          endColumn: text.length + 1,
+        },
       });
       return events;
     }
@@ -547,7 +529,7 @@ describe('JsonEditorComponent', () => {
         startLineNumber: 1,
         startColumn: 2,
         endLineNumber: 1,
-        endColumn: 5
+        endColumn: 5,
       });
       expect(monaco.__selectionConstructorCalls.length).toBe(1);
       // Reversed: end coords passed FIRST, start coords SECOND. The active
@@ -568,14 +550,12 @@ describe('JsonEditorComponent', () => {
       // FakeEditor has no focus spy at all - verify nothing on the editor
       // matches the focus contract.
       const component = await create('{"a":1}');
-      expect(
-        (editor as unknown as { focus?: jasmine.Spy }).focus
-      ).toBeUndefined();
+      expect((editor as unknown as { focus?: jasmine.Spy }).focus).toBeUndefined();
       component.revealRange({
         startLineNumber: 1,
         startColumn: 1,
         endLineNumber: 1,
-        endColumn: 2
+        endColumn: 2,
       });
       expect(editor.setSelection).toHaveBeenCalled();
     });
@@ -585,10 +565,7 @@ describe('JsonEditorComponent', () => {
       TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
         imports: [JsonEditorComponent],
-        providers: [
-          ...provideFakeAuth(),
-          { provide: LoggerService, useValue: logger }
-        ]
+        providers: [...provideFakeAuth(), { provide: LoggerService, useValue: logger }],
       }).compileComponents();
       const earlyFixture = TestBed.createComponent(JsonEditorComponent);
       earlyFixture.componentRef.setInput('value', '{}');
@@ -599,8 +576,8 @@ describe('JsonEditorComponent', () => {
           startLineNumber: 1,
           startColumn: 1,
           endLineNumber: 1,
-          endColumn: 2
-        })
+          endColumn: 2,
+        }),
       ).not.toThrow();
       expect(editor.setSelection).not.toHaveBeenCalled();
     });

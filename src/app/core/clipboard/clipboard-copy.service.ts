@@ -52,13 +52,12 @@ export class ClipboardCopyService {
   async copyWithToast(
     text: string,
     messages: CopyToastMessages,
-    durations: CopyToastDurations = {}
+    durations: CopyToastDurations = {},
   ): Promise<boolean> {
     const dismiss = $localize`:@@common.dismiss:Dismiss`;
     const successMs = durations.successDurationMs ?? DEFAULT_SUCCESS_MS;
     const failedMs = durations.failedDurationMs ?? DEFAULT_FAILED_MS;
-    const unsupportedMs =
-      durations.unsupportedDurationMs ?? DEFAULT_UNSUPPORTED_MS;
+    const unsupportedMs = durations.unsupportedDurationMs ?? DEFAULT_UNSUPPORTED_MS;
 
     const clipboard = navigator.clipboard;
     // clipboard is undefined on HTTP / file:// (insecure contexts) and in

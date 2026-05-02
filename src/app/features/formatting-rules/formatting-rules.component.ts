@@ -9,7 +9,7 @@ import {
   computed,
   effect,
   inject,
-  signal
+  signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -24,17 +24,17 @@ import type { FormattingRuleSet } from '../../core/api/models';
 import { NAME_MAX } from '../../core/api/models.constants';
 import {
   PreferencesService,
-  PreferenceSyncState
+  PreferenceSyncState,
 } from '../../core/preferences/preferences.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import {
   ConfirmDialogComponent,
-  ConfirmDialogData
+  ConfirmDialogData,
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 import {
   ClonePresetDialogComponent,
-  ClonePresetDialogResult
+  ClonePresetDialogResult,
 } from '../home/rule-sets-toolbar/clone-preset-dialog.component';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -50,16 +50,10 @@ const DUP_SUFFIX = ' (copy)';
 @Component({
   selector: 'app-formatting-rules',
   standalone: true,
-  imports: [
-    AppHeaderComponent,
-    IconComponent,
-    MatButtonModule,
-    MatMenuModule,
-    RouterLink
-  ],
+  imports: [AppHeaderComponent, IconComponent, MatButtonModule, MatMenuModule, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './formatting-rules.component.html',
-  styleUrl: './formatting-rules.component.scss'
+  styleUrl: './formatting-rules.component.scss',
 })
 export class FormattingRulesComponent implements OnInit {
   private readonly service = inject(RuleSetsService);
@@ -91,9 +85,7 @@ export class FormattingRulesComponent implements OnInit {
 
   readonly activeRuleSetIds = computed(() => this.service.activeRuleSetIds());
 
-  readonly isEmpty = computed(
-    () => this.loadState() === 'ready' && this.ruleSets().length === 0
-  );
+  readonly isEmpty = computed(() => this.loadState() === 'ready' && this.ruleSets().length === 0);
 
   @ViewChild('renameInput') renameInputRef?: ElementRef<HTMLInputElement>;
 
@@ -113,7 +105,7 @@ export class FormattingRulesComponent implements OnInit {
         this.snack.open(
           $localize`:@@formattingRules.default.failed:Could not save which rule sets are applied - check your connection.`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 4000 }
+          { duration: 4000 },
         );
       }
     });
@@ -168,7 +160,7 @@ export class FormattingRulesComponent implements OnInit {
           el.select();
         }
       },
-      { injector: this.injector }
+      { injector: this.injector },
     );
   }
 
@@ -200,7 +192,7 @@ export class FormattingRulesComponent implements OnInit {
         this.snack.open(
           $localize`:@@formattingRules.rename.success:Rule set renamed.`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 3000 }
+          { duration: 3000 },
         );
         this.editingId.set(null);
         this.editingName.set('');
@@ -220,14 +212,14 @@ export class FormattingRulesComponent implements OnInit {
               this.snack.open(
                 $localize`:@@formattingRules.rename.deletedDuringRename:This rule set was deleted.`,
                 $localize`:@@common.dismiss:Dismiss`,
-                { duration: 4000 }
+                { duration: 4000 },
               );
               this.service.refresh();
               this.editingId.set(null);
               this.editingName.set('');
               this.editingError.set(null);
               this.pendingActionId.set(null);
-            }
+            },
           });
           return;
         }
@@ -235,21 +227,21 @@ export class FormattingRulesComponent implements OnInit {
           this.snack.open(
             $localize`:@@formattingRules.rename.deletedDuringRename:This rule set was deleted.`,
             $localize`:@@common.dismiss:Dismiss`,
-            { duration: 4000 }
+            { duration: 4000 },
           );
           this.service.refresh();
         } else {
           this.snack.open(
             $localize`:@@formattingRules.rename.failed:Could not rename rule set. Please try again.`,
             $localize`:@@common.dismiss:Dismiss`,
-            { duration: 4000 }
+            { duration: 4000 },
           );
         }
         this.editingId.set(null);
         this.editingName.set('');
         this.editingError.set(null);
         this.pendingActionId.set(null);
-      }
+      },
     });
   }
 
@@ -263,35 +255,33 @@ export class FormattingRulesComponent implements OnInit {
     if (this.pendingActionId() !== null) return;
     const name = this.dupName(set.name);
     this.pendingActionId.set(set.id);
-    this.service
-      .create({ name, rules: structuredClone(set.rules) })
-      .subscribe({
-        next: () => {
+    this.service.create({ name, rules: structuredClone(set.rules) }).subscribe({
+      next: () => {
+        this.snack.open(
+          $localize`:@@formattingRules.duplicate.success:Rule set duplicated.`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 3000 },
+        );
+        this.pendingActionId.set(null);
+      },
+      error: (err: unknown) => {
+        const status = err instanceof HttpErrorResponse ? err.status : 0;
+        if (status === 409) {
           this.snack.open(
-            $localize`:@@formattingRules.duplicate.success:Rule set duplicated.`,
+            $localize`:@@formattingRules.duplicate.quotaExceeded:You have reached the rule set limit (20).`,
             $localize`:@@common.dismiss:Dismiss`,
-            { duration: 3000 }
+            { duration: 5000 },
           );
-          this.pendingActionId.set(null);
-        },
-        error: (err: unknown) => {
-          const status = err instanceof HttpErrorResponse ? err.status : 0;
-          if (status === 409) {
-            this.snack.open(
-              $localize`:@@formattingRules.duplicate.quotaExceeded:You have reached the rule set limit (20).`,
-              $localize`:@@common.dismiss:Dismiss`,
-              { duration: 5000 }
-            );
-          } else {
-            this.snack.open(
-              $localize`:@@formattingRules.duplicate.failed:Could not duplicate rule set.`,
-              $localize`:@@common.dismiss:Dismiss`,
-              { duration: 4000 }
-            );
-          }
-          this.pendingActionId.set(null);
+        } else {
+          this.snack.open(
+            $localize`:@@formattingRules.duplicate.failed:Could not duplicate rule set.`,
+            $localize`:@@common.dismiss:Dismiss`,
+            { duration: 4000 },
+          );
         }
-      });
+        this.pendingActionId.set(null);
+      },
+    });
   }
 
   async deleteSet(set: FormattingRuleSet): Promise<void> {
@@ -301,11 +291,11 @@ export class FormattingRulesComponent implements OnInit {
       message: $localize`:@@formattingRules.delete.message:"${set.name}:name:" will be permanently deleted. This cannot be undone.`,
       confirmLabel: $localize`:@@share.delete.confirm:Delete`,
       cancelLabel: $localize`:@@common.cancel:Cancel`,
-      destructive: true
+      destructive: true,
     };
     const ref = this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(
       ConfirmDialogComponent,
-      { data, width: '420px', autoFocus: 'dialog' }
+      { data, width: '420px', autoFocus: 'dialog' },
     );
     const confirmed = await firstValueFrom(ref.afterClosed());
     if (!confirmed) return;
@@ -315,7 +305,7 @@ export class FormattingRulesComponent implements OnInit {
         this.snack.open(
           $localize`:@@formattingRules.delete.success:Rule set deleted.`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 3000 }
+          { duration: 3000 },
         );
         this.pendingActionId.set(null);
       },
@@ -327,24 +317,24 @@ export class FormattingRulesComponent implements OnInit {
           const currentActives = this.preferences.prefs().activeRuleSetIds;
           if (currentActives.includes(set.id)) {
             this.preferences.update({
-              activeRuleSetIds: currentActives.filter((x) => x !== set.id)
+              activeRuleSetIds: currentActives.filter((x) => x !== set.id),
             });
           }
           this.service.refresh();
           this.snack.open(
             $localize`:@@formattingRules.delete.alreadyDeleted:This rule set was already deleted.`,
             $localize`:@@common.dismiss:Dismiss`,
-            { duration: 4000 }
+            { duration: 4000 },
           );
         } else {
           this.snack.open(
             $localize`:@@formattingRules.delete.failed:Could not delete rule set.`,
             $localize`:@@common.dismiss:Dismiss`,
-            { duration: 4000 }
+            { duration: 4000 },
           );
         }
         this.pendingActionId.set(null);
-      }
+      },
     });
   }
 
@@ -357,15 +347,14 @@ export class FormattingRulesComponent implements OnInit {
     if (this.cloning()) return;
     this.cloning.set(true);
     try {
-      const ref = this.dialog.open<
+      const ref = this.dialog.open<ClonePresetDialogComponent, void, ClonePresetDialogResult>(
         ClonePresetDialogComponent,
-        void,
-        ClonePresetDialogResult
-      >(ClonePresetDialogComponent, {
-        width: '480px',
-        autoFocus: 'first-tabbable',
-        restoreFocus: true
-      });
+        {
+          width: '480px',
+          autoFocus: 'first-tabbable',
+          restoreFocus: true,
+        },
+      );
       const result = await firstValueFrom(ref.afterClosed());
       if (result?.cloned) {
         await this.router.navigate(['/formatting-rules', result.cloned.id]);
@@ -382,8 +371,8 @@ export class FormattingRulesComponent implements OnInit {
       const created = await firstValueFrom(
         this.service.create({
           name: $localize`:@@formattingRules.newRuleSet.defaultName:New rule set`,
-          rules: []
-        })
+          rules: [],
+        }),
       );
       void this.router.navigate(['/formatting-rules', created.id]);
     } catch (err) {
@@ -392,13 +381,13 @@ export class FormattingRulesComponent implements OnInit {
         this.snack.open(
           $localize`:@@formattingRules.create.quotaExceeded:You have reached the rule set limit (20).`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 5000 }
+          { duration: 5000 },
         );
       } else {
         this.snack.open(
           $localize`:@@formattingRules.create.failed:Could not create rule set. Please try again.`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 5000 }
+          { duration: 5000 },
         );
       }
     } finally {

@@ -9,7 +9,7 @@ import {
   listBlobsByOwner,
   updateBlob,
   __resetBlobsContainerForTesting,
-  type BlobDocument
+  type BlobDocument,
 } from './blobs';
 
 // In-memory fake Cosmos container. Tracks items + exposes the query / create /
@@ -31,7 +31,13 @@ jest.mock('./cosmos', () => {
       database: {
         container: () => ({
           items: {
-            query: ({ query, parameters }: { query: string; parameters: { name: string; value: unknown }[] }) => ({
+            query: ({
+              query,
+              parameters,
+            }: {
+              query: string;
+              parameters: { name: string; value: unknown }[];
+            }) => ({
               fetchAll: async () => {
                 const params = Object.fromEntries(parameters.map((p) => [p.name, p.value]));
                 let resources: unknown[];
@@ -56,34 +62,30 @@ jest.mock('./cosmos', () => {
                   throw new Error(`Unexpected query in test: ${query}`);
                 }
                 return { resources };
-              }
+              },
             }),
             create: async (doc: BlobDocument) => {
               fake.items.push(doc);
               return { resource: doc };
-            }
+            },
           },
           item: (id: string, partitionKey: string) => ({
             replace: async (doc: BlobDocument) => {
-              const idx = fake.items.findIndex(
-                (b) => b.id === id && b.ownerId === partitionKey
-              );
+              const idx = fake.items.findIndex((b) => b.id === id && b.ownerId === partitionKey);
               if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
               fake.items[idx] = doc;
               return { resource: doc };
             },
             delete: async () => {
-              const idx = fake.items.findIndex(
-                (b) => b.id === id && b.ownerId === partitionKey
-              );
+              const idx = fake.items.findIndex((b) => b.id === id && b.ownerId === partitionKey);
               if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
               fake.items.splice(idx, 1);
               return {};
-            }
-          })
-        })
-      }
-    })
+            },
+          }),
+        }),
+      },
+    }),
   };
 });
 
@@ -125,7 +127,7 @@ describe('createBlob', () => {
   it('rejects content larger than MAX_BLOB_BYTES', async () => {
     const tooBig = 'a'.repeat(MAX_BLOB_BYTES + 1);
     await expect(createBlob('owner-1', { content: tooBig })).rejects.toBeInstanceOf(
-      BlobValidationError
+      BlobValidationError,
     );
   });
 
@@ -137,21 +139,19 @@ describe('createBlob', () => {
 
   it('rejects non-string content', async () => {
     await expect(
-      createBlob('owner-1', { content: 42 as unknown as string })
+      createBlob('owner-1', { content: 42 as unknown as string }),
     ).rejects.toBeInstanceOf(BlobValidationError);
   });
 
   it('rejects title longer than MAX_TITLE_LENGTH', async () => {
     const tooLong = 'x'.repeat(MAX_TITLE_LENGTH + 1);
-    await expect(
-      createBlob('owner-1', { content: '[]', title: tooLong })
-    ).rejects.toBeInstanceOf(BlobValidationError);
+    await expect(createBlob('owner-1', { content: '[]', title: tooLong })).rejects.toBeInstanceOf(
+      BlobValidationError,
+    );
   });
 
   it('rejects missing ownerId', async () => {
-    await expect(createBlob('', { content: '[]' })).rejects.toBeInstanceOf(
-      BlobValidationError
-    );
+    await expect(createBlob('', { content: '[]' })).rejects.toBeInstanceOf(BlobValidationError);
   });
 
   it('retries on slug collision and produces distinct slugs', async () => {
@@ -165,9 +165,9 @@ describe('createBlob', () => {
 
   it('throws SlugGenerationError when every generated slug already exists', async () => {
     fake.forceSlugCollision = true;
-    await expect(
-      createBlob('owner-2', { content: '[]' })
-    ).rejects.toBeInstanceOf(SlugGenerationError);
+    await expect(createBlob('owner-2', { content: '[]' })).rejects.toBeInstanceOf(
+      SlugGenerationError,
+    );
   });
 });
 
@@ -207,7 +207,7 @@ describe('updateBlob', () => {
     expect(updated.slug).toBe(orig.slug);
     expect(updated.createdAt).toBe(orig.createdAt);
     expect(new Date(updated.updatedAt).getTime()).toBeGreaterThan(
-      new Date(orig.updatedAt).getTime()
+      new Date(orig.updatedAt).getTime(),
     );
   });
 
@@ -228,9 +228,7 @@ describe('updateBlob', () => {
   it('enforces size limit on content updates', async () => {
     const orig = await seed();
     const tooBig = 'a'.repeat(MAX_BLOB_BYTES + 1);
-    await expect(updateBlob(orig, { content: tooBig })).rejects.toBeInstanceOf(
-      BlobValidationError
-    );
+    await expect(updateBlob(orig, { content: tooBig })).rejects.toBeInstanceOf(BlobValidationError);
   });
 
   it('ignores undefined patch fields', async () => {

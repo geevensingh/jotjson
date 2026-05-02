@@ -1,9 +1,4 @@
-import {
-  bucketColorHex,
-  bucketDepth,
-  bucketFontSize,
-  bucketTabSize
-} from './pref-summarize';
+import { bucketColorHex, bucketDepth, bucketFontSize, bucketTabSize } from './pref-summarize';
 import type { ColorBucket } from './pref-summarize';
 
 describe('preference telemetry summary helpers', () => {
@@ -21,7 +16,7 @@ describe('preference telemetry summary helpers', () => {
         { hex: '#264f78', bucket: 'blue' },
         { hex: '#3e3d32', bucket: 'gray' },
         { hex: '#cce4f7', bucket: 'blue' },
-        { hex: '#fff4cc', bucket: 'yellow' }
+        { hex: '#fff4cc', bucket: 'yellow' },
       ];
 
       for (const testCase of cases) {

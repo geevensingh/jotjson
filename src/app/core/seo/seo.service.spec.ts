@@ -12,7 +12,7 @@ function blob(overrides: Partial<JsonBlob> = {}): JsonBlob {
     isPublic: true,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -34,7 +34,7 @@ describe('SeoService', () => {
       'property="og:url"',
       'property="og:site_name"',
       'name="twitter:card"',
-      'name="robots"'
+      'name="robots"',
     ]) {
       meta.removeTag(sel);
     }
@@ -45,7 +45,7 @@ describe('SeoService', () => {
       svc.setOpenGraphForBlob(blob({ title: 'My config' }));
       expect(meta.getTag('property="og:title"')?.content).toBe('My config');
       expect(meta.getTag('property="og:description"')?.content).toBe(
-        'My config - JSON shared on JotJSON'
+        'My config - JSON shared on JotJSON',
       );
       expect(meta.getTag('property="og:type"')?.content).toBe('website');
       expect(meta.getTag('property="og:site_name"')?.content).toBe('JotJSON');
@@ -56,9 +56,7 @@ describe('SeoService', () => {
     it('falls back to "Untitled JSON" when title is missing/blank', () => {
       svc.setOpenGraphForBlob(blob({ title: '   ' }));
       expect(meta.getTag('property="og:title"')?.content).toBe('Untitled JSON');
-      expect(meta.getTag('property="og:description"')?.content).toBe(
-        'JSON shared on JotJSON'
-      );
+      expect(meta.getTag('property="og:description"')?.content).toBe('JSON shared on JotJSON');
     });
 
     it('is idempotent - repeat calls update rather than duplicate', () => {

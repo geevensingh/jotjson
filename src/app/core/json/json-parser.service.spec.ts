@@ -12,7 +12,7 @@ describe('JsonParserService', () => {
     __resetColdFlagsForTesting();
     loggerSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['event']);
     TestBed.configureTestingModule({
-      providers: [{ provide: LoggerService, useValue: loggerSpy }]
+      providers: [{ provide: LoggerService, useValue: loggerSpy }],
     });
     svc = TestBed.inject(JsonParserService);
   });
@@ -68,12 +68,11 @@ describe('JsonParserService', () => {
       svc.parse(text);
 
       expect(loggerSpy.event).toHaveBeenCalledTimes(1);
-      const [messageId, props, measurements] =
-        loggerSpy.event.calls.mostRecent().args;
+      const [messageId, props, measurements] = loggerSpy.event.calls.mostRecent().args;
       expect(messageId).toBe('parse.slow');
       expect(props).toEqual({
         cold: true,
-        sizeBytesBucket: bucketBytes(sizeBytes)
+        sizeBytesBucket: bucketBytes(sizeBytes),
       });
       expect(measurements).toBeDefined();
       if (!measurements) {
@@ -93,12 +92,11 @@ describe('JsonParserService', () => {
       svc.parse(text);
 
       expect(loggerSpy.event).toHaveBeenCalledTimes(2);
-      const [messageId, props, measurements] =
-        loggerSpy.event.calls.argsFor(1);
+      const [messageId, props, measurements] = loggerSpy.event.calls.argsFor(1);
       expect(messageId).toBe('parse.slow');
       expect(props).toEqual({
         cold: false,
-        sizeBytesBucket: bucketBytes(sizeBytes)
+        sizeBytesBucket: bucketBytes(sizeBytes),
       });
       expect(measurements).toBeDefined();
       if (!measurements) {
@@ -127,11 +125,10 @@ describe('JsonParserService', () => {
 
       expect(sizeBytes).toBeGreaterThan(text.length);
       expect(loggerSpy.event).toHaveBeenCalledTimes(1);
-      const [, props, measurements] =
-        loggerSpy.event.calls.mostRecent().args;
+      const [, props, measurements] = loggerSpy.event.calls.mostRecent().args;
       expect(props).toEqual({
         cold: true,
-        sizeBytesBucket: bucketBytes(sizeBytes)
+        sizeBytesBucket: bucketBytes(sizeBytes),
       });
       expect(measurements).toBeDefined();
       if (!measurements) {
@@ -203,32 +200,26 @@ describe('JsonParserService', () => {
     it('attributes a comment-only container to the close row as closeLeading (rule 4)', () => {
       const r = svc.parse('{\n  "tags": [\n    // populated at runtime\n  ]\n}');
       expect(r.commentsByPath.get('$.tags')).toEqual({
-        closeLeading: 'populated at runtime'
+        closeLeading: 'populated at runtime',
       });
     });
 
     it('preserves source order in nested arrays and uses canonical paths', () => {
-      const r = svc.parse(
-        '{\n  "foo": [\n    1, // first\n    2  /* second */\n  ]\n}'
-      );
+      const r = svc.parse('{\n  "foo": [\n    1, // first\n    2  /* second */\n  ]\n}');
       expect(r.commentsByPath.get('$.foo[0]')).toEqual({ trailing: 'first' });
       expect(r.commentsByPath.get('$.foo[1]')).toEqual({ trailing: 'second' });
     });
 
     it('attaches a comment between two properties to the next property as leading', () => {
-      const r = svc.parse(
-        '{\n  "a": 1,\n  // pre-b\n  "b": 2\n}'
-      );
+      const r = svc.parse('{\n  "a": 1,\n  // pre-b\n  "b": 2\n}');
       expect(r.commentsByPath.get('$.b')).toEqual({ leading: 'pre-b' });
       expect(r.commentsByPath.get('$.a')).toBeUndefined();
     });
 
     it('stacks multiple leading comments with newline separator', () => {
-      const r = svc.parse(
-        '{\n  // line 1\n  // line 2\n  "x": 1\n}'
-      );
+      const r = svc.parse('{\n  // line 1\n  // line 2\n  "x": 1\n}');
       expect(r.commentsByPath.get('$.x')).toEqual({
-        leading: 'line 1\nline 2'
+        leading: 'line 1\nline 2',
       });
     });
 
@@ -245,12 +236,10 @@ describe('JsonParserService', () => {
     });
 
     it('attaches both a leading and a trailing comment to the same value', () => {
-      const r = svc.parse(
-        '{\n  // before x\n  "x": 1 // after x\n}'
-      );
+      const r = svc.parse('{\n  // before x\n  "x": 1 // after x\n}');
       expect(r.commentsByPath.get('$.x')).toEqual({
         leading: 'before x',
-        trailing: 'after x'
+        trailing: 'after x',
       });
     });
 
@@ -305,14 +294,14 @@ describe('JsonParserService', () => {
       // in pendingLeading and merged onto the next sibling's leading
       // slot, hiding the second comment behind commentFirstLine().
       const r = svc.parse(
-        '{\n  "foo": { // explaination of foo\n    /*section header for bar*/\n    "bar": {} // value of bar\n  }\n}'
+        '{\n  "foo": { // explaination of foo\n    /*section header for bar*/\n    "bar": {} // value of bar\n  }\n}',
       );
       expect(r.commentsByPath.get('$.foo')).toEqual({
-        trailing: 'explaination of foo'
+        trailing: 'explaination of foo',
       });
       expect(r.commentsByPath.get('$.foo.bar')).toEqual({
         leading: 'section header for bar',
-        closeTrailing: 'value of bar'
+        closeTrailing: 'value of bar',
       });
     });
 
@@ -323,34 +312,32 @@ describe('JsonParserService', () => {
       // routed to closeTrailing and merged with `\n`, hiding the
       // second comment behind commentFirstLine().
       const r = svc.parse(
-        '{\n  "foo": { // explaination of foo\n    /*section header for bar*/\n    "bar": {} // value of bar\n    /*end of section for bar */\n  } // closing comment of foo\n}'
+        '{\n  "foo": { // explaination of foo\n    /*section header for bar*/\n    "bar": {} // value of bar\n    /*end of section for bar */\n  } // closing comment of foo\n}',
       );
       expect(r.commentsByPath.get('$.foo')).toEqual({
         trailing: 'explaination of foo',
         closeLeading: 'end of section for bar',
-        closeTrailing: 'closing comment of foo'
+        closeTrailing: 'closing comment of foo',
       });
       expect(r.commentsByPath.get('$.foo.bar')).toEqual({
         leading: 'section header for bar',
-        closeTrailing: 'value of bar'
+        closeTrailing: 'value of bar',
       });
     });
 
     it('stacks multiple pre-close orphan comments under closeLeading with newline separator', () => {
       const r = svc.parse(
-        '{\n  "foo": [\n    1,\n    /* first orphan */\n    /* second orphan */\n  ]\n}'
+        '{\n  "foo": [\n    1,\n    /* first orphan */\n    /* second orphan */\n  ]\n}',
       );
       expect(r.commentsByPath.get('$.foo')).toEqual({
-        closeLeading: 'first orphan\nsecond orphan'
+        closeLeading: 'first orphan\nsecond orphan',
       });
     });
 
     it('routes a single pre-close orphan comment to closeLeading even when no closeTrailing is present', () => {
-      const r = svc.parse(
-        '{\n  "foo": {\n    "x": 1\n    /* trailing orphan */\n  }\n}'
-      );
+      const r = svc.parse('{\n  "foo": {\n    "x": 1\n    /* trailing orphan */\n  }\n}');
       expect(r.commentsByPath.get('$.foo')).toEqual({
-        closeLeading: 'trailing orphan'
+        closeLeading: 'trailing orphan',
       });
     });
   });
@@ -458,7 +445,7 @@ describe('JsonParserService', () => {
         [1, 2, 3],
         'hello',
         42,
-        null
+        null,
       ];
       for (const s of samples) {
         const r = svc.parse(JSON.stringify(s));
@@ -505,7 +492,7 @@ describe('JsonParserService', () => {
         updated_timestamp: '2026-04-15T22:39:34.828969Z',
         total_request_charge_amount: 200.0,
         total_customer_charge_amount: 200.0,
-        balance_owing: 200.0
+        balance_owing: 200.0,
       });
     });
 

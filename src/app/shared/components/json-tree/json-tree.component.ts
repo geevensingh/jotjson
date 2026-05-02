@@ -12,7 +12,7 @@ import {
   signal,
   untracked,
   viewChild,
-  type WritableSignal
+  type WritableSignal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
@@ -22,10 +22,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
-import {
-  CommentBundle,
-  JsonParserService
-} from '../../../core/json/json-parser.service';
+import { CommentBundle, JsonParserService } from '../../../core/json/json-parser.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { bucketCount } from '../../../core/telemetry/buckets';
@@ -37,19 +34,15 @@ import {
   JsonBreadcrumbComponent,
   type BreadcrumbClick,
   type BreadcrumbContextMenu,
-  type BreadcrumbCrumb
+  type BreadcrumbCrumb,
 } from '../json-breadcrumb/json-breadcrumb.component';
 import {
   EMPTY_RULE_RESULT,
   RuleEngineNode,
   RuleEngineResult,
-  evaluateFormattingRules
+  evaluateFormattingRules,
 } from './formatting-rules-engine';
-import {
-  ParsedDate,
-  formatDateAnnotation,
-  parseAsDate
-} from '../../utils/date-detect';
+import { ParsedDate, formatDateAnnotation, parseAsDate } from '../../utils/date-detect';
 import { classifyValue, ValueClassification } from '../../utils/value-classifier';
 import { computeAutoFitDepth } from './auto-fit-depth';
 import { findScrollableAncestor } from './scroll-container';
@@ -77,7 +70,7 @@ const SEARCH_VALUE_TYPES: readonly SearchValueType[] = [
   'boolean',
   'null',
   'array',
-  'object'
+  'object',
 ];
 
 const TYPE_LABELS: Record<ValueClassification, string> = {
@@ -96,7 +89,7 @@ const TYPE_LABELS: Record<ValueClassification, string> = {
   null: $localize`:@@tree.type.null:null`,
   array: $localize`:@@tree.type.array:array`,
   object: $localize`:@@tree.type.object:object`,
-  undefined: $localize`:@@tree.type.undefined:undefined`
+  undefined: $localize`:@@tree.type.undefined:undefined`,
 };
 
 export interface TreeNode {
@@ -141,10 +134,18 @@ const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
 @Component({
   selector: 'jj-json-tree',
   standalone: true,
-  imports: [FormsModule, MatMenuModule, MatTooltipModule, MatTreeModule, MatDividerModule, IconComponent, JsonBreadcrumbComponent],
+  imports: [
+    FormsModule,
+    MatMenuModule,
+    MatTooltipModule,
+    MatTreeModule,
+    MatDividerModule,
+    IconComponent,
+    JsonBreadcrumbComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
-  styleUrl: './json-tree.component.scss'
+  styleUrl: './json-tree.component.scss',
 })
 export class JsonTreeComponent {
   private readonly prefs = inject(PreferencesService);
@@ -194,9 +195,7 @@ export class JsonTreeComponent {
    * comment after `"foo": {}` still surfaces. See `CommentBundle`
    * and DESIGN_SPEC.md M7k.
    */
-  readonly commentsByPath = input<ReadonlyMap<string, CommentBundle> | null>(
-    null
-  );
+  readonly commentsByPath = input<ReadonlyMap<string, CommentBundle> | null>(null);
 
   readonly embeddedMode = input<boolean>(false);
 
@@ -321,10 +320,9 @@ export class JsonTreeComponent {
   readonly closeLeadingCommentTooltipPrefix = $localize`:@@tree.comment.closeLeading.tooltipPrefix:Internal comment: `;
   readonly closeTrailingCommentTooltipPrefix = $localize`:@@tree.comment.closeTrailing.tooltipPrefix:End-of-block comment: `;
 
-  readonly treeControl = new NestedTreeControl<TreeNode, string>(
-    (n) => n.children ?? [],
-    { trackBy: (n) => n.pathString }
-  );
+  readonly treeControl = new NestedTreeControl<TreeNode, string>((n) => n.children ?? [], {
+    trackBy: (n) => n.pathString,
+  });
   readonly dataSource = new MatTreeNestedDataSource<TreeNode>();
 
   /**
@@ -344,9 +342,7 @@ export class JsonTreeComponent {
   });
 
   readonly showTypeBadges = computed(() => this.prefs.prefs().treeShowTypeLabels);
-  readonly showDateAnnotations = computed(
-    () => this.prefs.prefs().treeShowDateAnnotations
-  );
+  readonly showDateAnnotations = computed(() => this.prefs.prefs().treeShowDateAnnotations);
   /**
    * Master toggle for rendering JSONC comment slots in the tree. Bound
    * to the `treeShowComments` user preference; default true. The
@@ -441,7 +437,7 @@ export class JsonTreeComponent {
    * type filter) the same way they do for a query.
    */
   readonly searchActive = computed<boolean>(
-    () => !!this.search().trim() || this.prefs.prefs().searchValueType !== 'all'
+    () => !!this.search().trim() || this.prefs.prefs().searchValueType !== 'all',
   );
 
   /**
@@ -554,7 +550,7 @@ export class JsonTreeComponent {
       const classification = classifyValue(node.type, node.value, {
         detectDates: true,
         assumeUtcForIsoDateTime: prefs.treeAssumeUtcForIsoDateTime,
-        assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly
+        assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly,
       });
       return classification === typeFilter;
     };
@@ -623,19 +619,18 @@ export class JsonTreeComponent {
       {
         label: this.breadcrumbRootLabel,
         canonicalPath: '$',
-        current: path.length === 0
-      }
+        current: path.length === 0,
+      },
     ];
     // Include the selected node as the final crumb (i = path.length).
     for (let i = 1; i <= path.length; i++) {
       const partial = path.slice(0, i);
       const segment = partial[partial.length - 1];
-      const label =
-        typeof segment === 'number' ? `[${segment}]` : String(segment);
+      const label = typeof segment === 'number' ? `[${segment}]` : String(segment);
       out.push({
         label,
         canonicalPath: this.formatPath(partial),
-        current: i === path.length
+        current: i === path.length,
       });
     }
     return out;
@@ -645,9 +640,7 @@ export class JsonTreeComponent {
    * `true` when the trailing copy-path button on the breadcrumb bar
    * should be disabled. Mirrors "is anything selected?".
    */
-  readonly breadcrumbCopyDisabled = computed(
-    () => this.selectedPath() === null
-  );
+  readonly breadcrumbCopyDisabled = computed(() => this.selectedPath() === null);
 
   /**
    * Paths of all rows that share the selected row's primitive value
@@ -670,11 +663,7 @@ export class JsonTreeComponent {
     const matches = new Set<string>();
     const walk = (node: TreeNode | undefined): void => {
       if (!node) return;
-      if (
-        node.pathString !== sp &&
-        node.type === targetType &&
-        node.value === targetValue
-      ) {
+      if (node.pathString !== sp && node.type === targetType && node.value === targetValue) {
         matches.add(node.pathString);
       }
       node.children?.forEach(walk);
@@ -747,12 +736,12 @@ export class JsonTreeComponent {
   __setAutoFitMeasurementsForTesting(
     probeHeightPx: number,
     viewportPx: number,
-    scrollContainer: HTMLElement | null = null
+    scrollContainer: HTMLElement | null = null,
   ): void {
     this.autoFitMeasurementOverrideForTesting = {
       probeHeightPx,
       viewportPx,
-      scrollContainer
+      scrollContainer,
     };
   }
 
@@ -817,9 +806,9 @@ export class JsonTreeComponent {
               'tree.render.slow',
               {
                 cold: isColdAndMark('tree.render.slow'),
-                nodeCountBucket: bucketCount(nodeCount)
+                nodeCountBucket: bucketCount(nodeCount),
               },
-              { timeMs, nodeCount }
+              { timeMs, nodeCount },
             );
           }
         });
@@ -892,8 +881,7 @@ export class JsonTreeComponent {
     });
   }
 
-  hasChild = (_: number, node: TreeNode): boolean =>
-    !!node.children && node.children.length > 0;
+  hasChild = (_: number, node: TreeNode): boolean => !!node.children && node.children.length > 0;
 
   /**
    * Click handler for `.tree-row`. Selects the row unless the click
@@ -948,13 +936,13 @@ export class JsonTreeComponent {
 
   toggleSearchCaseSensitive(): void {
     this.prefs.update({
-      searchCaseSensitive: !this.prefs.prefs().searchCaseSensitive
+      searchCaseSensitive: !this.prefs.prefs().searchCaseSensitive,
     });
   }
 
   toggleSearchRegexMode(): void {
     this.prefs.update({
-      searchRegexMode: !this.prefs.prefs().searchRegexMode
+      searchRegexMode: !this.prefs.prefs().searchRegexMode,
     });
   }
 
@@ -1045,7 +1033,7 @@ export class JsonTreeComponent {
     const selectionUpDistance = total === 0 ? 0 : total - 1 - event.depth;
     this.logger.info('tree.breadcrumb.click', {
       depth: event.depth,
-      selectionUpDistance
+      selectionUpDistance,
     });
     this.selectByPathString(event.canonicalPath);
   }
@@ -1068,7 +1056,7 @@ export class JsonTreeComponent {
     const total = this.crumbs().length;
     this.logger.info('tree.breadcrumb.copyPath', {
       depth: total === 0 ? 0 : total - 1,
-      selectionUpDistance: 0
+      selectionUpDistance: 0,
     });
     this.copyPath(node);
   }
@@ -1092,7 +1080,7 @@ export class JsonTreeComponent {
     // Defer scroll until after Angular renders the expansion.
     queueMicrotask(() => {
       const el = this.host.nativeElement.querySelector(
-        `[data-path="${cssEscape(path)}"]`
+        `[data-path="${cssEscape(path)}"]`,
       ) as HTMLElement | null;
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     });
@@ -1172,21 +1160,15 @@ export class JsonTreeComponent {
     const result = computeAutoFitDepth(this.root() ?? null, estimatedRows, 1.5);
     this.expandToLevel(result.chosenDepth, true);
     const fillRatioPct =
-      estimatedRows > 0
-        ? Math.round((result.chosenRows / estimatedRows) * 100)
-        : 0;
+      estimatedRows > 0 ? Math.round((result.chosenRows / estimatedRows) * 100) : 0;
     const generation = ++this.autoFitGeneration;
     requestAnimationFrame(() => {
       if (this.cancelledRender || generation !== this.autoFitGeneration) {
         return;
       }
-      const actualHeightPx = scrollContainer
-        ? scrollContainer.scrollHeight
-        : 0;
+      const actualHeightPx = scrollContainer ? scrollContainer.scrollHeight : 0;
       const actualFillRatioPct =
-        viewportPx > 0
-          ? Math.round((actualHeightPx / viewportPx) * 100)
-          : 0;
+        viewportPx > 0 ? Math.round((actualHeightPx / viewportPx) * 100) : 0;
       this.logger.event(
         'tree.expand.autoFit',
         {},
@@ -1199,8 +1181,8 @@ export class JsonTreeComponent {
           chosenRows: result.chosenRows,
           fillRatioPct,
           actualHeightPx,
-          actualFillRatioPct
-        }
+          actualFillRatioPct,
+        },
       );
     });
   }
@@ -1227,7 +1209,7 @@ export class JsonTreeComponent {
       return {
         probeHeightPx: override.probeHeightPx,
         viewportPx: override.viewportPx,
-        scrollContainer: override.scrollContainer
+        scrollContainer: override.scrollContainer,
       };
     }
     const probeHeightPx = this.measureProbeRowHeight();
@@ -1235,9 +1217,7 @@ export class JsonTreeComponent {
       return null;
     }
     const scrollContainer = findScrollableAncestor(this.host.nativeElement);
-    const viewportPx = scrollContainer
-      ? scrollContainer.clientHeight
-      : window.innerHeight;
+    const viewportPx = scrollContainer ? scrollContainer.clientHeight : window.innerHeight;
     if (viewportPx <= 0) {
       return null;
     }
@@ -1252,10 +1232,7 @@ export class JsonTreeComponent {
    */
   private measureProbeRowHeight(): number {
     const fontSize = this.treeFontSize();
-    if (
-      this.probeRowHeightCache !== null &&
-      this.probeRowHeightCache.fontSize === fontSize
-    ) {
+    if (this.probeRowHeightCache !== null && this.probeRowHeightCache.fontSize === fontSize) {
       return this.probeRowHeightCache.heightPx;
     }
     const probeRef = this.autoFitProbe();
@@ -1277,12 +1254,12 @@ export class JsonTreeComponent {
   copyPath(node: TreeNode): void {
     const path = this.jsonParser.formatPathForClipboard(
       node.pathString,
-      this.prefs.prefs().treePathRoot
+      this.prefs.prefs().treePathRoot,
     );
     void this.clipboardCopy.copyWithToast(path, {
       success: $localize`:@@tree.copyPath.success:Path copied to clipboard.`,
       failed: $localize`:@@tree.copyPath.failed:Failed to copy path.`,
-      unsupported: $localize`:@@tree.copyPath.unsupported:Copy is not supported in this browser.`
+      unsupported: $localize`:@@tree.copyPath.unsupported:Copy is not supported in this browser.`,
     });
   }
 
@@ -1380,11 +1357,7 @@ export class JsonTreeComponent {
    * the row by design. Its own logger call (with `source: 'kebab'`)
    * lives in `onKebabClick`.
    */
-  private openContextMenuAt(
-    event: MouseEvent,
-    node: TreeNode,
-    source: 'row' | 'breadcrumb'
-  ): void {
+  private openContextMenuAt(event: MouseEvent, node: TreeNode, source: 'row' | 'breadcrumb'): void {
     event.preventDefault();
     const trigger = this.ctxTrigger();
     const apply = (): void => {
@@ -1454,7 +1427,7 @@ export class JsonTreeComponent {
     void this.clipboardCopy.copyWithToast(String(node.segment), {
       success: $localize`:@@tree.contextMenu.copy.success.key:Key copied to clipboard.`,
       failed: $localize`:@@tree.contextMenu.copy.failed.key:Failed to copy key.`,
-      unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`
+      unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`,
     });
   }
 
@@ -1468,12 +1441,12 @@ export class JsonTreeComponent {
    */
   copyValue(node: TreeNode, source: 'menu' | 'dblclick'): void {
     this.logger.info(
-      source === 'menu' ? 'tree.contextMenu.copyValue' : 'tree.row.doubleClickCopyValue'
+      source === 'menu' ? 'tree.contextMenu.copyValue' : 'tree.row.doubleClickCopyValue',
     );
     void this.clipboardCopy.copyWithToast(this.serializeNodeValueForCopy(node), {
       success: $localize`:@@tree.contextMenu.copy.success.value:Value copied to clipboard.`,
       failed: $localize`:@@tree.contextMenu.copy.failed.value:Failed to copy value.`,
-      unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`
+      unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`,
     });
   }
 
@@ -1506,7 +1479,7 @@ export class JsonTreeComponent {
     this.prefs.update({
       searchScope: 'keys',
       searchRegexMode: false,
-      searchValueType: 'all'
+      searchValueType: 'all',
     });
     this.search.set(String(node.segment));
     this.activateClickedHitOrFirst(node.pathString);
@@ -1531,13 +1504,11 @@ export class JsonTreeComponent {
     // for display, but the search engine matches against the raw value,
     // so we feed it the raw string here too.
     const query =
-      node.type === 'string'
-        ? (node.value as string)
-        : this.renderLeaf(node.value, node.type);
+      node.type === 'string' ? (node.value as string) : this.renderLeaf(node.value, node.type);
     this.prefs.update({
       searchScope: 'values',
       searchRegexMode: false,
-      searchValueType: 'all'
+      searchValueType: 'all',
     });
     this.search.set(query);
     this.activateClickedHitOrFirst(node.pathString);
@@ -1709,7 +1680,7 @@ export class JsonTreeComponent {
       this.treeControl.collapse(child);
     }
     this.logger.info(
-      source === 'wide' ? 'tree.contextMenu.isolateWide' : 'tree.contextMenu.isolate'
+      source === 'wide' ? 'tree.contextMenu.isolateWide' : 'tree.contextMenu.isolate',
     );
   }
 
@@ -1858,10 +1829,7 @@ export class JsonTreeComponent {
    * `expandToDepthFromHere` itself walks the whole subtree -- the
    * visibility check has to match the action's reach.
    */
-  private hasCollapsedContainerAboveDepth(
-    node: TreeNode,
-    relativeDepth: number
-  ): boolean {
+  private hasCollapsedContainerAboveDepth(node: TreeNode, relativeDepth: number): boolean {
     let found = false;
     const walk = (c: TreeNode, d: number): void => {
       if (found) return;
@@ -2076,7 +2044,7 @@ export class JsonTreeComponent {
     const prefs = this.prefs.prefs();
     const parsed: ParsedDate | null = parseAsDate(node.value, undefined, {
       assumeUtcForIsoDateTime: prefs.treeAssumeUtcForIsoDateTime,
-      assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly
+      assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly,
     });
     if (!parsed) return null;
     return formatDateAnnotation(
@@ -2084,7 +2052,7 @@ export class JsonTreeComponent {
       new Date(this.nowSignal()),
       undefined,
       prefs.treeDateAnnotationUnits,
-      prefs.treeDateAnnotationFriendlyForms
+      prefs.treeDateAnnotationFriendlyForms,
     );
   }
 
@@ -2100,7 +2068,7 @@ export class JsonTreeComponent {
     const classification = classifyValue(node.type, node.value, {
       detectDates: prefs.treeShowDateAnnotations,
       assumeUtcForIsoDateTime: prefs.treeAssumeUtcForIsoDateTime,
-      assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly
+      assumeUtcForIsoDateOnly: prefs.treeAssumeUtcForIsoDateOnly,
     });
     return TYPE_LABELS[classification];
   }
@@ -2170,11 +2138,9 @@ export class JsonTreeComponent {
     if (!bundle) return null;
     const isInlineRow = !node.children || node.children.length === 0;
     if (isInlineRow) {
-      const parts = [
-        bundle.trailing,
-        bundle.closeLeading,
-        bundle.closeTrailing
-      ].filter((part): part is string => part !== undefined);
+      const parts = [bundle.trailing, bundle.closeLeading, bundle.closeTrailing].filter(
+        (part): part is string => part !== undefined,
+      );
       return parts.length > 0 ? parts.join('\n') : null;
     }
     return bundle.trailing ?? null;
@@ -2224,7 +2190,7 @@ export class JsonTreeComponent {
     this.logger.event(
       'tree.expand.slow',
       { cold: isColdAndMark('tree.expand.slow') },
-      { timeMs, depth, nodeCount }
+      { timeMs, depth, nodeCount },
     );
   }
 
@@ -2237,7 +2203,7 @@ export class JsonTreeComponent {
       pathString: '$',
       value: raw,
       type: jsonTypeOf(raw),
-      depth: 0
+      depth: 0,
     };
     if (root.type === 'object' || root.type === 'array') {
       root.children = this.buildChildren(raw, [], counter);
@@ -2250,9 +2216,9 @@ export class JsonTreeComponent {
         'tree.build.slow',
         {
           cold: isColdAndMark('tree.build.slow'),
-          nodeCountBucket: bucketCount(nodeCount)
+          nodeCountBucket: bucketCount(nodeCount),
         },
-        { timeMs, nodeCount }
+        { timeMs, nodeCount },
       );
     }
     return root;
@@ -2261,17 +2227,17 @@ export class JsonTreeComponent {
   private buildChildren(
     value: unknown,
     parentPath: (string | number)[],
-    counter: TreeBuildCounter
+    counter: TreeBuildCounter,
   ): TreeNode[] {
     if (Array.isArray(value)) {
       return value.map((child, index) =>
-        this.buildNode(index, child, [...parentPath, index], counter)
+        this.buildNode(index, child, [...parentPath, index], counter),
       );
     }
     if (value && typeof value === 'object') {
       const objectValue = value as Record<string, unknown>;
       return Object.keys(objectValue).map((key) =>
-        this.buildNode(key, objectValue[key], [...parentPath, key], counter)
+        this.buildNode(key, objectValue[key], [...parentPath, key], counter),
       );
     }
     return [];
@@ -2281,7 +2247,7 @@ export class JsonTreeComponent {
     segment: string | number,
     value: unknown,
     path: (string | number)[],
-    counter: TreeBuildCounter
+    counter: TreeBuildCounter,
   ): TreeNode {
     counter.nodeCount += 1;
     const type = jsonTypeOf(value);
@@ -2291,7 +2257,7 @@ export class JsonTreeComponent {
       pathString: this.formatPath(path),
       value,
       type,
-      depth: path.length
+      depth: path.length,
     };
     if (type === 'object' || type === 'array') {
       node.children = this.buildChildren(value, path, counter);

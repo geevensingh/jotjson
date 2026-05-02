@@ -10,7 +10,7 @@ import {
   output,
   signal,
   untracked,
-  viewChild
+  viewChild,
 } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { IconComponent } from '../icon/icon.component';
@@ -77,7 +77,7 @@ export interface BreadcrumbContextMenu {
   imports: [MatMenuModule, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-breadcrumb.component.html',
-  styleUrl: './json-breadcrumb.component.scss'
+  styleUrl: './json-breadcrumb.component.scss',
 })
 export class JsonBreadcrumbComponent {
   private readonly destroyRef = inject(DestroyRef);
@@ -200,7 +200,7 @@ export class JsonBreadcrumbComponent {
   onCrumbClick(crumb: BreadcrumbCrumb): void {
     this.crumbClick.emit({
       canonicalPath: crumb.canonicalPath,
-      depth: this.indexOf(crumb)
+      depth: this.indexOf(crumb),
     });
   }
 
@@ -224,7 +224,7 @@ export class JsonBreadcrumbComponent {
     this.crumbContextMenu.emit({
       event,
       canonicalPath: crumb.canonicalPath,
-      depth: this.indexOf(crumb)
+      depth: this.indexOf(crumb),
     });
   }
 

@@ -1,9 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  input,
-  output
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 
@@ -24,7 +19,7 @@ import { MatCardModule } from '@angular/material/card';
   imports: [MatButtonModule, MatCardModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './upload-error-banner.component.html',
-  styleUrl: './upload-error-banner.component.scss'
+  styleUrl: './upload-error-banner.component.scss',
 })
 export class UploadErrorBannerComponent {
   readonly visible = input.required<boolean>();

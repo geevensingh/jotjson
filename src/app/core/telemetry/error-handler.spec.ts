@@ -11,10 +11,7 @@ describe('TelemetryErrorHandler', () => {
     errSpy = jasmine.createSpy('error');
     consoleErr = spyOn(console, 'error');
     TestBed.configureTestingModule({
-      providers: [
-        { provide: LoggerService, useValue: { error: errSpy } },
-        TelemetryErrorHandler
-      ]
+      providers: [{ provide: LoggerService, useValue: { error: errSpy } }, TelemetryErrorHandler],
     });
     handler = TestBed.inject(TelemetryErrorHandler);
   });

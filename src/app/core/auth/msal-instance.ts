@@ -1,8 +1,4 @@
-import {
-  IPublicClientApplication,
-  PublicClientApplication,
-  LogLevel
-} from '@azure/msal-browser';
+import { IPublicClientApplication, PublicClientApplication, LogLevel } from '@azure/msal-browser';
 import { MSAL_INSTANCE } from '@azure/msal-angular';
 import { environment } from '../../../environments/environment';
 import { msalBridge } from '../telemetry/msal-bridge';
@@ -35,14 +31,14 @@ export function createMsalInstance(): IPublicClientApplication {
       authority: authority || undefined,
       knownAuthorities,
       redirectUri,
-      postLogoutRedirectUri
+      postLogoutRedirectUri,
     },
     cache: {
       // localStorage so sign-in persists across tab close and new tabs, which
       // matches typical SPA "stay signed in" UX. MSAL still enforces token
       // expiry and relies on the silent/interactive refresh flow; the cached
       // material is refresh-token-equivalent, not a long-lived password.
-      cacheLocation: 'localStorage'
+      cacheLocation: 'localStorage',
     },
     system: {
       loggerOptions: {
@@ -56,8 +52,8 @@ export function createMsalInstance(): IPublicClientApplication {
           msalBridge.publish(message);
         },
         logLevel: LogLevel.Error,
-        piiLoggingEnabled: false
-      }
-    }
+        piiLoggingEnabled: false,
+      },
+    },
   });
 }

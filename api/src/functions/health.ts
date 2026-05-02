@@ -2,7 +2,7 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 
 export async function health(
   _req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   context.log('health check');
   return {
@@ -11,8 +11,8 @@ export async function health(
       status: 'ok',
       service: 'jotjson-api',
       version: '0.1.0',
-      timestamp: new Date().toISOString()
-    }
+      timestamp: new Date().toISOString(),
+    },
   };
 }
 
@@ -20,5 +20,5 @@ app.http('health', {
   methods: ['GET'],
   route: 'health',
   authLevel: 'anonymous',
-  handler: health
+  handler: health,
 });

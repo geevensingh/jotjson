@@ -1,4 +1,11 @@
-import { ComponentFixture, TestBed, fakeAsync, flush, flushMicrotasks, tick } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  TestBed,
+  fakeAsync,
+  flush,
+  flushMicrotasks,
+  tick,
+} from '@angular/core/testing';
 import { provideRouter, Router, ActivatedRoute, convertToParamMap } from '@angular/router';
 import { Subject, BehaviorSubject } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -10,10 +17,7 @@ import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { JsonTreeComponent } from '../../../shared/components/json-tree/json-tree.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
-import type {
-  FormattingRule,
-  FormattingRuleSet
-} from '../../../core/api/models';
+import type { FormattingRule, FormattingRuleSet } from '../../../core/api/models';
 
 function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
   return {
@@ -24,7 +28,7 @@ function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet 
     version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -36,7 +40,7 @@ function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     matchValue: 'foo',
     caseSensitive: false,
     style: { backgroundColor: '#ffe4b5' },
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -66,11 +70,9 @@ interface Setup {
 function setup(opts: SetupOpts = {}): Setup {
   TestBed.resetTestingModule();
   const cache = signal<FormattingRuleSet[] | null>(
-    opts.initialCache === undefined ? null : opts.initialCache
+    opts.initialCache === undefined ? null : opts.initialCache,
   );
-  const paramMap = new BehaviorSubject(
-    convertToParamMap({ id: opts.paramId ?? 'rs-1' })
-  );
+  const paramMap = new BehaviorSubject(convertToParamMap({ id: opts.paramId ?? 'rs-1' }));
 
   const updateSubjects: Subject<FormattingRuleSet>[] = [];
   const getSubjects: Subject<FormattingRuleSet>[] = [];
@@ -90,7 +92,7 @@ function setup(opts: SetupOpts = {}): Setup {
       const subj = new Subject<FormattingRuleSet>();
       updateSubjects.push(subj);
       return subj.asObservable();
-    })
+    }),
   };
   const snack = { open: jasmine.createSpy('open') };
 
@@ -101,14 +103,14 @@ function setup(opts: SetupOpts = {}): Setup {
       provideRouter([]),
       { provide: RuleSetsService, useValue: service },
       { provide: MatSnackBar, useValue: snack },
-      { provide: ActivatedRoute, useValue: { paramMap } }
-    ]
+      { provide: ActivatedRoute, useValue: { paramMap } },
+    ],
   });
 
   const auth = TestBed.inject(AuthService);
   if (opts.signedIn !== false) {
     signInFakeUser(auth, {
-      user: { id: 'oid-1', displayName: 'Test User', email: 'user@example.com' }
+      user: { id: 'oid-1', displayName: 'Test User', email: 'user@example.com' },
     });
   }
 
@@ -119,17 +121,15 @@ function setup(opts: SetupOpts = {}): Setup {
       ...service,
       updateSubjects,
       getSubjects,
-      setPendingIds: (ids) => pendingIds.set(new Set(ids))
+      setPendingIds: (ids) => pendingIds.set(new Set(ids)),
     },
     snack,
     paramMap,
-    auth
+    auth,
   };
 }
 
-function loaded(
-  initial: FormattingRuleSet = ruleSet({ rules: [rule()] })
-): Setup {
+function loaded(initial: FormattingRuleSet = ruleSet({ rules: [rule()] })): Setup {
   const ctx = setup({ initialCache: [initial] });
   ctx.fixture.detectChanges();
   return ctx;
@@ -195,7 +195,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       ctx.fixture.componentInstance.moveRule(0, 1);
       expect(ctx.fixture.componentInstance.editable()!.rules.map((r) => r.id)).toEqual([
         ids[1],
-        ids[0]
+        ids[0],
       ]);
       ctx.fixture.componentInstance.removeRule(0);
       expect(ctx.fixture.componentInstance.editable()!.rules.map((r) => r.id)).toEqual([ids[0]]);
@@ -213,9 +213,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
 
     it('ruleLabel formats target/match/value', () => {
       const ctx = loaded();
-      expect(ctx.fixture.componentInstance.ruleLabel(rule())).toBe(
-        'value contains "foo"'
-      );
+      expect(ctx.fixture.componentInstance.ruleLabel(rule())).toBe('value contains "foo"');
     });
   });
 
@@ -312,7 +310,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       ctx.fixture.detectChanges();
       expect(ctx.service.update).toHaveBeenCalledTimes(1);
       expect(ctx.service.update.calls.mostRecent().args[1]).toEqual(
-        jasmine.objectContaining({ name: 'ABC' })
+        jasmine.objectContaining({ name: 'ABC' }),
       );
       // Drain the in-flight save so fakeAsync exits cleanly.
       ctx.service.updateSubjects[0].next(ruleSet({ name: 'ABC', version: 2 }));
@@ -599,8 +597,8 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
           version: 5,
           createdAt: '2024-02-02T00:00:00Z',
           updatedAt: '2024-02-03T00:00:00Z',
-          rules: [rule({ matchValue: 'foo' })]
-        })
+          rules: [rule({ matchValue: 'foo' })],
+        }),
       );
       const draft = ctx.fixture.componentInstance.previewDraft();
       expect(draft).not.toBeNull();
@@ -630,7 +628,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     // DOM nodes from being attached during a fakeAsync test.
     function getTree(ctx: Setup): JsonTreeComponent {
       const debugEl = ctx.fixture.debugElement.query(
-        (el) => el.componentInstance instanceof JsonTreeComponent
+        (el) => el.componentInstance instanceof JsonTreeComponent,
       );
       expect(debugEl).toBeTruthy();
       return debugEl.componentInstance as JsonTreeComponent;
@@ -652,10 +650,10 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
               target: 'value',
               matchType: 'exact',
               matchValue: 'TypeError',
-              style: { backgroundColor: '#abcdef' }
-            })
-          ]
-        })
+              style: { backgroundColor: '#abcdef' },
+            }),
+          ],
+        }),
       );
       ctx.fixture.detectChanges();
       const tree = getTree(ctx);
@@ -675,10 +673,10 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
               target: 'value',
               matchType: 'exact',
               matchValue: '__never_matches__',
-              style: { backgroundColor: '#111111' }
-            })
-          ]
-        })
+              style: { backgroundColor: '#111111' },
+            }),
+          ],
+        }),
       );
       ctx.fixture.detectChanges();
       const tree = getTree(ctx);
@@ -691,7 +689,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         target: 'key',
         matchType: 'exact',
         matchValue: 'status',
-        style: { backgroundColor: '#ff0000' }
+        style: { backgroundColor: '#ff0000' },
       });
       ctx.fixture.detectChanges();
 
@@ -706,10 +704,10 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
               target: 'value',
               matchType: 'exact',
               matchValue: 'TypeError',
-              style: { backgroundColor: '#abcdef' }
-            })
-          ]
-        })
+              style: { backgroundColor: '#abcdef' },
+            }),
+          ],
+        }),
       );
       ctx.fixture.detectChanges();
       const tree = getTree(ctx);
@@ -734,17 +732,17 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
               target: 'value',
               matchType: 'exact',
               matchValue: 'TypeError',
-              style: { backgroundColor: '#aaaaaa' }
+              style: { backgroundColor: '#aaaaaa' },
             }),
             rule({
               id: 'r-second',
               target: 'value',
               matchType: 'exact',
               matchValue: 'TypeError',
-              style: { backgroundColor: '#bbbbbb' }
-            })
-          ]
-        })
+              style: { backgroundColor: '#bbbbbb' },
+            }),
+          ],
+        }),
       );
       ctx.fixture.detectChanges();
       const tree = getTree(ctx);
@@ -770,9 +768,9 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
             target: 'value',
             matchType: 'exact',
             matchValue: 'error',
-            style: { backgroundColor: '#112233' }
-          })
-        ]
+            style: { backgroundColor: '#112233' },
+          }),
+        ],
       });
       const overrideSet = ruleSet({
         id: 'override-set',
@@ -781,22 +779,22 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
             target: 'value',
             matchType: 'exact',
             matchValue: 'error',
-            style: { backgroundColor: '#abcdef' }
-          })
-        ]
+            style: { backgroundColor: '#abcdef' },
+          }),
+        ],
       });
       const stubbedRuleSets = {
         ruleSets: signal<FormattingRuleSet[] | null>([homeSet]).asReadonly(),
         activeRuleSets: signal<FormattingRuleSet[]>([homeSet]).asReadonly(),
-        activeRuleSetIds: signal<readonly string[]>(['home-set']).asReadonly()
+        activeRuleSetIds: signal<readonly string[]>(['home-set']).asReadonly(),
       };
       TestBed.configureTestingModule({
         imports: [JsonTreeComponent],
         providers: [
           ...provideFakeAuth(),
           { provide: RuleSetsService, useValue: stubbedRuleSets },
-          { provide: MatSnackBar, useValue: { open: jasmine.createSpy('open') } }
-        ]
+          { provide: MatSnackBar, useValue: { open: jasmine.createSpy('open') } },
+        ],
       });
       const fix = TestBed.createComponent(JsonTreeComponent);
       fix.componentRef.setInput('value', { status: 'error' });
@@ -829,7 +827,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       }
     }
 
-    it('addRule focuses the new rule\'s match-value input', fakeAsync(() => {
+    it("addRule focuses the new rule's match-value input", fakeAsync(() => {
       const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' })] }));
       try {
         ctx.fixture.componentInstance.addRule();
@@ -837,19 +835,17 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         flush();
         const editable = ctx.fixture.componentInstance.editable()!;
         const newId = editable.rules[editable.rules.length - 1].id;
-        expect((document.activeElement as HTMLElement | null)?.id).toBe(
-          `match-value-${newId}`
-        );
+        expect((document.activeElement as HTMLElement | null)?.id).toBe(`match-value-${newId}`);
       } finally {
         detach(ctx);
       }
     }));
 
-    it('removeRule on a middle rule focuses the next surviving rule\'s remove button', fakeAsync(() => {
+    it("removeRule on a middle rule focuses the next surviving rule's remove button", fakeAsync(() => {
       const ctx = attached(
         ruleSet({
-          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })]
-        })
+          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })],
+        }),
       );
       try {
         ctx.fixture.componentInstance.removeRule(1);
@@ -857,25 +853,19 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         flush();
         // rules[1] (r2) was removed; rules[1] is now r3 which should
         // receive focus on its remove button.
-        expect((document.activeElement as HTMLElement | null)?.id).toBe(
-          'remove-rule-r3'
-        );
+        expect((document.activeElement as HTMLElement | null)?.id).toBe('remove-rule-r3');
       } finally {
         detach(ctx);
       }
     }));
 
-    it('removeRule on the last rule focuses the new last rule\'s remove button', fakeAsync(() => {
-      const ctx = attached(
-        ruleSet({ rules: [rule({ id: 'r1' }), rule({ id: 'r2' })] })
-      );
+    it("removeRule on the last rule focuses the new last rule's remove button", fakeAsync(() => {
+      const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' }), rule({ id: 'r2' })] }));
       try {
         ctx.fixture.componentInstance.removeRule(1);
         ctx.fixture.detectChanges();
         flush();
-        expect((document.activeElement as HTMLElement | null)?.id).toBe(
-          'remove-rule-r1'
-        );
+        expect((document.activeElement as HTMLElement | null)?.id).toBe('remove-rule-r1');
       } finally {
         detach(ctx);
       }
@@ -887,9 +877,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         ctx.fixture.componentInstance.removeRule(0);
         ctx.fixture.detectChanges();
         flush();
-        expect((document.activeElement as HTMLElement | null)?.id).toBe(
-          'add-rule-button'
-        );
+        expect((document.activeElement as HTMLElement | null)?.id).toBe('add-rule-button');
       } finally {
         detach(ctx);
       }
@@ -898,8 +886,8 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     it('moveRule keeps focus on the same direction button when not at edge', fakeAsync(() => {
       const ctx = attached(
         ruleSet({
-          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })]
-        })
+          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })],
+        }),
       );
       try {
         // Move r2 down (index 1 -> 2). New position is the last, so
@@ -907,9 +895,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         ctx.fixture.componentInstance.moveRule(1, 1);
         ctx.fixture.detectChanges();
         flush();
-        expect((document.activeElement as HTMLElement | null)?.id).toBe(
-          'move-up-r2'
-        );
+        expect((document.activeElement as HTMLElement | null)?.id).toBe('move-up-r2');
       } finally {
         detach(ctx);
       }
@@ -918,8 +904,8 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     it('moveRule falls back to opposite direction when same direction hits the edge', fakeAsync(() => {
       const ctx = attached(
         ruleSet({
-          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })]
-        })
+          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })],
+        }),
       );
       try {
         // Move r2 up (index 1 -> 0). New position 0 disables move-up,
@@ -927,9 +913,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         ctx.fixture.componentInstance.moveRule(1, -1);
         ctx.fixture.detectChanges();
         flush();
-        expect((document.activeElement as HTMLElement | null)?.id).toBe(
-          'move-down-r2'
-        );
+        expect((document.activeElement as HTMLElement | null)?.id).toBe('move-down-r2');
       } finally {
         detach(ctx);
       }
@@ -938,13 +922,8 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     it('moveRule keeps focus on the moved button when neither end is reached', fakeAsync(() => {
       const ctx = attached(
         ruleSet({
-          rules: [
-            rule({ id: 'r1' }),
-            rule({ id: 'r2' }),
-            rule({ id: 'r3' }),
-            rule({ id: 'r4' })
-          ]
-        })
+          rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' }), rule({ id: 'r4' })],
+        }),
       );
       try {
         // Move r2 down (index 1 -> 2). Not the last, so move-down stays
@@ -952,9 +931,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         ctx.fixture.componentInstance.moveRule(1, 1);
         ctx.fixture.detectChanges();
         flush();
-        expect((document.activeElement as HTMLElement | null)?.id).toBe(
-          'move-down-r2'
-        );
+        expect((document.activeElement as HTMLElement | null)?.id).toBe('move-down-r2');
       } finally {
         detach(ctx);
       }

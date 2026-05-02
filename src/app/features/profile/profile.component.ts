@@ -4,7 +4,7 @@ import {
   DestroyRef,
   OnInit,
   computed,
-  inject
+  inject,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -19,7 +19,7 @@ import { MatSliderModule } from '@angular/material/slider';
 import { AuthService } from '../../core/auth/auth.service';
 import {
   DEFAULT_PREFERENCES,
-  PreferencesService
+  PreferencesService,
 } from '../../core/preferences/preferences.service';
 import { FormattingRuleSet, ThemeColorSet, UserPreferences } from '../../core/api/models';
 import { RuleSetsService } from '../../core/api/rule-sets.service';
@@ -46,23 +46,23 @@ const HIGHLIGHT_FIELDS: readonly HighlightFieldDescriptor[] = [
   {
     key: 'selectionColor',
     inputId: (t) => `pref-highlight-${t}-selection`,
-    i18nId: '@@profile.prefs.highlightColors.selection'
+    i18nId: '@@profile.prefs.highlightColors.selection',
   },
   {
     key: 'matchingValueColor',
     inputId: (t) => `pref-highlight-${t}-matching`,
-    i18nId: '@@profile.prefs.highlightColors.matching'
+    i18nId: '@@profile.prefs.highlightColors.matching',
   },
   {
     key: 'ancestorColor',
     inputId: (t) => `pref-highlight-${t}-ancestor`,
-    i18nId: '@@profile.prefs.highlightColors.ancestor'
+    i18nId: '@@profile.prefs.highlightColors.ancestor',
   },
   {
     key: 'searchHighlightColor',
     inputId: (t) => `pref-highlight-${t}-search`,
-    i18nId: '@@profile.prefs.highlightColors.search'
-  }
+    i18nId: '@@profile.prefs.highlightColors.search',
+  },
 ];
 
 @Component({
@@ -79,11 +79,11 @@ const HIGHLIGHT_FIELDS: readonly HighlightFieldDescriptor[] = [
     MatSelectModule,
     MatSlideToggleModule,
     MatSliderModule,
-    IconComponent
+    IconComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile.component.html',
-  styleUrl: './profile.component.scss'
+  styleUrl: './profile.component.scss',
 })
 export class ProfileComponent implements OnInit {
   private readonly auth = inject(AuthService);
@@ -103,22 +103,14 @@ export class ProfileComponent implements OnInit {
   readonly defaultTreeExpansionDepth = computed(() => this.prefs().defaultTreeExpansionDepth);
   readonly treeAutoFitToWindow = computed(() => this.prefs().treeAutoFitToWindow);
   readonly treeShowTypeLabels = computed(() => this.prefs().treeShowTypeLabels);
-  readonly treeShowDateAnnotations = computed(
-    () => this.prefs().treeShowDateAnnotations
-  );
+  readonly treeShowDateAnnotations = computed(() => this.prefs().treeShowDateAnnotations);
   readonly treeShowComments = computed(() => this.prefs().treeShowComments);
-  readonly treeDateAnnotationUnits = computed(
-    () => this.prefs().treeDateAnnotationUnits
-  );
+  readonly treeDateAnnotationUnits = computed(() => this.prefs().treeDateAnnotationUnits);
   readonly treeDateAnnotationFriendlyForms = computed(
-    () => this.prefs().treeDateAnnotationFriendlyForms
+    () => this.prefs().treeDateAnnotationFriendlyForms,
   );
-  readonly treeAssumeUtcForIsoDateTime = computed(
-    () => this.prefs().treeAssumeUtcForIsoDateTime
-  );
-  readonly treeAssumeUtcForIsoDateOnly = computed(
-    () => this.prefs().treeAssumeUtcForIsoDateOnly
-  );
+  readonly treeAssumeUtcForIsoDateTime = computed(() => this.prefs().treeAssumeUtcForIsoDateTime);
+  readonly treeAssumeUtcForIsoDateOnly = computed(() => this.prefs().treeAssumeUtcForIsoDateOnly);
   readonly treeFontSize = computed(() => this.prefs().treeFontSize);
   readonly treePathRoot = computed(() => this.prefs().treePathRoot);
 
@@ -127,9 +119,7 @@ export class ProfileComponent implements OnInit {
   readonly searchScope = computed(() => this.prefs().searchScope);
 
   readonly recentlyViewedEnabled = computed(() => this.prefs().recentlyViewedEnabled);
-  readonly treeEditorSelectionSync = computed(
-    () => this.prefs().treeEditorSelectionSync
-  );
+  readonly treeEditorSelectionSync = computed(() => this.prefs().treeEditorSelectionSync);
   readonly blobQuotaStrategy = computed(() => this.prefs().blobQuotaStrategy);
   readonly theme = computed(() => this.prefs().theme);
   readonly layoutOrientation = computed(() => this.prefs().layoutOrientation);
@@ -181,7 +171,7 @@ export class ProfileComponent implements OnInit {
       .subscribe({
         error: () => {
           /* surfaced once the service grows a sync-state signal */
-        }
+        },
       });
   }
 
@@ -211,7 +201,7 @@ export class ProfileComponent implements OnInit {
       value,
       EXPANSION_DEPTH_MIN,
       EXPANSION_DEPTH_MAX,
-      this.defaultTreeExpansionDepth()
+      this.defaultTreeExpansionDepth(),
     );
     this.prefsService.update({ defaultTreeExpansionDepth: clamped });
   }
@@ -239,10 +229,10 @@ export class ProfileComponent implements OnInit {
 
   onTreeDateAnnotationUnitChange(unit: TreeDateAnnotationUnit, value: boolean): void {
     const patch: Partial<UserPreferences['treeDateAnnotationUnits']> = {
-      [unit]: value
+      [unit]: value,
     };
     this.prefsService.update({
-      treeDateAnnotationUnits: patch as UserPreferences['treeDateAnnotationUnits']
+      treeDateAnnotationUnits: patch as UserPreferences['treeDateAnnotationUnits'],
     });
   }
 
@@ -313,9 +303,9 @@ export class ProfileComponent implements OnInit {
         ...current,
         [theme]: {
           ...current[theme],
-          [key]: normalized
-        }
-      }
+          [key]: normalized,
+        },
+      },
     });
   }
 
@@ -325,8 +315,8 @@ export class ProfileComponent implements OnInit {
     this.prefsService.update({
       treeHighlightColors: {
         ...current,
-        [active]: { ...DEFAULT_PREFERENCES.treeHighlightColors[active] }
-      }
+        [active]: { ...DEFAULT_PREFERENCES.treeHighlightColors[active] },
+      },
     });
   }
 
@@ -359,7 +349,7 @@ export class ProfileComponent implements OnInit {
     value: number | string | null,
     min: number,
     max: number,
-    fallback: number
+    fallback: number,
   ): number {
     if (value === null || value === '') return fallback;
     const parsed = typeof value === 'number' ? value : Number(value);

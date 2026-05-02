@@ -31,9 +31,7 @@ describe('JsonExtractorService', () => {
     });
 
     it('returns null for an unbalanced { with no closing brace', () => {
-      expect(
-        svc.extractFromMixedText('prefix { "a": 1 suffix no closer')
-      ).toBeNull();
+      expect(svc.extractFromMixedText('prefix { "a": 1 suffix no closer')).toBeNull();
     });
 
     it('returns null when input length exceeds 1 MiB', () => {
@@ -74,24 +72,20 @@ describe('JsonExtractorService', () => {
     });
 
     it('does not treat // inside a string as a comment (URL case)', () => {
-      const r = svc.extractFromMixedText(
-        '{"url":"http://example.test/a//b"}'
-      );
+      const r = svc.extractFromMixedText('{"url":"http://example.test/a//b"}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
       expect(JSON.parse(r!.text)).toEqual({
-        url: 'http://example.test/a//b'
+        url: 'http://example.test/a//b',
       });
     });
 
     it('does not treat /* */ inside a string as a comment', () => {
-      const r = svc.extractFromMixedText(
-        '{"pattern":"/* not a comment */"}'
-      );
+      const r = svc.extractFromMixedText('{"pattern":"/* not a comment */"}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
       expect(JSON.parse(r!.text)).toEqual({
-        pattern: '/* not a comment */'
+        pattern: '/* not a comment */',
       });
     });
 
@@ -137,9 +131,7 @@ describe('JsonExtractorService', () => {
 
   describe('multi-block extraction', () => {
     it('wraps two objects as an array, in source order', () => {
-      const r = svc.extractFromMixedText(
-        'request {"a":1} response {"b":2}'
-      );
+      const r = svc.extractFromMixedText('request {"a":1} response {"b":2}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(2);
       expect(r!.preservesComments).toBeFalse();
@@ -168,9 +160,7 @@ describe('JsonExtractorService', () => {
       // The outer { notJson: ... } has an unquoted key and is invalid JSONC,
       // so the parser rejects it. The scanner must resume at start+1 (not
       // end+1) so the inner {"real":1} is still found.
-      const r = svc.extractFromMixedText(
-        'debug { notJson: {"real":1} } end'
-      );
+      const r = svc.extractFromMixedText('debug { notJson: {"real":1} } end');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
       expect(r!.preservesComments).toBeTrue();
@@ -198,9 +188,7 @@ describe('JsonExtractorService', () => {
     });
 
     it('does NOT count // inside a JSON string value as a comment', () => {
-      const r = svc.extractFromMixedText(
-        'see {"url": "https://example.com/path"} done'
-      );
+      const r = svc.extractFromMixedText('see {"url": "https://example.com/path"} done');
       expect(r).not.toBeNull();
       expect(r!.hasComments).toBeFalse();
     });
@@ -215,9 +203,7 @@ describe('JsonExtractorService', () => {
     });
 
     it('reports hasComments: true when any multi-block candidate has comments', () => {
-      const r = svc.extractFromMixedText(
-        'request {"a":1} response { /* trace */ "b": 2 }'
-      );
+      const r = svc.extractFromMixedText('request {"a":1} response { /* trace */ "b": 2 }');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(2);
       expect(r!.hasComments).toBeTrue();
@@ -235,9 +221,7 @@ describe('JsonExtractorService', () => {
       // rejected by the parser (unquoted key). The scanner resumes at
       // start+1 and accepts the inner `{"real":1}`, which has no comments.
       // The rejected outer's comment must NOT propagate into the result.
-      const r = svc.extractFromMixedText(
-        'log { /* nope */ notJson: {"real":1} } end'
-      );
+      const r = svc.extractFromMixedText('log { /* nope */ notJson: {"real":1} } end');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
       expect(JSON.parse(r!.text)).toEqual({ real: 1 });

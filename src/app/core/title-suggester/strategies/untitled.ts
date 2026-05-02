@@ -21,6 +21,6 @@ export const untitledStrategy: SuggestionStrategy = (input) => {
   return {
     value: $localize`:@@toolbar.titleSuggestion.fallback.untitled:Untitled`,
     source: 'untitled',
-    confidence: 5
+    confidence: 5,
   };
 };

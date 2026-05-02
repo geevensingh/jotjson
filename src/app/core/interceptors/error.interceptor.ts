@@ -14,9 +14,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       logger.warn('api.error', {
         method: req.method,
         pathTemplate: sanitizePath(req.url),
-        status: error.status
+        status: error.status,
       });
       return throwError(() => error);
-    })
+    }),
   );
 };

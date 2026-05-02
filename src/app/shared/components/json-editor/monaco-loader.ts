@@ -39,18 +39,16 @@ export function loadMonaco(): Promise<typeof MonacoNS> {
           new Blob(
             [
               `self.MonacoEnvironment = { baseUrl: '${location.origin}/vs/' };` +
-                `importScripts('${location.origin}/vs/base/worker/workerMain.js');`
+                `importScripts('${location.origin}/vs/base/worker/workerMain.js');`,
             ],
-            { type: 'text/javascript' }
-          )
+            { type: 'text/javascript' },
+          ),
         );
         return proxy;
-      }
+      },
     };
 
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-monaco-loader="true"]'
-    );
+    const existing = document.querySelector<HTMLScriptElement>('script[data-monaco-loader="true"]');
     if (existing && window.require) {
       bootstrap(resolve, reject);
       return;
@@ -68,10 +66,7 @@ export function loadMonaco(): Promise<typeof MonacoNS> {
   return monacoPromise;
 }
 
-function bootstrap(
-  resolve: (m: typeof MonacoNS) => void,
-  reject: (error: unknown) => void
-): void {
+function bootstrap(resolve: (m: typeof MonacoNS) => void, reject: (error: unknown) => void): void {
   const req = window.require;
   if (!req) {
     reject(new Error('Monaco AMD loader did not attach window.require'));
@@ -99,7 +94,5 @@ export function __resetMonacoLoaderForTesting(): void {
   delete winRef['require'];
   delete winRef['MonacoEnvironment'];
   delete winRef['monaco'];
-  document
-    .querySelector('script[data-monaco-loader="true"]')
-    ?.remove();
+  document.querySelector('script[data-monaco-loader="true"]')?.remove();
 }

@@ -1,26 +1,16 @@
 jest.mock('./cosmos', () => ({
   getCosmos: jest.fn(() => {
     throw new Error('cosmos must not be touched in preset-data tests');
-  })
+  }),
 }));
 
 import { assertRule, assertRuleSetPayload } from './ruleSets';
-import {
-  PRESET_RULE_SETS,
-  findPreset,
-  listPresets,
-  presetToCreatePayload
-} from './ruleSetPresets';
+import { PRESET_RULE_SETS, findPreset, listPresets, presetToCreatePayload } from './ruleSetPresets';
 
 describe('built-in rule-set presets', () => {
   it('exposes the four spec presets in a stable order', () => {
     const ids = PRESET_RULE_SETS.map((p) => p.id);
-    expect(ids).toEqual([
-      'error-detection',
-      'status-codes',
-      'null-finder',
-      'status-highlights'
-    ]);
+    expect(ids).toEqual(['error-detection', 'status-codes', 'null-finder', 'status-highlights']);
   });
 
   it('uses kebab-case preset IDs (not UUIDs)', () => {
@@ -73,7 +63,7 @@ describe('built-in rule-set presets', () => {
       'exception',
       'fault',
       'failure',
-      'failed'
+      'failed',
     ]);
   });
 
@@ -142,7 +132,7 @@ describe('built-in rule-set presets', () => {
       'warning',
       'warn',
       'pending',
-      'retry'
+      'retry',
     ]);
   });
 

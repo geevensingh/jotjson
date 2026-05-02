@@ -5,7 +5,7 @@ import {
   detectBinary,
   detectEncoding,
   hasHighNonPrintableRatio,
-  matchesBinaryMagic
+  matchesBinaryMagic,
 } from './binary-detection';
 
 function bytesFrom(...values: number[]): Uint8Array {
@@ -50,7 +50,7 @@ const UTF16BE_BOM = bytesFrom(0xfe, 0xff);
 describe('binary-detection / matchesBinaryMagic', () => {
   it('detects PNG signature', () => {
     expect(
-      matchesBinaryMagic(bytesFrom(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00))
+      matchesBinaryMagic(bytesFrom(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00)),
     ).toBe(true);
   });
 
@@ -66,7 +66,7 @@ describe('binary-detection / matchesBinaryMagic', () => {
   it('detects WebP (RIFF + WEBP marker at offset 8)', () => {
     const webp = withPrefix(
       bytesFrom(0x52, 0x49, 0x46, 0x46, 0xaa, 0xbb, 0xcc, 0xdd),
-      bytesFrom(0x57, 0x45, 0x42, 0x50, 0x00)
+      bytesFrom(0x57, 0x45, 0x42, 0x50, 0x00),
     );
     expect(matchesBinaryMagic(webp)).toBe(true);
   });
@@ -74,7 +74,7 @@ describe('binary-detection / matchesBinaryMagic', () => {
   it('detects WAV (RIFF + WAVE marker at offset 8)', () => {
     const wav = withPrefix(
       bytesFrom(0x52, 0x49, 0x46, 0x46, 0xaa, 0xbb, 0xcc, 0xdd),
-      bytesFrom(0x57, 0x41, 0x56, 0x45, 0x00)
+      bytesFrom(0x57, 0x41, 0x56, 0x45, 0x00),
     );
     expect(matchesBinaryMagic(wav)).toBe(true);
   });
@@ -82,7 +82,7 @@ describe('binary-detection / matchesBinaryMagic', () => {
   it('does NOT match a RIFF prefix without WEBP/WAVE marker', () => {
     const rifflike = withPrefix(
       bytesFrom(0x52, 0x49, 0x46, 0x46, 0xaa, 0xbb, 0xcc, 0xdd),
-      bytesFrom(0x4a, 0x55, 0x4e, 0x4b, 0x00)
+      bytesFrom(0x4a, 0x55, 0x4e, 0x4b, 0x00),
     );
     expect(matchesBinaryMagic(rifflike)).toBe(false);
   });
@@ -137,14 +137,14 @@ describe('binary-detection / matchesBinaryMagic', () => {
 
   it('detects legacy Office OLE/CFBF compound file', () => {
     expect(
-      matchesBinaryMagic(bytesFrom(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00))
+      matchesBinaryMagic(bytesFrom(0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00)),
     ).toBe(true);
   });
 
   it('detects ISOBMFF/MP4 by "ftyp" at offset 4', () => {
     const mp4 = withPrefix(
       bytesFrom(0x00, 0x00, 0x00, 0x20),
-      bytesFrom(0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d)
+      bytesFrom(0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d),
     );
     expect(matchesBinaryMagic(mp4)).toBe(true);
   });
@@ -280,8 +280,18 @@ describe('binary-detection / hasHighNonPrintableRatio', () => {
 describe('binary-detection / detectBinary integration', () => {
   it('rejects PNG with reason "magic"', () => {
     const buffer = bytesFrom(
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      0x00, 0x00, 0x00, 0x0d
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      0x0d,
+      0x0a,
+      0x1a,
+      0x0a,
+      0x00,
+      0x00,
+      0x00,
+      0x0d,
     );
     expect(detectBinary(buffer)).toEqual({ isBinary: true, reason: 'magic' });
   });
@@ -289,21 +299,21 @@ describe('binary-detection / detectBinary integration', () => {
   it('rejects PDF with reason "magic"', () => {
     expect(detectBinary(utf8Bytes('%PDF-1.7\nbody...'))).toEqual({
       isBinary: true,
-      reason: 'magic'
+      reason: 'magic',
     });
   });
 
   it('rejects ZIP with reason "magic"', () => {
     expect(detectBinary(bytesFrom(0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00))).toEqual({
       isBinary: true,
-      reason: 'magic'
+      reason: 'magic',
     });
   });
 
   it('rejects magic bytes followed by valid-looking JSON (magic wins)', () => {
     const buffer = withPrefix(
       bytesFrom(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a),
-      utf8Bytes('{"a":1}')
+      utf8Bytes('{"a":1}'),
     );
     expect(detectBinary(buffer)).toEqual({ isBinary: true, reason: 'magic' });
   });
@@ -313,7 +323,7 @@ describe('binary-detection / detectBinary integration', () => {
     expect(result).toEqual({
       isBinary: false,
       text: '{"a":1,"b":[true,false,null]}',
-      encoding: 'utf-8'
+      encoding: 'utf-8',
     });
   });
 
@@ -338,7 +348,7 @@ describe('binary-detection / detectBinary integration', () => {
   it('rejects text with an embedded NUL character ("nul" reason)', () => {
     expect(detectBinary(utf8Bytes('hello\u0000world'))).toEqual({
       isBinary: true,
-      reason: 'nul'
+      reason: 'nul',
     });
   });
 
@@ -377,7 +387,7 @@ describe('binary-detection / detectBinary integration', () => {
     expect(detectBinary(utf8Bytes('abcd'))).toEqual({
       isBinary: false,
       text: 'abcd',
-      encoding: 'utf-8'
+      encoding: 'utf-8',
     });
   });
 
@@ -385,7 +395,7 @@ describe('binary-detection / detectBinary integration', () => {
     expect(detectBinary(new Uint8Array(0))).toEqual({
       isBinary: false,
       text: '',
-      encoding: 'utf-8'
+      encoding: 'utf-8',
     });
   });
 });

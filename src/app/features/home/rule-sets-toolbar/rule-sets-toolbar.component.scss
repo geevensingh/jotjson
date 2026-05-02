@@ -25,7 +25,9 @@
   border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
   border-radius: 999px;
   cursor: pointer;
-  transition: background-color 80ms ease-out, border-color 80ms ease-out;
+  transition:
+    background-color 80ms ease-out,
+    border-color 80ms ease-out;
 }
 
 .chip:hover {

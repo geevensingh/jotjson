@@ -11,7 +11,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: "06:00"
+      time: '06:00'
       timezone: America/Los_Angeles
     open-pull-requests-limit: 10
     labels:
@@ -24,17 +24,17 @@ updates:
     # (.nvmrc, engines.node, setup-node steps in CI/CD), so block major
     # bumps for @types/node. Revisit when we move to the next LTS.
     ignore:
-      - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       angular:
         patterns:
-          - "@angular/*"
-          - "@angular-devkit/*"
+          - '@angular/*'
+          - '@angular-devkit/*'
       material:
         patterns:
-          - "@angular/material"
-          - "@angular/cdk"
+          - '@angular/material'
+          - '@angular/cdk'
       dev-minor:
         dependency-type: development
         update-types:
@@ -46,7 +46,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: "06:00"
+      time: '06:00'
       timezone: America/Los_Angeles
     open-pull-requests-limit: 10
     labels:
@@ -59,12 +59,12 @@ updates:
     # (.nvmrc, engines.node, setup-node steps in CI/CD), so block major
     # bumps for @types/node. Revisit when we move to the next LTS.
     ignore:
-      - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       azure-sdk:
         patterns:
-          - "@azure/*"
+          - '@azure/*'
       dev-minor:
         dependency-type: development
         update-types:
@@ -76,7 +76,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: "06:00"
+      time: '06:00'
       timezone: America/Los_Angeles
     open-pull-requests-limit: 5
     labels:

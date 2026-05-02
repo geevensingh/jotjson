@@ -12,8 +12,8 @@ module.exports = {
       {
         outputDirectory: '<rootDir>/../test-results/api',
         outputName: 'junit.xml',
-        suiteName: 'api'
-      }
-    ]
-  ]
+        suiteName: 'api',
+      },
+    ],
+  ],
 };

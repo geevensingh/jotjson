@@ -21,10 +21,7 @@ import { LoggerService } from '../../core/telemetry/logger.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
-import {
-  installMinimalMonacoStub,
-  restoreMonacoStub
-} from '../../../testing/monaco.testing';
+import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -80,7 +77,7 @@ function makeIdentityBlob(overrides: Partial<JsonBlob> = {}): JsonBlob {
     isPublic: false,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -94,7 +91,7 @@ describe('HomeComponent (unit-level)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
@@ -200,7 +197,7 @@ describe('HomeComponent (unit-level)', () => {
       ownerId: 'me',
       isPublic: false,
       createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
+      updatedAt: '2024-01-01T00:00:00Z',
     });
     fixture.componentInstance.onClear();
     expect(fixture.componentInstance.content()).toBe('');
@@ -218,7 +215,7 @@ describe('HomeComponent (unit-level)', () => {
       ownerId: 'me',
       isPublic: false,
       createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
+      updatedAt: '2024-01-01T00:00:00Z',
     };
     fixture.componentRef.setInput('initialBlob', blob);
     fixture.componentRef.changeDetectorRef.detectChanges();
@@ -250,7 +247,7 @@ describe('HomeComponent (unit-level)', () => {
       ownerId: 'me',
       isPublic: false,
       createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
+      updatedAt: '2024-01-01T00:00:00Z',
     };
 
     // --- Cycle 1: hydrate from blob, then clear.
@@ -299,7 +296,7 @@ describe('HomeComponent (unit-level)', () => {
       ownerId: 'me',
       isPublic: false,
       createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
+      updatedAt: '2024-01-01T00:00:00Z',
     };
     const blob2: JsonBlob = {
       id: 'id-2',
@@ -309,7 +306,7 @@ describe('HomeComponent (unit-level)', () => {
       ownerId: 'me',
       isPublic: false,
       createdAt: '2024-02-01T00:00:00Z',
-      updatedAt: '2024-02-01T00:00:00Z'
+      updatedAt: '2024-02-01T00:00:00Z',
     };
 
     fixture.componentRef.setInput('initialBlob', blob1);
@@ -340,7 +337,7 @@ describe('HomeComponent (unit-level)', () => {
       ownerId: 'me',
       isPublic: false,
       createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
+      updatedAt: '2024-01-01T00:00:00Z',
     };
     first.componentRef.setInput('initialBlob', blob);
     first.componentRef.changeDetectorRef.detectChanges();
@@ -470,9 +467,7 @@ describe('HomeComponent (unit-level)', () => {
   it('onCopy writes the editor text to the clipboard', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1}');
-    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(
-      Promise.resolve()
-    );
+    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(Promise.resolve());
     await fixture.componentInstance.onCopy();
     expect(spy).toHaveBeenCalledWith('{"a":1}');
   });
@@ -480,9 +475,7 @@ describe('HomeComponent (unit-level)', () => {
   it('onCopy is a no-op when content is empty', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('');
-    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(
-      Promise.resolve()
-    );
+    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(Promise.resolve());
     await fixture.componentInstance.onCopy();
     expect(spy).not.toHaveBeenCalled();
   });
@@ -490,19 +483,14 @@ describe('HomeComponent (unit-level)', () => {
   it('onCopy swallows clipboard errors', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1}');
-    spyOn(navigator.clipboard, 'writeText').and.returnValue(
-      Promise.reject(new Error('denied'))
-    );
+    spyOn(navigator.clipboard, 'writeText').and.returnValue(Promise.reject(new Error('denied')));
     await expectAsync(fixture.componentInstance.onCopy()).toBeResolved();
   });
 
   it('onPaste auto-unescapes an escaped JSON payload and formats it', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
-    const escaped =
-      '{\\r\\n    \\"a\\": 1,\\r\\n    \\"b\\": 2\\r\\n }';
-    spyOn(navigator.clipboard, 'readText').and.returnValue(
-      Promise.resolve(escaped)
-    );
+    const escaped = '{\\r\\n    \\"a\\": 1,\\r\\n    \\"b\\": 2\\r\\n }';
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve(escaped));
     await fixture.componentInstance.onPaste();
     await waitForDoubleAnimationFrame();
     const content = fixture.componentInstance.content();
@@ -539,17 +527,15 @@ describe('HomeComponent (unit-level)', () => {
         clipboardReadMs: jasmine.any(Number),
         parseMs: jasmine.any(Number),
         syncHandlerMs: jasmine.any(Number),
-        firstPaintMs: jasmine.any(Number)
-      })
+        firstPaintMs: jasmine.any(Number),
+      }),
     );
   });
 
   it('onPaste does not emit paste.handle for whitespace-only clipboard text', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
-    spyOn(navigator.clipboard, 'readText').and.returnValue(
-      Promise.resolve('  \n\t  ')
-    );
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve('  \n\t  '));
 
     await fixture.componentInstance.onPaste();
     await waitForDoubleAnimationFrame();
@@ -564,7 +550,7 @@ describe('HomeComponent (unit-level)', () => {
     fixture.componentInstance.onEditorPaste({
       pastedText: '{"a":1}',
       postPasteContent: '{"a":1}',
-      postPasteParses: true
+      postPasteParses: true,
     });
 
     expect(eventSpy).not.toHaveBeenCalled();
@@ -572,14 +558,14 @@ describe('HomeComponent (unit-level)', () => {
 
   describe('view reset on document replacement', () => {
     function flushHomeEffects(
-      fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>
+      fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,
     ): void {
       fixture.componentRef.changeDetectorRef.detectChanges();
       TestBed.flushEffects();
     }
 
     function createComponentWithClipboardText(
-      text: string
+      text: string,
     ): ReturnType<typeof TestBed.createComponent<HomeComponent>> {
       const clipboardStub = {
         readForPaste: async () => text,
@@ -588,10 +574,10 @@ describe('HomeComponent (unit-level)', () => {
         stopPolling: () => undefined,
         permissionState: signal<'prompt'>('prompt').asReadonly(),
         hasJson: signal(false).asReadonly(),
-        preview: signal('').asReadonly()
+        preview: signal('').asReadonly(),
       } satisfies Partial<ClipboardPollingService>;
       TestBed.overrideProvider(ClipboardPollingService, {
-        useValue: clipboardStub
+        useValue: clipboardStub,
       });
       return TestBed.createComponent(HomeComponent);
     }
@@ -642,19 +628,19 @@ describe('HomeComponent (unit-level)', () => {
         id: 'blob-a',
         slug: 'slug-a',
         content: '{"a":1}',
-        title: 'Blob A'
+        title: 'Blob A',
       });
       const sameIdBlob = makeIdentityBlob({
         id: 'blob-a',
         slug: 'slug-a-again',
         content: '{"a":2}',
-        title: 'Blob A again'
+        title: 'Blob A again',
       });
       const secondBlob = makeIdentityBlob({
         id: 'blob-b',
         slug: 'slug-b',
         content: '{"b":2}',
-        title: 'Blob B'
+        title: 'Blob B',
       });
 
       fixture.componentRef.setInput('initialBlob', firstBlob);
@@ -698,9 +684,7 @@ describe('HomeComponent (unit-level)', () => {
   it('onCopyEscaped writes JSON.stringify of content to clipboard', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1}');
-    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(
-      Promise.resolve()
-    );
+    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(Promise.resolve());
     await fixture.componentInstance.onCopyEscaped();
     expect(spy).toHaveBeenCalledWith('"{\\"a\\":1}"');
   });
@@ -708,9 +692,7 @@ describe('HomeComponent (unit-level)', () => {
   it('onCopyEscaped is a no-op when content is empty', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('');
-    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(
-      Promise.resolve()
-    );
+    const spy = spyOn(navigator.clipboard, 'writeText').and.returnValue(Promise.resolve());
     await fixture.componentInstance.onCopyEscaped();
     expect(spy).not.toHaveBeenCalled();
   });
@@ -737,7 +719,7 @@ describe('HomeComponent (unit-level)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
     const f2 = TestBed.createComponent(HomeComponent);
     expect(f2.componentInstance.splitRatio()).toBe(0.1);
@@ -758,7 +740,7 @@ describe('HomeComponent (unit-level)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
     const f2 = TestBed.createComponent(HomeComponent);
     expect(f2.componentInstance.paneVisibility()).toBe('both');
@@ -823,10 +805,7 @@ describe('HomeComponent (unit-level)', () => {
   it('Ctrl+F is not routed to tree-search when the tree pane is hidden', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const c = fixture.componentInstance;
-    const focusSpy = spyOn(
-      c as unknown as { focusTreeSearch: () => void },
-      'focusTreeSearch'
-    );
+    const focusSpy = spyOn(c as unknown as { focusTreeSearch: () => void }, 'focusTreeSearch');
 
     c.paneVisibility.set('editor-only');
     const ev = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true });
@@ -852,7 +831,7 @@ describe('HomeComponent dirty computed (issue #84)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
@@ -923,7 +902,7 @@ describe('HomeComponent dirty computed (issue #84)', () => {
 
     const nullTitleBlob = {
       ...makeIdentityBlob({ id: 'identity-blob-2' }),
-      title: null
+      title: null,
     } as unknown as JsonBlob;
     loadBlob(component, nullTitleBlob);
     component.title.set('');
@@ -950,7 +929,7 @@ describe('HomeComponent canSave computed (issue #84)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
@@ -959,7 +938,7 @@ describe('HomeComponent canSave computed (issue #84)', () => {
   function createComponent(signedInUserId: string | null = null): HomeComponent {
     if (signedInUserId !== null) {
       signInFakeUser(TestBed.inject(AuthService), {
-        user: { id: signedInUserId, displayName: 'Test User' }
+        user: { id: signedInUserId, displayName: 'Test User' },
       });
     }
     return TestBed.createComponent(HomeComponent).componentInstance;
@@ -1043,7 +1022,7 @@ describe('HomeComponent sign-in restore (issue #84)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
@@ -1071,8 +1050,8 @@ describe('HomeComponent sign-in restore (issue #84)', () => {
       JSON.stringify({
         slug: 'abc123',
         content: '{"edited":true}',
-        title: 'Edited title'
-      })
+        title: 'Edited title',
+      }),
     );
     expect(signInSpy).toHaveBeenCalledTimes(1);
   });
@@ -1083,16 +1062,16 @@ describe('HomeComponent sign-in restore (issue #84)', () => {
       JSON.stringify({
         slug: 'abc123',
         content: '{"restored":true}',
-        title: 'Restored title'
-      })
+        title: 'Restored title',
+      }),
     );
 
     const component = hydrateFromResolver(
       makeIdentityBlob({
         slug: 'abc123',
         content: '{"resolver":true}',
-        title: 'Resolver title'
-      })
+        title: 'Resolver title',
+      }),
     );
 
     expect(component.content()).toBe('{"restored":true}');
@@ -1106,16 +1085,16 @@ describe('HomeComponent sign-in restore (issue #84)', () => {
       JSON.stringify({
         slug: 'different',
         content: '{"restored":true}',
-        title: 'Restored title'
-      })
+        title: 'Restored title',
+      }),
     );
 
     const component = hydrateFromResolver(
       makeIdentityBlob({
         slug: 'abc123',
         content: '{"resolver":true}',
-        title: 'Resolver title'
-      })
+        title: 'Resolver title',
+      }),
     );
 
     expect(component.content()).toBe('{"resolver":true}');
@@ -1129,8 +1108,8 @@ describe('HomeComponent sign-in restore (issue #84)', () => {
     const component = hydrateFromResolver(
       makeIdentityBlob({
         content: '{"resolver":true}',
-        title: 'Resolver title'
-      })
+        title: 'Resolver title',
+      }),
     );
 
     expect(component.content()).toBe('{"resolver":true}');
@@ -1142,8 +1121,8 @@ describe('HomeComponent sign-in restore (issue #84)', () => {
     const component = hydrateFromResolver(
       makeIdentityBlob({
         content: '{"resolver":true}',
-        title: 'Resolver title'
-      })
+        title: 'Resolver title',
+      }),
     );
 
     expect(component.content()).toBe('{"resolver":true}');
@@ -1160,13 +1139,15 @@ describe('HomeComponent draft persistence skip (issue #84)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
   afterEach(() => clearHomeStorage());
 
-  function flushComponentEffects(fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>): void {
+  function flushComponentEffects(
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,
+  ): void {
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
   }
@@ -1238,7 +1219,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
@@ -1246,16 +1227,13 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     const knownSet = new Set<string>(knownPaths);
     const tree: TreeStub = {
       selectByPathString: jasmine.createSpy('selectByPathString'),
-      hasPath: jasmine.createSpy('hasPath').and.callFake((p: string) =>
-        knownSet.has(p)
-      )
+      hasPath: jasmine.createSpy('hasPath').and.callFake((p: string) => knownSet.has(p)),
     };
     const editor: EditorStub = {
-      revealRange: jasmine.createSpy('revealRange')
+      revealRange: jasmine.createSpy('revealRange'),
     };
     (component as unknown as { tree: () => TreeStub }).tree = () => tree;
-    (component as unknown as { editor: () => EditorStub }).editor = () =>
-      editor;
+    (component as unknown as { editor: () => EditorStub }).editor = () => editor;
     return { fixture, component, tree, editor };
   }
 
@@ -1307,7 +1285,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
       startLineNumber: 1,
       startColumn: 2,
       endLineNumber: 1,
-      endColumn: 15
+      endColumn: 15,
     });
   });
 
@@ -1320,7 +1298,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
       startLineNumber: 1,
       startColumn: 7,
       endLineNumber: 1,
-      endColumn: 9
+      endColumn: 9,
     });
   });
 
@@ -1333,7 +1311,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
       startLineNumber: 1,
       startColumn: 6,
       endLineNumber: 1,
-      endColumn: 8
+      endColumn: 8,
     });
   });
 
@@ -1378,7 +1356,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     const text = '{"a": 1}';
     const { component, tree } = setUp(text, ['$', '$.a']);
     TestBed.inject(PreferencesService).update({
-      treeEditorSelectionSync: false
+      treeEditorSelectionSync: false,
     });
     component.onCursorChange({ line: 1, column: 7, offset: 6 });
     expect(tree.selectByPathString).not.toHaveBeenCalled();
@@ -1388,7 +1366,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     const text = '{"a": 1}';
     const { component } = setUp(text, ['$', '$.a']);
     TestBed.inject(PreferencesService).update({
-      treeEditorSelectionSync: false
+      treeEditorSelectionSync: false,
     });
     component.onCursorChange({ line: 3, column: 5, offset: 6 });
     expect(component.cursor()).toEqual({ line: 3, column: 5 });
@@ -1398,7 +1376,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     const text = '{"a": 1}';
     const { component, editor } = setUp(text, ['$', '$.a']);
     TestBed.inject(PreferencesService).update({
-      treeEditorSelectionSync: false
+      treeEditorSelectionSync: false,
     });
     component.onTreeSelectionChange(['a']);
     expect(editor.revealRange).not.toHaveBeenCalled();
@@ -1409,16 +1387,12 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     const { component, tree } = setUp(text, ['$', '$.a']);
     // Off
     component.onToggleSelectionSync();
-    expect(
-      TestBed.inject(PreferencesService).prefs().treeEditorSelectionSync
-    ).toBe(false);
+    expect(TestBed.inject(PreferencesService).prefs().treeEditorSelectionSync).toBe(false);
     component.onCursorChange({ line: 1, column: 7, offset: 6 });
     expect(tree.selectByPathString).not.toHaveBeenCalled();
     // Back on
     component.onToggleSelectionSync();
-    expect(
-      TestBed.inject(PreferencesService).prefs().treeEditorSelectionSync
-    ).toBe(true);
+    expect(TestBed.inject(PreferencesService).prefs().treeEditorSelectionSync).toBe(true);
     // Toggling on did not call selectByPathString of its own.
     expect(tree.selectByPathString).not.toHaveBeenCalled();
     // Next user move re-engages sync.
@@ -1502,7 +1476,7 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
       startLineNumber: 1,
       startColumn: 8,
       endLineNumber: 1,
-      endColumn: 10
+      endColumn: 10,
     });
   });
 });
@@ -1518,7 +1492,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     isPublic: false,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
-    ...overrides
+    ...overrides,
   });
 
   interface StubBlobService {
@@ -1549,30 +1523,33 @@ describe('HomeComponent save() branching (M4a)', () => {
     TestBed.resetTestingModule();
 
     const stub: StubBlobService = {
-      create: jasmine.createSpy('create').and.callFake(() =>
-        opts.createResult instanceof Error
-          ? throwError(() => opts.createResult as Error)
-          : of(opts.createResult ?? blob())
-      ),
-      update: jasmine.createSpy('update').and.callFake(() =>
-        opts.updateResult instanceof Error
-          ? throwError(() => opts.updateResult as Error)
-          : of(opts.updateResult ?? blob())
-      ),
-      get: jasmine.createSpy('get').and.returnValue(of(blob()))
+      create: jasmine
+        .createSpy('create')
+        .and.callFake(() =>
+          opts.createResult instanceof Error
+            ? throwError(() => opts.createResult as Error)
+            : of(opts.createResult ?? blob()),
+        ),
+      update: jasmine
+        .createSpy('update')
+        .and.callFake(() =>
+          opts.updateResult instanceof Error
+            ? throwError(() => opts.updateResult as Error)
+            : of(opts.updateResult ?? blob()),
+        ),
+      get: jasmine.createSpy('get').and.returnValue(of(blob())),
     };
 
     const quota: StubQuotaService = {
       notifyAutoDeleted: jasmine.createSpy('notifyAutoDeleted').and.resolveTo(),
-      notifyQuotaExceededManual: jasmine
-        .createSpy('notifyQuotaExceededManual')
-        .and.resolveTo()
+      notifyQuotaExceededManual: jasmine.createSpy('notifyQuotaExceededManual').and.resolveTo(),
     };
 
     const fakeAuth: Partial<AuthService> = {
-      user: (() => (opts.userId ? { id: opts.userId, displayName: 'Test' } : null)) as AuthService['user'],
+      user: (() =>
+        opts.userId ? { id: opts.userId, displayName: 'Test' } : null) as AuthService['user'],
       isSignedIn: (() => !!opts.userId) as AuthService['isSignedIn'],
-      isConfigured: true
+      isConfigured: true,
     };
 
     TestBed.configureTestingModule({
@@ -1582,8 +1559,8 @@ describe('HomeComponent save() branching (M4a)', () => {
         provideRouter([]),
         { provide: BlobService, useValue: stub },
         { provide: AuthService, useValue: fakeAuth },
-        { provide: QuotaNotificationService, useValue: quota }
-      ]
+        { provide: QuotaNotificationService, useValue: quota },
+      ],
     });
 
     const fixture = TestBed.createComponent(HomeComponent);
@@ -1620,7 +1597,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     expect(eventSpy).toHaveBeenCalledOnceWith(
       'share.created',
       { visibility: 'private' },
-      { sizeBytes: new Blob([content]).size }
+      { sizeBytes: new Blob([content]).size },
     );
   });
 
@@ -1681,7 +1658,7 @@ describe('HomeComponent save() branching (M4a)', () => {
   it('create path: calls notifyAutoDeleted when the response includes autoDeleted', async () => {
     const created = {
       ...blob({ id: 'new-id', slug: 'newslug', ownerId: 'u1' }),
-      autoDeleted: { id: 'old-id', slug: 'oldslug', title: 'Old title' }
+      autoDeleted: { id: 'old-id', slug: 'oldslug', title: 'Old title' },
     };
     const { fixture, quota, router } = setup({ userId: 'u1', createResult: created });
     spyOn(router, 'navigate').and.resolveTo(true);
@@ -1690,11 +1667,11 @@ describe('HomeComponent save() branching (M4a)', () => {
     expect(quota.notifyAutoDeleted).toHaveBeenCalledWith({
       id: 'old-id',
       slug: 'oldslug',
-      title: 'Old title'
+      title: 'Old title',
     });
     // loadedBlob must NOT carry the autoDeleted marker.
     expect(
-      (fixture.componentInstance.loadedBlob() as unknown as Record<string, unknown>)['autoDeleted']
+      (fixture.componentInstance.loadedBlob() as unknown as Record<string, unknown>)['autoDeleted'],
     ).toBeUndefined();
   });
 
@@ -1709,7 +1686,7 @@ describe('HomeComponent save() branching (M4a)', () => {
   it('create path: opens the manual-full dialog on 409 quota_exceeded', async () => {
     const err = Object.assign(new Error('quota'), {
       status: 409,
-      error: { error: 'Blob quota reached', code: 'quota_exceeded' }
+      error: { error: 'Blob quota reached', code: 'quota_exceeded' },
     });
     const { fixture, quota } = setup({ userId: 'u1', createResult: err });
     spyOn(console, 'warn');
@@ -1736,7 +1713,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
@@ -1763,7 +1740,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       ownerId: 'o1',
       isPublic: false,
       createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
+      updatedAt: '2024-01-01T00:00:00Z',
     });
     fixture.componentInstance.content.set('{}');
     fixture.componentInstance.title.set('My Config');
@@ -1783,7 +1760,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       ownerId: 'o1',
       isPublic: false,
       createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
+      updatedAt: '2024-01-01T00:00:00Z',
     });
     fixture.componentInstance.content.set('{}');
     fixture.componentInstance.title.set('');
@@ -1801,13 +1778,15 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
   afterEach(() => clearHomeStorage());
 
-  function flushComponentEffects(fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>): void {
+  function flushComponentEffects(
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,
+  ): void {
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
   }
@@ -1822,7 +1801,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const jsonBlob = makeIdentityBlob({
       content: '{"saved":true}',
-      title: 'Saved title'
+      title: 'Saved title',
     });
 
     fixture.componentInstance.loadedBlob.set(jsonBlob);
@@ -1839,7 +1818,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const jsonBlob = makeIdentityBlob({
       content: '{"saved":true}',
-      title: 'Saved title'
+      title: 'Saved title',
     });
 
     fixture.componentInstance.loadedBlob.set(jsonBlob);
@@ -1864,7 +1843,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     flushComponentEffects(fixture);
 
     expect(mostRecentTitle(titleSpy)).toContain(
-      'JotJSON - JSON viewer, formatter, and tree explorer'
+      'JotJSON - JSON viewer, formatter, and tree explorer',
     );
     expect(mostRecentTitle(titleSpy).startsWith('* ')).toBeFalse();
   });
@@ -1873,21 +1852,21 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     const originalBlob = makeIdentityBlob({
       content: '{"saved":true}',
       title: 'Saved title',
-      ownerId: 'owner-me'
+      ownerId: 'owner-me',
     });
     const updatedBlob = makeIdentityBlob({
       content: '{"saved":false}',
       title: 'Saved title',
-      ownerId: 'owner-me'
+      ownerId: 'owner-me',
     });
     const blobService = {
       create: jasmine.createSpy('create').and.returnValue(of(updatedBlob)),
       update: jasmine.createSpy('update').and.returnValue(of(updatedBlob)),
-      get: jasmine.createSpy('get').and.returnValue(of(originalBlob))
+      get: jasmine.createSpy('get').and.returnValue(of(originalBlob)),
     };
     TestBed.overrideProvider(BlobService, { useValue: blobService });
     signInFakeUser(TestBed.inject(AuthService), {
-      user: { id: 'owner-me', displayName: 'Owner User' }
+      user: { id: 'owner-me', displayName: 'Owner User' },
     });
     const titleService = TestBed.inject(Title);
     const titleSpy = spyOn(titleService, 'setTitle');
@@ -1904,7 +1883,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
 
     expect(blobService.update).toHaveBeenCalledWith('identity-blob-1', {
       content: '{"saved":false}',
-      title: 'Saved title'
+      title: 'Saved title',
     });
     expect(mostRecentTitle(titleSpy)).toBe('Saved title | JotJSON');
   });
@@ -1943,7 +1922,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     isPublic: false,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
-    ...overrides
+    ...overrides,
   });
 
   function setup(opts: {
@@ -1963,23 +1942,27 @@ describe('HomeComponent blob actions (M4b)', () => {
 
     const stub = {
       create: jasmine.createSpy('create').and.returnValue(of(blob())),
-      update: jasmine.createSpy('update').and.callFake(() =>
-        opts.updateResult instanceof Error
-          ? throwError(() => opts.updateResult as Error)
-          : of(opts.updateResult ?? blob())
-      ),
-      delete: jasmine.createSpy('delete').and.callFake(() =>
-        opts.deleteResult instanceof Error
-          ? throwError(() => opts.deleteResult as Error)
-          : of(undefined)
-      ),
-      get: jasmine.createSpy('get').and.returnValue(of(blob()))
+      update: jasmine
+        .createSpy('update')
+        .and.callFake(() =>
+          opts.updateResult instanceof Error
+            ? throwError(() => opts.updateResult as Error)
+            : of(opts.updateResult ?? blob()),
+        ),
+      delete: jasmine
+        .createSpy('delete')
+        .and.callFake(() =>
+          opts.deleteResult instanceof Error
+            ? throwError(() => opts.deleteResult as Error)
+            : of(undefined),
+        ),
+      get: jasmine.createSpy('get').and.returnValue(of(blob())),
     };
 
     const fakeAuth: Partial<AuthService> = {
       user: (() => ({ id: opts.userId, displayName: 'Test' })) as AuthService['user'],
       isSignedIn: (() => true) as AuthService['isSignedIn'],
-      isConfigured: true
+      isConfigured: true,
     };
 
     const dialogRef = { afterClosed: () => of(!!opts.confirm) };
@@ -1994,19 +1977,19 @@ describe('HomeComponent blob actions (M4b)', () => {
     if (opts.clipboardAvailable === false) {
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
-        get: () => undefined as unknown as Clipboard
+        get: () => undefined as unknown as Clipboard,
       });
     } else {
       clipboardStub = {
         writeText: jasmine
           .createSpy('writeText')
           .and.returnValue(
-            opts.clipboardFails ? Promise.reject(new Error('x')) : Promise.resolve()
-          )
+            opts.clipboardFails ? Promise.reject(new Error('x')) : Promise.resolve(),
+          ),
       };
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
-        get: () => clipboardStub as unknown as Clipboard
+        get: () => clipboardStub as unknown as Clipboard,
       });
     }
 
@@ -2018,8 +2001,8 @@ describe('HomeComponent blob actions (M4b)', () => {
         { provide: BlobService, useValue: stub },
         { provide: AuthService, useValue: fakeAuth },
         { provide: MatDialog, useValue: dialog },
-        { provide: MatSnackBar, useValue: snack }
-      ]
+        { provide: MatSnackBar, useValue: snack },
+      ],
     });
 
     const fixture = TestBed.createComponent(HomeComponent);
@@ -2030,33 +2013,31 @@ describe('HomeComponent blob actions (M4b)', () => {
   it('onCopyShareLink writes /s/<slug> URL to the clipboard and toasts on success', async () => {
     const { fixture, snack } = setup({
       userId: 'owner-me',
-      loaded: blob()
-    }); 
-      fixture.componentInstance.onCopyShareLink();
-      // Let the clipboard promise flush.
-      await Promise.resolve();
-      await Promise.resolve();
-      const writeText = (navigator.clipboard as unknown as { writeText: jasmine.Spy }).writeText;
-      expect(writeText).toHaveBeenCalledWith(
-        `${window.location.origin}/s/abc123`
-      );
-      expect(snack.open).toHaveBeenCalled();
+      loaded: blob(),
+    });
+    fixture.componentInstance.onCopyShareLink();
+    // Let the clipboard promise flush.
+    await Promise.resolve();
+    await Promise.resolve();
+    const writeText = (navigator.clipboard as unknown as { writeText: jasmine.Spy }).writeText;
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/s/abc123`);
+    expect(snack.open).toHaveBeenCalled();
   });
 
   it('onCopyShareLink toasts an error when the browser lacks clipboard API', async () => {
     const { fixture, snack } = setup({
       userId: 'owner-me',
       loaded: blob(),
-      clipboardAvailable: false
-    }); 
-      fixture.componentInstance.onCopyShareLink();
-      expect(snack.open).toHaveBeenCalled();
+      clipboardAvailable: false,
+    });
+    fixture.componentInstance.onCopyShareLink();
+    expect(snack.open).toHaveBeenCalled();
   });
 
   it('onCopyShareLink is a no-op when no blob is loaded', async () => {
-    const { fixture, snack } = setup({ userId: 'owner-me' }); 
-      fixture.componentInstance.onCopyShareLink();
-      expect(snack.open).not.toHaveBeenCalled();
+    const { fixture, snack } = setup({ userId: 'owner-me' });
+    fixture.componentInstance.onCopyShareLink();
+    expect(snack.open).not.toHaveBeenCalled();
   });
 
   it('onTogglePublic emits public visibility telemetry after a private-to-public update', async () => {
@@ -2064,7 +2045,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     const { fixture, stub, snack } = setup({
       userId: 'owner-me',
       loaded: blob({ isPublic: false }),
-      updateResult: updated
+      updateResult: updated,
     });
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     await fixture.componentInstance.onTogglePublic();
@@ -2074,7 +2055,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     expect(eventSpy).toHaveBeenCalledOnceWith(
       'share.visibility.changed',
       { newVisibility: 'public' },
-      undefined
+      undefined,
     );
   });
 
@@ -2083,7 +2064,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     const { fixture, stub, snack } = setup({
       userId: 'owner-me',
       loaded: blob({ isPublic: true }),
-      updateResult: updated
+      updateResult: updated,
     });
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     await fixture.componentInstance.onTogglePublic();
@@ -2093,7 +2074,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     expect(eventSpy).toHaveBeenCalledOnceWith(
       'share.visibility.changed',
       { newVisibility: 'private' },
-      undefined
+      undefined,
     );
   });
 
@@ -2101,7 +2082,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     const { fixture, snack } = setup({
       userId: 'owner-me',
       loaded: blob(),
-      updateResult: new Error('nope')
+      updateResult: new Error('nope'),
     });
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     const warnSpy = spyOn(console, 'warn');
@@ -2114,39 +2095,39 @@ describe('HomeComponent blob actions (M4b)', () => {
   it('onTogglePublic does nothing when the user does not own the blob', async () => {
     const { fixture, stub } = setup({
       userId: 'someone-else',
-      loaded: blob()
-    }); 
-      await fixture.componentInstance.onTogglePublic();
-      expect(stub.update).not.toHaveBeenCalled();
+      loaded: blob(),
+    });
+    await fixture.componentInstance.onTogglePublic();
+    expect(stub.update).not.toHaveBeenCalled();
   });
 
   it('onDeleteBlob confirms, deletes, clears state, and navigates home', async () => {
     const { fixture, stub, dialog, snack } = setup({
       userId: 'owner-me',
       loaded: blob({ title: 'My Config' }),
-      confirm: true
+      confirm: true,
     });
     const router = TestBed.inject(Router);
-    const nav = spyOn(router, 'navigate').and.resolveTo(true); 
-      await fixture.componentInstance.onDeleteBlob();
-      expect(dialog.open).toHaveBeenCalled();
-      expect(stub.delete).toHaveBeenCalledWith('blob-1');
-      expect(fixture.componentInstance.loadedBlob()).toBeNull();
-      expect(fixture.componentInstance.content()).toBe('');
-      expect(fixture.componentInstance.title()).toBe('');
-      expect(nav).toHaveBeenCalledWith(['/']);
-      expect(snack.open).toHaveBeenCalled();
+    const nav = spyOn(router, 'navigate').and.resolveTo(true);
+    await fixture.componentInstance.onDeleteBlob();
+    expect(dialog.open).toHaveBeenCalled();
+    expect(stub.delete).toHaveBeenCalledWith('blob-1');
+    expect(fixture.componentInstance.loadedBlob()).toBeNull();
+    expect(fixture.componentInstance.content()).toBe('');
+    expect(fixture.componentInstance.title()).toBe('');
+    expect(nav).toHaveBeenCalledWith(['/']);
+    expect(snack.open).toHaveBeenCalled();
   });
 
   it('onDeleteBlob does nothing when the user cancels the confirmation', async () => {
     const { fixture, stub } = setup({
       userId: 'owner-me',
       loaded: blob(),
-      confirm: false
-    }); 
-      await fixture.componentInstance.onDeleteBlob();
-      expect(stub.delete).not.toHaveBeenCalled();
-      expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
+      confirm: false,
+    });
+    await fixture.componentInstance.onDeleteBlob();
+    expect(stub.delete).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
   });
 
   it('onDeleteBlob toasts an error when delete fails and preserves local state', async () => {
@@ -2154,12 +2135,12 @@ describe('HomeComponent blob actions (M4b)', () => {
       userId: 'owner-me',
       loaded: blob(),
       confirm: true,
-      deleteResult: new Error('boom')
+      deleteResult: new Error('boom'),
     });
-    spyOn(console, 'warn'); 
-      await fixture.componentInstance.onDeleteBlob();
-      expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
-      expect(snack.open).toHaveBeenCalled();
+    spyOn(console, 'warn');
+    await fixture.componentInstance.onDeleteBlob();
+    expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
+    expect(snack.open).toHaveBeenCalled();
   });
 });
 
@@ -2196,8 +2177,8 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: DocumentDropController, useValue: fakeController },
-        { provide: MatSnackBar, useValue: snack }
-      ]
+        { provide: MatSnackBar, useValue: snack },
+      ],
     });
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentRef.changeDetectorRef.detectChanges();
@@ -2209,7 +2190,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
       size: MAX_UPLOAD_BYTES + 1,
       name: 'oversized.json',
       text: () => Promise.resolve(''),
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0))
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
     } as unknown as File;
   }
 
@@ -2218,7 +2199,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
       size: 100,
       name: 'rejecting.json',
       text: () => Promise.reject(new Error('boom')),
-      arrayBuffer: () => Promise.reject(new Error('boom'))
+      arrayBuffer: () => Promise.reject(new Error('boom')),
     } as unknown as File;
   }
 
@@ -2233,7 +2214,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     expect(args[0]).toContain('too large');
     expect(fixture.componentInstance.content()).toBe(before);
     expect(warnSpy).toHaveBeenCalledWith('[home.upload.tooLarge]', {
-      sizeBytes: MAX_UPLOAD_BYTES + 1
+      sizeBytes: MAX_UPLOAD_BYTES + 1,
     });
     expect(eventSpy).not.toHaveBeenCalled();
   });
@@ -2255,8 +2236,8 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
         fileReadMs: jasmine.any(Number),
         parseMs: jasmine.any(Number),
         syncHandlerMs: jasmine.any(Number),
-        firstPaintMs: jasmine.any(Number)
-      })
+        firstPaintMs: jasmine.any(Number),
+      }),
     );
   });
 
@@ -2283,7 +2264,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
       size: new Blob([text]).size,
       name: 'b.json',
       text: () => Promise.resolve(text),
-      arrayBuffer: () => Promise.resolve(new TextEncoder().encode(text).buffer)
+      arrayBuffer: () => Promise.resolve(new TextEncoder().encode(text).buffer),
     } as unknown as File;
     handler([file]);
     await waitForTaskQueue();
@@ -2298,8 +2279,8 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
         fileReadMs: jasmine.any(Number),
         parseMs: jasmine.any(Number),
         syncHandlerMs: jasmine.any(Number),
-        firstPaintMs: jasmine.any(Number)
-      })
+        firstPaintMs: jasmine.any(Number),
+      }),
     );
   });
 
@@ -2327,7 +2308,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     expect(snack.open.calls.mostRecent().args[0]).toContain('too large');
     expect(fixture.componentInstance.content()).toBe(before);
     expect(warnSpy).toHaveBeenCalledWith('[home.upload.tooLarge]', {
-      sizeBytes: MAX_UPLOAD_BYTES + 1
+      sizeBytes: MAX_UPLOAD_BYTES + 1,
     });
   });
 
@@ -2349,7 +2330,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     expect(fixture.componentInstance.dropActive()).toBe(true);
 
     const overlayDebug = fixture.debugElement.query(
-      (debugEl) => debugEl.componentInstance instanceof DropOverlayComponent
+      (debugEl) => debugEl.componentInstance instanceof DropOverlayComponent,
     );
     expect(overlayDebug).toBeTruthy();
     const overlay = overlayDebug.componentInstance as DropOverlayComponent;
@@ -2361,7 +2342,6 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   });
 });
 
-
 describe('HomeComponent M7p extract-from-mixed-text', () => {
   setupMinimalMonacoStub();
   beforeEach(() => {
@@ -2372,7 +2352,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
@@ -2386,15 +2366,13 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
   it('toolbar paste with mixed text shows the extract banner', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
-    spyOn(navigator.clipboard, 'readText').and.returnValue(
-      Promise.resolve('INFO log {"a":1}')
-    );
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve('INFO log {"a":1}'));
     const extractor = TestBed.inject(JsonExtractorService);
     spyOn(extractor, 'extractFromMixedText').and.returnValue({
       text: '{ "a": 1 }',
       blockCount: 1,
       preservesComments: true,
-      hasComments: false
+      hasComments: false,
     });
 
     await component.onPaste();
@@ -2407,9 +2385,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
   it('toolbar paste with already-valid JSON does NOT show the extract banner', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
-    spyOn(navigator.clipboard, 'readText').and.returnValue(
-      Promise.resolve('{"a":1}')
-    );
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve('{"a":1}'));
     const extractor = TestBed.inject(JsonExtractorService);
     const extractSpy = spyOn(extractor, 'extractFromMixedText').and.callThrough();
 
@@ -2429,13 +2405,13 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
       text: '{ "a": 1 }',
       blockCount: 1,
       preservesComments: true,
-      hasComments: false
+      hasComments: false,
     });
 
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1}',
       postPasteContent: 'prefix INFO log {"a":1}',
-      postPasteParses: false
+      postPasteParses: false,
     });
 
     expect(extractSpy).toHaveBeenCalledTimes(1);
@@ -2449,7 +2425,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     component.extractedCandidate.set({
       data: { text: 'stale', blockCount: 1, preservesComments: true, hasComments: false },
       sourceVersion: 999,
-      source: 'paste'
+      source: 'paste',
     });
     const extractor = TestBed.inject(JsonExtractorService);
     const extractSpy = spyOn(extractor, 'extractFromMixedText').and.callThrough();
@@ -2457,7 +2433,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     component.onEditorPaste({
       pastedText: '{"a":1}',
       postPasteContent: '{"a":1}',
-      postPasteParses: true
+      postPasteParses: true,
     });
 
     expect(extractSpy).not.toHaveBeenCalled();
@@ -2471,7 +2447,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     component.extractedCandidate.set({
       data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true, hasComments: false },
       sourceVersion: 0,
-      source: 'paste'
+      source: 'paste',
     });
     expect(component.extractBannerVisible()).toBe(true);
 
@@ -2490,7 +2466,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     component.extractedCandidate.set({
       data: { text: '{ "a": 1 }', blockCount: 1, preservesComments: true, hasComments: false },
       sourceVersion: 999,
-      source: 'paste'
+      source: 'paste',
     });
 
     component.onExtractDismiss();
@@ -2508,13 +2484,13 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
       text: '{ "a": 1 }',
       blockCount: 1,
       preservesComments: true,
-      hasComments: false
+      hasComments: false,
     });
 
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1}',
       postPasteContent: 'INFO log {"a":1}',
-      postPasteParses: false
+      postPasteParses: false,
     });
     expect(component.extractBannerVisible()).toBe(true);
 
@@ -2537,18 +2513,16 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
       text: '{ "a": 1 }',
       blockCount: 1,
       preservesComments: true,
-      hasComments: false
+      hasComments: false,
     });
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
-      type: 'text/plain'
+      type: 'text/plain',
     });
 
     await component.onUpload(file);
     await waitForDoubleAnimationFrame();
 
-    expect(extractor.extractFromMixedText).toHaveBeenCalledWith(
-      'INFO log {"a":1}'
-    );
+    expect(extractor.extractFromMixedText).toHaveBeenCalledWith('INFO log {"a":1}');
     expect(component.extractBannerVisible()).toBe(true);
     expect(component.extractedCandidate()?.data.blockCount).toBe(1);
   });
@@ -2559,7 +2533,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     const extractor = TestBed.inject(JsonExtractorService);
     const extractSpy = spyOn(extractor, 'extractFromMixedText').and.callThrough();
     const file = new File(['{"a":1}'], 'data.json', {
-      type: 'application/json'
+      type: 'application/json',
     });
 
     await component.onUpload(file);
@@ -2601,15 +2575,18 @@ describe('HomeComponent extract-banner telemetry', () => {
       providers: [
         ...provideFakeAuth(),
         provideRouter([]),
-        { provide: DocumentDropController, useValue: drop }
-      ]
+        { provide: DocumentDropController, useValue: drop },
+      ],
     });
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
     const extractor = TestBed.inject(JsonExtractorService);
-    const extractorSpy = spyOn(extractor, 'extractFromMixedText').and.returnValue(
-      { text: '{ "a": 1 }', blockCount: 2, preservesComments: false, hasComments: false }
-    );
+    const extractorSpy = spyOn(extractor, 'extractFromMixedText').and.returnValue({
+      text: '{ "a": 1 }',
+      blockCount: 2,
+      preservesComments: false,
+      hasComments: false,
+    });
     fixture.detectChanges();
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
     return { fixture, component, eventSpy, extractorSpy, drop };
@@ -2620,8 +2597,7 @@ describe('HomeComponent extract-banner telemetry', () => {
       .allArgs()
       .filter(
         (args) =>
-          typeof args[0] === 'string' &&
-          (args[0] as string).startsWith('home.extract.banner.')
+          typeof args[0] === 'string' && (args[0] as string).startsWith('home.extract.banner.'),
       );
   }
 
@@ -2631,9 +2607,7 @@ describe('HomeComponent extract-banner telemetry', () => {
 
   it('toolbar paste fires shown with source="paste"', async () => {
     const { component, eventSpy } = setupTelemetryBed();
-    spyOn(navigator.clipboard, 'readText').and.returnValue(
-      Promise.resolve('INFO log {"a":1}')
-    );
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve('INFO log {"a":1}'));
 
     await component.onPaste();
     await waitForDoubleAnimationFrame();
@@ -2641,7 +2615,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 }
+      { blockCount: 2, preservesComments: 0, hasComments: 0 },
     );
   });
 
@@ -2651,40 +2625,40 @@ describe('HomeComponent extract-banner telemetry', () => {
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1}',
       postPasteContent: 'INFO log {"a":1}',
-      postPasteParses: false
+      postPasteParses: false,
     });
 
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 }
+      { blockCount: 2, preservesComments: 0, hasComments: 0 },
     );
   });
 
   it('Upload pick fires shown with source="upload.pick"', async () => {
     const { component, eventSpy } = setupTelemetryBed();
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
-      type: 'text/plain'
+      type: 'text/plain',
     });
 
     await component.onUpload(file);
     await waitForDoubleAnimationFrame();
 
     const shownCalls = bannerCalls(eventSpy).filter(
-      (args) => args[0] === 'home.extract.banner.shown'
+      (args) => args[0] === 'home.extract.banner.shown',
     );
     expect(shownCalls.length).toBe(1);
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.pick' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 }
+      { blockCount: 2, preservesComments: 0, hasComments: 0 },
     ]);
   });
 
   it('drag-drop fires shown with source="upload.drag"', async () => {
     const { eventSpy, drop } = setupTelemetryBed();
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
-      type: 'text/plain'
+      type: 'text/plain',
     });
     expect(drop.registeredHandler).toBeDefined();
 
@@ -2694,13 +2668,13 @@ describe('HomeComponent extract-banner telemetry', () => {
     await waitForDoubleAnimationFrame();
 
     const shownCalls = bannerCalls(eventSpy).filter(
-      (args) => args[0] === 'home.extract.banner.shown'
+      (args) => args[0] === 'home.extract.banner.shown',
     );
     expect(shownCalls.length).toBe(1);
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.drag' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 }
+      { blockCount: 2, preservesComments: 0, hasComments: 0 },
     ]);
   });
 
@@ -2709,7 +2683,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1}',
       postPasteContent: 'INFO log {"a":1}',
-      postPasteParses: false
+      postPasteParses: false,
     });
     eventSpy.calls.reset();
 
@@ -2728,19 +2702,19 @@ describe('HomeComponent extract-banner telemetry', () => {
       text: '[{"a":1},{"b":2}]',
       blockCount: 2,
       preservesComments: false,
-      hasComments: true
+      hasComments: true,
     });
 
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1} {/*c*/"b":2}',
       postPasteContent: 'INFO log {"a":1} {/*c*/"b":2}',
-      postPasteParses: false
+      postPasteParses: false,
     });
 
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 1 }
+      { blockCount: 2, preservesComments: 0, hasComments: 1 },
     );
   });
 
@@ -2750,12 +2724,12 @@ describe('HomeComponent extract-banner telemetry', () => {
       text: '[{"a":1},{"b":2}]',
       blockCount: 2,
       preservesComments: false,
-      hasComments: true
+      hasComments: true,
     });
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1} {/*c*/"b":2}',
       postPasteContent: 'INFO log {"a":1} {/*c*/"b":2}',
-      postPasteParses: false
+      postPasteParses: false,
     });
     eventSpy.calls.reset();
 
@@ -2766,7 +2740,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.accept',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 1 }
+      { blockCount: 2, preservesComments: 0, hasComments: 1 },
     ]);
   });
 
@@ -2775,7 +2749,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1}',
       postPasteContent: 'INFO log {"a":1}',
-      postPasteParses: false
+      postPasteParses: false,
     });
     eventSpy.calls.reset();
 
@@ -2786,7 +2760,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'editor.paste', reason: 'user.click' },
-      { blockCount: 2 }
+      { blockCount: 2 },
     ]);
   });
 
@@ -2795,7 +2769,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1}',
       postPasteContent: 'INFO log {"a":1}',
-      postPasteParses: false
+      postPasteParses: false,
     });
     expect(component.extractBannerVisible()).toBe(true);
     eventSpy.calls.reset();
@@ -2808,15 +2782,13 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'editor.paste', reason: 'content.changed' },
-      { blockCount: 2 }
+      { blockCount: 2 },
     ]);
   });
 
   it('a second paste replacing a visible banner fires dismiss(old) + shown(new)', async () => {
     const { component, eventSpy, extractorSpy } = setupTelemetryBed();
-    spyOn(navigator.clipboard, 'readText').and.returnValue(
-      Promise.resolve('INFO log {"a":1}')
-    );
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve('INFO log {"a":1}'));
     await component.onPaste();
     await waitForDoubleAnimationFrame();
     expect(component.extractBannerVisible()).toBe(true);
@@ -2825,13 +2797,13 @@ describe('HomeComponent extract-banner telemetry', () => {
       text: '{ "b": 2 }',
       blockCount: 1,
       preservesComments: true,
-      hasComments: false
+      hasComments: false,
     });
 
     component.onEditorPaste({
       pastedText: 'log {"b":2}',
       postPasteContent: 'log {"b":2}',
-      postPasteParses: false
+      postPasteParses: false,
     });
 
     const calls = bannerCalls(eventSpy);
@@ -2839,20 +2811,18 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'paste', reason: 'content.changed' },
-      { blockCount: 2 }
+      { blockCount: 2 },
     ]);
     expect(calls[1]).toEqual([
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 1, preservesComments: 1, hasComments: 0 }
+      { blockCount: 1, preservesComments: 1, hasComments: 0 },
     ]);
   });
 
   it('candidate carries source="paste" only on toolbar Paste path', async () => {
     const { component } = setupTelemetryBed();
-    spyOn(navigator.clipboard, 'readText').and.returnValue(
-      Promise.resolve('INFO log {"a":1}')
-    );
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve('INFO log {"a":1}'));
 
     await component.onPaste();
     await waitForDoubleAnimationFrame();
@@ -2865,7 +2835,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1}',
       postPasteContent: 'INFO log {"a":1}',
-      postPasteParses: false
+      postPasteParses: false,
     });
     expect(component.extractedCandidate()?.source).toBe('editor.paste');
   });
@@ -2873,7 +2843,7 @@ describe('HomeComponent extract-banner telemetry', () => {
   it('candidate carries source="upload.pick" on Upload-button path', async () => {
     const { component } = setupTelemetryBed();
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
-      type: 'text/plain'
+      type: 'text/plain',
     });
     await component.onUpload(file);
     await waitForDoubleAnimationFrame();
@@ -2883,7 +2853,7 @@ describe('HomeComponent extract-banner telemetry', () => {
   it('candidate carries source="upload.drag" on drag-drop path', async () => {
     const { component, drop } = setupTelemetryBed();
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
-      type: 'text/plain'
+      type: 'text/plain',
     });
     drop.registeredHandler!([file]);
     await waitForTaskQueue();
@@ -2893,14 +2863,9 @@ describe('HomeComponent extract-banner telemetry', () => {
   });
 
   it('toolbar paste auto-focuses the banner Extract button', async () => {
-    const focusSpy = spyOn(
-      ExtractJsonBannerComponent.prototype,
-      'focusExtractButton'
-    );
+    const focusSpy = spyOn(ExtractJsonBannerComponent.prototype, 'focusExtractButton');
     const { component } = setupTelemetryBed();
-    spyOn(navigator.clipboard, 'readText').and.returnValue(
-      Promise.resolve('INFO log {"a":1}')
-    );
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve('INFO log {"a":1}'));
 
     await component.onPaste();
     await waitForDoubleAnimationFrame();
@@ -2910,16 +2875,13 @@ describe('HomeComponent extract-banner telemetry', () => {
   });
 
   it('native editor paste does NOT auto-focus the banner Extract button', async () => {
-    const focusSpy = spyOn(
-      ExtractJsonBannerComponent.prototype,
-      'focusExtractButton'
-    );
+    const focusSpy = spyOn(ExtractJsonBannerComponent.prototype, 'focusExtractButton');
     const { component } = setupTelemetryBed();
 
     component.onEditorPaste({
       pastedText: 'INFO log {"a":1}',
       postPasteContent: 'INFO log {"a":1}',
-      postPasteParses: false
+      postPasteParses: false,
     });
     await waitForTaskQueue();
 
@@ -2927,13 +2889,10 @@ describe('HomeComponent extract-banner telemetry', () => {
   });
 
   it('Upload pick does NOT auto-focus the banner Extract button', async () => {
-    const focusSpy = spyOn(
-      ExtractJsonBannerComponent.prototype,
-      'focusExtractButton'
-    );
+    const focusSpy = spyOn(ExtractJsonBannerComponent.prototype, 'focusExtractButton');
     const { component } = setupTelemetryBed();
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
-      type: 'text/plain'
+      type: 'text/plain',
     });
 
     await component.onUpload(file);
@@ -2944,13 +2903,10 @@ describe('HomeComponent extract-banner telemetry', () => {
   });
 
   it('drag-drop does NOT auto-focus the banner Extract button', async () => {
-    const focusSpy = spyOn(
-      ExtractJsonBannerComponent.prototype,
-      'focusExtractButton'
-    );
+    const focusSpy = spyOn(ExtractJsonBannerComponent.prototype, 'focusExtractButton');
     const { drop } = setupTelemetryBed();
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
-      type: 'text/plain'
+      type: 'text/plain',
     });
 
     drop.registeredHandler!([file]);
@@ -2961,7 +2917,6 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(focusSpy).not.toHaveBeenCalled();
   });
 });
-
 
 describe('HomeComponent extract-banner commentsWillBeDropped binding', () => {
   setupMinimalMonacoStub();
@@ -2974,7 +2929,7 @@ describe('HomeComponent extract-banner commentsWillBeDropped binding', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
@@ -2986,11 +2941,9 @@ describe('HomeComponent extract-banner commentsWillBeDropped binding', () => {
   });
 
   function readBannerCommentsWillBeDropped(
-    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,
   ): boolean | null {
-    const debugEl = fixture.debugElement.query(
-      By.directive(ExtractJsonBannerComponent)
-    );
+    const debugEl = fixture.debugElement.query(By.directive(ExtractJsonBannerComponent));
     if (!debugEl) {
       return null;
     }
@@ -3006,10 +2959,10 @@ describe('HomeComponent extract-banner commentsWillBeDropped binding', () => {
         text: '[{"a":1},{"b":2}]',
         blockCount: 2,
         preservesComments: false,
-        hasComments: true
+        hasComments: true,
       },
       sourceVersion: 0,
-      source: 'paste'
+      source: 'paste',
     });
     fixture.detectChanges();
 
@@ -3024,10 +2977,10 @@ describe('HomeComponent extract-banner commentsWillBeDropped binding', () => {
         text: '[{"a":1},{"b":2}]',
         blockCount: 2,
         preservesComments: false,
-        hasComments: false
+        hasComments: false,
       },
       sourceVersion: 0,
-      source: 'paste'
+      source: 'paste',
     });
     fixture.detectChanges();
 
@@ -3042,10 +2995,10 @@ describe('HomeComponent extract-banner commentsWillBeDropped binding', () => {
         text: '{ /* note */ "a": 1 }',
         blockCount: 1,
         preservesComments: true,
-        hasComments: true
+        hasComments: true,
       },
       sourceVersion: 0,
-      source: 'paste'
+      source: 'paste',
     });
     fixture.detectChanges();
 
@@ -3060,17 +3013,16 @@ describe('HomeComponent extract-banner commentsWillBeDropped binding', () => {
         text: '{ "a": 1 }',
         blockCount: 1,
         preservesComments: true,
-        hasComments: false
+        hasComments: false,
       },
       sourceVersion: 0,
-      source: 'paste'
+      source: 'paste',
     });
     fixture.detectChanges();
 
     expect(readBannerCommentsWillBeDropped(fixture)).toBe(false);
   });
 });
-
 
 describe('HomeComponent upload-error banner (#36)', () => {
   setupMinimalMonacoStub();
@@ -3105,8 +3057,8 @@ describe('HomeComponent upload-error banner (#36)', () => {
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: DocumentDropController, useValue: fakeController },
-        { provide: MatSnackBar, useValue: snack }
-      ]
+        { provide: MatSnackBar, useValue: snack },
+      ],
     });
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentRef.changeDetectorRef.detectChanges();
@@ -3259,7 +3211,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
       size: 5,
       name: 'dropped.json',
       text: () => Promise.resolve('{"a":'),
-      arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":').buffer)
+      arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":').buffer),
     } as unknown as File;
 
     fakeController.registeredHandler!([file]);
@@ -3278,7 +3230,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
       size: 7,
       name: 'good.json',
       text: () => Promise.resolve('{"a":1}'),
-      arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":1}').buffer)
+      arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":1}').buffer),
     } as unknown as File;
 
     fakeController.registeredHandler!([file]);
@@ -3349,8 +3301,8 @@ describe('HomeComponent binary upload rejection (#62)', () => {
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: DocumentDropController, useValue: fakeController },
-        { provide: MatSnackBar, useValue: snack }
-      ]
+        { provide: MatSnackBar, useValue: snack },
+      ],
     });
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentRef.changeDetectorRef.detectChanges();
@@ -3363,7 +3315,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
 
   function pngFile(name = 'logo.png'): File {
     const pngBytes = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
     ]);
     return new File([pngBytes], name, { type: 'image/png' });
   }
@@ -3390,13 +3342,13 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     const { fixture, fakeController, snack } = setup();
     const before = fixture.componentInstance.content();
     const pngBytes = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
     ]);
     const fakePng = {
       size: pngBytes.byteLength,
       name: 'dropped.png',
       text: () => Promise.resolve(''),
-      arrayBuffer: () => Promise.resolve(pngBytes.buffer)
+      arrayBuffer: () => Promise.resolve(pngBytes.buffer),
     } as unknown as File;
     fakeController.registeredHandler!([fakePng]);
     await Promise.resolve();
@@ -3426,7 +3378,7 @@ describe('HomeComponent M7p title-suggester wiring', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     });
   });
 
@@ -3478,7 +3430,7 @@ describe('HomeComponent M7p title-suggester wiring', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.lastFilename.set('something.json');
     fixture.componentInstance.suggestedTitlesForMenu.set([
-      { value: 'A', source: 'filename', confidence: 95 }
+      { value: 'A', source: 'filename', confidence: 95 },
     ]);
     fixture.componentInstance.onClear();
     expect(fixture.componentInstance.lastFilename()).toBeNull();
@@ -3488,10 +3440,7 @@ describe('HomeComponent M7p title-suggester wiring', () => {
   it('onPaste clears any existing lastFilename', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.lastFilename.set('prior.json');
-    spyOn(
-      TestBed.inject(ClipboardPollingService),
-      'readForPaste'
-    ).and.resolveTo('{"pasted":true}');
+    spyOn(TestBed.inject(ClipboardPollingService), 'readForPaste').and.resolveTo('{"pasted":true}');
     await fixture.componentInstance.onPaste();
     expect(fixture.componentInstance.lastFilename()).toBeNull();
     expect(fixture.componentInstance.suggestedTitlesForMenu()).toEqual([]);

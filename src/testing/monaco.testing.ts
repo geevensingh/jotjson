@@ -31,7 +31,7 @@ function makeMinimalEditor(initialValue: string): object {
   const model = {
     getValue: () => current,
     getValueInRange: () => '',
-    getOffsetAt: () => 0
+    getOffsetAt: () => 0,
   };
   return {
     getValue: () => current,
@@ -47,7 +47,7 @@ function makeMinimalEditor(initialValue: string): object {
     executeEdits: () => true,
     layout: () => undefined,
     setSelection: () => undefined,
-    revealRangeInCenterIfOutsideViewport: () => undefined
+    revealRangeInCenterIfOutsideViewport: () => undefined,
   };
 }
 
@@ -59,29 +59,25 @@ function buildMinimalMonaco(): typeof MonacoNS {
   const stub = {
     editor: {
       create: (_host: HTMLElement, options: { value?: string } | undefined) =>
-        makeMinimalEditor(
-          options && typeof options.value === 'string' ? options.value : ''
-        ),
+        makeMinimalEditor(options && typeof options.value === 'string' ? options.value : ''),
       defineTheme: () => undefined,
       setTheme: () => undefined,
-      setModelMarkers: () => undefined
+      setModelMarkers: () => undefined,
     },
     json: {
       jsonDefaults: {
-        setDiagnosticsOptions: () => undefined
-      }
+        setDiagnosticsOptions: () => undefined,
+      },
     },
     MarkerSeverity: { Error: 8 },
-    Selection: NoopSelection
+    Selection: NoopSelection,
   };
   return stub as unknown as typeof MonacoNS;
 }
 
 export function installMinimalMonacoStub(): void {
   if (saved) {
-    throw new Error(
-      'installMinimalMonacoStub: already installed. Call restoreMonacoStub() first.'
-    );
+    throw new Error('installMinimalMonacoStub: already installed. Call restoreMonacoStub() first.');
   }
   const winRef = window as unknown as { monaco?: typeof MonacoNS };
   saved = { previous: winRef.monaco };

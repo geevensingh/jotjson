@@ -1,9 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  input
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { FormattingRule, FormattingRuleSet } from '../../../../core/api/models';
 import { JsonTreeComponent } from '../../../../shared/components/json-tree/json-tree.component';
@@ -25,10 +20,10 @@ const SAMPLE: Readonly<Record<string, unknown>> = Object.freeze({
   user: {
     id: 42,
     email: 'user@example.com',
-    active: true
+    active: true,
   },
   tags: ['retry', 'critical'],
-  resolvedAt: null
+  resolvedAt: null,
 });
 
 const MAX_LABEL_LENGTH = 30;
@@ -63,7 +58,7 @@ export interface ContrastFailure {
   imports: [JsonTreeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './rule-preview.component.html',
-  styleUrl: './rule-preview.component.scss'
+  styleUrl: './rule-preview.component.scss',
 })
 export class RulePreviewComponent {
   readonly draft = input.required<FormattingRuleSet>();
@@ -116,7 +111,7 @@ function evaluateRule(rule: FormattingRule): ContrastFailure | null {
     ruleId: rule.id,
     label: truncate(rule.matchValue),
     failsLight,
-    failsDark
+    failsDark,
   };
 }
 
@@ -136,4 +131,3 @@ function truncate(value: string): string {
   }
   return trimmed.slice(0, MAX_LABEL_LENGTH - 3) + '...';
 }
-

@@ -5,7 +5,7 @@ import {
   EventMessage,
   EventType,
   InteractionRequiredAuthError,
-  IPublicClientApplication
+  IPublicClientApplication,
 } from '@azure/msal-browser';
 import { MsalBroadcastService } from '@azure/msal-angular';
 import { filter } from 'rxjs/operators';
@@ -68,7 +68,7 @@ export class AuthService {
     const cfg = environment.devAuth;
     if (cfg?.enabled && !this.devMode) {
       this.logger.warn('auth.devMode.misconfigured', {
-        reason: 'userId-format'
+        reason: 'userId-format',
       });
     }
     // Subscribe to MSAL events so the user signal stays in sync with
@@ -142,8 +142,8 @@ export class AuthService {
     void this.ensureInitialized().then(() =>
       this.msal.loginRedirect({
         scopes: environment.auth.scopes,
-        prompt: 'select_account'
-      })
+        prompt: 'select_account',
+      }),
     );
   }
 
@@ -178,7 +178,7 @@ export class AuthService {
       try {
         const result = await this.msal.acquireTokenSilent({
           account,
-          scopes: environment.auth.scopes
+          scopes: environment.auth.scopes,
         });
         idTokenHint = result.idToken;
       } catch {
@@ -193,7 +193,7 @@ export class AuthService {
       account,
       idTokenHint,
       logoutHint: account?.loginHint,
-      postLogoutRedirectUri: environment.auth.postLogoutRedirectUri
+      postLogoutRedirectUri: environment.auth.postLogoutRedirectUri,
     });
   }
 
@@ -219,7 +219,7 @@ export class AuthService {
     try {
       const result = await this.msal.acquireTokenSilent({
         account,
-        scopes: environment.auth.scopes
+        scopes: environment.auth.scopes,
       });
       return result.accessToken || null;
     } catch (error) {
@@ -248,8 +248,7 @@ export class AuthService {
   }
 
   private refreshFromCache(): void {
-    const account =
-      this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0] ?? null;
+    const account = this.msal.getActiveAccount() ?? this.msal.getAllAccounts()[0] ?? null;
     const user = account ? this.toAuthUser(account) : null;
     this.setCurrentUser(user);
   }
@@ -290,7 +289,7 @@ export class AuthService {
     return {
       id: cfg.userId,
       displayName: cfg.displayName,
-      ...(cfg.email !== undefined ? { email: cfg.email } : {})
+      ...(cfg.email !== undefined ? { email: cfg.email } : {}),
     };
   }
 

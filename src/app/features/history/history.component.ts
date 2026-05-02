@@ -10,7 +10,7 @@ import {
   computed,
   effect,
   inject,
-  signal
+  signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
@@ -27,7 +27,7 @@ import { AppHeaderComponent } from '../../shared/components/app-header/app-heade
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import {
   ConfirmDialogComponent,
-  ConfirmDialogData
+  ConfirmDialogData,
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -43,16 +43,10 @@ interface DayGroup {
 @Component({
   selector: 'app-history',
   standalone: true,
-  imports: [
-    RouterLink,
-    MatButtonModule,
-    MatTooltipModule,
-    AppHeaderComponent,
-    IconComponent
-  ],
+  imports: [RouterLink, MatButtonModule, MatTooltipModule, AppHeaderComponent, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './history.component.html',
-  styleUrl: './history.component.scss'
+  styleUrl: './history.component.scss',
 })
 export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly history = inject(HistoryService);
@@ -77,27 +71,19 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private readonly searchInput$ = new Subject<string>();
 
-  readonly isEmpty = computed(
-    () => this.state() === 'ready' && this.entries().length === 0
-  );
+  readonly isEmpty = computed(() => this.state() === 'ready' && this.entries().length === 0);
 
   readonly hasMore = computed(() => !!this.continuationToken());
 
   readonly hasActiveFilters = computed(
     () =>
-      this.searchTerm().trim().length > 0 ||
-      this.fromDate().length > 0 ||
-      this.toDate().length > 0
+      this.searchTerm().trim().length > 0 || this.fromDate().length > 0 || this.toDate().length > 0,
   );
 
   constructor() {
     inject(DestroyRef);
     this.searchInput$
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        takeUntilDestroyed()
-      )
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
       .subscribe((value) => this.applySearchTerm(value));
     // Re-observe the sentinel whenever the page state changes; the
     // sentinel only renders when there's another page (hasMore()) and its
@@ -185,7 +171,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         }
       },
-      { rootMargin: '200px 0px' }
+      { rootMargin: '200px 0px' },
     );
     this.refreshSentinelObservation();
   }
@@ -211,18 +197,14 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.continuationToken.set(undefined);
     const opts = this.buildListOptions();
     try {
-      const page = await firstValueFrom(
-        this.history.list({ pageSize: 50, ...opts })
-      );
+      const page = await firstValueFrom(this.history.list({ pageSize: 50, ...opts }));
       this.entries.set(page.entries);
       this.continuationToken.set(page.continuationToken);
       this.state.set('ready');
     } catch (error) {
       this.logger.warn('history.load.failed');
       void error;
-      this.errorMessage.set(
-        $localize`:@@history.load.failed:Failed to load your history.`
-      );
+      this.errorMessage.set($localize`:@@history.load.failed:Failed to load your history.`);
       this.state.set('error');
     }
   }
@@ -237,8 +219,8 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
         this.history.list({
           pageSize: 50,
           continuationToken: token,
-          ...opts
-        })
+          ...opts,
+        }),
       );
       this.entries.update((current) => [...current, ...page.entries]);
       this.continuationToken.set(page.continuationToken);
@@ -248,7 +230,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.snack.open(
         $localize`:@@history.loadMore.failed:Failed to load more history.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 }
+        { duration: 4000 },
       );
     } finally {
       this.loadingMore.set(false);
@@ -330,7 +312,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     const to = this.toDate();
     if (from && to && from > to) {
       this.dateRangeError.set(
-        $localize`:@@history.filter.date.invalid:From date must be on or before To date.`
+        $localize`:@@history.filter.date.invalid:From date must be on or before To date.`,
       );
       return false;
     }
@@ -344,11 +326,11 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       message: $localize`:@@history.clear.message:Every entry in your activity history will be permanently removed. The blobs themselves are not affected.`,
       confirmLabel: $localize`:@@history.clear.confirm:Clear history`,
       cancelLabel: $localize`:@@common.cancel:Cancel`,
-      destructive: true
+      destructive: true,
     };
     const ref = this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(
       ConfirmDialogComponent,
-      { data, width: '420px', autoFocus: 'dialog' }
+      { data, width: '420px', autoFocus: 'dialog' },
     );
     const confirmed = await firstValueFrom(ref.afterClosed());
     if (!confirmed) return;
@@ -360,7 +342,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.snack.open(
         $localize`:@@history.clear.success:History cleared.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 3000 }
+        { duration: 3000 },
       );
     } catch (error) {
       this.logger.warn('history.clear.failed');
@@ -368,7 +350,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.snack.open(
         $localize`:@@history.clear.failed:Failed to clear history.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 }
+        { duration: 4000 },
       );
     }
   }

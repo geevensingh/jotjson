@@ -10,7 +10,7 @@ jest.mock('../shared/auth', () => {
   return {
     ...actual,
     requireAuth: jest.fn(),
-    tryAuth: jest.fn()
+    tryAuth: jest.fn(),
   };
 });
 
@@ -33,17 +33,17 @@ jest.mock('../shared/blobs', () => ({
       super(message);
       this.name = 'SlugGenerationError';
     }
-  }
+  },
 }));
 
 jest.mock('../shared/users', () => ({
-  readUser: jest.fn()
+  readUser: jest.fn(),
 }));
 
 jest.mock('../shared/history', () => ({
   recordEntry: jest.fn(),
   getRecentViewAt: jest.fn(),
-  VIEW_DEBOUNCE_SECONDS: 300
+  VIEW_DEBOUNCE_SECONDS: 300,
 }));
 
 import { AuthError, requireAuth as requireAuthMock, tryAuth as tryAuthMock } from '../shared/auth';
@@ -54,15 +54,18 @@ import {
   deleteBlobById as deleteBlobByIdMock,
   findBlobByIdOrSlug as findBlobMock,
   listBlobsByOwner as listBlobsByOwnerMock,
-  updateBlob as updateBlobMock
+  updateBlob as updateBlobMock,
 } from '../shared/blobs';
-import { recordEntry as recordEntryMock, getRecentViewAt as getRecentViewAtMock } from '../shared/history';
+import {
+  recordEntry as recordEntryMock,
+  getRecentViewAt as getRecentViewAtMock,
+} from '../shared/history';
 import { readUser as readUserMock } from '../shared/users';
 import { deleteBlob, getBlob, listBlobs, postBlob, putBlob } from './blobs';
 import type { TelemetryClient } from 'applicationinsights';
 import {
   __resetTelemetryInitForTesting,
-  __setTelemetryClientForTesting as __setTelemetryClientForTestingT
+  __setTelemetryClientForTesting as __setTelemetryClientForTestingT,
 } from '../shared/telemetry';
 
 // Silence the warn-once that shared/http.ts forbidden() would otherwise
@@ -89,7 +92,7 @@ function makeRequest(opts: { body?: unknown; params?: Record<string, string> } =
     json: async () => {
       if (opts.body === undefined) throw new Error('no body');
       return opts.body;
-    }
+    },
   } as unknown as HttpRequest;
 }
 
@@ -113,7 +116,7 @@ const sampleBlob = {
   ownerId: 'u-1',
   isPublic: false,
   createdAt: '2026-01-01T00:00:00Z',
-  updatedAt: '2026-01-01T00:00:00Z'
+  updatedAt: '2026-01-01T00:00:00Z',
 };
 
 describe('POST /api/blobs', () => {
@@ -138,14 +141,14 @@ describe('POST /api/blobs', () => {
     createBlob.mockResolvedValueOnce(sampleBlob);
     const res = await postBlob(
       makeRequest({ body: { content: '{}', title: 'hi', isPublic: false } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(201);
     expect(res.jsonBody).toEqual(sampleBlob);
     expect(createBlob).toHaveBeenCalledWith('u-1', {
       content: '{}',
       title: 'hi',
-      isPublic: false
+      isPublic: false,
     });
   });
 
@@ -186,7 +189,7 @@ describe('POST /api/blobs - quota enforcement', () => {
       // Older indices are older (smaller updatedAt).
       createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
       updatedAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-      title: i === 0 ? 'oldest title' : undefined
+      title: i === 0 ? 'oldest title' : undefined,
     }));
   }
 
@@ -194,7 +197,7 @@ describe('POST /api/blobs - quota enforcement', () => {
     listBlobsSpy.mockResolvedValueOnce(manyBlobs(100));
     readUser.mockResolvedValueOnce({
       id: 'u-1',
-      preferences: { blobQuotaStrategy: 'auto_fifo' }
+      preferences: { blobQuotaStrategy: 'auto_fifo' },
     });
     deleteBlobByIdSpy.mockResolvedValueOnce(true);
     createBlob.mockResolvedValueOnce(sampleBlob);
@@ -208,7 +211,7 @@ describe('POST /api/blobs - quota enforcement', () => {
     expect(body['autoDeleted']).toEqual({
       id: 'existing-0',
       slug: 'slug-0',
-      title: 'oldest title'
+      title: 'oldest title',
     });
   });
 
@@ -228,7 +231,7 @@ describe('POST /api/blobs - quota enforcement', () => {
     listBlobsSpy.mockResolvedValueOnce(manyBlobs(100));
     readUser.mockResolvedValueOnce({
       id: 'u-1',
-      preferences: { blobQuotaStrategy: 'manual' }
+      preferences: { blobQuotaStrategy: 'manual' },
     });
 
     const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
@@ -291,7 +294,7 @@ describe('PUT /api/blobs/:id', () => {
     requireAuth.mockRejectedValueOnce(new AuthError('nope'));
     const res = await putBlob(
       makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(401);
   });
@@ -305,7 +308,7 @@ describe('PUT /api/blobs/:id', () => {
     findBlob.mockResolvedValueOnce(null);
     const res = await putBlob(
       makeRequest({ params: { id: 'uuid-x' }, body: { content: '{}' } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(404);
   });
@@ -315,7 +318,7 @@ describe('PUT /api/blobs/:id', () => {
     const res = await putBlob(
       // caller passed the slug - sampleBlob.id !== 'abc123'
       makeRequest({ params: { id: 'abc123' }, body: { content: '{}' } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(400);
   });
@@ -324,7 +327,7 @@ describe('PUT /api/blobs/:id', () => {
     findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'u-2' });
     const res = await putBlob(
       makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(403);
   });
@@ -337,15 +340,15 @@ describe('PUT /api/blobs/:id', () => {
     const res = await putBlob(
       makeRequest({
         params: { id: 'uuid-1' },
-        body: { content: '{"b":2}', title: 'renamed' }
+        body: { content: '{"b":2}', title: 'renamed' },
       }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(200);
     expect(res.jsonBody).toEqual(updated);
     expect(updateBlob).toHaveBeenCalledWith(sampleBlob, {
       content: '{"b":2}',
-      title: 'renamed'
+      title: 'renamed',
     });
   });
 
@@ -354,7 +357,7 @@ describe('PUT /api/blobs/:id', () => {
     updateBlob.mockRejectedValueOnce(new BlobValidationError('content too large'));
     const res = await putBlob(
       makeRequest({ params: { id: 'uuid-1' }, body: { content: 'big' } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(400);
   });
@@ -393,10 +396,7 @@ describe('GET /api/blobs (list)', () => {
 describe('DELETE /api/blobs/:id', () => {
   it('returns 401 when unauthenticated', async () => {
     requireAuth.mockRejectedValueOnce(new AuthError('nope'));
-    const res = await deleteBlob(
-      makeRequest({ params: { id: 'uuid-1' } }),
-      ctx
-    );
+    const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
     expect(res.status).toBe(401);
     expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
   });
@@ -408,30 +408,21 @@ describe('DELETE /api/blobs/:id', () => {
 
   it('returns 404 when the blob does not exist', async () => {
     findBlob.mockResolvedValueOnce(null);
-    const res = await deleteBlob(
-      makeRequest({ params: { id: 'uuid-1' } }),
-      ctx
-    );
+    const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
     expect(res.status).toBe(404);
     expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
   });
 
   it('returns 400 when the path param is the slug, not a UUID', async () => {
     findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
-    const res = await deleteBlob(
-      makeRequest({ params: { id: 'abc123' } }),
-      ctx
-    );
+    const res = await deleteBlob(makeRequest({ params: { id: 'abc123' } }), ctx);
     expect(res.status).toBe(400);
     expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
   });
 
   it('returns 403 when the caller does not own the blob', async () => {
     findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
-    const res = await deleteBlob(
-      makeRequest({ params: { id: 'uuid-1' } }),
-      ctx
-    );
+    const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
     expect(res.status).toBe(403);
     expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
   });
@@ -439,10 +430,7 @@ describe('DELETE /api/blobs/:id', () => {
   it('returns 204 on successful deletion', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
     deleteBlobByIdSpy.mockResolvedValueOnce(true);
-    const res = await deleteBlob(
-      makeRequest({ params: { id: 'uuid-1' } }),
-      ctx
-    );
+    const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
     expect(res.status).toBe(204);
     expect(deleteBlobByIdSpy).toHaveBeenCalledWith('uuid-1', 'u-1');
   });
@@ -450,20 +438,14 @@ describe('DELETE /api/blobs/:id', () => {
   it('returns 404 when the doc disappears between find and delete', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
     deleteBlobByIdSpy.mockResolvedValueOnce(false);
-    const res = await deleteBlob(
-      makeRequest({ params: { id: 'uuid-1' } }),
-      ctx
-    );
+    const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
     expect(res.status).toBe(404);
   });
 
   it('returns 500 on unexpected errors', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
     deleteBlobByIdSpy.mockRejectedValueOnce(new Error('cosmos down'));
-    const res = await deleteBlob(
-      makeRequest({ params: { id: 'uuid-1' } }),
-      ctx
-    );
+    const res = await deleteBlob(makeRequest({ params: { id: 'uuid-1' } }), ctx);
     expect(res.status).toBe(500);
   });
 });
@@ -483,10 +465,7 @@ describe('history recording hooks (v1: viewed only)', () => {
     it('does not record any history on update', async () => {
       findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
       updateBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
-      await putBlob(
-        makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
-        ctx
-      );
+      await putBlob(makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }), ctx);
       expect(recordEntry).not.toHaveBeenCalled();
     });
   });
@@ -511,7 +490,7 @@ describe('history recording hooks (v1: viewed only)', () => {
       const res = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
       expect(res.status).toBe(200);
       expect(recordEntry).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'viewed', userId: 'u-1', title: 'Other' })
+        expect.objectContaining({ action: 'viewed', userId: 'u-1', title: 'Other' }),
       );
     });
 
@@ -520,9 +499,7 @@ describe('history recording hooks (v1: viewed only)', () => {
       tryAuth.mockResolvedValueOnce({ id: 'u-1' });
       readUser.mockResolvedValue({ preferences: { recentlyViewedEnabled: true } });
       await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
-      expect(recordEntry).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'viewed' })
-      );
+      expect(recordEntry).toHaveBeenCalledWith(expect.objectContaining({ action: 'viewed' }));
     });
 
     it('does NOT record when recentlyViewedEnabled is false', async () => {
@@ -538,9 +515,7 @@ describe('history recording hooks (v1: viewed only)', () => {
       tryAuth.mockResolvedValueOnce({ id: 'u-1' });
       readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'save_only' } });
       await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
-      expect(recordEntry).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'viewed' })
-      );
+      expect(recordEntry).toHaveBeenCalledWith(expect.objectContaining({ action: 'viewed' }));
     });
 
     it('coerces legacy historyTrackingMode "all_actions" to enabled (records)', async () => {
@@ -548,9 +523,7 @@ describe('history recording hooks (v1: viewed only)', () => {
       tryAuth.mockResolvedValueOnce({ id: 'u-1' });
       readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
       await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
-      expect(recordEntry).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'viewed' })
-      );
+      expect(recordEntry).toHaveBeenCalledWith(expect.objectContaining({ action: 'viewed' }));
     });
 
     it('fails closed: when readUser throws, no record is written', async () => {
@@ -579,9 +552,7 @@ describe('history recording hooks (v1: viewed only)', () => {
       const old = new Date(Date.now() - 10 * 60_000).toISOString();
       getRecentViewAt.mockResolvedValueOnce(old);
       await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
-      expect(recordEntry).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'viewed' })
-      );
+      expect(recordEntry).toHaveBeenCalledWith(expect.objectContaining({ action: 'viewed' }));
     });
 
     it('does NOT record when caller is the owner', async () => {
@@ -630,13 +601,13 @@ describe('access.forbidden telemetry emission from blob handlers', () => {
     findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
     const res = await putBlob(
       makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(403);
     expect(mockTrackEvent).toHaveBeenCalledWith({
       name: 'access.forbidden',
       properties: { resource: 'blob', authMode: 'required' },
-      measurements: undefined
+      measurements: undefined,
     });
   });
 
@@ -647,7 +618,7 @@ describe('access.forbidden telemetry emission from blob handlers', () => {
     expect(mockTrackEvent).toHaveBeenCalledWith({
       name: 'access.forbidden',
       properties: { resource: 'blob', authMode: 'required' },
-      measurements: undefined
+      measurements: undefined,
     });
   });
 });
@@ -662,7 +633,7 @@ describe('quota.exceeded telemetry emission from blob handlers', () => {
       isPublic: false,
       createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
       updatedAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-      title: i === 0 ? 'oldest title' : undefined
+      title: i === 0 ? 'oldest title' : undefined,
     }));
   }
 
@@ -683,7 +654,7 @@ describe('quota.exceeded telemetry emission from blob handlers', () => {
     listBlobsSpy.mockResolvedValueOnce(manyBlobsForQuota(100));
     readUser.mockResolvedValueOnce({
       id: 'u-1',
-      preferences: { blobQuotaStrategy: 'manual' }
+      preferences: { blobQuotaStrategy: 'manual' },
     });
 
     const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
@@ -693,7 +664,7 @@ describe('quota.exceeded telemetry emission from blob handlers', () => {
     expect(mockTrackEvent).toHaveBeenCalledWith({
       name: 'quota.exceeded',
       properties: { resource: 'blob', authMode: 'required', via: 'create' },
-      measurements: { count: 100, limit: 100 }
+      measurements: { count: 100, limit: 100 },
     });
   });
 
@@ -705,7 +676,7 @@ describe('quota.exceeded telemetry emission from blob handlers', () => {
     listBlobsSpy.mockResolvedValueOnce(manyBlobsForQuota(100));
     readUser.mockResolvedValueOnce({
       id: 'u-1',
-      preferences: { blobQuotaStrategy: 'auto_fifo' }
+      preferences: { blobQuotaStrategy: 'auto_fifo' },
     });
     deleteBlobByIdSpy.mockResolvedValueOnce(true);
     createBlob.mockResolvedValueOnce(sampleBlob);

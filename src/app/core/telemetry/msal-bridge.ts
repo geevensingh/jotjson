@@ -31,7 +31,7 @@ class MsalBridge {
     const message = redactPii(truncate(rawMessage ?? '', MAX_MSG));
     const aadCode = extractAadCode(rawMessage ?? '');
     const entry: MsalBridgeEntry = {
-      props: { message, aadCode }
+      props: { message, aadCode },
     };
     if (this.consumer) {
       try {

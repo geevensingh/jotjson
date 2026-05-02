@@ -1,9 +1,6 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import {
-  persistedSignal,
-  persistedStringSignal
-} from './persisted-signal';
+import { persistedSignal, persistedStringSignal } from './persisted-signal';
 
 const STRING_KEY = 'jotjson.test.persistedString.v1';
 const NUMBER_KEY = 'jotjson.test.persistedNumber.v1';
@@ -23,7 +20,7 @@ class NumberHost {
       if (!Number.isFinite(n)) return 0.5;
       return Math.min(0.9, Math.max(0.1, n));
     },
-    serialize: (n) => String(n)
+    serialize: (n) => String(n),
   });
 }
 

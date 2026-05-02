@@ -74,7 +74,7 @@ export const TELEMETRY_MESSAGE_IDS = [
    * `sessionStorage` after a boot-time failure that wrote to the
    * `BOOT_FAIL_KEY` slot before the SDK was ready.
    */
-   'boot.failed',
+  'boot.failed',
 
   /**
    * Kind: event
@@ -987,7 +987,7 @@ export const TELEMETRY_MESSAGE_IDS = [
    * the current selection, not navigate elsewhere); kept for shape
    * parity with `tree.breadcrumb.click`.
    */
-  'tree.breadcrumb.copyPath'
+  'tree.breadcrumb.copyPath',
 ] as const;
 
 export type TelemetryMessageId = (typeof TELEMETRY_MESSAGE_IDS)[number];

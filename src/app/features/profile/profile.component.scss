@@ -113,7 +113,9 @@ dl {
     overflow-wrap: anywhere;
   }
 
-  &--indented { padding-left: 0.25rem; }
+  &--indented {
+    padding-left: 0.25rem;
+  }
 
   &--slider .pref-slider {
     flex: 1 1 16rem;

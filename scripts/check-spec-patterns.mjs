@@ -32,8 +32,8 @@ const RULES = [
       "Use Object.defineProperty(navigator, 'clipboard', { configurable: true, get: () => ... })" +
       ' with a beforeEach/afterEach pair that captures and restores the' +
       ' original descriptor. spyOnProperty requires an accessor property,' +
-      " which Linux headless Chrome does not expose for navigator.clipboard."
-  }
+      ' which Linux headless Chrome does not expose for navigator.clipboard.',
+  },
 ];
 
 function listSpecFiles() {
@@ -42,7 +42,7 @@ function listSpecFiles() {
   const out = execFileSync(
     'git',
     ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
-    { encoding: 'buffer' }
+    { encoding: 'buffer' },
   );
   return out
     .toString('utf8')

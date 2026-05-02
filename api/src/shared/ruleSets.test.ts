@@ -12,7 +12,7 @@ import {
   replaceRuleSet,
   __resetRuleSetsContainerForTesting,
   type FormattingRule,
-  type RuleSetDocument
+  type RuleSetDocument,
 } from './ruleSets';
 
 interface FakeContainer {
@@ -30,7 +30,7 @@ jest.mock('./cosmos', () => {
           items: {
             query: ({
               query,
-              parameters
+              parameters,
             }: {
               query: string;
               parameters: { name: string; value: unknown }[];
@@ -51,12 +51,12 @@ jest.mock('./cosmos', () => {
                   return { resources };
                 }
                 throw new Error(`Unexpected query: ${query}`);
-              }
+              },
             }),
             create: async (doc: RuleSetDocument) => {
               fake.items.push(doc);
               return { resource: doc };
-            }
+            },
           },
           item: (id: string, partitionKey: string) => ({
             read: async () => {
@@ -65,31 +65,25 @@ jest.mock('./cosmos', () => {
                 delete fake.failNextRead;
                 throw err;
               }
-              const found = fake.items.find(
-                (r) => r.id === id && r.userId === partitionKey
-              );
+              const found = fake.items.find((r) => r.id === id && r.userId === partitionKey);
               return { resource: found ?? null };
             },
             replace: async (next: RuleSetDocument) => {
-              const idx = fake.items.findIndex(
-                (r) => r.id === id && r.userId === partitionKey
-              );
+              const idx = fake.items.findIndex((r) => r.id === id && r.userId === partitionKey);
               if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
               fake.items[idx] = next;
               return { resource: next };
             },
             delete: async () => {
-              const idx = fake.items.findIndex(
-                (r) => r.id === id && r.userId === partitionKey
-              );
+              const idx = fake.items.findIndex((r) => r.id === id && r.userId === partitionKey);
               if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
               fake.items.splice(idx, 1);
               return { resource: undefined };
-            }
-          })
-        })
-      }
-    })
+            },
+          }),
+        }),
+      },
+    }),
   };
 });
 
@@ -106,7 +100,7 @@ function validRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     matchValue: 'error',
     caseSensitive: false,
     style: { backgroundColor: '#ffeb3b' },
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -116,15 +110,14 @@ describe('assertStyle', () => {
   });
 
   it('normalizes hex colors to lowercase', () => {
-    expect(
-      assertStyle({ backgroundColor: '#FFEB3B', textColor: '#1A2B3C' }, 'style')
-    ).toEqual({ backgroundColor: '#ffeb3b', textColor: '#1a2b3c' });
+    expect(assertStyle({ backgroundColor: '#FFEB3B', textColor: '#1A2B3C' }, 'style')).toEqual({
+      backgroundColor: '#ffeb3b',
+      textColor: '#1a2b3c',
+    });
   });
 
   it('rejects malformed hex colors', () => {
-    expect(() => assertStyle({ backgroundColor: 'red' }, 'style')).toThrow(
-      RuleSetValidationError
-    );
+    expect(() => assertStyle({ backgroundColor: 'red' }, 'style')).toThrow(RuleSetValidationError);
   });
 
   it('rejects unknown style fields', () => {
@@ -153,7 +146,7 @@ describe('assertRule', () => {
 
   it('rejects regex match-type (deferred to v1.1)', () => {
     expect(() => assertRule(validRule({ matchType: 'regex' as never }), 'rule')).toThrow(
-      /matchType/
+      /matchType/,
     );
   });
 
@@ -162,9 +155,7 @@ describe('assertRule', () => {
   });
 
   it('rejects matchValue longer than the cap', () => {
-    expect(() => assertRule(validRule({ matchValue: 'x'.repeat(201) }), 'rule')).toThrow(
-      /max 200/
-    );
+    expect(() => assertRule(validRule({ matchValue: 'x'.repeat(201) }), 'rule')).toThrow(/max 200/);
   });
 
   it('accepts matchValue at exactly MAX_RULE_MATCH_VALUE_LENGTH chars', () => {
@@ -182,9 +173,7 @@ describe('assertRule', () => {
   });
 
   it('rejects unknown target values', () => {
-    expect(() => assertRule(validRule({ target: 'both' as never }), 'rule')).toThrow(
-      /target/
-    );
+    expect(() => assertRule(validRule({ target: 'both' as never }), 'rule')).toThrow(/target/);
   });
 });
 
@@ -199,9 +188,7 @@ describe('assertRuleSetPayload', () => {
   });
 
   it('rejects name longer than 80 chars', () => {
-    expect(() => assertRuleSetPayload({ name: 'x'.repeat(81), rules: [] })).toThrow(
-      /max 80/
-    );
+    expect(() => assertRuleSetPayload({ name: 'x'.repeat(81), rules: [] })).toThrow(/max 80/);
   });
 
   it('accepts name at exactly MAX_RULE_SET_NAME_LENGTH chars', () => {
@@ -227,13 +214,16 @@ describe('assertRuleSetPayload', () => {
 
   it('rejects duplicate rule ids', () => {
     expect(() =>
-      assertRuleSetPayload({ name: 'x', rules: [validRule({ id: 'r1' }), validRule({ id: 'r1' })] })
+      assertRuleSetPayload({
+        name: 'x',
+        rules: [validRule({ id: 'r1' }), validRule({ id: 'r1' })],
+      }),
     ).toThrow(/Duplicate rule id/);
   });
 
   it('rejects unknown payload fields', () => {
     expect(() => assertRuleSetPayload({ name: 'x', rules: [], extra: 1 })).toThrow(
-      /Unknown field "extra"/
+      /Unknown field "extra"/,
     );
   });
 
@@ -261,7 +251,7 @@ describe('repository', () => {
       makeStored('a', 'u-1', '2026-01-03T00:00:00Z'),
       makeStored('b', 'u-1', '2026-01-01T00:00:00Z'),
       makeStored('c', 'u-1', '2026-01-02T00:00:00Z'),
-      makeStored('z', 'other-user', '2026-01-01T00:00:00Z')
+      makeStored('z', 'other-user', '2026-01-01T00:00:00Z'),
     ];
     const got = await listRuleSetsByOwner('u-1');
     expect(got.map((r) => r.id)).toEqual(['b', 'c', 'a']);
@@ -298,7 +288,7 @@ describe('repository', () => {
     const next = await replaceRuleSet(
       stored,
       { name: 'Renamed', rules: [validRule({ id: 'r2' })] },
-      1
+      1,
     );
     expect(next.version).toBe(2);
     expect(next.createdAt).toBe('2026-01-01T00:00:00Z');
@@ -309,9 +299,9 @@ describe('repository', () => {
   it('replaceRuleSet throws RuleSetVersionConflictError on version mismatch', async () => {
     const stored = makeStored('a', 'u-1', '2026-01-01T00:00:00Z');
     fake.items = [stored];
-    await expect(
-      replaceRuleSet(stored, { name: 'x', rules: [] }, 999)
-    ).rejects.toBeInstanceOf(RuleSetVersionConflictError);
+    await expect(replaceRuleSet(stored, { name: 'x', rules: [] }, 999)).rejects.toBeInstanceOf(
+      RuleSetVersionConflictError,
+    );
     // No mutation when the precondition fails.
     expect(fake.items[0]?.version).toBe(1);
   });
@@ -335,6 +325,6 @@ function makeStored(id: string, userId: string, createdAt: string): RuleSetDocum
     rules: [],
     version: 1,
     createdAt,
-    updatedAt: createdAt
+    updatedAt: createdAt,
   };
 }

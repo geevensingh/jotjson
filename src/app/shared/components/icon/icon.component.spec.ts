@@ -30,7 +30,7 @@ describe('IconComponent', () => {
     'flag',
     'bookmark',
     'extract',
-    'wand'
+    'wand',
   ];
 
   async function createWith(name: JjIconName): Promise<ComponentFixture<IconComponent>> {
@@ -47,9 +47,7 @@ describe('IconComponent', () => {
       const svg = fixture.nativeElement.querySelector('svg') as SVGElement | null;
       expect(svg).withContext(`svg missing for ${name}`).not.toBeNull();
       const shapeCount = svg!.querySelectorAll('path, rect, circle, line, polygon').length;
-      expect(shapeCount)
-        .withContext(`${name} should render at least one shape`)
-        .toBeGreaterThan(0);
+      expect(shapeCount).withContext(`${name} should render at least one shape`).toBeGreaterThan(0);
     });
   }
 

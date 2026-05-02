@@ -7,17 +7,10 @@
  */
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    !Array.isArray(value)
-  );
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function readString(
-  obj: Record<string, unknown>,
-  key: string
-): string | null {
+export function readString(obj: Record<string, unknown>, key: string): string | null {
   const value = obj[key];
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -25,8 +18,7 @@ export function readString(
   return trimmed;
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const NUMERIC_RE = /^-?\d+(?:\.\d+)?$/;
 

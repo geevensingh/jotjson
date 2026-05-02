@@ -172,14 +172,7 @@ export interface HistoryEntry {
  * a matched key/value. New icons require a spec amendment, not a
  * user-supplied free-form string. See DESIGN_SPEC.md §Features 7.
  */
-export type FormattingIcon =
-  | 'warning'
-  | 'check'
-  | 'star'
-  | 'info'
-  | 'error'
-  | 'flag'
-  | 'bookmark';
+export type FormattingIcon = 'warning' | 'check' | 'star' | 'info' | 'error' | 'flag' | 'bookmark';
 
 export const FORMATTING_ICONS: readonly FormattingIcon[] = [
   'warning',
@@ -188,7 +181,7 @@ export const FORMATTING_ICONS: readonly FormattingIcon[] = [
   'info',
   'error',
   'flag',
-  'bookmark'
+  'bookmark',
 ] as const;
 
 export interface FormattingStyle {
@@ -206,11 +199,7 @@ export interface FormattingStyle {
  * pending a safe-evaluation strategy (see DESIGN_SPEC.md §Features 7,
  * "Regex policy"). Add `'regex'` back here when M6+ ships it.
  */
-export type FormattingRuleMatchType =
-  | 'exact'
-  | 'contains'
-  | 'starts_with'
-  | 'ends_with';
+export type FormattingRuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
 
 export interface FormattingRule {
   id: string;

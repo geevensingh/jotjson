@@ -44,9 +44,7 @@ export function __resetUsersContainerForTesting(): void {
 
 export async function readUser(id: string): Promise<UserDocument | null> {
   try {
-    const { resource } = await getUsersContainer()
-      .item(id, id)
-      .read<UserDocument>();
+    const { resource } = await getUsersContainer().item(id, id).read<UserDocument>();
     return resource ?? null;
   } catch (error) {
     if ((error as { code?: number }).code === 404) return null;
@@ -55,8 +53,7 @@ export async function readUser(id: string): Promise<UserDocument | null> {
 }
 
 export async function upsertUser(doc: UserDocument): Promise<UserDocument> {
-  const response: ItemResponse<UserDocument> = await getUsersContainer().items.upsert<UserDocument>(
-    doc
-  );
+  const response: ItemResponse<UserDocument> =
+    await getUsersContainer().items.upsert<UserDocument>(doc);
   return response.resource ?? doc;
 }

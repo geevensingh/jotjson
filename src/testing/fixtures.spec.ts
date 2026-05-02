@@ -30,7 +30,7 @@ const FIXTURE_FILES = [
   'Simple.json',
   'Test.json',
   'TestHeader.json',
-  'Unpretty.json'
+  'Unpretty.json',
 ] as const;
 
 const PREFS_KEY = 'jotjson.preferences.v1';
@@ -44,7 +44,7 @@ describe('fixture files', () => {
       if (!res.ok) {
         throw new Error(
           `Failed to load fixtures/${name}: HTTP ${res.status}. ` +
-            `Ensure src/testing/fixtures is registered in angular.json test assets.`
+            `Ensure src/testing/fixtures is registered in angular.json test assets.`,
         );
       }
       contents.set(name, await res.text());
@@ -56,7 +56,7 @@ describe('fixture files', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [JsonTreeComponent],
-      providers: [provideAnimationsAsync(), ...provideFakeAuth()]
+      providers: [provideAnimationsAsync(), ...provideFakeAuth()],
     });
   });
 
@@ -71,13 +71,9 @@ describe('fixture files', () => {
         const text = contents.get(name);
         expect(text).withContext('fixture loaded').toBeDefined();
         const result = svc.parse(text!);
-        expect(result.errors)
-          .withContext(`parse errors for ${name}`)
-          .toEqual([]);
+        expect(result.errors).withContext(`parse errors for ${name}`).toEqual([]);
         expect(result.ast).withContext(`AST for ${name}`).toBeDefined();
-        expect(result.value)
-          .withContext(`parsed value for ${name}`)
-          .toBeDefined();
+        expect(result.value).withContext(`parsed value for ${name}`).toBeDefined();
       });
 
       it('renders in JsonTreeComponent without throwing', () => {
@@ -98,9 +94,7 @@ describe('fixture files', () => {
         expect(root).withContext(`tree root for ${name}`).toBeDefined();
         // A healthy fixture is an object or array at the top level, so the
         // root should have children.
-        expect(root?.children)
-          .withContext(`tree root children for ${name}`)
-          .toBeDefined();
+        expect(root?.children).withContext(`tree root children for ${name}`).toBeDefined();
         expect(root!.children!.length)
           .withContext(`tree root child count for ${name}`)
           .toBeGreaterThan(0);
@@ -129,7 +123,7 @@ describe('extractor on mixed-text fixtures', () => {
     if (!res.ok) {
       throw new Error(
         `Failed to load fixtures/MultiPartMixedText.json: HTTP ${res.status}. ` +
-          `Ensure src/testing/fixtures is registered in angular.json test assets.`
+          `Ensure src/testing/fixtures is registered in angular.json test assets.`,
       );
     }
     mixedText = await res.text();
@@ -139,7 +133,7 @@ describe('extractor on mixed-text fixtures', () => {
     localStorage.removeItem(PREFS_KEY);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [provideAnimationsAsync(), ...provideFakeAuth()]
+      providers: [provideAnimationsAsync(), ...provideFakeAuth()],
     });
   });
 
@@ -159,12 +153,8 @@ describe('extractor on mixed-text fixtures', () => {
     const extractor = TestBed.inject(JsonExtractorService);
     const extracted = extractor.extractFromMixedText(mixedText);
 
-    expect(extracted)
-      .withContext('extractor must return non-null on this fixture')
-      .not.toBeNull();
-    expect(extracted!.blockCount)
-      .withContext('two HTTP bodies in this capture')
-      .toBe(2);
+    expect(extracted).withContext('extractor must return non-null on this fixture').not.toBeNull();
+    expect(extracted!.blockCount).withContext('two HTTP bodies in this capture').toBe(2);
     // Multi-block uses JSON.stringify array wrap; comments cannot survive.
     expect(extracted!.preservesComments).toBe(false);
     // The HTTP-capture fixture has no JSONC comments in either body, so
@@ -177,8 +167,6 @@ describe('extractor on mixed-text fixtures', () => {
     expect(Array.isArray(value)).toBe(true);
     expect(value.length).toBe(2);
     expect(value[0]).toEqual(jasmine.objectContaining({ authentication_data: null }));
-    expect(value[1]).toEqual(
-      jasmine.objectContaining({ buyer_info: jasmine.any(Object) })
-    );
+    expect(value[1]).toEqual(jasmine.objectContaining({ buyer_info: jasmine.any(Object) }));
   });
 });

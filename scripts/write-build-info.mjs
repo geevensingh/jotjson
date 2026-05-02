@@ -64,24 +64,24 @@ function getBuildNumber() {
     const isShallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
       cwd: repositoryRoot,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
+      stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
     if (isShallow === 'true') {
       console.warn(
         "write-build-info: shallow git checkout detected; buildNumber set to 'unknown'. " +
-          'Set actions/checkout fetch-depth: 0 if this is the build that ships.'
+          'Set actions/checkout fetch-depth: 0 if this is the build that ships.',
       );
       return 'unknown';
     }
     const count = execFileSync('git', ['rev-list', '--count', 'HEAD'], {
       cwd: repositoryRoot,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
+      stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
     if (count === '' || !/^\d+$/u.test(count)) {
       console.warn(
         `write-build-info: unexpected git rev-list output ${JSON.stringify(count)}; ` +
-          "buildNumber set to 'unknown'."
+          "buildNumber set to 'unknown'.",
       );
       return 'unknown';
     }
@@ -89,7 +89,7 @@ function getBuildNumber() {
   } catch (error) {
     console.warn(
       `write-build-info: failed to derive buildNumber from git (${error?.message ?? error}); ` +
-        "buildNumber set to 'unknown'."
+        "buildNumber set to 'unknown'.",
     );
     return 'unknown';
   }
@@ -103,7 +103,7 @@ const payload = {
   branch: process.env.GITHUB_REF_NAME || '',
   builtAt: new Date().toISOString(),
   repoUrl: repositoryUrl,
-  buildNumber: getBuildNumber()
+  buildNumber: getBuildNumber(),
 };
 
 const contents =

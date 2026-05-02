@@ -25,7 +25,7 @@ import type {
   FormattingIcon,
   FormattingRule,
   FormattingRuleSet,
-  FormattingStyle
+  FormattingStyle,
 } from '../../../core/api/models';
 
 /**
@@ -111,7 +111,7 @@ export const EMPTY_RULE_RESULT: RuleEngineResult = Object.freeze({
   rowStyle: Object.freeze({}) as RuleRowStyle,
   keyStyle: Object.freeze({}) as RuleStyleProjection,
   valueStyle: Object.freeze({}) as RuleStyleProjection,
-  matchedRules: Object.freeze([]) as readonly MatchedRuleRef[]
+  matchedRules: Object.freeze([]) as readonly MatchedRuleRef[],
 }) as RuleEngineResult;
 
 /**
@@ -122,7 +122,7 @@ export const EMPTY_RULE_RESULT: RuleEngineResult = Object.freeze({
 const VALID_TARGETS: ReadonlySet<FormattingRule['target']> = new Set([
   'key',
   'value',
-  'key_and_value'
+  'key_and_value',
 ]);
 
 /**
@@ -136,7 +136,7 @@ const VALID_MATCH_TYPES: ReadonlySet<FormattingRule['matchType']> = new Set([
   'exact',
   'contains',
   'starts_with',
-  'ends_with'
+  'ends_with',
 ]);
 
 /**
@@ -148,7 +148,7 @@ function matchString(
   candidate: string,
   matchType: FormattingRule['matchType'],
   matchValue: string,
-  caseSensitive: boolean
+  caseSensitive: boolean,
 ): boolean {
   // Case-insensitive matching folds both sides to lowercase. We pay
   // two `.toLowerCase()` calls per match attempt - acceptable because
@@ -181,10 +181,7 @@ function matchString(
  * explicit `false` deliberately clobbering an earlier `true` (the
  * documented expected behaviour, plan.md M6f spec tests).
  */
-function projectInlineStyle(
-  target: RuleStyleProjection,
-  style: FormattingStyle
-): void {
+function projectInlineStyle(target: RuleStyleProjection, style: FormattingStyle): void {
   if (style.textColor !== undefined) target.color = style.textColor;
   if (style.bold !== undefined) target.bold = style.bold;
   if (style.italic !== undefined) target.italic = style.italic;
@@ -243,7 +240,7 @@ function projectRowStyle(target: RuleRowStyle, style: FormattingStyle): void {
  */
 export function evaluateFormattingRules(
   activeSets: readonly FormattingRuleSet[],
-  node: RuleEngineNode
+  node: RuleEngineNode,
 ): RuleEngineResult {
   const rowStyle: RuleRowStyle = {};
   const keyStyle: RuleStyleProjection = {};
@@ -260,8 +257,7 @@ export function evaluateFormattingRules(
       // node's role and the rule's target. Containers exclude the
       // value side regardless of target.
       const tryKey =
-        (rule.target === 'key' || rule.target === 'key_and_value') &&
-        node.key !== null;
+        (rule.target === 'key' || rule.target === 'key_and_value') && node.key !== null;
       const tryValue =
         (rule.target === 'value' || rule.target === 'key_and_value') &&
         !node.isContainer &&
@@ -274,12 +270,7 @@ export function evaluateFormattingRules(
         matchString(node.key as string, rule.matchType, rule.matchValue, rule.caseSensitive);
       const valueMatched =
         tryValue &&
-        matchString(
-          node.valueText as string,
-          rule.matchType,
-          rule.matchValue,
-          rule.caseSensitive
-        );
+        matchString(node.valueText as string, rule.matchType, rule.matchValue, rule.caseSensitive);
 
       if (!keyMatched && !valueMatched) continue;
 
@@ -290,7 +281,7 @@ export function evaluateFormattingRules(
       matchedRules.push({
         setId: set.id,
         ruleId: rule.id,
-        label: describeRule(rule)
+        label: describeRule(rule),
       });
     }
   }
@@ -319,12 +310,7 @@ export function evaluateFormattingRules(
  * post-v1 follow-up.
  */
 export function describeRule(rule: FormattingRule): string {
-  const target =
-    rule.target === 'key'
-      ? 'key'
-      : rule.target === 'value'
-        ? 'value'
-        : 'key or value';
+  const target = rule.target === 'key' ? 'key' : rule.target === 'value' ? 'value' : 'key or value';
   const quoted = JSON.stringify(rule.matchValue ?? '');
   const sensitivity = rule.caseSensitive ? ' (case-sensitive)' : '';
   return `${target} ${rule.matchType} ${quoted}${sensitivity}`;

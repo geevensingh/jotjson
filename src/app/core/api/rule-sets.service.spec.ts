@@ -6,12 +6,7 @@ import { AuthUser } from '../auth/auth-user';
 import { PreferencesService } from '../preferences/preferences.service';
 import { LoggerService } from '../telemetry/logger.service';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
-import {
-  FormattingRule,
-  FormattingRuleSet,
-  RuleSetPayload,
-  RuleSetPreset
-} from './models';
+import { FormattingRule, FormattingRuleSet, RuleSetPayload, RuleSetPreset } from './models';
 import { RuleSetsService } from './rule-sets.service';
 
 const BASE = `${environment.apiBaseUrl}/rule-sets`;
@@ -25,7 +20,7 @@ function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     matchValue: 'error',
     caseSensitive: false,
     style: { backgroundColor: '#ffcdd2' },
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -38,7 +33,7 @@ function makeSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet 
     version: 1,
     createdAt: '2026-04-27T00:00:00.000Z',
     updatedAt: '2026-04-27T00:00:00.000Z',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -51,7 +46,7 @@ describe('RuleSetsService', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideFakeAuth()]
+      providers: [provideFakeAuth()],
     });
     service = TestBed.inject(RuleSetsService);
     httpMock = TestBed.inject(HttpTestingController);
@@ -133,10 +128,9 @@ describe('RuleSetsService', () => {
       httpMock.expectOne(BASE).flush([makeSet({ id: 'a' })]);
 
       service.create(payload).subscribe({ error: () => undefined });
-      httpMock.expectOne(BASE).flush(
-        { error: 'boom' },
-        { status: 500, statusText: 'Server Error' }
-      );
+      httpMock
+        .expectOne(BASE)
+        .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
 
       expect(service.ruleSets()?.map((s) => s.id)).toEqual(['a']);
     });
@@ -171,10 +165,9 @@ describe('RuleSetsService', () => {
       httpMock.expectOne(BASE).flush([original]);
 
       service.update('a', payload, 7).subscribe({ error: () => undefined });
-      httpMock.expectOne(`${BASE}/a`).flush(
-        { error: 'conflict' },
-        { status: 412, statusText: 'Precondition Failed' }
-      );
+      httpMock
+        .expectOne(`${BASE}/a`)
+        .flush({ error: 'conflict' }, { status: 412, statusText: 'Precondition Failed' });
       expect(service.ruleSets()?.[0]).toEqual(original);
     });
   });
@@ -217,10 +210,9 @@ describe('RuleSetsService', () => {
       httpMock.expectOne(BASE).flush([makeSet({ id: 'a' })]);
 
       service.delete('a').subscribe({ error: () => undefined });
-      httpMock.expectOne(`${BASE}/a`).flush(
-        { error: 'nope' },
-        { status: 500, statusText: 'Server Error' }
-      );
+      httpMock
+        .expectOne(`${BASE}/a`)
+        .flush({ error: 'nope' }, { status: 500, statusText: 'Server Error' });
       expect(service.ruleSets()?.map((s) => s.id)).toEqual(['a']);
     });
   });
@@ -228,7 +220,7 @@ describe('RuleSetsService', () => {
   describe('listPresets()', () => {
     it('GETs /api/rule-set-presets', () => {
       const presets: RuleSetPreset[] = [
-        { id: 'error-detection', name: 'Errors', rules: [makeRule()] }
+        { id: 'error-detection', name: 'Errors', rules: [makeRule()] },
       ];
       let received: RuleSetPreset[] | null = null;
       service.listPresets().subscribe((v) => {
@@ -295,11 +287,9 @@ describe('RuleSetsService', () => {
   describe('setActives() / toggleActive()', () => {
     beforeEach(() => {
       service.list().subscribe();
-      httpMock.expectOne(BASE).flush([
-        makeSet({ id: 'a' }),
-        makeSet({ id: 'b' }),
-        makeSet({ id: 'c' })
-      ]);
+      httpMock
+        .expectOne(BASE)
+        .flush([makeSet({ id: 'a' }), makeSet({ id: 'b' }), makeSet({ id: 'c' })]);
     });
 
     it('setActives() filters out IDs not present in the cache', () => {
@@ -400,43 +390,37 @@ describe('RuleSetsService', () => {
       req.flush(makeSet({ id: 'b', rules: [makeRule(), makeRule({ id: 'r2' })] }));
       expect(infoSpy).toHaveBeenCalledWith('ruleSets.created', {
         ruleCount: 2,
-        source: 'manual'
+        source: 'manual',
       });
     });
 
     it('does NOT emit ruleSets.created when create() fails', () => {
       const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
       service.create(payload).subscribe({ error: () => undefined });
-      httpMock.expectOne(BASE).flush(
-        { error: 'boom' },
-        { status: 500, statusText: 'Server Error' }
-      );
-      expect(infoSpy).not.toHaveBeenCalledWith(
-        'ruleSets.created',
-        jasmine.anything()
-      );
+      httpMock
+        .expectOne(BASE)
+        .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expect(infoSpy).not.toHaveBeenCalledWith('ruleSets.created', jasmine.anything());
     });
 
     it('emits ruleSets.updated with the rule count on update() success', () => {
       const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
       service.update('a', payload, 7).subscribe();
-      httpMock.expectOne(`${BASE}/a`).flush(
-        makeSet({ id: 'a', rules: [makeRule(), makeRule({ id: 'r2' }), makeRule({ id: 'r3' })] })
-      );
+      httpMock
+        .expectOne(`${BASE}/a`)
+        .flush(
+          makeSet({ id: 'a', rules: [makeRule(), makeRule({ id: 'r2' }), makeRule({ id: 'r3' })] }),
+        );
       expect(infoSpy).toHaveBeenCalledWith('ruleSets.updated', { ruleCount: 3 });
     });
 
     it('does NOT emit ruleSets.updated on 412 conflict', () => {
       const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
       service.update('a', payload, 7).subscribe({ error: () => undefined });
-      httpMock.expectOne(`${BASE}/a`).flush(
-        { error: 'conflict' },
-        { status: 412, statusText: 'Precondition Failed' }
-      );
-      expect(infoSpy).not.toHaveBeenCalledWith(
-        'ruleSets.updated',
-        jasmine.anything()
-      );
+      httpMock
+        .expectOne(`${BASE}/a`)
+        .flush({ error: 'conflict' }, { status: 412, statusText: 'Precondition Failed' });
+      expect(infoSpy).not.toHaveBeenCalledWith('ruleSets.updated', jasmine.anything());
     });
 
     it('emits ruleSets.deleted (no props) on delete() success', () => {
@@ -447,34 +431,28 @@ describe('RuleSetsService', () => {
 
     it('does NOT emit ruleSets.deleted when delete() fails', () => {
       service.delete('a').subscribe({ error: () => undefined });
-      httpMock.expectOne(`${BASE}/a`).flush(
-        { error: 'boom' },
-        { status: 500, statusText: 'Server Error' }
-      );
-      expect(infoSpy).not.toHaveBeenCalledWith(
-        'ruleSets.deleted',
-        jasmine.anything()
-      );
+      httpMock
+        .expectOne(`${BASE}/a`)
+        .flush({ error: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expect(infoSpy).not.toHaveBeenCalledWith('ruleSets.deleted', jasmine.anything());
     });
 
     it('emits ruleSets.created with preset source on clonePreset() success', () => {
       service.clonePreset('error-detection').subscribe();
-      httpMock.expectOne(`${PRESETS_BASE}/error-detection/clone`).flush(
-        makeSet({ id: 'b', rules: [makeRule()] })
-      );
+      httpMock
+        .expectOne(`${PRESETS_BASE}/error-detection/clone`)
+        .flush(makeSet({ id: 'b', rules: [makeRule()] }));
       expect(infoSpy).toHaveBeenCalledWith('ruleSets.created', {
         ruleCount: 1,
-        source: 'preset'
+        source: 'preset',
       });
     });
 
     it('emits ruleSets.applied with activeCount on every activeRuleSetIds change', () => {
       service.list().subscribe();
-      httpMock.expectOne(BASE).flush([
-        makeSet({ id: 'a' }),
-        makeSet({ id: 'b' }),
-        makeSet({ id: 'c' })
-      ]);
+      httpMock
+        .expectOne(BASE)
+        .flush([makeSet({ id: 'a' }), makeSet({ id: 'b' }), makeSet({ id: 'c' })]);
 
       service.setActives(['a', 'b']);
       TestBed.flushEffects();
@@ -513,10 +491,7 @@ describe('RuleSetsService', () => {
       // first run (the default-empty state before any preferences have
       // hydrated). The outer beforeEach already drained that run, so
       // a fresh check here should see no prior 'applied' emits.
-      expect(infoSpy).not.toHaveBeenCalledWith(
-        'ruleSets.applied',
-        jasmine.anything()
-      );
+      expect(infoSpy).not.toHaveBeenCalledWith('ruleSets.applied', jasmine.anything());
     });
   });
 
@@ -527,7 +502,7 @@ describe('RuleSetsService', () => {
     function setOnline(value: boolean): void {
       Object.defineProperty(navigator, 'onLine', {
         configurable: true,
-        get: () => value
+        get: () => value,
       });
     }
 
@@ -557,10 +532,7 @@ describe('RuleSetsService', () => {
         if (r.request.method === 'GET') {
           r.flush(null, { status: 404, statusText: 'Not Found' });
         } else {
-          r.flush(
-            { id: 'oid-1', preferences: {} },
-            { status: 200, statusText: 'OK' }
-          );
+          r.flush({ id: 'oid-1', preferences: {} }, { status: 200, statusText: 'OK' });
         }
       });
     }
@@ -633,10 +605,9 @@ describe('RuleSetsService', () => {
 
       setOnline(true);
       window.dispatchEvent(new Event('online'));
-      httpMock.expectOne(`${BASE}/a`).flush(
-        { error: 'conflict' },
-        { status: 412, statusText: 'Precondition Failed' }
-      );
+      httpMock
+        .expectOne(`${BASE}/a`)
+        .flush({ error: 'conflict' }, { status: 412, statusText: 'Precondition Failed' });
       // The post-conflict refresh fires a list().
       httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 9, name: 'ServerWon' })]);
 
@@ -656,10 +627,9 @@ describe('RuleSetsService', () => {
 
       setOnline(true);
       window.dispatchEvent(new Event('online'));
-      httpMock.expectOne(`${BASE}/a`).flush(
-        { error: 'boom' },
-        { status: 503, statusText: 'Service Unavailable' }
-      );
+      httpMock
+        .expectOne(`${BASE}/a`)
+        .flush({ error: 'boom' }, { status: 503, statusText: 'Service Unavailable' });
 
       expect(svc.pendingWriteCount()).toBe(1);
       expect(svc.pendingWriteIds().has('a')).toBeTrue();
@@ -714,10 +684,9 @@ describe('RuleSetsService', () => {
 
       setOnline(true);
       window.dispatchEvent(new Event('online'));
-      httpMock.expectOne(`${BASE}/a`).flush(
-        { error: 'gone' },
-        { status: 404, statusText: 'Not Found' }
-      );
+      httpMock
+        .expectOne(`${BASE}/a`)
+        .flush({ error: 'gone' }, { status: 404, statusText: 'Not Found' });
 
       expect(svc.pendingWriteCount()).toBe(0);
       expect(svc.ruleSets()?.map((s) => s.id)).toEqual([]);
@@ -728,7 +697,7 @@ describe('RuleSetsService', () => {
       // service with the current user signed in.
       localStorage.setItem(
         CACHE_KEY,
-        JSON.stringify({ userId: 'someone-else', sets: [makeSet({ id: 'x' })] })
+        JSON.stringify({ userId: 'someone-else', sets: [makeSet({ id: 'x' })] }),
       );
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({ providers: [provideFakeAuth()] });
@@ -752,8 +721,7 @@ describe('RuleSetsService', () => {
       TestBed.flushEffects();
       expect(localStorage.getItem(CACHE_KEY)).not.toBeNull();
 
-      (auth as unknown as { userSignal: { set(v: AuthUser | null): void } })
-        .userSignal.set(null);
+      (auth as unknown as { userSignal: { set(v: AuthUser | null): void } }).userSignal.set(null);
       TestBed.flushEffects();
 
       expect(svc.ruleSets()).toBeNull();
@@ -771,7 +739,7 @@ describe('RuleSetsService', () => {
       const live = httpMock.expectOne(`${BASE}/a`);
       live.flush(null, {
         status: 0,
-        statusText: 'Unknown Error'
+        statusText: 'Unknown Error',
       });
 
       // The catchError path should have re-routed via the queue and

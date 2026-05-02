@@ -7,7 +7,7 @@ import {
   afterNextRender,
   computed,
   inject,
-  signal
+  signal,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -18,7 +18,19 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { EMPTY, Observable, Subject, catchError, concatMap, debounceTime, filter, firstValueFrom, merge, of, tap } from 'rxjs';
+import {
+  EMPTY,
+  Observable,
+  Subject,
+  catchError,
+  concatMap,
+  debounceTime,
+  filter,
+  firstValueFrom,
+  merge,
+  of,
+  tap,
+} from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
@@ -28,7 +40,7 @@ import {
   FormattingIcon,
   FormattingRule,
   FormattingRuleMatchType,
-  FormattingRuleSet
+  FormattingRuleSet,
 } from '../../../core/api/models';
 import { AppHeaderComponent } from '../../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -50,9 +62,7 @@ interface ServerMeta {
   updatedAt: string;
 }
 
-type Validity =
-  | { kind: 'valid' }
-  | { kind: 'invalid'; reasons: string[] };
+type Validity = { kind: 'valid' } | { kind: 'invalid'; reasons: string[] };
 
 type PillState =
   | { kind: 'reloading' }
@@ -72,7 +82,7 @@ const SAVED_FLASH_MS = 2000;
 
 const DEFAULT_NEW_RULE_STYLE = (): FormattingRule['style'] => ({
   backgroundColor: '#ffe4b5',
-  textColor: '#1f2937'
+  textColor: '#1f2937',
 });
 
 /**
@@ -120,11 +130,11 @@ const DEFAULT_NEW_RULE_STYLE = (): FormattingRule['style'] => ({
     MatSlideToggleModule,
     MatTooltipModule,
     RouterLink,
-    RulePreviewComponent
+    RulePreviewComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './rule-editor.component.html',
-  styleUrl: './rule-editor.component.scss'
+  styleUrl: './rule-editor.component.scss',
 })
 export class RuleEditorComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
@@ -145,22 +155,16 @@ export class RuleEditorComponent implements OnInit {
   readonly savedFlash = signal<boolean>(false);
 
   readonly icons: readonly FormattingIcon[] = FORMATTING_ICONS;
-  readonly targetOptions: readonly FormattingRule['target'][] = [
-    'key',
-    'value',
-    'key_and_value'
-  ];
+  readonly targetOptions: readonly FormattingRule['target'][] = ['key', 'value', 'key_and_value'];
   readonly matchTypeOptions: readonly FormattingRuleMatchType[] = [
     'exact',
     'contains',
     'starts_with',
-    'ends_with'
+    'ends_with',
   ];
 
   /** `true` while either a 412 conflict banner is up or a Reload is in flight. */
-  readonly formDisabled = computed(
-    () => this.conflict() || this.reloading()
-  );
+  readonly formDisabled = computed(() => this.conflict() || this.reloading());
 
   readonly validity = computed<Validity>(() => {
     const e = this.editable();
@@ -170,13 +174,11 @@ export class RuleEditorComponent implements OnInit {
       reasons.push($localize`:@@ruleEditor.validity.nameEmpty:Name is required.`);
     } else if (e.name.length > NAME_MAX) {
       reasons.push(
-        $localize`:@@ruleEditor.validity.nameLong:Name is too long (max 80 characters).`
+        $localize`:@@ruleEditor.validity.nameLong:Name is too long (max 80 characters).`,
       );
     }
     if (e.rules.length > MAX_RULES) {
-      reasons.push(
-        $localize`:@@ruleEditor.validity.tooManyRules:Too many rules (max 50).`
-      );
+      reasons.push($localize`:@@ruleEditor.validity.tooManyRules:Too many rules (max 50).`);
     }
     let hasEmptyMatchValue = false;
     let hasLongMatchValue = false;
@@ -184,33 +186,27 @@ export class RuleEditorComponent implements OnInit {
     for (const rule of e.rules) {
       if (rule.matchValue.trim() === '') hasEmptyMatchValue = true;
       if (rule.matchValue.length > MATCH_VALUE_MAX) hasLongMatchValue = true;
-      const colors = [
-        rule.style.backgroundColor,
-        rule.style.textColor,
-        rule.style.borderColor
-      ];
+      const colors = [rule.style.backgroundColor, rule.style.textColor, rule.style.borderColor];
       for (const c of colors) {
         if (c && !HEX_COLOR.test(c)) hasBadHex = true;
       }
     }
     if (hasEmptyMatchValue) {
       reasons.push(
-        $localize`:@@ruleEditor.validity.matchValueEmpty:One or more rules are missing a match value.`
+        $localize`:@@ruleEditor.validity.matchValueEmpty:One or more rules are missing a match value.`,
       );
     }
     if (hasLongMatchValue) {
       reasons.push(
-        $localize`:@@ruleEditor.validity.matchValueLong:One or more rules have a match value that is too long (max 200 characters).`
+        $localize`:@@ruleEditor.validity.matchValueLong:One or more rules have a match value that is too long (max 200 characters).`,
       );
     }
     if (hasBadHex) {
       reasons.push(
-        $localize`:@@ruleEditor.validity.badHex:One or more rules have an invalid color (must be #rrggbb).`
+        $localize`:@@ruleEditor.validity.badHex:One or more rules have an invalid color (must be #rrggbb).`,
       );
     }
-    return reasons.length === 0
-      ? { kind: 'valid' }
-      : { kind: 'invalid', reasons };
+    return reasons.length === 0 ? { kind: 'valid' } : { kind: 'invalid', reasons };
   });
 
   readonly isDirty = computed(() => {
@@ -258,14 +254,13 @@ export class RuleEditorComponent implements OnInit {
       rules: e.rules,
       version: meta.version,
       createdAt: meta.createdAt,
-      updatedAt: meta.updatedAt
+      updatedAt: meta.updatedAt,
     };
   });
 
   /** Auto-generated label per F1: e.g. `key contains "error"`. */
   ruleLabel(rule: FormattingRule): string {
-    const targetLabel =
-      rule.target === 'key_and_value' ? 'key+value' : rule.target;
+    const targetLabel = rule.target === 'key_and_value' ? 'key+value' : rule.target;
     const verb = rule.matchType.replace(/_/g, ' ');
     const value = rule.matchValue ? `"${rule.matchValue}"` : '(empty)';
     return `${targetLabel} ${verb} ${value}`;
@@ -295,20 +290,22 @@ export class RuleEditorComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event) => this.handleSyncEvent(event));
 
-    this.route.paramMap
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((params) => {
-        const id = params.get('id');
-        if (!id) {
-          void this.router.navigate(['/formatting-rules']);
-          return;
-        }
-        this.resetForId(id);
-        void this.loadById(id);
-      });
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const id = params.get('id');
+      if (!id) {
+        void this.router.navigate(['/formatting-rules']);
+        return;
+      }
+      this.resetForId(id);
+      void this.loadById(id);
+    });
   }
 
-  private handleSyncEvent(event: { kind: 'conflict' | 'error'; id: string; status?: number }): void {
+  private handleSyncEvent(event: {
+    kind: 'conflict' | 'error';
+    id: string;
+    status?: number;
+  }): void {
     const meta = this.serverMeta();
     if (!meta || meta.id !== event.id) return;
     if (event.kind === 'conflict') {
@@ -316,13 +313,13 @@ export class RuleEditorComponent implements OnInit {
       this.snack.open(
         $localize`:@@ruleEditor.offlineConflict:Your offline edit could not be saved - someone else changed this rule set.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 6000 }
+        { duration: 6000 },
       );
     } else {
       this.snack.open(
         $localize`:@@ruleEditor.offlineError:Your offline edit could not be saved.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 6000 }
+        { duration: 6000 },
       );
     }
   }
@@ -348,11 +345,9 @@ export class RuleEditorComponent implements OnInit {
       version: set.version,
       userId: set.userId,
       createdAt: set.createdAt,
-      updatedAt: set.updatedAt
+      updatedAt: set.updatedAt,
     });
-    this.lastSavedFingerprint.set(
-      this.fingerprint({ name: set.name, rules: cloned })
-    );
+    this.lastSavedFingerprint.set(this.fingerprint({ name: set.name, rules: cloned }));
   }
 
   private async loadById(id: string): Promise<void> {
@@ -374,7 +369,7 @@ export class RuleEditorComponent implements OnInit {
         this.snack.open(
           $localize`:@@ruleEditor.notFound:Rule set not found.`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 4000 }
+          { duration: 4000 },
         );
         void this.router.navigate(['/formatting-rules']);
         return;
@@ -400,7 +395,7 @@ export class RuleEditorComponent implements OnInit {
       matchType: 'contains',
       matchValue: '',
       caseSensitive: false,
-      style: DEFAULT_NEW_RULE_STYLE()
+      style: DEFAULT_NEW_RULE_STYLE(),
     };
     this.editable.set({ ...current, rules: [...current.rules, newRule] });
     // M6g-2: focus the new rule's match-value input so users can start
@@ -422,9 +417,7 @@ export class RuleEditorComponent implements OnInit {
     // removed the last one); fall back to the "+ Add rule" button if
     // the list is now empty.
     const successor = next[index] ?? next[index - 1];
-    const targetId = successor
-      ? `remove-rule-${successor.id}`
-      : 'add-rule-button';
+    const targetId = successor ? `remove-rule-${successor.id}` : 'add-rule-button';
     this.focusElementById(targetId);
   }
 
@@ -443,11 +436,8 @@ export class RuleEditorComponent implements OnInit {
     // edge in that direction (button now disabled), fall back to the
     // opposite direction button which is still active.
     const sameDirAtEdge =
-      (direction === -1 && target === 0) ||
-      (direction === 1 && target === next.length - 1);
-    const focusDir: -1 | 1 = sameDirAtEdge
-      ? (direction === -1 ? 1 : -1)
-      : direction;
+      (direction === -1 && target === 0) || (direction === 1 && target === next.length - 1);
+    const focusDir: -1 | 1 = sameDirAtEdge ? (direction === -1 ? 1 : -1) : direction;
     const focusPrefix = focusDir === -1 ? 'move-up-' : 'move-down-';
     this.focusElementById(`${focusPrefix}${moved.id}`);
   }
@@ -462,10 +452,7 @@ export class RuleEditorComponent implements OnInit {
     this.editable.set({ ...current, rules: next });
   }
 
-  patchStyle(
-    index: number,
-    patch: Partial<FormattingRule['style']>
-  ): void {
+  patchStyle(index: number, patch: Partial<FormattingRule['style']>): void {
     if (this.formDisabled()) return;
     const current = this.editable();
     if (!current) return;
@@ -505,7 +492,7 @@ export class RuleEditorComponent implements OnInit {
           (el as HTMLElement).focus();
         }
       },
-      { injector: this.injector }
+      { injector: this.injector },
     );
   }
 
@@ -535,7 +522,7 @@ export class RuleEditorComponent implements OnInit {
         this.snack.open(
           $localize`:@@ruleEditor.deleted:This rule set was deleted.`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 5000 }
+          { duration: 5000 },
         );
         void this.router.navigate(['/formatting-rules']);
         return;
@@ -546,7 +533,7 @@ export class RuleEditorComponent implements OnInit {
       this.snack.open(
         $localize`:@@ruleEditor.reloadFailed:Reload failed. Please try again.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 5000 }
+        { duration: 5000 },
       );
     } finally {
       if (this.currentId === id) this.reloading.set(false);
@@ -563,7 +550,7 @@ export class RuleEditorComponent implements OnInit {
         debounceTime(SAVE_DEBOUNCE_MS),
         filter(() => this.canFireSave()),
         concatMap(() => this.fireSave()),
-        takeUntilDestroyed(this.destroyRef)
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe();
   }
@@ -586,7 +573,7 @@ export class RuleEditorComponent implements OnInit {
     if (!editable || !meta || !id) return of(null);
     const payload: Editable = {
       name: editable.name,
-      rules: editable.rules
+      rules: editable.rules,
     };
     const fingerprint = this.fingerprint(payload);
 
@@ -600,7 +587,7 @@ export class RuleEditorComponent implements OnInit {
           version: response.version,
           userId: response.userId,
           createdAt: response.createdAt,
-          updatedAt: response.updatedAt
+          updatedAt: response.updatedAt,
         });
         this.lastSavedFingerprint.set(fingerprint);
         this.saveState.set('idle');
@@ -619,7 +606,7 @@ export class RuleEditorComponent implements OnInit {
             this.snack.open(
               $localize`:@@ruleEditor.deleted:This rule set was deleted.`,
               $localize`:@@common.dismiss:Dismiss`,
-              { duration: 5000 }
+              { duration: 5000 },
             );
             void this.router.navigate(['/formatting-rules']);
             return EMPTY;
@@ -627,7 +614,7 @@ export class RuleEditorComponent implements OnInit {
         }
         this.saveState.set('error');
         return EMPTY;
-      })
+      }),
     );
   }
 
@@ -656,9 +643,9 @@ export class RuleEditorComponent implements OnInit {
           bold: r.style.bold ?? false,
           italic: r.style.italic ?? false,
           underline: r.style.underline ?? false,
-          icon: r.style.icon ?? null
-        }
-      }))
+          icon: r.style.icon ?? null,
+        },
+      })),
     });
   }
 

@@ -1,12 +1,5 @@
-import {
-  HttpClient,
-  provideHttpClient,
-  withInterceptors
-} from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting
-} from '@angular/common/http/testing';
+import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { LoggerService } from '../telemetry/logger.service';
 import { errorInterceptor } from './error.interceptor';
@@ -17,17 +10,13 @@ describe('errorInterceptor', () => {
   let loggerSpy: jasmine.SpyObj<LoggerService>;
 
   beforeEach(() => {
-    loggerSpy = jasmine.createSpyObj<LoggerService>('LoggerService', [
-      'info',
-      'warn',
-      'error'
-    ]);
+    loggerSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['info', 'warn', 'error']);
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
-        { provide: LoggerService, useValue: loggerSpy }
-      ]
+        { provide: LoggerService, useValue: loggerSpy },
+      ],
     });
     http = TestBed.inject(HttpClient);
     httpMock = TestBed.inject(HttpTestingController);
@@ -37,11 +26,9 @@ describe('errorInterceptor', () => {
 
   it('logs api.error via LoggerService.warn with the path sanitized (query stripped)', () => {
     http.get('/api/history?q=secret&continuationToken=abc').subscribe({
-      error: () => undefined
+      error: () => undefined,
     });
-    const req = httpMock.expectOne(
-      '/api/history?q=secret&continuationToken=abc'
-    );
+    const req = httpMock.expectOne('/api/history?q=secret&continuationToken=abc');
     req.flush('boom', { status: 500, statusText: 'Server Error' });
 
     expect(loggerSpy.warn).toHaveBeenCalledTimes(1);
@@ -51,16 +38,12 @@ describe('errorInterceptor', () => {
       jasmine.objectContaining({
         method: 'GET',
         pathTemplate: '/api/history',
-        status: 500
-      })
+        status: 500,
+      }),
     );
     // Ensure query string did not leak into the logged path.
-    expect((props as { pathTemplate?: string }).pathTemplate).not.toContain(
-      '?'
-    );
-    expect((props as { pathTemplate?: string }).pathTemplate).not.toContain(
-      'secret'
-    );
+    expect((props as { pathTemplate?: string }).pathTemplate).not.toContain('?');
+    expect((props as { pathTemplate?: string }).pathTemplate).not.toContain('secret');
   });
 
   it('propagates the error downstream (does not swallow)', () => {
@@ -68,7 +51,7 @@ describe('errorInterceptor', () => {
     let nextCalled = false;
     http.get('/api/blobs/missing').subscribe({
       next: () => (nextCalled = true),
-      error: (err) => (caught = err)
+      error: (err) => (caught = err),
     });
     const req = httpMock.expectOne('/api/blobs/missing');
     req.flush('not found', { status: 404, statusText: 'Not Found' });

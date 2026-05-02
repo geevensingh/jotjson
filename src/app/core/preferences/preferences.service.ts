@@ -6,12 +6,7 @@ import { UserApiService } from '../api/user-api.service';
 import { AuthService } from '../auth/auth.service';
 import { bucketCount } from '../telemetry/buckets';
 import { LoggerService } from '../telemetry/logger.service';
-import {
-  bucketColorHex,
-  bucketDepth,
-  bucketFontSize,
-  bucketTabSize
-} from './pref-summarize';
+import { bucketColorHex, bucketDepth, bucketFontSize, bucketTabSize } from './pref-summarize';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const FLUSH_DEBOUNCE_MS = 500;
@@ -46,7 +41,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     day: true,
     hour: true,
     minute: true,
-    second: true
+    second: true,
   },
   treeDateAnnotationFriendlyForms: true,
   treeAssumeUtcForIsoDateTime: true,
@@ -68,15 +63,15 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
       selectionColor: '#264f78',
       matchingValueColor: '#3e3d32',
       ancestorColor: '#2a2d2e',
-      searchHighlightColor: '#6a4c00'
+      searchHighlightColor: '#6a4c00',
     },
     light: {
       selectionColor: '#cce4f7',
       matchingValueColor: '#fff4cc',
       ancestorColor: '#ececec',
-      searchHighlightColor: '#ffe082'
-    }
-  }
+      searchHighlightColor: '#ffe082',
+    },
+  },
 };
 
 function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light' {
@@ -134,18 +129,18 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
     ...filtered,
     treeDateAnnotationUnits: {
       ...DEFAULT_PREFERENCES.treeDateAnnotationUnits,
-      ...remoteUnits
+      ...remoteUnits,
     },
     treeHighlightColors: {
       dark: {
         ...DEFAULT_PREFERENCES.treeHighlightColors.dark,
-        ...(remoteColors.dark ?? {})
+        ...(remoteColors.dark ?? {}),
       },
       light: {
         ...DEFAULT_PREFERENCES.treeHighlightColors.light,
-        ...(remoteColors.light ?? {})
-      }
-    }
+        ...(remoteColors.light ?? {}),
+      },
+    },
   };
 }
 
@@ -191,61 +186,58 @@ const PREFERENCE_KEYS = [
   'seenBlobQuotaModal',
   'seenClipboardBanner',
   'treePathRoot',
-  'treeHighlightColors'
+  'treeHighlightColors',
 ] as const satisfies readonly (keyof UserPreferences)[];
 
-const TREE_HIGHLIGHT_THEMES = [
-  'dark',
-  'light'
-] as const satisfies readonly TreeHighlightTheme[];
+const TREE_HIGHLIGHT_THEMES = ['dark', 'light'] as const satisfies readonly TreeHighlightTheme[];
 const TREE_HIGHLIGHT_COLOR_SLOTS = [
   'selectionColor',
   'matchingValueColor',
   'ancestorColor',
-  'searchHighlightColor'
+  'searchHighlightColor',
 ] as const satisfies readonly TreeHighlightColorSlot[];
 
 function deepMergeColors(
   previousColors: TreeHighlightColors,
-  nextColors: PartialTreeHighlightColors | undefined
+  nextColors: PartialTreeHighlightColors | undefined,
 ): TreeHighlightColors {
   return {
     dark: {
       ...previousColors.dark,
-      ...(nextColors?.dark ?? {})
+      ...(nextColors?.dark ?? {}),
     },
     light: {
       ...previousColors.light,
-      ...(nextColors?.light ?? {})
-    }
+      ...(nextColors?.light ?? {}),
+    },
   };
 }
 
 function deepMergeUnits(
   previousUnits: TreeDateAnnotationUnits,
-  nextUnits: PartialTreeDateAnnotationUnits | undefined
+  nextUnits: PartialTreeDateAnnotationUnits | undefined,
 ): TreeDateAnnotationUnits {
   return {
     ...previousUnits,
-    ...(nextUnits ?? {})
+    ...(nextUnits ?? {}),
   };
 }
 
 function mergePreferencePatch(
   previousPreferences: UserPreferences,
-  nextPreferences: Partial<UserPreferences>
+  nextPreferences: Partial<UserPreferences>,
 ): UserPreferences {
   return structuredClone({
     ...previousPreferences,
     ...nextPreferences,
     treeDateAnnotationUnits: deepMergeUnits(
       previousPreferences.treeDateAnnotationUnits,
-      nextPreferences.treeDateAnnotationUnits
+      nextPreferences.treeDateAnnotationUnits,
     ),
     treeHighlightColors: deepMergeColors(
       previousPreferences.treeHighlightColors,
-      nextPreferences.treeHighlightColors
-    )
+      nextPreferences.treeHighlightColors,
+    ),
   });
 }
 
@@ -383,7 +375,7 @@ export class PreferencesService {
   private emitPreferenceChanges(
     previousPreferences: UserPreferences,
     mergedPreferences: UserPreferences,
-    source: PreferenceChangeSource
+    source: PreferenceChangeSource,
   ): void {
     for (const key of PREFERENCE_KEYS) {
       if (key === 'treeHighlightColors') {
@@ -400,7 +392,7 @@ export class PreferencesService {
   private emitTreeHighlightColorChanges(
     previousPreferences: UserPreferences,
     mergedPreferences: UserPreferences,
-    source: PreferenceChangeSource
+    source: PreferenceChangeSource,
   ): void {
     for (const theme of TREE_HIGHLIGHT_THEMES) {
       for (const slot of TREE_HIGHLIGHT_COLOR_SLOTS) {
@@ -417,9 +409,9 @@ export class PreferencesService {
             source,
             kind: 'color',
             isDefault: booleanDimension(color.toLowerCase() === defaultColor.toLowerCase()),
-            bucket: bucketColorHex(color)
+            bucket: bucketColorHex(color),
           },
-          undefined
+          undefined,
         );
       }
     }
@@ -428,7 +420,7 @@ export class PreferencesService {
   private emitTopLevelPreferenceChange(
     key: TopLevelPreferenceKey,
     preferences: UserPreferences,
-    source: PreferenceChangeSource
+    source: PreferenceChangeSource,
   ): void {
     switch (key) {
       case 'theme':
@@ -439,7 +431,7 @@ export class PreferencesService {
           key,
           bucketFontSize(preferences.editorFontSize),
           preferences.editorFontSize,
-          source
+          source,
         );
         return;
       case 'editorTabSize':
@@ -447,7 +439,7 @@ export class PreferencesService {
           key,
           bucketTabSize(preferences.editorTabSize),
           preferences.editorTabSize,
-          source
+          source,
         );
         return;
       case 'defaultTreeExpansionDepth':
@@ -455,7 +447,7 @@ export class PreferencesService {
           key,
           bucketDepth(preferences.defaultTreeExpansionDepth),
           preferences.defaultTreeExpansionDepth,
-          source
+          source,
         );
         return;
       case 'activeRuleSetIds':
@@ -472,7 +464,7 @@ export class PreferencesService {
           key,
           bucketFontSize(preferences.treeFontSize),
           preferences.treeFontSize,
-          source
+          source,
         );
         return;
       case 'treeShowTypeLabels':
@@ -488,7 +480,7 @@ export class PreferencesService {
         this.emitCountPreferenceChange(
           key,
           countEnabledDateAnnotationUnits(preferences.treeDateAnnotationUnits),
-          source
+          source,
         );
         return;
       case 'treeDateAnnotationFriendlyForms':
@@ -541,7 +533,7 @@ export class PreferencesService {
   private emitStringPreferenceChange(
     key: TopLevelPreferenceKey,
     value: string,
-    source: PreferenceChangeSource
+    source: PreferenceChangeSource,
   ): void {
     this.loggerService.event('pref.changed', { key, source, kind: 'string', value }, undefined);
   }
@@ -549,12 +541,12 @@ export class PreferencesService {
   private emitBooleanPreferenceChange(
     key: TopLevelPreferenceKey,
     value: boolean,
-    source: PreferenceChangeSource
+    source: PreferenceChangeSource,
   ): void {
     this.loggerService.event(
       'pref.changed',
       { key, source, kind: 'boolean', value: booleanDimension(value) },
-      undefined
+      undefined,
     );
   }
 
@@ -562,24 +554,24 @@ export class PreferencesService {
     key: TopLevelPreferenceKey,
     valueBucket: NumberPreferenceBucket,
     value: number,
-    source: PreferenceChangeSource
+    source: PreferenceChangeSource,
   ): void {
     this.loggerService.event(
       'pref.changed',
       { key, source, kind: 'number', valueBucket },
-      { value }
+      { value },
     );
   }
 
   private emitCountPreferenceChange(
     key: TopLevelPreferenceKey,
     count: number,
-    source: PreferenceChangeSource
+    source: PreferenceChangeSource,
   ): void {
     this.loggerService.event(
       'pref.changed',
       { key, source, kind: 'count', countBucket: bucketCount(count) },
-      { count }
+      { count },
     );
   }
 
@@ -645,14 +637,14 @@ export class PreferencesService {
                 error: () => {
                   if (gen !== this.syncGen) return;
                   this._syncState.set('error');
-                }
+                },
               });
           }
         },
         error: () => {
           if (gen !== this.syncGen) return;
           this._syncState.set('error');
-        }
+        },
       });
   }
 
@@ -690,7 +682,7 @@ export class PreferencesService {
         error: () => {
           if (gen !== this.syncGen) return;
           this._syncState.set('error');
-        }
+        },
       });
   }
 

@@ -30,9 +30,7 @@ import { getCosmos } from './cosmos';
 
 export type HistoryAction = 'viewed';
 
-export const HISTORY_ACTIONS: ReadonlySet<HistoryAction> = new Set<HistoryAction>([
-  'viewed'
-]);
+export const HISTORY_ACTIONS: ReadonlySet<HistoryAction> = new Set<HistoryAction>(['viewed']);
 
 export interface HistoryDocument {
   id: string;
@@ -111,7 +109,7 @@ export async function recordEntry(input: RecordEntryInput): Promise<HistoryDocum
     action: input.action,
     ...(input.blobId !== undefined ? { blobId: input.blobId } : {}),
     ...(input.slug !== undefined ? { slug: input.slug } : {}),
-    ...(input.title !== undefined ? { title: input.title } : {})
+    ...(input.title !== undefined ? { title: input.title } : {}),
   };
   const response = await getHistoryContainer().items.create<HistoryDocument>(doc);
   const saved = response.resource ?? doc;
@@ -133,24 +131,30 @@ export async function recordEntry(input: RecordEntryInput): Promise<HistoryDocum
 export async function pruneFifo(userId: string): Promise<number> {
   const container = getHistoryContainer();
   const { resources: countRows } = await container.items
-    .query<number>({
-      query: 'SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid',
-      parameters: [{ name: '@uid', value: userId }]
-    }, { partitionKey: userId })
+    .query<number>(
+      {
+        query: 'SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid',
+        parameters: [{ name: '@uid', value: userId }],
+      },
+      { partitionKey: userId },
+    )
     .fetchAll();
   const total = countRows[0] ?? 0;
   if (total <= HISTORY_RETENTION_PER_USER) return 0;
 
   const overflow = total - HISTORY_RETENTION_PER_USER;
   const { resources: oldest } = await container.items
-    .query<{ id: string }>({
-      query:
-        'SELECT TOP @n c.id FROM c WHERE c.userId = @uid ORDER BY c.accessedAt ASC, c.id ASC',
-      parameters: [
-        { name: '@uid', value: userId },
-        { name: '@n', value: overflow }
-      ]
-    }, { partitionKey: userId })
+    .query<{ id: string }>(
+      {
+        query:
+          'SELECT TOP @n c.id FROM c WHERE c.userId = @uid ORDER BY c.accessedAt ASC, c.id ASC',
+        parameters: [
+          { name: '@uid', value: userId },
+          { name: '@n', value: overflow },
+        ],
+      },
+      { partitionKey: userId },
+    )
     .fetchAll();
   let deleted = 0;
   for (const row of oldest) {
@@ -173,19 +177,19 @@ export async function pruneFifo(userId: string): Promise<number> {
  * /api/blobs/{idOrSlug} endpoint to enforce the
  * VIEW_DEBOUNCE_SECONDS server-side debounce.
  */
-export async function getRecentViewAt(
-  userId: string,
-  blobId: string
-): Promise<string | null> {
-  const { resources } = await getHistoryContainer().items
-    .query<{ accessedAt: string }>({
-      query:
-        'SELECT TOP 1 c.accessedAt FROM c WHERE c.userId = @uid AND c.action = "viewed" AND c.blobId = @bid ORDER BY c.accessedAt DESC',
-      parameters: [
-        { name: '@uid', value: userId },
-        { name: '@bid', value: blobId }
-      ]
-    }, { partitionKey: userId })
+export async function getRecentViewAt(userId: string, blobId: string): Promise<string | null> {
+  const { resources } = await getHistoryContainer()
+    .items.query<{ accessedAt: string }>(
+      {
+        query:
+          'SELECT TOP 1 c.accessedAt FROM c WHERE c.userId = @uid AND c.action = "viewed" AND c.blobId = @bid ORDER BY c.accessedAt DESC',
+        parameters: [
+          { name: '@uid', value: userId },
+          { name: '@bid', value: blobId },
+        ],
+      },
+      { partitionKey: userId },
+    )
     .fetchAll();
   return resources[0]?.accessedAt ?? null;
 }
@@ -198,24 +202,20 @@ export async function getRecentViewAt(
  */
 export async function listEntries(
   userId: string,
-  options: ListEntriesOptions = {}
+  options: ListEntriesOptions = {},
 ): Promise<ListEntriesResult> {
-  const pageSize = Math.min(
-    Math.max(1, options.pageSize ?? DEFAULT_PAGE_SIZE),
-    MAX_PAGE_SIZE
-  );
+  const pageSize = Math.min(Math.max(1, options.pageSize ?? DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
   const q = typeof options.q === 'string' ? options.q.trim() : '';
   // Lower-case once on the server so the Cosmos call doesn't have to
   // recompute LOWER(@q) per row. The query side wraps the column values
   // in LOWER(...) so the comparison stays case-insensitive.
   const qLower = q.toLowerCase();
   const parameters: { name: string; value: string | number | string[] }[] = [
-    { name: '@uid', value: userId }
+    { name: '@uid', value: userId },
   ];
   let where = 'c.userId = @uid AND c.action = "viewed"';
   if (qLower) {
-    where +=
-      ' AND (CONTAINS(LOWER(c.title), @q) OR CONTAINS(LOWER(c.slug), @q))';
+    where += ' AND (CONTAINS(LOWER(c.title), @q) OR CONTAINS(LOWER(c.slug), @q))';
     parameters.push({ name: '@q', value: qLower });
   }
   if (typeof options.from === 'string' && options.from.length > 0) {
@@ -229,22 +229,18 @@ export async function listEntries(
   const iterator = getHistoryContainer().items.query<HistoryDocument>(
     {
       query: `SELECT * FROM c WHERE ${where} ORDER BY c.accessedAt DESC`,
-      parameters
+      parameters,
     },
     {
       partitionKey: userId,
       maxItemCount: pageSize,
-      ...(options.continuationToken
-        ? { continuationToken: options.continuationToken }
-        : {})
-    }
+      ...(options.continuationToken ? { continuationToken: options.continuationToken } : {}),
+    },
   );
   const response = await iterator.fetchNext();
   return {
     entries: response.resources ?? [],
-    ...(response.continuationToken
-      ? { continuationToken: response.continuationToken }
-      : {})
+    ...(response.continuationToken ? { continuationToken: response.continuationToken } : {}),
   };
 }
 
@@ -260,10 +256,13 @@ export async function clearAll(userId: string): Promise<number> {
   // for users near the 1k cap.
   while (true) {
     const { resources } = await container.items
-      .query<{ id: string }>({
-        query: 'SELECT TOP 100 c.id FROM c WHERE c.userId = @uid',
-        parameters: [{ name: '@uid', value: userId }]
-      }, { partitionKey: userId })
+      .query<{ id: string }>(
+        {
+          query: 'SELECT TOP 100 c.id FROM c WHERE c.userId = @uid',
+          parameters: [{ name: '@uid', value: userId }],
+        },
+        { partitionKey: userId },
+      )
       .fetchAll();
     if (resources.length === 0) break;
     for (const row of resources) {

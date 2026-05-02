@@ -20,8 +20,7 @@ export const jsonSchemaStrategy: SuggestionStrategy = (input) => {
   const schema = readString(obj, '$schema');
   const id = readString(obj, '$id');
   const type = readString(obj, 'type');
-  const hasProperties =
-    isPlainObject(obj['properties']) || isPlainObject(obj['items']);
+  const hasProperties = isPlainObject(obj['properties']) || isPlainObject(obj['items']);
 
   const looksLikeSchema =
     (schema !== null && SCHEMA_URI_RE.test(schema)) ||
@@ -36,7 +35,10 @@ export const jsonSchemaStrategy: SuggestionStrategy = (input) => {
   }
 
   if (id !== null) {
-    const trailing = id.replace(/[#/]+$/, '').split(/[/#]/).pop();
+    const trailing = id
+      .replace(/[#/]+$/, '')
+      .split(/[/#]/)
+      .pop();
     if (trailing !== undefined && trailing.length > 0) {
       const cleaned = trailing.replace(/\.json$/i, '');
       return { value: cleaned, source: 'jsonSchema', confidence: 88 };

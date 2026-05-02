@@ -39,7 +39,7 @@ export interface AutoFitResult {
 export function computeAutoFitDepth(
   root: TreeNode | undefined | null,
   capacity: number,
-  tolerance = 1.5
+  tolerance = 1.5,
 ): AutoFitResult {
   if (root == null) {
     return { chosenDepth: 0, chosenRows: 0, totalNodes: 0 };

@@ -3,10 +3,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { RulePreviewComponent } from './rule-preview.component';
 import { JsonTreeComponent } from '../../../../shared/components/json-tree/json-tree.component';
-import type {
-  FormattingRule,
-  FormattingRuleSet
-} from '../../../../core/api/models';
+import type { FormattingRule, FormattingRuleSet } from '../../../../core/api/models';
 import { provideFakeAuth } from '../../../../../testing/auth.testing';
 
 function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
@@ -17,7 +14,7 @@ function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     matchValue: 'TypeError',
     caseSensitive: false,
     style: { backgroundColor: '#ffcdd2' },
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -30,7 +27,7 @@ function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet 
     version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -43,8 +40,8 @@ describe('RulePreviewComponent', () => {
       imports: [RulePreviewComponent],
       providers: [
         ...provideFakeAuth(),
-        { provide: MatSnackBar, useValue: { open: jasmine.createSpy('open') } }
-      ]
+        { provide: MatSnackBar, useValue: { open: jasmine.createSpy('open') } },
+      ],
     }).compileComponents();
     fixture = TestBed.createComponent(RulePreviewComponent);
     fixture.componentRef.setInput('draft', draft);
@@ -56,7 +53,7 @@ describe('RulePreviewComponent', () => {
     const treeEl = fixture.nativeElement.querySelector('jj-json-tree') as HTMLElement | null;
     expect(treeEl).not.toBeNull();
     const treeDebug = fixture.debugElement.query(
-      (el) => el.componentInstance instanceof JsonTreeComponent
+      (el) => el.componentInstance instanceof JsonTreeComponent,
     );
     expect(treeDebug).toBeTruthy();
     const tree = treeDebug.componentInstance as JsonTreeComponent;
@@ -74,7 +71,7 @@ describe('RulePreviewComponent', () => {
     const draft = ruleSet({ name: 'Initial' });
     await create(draft);
     const tree = fixture.debugElement.query(
-      (el) => el.componentInstance instanceof JsonTreeComponent
+      (el) => el.componentInstance instanceof JsonTreeComponent,
     ).componentInstance as JsonTreeComponent;
     const override = tree.overrideRuleSets();
     expect(override).not.toBeNull();
@@ -85,13 +82,13 @@ describe('RulePreviewComponent', () => {
   it('updates the override when the draft Input changes', async () => {
     await create(ruleSet({ name: 'Before' }));
     const tree = fixture.debugElement.query(
-      (el) => el.componentInstance instanceof JsonTreeComponent
+      (el) => el.componentInstance instanceof JsonTreeComponent,
     ).componentInstance as JsonTreeComponent;
     expect(tree.overrideRuleSets()![0].name).toBe('Before');
 
     const updated = ruleSet({
       name: 'After',
-      rules: [rule({ matchValue: 'message' })]
+      rules: [rule({ matchValue: 'message' })],
     });
     fixture.componentRef.setInput('draft', updated);
     fixture.detectChanges();
@@ -104,7 +101,7 @@ describe('RulePreviewComponent', () => {
   it('binds embeddedMode=true on the inner JsonTreeComponent (M6d-3-fu2)', async () => {
     await create(ruleSet());
     const tree = fixture.debugElement.query(
-      (el) => el.componentInstance instanceof JsonTreeComponent
+      (el) => el.componentInstance instanceof JsonTreeComponent,
     ).componentInstance as JsonTreeComponent;
     expect(tree.embeddedMode()).toBeTrue();
   });
@@ -117,14 +114,12 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r1',
               matchValue: 'ok',
-              style: { textColor: '#000000', backgroundColor: '#ffffff' }
-            })
-          ]
-        })
+              style: { textColor: '#000000', backgroundColor: '#ffffff' },
+            }),
+          ],
+        }),
       );
-      const banner = fixture.nativeElement.querySelector(
-        '[data-testid="contrast-warning"]'
-      );
+      const banner = fixture.nativeElement.querySelector('[data-testid="contrast-warning"]');
       expect(banner).toBeNull();
       expect(fixture.componentInstance.contrastFailures()).toEqual([]);
     });
@@ -138,15 +133,13 @@ describe('RulePreviewComponent', () => {
               matchValue: 'ok',
               // borderColor is decorative; no fg/bg set means the rule
               // does not affect contrast and must not be flagged.
-              style: { borderColor: '#888888' }
-            })
-          ]
-        })
+              style: { borderColor: '#888888' },
+            }),
+          ],
+        }),
       );
       expect(fixture.componentInstance.contrastFailures()).toEqual([]);
-      const banner = fixture.nativeElement.querySelector(
-        '[data-testid="contrast-warning"]'
-      );
+      const banner = fixture.nativeElement.querySelector('[data-testid="contrast-warning"]');
       expect(banner).toBeNull();
     });
 
@@ -159,19 +152,17 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r-white-text',
               matchValue: 'whiteOnLight',
-              style: { textColor: '#ffffff' }
-            })
-          ]
-        })
+              style: { textColor: '#ffffff' },
+            }),
+          ],
+        }),
       );
       const failures = fixture.componentInstance.contrastFailures();
       expect(failures.length).toBe(1);
       expect(failures[0].ruleId).toBe('r-white-text');
       expect(failures[0].failsLight).toBeTrue();
       expect(failures[0].failsDark).toBeFalse();
-      const themes = fixture.nativeElement.querySelector(
-        '.contrast-warning-themes'
-      ) as HTMLElement;
+      const themes = fixture.nativeElement.querySelector('.contrast-warning-themes') as HTMLElement;
       expect(themes.textContent?.trim()).toBe('fails in light theme');
     });
 
@@ -184,18 +175,16 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r-black-text',
               matchValue: 'darkOnDark',
-              style: { textColor: '#000000' }
-            })
-          ]
-        })
+              style: { textColor: '#000000' },
+            }),
+          ],
+        }),
       );
       const failures = fixture.componentInstance.contrastFailures();
       expect(failures.length).toBe(1);
       expect(failures[0].failsLight).toBeFalse();
       expect(failures[0].failsDark).toBeTrue();
-      const themes = fixture.nativeElement.querySelector(
-        '.contrast-warning-themes'
-      ) as HTMLElement;
+      const themes = fixture.nativeElement.querySelector('.contrast-warning-themes') as HTMLElement;
       expect(themes.textContent?.trim()).toBe('fails in dark theme');
     });
 
@@ -206,18 +195,16 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r-both',
               matchValue: 'mid',
-              style: { textColor: '#888888', backgroundColor: '#999999' }
-            })
-          ]
-        })
+              style: { textColor: '#888888', backgroundColor: '#999999' },
+            }),
+          ],
+        }),
       );
       const failures = fixture.componentInstance.contrastFailures();
       expect(failures.length).toBe(1);
       expect(failures[0].failsLight).toBeTrue();
       expect(failures[0].failsDark).toBeTrue();
-      const themes = fixture.nativeElement.querySelector(
-        '.contrast-warning-themes'
-      ) as HTMLElement;
+      const themes = fixture.nativeElement.querySelector('.contrast-warning-themes') as HTMLElement;
       expect(themes.textContent?.trim()).toBe('fails in light and dark');
     });
 
@@ -228,13 +215,13 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r1',
               matchValue: 'one',
-              style: { textColor: '#ffffff' }
-            })
-          ]
-        })
+              style: { textColor: '#ffffff' },
+            }),
+          ],
+        }),
       );
       const summary = fixture.nativeElement.querySelector(
-        '.contrast-warning-summary .contrast-warning-text'
+        '.contrast-warning-summary .contrast-warning-text',
       ) as HTMLElement;
       expect(summary.textContent?.trim()).toContain('1 rule may be hard to read');
     });
@@ -246,18 +233,18 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r1',
               matchValue: 'a',
-              style: { textColor: '#ffffff' }
+              style: { textColor: '#ffffff' },
             }),
             rule({
               id: 'r2',
               matchValue: 'b',
-              style: { textColor: '#000000' }
-            })
-          ]
-        })
+              style: { textColor: '#000000' },
+            }),
+          ],
+        }),
       );
       const summary = fixture.nativeElement.querySelector(
-        '.contrast-warning-summary .contrast-warning-text'
+        '.contrast-warning-summary .contrast-warning-text',
       ) as HTMLElement;
       expect(summary.textContent?.trim()).toContain('2 rules may be hard to read');
       const items = fixture.nativeElement.querySelectorAll('.contrast-warning-item');
@@ -272,18 +259,16 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r1',
               matchValue: longValue,
-              style: { textColor: '#ffffff' }
-            })
-          ]
-        })
+              style: { textColor: '#ffffff' },
+            }),
+          ],
+        }),
       );
       const failures = fixture.componentInstance.contrastFailures();
       expect(failures.length).toBe(1);
       expect(failures[0].label.length).toBeLessThanOrEqual(30);
       expect(failures[0].label.endsWith('...')).toBeTrue();
-      const label = fixture.nativeElement.querySelector(
-        '.contrast-warning-label'
-      ) as HTMLElement;
+      const label = fixture.nativeElement.querySelector('.contrast-warning-label') as HTMLElement;
       expect(label.textContent?.trim()).toBe(failures[0].label);
     });
 
@@ -294,10 +279,10 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r1',
               matchValue: '   ',
-              style: { textColor: '#ffffff' }
-            })
-          ]
-        })
+              style: { textColor: '#ffffff' },
+            }),
+          ],
+        }),
       );
       const failures = fixture.componentInstance.contrastFailures();
       expect(failures[0].label).toBe('(empty)');
@@ -312,15 +297,13 @@ describe('RulePreviewComponent', () => {
             rule({
               id: 'r-typing',
               matchValue: 'wip',
-              style: { backgroundColor: '#abc' }
-            })
-          ]
-        })
+              style: { backgroundColor: '#abc' },
+            }),
+          ],
+        }),
       );
       expect(fixture.componentInstance.contrastFailures()).toEqual([]);
-      const banner = fixture.nativeElement.querySelector(
-        '[data-testid="contrast-warning"]'
-      );
+      const banner = fixture.nativeElement.querySelector('[data-testid="contrast-warning"]');
       expect(banner).toBeNull();
     });
   });

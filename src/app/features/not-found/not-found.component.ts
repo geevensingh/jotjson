@@ -10,7 +10,7 @@ import { SeoService } from '../../core/seo/seo.service';
   imports: [RouterLink, MatButtonModule, AppHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './not-found.component.html',
-  styleUrl: './not-found.component.scss'
+  styleUrl: './not-found.component.scss',
 })
 export class NotFoundComponent implements OnInit {
   private readonly seo = inject(SeoService);

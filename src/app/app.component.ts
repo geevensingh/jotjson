@@ -6,7 +6,7 @@ import { DocumentDropController } from './core/upload/document-drop-controller.s
   selector: 'app-root',
   imports: [RouterOutlet],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.scss'
+  styleUrl: './app.component.scss',
 })
 export class AppComponent implements OnInit {
   readonly title = 'JotJSON';
@@ -32,7 +32,7 @@ export class AppComponent implements OnInit {
     void Promise.all([
       import('./core/telemetry/logger.service'),
       import('./core/telemetry/route-tracker'),
-      import('../generated/build-info')
+      import('../generated/build-info'),
     ]).then(async ([loggerModule, trackerModule, buildInfoModule]) => {
       const routeTracker = this.injector.get(trackerModule.RouteTracker);
       // Start subscribing to NavigationEnd before connect() resolves so
@@ -40,12 +40,16 @@ export class AppComponent implements OnInit {
       // before telemetry is ready.
       routeTracker.start();
       const loggerService = this.injector.get(loggerModule.LoggerService);
-      loggerService.event('app.boot', {
-        version: buildInfoModule.BUILD_INFO.version,
-        sha: buildInfoModule.BUILD_INFO.sha,
-        branch: buildInfoModule.BUILD_INFO.branch,
-        buildNumber: buildInfoModule.BUILD_INFO.buildNumber
-      }, undefined);
+      loggerService.event(
+        'app.boot',
+        {
+          version: buildInfoModule.BUILD_INFO.version,
+          sha: buildInfoModule.BUILD_INFO.sha,
+          branch: buildInfoModule.BUILD_INFO.branch,
+          buildNumber: buildInfoModule.BUILD_INFO.buildNumber,
+        },
+        undefined,
+      );
       await loggerService.connect();
       routeTracker.flushPending();
       // Keep web-vitals in a lazy chunk; it emits one webVitals event on pagehide.
@@ -53,7 +57,7 @@ export class AppComponent implements OnInit {
         return initWebVitals(
           loggerService,
           buildInfoModule.BUILD_INFO.version,
-          buildInfoModule.BUILD_INFO.buildNumber
+          buildInfoModule.BUILD_INFO.buildNumber,
         );
       });
     });
@@ -62,4 +66,3 @@ export class AppComponent implements OnInit {
     });
   }
 }
-

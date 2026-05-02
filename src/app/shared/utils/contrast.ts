@@ -17,7 +17,7 @@
  */
 export const THEME_DEFAULTS = {
   light: { bg: '#fafafa', fg: '#1a1a1a' },
-  dark: { bg: '#1e1e1e', fg: '#e4e4e4' }
+  dark: { bg: '#1e1e1e', fg: '#e4e4e4' },
 } as const;
 
 export type Theme = keyof typeof THEME_DEFAULTS;
@@ -43,11 +43,7 @@ function relativeLuminance(hex: string): number {
   const r = (value >> 16) & 0xff;
   const g = (value >> 8) & 0xff;
   const b = value & 0xff;
-  return (
-    0.2126 * channelLinear(r) +
-    0.7152 * channelLinear(g) +
-    0.0722 * channelLinear(b)
-  );
+  return 0.2126 * channelLinear(r) + 0.7152 * channelLinear(g) + 0.0722 * channelLinear(b);
 }
 
 /**

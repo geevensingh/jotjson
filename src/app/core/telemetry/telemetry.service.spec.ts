@@ -52,9 +52,7 @@ describe('TelemetryService', () => {
     const svc = make();
     await svc.connect();
     expect(() => svc.trackEvent('app.unhandled')).not.toThrow();
-    expect(() =>
-      svc.trackException(normalizeError(new Error('x')))
-    ).not.toThrow();
+    expect(() => svc.trackException(normalizeError(new Error('x')))).not.toThrow();
     expect(() => svc.trackPageView('Home', '/')).not.toThrow();
   });
 
@@ -87,10 +85,8 @@ describe('TelemetryService', () => {
     await svc.connect();
     const err = new HttpErrorResponse({
       url: '/api/x?secret=yes',
-      status: 500
+      status: 500,
     });
-    expect(() =>
-      svc.trackException(normalizeError(err, { method: 'GET' }))
-    ).not.toThrow();
+    expect(() => svc.trackException(normalizeError(err, { method: 'GET' }))).not.toThrow();
   });
 });

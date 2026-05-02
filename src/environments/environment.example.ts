@@ -14,9 +14,9 @@ export const environment: Environment = {
     knownAuthorities: [],
     redirectUri: 'http://localhost:4200/',
     postLogoutRedirectUri: 'http://localhost:4200/',
-    scopes: []
+    scopes: [],
   },
-  appInsightsConnectionString: ''
+  appInsightsConnectionString: '',
   // Optional: local-only dev-auth bypass. Uncomment to skip MSAL on
   // localhost and impersonate a fake signed-in user. Pair with
   // `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json`. See

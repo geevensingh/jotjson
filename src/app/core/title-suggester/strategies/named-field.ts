@@ -19,14 +19,7 @@ import { isPlainObject, looksLikeMachineId, readString } from './helpers';
  *
  * The chain stops at the first non-rejected field.
  */
-type FieldKey =
-  | 'name'
-  | 'title'
-  | 'displayName'
-  | 'subject'
-  | 'label'
-  | 'id'
-  | 'slug';
+type FieldKey = 'name' | 'title' | 'displayName' | 'subject' | 'label' | 'id' | 'slug';
 
 const PRIORITY: readonly FieldKey[] = [
   'name',
@@ -35,7 +28,7 @@ const PRIORITY: readonly FieldKey[] = [
   'subject',
   'label',
   'id',
-  'slug'
+  'slug',
 ];
 
 const MACHINE_ID_REJECT_KEYS: ReadonlySet<FieldKey> = new Set(['id', 'slug']);

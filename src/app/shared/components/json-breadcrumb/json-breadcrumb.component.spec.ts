@@ -1,16 +1,10 @@
-import {
-  ComponentFixture,
-  fakeAsync,
-  flush,
-  TestBed,
-  tick
-} from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, flush, TestBed, tick } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import {
   BreadcrumbClick,
   BreadcrumbContextMenu,
   BreadcrumbCrumb,
-  JsonBreadcrumbComponent
+  JsonBreadcrumbComponent,
 } from './json-breadcrumb.component';
 
 describe('JsonBreadcrumbComponent', () => {
@@ -23,10 +17,10 @@ describe('JsonBreadcrumbComponent', () => {
       copyPathTitle?: string;
       copyPathAriaLabel?: string;
       copyPathDisabled?: boolean;
-    } = {}
+    } = {},
   ): Promise<ComponentFixture<JsonBreadcrumbComponent>> {
     await TestBed.configureTestingModule({
-      imports: [JsonBreadcrumbComponent, NoopAnimationsModule]
+      imports: [JsonBreadcrumbComponent, NoopAnimationsModule],
     }).compileComponents();
     const fixture = TestBed.createComponent(JsonBreadcrumbComponent);
     fixture.componentRef.setInput('crumbs', crumbs);
@@ -58,34 +52,30 @@ describe('JsonBreadcrumbComponent', () => {
       out.push({
         label: `crumb${index}`,
         canonicalPath: `$.crumb${index}`,
-        current: index === count - 1
+        current: index === count - 1,
       });
     }
     return out;
   }
 
-  function chipButtons(
-    fixture: ComponentFixture<JsonBreadcrumbComponent>
-  ): HTMLButtonElement[] {
+  function chipButtons(fixture: ComponentFixture<JsonBreadcrumbComponent>): HTMLButtonElement[] {
     return Array.from(
-      fixture.nativeElement.querySelectorAll('.jj-breadcrumb__chip')
+      fixture.nativeElement.querySelectorAll('.jj-breadcrumb__chip'),
     ) as HTMLButtonElement[];
   }
 
   function copyButton(
-    fixture: ComponentFixture<JsonBreadcrumbComponent>
+    fixture: ComponentFixture<JsonBreadcrumbComponent>,
   ): HTMLButtonElement | null {
-    return fixture.nativeElement.querySelector(
-      '.jj-breadcrumb__copy'
-    ) as HTMLButtonElement | null;
+    return fixture.nativeElement.querySelector('.jj-breadcrumb__copy') as HTMLButtonElement | null;
   }
 
   it('renders the placeholder when crumbs is empty', async () => {
     const fixture = await createWith([], {
-      emptyPlaceholder: 'No current selection'
+      emptyPlaceholder: 'No current selection',
     });
     const empty = fixture.nativeElement.querySelector(
-      '.jj-breadcrumb--empty'
+      '.jj-breadcrumb--empty',
     ) as HTMLElement | null;
     expect(empty).not.toBeNull();
     expect(empty?.textContent?.trim()).toBe('No current selection');
@@ -94,15 +84,11 @@ describe('JsonBreadcrumbComponent', () => {
   });
 
   it('renders a single chip when one crumb is provided', async () => {
-    const fixture = await createWith([
-      { label: 'Root', canonicalPath: '$', current: true }
-    ]);
+    const fixture = await createWith([{ label: 'Root', canonicalPath: '$', current: true }]);
     const chips = chipButtons(fixture);
     expect(chips.length).toBe(1);
     expect(chips[0]!.textContent?.trim()).toBe('Root');
-    const overflow = fixture.nativeElement.querySelector(
-      '.jj-breadcrumb__chip--overflow'
-    );
+    const overflow = fixture.nativeElement.querySelector('.jj-breadcrumb__chip--overflow');
     expect(overflow).toBeNull();
   });
 
@@ -110,9 +96,7 @@ describe('JsonBreadcrumbComponent', () => {
     const fixture = await createWith(makeCrumbs(5));
     const chips = chipButtons(fixture);
     expect(chips.length).toBe(5);
-    const overflow = fixture.nativeElement.querySelector(
-      '.jj-breadcrumb__chip--overflow'
-    );
+    const overflow = fixture.nativeElement.querySelector('.jj-breadcrumb__chip--overflow');
     expect(overflow).toBeNull();
     expect(fixture.componentInstance.hiddenMiddleCount()).toBe(0);
   });
@@ -127,13 +111,7 @@ describe('JsonBreadcrumbComponent', () => {
     // crumb0 + overflow + crumb5..crumb7 = 5 chips (1 leading + 1 overflow + 3 trailing)
     expect(chips.length).toBe(5);
     const labels = chips.map((b) => b.textContent?.trim());
-    expect(labels).toEqual([
-      'crumb0',
-      '...',
-      'crumb5',
-      'crumb6',
-      'crumb7'
-    ]);
+    expect(labels).toEqual(['crumb0', '...', 'crumb5', 'crumb6', 'crumb7']);
   });
 
   it('exposes hidden middle ancestors via the hiddenCrumbs computed', async () => {
@@ -145,7 +123,7 @@ describe('JsonBreadcrumbComponent', () => {
       '$.crumb1',
       '$.crumb2',
       '$.crumb3',
-      '$.crumb4'
+      '$.crumb4',
     ]);
   });
 
@@ -180,7 +158,7 @@ describe('JsonBreadcrumbComponent', () => {
     const fixture = await createWith([
       { label: 'Root', canonicalPath: '$', current: false },
       { label: 'foo', canonicalPath: '$.foo', current: false },
-      { label: 'bar', canonicalPath: '$.foo.bar', current: true }
+      { label: 'bar', canonicalPath: '$.foo.bar', current: true },
     ]);
     const chips = chipButtons(fixture);
     expect(chips.length).toBe(3);
@@ -191,7 +169,7 @@ describe('JsonBreadcrumbComponent', () => {
 
   it('uses the supplied nav aria-label', async () => {
     const fixture = await createWith(makeCrumbs(2), {
-      navAriaLabel: 'Migas de pan'
+      navAriaLabel: 'Migas de pan',
     });
     const nav = fixture.nativeElement.querySelector('nav');
     expect(nav?.getAttribute('aria-label')).toBe('Migas de pan');
@@ -200,13 +178,13 @@ describe('JsonBreadcrumbComponent', () => {
   describe('crumbContextMenu output', () => {
     function dispatchContextMenu(
       target: HTMLElement,
-      options: { clientX?: number; clientY?: number } = {}
+      options: { clientX?: number; clientY?: number } = {},
     ): MouseEvent {
       const event = new MouseEvent('contextmenu', {
         clientX: options.clientX ?? 100,
         clientY: options.clientY ?? 200,
         bubbles: true,
-        cancelable: true
+        cancelable: true,
       });
       target.dispatchEvent(event);
       return event;
@@ -278,7 +256,7 @@ describe('JsonBreadcrumbComponent', () => {
         events.push(value);
       });
       const overflow = fixture.nativeElement.querySelector(
-        '.jj-breadcrumb__chip--overflow'
+        '.jj-breadcrumb__chip--overflow',
       ) as HTMLButtonElement | null;
       expect(overflow).not.toBeNull();
       dispatchContextMenu(overflow!);
@@ -290,19 +268,17 @@ describe('JsonBreadcrumbComponent', () => {
     it('renders with the supplied title and aria-label', async () => {
       const fixture = await createWith(makeCrumbs(1), {
         copyPathTitle: 'Copiar ruta',
-        copyPathAriaLabel: 'Copiar ruta JSON de la fila seleccionada'
+        copyPathAriaLabel: 'Copiar ruta JSON de la fila seleccionada',
       });
       const button = copyButton(fixture);
       expect(button).not.toBeNull();
       expect(button?.getAttribute('title')).toBe('Copiar ruta');
-      expect(button?.getAttribute('aria-label')).toBe(
-        'Copiar ruta JSON de la fila seleccionada'
-      );
+      expect(button?.getAttribute('aria-label')).toBe('Copiar ruta JSON de la fila seleccionada');
     });
 
     it('is disabled when copyPathDisabled is true (e.g. no selection)', async () => {
       const fixture = await createWith([], {
-        copyPathDisabled: true
+        copyPathDisabled: true,
       });
       const button = copyButton(fixture);
       expect(button?.disabled).toBe(true);
@@ -310,7 +286,7 @@ describe('JsonBreadcrumbComponent', () => {
 
     it('is enabled when copyPathDisabled is false', async () => {
       const fixture = await createWith(makeCrumbs(2), {
-        copyPathDisabled: false
+        copyPathDisabled: false,
       });
       const button = copyButton(fixture);
       expect(button?.disabled).toBe(false);
@@ -328,7 +304,7 @@ describe('JsonBreadcrumbComponent', () => {
 
     it('does not emit copyPathClick when disabled and clicked', async () => {
       const fixture = await createWith([], {
-        copyPathDisabled: true
+        copyPathDisabled: true,
       });
       let emitted = 0;
       fixture.componentInstance.copyPathClick.subscribe(() => {
@@ -340,45 +316,33 @@ describe('JsonBreadcrumbComponent', () => {
   });
 
   describe('isFullyCollapsed signal', () => {
-    function bar(
-      fixture: ComponentFixture<JsonBreadcrumbComponent>
-    ): HTMLElement {
-      return fixture.nativeElement.querySelector(
-        '.jj-breadcrumb-bar'
-      ) as HTMLElement;
+    function bar(fixture: ComponentFixture<JsonBreadcrumbComponent>): HTMLElement {
+      return fixture.nativeElement.querySelector('.jj-breadcrumb-bar') as HTMLElement;
     }
 
     it('is false when crumbs is empty (placeholder branch)', async () => {
       const fixture = await createWith([]);
       expect(fixture.componentInstance.isFullyCollapsed()).toBe(false);
-      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
-        false
-      );
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(false);
     });
 
     it('is true when only one crumb is supplied (no overflow possible)', async () => {
       const fixture = await createWith(makeCrumbs(1));
       expect(fixture.componentInstance.isFullyCollapsed()).toBe(true);
-      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
-        true
-      );
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(true);
     });
 
     it('is true when two crumbs are supplied (no overflow possible)', async () => {
       const fixture = await createWith(makeCrumbs(2));
       expect(fixture.componentInstance.isFullyCollapsed()).toBe(true);
-      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
-        true
-      );
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(true);
     });
 
     it('is false when 3+ crumbs are inline (hiddenMiddleCount = 0)', async () => {
       const fixture = await createWith(makeCrumbs(5));
       expect(fixture.componentInstance.hiddenMiddleCount()).toBe(0);
       expect(fixture.componentInstance.isFullyCollapsed()).toBe(false);
-      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
-        false
-      );
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(false);
     });
 
     it('is false in mid-collapse (some middle hidden, but not all)', async () => {
@@ -387,9 +351,7 @@ describe('JsonBreadcrumbComponent', () => {
       fixture.componentInstance.hiddenMiddleCount.set(3);
       fixture.detectChanges();
       expect(fixture.componentInstance.isFullyCollapsed()).toBe(false);
-      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
-        false
-      );
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(false);
     });
 
     it('flips to true when the algorithm has hidden every collapsible middle', async () => {
@@ -397,9 +359,7 @@ describe('JsonBreadcrumbComponent', () => {
       fixture.componentInstance.hiddenMiddleCount.set(6); // total - 2
       fixture.detectChanges();
       expect(fixture.componentInstance.isFullyCollapsed()).toBe(true);
-      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(
-        true
-      );
+      expect(bar(fixture).classList.contains('is-fully-collapsed')).toBe(true);
     });
   });
 
@@ -407,10 +367,7 @@ describe('JsonBreadcrumbComponent', () => {
     interface ResizeObserverGlobal {
       ResizeObserver: typeof ResizeObserver;
     }
-    type ResizeFn = (
-      entries: ResizeObserverEntry[],
-      observer: ResizeObserver
-    ) => void;
+    type ResizeFn = (entries: ResizeObserverEntry[], observer: ResizeObserver) => void;
 
     let originalResizeObserver: typeof ResizeObserver | undefined;
     let observerCallbacks: ResizeFn[];
@@ -437,8 +394,7 @@ describe('JsonBreadcrumbComponent', () => {
       observerInstances = [];
       const win = window as unknown as ResizeObserverGlobal;
       originalResizeObserver = win.ResizeObserver;
-      win.ResizeObserver =
-        FakeResizeObserver as unknown as typeof ResizeObserver;
+      win.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
     });
 
     afterEach(() => {
@@ -482,7 +438,7 @@ describe('JsonBreadcrumbComponent', () => {
 
     it('debounces ResizeObserver fires by 100ms (trailing edge)', fakeAsync(() => {
       TestBed.configureTestingModule({
-        imports: [JsonBreadcrumbComponent, NoopAnimationsModule]
+        imports: [JsonBreadcrumbComponent, NoopAnimationsModule],
       });
       const fixture = TestBed.createComponent(JsonBreadcrumbComponent);
       fixture.componentRef.setInput('crumbs', makeCrumbs(5));

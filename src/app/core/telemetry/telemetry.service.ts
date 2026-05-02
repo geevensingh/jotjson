@@ -1,15 +1,10 @@
 import { Injectable } from '@angular/core';
-import type {
-  ApplicationInsights,
-  ITelemetryItem
-} from '@microsoft/applicationinsights-web';
+import type { ApplicationInsights, ITelemetryItem } from '@microsoft/applicationinsights-web';
 import { environment } from '../../../environments/environment';
 import { NormalizedError, sanitizePath } from './normalize-error';
 import { TelemetryMessageId } from './telemetry-message-ids';
 
-export type TelemetryProps = Readonly<
-  Record<string, string | number | boolean | undefined>
->;
+export type TelemetryProps = Readonly<Record<string, string | number | boolean | undefined>>;
 
 /**
  * Numeric measurements that land in Application Insights'
@@ -100,32 +95,28 @@ export class TelemetryService {
   trackEvent(
     name: TelemetryMessageId,
     props?: TelemetryProps,
-    measurements?: TelemetryMeasurements
+    measurements?: TelemetryMeasurements,
   ): void {
     if (!this.appInsights) {
       return;
     }
-    this.appInsights.trackEvent(
-      { name },
-      this.toCustomProps(props, measurements)
-    );
+    this.appInsights.trackEvent({ name }, this.toCustomProps(props, measurements));
   }
 
   trackTrace(
     name: TelemetryMessageId,
     severity: TelemetrySeverity,
     props?: TelemetryProps,
-    measurements?: TelemetryMeasurements
+    measurements?: TelemetryMeasurements,
   ): void {
     if (!this.appInsights) {
       return;
     }
     // SeverityLevel: Information=1, Warning=2, Error=3.
-    const severityLevel =
-      severity === 'error' ? 3 : severity === 'warn' ? 2 : 1;
+    const severityLevel = severity === 'error' ? 3 : severity === 'warn' ? 2 : 1;
     this.appInsights.trackTrace(
       { message: name, severityLevel },
-      this.toCustomProps(props, measurements)
+      this.toCustomProps(props, measurements),
     );
   }
 
@@ -136,7 +127,7 @@ export class TelemetryService {
     const synthetic = this.toSyntheticError(error);
     this.appInsights.trackException(
       { exception: synthetic },
-      this.toCustomProps({ ...props, ...this.errorProps(error) })
+      this.toCustomProps({ ...props, ...this.errorProps(error) }),
     );
   }
 
@@ -175,9 +166,7 @@ export class TelemetryService {
   private async loadAndInit(connectionString: string): Promise<void> {
     // Dynamic import keeps the SDK in a lazy chunk. Do not statically
     // import `@microsoft/applicationinsights-web` from this file.
-    const { ApplicationInsights: AI } = await import(
-      '@microsoft/applicationinsights-web'
-    );
+    const { ApplicationInsights: AI } = await import('@microsoft/applicationinsights-web');
     const ai = new AI({
       config: {
         connectionString,
@@ -190,8 +179,8 @@ export class TelemetryService {
         disableCookiesUsage: true,
         // Keep correlation between SPA and same-origin Functions.
         enableCorsCorrelation: true,
-        distributedTracingMode: 2 /* W3C */
-      }
+        distributedTracingMode: 2 /* W3C */,
+      },
     });
     ai.loadAppInsights();
     ai.addTelemetryInitializer(this.privacyInitializer);
@@ -271,7 +260,7 @@ export class TelemetryService {
 
   private toCustomProps(
     props?: TelemetryProps,
-    measurements?: TelemetryMeasurements
+    measurements?: TelemetryMeasurements,
   ): Record<string, string | number> | undefined {
     if (!props && !measurements) {
       return undefined;
@@ -302,7 +291,7 @@ export class TelemetryService {
   private toSyntheticError(normalized: NormalizedError): Error {
     if (normalized.kind === 'http') {
       const error = new Error(
-        `HTTP ${normalized.status} ${normalized.method ?? ''} ${normalized.pathTemplate ?? ''}`.trim()
+        `HTTP ${normalized.status} ${normalized.method ?? ''} ${normalized.pathTemplate ?? ''}`.trim(),
       );
       error.name = 'HttpError';
       return error;
@@ -327,7 +316,7 @@ export class TelemetryService {
         status: normalized.status,
         method: normalized.method,
         pathTemplate: normalized.pathTemplate,
-        backendCode: normalized.backendCode
+        backendCode: normalized.backendCode,
       };
     }
     if (normalized.kind === 'error') {

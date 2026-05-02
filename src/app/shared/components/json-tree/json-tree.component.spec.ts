@@ -9,10 +9,7 @@ import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { bucketCount } from '../../../core/telemetry/buckets';
 import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
-import type {
-  FormattingRule,
-  FormattingRuleSet
-} from '../../../core/api/models';
+import type { FormattingRule, FormattingRuleSet } from '../../../core/api/models';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
@@ -32,19 +29,13 @@ describe('JsonTreeComponent', () => {
   let prefs: PreferencesService;
   let snackOpen: jasmine.Spy;
 
-  async function createWith(
-    value: unknown,
-    beforeDetectChanges?: () => void
-  ): Promise<void> {
+  async function createWith(value: unknown, beforeDetectChanges?: () => void): Promise<void> {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
     snackOpen = jasmine.createSpy('snackOpen');
     await TestBed.configureTestingModule({
       imports: [JsonTreeComponent],
-      providers: [
-        ...provideFakeAuth(),
-        { provide: MatSnackBar, useValue: { open: snackOpen } }
-      ]
+      providers: [...provideFakeAuth(), { provide: MatSnackBar, useValue: { open: snackOpen } }],
     }).compileComponents();
     fixture = TestBed.createComponent(JsonTreeComponent);
     prefs = TestBed.inject(PreferencesService);
@@ -71,7 +62,7 @@ describe('JsonTreeComponent', () => {
       (callback: FrameRequestCallback): number => {
         callbacks.push(callback);
         return callbacks.length;
-      }
+      },
     );
     return callbacks;
   }
@@ -113,9 +104,7 @@ describe('JsonTreeComponent', () => {
       .allArgs()
       .flat()
       .filter((a) => typeof a === 'string' && a.includes('conflicting node types'));
-    expect(warnings)
-      .withContext('mat-tree must not emit flat/nested conflict warning')
-      .toEqual([]);
+    expect(warnings).withContext('mat-tree must not emit flat/nested conflict warning').toEqual([]);
   });
 
   it('applies treeFontSize to the .tree-body element as a CSS custom property', async () => {
@@ -134,7 +123,7 @@ describe('JsonTreeComponent', () => {
     document.body.appendChild(fixture.nativeElement);
     try {
       const badge = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-type-badge'
+        '.tree-type-badge',
       ) as HTMLElement;
       expect(badge).withContext('expected a .tree-type-badge to be rendered').toBeTruthy();
       const fs = Number.parseFloat(getComputedStyle(badge).fontSize);
@@ -153,7 +142,7 @@ describe('JsonTreeComponent', () => {
     document.body.appendChild(fixture.nativeElement);
     try {
       const node = (fixture.nativeElement as HTMLElement).querySelector(
-        'mat-nested-tree-node, .mat-nested-tree-node'
+        'mat-nested-tree-node, .mat-nested-tree-node',
       ) as HTMLElement;
       expect(node).withContext('expected a mat-nested-tree-node to be rendered').toBeTruthy();
       const fs = Number.parseFloat(getComputedStyle(node).fontSize);
@@ -219,8 +208,7 @@ describe('JsonTreeComponent', () => {
       spyOn(window, 'requestAnimationFrame').and.returnValue(0);
       spyOn(performance, 'now').and.returnValues(0, 99, 0, 0, 0);
       const eventSpy = await createWithEventSpy({ a: 1 });
-      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.build.slow'))
-        .toBeFalse();
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.build.slow')).toBeFalse();
     });
 
     it('emits tree.build.slow above the threshold', async () => {
@@ -230,7 +218,7 @@ describe('JsonTreeComponent', () => {
       expect(eventSpy).toHaveBeenCalledWith(
         'tree.build.slow',
         { cold: true, nodeCountBucket: bucketCount(2) },
-        { timeMs: 101, nodeCount: 2 }
+        { timeMs: 101, nodeCount: 2 },
       );
     });
 
@@ -238,33 +226,27 @@ describe('JsonTreeComponent', () => {
       spyOn(window, 'requestAnimationFrame').and.returnValue(0);
       spyOn(performance, 'now').and.returnValues(0, 100, 0, 0, 0);
       const eventSpy = await createWithEventSpy({ a: 1 });
-      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.build.slow'))
-        .toBeFalse();
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.build.slow')).toBeFalse();
     });
 
     it('marks only the first tree.build.slow emission as cold', async () => {
       spyOn(window, 'requestAnimationFrame').and.returnValue(0);
-      spyOn(performance, 'now').and.returnValues(
-        0, 101, 0, 0, 0,
-        200, 350, 0
-      );
+      spyOn(performance, 'now').and.returnValues(0, 101, 0, 0, 0, 200, 350, 0);
       const eventSpy = await createWithEventSpy({ a: 1 });
       fixture.componentRef.setInput('value', { b: 2 });
       fixture.detectChanges();
-      const buildCalls = eventSpy.calls
-        .allArgs()
-        .filter((args) => args[0] === 'tree.build.slow');
+      const buildCalls = eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.build.slow');
       expect(buildCalls).toEqual([
         [
           'tree.build.slow',
           { cold: true, nodeCountBucket: bucketCount(2) },
-          { timeMs: 101, nodeCount: 2 }
+          { timeMs: 101, nodeCount: 2 },
         ],
         [
           'tree.build.slow',
           { cold: false, nodeCountBucket: bucketCount(2) },
-          { timeMs: 150, nodeCount: 2 }
-        ]
+          { timeMs: 150, nodeCount: 2 },
+        ],
       ]);
     });
 
@@ -273,12 +255,12 @@ describe('JsonTreeComponent', () => {
       spyOn(performance, 'now').and.returnValues(0, 101, 0, 0, 0);
       const eventSpy = await createWithEventSpy({
         a: { b: 1 },
-        c: [2, 3]
+        c: [2, 3],
       });
       expect(eventSpy).toHaveBeenCalledWith(
         'tree.build.slow',
         { cold: true, nodeCountBucket: bucketCount(6) },
-        { timeMs: 101, nodeCount: 6 }
+        { timeMs: 101, nodeCount: 6 },
       );
     });
   });
@@ -289,8 +271,7 @@ describe('JsonTreeComponent', () => {
       spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0, 199);
       const eventSpy = await createWithEventSpy({ a: 1 });
       runQueuedAnimationFrames(callbacks);
-      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow'))
-        .toBeFalse();
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow')).toBeFalse();
     });
 
     it('emits tree.render.slow above the threshold', async () => {
@@ -301,31 +282,26 @@ describe('JsonTreeComponent', () => {
       expect(eventSpy).toHaveBeenCalledWith(
         'tree.render.slow',
         { cold: true, nodeCountBucket: bucketCount(2) },
-        { timeMs: 201, nodeCount: 2 }
+        { timeMs: 201, nodeCount: 2 },
       );
     });
 
     it('drops a stale tree.render.slow measurement when value changes again', async () => {
       const callbacks = installAnimationFrameQueue();
-      spyOn(performance, 'now').and.returnValues(
-        0, 0, 0, 0, 0,
-        0, 0, 1000, 1251
-      );
+      spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0, 0, 0, 1000, 1251);
       const eventSpy = await createWithEventSpy({ first: 1 });
       fixture.componentRef.setInput('value', { second: { leaf: 2 } });
       fixture.detectChanges();
 
       runQueuedAnimationFrames(callbacks);
 
-      const renderCalls = eventSpy.calls
-        .allArgs()
-        .filter((args) => args[0] === 'tree.render.slow');
+      const renderCalls = eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.render.slow');
       expect(renderCalls).toEqual([
         [
           'tree.render.slow',
           { cold: true, nodeCountBucket: bucketCount(3) },
-          { timeMs: 251, nodeCount: 3 }
-        ]
+          { timeMs: 251, nodeCount: 3 },
+        ],
       ]);
     });
 
@@ -333,8 +309,7 @@ describe('JsonTreeComponent', () => {
       const callbacks = installAnimationFrameQueue();
       const eventSpy = await createWithEventSpy(undefined);
       runQueuedAnimationFrames(callbacks);
-      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow'))
-        .toBeFalse();
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow')).toBeFalse();
     });
 
     it('does not emit tree.render.slow after component destroy', async () => {
@@ -343,8 +318,7 @@ describe('JsonTreeComponent', () => {
       const eventSpy = await createWithEventSpy({ a: 1 });
       fixture.destroy();
       runQueuedAnimationFrames(callbacks);
-      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow'))
-        .toBeFalse();
+      expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow')).toBeFalse();
     });
   });
 
@@ -357,24 +331,20 @@ describe('JsonTreeComponent', () => {
      * font metrics).
      */
     function captureAutoFitEmit(
-      eventSpy: jasmine.Spy
+      eventSpy: jasmine.Spy,
     ): { props: Record<string, unknown>; measurements: Record<string, number> } | null {
-      const call = eventSpy.calls
-        .allArgs()
-        .find((args) => args[0] === 'tree.expand.autoFit');
+      const call = eventSpy.calls.allArgs().find((args) => args[0] === 'tree.expand.autoFit');
       if (!call) return null;
       return {
         props: call[1] as Record<string, unknown>,
-        measurements: call[2] as Record<string, number>
+        measurements: call[2] as Record<string, number>,
       };
     }
 
-    function expandToLevelCallsFor(
-      spy: jasmine.Spy
-    ): { depth: number; internal: boolean }[] {
+    function expandToLevelCallsFor(spy: jasmine.Spy): { depth: number; internal: boolean }[] {
       return spy.calls.allArgs().map((args) => ({
         depth: args[0] as number,
-        internal: (args[1] as boolean | undefined) ?? false
+        internal: (args[1] as boolean | undefined) ?? false,
       }));
     }
 
@@ -516,26 +486,18 @@ describe('JsonTreeComponent', () => {
   });
 
   describe('view reset via viewResetToken', () => {
-    type AutoFitCall = [
-      'tree.expand.autoFit',
-      Record<string, unknown>,
-      Record<string, number>
-    ];
+    type AutoFitCall = ['tree.expand.autoFit', Record<string, unknown>, Record<string, number>];
 
     function autoFitCallsFor(eventSpy: jasmine.Spy): AutoFitCall[] {
       const calls: readonly unknown[][] = eventSpy.calls.allArgs();
-      return calls.filter(
-        (args): args is AutoFitCall => args[0] === 'tree.expand.autoFit'
-      );
+      return calls.filter((args): args is AutoFitCall => args[0] === 'tree.expand.autoFit');
     }
 
-    function expandToLevelCallsFor(
-      spy: jasmine.Spy
-    ): { depth: number; internal: boolean }[] {
+    function expandToLevelCallsFor(spy: jasmine.Spy): { depth: number; internal: boolean }[] {
       const calls: readonly unknown[][] = spy.calls.allArgs();
       return calls.map((args) => ({
         depth: args[0] as number,
-        internal: (args[1] as boolean | undefined) ?? false
+        internal: (args[1] as boolean | undefined) ?? false,
       }));
     }
 
@@ -613,9 +575,7 @@ describe('JsonTreeComponent', () => {
       fixture.componentRef.setInput('value', { a: { b: { c: 1 } } });
       fixture.detectChanges();
       runQueuedAnimationFrames(callbacks);
-      expect(expandToLevelCallsFor(expandSpy)).toEqual([
-        { depth: 3, internal: true }
-      ]);
+      expect(expandToLevelCallsFor(expandSpy)).toEqual([{ depth: 3, internal: true }]);
       expect(autoFitCallsFor(eventSpy).length).toBe(0);
 
       fixture.componentRef.setInput('viewResetToken', 1);
@@ -625,7 +585,7 @@ describe('JsonTreeComponent', () => {
 
       expect(expandToLevelCallsFor(expandSpy)).toEqual([
         { depth: 3, internal: true },
-        { depth: 3, internal: true }
+        { depth: 3, internal: true },
       ]);
       expect(autoFitCallsFor(eventSpy).length).toBe(0);
     });
@@ -735,7 +695,7 @@ describe('JsonTreeComponent', () => {
         missing: null,
         name: 'plain',
         tags: ['x'],
-        meta: { kind: 'k' }
+        meta: { kind: 'k' },
       });
     });
 
@@ -816,7 +776,7 @@ describe('JsonTreeComponent', () => {
     beforeEach(async () => {
       await createWith({
         a: { b: { c: { d: 1 } } },
-        list: [{ x: 1 }, { y: 2 }]
+        list: [{ x: 1 }, { y: 2 }],
       });
     });
 
@@ -854,7 +814,7 @@ describe('JsonTreeComponent', () => {
   describe('tree expand slow telemetry', () => {
     const expandSample = {
       a: { b: { c: 1 } },
-      list: [{ x: 1 }, { y: 2 }]
+      list: [{ x: 1 }, { y: 2 }],
     };
 
     type RootNode = ReturnType<JsonTreeComponent['root']>;
@@ -886,9 +846,7 @@ describe('JsonTreeComponent', () => {
     }
 
     function hasExpandSlowEvent(eventSpy: jasmine.Spy): boolean {
-      return eventSpy.calls
-        .allArgs()
-        .some((args) => args[0] === 'tree.expand.slow');
+      return eventSpy.calls.allArgs().some((args) => args[0] === 'tree.expand.slow');
     }
 
     it('does not emit for expandAll below the threshold', async () => {
@@ -905,11 +863,10 @@ describe('JsonTreeComponent', () => {
       spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
       cmp.expandAll();
       cmp.expandAll();
-      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow'))
-        .toEqual([
-          ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 6 }],
-          ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 6 }]
-        ]);
+      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow')).toEqual([
+        ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 6 }],
+        ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 6 }],
+      ]);
     });
 
     it('does not emit for expandToLevel below the threshold', async () => {
@@ -926,11 +883,10 @@ describe('JsonTreeComponent', () => {
       spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
       cmp.expandToLevel(2);
       cmp.expandToLevel(2);
-      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow'))
-        .toEqual([
-          ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 6 }],
-          ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 6 }]
-        ]);
+      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow')).toEqual([
+        ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 6 }],
+        ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 6 }],
+      ]);
     });
 
     it('does not emit for expandAllFromHere below the threshold', async () => {
@@ -948,11 +904,10 @@ describe('JsonTreeComponent', () => {
       const startNode = nodeAt('$.a');
       cmp.expandAllFromHere(startNode);
       cmp.expandAllFromHere(startNode);
-      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow'))
-        .toEqual([
-          ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 1, nodeCount: 2 }],
-          ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 1, nodeCount: 2 }]
-        ]);
+      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow')).toEqual([
+        ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 1, nodeCount: 2 }],
+        ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 1, nodeCount: 2 }],
+      ]);
     });
 
     it('does not emit for expandToDepthFromHere below the threshold', async () => {
@@ -970,11 +925,10 @@ describe('JsonTreeComponent', () => {
       const startNode = nodeAt('$.a');
       cmp.expandToDepthFromHere(startNode, 2);
       cmp.expandToDepthFromHere(startNode, 2);
-      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow'))
-        .toEqual([
-          ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 2 }],
-          ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 2 }]
-        ]);
+      expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow')).toEqual([
+        ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 2, nodeCount: 2 }],
+        ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 2, nodeCount: 2 }],
+      ]);
     });
 
     it('does not emit for the initial expandToLevel even when it is slow', async () => {
@@ -1014,7 +968,7 @@ describe('JsonTreeComponent', () => {
       leading?: string,
       trailing?: string,
       closeTrailing?: string,
-      closeLeading?: string
+      closeLeading?: string,
     ): {
       leading?: string;
       trailing?: string;
@@ -1035,15 +989,17 @@ describe('JsonTreeComponent', () => {
     }
 
     function makeMap(
-      entries: Array<[
-        string,
-        {
-          leading?: string;
-          trailing?: string;
-          closeLeading?: string;
-          closeTrailing?: string;
-        }
-      ]>
+      entries: Array<
+        [
+          string,
+          {
+            leading?: string;
+            trailing?: string;
+            closeLeading?: string;
+            closeTrailing?: string;
+          },
+        ]
+      >,
     ): ReadonlyMap<
       string,
       {
@@ -1066,7 +1022,7 @@ describe('JsonTreeComponent', () => {
           closeLeading?: string;
           closeTrailing?: string;
         }
-      >
+      >,
     ): Promise<void> {
       await createWith(value);
       fixture.componentRef.setInput('commentsByPath', comments);
@@ -1076,7 +1032,7 @@ describe('JsonTreeComponent', () => {
     function commentTexts(selector: string): string[] {
       const host = fixture.nativeElement as HTMLElement;
       return Array.from(host.querySelectorAll<HTMLElement>(selector)).map(
-        (el) => el.textContent?.trim() ?? ''
+        (el) => el.textContent?.trim() ?? '',
       );
     }
 
@@ -1089,7 +1045,7 @@ describe('JsonTreeComponent', () => {
     it('renders a leading comment before the key on a leaf row', async () => {
       await createWithComments(
         { name: 'Alice' },
-        makeMap([['$.name', makeBundle('legal name on file')]])
+        makeMap([['$.name', makeBundle('legal name on file')]]),
       );
       const leading = commentTexts('.tree-comment-leading');
       expect(leading.length).toBe(1);
@@ -1099,7 +1055,7 @@ describe('JsonTreeComponent', () => {
     it('renders a trailing comment on a leaf row as a sibling of tree-row-right', async () => {
       await createWithComments(
         { id: 42 },
-        makeMap([['$.id', makeBundle(undefined, 'uuid migration TBD')]])
+        makeMap([['$.id', makeBundle(undefined, 'uuid migration TBD')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]');
@@ -1121,36 +1077,34 @@ describe('JsonTreeComponent', () => {
       prefs.update({ treeShowTypeLabels: true });
       await createWithComments(
         { id: 42 },
-        makeMap([['$.id', makeBundle(undefined, 'inline note')]])
+        makeMap([['$.id', makeBundle(undefined, 'inline note')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
       const children = Array.from(leafRow.children) as HTMLElement[];
-      const valueIndex = children.findIndex((c) =>
-        c.classList.contains('tree-value-number')
-      );
+      const valueIndex = children.findIndex((c) => c.classList.contains('tree-value-number'));
       const trailingIndex = children.findIndex((c) =>
-        c.classList.contains('tree-comment-trailing')
+        c.classList.contains('tree-comment-trailing'),
       );
-      const rightIndex = children.findIndex((c) =>
-        c.classList.contains('tree-row-right')
-      );
+      const rightIndex = children.findIndex((c) => c.classList.contains('tree-row-right'));
       expect(valueIndex).withContext('value span').toBeGreaterThanOrEqual(0);
       expect(trailingIndex).withContext('trailing comment').toBeGreaterThan(valueIndex);
-      expect(rightIndex).withContext('tree-row-right after trailing').toBeGreaterThan(trailingIndex);
+      expect(rightIndex)
+        .withContext('tree-row-right after trailing')
+        .toBeGreaterThan(trailingIndex);
     });
 
     it('renders the trailing comment AFTER the date annotation on string rows', async () => {
       prefs.update({ treeShowDateAnnotations: true });
       await createWithComments(
         { when: '2024-01-15T00:00:00Z' },
-        makeMap([['$.when', makeBundle(undefined, 'logged at noon')]])
+        makeMap([['$.when', makeBundle(undefined, 'logged at noon')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.when"]') as HTMLElement;
       const children = Array.from(leafRow.children) as HTMLElement[];
       const trailingIndex = children.findIndex((c) =>
-        c.classList.contains('tree-comment-trailing')
+        c.classList.contains('tree-comment-trailing'),
       );
       // The date annotation lives inside the .tree-value-string's
       // @case block, so it's a descendant - check its position within
@@ -1170,7 +1124,7 @@ describe('JsonTreeComponent', () => {
     it('renders the trailing comment BEFORE the kebab on leaf rows', async () => {
       await createWithComments(
         { id: 42 },
-        makeMap([['$.id', makeBundle(undefined, 'inline note')]])
+        makeMap([['$.id', makeBundle(undefined, 'inline note')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
@@ -1185,14 +1139,11 @@ describe('JsonTreeComponent', () => {
     });
 
     it('does not impose a max-width on .tree-comment (flex-driven shrink instead)', async () => {
-      await createWithComments(
-        { id: 42 },
-        makeMap([['$.id', makeBundle(undefined, 'note')]])
-      );
+      await createWithComments({ id: 42 }, makeMap([['$.id', makeBundle(undefined, 'note')]]));
       document.body.appendChild(fixture.nativeElement);
       try {
         const trailing = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-comment-trailing'
+          '.tree-comment-trailing',
         ) as HTMLElement;
         expect(trailing).withContext('trailing slot should render').toBeTruthy();
         // The slot must not be capped by an arbitrary max-width; row
@@ -1206,7 +1157,7 @@ describe('JsonTreeComponent', () => {
     it('renders the trailing-on-close comment on the container close row', async () => {
       await createWithComments(
         { user: { name: 'Alice' } },
-        makeMap([['$.user', makeBundle(undefined, undefined, 'end of user')]])
+        makeMap([['$.user', makeBundle(undefined, undefined, 'end of user')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const closeRow = host.querySelector('.tree-row--close');
@@ -1228,51 +1179,38 @@ describe('JsonTreeComponent', () => {
         makeMap([
           [
             '$.foo',
-            makeBundle(
-              undefined,
-              undefined,
-              'closing comment of foo',
-              'end of section for bar'
-            )
-          ]
-        ])
+            makeBundle(undefined, undefined, 'closing comment of foo', 'end of section for bar'),
+          ],
+        ]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const closeRow = host.querySelector('.tree-row--close') as HTMLElement;
       expect(closeRow).withContext('close row should be rendered').not.toBeNull();
 
       const leading = closeRow.querySelector(
-        '.tree-comment-leading.tree-comment-leading--close'
+        '.tree-comment-leading.tree-comment-leading--close',
       ) as HTMLElement | null;
       const trailing = closeRow.querySelector(
-        '.tree-comment-trailing.tree-comment-trailing--close'
+        '.tree-comment-trailing.tree-comment-trailing--close',
       ) as HTMLElement | null;
-      const brace = closeRow.querySelector(
-        '.tree-value-brace'
-      ) as HTMLElement | null;
+      const brace = closeRow.querySelector('.tree-value-brace') as HTMLElement | null;
 
-      expect(leading)
-        .withContext('closeLeading slot should render')
-        .not.toBeNull();
+      expect(leading).withContext('closeLeading slot should render').not.toBeNull();
       expect(leading!.textContent?.trim()).toBe('end of section for bar');
 
-      expect(trailing)
-        .withContext('closeTrailing slot should render')
-        .not.toBeNull();
+      expect(trailing).withContext('closeTrailing slot should render').not.toBeNull();
       expect(trailing!.textContent?.trim()).toBe('closing comment of foo');
 
       expect(brace).withContext('close brace should render').not.toBeNull();
 
       const leadingBeforeBrace =
-        leading!.compareDocumentPosition(brace!) &
-        Node.DOCUMENT_POSITION_FOLLOWING;
+        leading!.compareDocumentPosition(brace!) & Node.DOCUMENT_POSITION_FOLLOWING;
       expect(leadingBeforeBrace)
         .withContext('closeLeading must appear before the close brace')
         .toBeGreaterThan(0);
 
       const trailingAfterBrace =
-        brace!.compareDocumentPosition(trailing!) &
-        Node.DOCUMENT_POSITION_FOLLOWING;
+        brace!.compareDocumentPosition(trailing!) & Node.DOCUMENT_POSITION_FOLLOWING;
       expect(trailingAfterBrace)
         .withContext('closeTrailing must appear after the close brace')
         .toBeGreaterThan(0);
@@ -1287,14 +1225,10 @@ describe('JsonTreeComponent', () => {
       // bug class M7k-fu3 / fu4 exist to fix.
       await createWithComments(
         { foo: {} },
-        makeMap([
-          ['$.foo', makeBundle(undefined, undefined, 'tail', 'hello')]
-        ])
+        makeMap([['$.foo', makeBundle(undefined, undefined, 'tail', 'hello')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
-      const trailing = host.querySelector(
-        '.tree-comment-trailing'
-      ) as HTMLElement | null;
+      const trailing = host.querySelector('.tree-comment-trailing') as HTMLElement | null;
       expect(trailing)
         .withContext('merged trailing slot should render on empty container')
         .not.toBeNull();
@@ -1304,39 +1238,29 @@ describe('JsonTreeComponent', () => {
       const debugEl = fixture.debugElement
         .queryAll(By.directive(MatTooltip))
         .find((de) =>
-          (de.nativeElement as HTMLElement).classList.contains(
-            'tree-comment-trailing'
-          )
+          (de.nativeElement as HTMLElement).classList.contains('tree-comment-trailing'),
         );
-      expect(debugEl)
-        .withContext('trailing-comment tooltip directive')
-        .toBeDefined();
+      expect(debugEl).withContext('trailing-comment tooltip directive').toBeDefined();
       const tooltipMessage = debugEl!.injector.get(MatTooltip).message;
       expect(tooltipMessage).toContain('hello');
       expect(tooltipMessage).toContain('tail');
       // Source order: closeLeading (hello) before closeTrailing (tail).
-      expect(tooltipMessage.indexOf('hello')).toBeLessThan(
-        tooltipMessage.indexOf('tail')
-      );
+      expect(tooltipMessage.indexOf('hello')).toBeLessThan(tooltipMessage.indexOf('tail'));
     });
 
     it('merges trailing, closeLeading, and closeTrailing on an empty inline container with all three populated', async () => {
       await createWithComments(
         { foo: {} },
-        makeMap([['$.foo', makeBundle(undefined, 'open', 'tail', 'mid')]])
+        makeMap([['$.foo', makeBundle(undefined, 'open', 'tail', 'mid')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
-      const trailing = host.querySelector(
-        '.tree-comment-trailing'
-      ) as HTMLElement | null;
+      const trailing = host.querySelector('.tree-comment-trailing') as HTMLElement | null;
       expect(trailing).not.toBeNull();
       expect(trailing!.textContent?.trim()).toBe('open');
       const debugEl = fixture.debugElement
         .queryAll(By.directive(MatTooltip))
         .find((de) =>
-          (de.nativeElement as HTMLElement).classList.contains(
-            'tree-comment-trailing'
-          )
+          (de.nativeElement as HTMLElement).classList.contains('tree-comment-trailing'),
         );
       expect(debugEl).toBeDefined();
       const tooltipMessage = debugEl!.injector.get(MatTooltip).message;
@@ -1346,12 +1270,8 @@ describe('JsonTreeComponent', () => {
       expect(tooltipMessage).toContain('open');
       expect(tooltipMessage).toContain('mid');
       expect(tooltipMessage).toContain('tail');
-      expect(tooltipMessage.indexOf('open')).toBeLessThan(
-        tooltipMessage.indexOf('mid')
-      );
-      expect(tooltipMessage.indexOf('mid')).toBeLessThan(
-        tooltipMessage.indexOf('tail')
-      );
+      expect(tooltipMessage.indexOf('open')).toBeLessThan(tooltipMessage.indexOf('mid'));
+      expect(tooltipMessage.indexOf('mid')).toBeLessThan(tooltipMessage.indexOf('tail'));
     });
 
     it('renders an open-row trailing comment on a container open row', async () => {
@@ -1361,7 +1281,7 @@ describe('JsonTreeComponent', () => {
       // next sibling's leading slot.
       await createWithComments(
         { foo: { bar: 1 } },
-        makeMap([['$.foo', makeBundle(undefined, 'explaination of foo')]])
+        makeMap([['$.foo', makeBundle(undefined, 'explaination of foo')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const openRow = host.querySelector('[data-path="$.foo"]') as HTMLElement;
@@ -1369,24 +1289,14 @@ describe('JsonTreeComponent', () => {
       // The trailing comment is a direct child of the open row, NOT
       // of the close row.
       const closeRow = host.querySelector('.tree-row--close');
-      const openRowTrailing = openRow.querySelector(
-        ':scope > .tree-comment-trailing'
-      );
-      const closeRowTrailing = closeRow?.querySelector(
-        '.tree-comment-trailing'
-      );
-      expect(openRowTrailing)
-        .withContext('open-row trailing slot must render')
-        .not.toBeNull();
+      const openRowTrailing = openRow.querySelector(':scope > .tree-comment-trailing');
+      const closeRowTrailing = closeRow?.querySelector('.tree-comment-trailing');
+      expect(openRowTrailing).withContext('open-row trailing slot must render').not.toBeNull();
       expect(openRowTrailing!.textContent?.trim()).toBe('explaination of foo');
-      expect(closeRowTrailing)
-        .withContext('close-row trailing slot must NOT render')
-        .toBeFalsy();
+      expect(closeRowTrailing).withContext('close-row trailing slot must NOT render').toBeFalsy();
       // The trailing slot sits before tree-row-right in DOM order,
       // mirroring the leaf-row pattern.
-      const rowRight = openRow.querySelector(
-        ':scope > .tree-row-right'
-      ) as HTMLElement;
+      const rowRight = openRow.querySelector(':scope > .tree-row-right') as HTMLElement;
       expect(rowRight).not.toBeNull();
       const positionMask = openRowTrailing!.compareDocumentPosition(rowRight);
       expect(positionMask & Node.DOCUMENT_POSITION_FOLLOWING)
@@ -1397,12 +1307,7 @@ describe('JsonTreeComponent', () => {
     it('renders only the first line of a multi-line comment in the inline slot', async () => {
       await createWithComments(
         { version: 3 },
-        makeMap([
-          [
-            '$.version',
-            makeBundle(undefined, 'first line\nsecond line\nthird line')
-          ]
-        ])
+        makeMap([['$.version', makeBundle(undefined, 'first line\nsecond line\nthird line')]]),
       );
       const trailing = commentTexts('.tree-comment-trailing');
       expect(trailing[0]).toBe('first line');
@@ -1412,14 +1317,12 @@ describe('JsonTreeComponent', () => {
       const fullText = 'first line\nsecond line';
       await createWithComments(
         { version: 3 },
-        makeMap([['$.version', makeBundle(undefined, fullText)]])
+        makeMap([['$.version', makeBundle(undefined, fullText)]]),
       );
       const debugEl = fixture.debugElement
         .queryAll(By.directive(MatTooltip))
         .find((de) =>
-          (de.nativeElement as HTMLElement).classList.contains(
-            'tree-comment-trailing'
-          )
+          (de.nativeElement as HTMLElement).classList.contains('tree-comment-trailing'),
         );
       expect(debugEl).withContext('trailing-comment tooltip directive').toBeDefined();
       const tooltip = debugEl!.injector.get(MatTooltip);
@@ -1430,7 +1333,7 @@ describe('JsonTreeComponent', () => {
     it('renders a leading comment on a container open row', async () => {
       await createWithComments(
         { user: { name: 'Alice' } },
-        makeMap([['$.user', makeBundle('Customer record')]])
+        makeMap([['$.user', makeBundle('Customer record')]]),
       );
       const leading = commentTexts('.tree-comment-leading');
       expect(leading).toContain('Customer record');
@@ -1439,7 +1342,7 @@ describe('JsonTreeComponent', () => {
     it('does not render comment slots that are not in the map', async () => {
       await createWithComments(
         { kept: 1, dropped: 2 },
-        makeMap([['$.kept', makeBundle(undefined, 'shown')]])
+        makeMap([['$.kept', makeBundle(undefined, 'shown')]]),
       );
       const trailing = commentTexts('.tree-comment-trailing');
       expect(trailing).toEqual(['shown']);
@@ -1450,8 +1353,8 @@ describe('JsonTreeComponent', () => {
         { user: { name: 'Alice' }, version: 3 },
         makeMap([
           ['$.user', makeBundle('Customer record', 'end of user')],
-          ['$.version', makeBundle(undefined, 'see issue #128')]
-        ])
+          ['$.version', makeBundle(undefined, 'see issue #128')],
+        ]),
       );
       // Sanity check: comments visible by default.
       expect(commentTexts('.tree-comment-leading').length).toBeGreaterThan(0);
@@ -1475,7 +1378,7 @@ describe('JsonTreeComponent', () => {
         'Customer record that is really long and record that is really long and record that is really really really long';
       await createWithComments(
         { foo: { user: { name: 'Alice', id: 42 } } },
-        makeMap([['$.foo.user', makeBundle(longComment)]])
+        makeMap([['$.foo.user', makeBundle(longComment)]]),
       );
       document.body.appendChild(fixture.nativeElement);
       try {
@@ -1485,9 +1388,7 @@ describe('JsonTreeComponent', () => {
         host.style.maxWidth = '480px';
         fixture.detectChanges();
 
-        const userRow = host.querySelector(
-          '[data-path="$.foo.user"]'
-        ) as HTMLElement | null;
+        const userRow = host.querySelector('[data-path="$.foo.user"]') as HTMLElement | null;
         expect(userRow).withContext('user open row should render').not.toBeNull();
         const rowRight = userRow!.querySelector('.tree-row-right') as HTMLElement;
         const count = userRow!.querySelector('.tree-count') as HTMLElement;
@@ -1508,9 +1409,7 @@ describe('JsonTreeComponent', () => {
           // accounting for sub-pixel rounding.
           expect(countHeight).toBeLessThan(countLineHeight * 1.5);
         }
-        expect(rowRight.getBoundingClientRect().height).toBeLessThan(
-          countHeight * 1.6
-        );
+        expect(rowRight.getBoundingClientRect().height).toBeLessThan(countHeight * 1.6);
       } finally {
         document.body.removeChild(fixture.nativeElement);
       }
@@ -1528,7 +1427,7 @@ describe('JsonTreeComponent', () => {
       document.body.appendChild(fixture.nativeElement);
       try {
         const element = (fixture.nativeElement as HTMLElement).querySelector(
-          selector
+          selector,
         ) as HTMLElement | null;
         if (!element) {
           throw new Error(`Expected ${selector} to be rendered`);
@@ -1568,10 +1467,7 @@ describe('JsonTreeComponent', () => {
 
     it('renders .tree-comment in the UI sans-serif font (decoration)', async () => {
       await createWith({ name: 'Alice' });
-      fixture.componentRef.setInput(
-        'commentsByPath',
-        new Map([['$.name', { leading: 'note' }]])
-      );
+      fixture.componentRef.setInput('commentsByPath', new Map([['$.name', { leading: 'note' }]]));
       fixture.detectChanges();
       const family = attachAndComputeFontFamily('.tree-comment');
       expect(family).toMatch(SANS_PATTERN);
@@ -1593,7 +1489,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set(path);
       fixture.detectChanges();
       const selected = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row[aria-selected="true"]'
+        '.tree-row[aria-selected="true"]',
       ) as HTMLElement | null;
       cmp.selectedPath.set(null);
       fixture.detectChanges();
@@ -1613,7 +1509,7 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       expect(cmp.selectedPath()).toBe('$.a');
       const stillSelected = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row.is-selected[aria-selected="true"]'
+        '.tree-row.is-selected[aria-selected="true"]',
       );
       expect(stillSelected).toBeTruthy();
     });
@@ -1624,7 +1520,7 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       expect(cmp.ancestorPaths().size).toBe(0);
       const ancestors = (fixture.nativeElement as HTMLElement).querySelectorAll(
-        '.tree-row.is-ancestor'
+        '.tree-row.is-ancestor',
       );
       expect(ancestors.length).toBe(0);
     });
@@ -1666,9 +1562,7 @@ describe('JsonTreeComponent', () => {
       cmp.expandAll();
       cmp.selectedPath.set('$.a');
       fixture.detectChanges();
-      const badges = (fixture.nativeElement as HTMLElement).querySelectorAll(
-        '.tree-match-badge'
-      );
+      const badges = (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-match-badge');
       expect(badges.length).toBe(1);
       const matchRow = badges[0].closest('.tree-row') as HTMLElement;
       expect(matchRow.classList.contains('is-match')).toBeTrue();
@@ -1729,7 +1623,7 @@ describe('JsonTreeComponent', () => {
       cmp.expandAll();
       fixture.detectChanges();
       const twisty = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-twisty[matTreeNodeToggle], button.tree-twisty'
+        '.tree-twisty[matTreeNodeToggle], button.tree-twisty',
       ) as HTMLElement;
       expect(twisty).withContext('expected a twisty toggle button').toBeTruthy();
       twisty.click();
@@ -1753,7 +1647,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set('$.alpha');
       fixture.detectChanges();
       const input = (fixture.nativeElement as HTMLElement).querySelector(
-        'input.tree-search'
+        'input.tree-search',
       ) as HTMLInputElement;
       input.focus();
       const ev = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
@@ -1809,7 +1703,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set('$.a.x');
       fixture.detectChanges();
       const xRow = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row[aria-selected="true"]'
+        '.tree-row[aria-selected="true"]',
       ) as HTMLElement;
       expect(xRow.classList.contains('is-selected')).toBeTrue();
       expect(xRow.classList.contains('is-search-hit')).toBeTrue();
@@ -1821,10 +1715,7 @@ describe('JsonTreeComponent', () => {
       await createWith({ a: 1 });
     });
 
-    function withClipboard<T>(
-      stub: { writeText?: jasmine.Spy } | undefined,
-      run: () => T
-    ): T {
+    function withClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
       try {
@@ -1833,12 +1724,12 @@ describe('JsonTreeComponent', () => {
         if (original) {
           Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: original
+            value: original,
           });
         } else {
           Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: undefined
+            value: undefined,
           });
         }
       }
@@ -1920,7 +1811,7 @@ describe('JsonTreeComponent', () => {
   describe('date annotations', () => {
     function getAnnotationSpans(): HTMLElement[] {
       return Array.from(
-        (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-date-annotation')
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-date-annotation'),
       );
     }
 
@@ -1936,7 +1827,7 @@ describe('JsonTreeComponent', () => {
     it('lets the annotation wrap when space is tight (parity with the original value)', async () => {
       await createWith({ created: '2024-11-05T18:30:00Z' });
       const valueSpan = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-value-string'
+        '.tree-value-string',
       ) as HTMLElement | null;
       const annotationSpan = getAnnotationSpans()[0];
       expect(valueSpan).toBeTruthy();
@@ -1975,8 +1866,8 @@ describe('JsonTreeComponent', () => {
               day: true,
               hour: true,
               minute: true,
-              second: true
-            }
+              second: true,
+            },
           });
         });
 
@@ -1997,8 +1888,8 @@ describe('JsonTreeComponent', () => {
           day: false,
           hour: false,
           minute: false,
-          second: false
-        }
+          second: false,
+        },
       });
       fixture.detectChanges();
       expect(getAnnotationSpans().length).toBe(0);
@@ -2044,7 +1935,7 @@ describe('JsonTreeComponent', () => {
       cmp.search.set('\u2014');
       fixture.detectChanges();
       const hits = (fixture.nativeElement as HTMLElement).querySelectorAll(
-        '.tree-row.is-search-hit'
+        '.tree-row.is-search-hit',
       );
       expect(hits.length).toBe(0);
     });
@@ -2073,7 +1964,7 @@ describe('JsonTreeComponent', () => {
       // string carries a "Z" suffix.
       await createWith({
         a: '2024-11-05T18:30:00',
-        b: '2024-11-05T18:30:00Z'
+        b: '2024-11-05T18:30:00Z',
       });
       const spans = getAnnotationSpans();
       expect(spans.length).toBe(2);
@@ -2085,7 +1976,7 @@ describe('JsonTreeComponent', () => {
     it('treats timezone-less ISO date-time as local when the pref is false', async () => {
       await createWith({
         a: '2024-11-05T18:30:00',
-        b: '2024-11-05T18:30:00Z'
+        b: '2024-11-05T18:30:00Z',
       });
       prefs.update({ treeAssumeUtcForIsoDateTime: false });
       fixture.detectChanges();
@@ -2103,7 +1994,7 @@ describe('JsonTreeComponent', () => {
   describe('type badge labels', () => {
     function badges(): string[] {
       return Array.from(
-        (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-type-badge')
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-type-badge'),
       ).map((el) => (el.textContent ?? '').trim());
     }
 
@@ -2264,10 +2155,14 @@ describe('JsonTreeComponent', () => {
         try {
           c.selectedPath.set(null);
           fixture.detectChanges();
-          const totalWidth = (fixture.nativeElement.querySelector('.tree-search-count') as HTMLElement).offsetWidth;
+          const totalWidth = (
+            fixture.nativeElement.querySelector('.tree-search-count') as HTMLElement
+          ).offsetWidth;
           c.selectedPath.set(c.searchHitPaths()[0] as string);
           fixture.detectChanges();
-          const positionWidth = (fixture.nativeElement.querySelector('.tree-search-count') as HTMLElement).offsetWidth;
+          const positionWidth = (
+            fixture.nativeElement.querySelector('.tree-search-count') as HTMLElement
+          ).offsetWidth;
           expect(positionWidth).toBe(totalWidth);
         } finally {
           fixture.nativeElement.remove();
@@ -2292,7 +2187,9 @@ describe('JsonTreeComponent', () => {
     describe('case sensitive / regex / scope toggles', () => {
       it('toggles case-sensitive preference and updates aria-pressed', async () => {
         await createWith({ a: 1 });
-        const btn = fixture.nativeElement.querySelectorAll('.tree-search-toggle')[0] as HTMLButtonElement;
+        const btn = fixture.nativeElement.querySelectorAll(
+          '.tree-search-toggle',
+        )[0] as HTMLButtonElement;
         expect(btn.getAttribute('aria-pressed')).toBe('false');
         btn.click();
         fixture.detectChanges();
@@ -2302,7 +2199,9 @@ describe('JsonTreeComponent', () => {
 
       it('toggles regex-mode preference', async () => {
         await createWith({ a: 1 });
-        const btn = fixture.nativeElement.querySelectorAll('.tree-search-toggle')[1] as HTMLButtonElement;
+        const btn = fixture.nativeElement.querySelectorAll(
+          '.tree-search-toggle',
+        )[1] as HTMLButtonElement;
         btn.click();
         fixture.detectChanges();
         expect(prefs.prefs().searchRegexMode).toBe(true);
@@ -2360,7 +2259,11 @@ describe('JsonTreeComponent', () => {
         await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
         setSearch('alp');
         const c = fixture.componentInstance;
-        const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true, bubbles: true });
+        const enter = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          cancelable: true,
+          bubbles: true,
+        });
         input().dispatchEvent(enter);
         fixture.detectChanges();
         expect(c.activeHitIndex()).toBe(1);
@@ -2368,7 +2271,7 @@ describe('JsonTreeComponent', () => {
           key: 'Enter',
           shiftKey: true,
           cancelable: true,
-          bubbles: true
+          bubbles: true,
         });
         input().dispatchEvent(shiftEnter);
         fixture.detectChanges();
@@ -2401,7 +2304,7 @@ describe('JsonTreeComponent', () => {
         await createWith({ a: 1 });
         setSearch('zzz');
         const navButtons = fixture.nativeElement.querySelectorAll(
-          '.tree-search-nav'
+          '.tree-search-nav',
         ) as NodeListOf<HTMLButtonElement>;
         expect(navButtons[0].disabled).toBe(true);
         expect(navButtons[1].disabled).toBe(true);
@@ -2464,10 +2367,7 @@ describe('JsonTreeComponent', () => {
 
     it('tolerates localStorage.getItem throwing on hydrate', async () => {
       const originalGet = Storage.prototype.getItem;
-      spyOn(Storage.prototype, 'getItem').and.callFake(function (
-        this: Storage,
-        key: string
-      ) {
+      spyOn(Storage.prototype, 'getItem').and.callFake(function (this: Storage, key: string) {
         if (key === SEARCH_KEY) {
           throw new Error('blocked');
         }
@@ -2487,10 +2387,7 @@ describe('JsonTreeComponent', () => {
       snackOpen = jasmine.createSpy('snackOpen');
       await TestBed.configureTestingModule({
         imports: [JsonTreeComponent],
-        providers: [
-          ...provideFakeAuth(),
-          { provide: MatSnackBar, useValue: { open: snackOpen } }
-        ]
+        providers: [...provideFakeAuth(), { provide: MatSnackBar, useValue: { open: snackOpen } }],
       }).compileComponents();
       fixture = TestBed.createComponent(JsonTreeComponent);
       prefs = TestBed.inject(PreferencesService);
@@ -2520,9 +2417,7 @@ describe('JsonTreeComponent', () => {
 
     it('hides the search input from the DOM', async () => {
       await createEmbedded({ alpha: 1 });
-      const searchInput = fixture.nativeElement.querySelector(
-        'input[type="search"].tree-search'
-      );
+      const searchInput = fixture.nativeElement.querySelector('input[type="search"].tree-search');
       expect(searchInput).toBeNull();
     });
 
@@ -2574,11 +2469,14 @@ describe('JsonTreeComponent', () => {
         matchValue: 'error',
         caseSensitive: false,
         style: { backgroundColor: '#ffcdd2' },
-        ...overrides
+        ...overrides,
       };
     }
 
-    function makeSet(rules: FormattingRule[], overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
+    function makeSet(
+      rules: FormattingRule[],
+      overrides: Partial<FormattingRuleSet> = {},
+    ): FormattingRuleSet {
       return {
         id: 'set-1',
         userId: 'oid-1',
@@ -2587,7 +2485,7 @@ describe('JsonTreeComponent', () => {
         version: 1,
         createdAt: '2026-04-27T00:00:00.000Z',
         updatedAt: '2026-04-27T00:00:00.000Z',
-        ...overrides
+        ...overrides,
       };
     }
 
@@ -2623,9 +2521,9 @@ describe('JsonTreeComponent', () => {
           makeRule({
             target: 'value',
             matchValue: 'error',
-            style: { backgroundColor: '#ffcdd2', textColor: '#b71c1c' }
-          })
-        ])
+            style: { backgroundColor: '#ffcdd2', textColor: '#b71c1c' },
+          }),
+        ]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       cmp.expandAll();
@@ -2647,9 +2545,9 @@ describe('JsonTreeComponent', () => {
             target: 'value',
             matchType: 'exact',
             matchValue: '200',
-            style: { backgroundColor: '#c8e6c9' }
-          })
-        ])
+            style: { backgroundColor: '#c8e6c9' },
+          }),
+        ]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       cmp.expandAll();
@@ -2668,9 +2566,7 @@ describe('JsonTreeComponent', () => {
       // miss. This test pins the producer contract.
       await setUp({ status: '200' });
       seedRuleSets([
-        makeSet([
-          makeRule({ target: 'value', matchType: 'exact', matchValue: '200' })
-        ])
+        makeSet([makeRule({ target: 'value', matchType: 'exact', matchValue: '200' })]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       cmp.expandAll();
@@ -2689,16 +2585,16 @@ describe('JsonTreeComponent', () => {
             target: 'key',
             matchType: 'exact',
             matchValue: 'errors',
-            style: { textColor: '#b71c1c' }
+            style: { textColor: '#b71c1c' },
           }),
           makeRule({
             id: 'r-val',
             target: 'value',
             matchType: 'contains',
             matchValue: 'errors',
-            style: { backgroundColor: '#ffcdd2' }
-          })
-        ])
+            style: { backgroundColor: '#ffcdd2' },
+          }),
+        ]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       cmp.expandAll();
@@ -2720,9 +2616,9 @@ describe('JsonTreeComponent', () => {
             id: 'r2',
             target: 'value',
             matchType: 'contains',
-            matchValue: 'err'
-          })
-        ])
+            matchValue: 'err',
+          }),
+        ]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       cmp.expandAll();
@@ -2744,9 +2640,9 @@ describe('JsonTreeComponent', () => {
             target: 'key',
             matchType: 'exact',
             matchValue: 'warning',
-            style: { icon: 'warning' }
-          })
-        ])
+            style: { icon: 'warning' },
+          }),
+        ]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       cmp.expandAll();
@@ -2755,9 +2651,7 @@ describe('JsonTreeComponent', () => {
       const warnNode = root.children!.find((c) => c.segment === 'warning')!;
       expect(cmp.keyIcon(warnNode)).toBe('warning');
       expect(cmp.valueIcon(warnNode)).toBeNull();
-      const iconEl = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-rule-icon--key'
-      );
+      const iconEl = (fixture.nativeElement as HTMLElement).querySelector('.tree-rule-icon--key');
       expect(iconEl).not.toBeNull();
     });
 
@@ -2768,9 +2662,7 @@ describe('JsonTreeComponent', () => {
       // hit the same closure-scoped cache.
       await setUp({ status: 'error' });
       seedRuleSets([
-        makeSet([
-          makeRule({ target: 'value', matchType: 'exact', matchValue: 'error' })
-        ])
+        makeSet([makeRule({ target: 'value', matchType: 'exact', matchValue: 'error' })]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       const root = cmp.root()!;
@@ -2783,9 +2675,7 @@ describe('JsonTreeComponent', () => {
     it('drops the cache when activeRuleSets changes', async () => {
       await setUp({ status: 'error' });
       seedRuleSets([
-        makeSet([
-          makeRule({ id: 'r1', target: 'value', matchType: 'exact', matchValue: 'error' })
-        ])
+        makeSet([makeRule({ id: 'r1', target: 'value', matchType: 'exact', matchValue: 'error' })]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       const root = cmp.root()!;
@@ -2811,11 +2701,14 @@ describe('JsonTreeComponent', () => {
         matchValue: 'error',
         caseSensitive: false,
         style: { backgroundColor: '#ffcdd2' },
-        ...overrides
+        ...overrides,
       };
     }
 
-    function makeSet(rules: FormattingRule[], overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
+    function makeSet(
+      rules: FormattingRule[],
+      overrides: Partial<FormattingRuleSet> = {},
+    ): FormattingRuleSet {
       return {
         id: 'set-1',
         userId: 'oid-1',
@@ -2824,7 +2717,7 @@ describe('JsonTreeComponent', () => {
         version: 1,
         createdAt: '2026-04-27T00:00:00.000Z',
         updatedAt: '2026-04-27T00:00:00.000Z',
-        ...overrides
+        ...overrides,
       };
     }
 
@@ -2847,16 +2740,15 @@ describe('JsonTreeComponent', () => {
     it('uses overrideRuleSets when set, not the service-derived list', async () => {
       await setUp({ status: 'error' });
       seedDefault([
-        makeSet(
-          [makeRule({ matchValue: 'error', style: { backgroundColor: '#000000' } })],
-          { id: 'default-set' }
-        )
+        makeSet([makeRule({ matchValue: 'error', style: { backgroundColor: '#000000' } })], {
+          id: 'default-set',
+        }),
       ]);
       prefs.update({ activeRuleSetIds: ['default-set'] });
 
       const overrideSet = makeSet(
         [makeRule({ matchValue: 'error', style: { backgroundColor: '#abcdef' } })],
-        { id: 'override-set' }
+        { id: 'override-set' },
       );
       fixture.componentRef.setInput('overrideRuleSets', [overrideSet]);
       fixture.detectChanges();
@@ -2869,9 +2761,7 @@ describe('JsonTreeComponent', () => {
     it('falls back to the service when overrideRuleSets is null (default)', async () => {
       await setUp({ status: 'error' });
       seedDefault([
-        makeSet(
-          [makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]
-        )
+        makeSet([makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
       fixture.detectChanges();
@@ -2884,9 +2774,7 @@ describe('JsonTreeComponent', () => {
     it('treats an empty array override as "no rule sets active" (does NOT fall back)', async () => {
       await setUp({ status: 'error' });
       seedDefault([
-        makeSet(
-          [makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]
-        )
+        makeSet([makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
 
@@ -2900,15 +2788,13 @@ describe('JsonTreeComponent', () => {
     it('per-instance: overriding one tree does not affect another instance', async () => {
       await setUp({ status: 'error' });
       seedDefault([
-        makeSet(
-          [makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]
-        )
+        makeSet([makeRule({ matchValue: 'error', style: { backgroundColor: '#112233' } })]),
       ]);
       prefs.update({ activeRuleSetIds: ['set-1'] });
 
       const overrideSet = makeSet(
         [makeRule({ matchValue: 'error', style: { backgroundColor: '#abcdef' } })],
-        { id: 'override-set' }
+        { id: 'override-set' },
       );
       fixture.componentRef.setInput('overrideRuleSets', [overrideSet]);
       fixture.detectChanges();
@@ -2919,10 +2805,10 @@ describe('JsonTreeComponent', () => {
       const secondCmp = second.componentInstance;
 
       const firstStyles = cmp.ruleStyleVars(
-        cmp.root()!.children!.find((c) => c.segment === 'status')!
+        cmp.root()!.children!.find((c) => c.segment === 'status')!,
       );
       const secondStyles = secondCmp.ruleStyleVars(
-        secondCmp.root()!.children!.find((c) => c.segment === 'status')!
+        secondCmp.root()!.children!.find((c) => c.segment === 'status')!,
       );
 
       expect(firstStyles?.['--tree-row-format-bg']).toBe('#abcdef');
@@ -3011,8 +2897,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectByPathString('$.a.b');
       fixture.detectChanges();
       const matched = events.find(
-        (path) =>
-          path !== null && path.length === 2 && path[0] === 'a' && path[1] === 'b'
+        (path) => path !== null && path.length === 2 && path[0] === 'a' && path[1] === 'b',
       );
       expect(matched).withContext('expected path ["a","b"]').toBeTruthy();
     });
@@ -3047,18 +2932,12 @@ describe('JsonTreeComponent', () => {
     // here). Mirrors the same restore semantics: if `navigator` had
     // no own `clipboard` descriptor before our override, we delete
     // ours so the prototype's getter is restored.
-    function withClipboardStub<T>(
-      stub: { writeText?: jasmine.Spy } | undefined,
-      run: () => T
-    ): T {
+    function withClipboardStub<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
-      const hadOwn = Object.prototype.hasOwnProperty.call(
-        navigator,
-        'clipboard'
-      );
+      const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
-        value: stub
+        value: stub,
       });
       try {
         return run();
@@ -3066,7 +2945,7 @@ describe('JsonTreeComponent', () => {
         if (hadOwn && original) {
           Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: original
+            value: original,
           });
         } else {
           delete (navigator as { clipboard?: unknown }).clipboard;
@@ -3094,19 +2973,9 @@ describe('JsonTreeComponent', () => {
       await createWith({ foo: { bar: { baz: 1 } } });
       cmp.selectByPathString('$.foo.bar.baz');
       const labels = cmp.crumbs().map((crumb) => crumb.label);
-      expect(labels).toEqual([
-        cmp.breadcrumbRootLabel,
-        'foo',
-        'bar',
-        'baz'
-      ]);
+      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'foo', 'bar', 'baz']);
       const paths = cmp.crumbs().map((crumb) => crumb.canonicalPath);
-      expect(paths).toEqual([
-        '$',
-        '$.foo',
-        '$.foo.bar',
-        '$.foo.bar.baz'
-      ]);
+      expect(paths).toEqual(['$', '$.foo', '$.foo.bar', '$.foo.bar.baz']);
       const currents = cmp.crumbs().map((crumb) => crumb.current);
       expect(currents).toEqual([false, false, false, true]);
     });
@@ -3115,19 +2984,9 @@ describe('JsonTreeComponent', () => {
       await createWith({ items: [{ name: 'a' }] });
       cmp.selectByPathString('$.items[0].name');
       const labels = cmp.crumbs().map((crumb) => crumb.label);
-      expect(labels).toEqual([
-        cmp.breadcrumbRootLabel,
-        'items',
-        '[0]',
-        'name'
-      ]);
+      expect(labels).toEqual([cmp.breadcrumbRootLabel, 'items', '[0]', 'name']);
       const paths = cmp.crumbs().map((crumb) => crumb.canonicalPath);
-      expect(paths).toEqual([
-        '$',
-        '$.items',
-        '$.items[0]',
-        '$.items[0].name'
-      ]);
+      expect(paths).toEqual(['$', '$.items', '$.items[0]', '$.items[0].name']);
       const currents = cmp.crumbs().map((crumb) => crumb.current);
       expect(currents).toEqual([false, false, false, true]);
     });
@@ -3155,7 +3014,7 @@ describe('JsonTreeComponent', () => {
       expect(info).toHaveBeenCalledWith('tree.breadcrumb.click', {
         depth: 1,
         // Pre-click crumbs.length=4, depth=1 => up-distance from old leaf (depth=3) = 4-1-1 = 2
-        selectionUpDistance: 2
+        selectionUpDistance: 2,
       });
     });
 
@@ -3168,7 +3027,7 @@ describe('JsonTreeComponent', () => {
       cmp.onBreadcrumbClick({ canonicalPath: '$.foo.bar', depth: 2 });
       expect(info).toHaveBeenCalledWith('tree.breadcrumb.click', {
         depth: 2,
-        selectionUpDistance: 0
+        selectionUpDistance: 0,
       });
     });
 
@@ -3177,7 +3036,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectByPathString('$.foo.bar');
       fixture.detectChanges();
       const chips = Array.from(
-        fixture.nativeElement.querySelectorAll('.jj-breadcrumb__chip')
+        fixture.nativeElement.querySelectorAll('.jj-breadcrumb__chip'),
       ) as HTMLButtonElement[];
       // crumbs = [Root, foo, bar(current)] -> 3 chips. Click foo (index 1).
       expect(chips.length).toBe(3);
@@ -3218,7 +3077,7 @@ describe('JsonTreeComponent', () => {
       withClipboardStub({ writeText }, () => cmp.onBreadcrumbCopyPath());
       expect(info).toHaveBeenCalledWith('tree.breadcrumb.copyPath', {
         depth: 2,
-        selectionUpDistance: 0
+        selectionUpDistance: 0,
       });
       expect(writeText).toHaveBeenCalled();
     });
@@ -3250,10 +3109,7 @@ describe('JsonTreeComponent', () => {
       throw new Error(`No node at path ${path}`);
     }
 
-    function withCtxClipboard<T>(
-      stub: { writeText?: jasmine.Spy } | undefined,
-      run: () => T
-    ): T {
+    function withCtxClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
@@ -3263,7 +3119,7 @@ describe('JsonTreeComponent', () => {
         if (hadOwn && original) {
           Object.defineProperty(navigator, 'clipboard', {
             configurable: true,
-            value: original
+            value: original,
           });
         } else {
           // No own clipboard property existed before our override; deleting
@@ -3280,7 +3136,7 @@ describe('JsonTreeComponent', () => {
         clientX: 100,
         clientY: 200,
         bubbles: true,
-        cancelable: true
+        cancelable: true,
       });
     }
 
@@ -3310,13 +3166,9 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.alpha');
-        expect(cmp.selectedPath())
-          .withContext('precondition: nothing selected')
-          .toBeNull();
+        expect(cmp.selectedPath()).withContext('precondition: nothing selected').toBeNull();
         cmp.onRowContextMenu(ctxEvent(), node);
-        expect(cmp.selectedPath())
-          .withContext('right-click must leave selection null')
-          .toBeNull();
+        expect(cmp.selectedPath()).withContext('right-click must leave selection null').toBeNull();
         expect(cmp.contextNode()?.pathString).toBe('$.alpha');
       });
 
@@ -3327,7 +3179,7 @@ describe('JsonTreeComponent', () => {
           clientX: 0,
           clientY: 0,
           bubbles: true,
-          cancelable: true
+          cancelable: true,
         });
         cmp.onRowContextMenu(ev, node);
         expect(cmp.contextNode()).toBeNull();
@@ -3340,13 +3192,13 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const node = nodeAt('$.alpha');
         const pill = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-kebab-pill'
+          '.tree-kebab-pill',
         ) as HTMLButtonElement;
         const ev = new MouseEvent('contextmenu', {
           clientX: 100,
           clientY: 100,
           bubbles: true,
-          cancelable: true
+          cancelable: true,
         });
         // dispatch via the pill so target.closest('button, ...') matches.
         Object.defineProperty(ev, 'target', { value: pill });
@@ -3375,7 +3227,7 @@ describe('JsonTreeComponent', () => {
         const info = spyOn(TestBed.inject(LoggerService), 'info');
         cmp.onKebabClick(ev, node);
         expect(info).toHaveBeenCalledWith('tree.contextMenu.opened', {
-          source: 'kebab'
+          source: 'kebab',
         });
       });
     });
@@ -3390,7 +3242,7 @@ describe('JsonTreeComponent', () => {
         const info = spyOn(TestBed.inject(LoggerService), 'info');
         cmp.onRowContextMenu(ev, node);
         expect(info).toHaveBeenCalledWith('tree.contextMenu.opened', {
-          source: 'row'
+          source: 'row',
         });
       });
     });
@@ -3401,7 +3253,7 @@ describe('JsonTreeComponent', () => {
           clientX: 100,
           clientY: 200,
           bubbles: true,
-          cancelable: true
+          cancelable: true,
         });
       }
 
@@ -3418,7 +3270,7 @@ describe('JsonTreeComponent', () => {
         cmp.onBreadcrumbContextMenu({
           event,
           canonicalPath: '$.foo',
-          depth: 1
+          depth: 1,
         });
         expect(cmp.contextNode()?.pathString).toBe('$.foo');
         expect(cmp.selectedPath())
@@ -3439,12 +3291,10 @@ describe('JsonTreeComponent', () => {
         cmp.onBreadcrumbContextMenu({
           event: ctxMouseEvent(),
           canonicalPath: '$.foo',
-          depth: 1
+          depth: 1,
         });
         fixture.detectChanges();
-        expect(events)
-          .withContext('right-click must not emit a selectionChange event')
-          .toEqual([]);
+        expect(events).withContext('right-click must not emit a selectionChange event').toEqual([]);
       });
 
       it("logs tree.contextMenu.opened with source: 'breadcrumb'", async () => {
@@ -3456,10 +3306,10 @@ describe('JsonTreeComponent', () => {
         cmp.onBreadcrumbContextMenu({
           event,
           canonicalPath: '$.foo',
-          depth: 1
+          depth: 1,
         });
         expect(info).toHaveBeenCalledWith('tree.contextMenu.opened', {
-          source: 'breadcrumb'
+          source: 'breadcrumb',
         });
       });
 
@@ -3470,7 +3320,7 @@ describe('JsonTreeComponent', () => {
         cmp.onBreadcrumbContextMenu({
           event,
           canonicalPath: '$.does.not.exist',
-          depth: 99
+          depth: 99,
         });
         expect(cmp.contextNode()).toBeNull();
         expect(cmp.selectedPath()).toBeNull();
@@ -3486,7 +3336,7 @@ describe('JsonTreeComponent', () => {
         cmp.onBreadcrumbContextMenu({
           event,
           canonicalPath: '$.alpha',
-          depth: 1
+          depth: 1,
         });
         expect(event.defaultPrevented).toBe(true);
       });
@@ -3498,7 +3348,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.alpha');
         withCtxClipboard({ writeText }, () => cmp.copyKey(node));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith('alpha');
         expect(snackOpen).toHaveBeenCalled();
       });
@@ -3510,7 +3361,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$[1]');
         withCtxClipboard({ writeText }, () => cmp.copyKey(node));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith('1');
       });
 
@@ -3519,7 +3371,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const root = nodeAt('$');
         withCtxClipboard({ writeText }, () => cmp.copyKey(root));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).not.toHaveBeenCalled();
       });
     });
@@ -3530,7 +3383,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.note');
         withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith('hello "world"');
       });
 
@@ -3539,7 +3393,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.count');
         withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith('42');
       });
 
@@ -3548,7 +3403,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.enabled');
         withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith('true');
       });
 
@@ -3557,7 +3413,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.blank');
         withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith('null');
       });
 
@@ -3566,7 +3423,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.obj');
         withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         const arg = writeText.calls.mostRecent().args[0] as string;
         expect(arg).toContain('\n');
         expect(arg).toContain('  "a": 1');
@@ -3578,7 +3436,8 @@ describe('JsonTreeComponent', () => {
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.arr');
         withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         const arg = writeText.calls.mostRecent().args[0] as string;
         expect(arg).toBe('[\n  1,\n  2\n]');
       });
@@ -3590,7 +3449,7 @@ describe('JsonTreeComponent', () => {
         prefs.update({
           searchScope: 'values',
           searchRegexMode: true,
-          searchValueType: 'string'
+          searchValueType: 'string',
         });
         cmp.expandAll();
         fixture.detectChanges();
@@ -3608,7 +3467,8 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const node = nodeAt('$.alphabet');
         cmp.searchByKey(node);
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         const idx = cmp.activeHitIndex();
         const paths = cmp.searchHitPaths();
         expect(paths[idx]).toBe('$.alphabet');
@@ -3630,7 +3490,8 @@ describe('JsonTreeComponent', () => {
         // node whose key doesn't match the existing query.
         const node = nodeAt('$.alpha');
         cmp.searchByKey(node);
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         // After searchByKey on $.alpha, paths = [$.alpha]; activeHit = 0.
         const idx = cmp.activeHitIndex();
         const paths = cmp.searchHitPaths();
@@ -3653,7 +3514,8 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const node = nodeAt('$.c');
         cmp.searchByValue(node);
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(prefs.prefs().searchScope).toBe('values');
         expect(prefs.prefs().searchRegexMode).toBe(false);
         expect(prefs.prefs().searchValueType).toBe('all');
@@ -3795,7 +3657,7 @@ describe('JsonTreeComponent', () => {
         await createWith({
           a: { a2: { z: 1 }, a3: { z: 1 } },
           b: { z: 1 },
-          c: { z: 1 }
+          c: { z: 1 },
         });
         cmp.expandAll();
         fixture.detectChanges();
@@ -3902,7 +3764,7 @@ describe('JsonTreeComponent', () => {
           a: cmp.treeControl.isExpanded(nodeAt('$.a')),
           a2: cmp.treeControl.isExpanded(a2),
           a3: cmp.treeControl.isExpanded(nodeAt('$.a.a3')),
-          b: cmp.treeControl.isExpanded(nodeAt('$.b'))
+          b: cmp.treeControl.isExpanded(nodeAt('$.b')),
         };
         cmp.isolateRow(a2, 'wide');
         expect(cmp.treeControl.isExpanded(nodeAt('$.a'))).toBe(stateAfterFirst.a);
@@ -3914,7 +3776,7 @@ describe('JsonTreeComponent', () => {
       it('telemetry: each ID is emitted with no payload (no user content)', async () => {
         await createWith({
           a: { a2: { z: 1 }, a3: { z: 1 } },
-          b: { z: 1 }
+          b: { z: 1 },
         });
         cmp.expandAll();
         fixture.detectChanges();
@@ -4068,16 +3930,14 @@ describe('JsonTreeComponent', () => {
         await createWith({
           'top-level': {
             'second-level': { 'third-level': { x: 1, y: 2 } },
-            'alt-second-level': { 'third-level': { x: 1, y: 2 } }
-          }
+            'alt-second-level': { 'third-level': { x: 1, y: 2 } },
+          },
         });
         cmp.expandAll();
         fixture.detectChanges();
         const top = nodeAt('$["top-level"]');
         const altSecond = nodeAt('$["top-level"]["alt-second-level"]');
-        const altThird = nodeAt(
-          '$["top-level"]["alt-second-level"]["third-level"]'
-        );
+        const altThird = nodeAt('$["top-level"]["alt-second-level"]["third-level"]');
         // Collapse only alt-second-level and its (now hidden) third-level
         // so the partial-expansion shape matches the user's scenario.
         cmp.treeControl.collapse(altThird);
@@ -4096,10 +3956,9 @@ describe('JsonTreeComponent', () => {
         await createWith({ note: 'hi' });
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.note');
-        withCtxClipboard({ writeText }, () =>
-          cmp.onRowDblClick(new MouseEvent('dblclick'), node)
-        );
-        await Promise.resolve(); await Promise.resolve();
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith('hi');
       });
 
@@ -4109,10 +3968,9 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.obj');
-        withCtxClipboard({ writeText }, () =>
-          cmp.onRowDblClick(new MouseEvent('dblclick'), node)
-        );
-        await Promise.resolve(); await Promise.resolve();
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
+        await Promise.resolve();
+        await Promise.resolve();
         const arg = writeText.calls.mostRecent().args[0] as string;
         expect(arg).toContain('\n');
         expect(arg).toContain('"a": 1');
@@ -4124,13 +3982,14 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const kebab = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-kebab-pill'
+          '.tree-kebab-pill',
         ) as HTMLButtonElement;
         const ev = new MouseEvent('dblclick', { bubbles: true });
         Object.defineProperty(ev, 'target', { value: kebab });
         const node = nodeAt('$.alpha');
         withCtxClipboard({ writeText }, () => cmp.onRowDblClick(ev, node));
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(writeText).not.toHaveBeenCalled();
       });
     });
@@ -4140,9 +3999,7 @@ describe('JsonTreeComponent', () => {
         await createWith({ a: 1, b: 2 });
         cmp.expandAll();
         fixture.detectChanges();
-        const kebabs = (fixture.nativeElement as HTMLElement).querySelectorAll(
-          '.tree-kebab-pill'
-        );
+        const kebabs = (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-kebab-pill');
         // root container + a leaf + b leaf = 3 visible rows.
         expect(kebabs.length).toBeGreaterThanOrEqual(3);
       });
@@ -4157,11 +4014,11 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const kebabs = (fixture.nativeElement as HTMLElement).querySelectorAll(
-          '.tree-kebab-pill'
+          '.tree-kebab-pill',
         ) as NodeListOf<HTMLButtonElement>;
         // The leaf row's kebab (skip the root container's kebab at index 0).
         const leafKebab = Array.from(kebabs).find(
-          (b) => b.closest('.tree-row[data-path="$.alpha"]') !== null
+          (b) => b.closest('.tree-row[data-path="$.alpha"]') !== null,
         ) as HTMLButtonElement | undefined;
         expect(leafKebab).withContext('found a kebab on $.alpha').toBeTruthy();
         leafKebab!.click();
@@ -4171,9 +4028,7 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         expect(cmp.contextNode()?.pathString).toBe('$.alpha');
         const items = document.body.querySelectorAll('button.mat-mdc-menu-item');
-        expect(items.length)
-          .withContext('menu must render at least one item')
-          .toBeGreaterThan(0);
+        expect(items.length).withContext('menu must render at least one item').toBeGreaterThan(0);
         // Clean up the overlay so it doesn't leak into other specs.
         document.body
           .querySelectorAll('.cdk-overlay-backdrop')
@@ -4189,7 +4044,7 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const kebab = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-row[data-path="$.alpha"] .tree-kebab-pill'
+          '.tree-row[data-path="$.alpha"] .tree-kebab-pill',
         ) as HTMLButtonElement | null;
         expect(kebab).toBeTruthy();
         kebab!.click();
@@ -4197,7 +4052,7 @@ describe('JsonTreeComponent', () => {
         await Promise.resolve();
         fixture.detectChanges();
         const items = document.body.querySelectorAll(
-          'button.mat-mdc-menu-item'
+          'button.mat-mdc-menu-item',
         ) as NodeListOf<HTMLButtonElement>;
         expect(items.length).toBeGreaterThan(0);
         const first = items[0];

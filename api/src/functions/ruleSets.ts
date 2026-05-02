@@ -21,12 +21,7 @@
  * existence of someone else's rule set - the URLs are server-issued
  * UUIDs and never user-discoverable.
  */
-import {
-  app,
-  HttpRequest,
-  HttpResponseInit,
-  InvocationContext
-} from '@azure/functions';
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
 import {
   MAX_RULE_SETS_PER_USER,
@@ -39,12 +34,12 @@ import {
   listRuleSetsByOwner,
   readRuleSet,
   replaceRuleSet,
-  type RuleSetDocument
+  type RuleSetDocument,
 } from '../shared/ruleSets';
 import {
   findPreset,
   listPresets as listPresetsData,
-  presetToCreatePayload
+  presetToCreatePayload,
 } from '../shared/ruleSetPresets';
 import {
   badRequest,
@@ -52,7 +47,7 @@ import {
   internalError,
   notFound,
   quotaExceeded,
-  unauthorized
+  unauthorized,
 } from '../shared/http';
 import { readUser, upsertUser } from '../shared/users';
 
@@ -71,7 +66,7 @@ function withEtag(status: number, doc: RuleSetDocument): HttpResponseInit {
   return {
     status,
     headers: { ETag: `"${doc.version}"` },
-    jsonBody: doc
+    jsonBody: doc,
   };
 }
 
@@ -94,7 +89,7 @@ function parseIfMatch(headerValue: string | null | undefined): number | null {
 
 export async function postRuleSet(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -128,8 +123,8 @@ export async function postRuleSet(
           resource: 'ruleSet',
           via: 'create',
           count: existing.length,
-          limit: MAX_RULE_SETS_PER_USER
-        }
+          limit: MAX_RULE_SETS_PER_USER,
+        },
       );
     }
     const created = await createRuleSet(principal.id, payload);
@@ -142,7 +137,7 @@ export async function postRuleSet(
 
 export async function listRuleSets(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -161,7 +156,7 @@ export async function listRuleSets(
 
 export async function getRuleSet(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -197,7 +192,7 @@ export async function getRuleSet(
 
 export async function putRuleSet(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -237,7 +232,7 @@ export async function putRuleSet(
     }
     if (found.version !== expectedVersion) {
       return preconditionFailed(
-        `Rule set was modified by another writer (expected version ${expectedVersion}, found ${found.version})`
+        `Rule set was modified by another writer (expected version ${expectedVersion}, found ${found.version})`,
       );
     }
     const next = await replaceRuleSet(found, payload, expectedVersion);
@@ -254,7 +249,7 @@ export async function putRuleSet(
 
 export async function deleteRuleSet(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -357,7 +352,7 @@ async function cleanupUserReferences(userId: string, deletedSetId: string): Prom
   await upsertUser({
     ...user,
     preferences: nextPrefs,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   });
 }
 
@@ -372,7 +367,7 @@ async function cleanupUserReferences(userId: string, deletedSetId: string): Prom
  */
 export async function listPresets(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   try {
     await requireAuth(req);
@@ -398,7 +393,7 @@ export async function listPresets(
  */
 export async function clonePreset(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -423,8 +418,8 @@ export async function clonePreset(
           resource: 'ruleSet',
           via: 'clone',
           count: existing.length,
-          limit: MAX_RULE_SETS_PER_USER
-        }
+          limit: MAX_RULE_SETS_PER_USER,
+        },
       );
     }
     const payload = presetToCreatePayload(preset);
@@ -446,7 +441,7 @@ app.http('rule-sets-post', {
   methods: ['POST'],
   route: 'rule-sets',
   authLevel: 'anonymous',
-  handler: postRuleSet
+  handler: postRuleSet,
 });
 
 app.http('rule-sets-presets-list', {
@@ -463,40 +458,40 @@ app.http('rule-sets-presets-list', {
   // any client still hitting the old path.
   route: 'rule-set-presets',
   authLevel: 'anonymous',
-  handler: listPresets
+  handler: listPresets,
 });
 
 app.http('rule-sets-presets-clone', {
   methods: ['POST'],
   route: 'rule-set-presets/{id}/clone',
   authLevel: 'anonymous',
-  handler: clonePreset
+  handler: clonePreset,
 });
 
 app.http('rule-sets-list', {
   methods: ['GET'],
   route: 'rule-sets',
   authLevel: 'anonymous',
-  handler: listRuleSets
+  handler: listRuleSets,
 });
 
 app.http('rule-sets-get', {
   methods: ['GET'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: getRuleSet
+  handler: getRuleSet,
 });
 
 app.http('rule-sets-put', {
   methods: ['PUT'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: putRuleSet
+  handler: putRuleSet,
 });
 
 app.http('rule-sets-delete', {
   methods: ['DELETE'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: deleteRuleSet
+  handler: deleteRuleSet,
 });

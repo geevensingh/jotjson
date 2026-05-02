@@ -70,7 +70,7 @@ function tryConstructFromYmd(
   day: number,
   hour = 0,
   minute = 0,
-  second = 0
+  second = 0,
 ): Date | null {
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > 31) return null;
@@ -79,29 +79,37 @@ function tryConstructFromYmd(
   if (second < 0 || second > 60) return null;
   const date = new Date(year, month - 1, day, hour, minute, second);
   // Reject calendar overflow (e.g. Feb 30 -> Mar 2).
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
     return null;
   }
   return isInRange(date) ? date : null;
 }
 
 const MONTH_NAMES: Record<string, number> = {
-  jan: 1, january: 1,
-  feb: 2, february: 2,
-  mar: 3, march: 3,
-  apr: 4, april: 4,
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
   may: 5,
-  jun: 6, june: 6,
-  jul: 7, july: 7,
-  aug: 8, august: 8,
-  sep: 9, sept: 9, september: 9,
-  oct: 10, october: 10,
-  nov: 11, november: 11,
-  dec: 12, december: 12
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
 };
 
 export interface ParsedDate {
@@ -131,11 +139,7 @@ const ISO_TZ_SUFFIX = /(?:Z|[+-]\d{2}:?\d{2})$/i;
  * Returns the parsed date plus a `hasTime` flag, or null if `raw` does not
  * match one of the accepted shapes or falls outside the supported range.
  */
-export function parseAsDate(
-  raw: unknown,
-  locale?: string,
-  opts?: ParseOptions
-): ParsedDate | null {
+export function parseAsDate(raw: unknown, locale?: string, opts?: ParseOptions): ParsedDate | null {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   if (trimmed.length < 8 || trimmed.length > 40) return null;
@@ -152,11 +156,7 @@ export function parseAsDate(
     if (opts?.assumeUtcForIsoDateOnly) {
       if (m < 1 || m > 12 || d < 1 || d > 31) return null;
       const utc = new Date(Date.UTC(y, m - 1, d));
-      if (
-        utc.getUTCFullYear() !== y ||
-        utc.getUTCMonth() !== m - 1 ||
-        utc.getUTCDate() !== d
-      ) {
+      if (utc.getUTCFullYear() !== y || utc.getUTCMonth() !== m - 1 || utc.getUTCDate() !== d) {
         return null;
       }
       return isInRange(utc) ? { date: utc, hasTime: false } : null;
@@ -225,14 +225,12 @@ const REL_UNITS: RelativeUnitDefinition[] = [
   { unit: 'day', ms: 24 * 60 * 60 * 1000 },
   { unit: 'hour', ms: 60 * 60 * 1000 },
   { unit: 'minute', ms: 60 * 1000 },
-  { unit: 'second', ms: 1000 }
+  { unit: 'second', ms: 1000 },
 ];
 
 const MAX_ADAPTIVE_FRACTION_DIGITS = 4;
 
-function getEnabledRelativeUnits(
-  enabledUnits?: RelativeUnitSettings
-): RelativeUnitDefinition[] {
+function getEnabledRelativeUnits(enabledUnits?: RelativeUnitSettings): RelativeUnitDefinition[] {
   return REL_UNITS.filter(({ unit }) => enabledUnits?.[unit] ?? true);
 }
 
@@ -257,7 +255,7 @@ function roundWithAdaptivePrecision(value: number): number {
 
 function hasDisabledSmallerUnit(
   selectedUnit: RelativeUnit,
-  enabledUnits?: RelativeUnitSettings
+  enabledUnits?: RelativeUnitSettings,
 ): boolean {
   if (enabledUnits === undefined) return false;
   const selectedIndex = REL_UNITS.findIndex(({ unit }) => unit === selectedUnit);
@@ -277,7 +275,7 @@ export function formatRelative(
     minute: boolean;
     second: boolean;
   },
-  friendlyForms?: boolean
+  friendlyForms?: boolean,
 ): string | null {
   const enabledRelativeUnits = getEnabledRelativeUnits(enabledUnits);
   if (enabledRelativeUnits.length === 0) return null;
@@ -292,13 +290,13 @@ export function formatRelative(
   const unitValue = absoluteDeltaMs / selectedUnit.ms;
   const shouldKeepFractionalValue =
     fittingUnit !== undefined && hasDisabledSmallerUnit(selectedUnit.unit, enabledUnits);
-  const absoluteValue = fittingUnit === undefined || shouldKeepFractionalValue
-    ? roundWithAdaptivePrecision(unitValue)
-    : Math.round(unitValue);
+  const absoluteValue =
+    fittingUnit === undefined || shouldKeepFractionalValue
+      ? roundWithAdaptivePrecision(unitValue)
+      : Math.round(unitValue);
   const value = absoluteValue * sign;
-  const numeric: 'auto' | 'always' = (friendlyForms ?? true) && Number.isInteger(value)
-    ? 'auto'
-    : 'always';
+  const numeric: 'auto' | 'always' =
+    (friendlyForms ?? true) && Number.isInteger(value) ? 'auto' : 'always';
 
   try {
     return new Intl.RelativeTimeFormat(locale, { numeric }).format(value, selectedUnit.unit);
@@ -324,7 +322,7 @@ export function formatDateAnnotation(
     minute: boolean;
     second: boolean;
   },
-  friendlyForms?: boolean
+  friendlyForms?: boolean,
 ): string | null {
   const opts: Intl.DateTimeFormatOptions = parsed.hasTime
     ? { dateStyle: 'medium', timeStyle: 'short' }

@@ -8,7 +8,7 @@ import { BUILD_INFO, type BuildInfo } from '../../../generated/build-info';
  */
 export const BUILD_INFO_TOKEN = new InjectionToken<BuildInfo>('BUILD_INFO', {
   providedIn: 'root',
-  factory: () => BUILD_INFO
+  factory: () => BUILD_INFO,
 });
 
 export type { BuildInfo };

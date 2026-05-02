@@ -1,8 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  ClipboardPermissionState,
-  ClipboardPollingService
-} from './clipboard-polling.service';
+import { ClipboardPermissionState, ClipboardPollingService } from './clipboard-polling.service';
 
 type ClipboardLike = Pick<Clipboard, 'readText' | 'writeText'>;
 
@@ -24,7 +21,7 @@ function makeStatus(initial: PermissionState): PermissionStatusStub {
       stub.state = newState;
       const evt = { target: stub } as unknown as Event;
       for (const l of stub.listeners) l(evt);
-    }
+    },
   };
   stub.addEventListener.and.callFake((name: string, cb: (e: Event) => void) => {
     if (name === 'change') stub.listeners.push(cb);
@@ -47,24 +44,24 @@ function installNavigatorStubs(opts: {
   if (opts.clipboard === null) {
     Object.defineProperty(navigator, 'clipboard', {
       value: undefined,
-      configurable: true
+      configurable: true,
     });
   } else if (opts.clipboard) {
     Object.defineProperty(navigator, 'clipboard', {
       value: opts.clipboard,
-      configurable: true
+      configurable: true,
     });
   }
 
   if (opts.permissionsQuery === null) {
     Object.defineProperty(navigator, 'permissions', {
       value: undefined,
-      configurable: true
+      configurable: true,
     });
   } else if (opts.permissionsQuery) {
     Object.defineProperty(navigator, 'permissions', {
       value: { query: opts.permissionsQuery },
-      configurable: true
+      configurable: true,
     });
   }
 
@@ -143,14 +140,14 @@ describe('ClipboardPollingService', () => {
       ? null
       : {
           readText: opts.readText ?? jasmine.createSpy('readText').and.resolveTo(''),
-          writeText: jasmine.createSpy('writeText').and.resolveTo(undefined)
+          writeText: jasmine.createSpy('writeText').and.resolveTo(undefined),
         };
     restore = installNavigatorStubs({
       clipboard,
       permissionsQuery:
         opts.permissionsQuery === undefined
           ? jasmine.createSpy('query').and.resolveTo(makeStatus('prompt'))
-          : opts.permissionsQuery
+          : opts.permissionsQuery,
     });
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({});
@@ -164,7 +161,7 @@ describe('ClipboardPollingService', () => {
 
   it('reports unknown when permissions.query throws (Firefox)', async () => {
     const svc = createService({
-      permissionsQuery: jasmine.createSpy('query').and.rejectWith(new Error('nope'))
+      permissionsQuery: jasmine.createSpy('query').and.rejectWith(new Error('nope')),
     });
     await flush();
     expect(svc.permissionState()).toBe('unknown');
@@ -221,7 +218,7 @@ describe('ClipboardPollingService', () => {
       .and.callFake(() => Promise.resolve(clipboardText));
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
     });
     await flush();
 
@@ -236,15 +233,13 @@ describe('ClipboardPollingService', () => {
       { text: '42 dollars', expected: false, name: 'numbers and prose' },
       { text: '', expected: false, name: 'empty' },
       { text: '   \n  \t', expected: false, name: 'whitespace only' },
-      { text: '"{\\"a\\":1}"', expected: true, name: 'escaped JSON (literal { qualifies)' }
+      { text: '"{\\"a\\":1}"', expected: true, name: 'escaped JSON (literal { qualifies)' },
     ];
 
     for (const c of cases) {
       clipboardText = c.text;
       await svc.checkOnce();
-      expect(svc.hasJson())
-        .withContext(`case: ${c.name}`)
-        .toBe(c.expected);
+      expect(svc.hasJson()).withContext(`case: ${c.name}`).toBe(c.expected);
     }
   });
 
@@ -255,7 +250,7 @@ describe('ClipboardPollingService', () => {
       .and.callFake(() => Promise.resolve(clipboardText));
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
     });
     await flush();
     await svc.checkOnce();
@@ -272,7 +267,7 @@ describe('ClipboardPollingService', () => {
     const readText = jasmine.createSpy('readText').and.resolveTo(`{"${longKey}":1}`);
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
     });
     await flush();
     await svc.checkOnce();
@@ -285,7 +280,7 @@ describe('ClipboardPollingService', () => {
     const readText = jasmine.createSpy('readText').and.resolveTo('{"a":1}');
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
     });
     await flush();
     readText.calls.reset();
@@ -300,7 +295,7 @@ describe('ClipboardPollingService', () => {
       const readText = jasmine.createSpy('readText').and.resolveTo('{"a":1}');
       const svc = createService({
         readText,
-        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
       });
       await flush();
       readText.calls.reset();
@@ -344,7 +339,7 @@ describe('ClipboardPollingService', () => {
       const readText = jasmine.createSpy('readText').and.resolveTo('{"a":1}');
       const svc = createService({
         readText,
-        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
       });
       await flush();
       svc.startPolling();
@@ -364,7 +359,7 @@ describe('ClipboardPollingService', () => {
     const readText = jasmine.createSpy('readText').and.resolveTo('{"a":1}');
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(status)
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(status),
     });
     await flush();
     expect(svc.permissionState()).toBe('granted');
@@ -380,7 +375,7 @@ describe('ClipboardPollingService', () => {
       const readText = jasmine.createSpy('readText').and.resolveTo(text);
       const svc = createService({
         readText,
-        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
       });
       await flush();
       await svc.checkOnce();

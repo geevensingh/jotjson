@@ -3,7 +3,7 @@ import { signal } from '@angular/core';
 import { ClipboardBannerComponent } from './clipboard-banner.component';
 import {
   ClipboardPermissionState,
-  ClipboardPollingService
+  ClipboardPollingService,
 } from '../../../core/clipboard/clipboard-polling.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { DEFAULT_PREFERENCES } from '../../../core/preferences/preferences.service';
@@ -32,17 +32,17 @@ describe('ClipboardBannerComponent', () => {
           provide: ClipboardPollingService,
           useValue: {
             permissionState: permissionState.asReadonly(),
-            enable: enableSpy
-          }
+            enable: enableSpy,
+          },
         },
         {
           provide: PreferencesService,
           useValue: {
             prefs: prefsSignal.asReadonly(),
-            update: updateSpy
-          }
-        }
-      ]
+            update: updateSpy,
+          },
+        },
+      ],
     });
   });
 
@@ -55,9 +55,7 @@ describe('ClipboardBannerComponent', () => {
   it('is visible when state=prompt and banner not seen', () => {
     const fixture = create();
     expect(fixture.componentInstance.visible()).toBe(true);
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector('.banner')
-    ).toBeTruthy();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.banner')).toBeTruthy();
   });
 
   it('is visible when state=unknown', () => {
@@ -70,9 +68,7 @@ describe('ClipboardBannerComponent', () => {
     permissionState.set('granted');
     const fixture = create();
     expect(fixture.componentInstance.visible()).toBe(false);
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector('.banner')
-    ).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.banner')).toBeNull();
   });
 
   it('is hidden when state=denied', () => {

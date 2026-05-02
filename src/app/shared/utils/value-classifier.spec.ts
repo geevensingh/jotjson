@@ -70,9 +70,9 @@ describe('value-classifier', () => {
     });
 
     it('rejects a UUID embedded in a longer string', () => {
-      expect(
-        classifyValue('string', 'see 550e8400-e29b-41d4-a716-446655440000 here'),
-      ).toBe('string');
+      expect(classifyValue('string', 'see 550e8400-e29b-41d4-a716-446655440000 here')).toBe(
+        'string',
+      );
     });
 
     it('rejects a UUID with wrong segment lengths', () => {
@@ -137,8 +137,8 @@ describe('value-classifier', () => {
       expect(
         classifyValue(
           'string',
-          '/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev'
-        )
+          '/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev',
+        ),
       ).toBe('path');
     });
 

@@ -21,8 +21,7 @@ export const descriptionFallbackStrategy: SuggestionStrategy = (input) => {
   const source = description ?? summary;
   if (source === null) return null;
   const firstSentenceEnd = source.search(/[.\n]/);
-  const firstSentence =
-    firstSentenceEnd >= 0 ? source.slice(0, firstSentenceEnd) : source;
+  const firstSentence = firstSentenceEnd >= 0 ? source.slice(0, firstSentenceEnd) : source;
   const trimmed = firstSentence.trim();
   if (trimmed.length === 0) return null;
   const value =

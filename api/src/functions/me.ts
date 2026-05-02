@@ -16,28 +16,19 @@
  * anonymously must not implicitly mutate the database on load. The
  * frontend explicitly calls POST /api/me only when it wants to seed.
  */
-import {
-  app,
-  HttpRequest,
-  HttpResponseInit,
-  InvocationContext
-} from '@azure/functions';
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
-import {
-  badRequest,
-  internalError,
-  unauthorized
-} from '../shared/http';
+import { badRequest, internalError, unauthorized } from '../shared/http';
 import {
   PreferenceValidationError,
   normalizePreferences,
-  normalizeStoredPreferences
+  normalizeStoredPreferences,
 } from '../shared/preferences';
 import { readUser, upsertUser, UserDocument } from '../shared/users';
 
 export async function getMe(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -56,7 +47,7 @@ export async function getMe(
     // stored docs have been re-saved.
     const normalized: UserDocument = {
       ...doc,
-      preferences: normalizeStoredPreferences(doc.preferences)
+      preferences: normalizeStoredPreferences(doc.preferences),
     };
     return { status: 200, jsonBody: normalized };
   } catch (error) {
@@ -66,7 +57,7 @@ export async function getMe(
 
 export async function postMe(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -108,7 +99,7 @@ export async function postMe(
     email: principal.email,
     preferences,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 
   try {
@@ -121,7 +112,7 @@ export async function postMe(
 
 export async function putMePreferences(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -156,7 +147,7 @@ export async function putMePreferences(
         email: principal.email,
         preferences,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       };
 
   try {
@@ -171,19 +162,19 @@ app.http('me-get', {
   methods: ['GET'],
   route: 'me',
   authLevel: 'anonymous',
-  handler: getMe
+  handler: getMe,
 });
 
 app.http('me-post', {
   methods: ['POST'],
   route: 'me',
   authLevel: 'anonymous',
-  handler: postMe
+  handler: postMe,
 });
 
 app.http('me-preferences-put', {
   methods: ['PUT'],
   route: 'me/preferences',
   authLevel: 'anonymous',
-  handler: putMePreferences
+  handler: putMePreferences,
 });

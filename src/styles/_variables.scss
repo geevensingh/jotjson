@@ -28,7 +28,12 @@ $highlight-ancestor-light: #ececec;
 $highlight-search-light: #ffe082;
 
 $font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-$font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+$font-ui:
+  system-ui,
+  -apple-system,
+  'Segoe UI',
+  Roboto,
+  sans-serif;
 
 $breakpoint-mobile: 768px;
 $breakpoint-tablet: 1024px;

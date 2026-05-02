@@ -9,7 +9,7 @@ jest.mock('../shared/auth', () => {
   const actual = jest.requireActual('../shared/auth');
   return {
     ...actual,
-    requireAuth: jest.fn()
+    requireAuth: jest.fn(),
   };
 });
 
@@ -58,12 +58,12 @@ jest.mock('../shared/ruleSets', () => ({
   MAX_RULE_SET_NAME_LENGTH: 80,
   MAX_RULE_MATCH_VALUE_LENGTH: 200,
   RuleSetValidationError: _RuleSetValidationError,
-  RuleSetVersionConflictError: _RuleSetVersionConflictError
+  RuleSetVersionConflictError: _RuleSetVersionConflictError,
 }));
 
 jest.mock('../shared/users', () => ({
   readUser: jest.fn(),
-  upsertUser: jest.fn()
+  upsertUser: jest.fn(),
 }));
 
 import { AuthError, requireAuth as requireAuthMock } from '../shared/auth';
@@ -76,7 +76,7 @@ import {
   readRuleSet as readRuleSetMock,
   replaceRuleSet as replaceRuleSetMock,
   RuleSetValidationError,
-  RuleSetVersionConflictError
+  RuleSetVersionConflictError,
 } from '../shared/ruleSets';
 import { readUser as readUserMock, upsertUser as upsertUserMock } from '../shared/users';
 import {
@@ -86,12 +86,12 @@ import {
   listPresets,
   listRuleSets,
   postRuleSet,
-  putRuleSet
+  putRuleSet,
 } from './ruleSets';
 import type { TelemetryClient } from 'applicationinsights';
 import {
   __resetTelemetryInitForTesting,
-  __setTelemetryClientForTesting as __setTelemetryClientForTestingT
+  __setTelemetryClientForTesting as __setTelemetryClientForTestingT,
 } from '../shared/telemetry';
 
 // Silence the warn-once that shared/http.ts forbidden() would otherwise
@@ -110,21 +110,23 @@ const replaceRuleSet = replaceRuleSetMock as unknown as jest.Mock;
 const readUser = readUserMock as unknown as jest.Mock;
 const upsertUser = upsertUserMock as unknown as jest.Mock;
 
-function makeRequest(opts: {
-  body?: unknown;
-  params?: Record<string, string>;
-  headers?: Record<string, string>;
-} = {}): HttpRequest {
+function makeRequest(
+  opts: {
+    body?: unknown;
+    params?: Record<string, string>;
+    headers?: Record<string, string>;
+  } = {},
+): HttpRequest {
   const headers = opts.headers ?? {};
   return {
     headers: {
-      get: (name: string) => headers[name] ?? headers[name.toLowerCase()] ?? null
+      get: (name: string) => headers[name] ?? headers[name.toLowerCase()] ?? null,
     },
     params: opts.params ?? {},
     json: async () => {
       if (opts.body === undefined) throw new Error('no body');
       return opts.body;
-    }
+    },
   } as unknown as HttpRequest;
 }
 
@@ -136,7 +138,7 @@ const sampleRule = {
   matchType: 'contains' as const,
   matchValue: 'error',
   caseSensitive: false,
-  style: { backgroundColor: '#ffeb3b' }
+  style: { backgroundColor: '#ffeb3b' },
 };
 
 const sampleSet = {
@@ -146,7 +148,7 @@ const sampleSet = {
   rules: [sampleRule],
   version: 1,
   createdAt: '2026-01-01T00:00:00Z',
-  updatedAt: '2026-01-01T00:00:00Z'
+  updatedAt: '2026-01-01T00:00:00Z',
 };
 
 beforeEach(() => {
@@ -158,10 +160,7 @@ beforeEach(() => {
 describe('POST /api/rule-sets', () => {
   it('returns 401 when unauthenticated', async () => {
     requireAuth.mockRejectedValueOnce(new AuthError('Missing bearer token'));
-    const res = await postRuleSet(
-      makeRequest({ body: { name: 'x', rules: [] } }),
-      ctx
-    );
+    const res = await postRuleSet(makeRequest({ body: { name: 'x', rules: [] } }), ctx);
     expect(res.status).toBe(401);
     expect(createRuleSet).not.toHaveBeenCalled();
   });
@@ -180,7 +179,7 @@ describe('POST /api/rule-sets', () => {
     createRuleSet.mockResolvedValueOnce(sampleSet);
     const res = await postRuleSet(
       makeRequest({ body: { name: 'Errors', rules: [sampleRule] } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(201);
     expect(res.headers).toEqual({ ETag: '"1"' });
@@ -190,12 +189,9 @@ describe('POST /api/rule-sets', () => {
 
   it('returns 409 quota_exceeded when the user already has 20 sets', async () => {
     listRuleSetsByOwner.mockResolvedValueOnce(
-      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` }))
+      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` })),
     );
-    const res = await postRuleSet(
-      makeRequest({ body: { name: 'x', rules: [] } }),
-      ctx
-    );
+    const res = await postRuleSet(makeRequest({ body: { name: 'x', rules: [] } }), ctx);
     expect(res.status).toBe(409);
     const body = res.jsonBody as Record<string, unknown>;
     expect(body['code']).toBe('quota_exceeded');
@@ -204,10 +200,7 @@ describe('POST /api/rule-sets', () => {
 
   it('returns 500 when the create call fails unexpectedly', async () => {
     createRuleSet.mockRejectedValueOnce(new Error('boom'));
-    const res = await postRuleSet(
-      makeRequest({ body: { name: 'x', rules: [] } }),
-      ctx
-    );
+    const res = await postRuleSet(makeRequest({ body: { name: 'x', rules: [] } }), ctx);
     expect(res.status).toBe(500);
   });
 });
@@ -251,7 +244,7 @@ describe('PUT /api/rule-sets/:id', () => {
   it('rejects missing If-Match with 400', async () => {
     const res = await putRuleSet(
       makeRequest({ params: { id: 'rs-1' }, body: { name: 'x', rules: [] } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(400);
     expect((res.jsonBody as Record<string, unknown>)['error']).toMatch(/If-Match/);
@@ -262,9 +255,9 @@ describe('PUT /api/rule-sets/:id', () => {
       makeRequest({
         params: { id: 'rs-1' },
         headers: { 'If-Match': 'W/"3"' },
-        body: { name: 'x', rules: [] }
+        body: { name: 'x', rules: [] },
       }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(400);
   });
@@ -275,9 +268,9 @@ describe('PUT /api/rule-sets/:id', () => {
       makeRequest({
         params: { id: 'rs-1' },
         headers: { 'If-Match': '"99"' },
-        body: { name: 'Renamed', rules: [sampleRule] }
+        body: { name: 'Renamed', rules: [sampleRule] },
       }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(412);
     expect(replaceRuleSet).not.toHaveBeenCalled();
@@ -290,9 +283,9 @@ describe('PUT /api/rule-sets/:id', () => {
       makeRequest({
         params: { id: 'rs-1' },
         headers: { 'If-Match': '"1"' },
-        body: { name: 'Renamed', rules: [sampleRule] }
+        body: { name: 'Renamed', rules: [sampleRule] },
       }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(412);
   });
@@ -303,9 +296,9 @@ describe('PUT /api/rule-sets/:id', () => {
       makeRequest({
         params: { id: 'rs-1' },
         headers: { 'If-Match': '"1"' },
-        body: { name: 'Renamed', rules: [sampleRule] }
+        body: { name: 'Renamed', rules: [sampleRule] },
       }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(403);
     expect(replaceRuleSet).not.toHaveBeenCalled();
@@ -317,19 +310,23 @@ describe('PUT /api/rule-sets/:id', () => {
       ...sampleSet,
       version: 2,
       name: 'Renamed',
-      updatedAt: '2026-01-02T00:00:00Z'
+      updatedAt: '2026-01-02T00:00:00Z',
     });
     const res = await putRuleSet(
       makeRequest({
         params: { id: 'rs-1' },
         headers: { 'If-Match': '"1"' },
-        body: { name: 'Renamed', rules: [sampleRule] }
+        body: { name: 'Renamed', rules: [sampleRule] },
       }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(200);
     expect(res.headers).toEqual({ ETag: '"2"' });
-    expect(replaceRuleSet).toHaveBeenCalledWith(sampleSet, { name: 'Renamed', rules: [sampleRule] }, 1);
+    expect(replaceRuleSet).toHaveBeenCalledWith(
+      sampleSet,
+      { name: 'Renamed', rules: [sampleRule] },
+      1,
+    );
   });
 
   it('returns 400 on RuleSetValidationError from the payload', async () => {
@@ -337,9 +334,9 @@ describe('PUT /api/rule-sets/:id', () => {
       makeRequest({
         params: { id: 'rs-1' },
         headers: { 'If-Match': '"1"' },
-        body: { name: '', rules: [] }
+        body: { name: '', rules: [] },
       }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(400);
     expect(findRuleSetById).not.toHaveBeenCalled();
@@ -352,9 +349,9 @@ describe('PUT /api/rule-sets/:id', () => {
       makeRequest({
         params: { id: 'rs-1' },
         headers: { 'If-Match': '"1"' },
-        body: { name: 'Renamed', rules: [sampleRule] }
+        body: { name: 'Renamed', rules: [sampleRule] },
       }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(400);
   });
@@ -364,9 +361,7 @@ describe('DELETE /api/rule-sets/:id', () => {
   it('returns 404 when the set does not exist', async () => {
     readRuleSet.mockResolvedValueOnce(null);
     findRuleSetById.mockResolvedValueOnce(null);
-    expect(
-      (await deleteRuleSet(makeRequest({ params: { id: 'rs-x' } }), ctx)).status
-    ).toBe(404);
+    expect((await deleteRuleSet(makeRequest({ params: { id: 'rs-x' } }), ctx)).status).toBe(404);
   });
 
   it('returns 403 when another user owns the set', async () => {
@@ -384,7 +379,7 @@ describe('DELETE /api/rule-sets/:id', () => {
       id: 'u-1',
       preferences: { activeRuleSetIds: ['rs-other'] },
       createdAt: 't',
-      updatedAt: 't'
+      updatedAt: 't',
     });
     const res = await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
     expect(res.status).toBe(204);
@@ -398,10 +393,10 @@ describe('DELETE /api/rule-sets/:id', () => {
     readUser.mockResolvedValueOnce({
       id: 'u-1',
       preferences: {
-        activeRuleSetIds: ['rs-other', 'rs-1', 'rs-also']
+        activeRuleSetIds: ['rs-other', 'rs-1', 'rs-also'],
       },
       createdAt: 't',
-      updatedAt: 't'
+      updatedAt: 't',
     });
     upsertUser.mockResolvedValueOnce({});
     await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
@@ -415,10 +410,10 @@ describe('DELETE /api/rule-sets/:id', () => {
     readUser.mockResolvedValueOnce({
       id: 'u-1',
       preferences: {
-        defaultRuleSetIds: ['rs-other', 'rs-1', 'rs-also']
+        defaultRuleSetIds: ['rs-other', 'rs-1', 'rs-also'],
       },
       createdAt: 't',
-      updatedAt: 't'
+      updatedAt: 't',
     });
     upsertUser.mockResolvedValueOnce({});
     await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
@@ -433,10 +428,10 @@ describe('DELETE /api/rule-sets/:id', () => {
     readUser.mockResolvedValueOnce({
       id: 'u-1',
       preferences: {
-        defaultRuleSetId: 'rs-1'
+        defaultRuleSetId: 'rs-1',
       },
       createdAt: 't',
-      updatedAt: 't'
+      updatedAt: 't',
     });
     upsertUser.mockResolvedValueOnce({});
     await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
@@ -454,10 +449,10 @@ describe('DELETE /api/rule-sets/:id', () => {
         // Stored doc has all three shapes - canonical wins.
         defaultRuleSetId: 'rs-stale-singular',
         defaultRuleSetIds: ['rs-stale-array'],
-        activeRuleSetIds: ['rs-other', 'rs-1', 'rs-also']
+        activeRuleSetIds: ['rs-other', 'rs-1', 'rs-also'],
       },
       createdAt: 't',
-      updatedAt: 't'
+      updatedAt: 't',
     });
     upsertUser.mockResolvedValueOnce({});
     await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
@@ -499,7 +494,7 @@ describe('GET /api/rule-set-presets', () => {
       'error-detection',
       'status-codes',
       'null-finder',
-      'status-highlights'
+      'status-highlights',
     ]);
   });
 });
@@ -507,19 +502,13 @@ describe('GET /api/rule-set-presets', () => {
 describe('POST /api/rule-set-presets/:id/clone', () => {
   it('returns 401 when unauthenticated', async () => {
     requireAuth.mockRejectedValueOnce(new AuthError('Missing bearer token'));
-    const res = await clonePreset(
-      makeRequest({ params: { id: 'error-detection' } }),
-      ctx
-    );
+    const res = await clonePreset(makeRequest({ params: { id: 'error-detection' } }), ctx);
     expect(res.status).toBe(401);
     expect(createRuleSet).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the preset id is unknown', async () => {
-    const res = await clonePreset(
-      makeRequest({ params: { id: 'does-not-exist' } }),
-      ctx
-    );
+    const res = await clonePreset(makeRequest({ params: { id: 'does-not-exist' } }), ctx);
     expect(res.status).toBe(404);
     expect(createRuleSet).not.toHaveBeenCalled();
   });
@@ -531,12 +520,9 @@ describe('POST /api/rule-set-presets/:id/clone', () => {
       id: 'rs-clone-1',
       name: preset.name,
       rules: preset.rules,
-      version: 1
+      version: 1,
     });
-    const res = await clonePreset(
-      makeRequest({ params: { id: 'null-finder' } }),
-      ctx
-    );
+    const res = await clonePreset(makeRequest({ params: { id: 'null-finder' } }), ctx);
     expect(res.status).toBe(201);
     expect(res.headers).toEqual({ ETag: '"1"' });
     expect(createRuleSet).toHaveBeenCalledTimes(1);
@@ -549,12 +535,9 @@ describe('POST /api/rule-set-presets/:id/clone', () => {
 
   it('rejects clone with 409 when the user already has 20 sets', async () => {
     listRuleSetsByOwner.mockResolvedValueOnce(
-      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` }))
+      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` })),
     );
-    const res = await clonePreset(
-      makeRequest({ params: { id: 'error-detection' } }),
-      ctx
-    );
+    const res = await clonePreset(makeRequest({ params: { id: 'error-detection' } }), ctx);
     expect(res.status).toBe(409);
     const body = res.jsonBody as Record<string, unknown>;
     expect(body['code']).toBe('quota_exceeded');
@@ -566,12 +549,9 @@ describe('POST /api/rule-set-presets/:id/clone', () => {
       ...sampleSet,
       id: 'rs-clone-2',
       name: 'Error Detection',
-      version: 1
+      version: 1,
     });
-    await clonePreset(
-      makeRequest({ params: { id: 'error-detection' } }),
-      ctx
-    );
+    await clonePreset(makeRequest({ params: { id: 'error-detection' } }), ctx);
     const [, payload] = createRuleSet.mock.calls[0]!;
     // mutating the cloned payload must not change the static preset
     payload.rules[0].matchValue = 'mutated';
@@ -581,10 +561,7 @@ describe('POST /api/rule-set-presets/:id/clone', () => {
 
   it('returns 500 when createRuleSet itself fails', async () => {
     createRuleSet.mockRejectedValueOnce(new Error('cosmos down'));
-    const res = await clonePreset(
-      makeRequest({ params: { id: 'null-finder' } }),
-      ctx
-    );
+    const res = await clonePreset(makeRequest({ params: { id: 'null-finder' } }), ctx);
     expect(res.status).toBe(500);
   });
 });
@@ -610,7 +587,7 @@ describe('access.forbidden telemetry emission from rule-set handlers', () => {
     expect(mockTrackEvent).toHaveBeenCalledWith({
       name: 'access.forbidden',
       properties: { resource: 'ruleSet', authMode: 'required' },
-      measurements: undefined
+      measurements: undefined,
     });
   });
 
@@ -622,7 +599,7 @@ describe('access.forbidden telemetry emission from rule-set handlers', () => {
     expect(mockTrackEvent).toHaveBeenCalledWith({
       name: 'access.forbidden',
       properties: { resource: 'ruleSet', authMode: 'required' },
-      measurements: undefined
+      measurements: undefined,
     });
   });
 });
@@ -643,35 +620,29 @@ describe('quota.exceeded telemetry emission from rule-set handlers', () => {
 
   it('postRuleSet emits resource=ruleSet, via=create with count and limit', async () => {
     listRuleSetsByOwner.mockResolvedValueOnce(
-      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` }))
+      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` })),
     );
-    const res = await postRuleSet(
-      makeRequest({ body: { name: 'x', rules: [] } }),
-      ctx
-    );
+    const res = await postRuleSet(makeRequest({ body: { name: 'x', rules: [] } }), ctx);
     expect(res.status).toBe(409);
     expect(mockTrackEvent).toHaveBeenCalledTimes(1);
     expect(mockTrackEvent).toHaveBeenCalledWith({
       name: 'quota.exceeded',
       properties: { resource: 'ruleSet', authMode: 'required', via: 'create' },
-      measurements: { count: 20, limit: 20 }
+      measurements: { count: 20, limit: 20 },
     });
   });
 
   it('clonePreset emits resource=ruleSet, via=clone with count and limit', async () => {
     listRuleSetsByOwner.mockResolvedValueOnce(
-      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` }))
+      Array.from({ length: 20 }, (_, i) => ({ ...sampleSet, id: `rs-${i}` })),
     );
-    const res = await clonePreset(
-      makeRequest({ params: { id: 'error-detection' } }),
-      ctx
-    );
+    const res = await clonePreset(makeRequest({ params: { id: 'error-detection' } }), ctx);
     expect(res.status).toBe(409);
     expect(mockTrackEvent).toHaveBeenCalledTimes(1);
     expect(mockTrackEvent).toHaveBeenCalledWith({
       name: 'quota.exceeded',
       properties: { resource: 'ruleSet', authMode: 'required', via: 'clone' },
-      measurements: { count: 20, limit: 20 }
+      measurements: { count: 20, limit: 20 },
     });
   });
 });

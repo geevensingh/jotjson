@@ -6,12 +6,9 @@ import {
   internalError,
   notFound,
   quotaExceeded,
-  unauthorized
+  unauthorized,
 } from './http';
-import {
-  __resetTelemetryInitForTesting,
-  __setTelemetryClientForTesting
-} from './telemetry';
+import { __resetTelemetryInitForTesting, __setTelemetryClientForTesting } from './telemetry';
 
 describe('shared/http response helpers', () => {
   it('unauthorized returns status 401 with the provided message', () => {
@@ -58,7 +55,7 @@ describe('shared/http response helpers', () => {
       expect(mockTrackEvent).toHaveBeenCalledWith({
         name: 'access.forbidden',
         properties: { resource: 'blob', authMode: 'required' },
-        measurements: undefined
+        measurements: undefined,
       });
     });
 
@@ -68,7 +65,7 @@ describe('shared/http response helpers', () => {
       expect(mockTrackEvent).toHaveBeenCalledWith({
         name: 'access.forbidden',
         properties: { resource: 'ruleSet', authMode: 'required' },
-        measurements: undefined
+        measurements: undefined,
       });
     });
 
@@ -98,12 +95,12 @@ describe('shared/http response helpers', () => {
         resource: 'blob',
         via: 'create',
         count: 100,
-        limit: 100
+        limit: 100,
       });
       expect(result.status).toBe(409);
       expect(result.jsonBody).toEqual({
         error: 'Blob quota of 100 reached',
-        code: 'quota_exceeded'
+        code: 'quota_exceeded',
       });
     });
 
@@ -112,13 +109,13 @@ describe('shared/http response helpers', () => {
         resource: 'blob',
         via: 'create',
         count: 100,
-        limit: 100
+        limit: 100,
       });
       expect(mockTrackEvent).toHaveBeenCalledTimes(1);
       expect(mockTrackEvent).toHaveBeenCalledWith({
         name: 'quota.exceeded',
         properties: { resource: 'blob', authMode: 'required', via: 'create' },
-        measurements: { count: 100, limit: 100 }
+        measurements: { count: 100, limit: 100 },
       });
     });
 
@@ -127,13 +124,13 @@ describe('shared/http response helpers', () => {
         resource: 'ruleSet',
         via: 'create',
         count: 20,
-        limit: 20
+        limit: 20,
       });
       expect(mockTrackEvent).toHaveBeenCalledTimes(1);
       expect(mockTrackEvent).toHaveBeenCalledWith({
         name: 'quota.exceeded',
         properties: { resource: 'ruleSet', authMode: 'required', via: 'create' },
-        measurements: { count: 20, limit: 20 }
+        measurements: { count: 20, limit: 20 },
       });
     });
 
@@ -142,13 +139,13 @@ describe('shared/http response helpers', () => {
         resource: 'ruleSet',
         via: 'clone',
         count: 20,
-        limit: 20
+        limit: 20,
       });
       expect(mockTrackEvent).toHaveBeenCalledTimes(1);
       expect(mockTrackEvent).toHaveBeenCalledWith({
         name: 'quota.exceeded',
         properties: { resource: 'ruleSet', authMode: 'required', via: 'clone' },
-        measurements: { count: 20, limit: 20 }
+        measurements: { count: 20, limit: 20 },
       });
     });
 
@@ -159,12 +156,12 @@ describe('shared/http response helpers', () => {
         resource: 'blob',
         via: 'create',
         count: 105,
-        limit: 100
+        limit: 100,
       });
       expect(mockTrackEvent).toHaveBeenCalledWith({
         name: 'quota.exceeded',
         properties: { resource: 'blob', authMode: 'required', via: 'create' },
-        measurements: { count: 105, limit: 100 }
+        measurements: { count: 105, limit: 100 },
       });
     });
 

@@ -6,11 +6,7 @@ import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testin
 import { AuthService } from '../../../core/auth/auth.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
-import type {
-  FormattingRule,
-  FormattingRuleSet,
-  RuleSetPreset
-} from '../../../core/api/models';
+import type { FormattingRule, FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar.component';
 import { ClonePresetDialogComponent } from './clone-preset-dialog.component';
 
@@ -23,7 +19,7 @@ function rule(id: string, target: FormattingRule['target'] = 'key'): FormattingR
     matchType: 'contains',
     matchValue: 'x',
     caseSensitive: false,
-    style: {}
+    style: {},
   };
 }
 
@@ -36,7 +32,7 @@ function makeSet(over: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
     version: 1,
     createdAt: '2026-04-27T00:00:00Z',
     updatedAt: '2026-04-27T00:00:00Z',
-    ...over
+    ...over,
   };
 }
 
@@ -45,7 +41,7 @@ function makePreset(over: Partial<RuleSetPreset> = {}): RuleSetPreset {
     id: 'preset-' + (over.id ?? Math.random().toString(36).slice(2, 8)),
     name: 'Preset',
     rules: [rule('r1')],
-    ...over
+    ...over,
   };
 }
 
@@ -56,9 +52,11 @@ function makePreset(over: Partial<RuleSetPreset> = {}): RuleSetPreset {
  */
 function setCache(sets: FormattingRuleSet[] | null): void {
   const ruleSets = TestBed.inject(RuleSetsService);
-  (ruleSets as unknown as {
-    _serverSnapshot: { set(v: FormattingRuleSet[] | null): void };
-  })._serverSnapshot.set(sets);
+  (
+    ruleSets as unknown as {
+      _serverSnapshot: { set(v: FormattingRuleSet[] | null): void };
+    }
+  )._serverSnapshot.set(sets);
 }
 
 describe('RuleSetsToolbarComponent', () => {
@@ -75,8 +73,8 @@ describe('RuleSetsToolbarComponent', () => {
       providers: [
         ...provideFakeAuth(),
         { provide: MatDialog, useValue: dialogStub },
-        { provide: MatSnackBar, useValue: snackStub }
-      ]
+        { provide: MatSnackBar, useValue: snackStub },
+      ],
     });
   });
 
@@ -125,10 +123,7 @@ describe('RuleSetsToolbarComponent', () => {
     });
 
     it('renders one chip per cached rule set, sorted by name', () => {
-      setCache([
-        makeSet({ id: 'b', name: 'Beta' }),
-        makeSet({ id: 'a', name: 'Alpha' })
-      ]);
+      setCache([makeSet({ id: 'b', name: 'Beta' }), makeSet({ id: 'a', name: 'Alpha' })]);
       const fixture = render();
       const chips = (fixture.nativeElement as HTMLElement).querySelectorAll('.chip');
       expect(chips.length).toBe(2);
@@ -143,10 +138,10 @@ describe('RuleSetsToolbarComponent', () => {
 
       const fixture = render();
       const a = (fixture.nativeElement as HTMLElement).querySelector(
-        '.chip[data-set-id="a"]'
+        '.chip[data-set-id="a"]',
       ) as HTMLButtonElement;
       const b = (fixture.nativeElement as HTMLElement).querySelector(
-        '.chip[data-set-id="b"]'
+        '.chip[data-set-id="b"]',
       ) as HTMLButtonElement;
       expect(a.classList.contains('chip--active')).toBe(true);
       expect(a.getAttribute('aria-pressed')).toBe('true');
@@ -160,7 +155,7 @@ describe('RuleSetsToolbarComponent', () => {
       const fixture = render();
 
       const chip = (fixture.nativeElement as HTMLElement).querySelector(
-        '.chip[data-set-id="a"]'
+        '.chip[data-set-id="a"]',
       ) as HTMLButtonElement;
       chip.click();
       expect(prefs.prefs().activeRuleSetIds).toEqual(['a']);
@@ -172,9 +167,7 @@ describe('RuleSetsToolbarComponent', () => {
     it('shows the empty state when the user has no rule sets', () => {
       setCache([]);
       const fixture = render();
-      const empty = (fixture.nativeElement as HTMLElement).querySelector(
-        '.status--empty'
-      );
+      const empty = (fixture.nativeElement as HTMLElement).querySelector('.status--empty');
       expect(empty?.textContent?.trim()).toContain('No formatting rules yet');
     });
 
@@ -182,7 +175,7 @@ describe('RuleSetsToolbarComponent', () => {
       setCache([]);
       const fixture = render();
       const trigger = (fixture.nativeElement as HTMLElement).querySelector(
-        '[data-testid="clone-preset-trigger"]'
+        '[data-testid="clone-preset-trigger"]',
       );
       expect(trigger).not.toBeNull();
     });
@@ -190,13 +183,13 @@ describe('RuleSetsToolbarComponent', () => {
     it('opens the clone-preset dialog when the trigger is clicked', () => {
       setCache([]);
       const ref = {
-        afterClosed: () => of(undefined)
+        afterClosed: () => of(undefined),
       } as unknown as MatDialogRef<ClonePresetDialogComponent>;
       dialogStub.open.and.returnValue(ref);
 
       const fixture = render();
       const trigger = (fixture.nativeElement as HTMLElement).querySelector(
-        '[data-testid="clone-preset-trigger"]'
+        '[data-testid="clone-preset-trigger"]',
       ) as HTMLButtonElement;
       trigger.click();
 
@@ -214,7 +207,7 @@ describe('RuleSetsToolbarComponent', () => {
 
       const preset = makePreset({ id: 'p1', name: 'Error detection' });
       const ref = {
-        afterClosed: () => of({ preset, cloned })
+        afterClosed: () => of({ preset, cloned }),
       } as unknown as MatDialogRef<ClonePresetDialogComponent>;
       dialogStub.open.and.returnValue(ref);
 
@@ -226,7 +219,7 @@ describe('RuleSetsToolbarComponent', () => {
 
       const fixture = render();
       const trigger = (fixture.nativeElement as HTMLElement).querySelector(
-        '[data-testid="clone-preset-trigger"]'
+        '[data-testid="clone-preset-trigger"]',
       ) as HTMLButtonElement;
       trigger.click();
       tick();
@@ -244,13 +237,13 @@ describe('RuleSetsToolbarComponent', () => {
       const setDefaultsSpy = spyOn(ruleSets, 'setActives');
 
       const ref = {
-        afterClosed: () => of(undefined)
+        afterClosed: () => of(undefined),
       } as unknown as MatDialogRef<ClonePresetDialogComponent>;
       dialogStub.open.and.returnValue(ref);
 
       const fixture = render();
       const trigger = (fixture.nativeElement as HTMLElement).querySelector(
-        '[data-testid="clone-preset-trigger"]'
+        '[data-testid="clone-preset-trigger"]',
       ) as HTMLButtonElement;
       trigger.click();
       tick();

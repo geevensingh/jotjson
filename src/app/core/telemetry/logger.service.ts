@@ -1,15 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 import { msalBridge } from './msal-bridge';
-import {
-  HttpErrorContext,
-  NormalizedError,
-  normalizeError
-} from './normalize-error';
+import { HttpErrorContext, NormalizedError, normalizeError } from './normalize-error';
 import {
   TelemetryService,
   TelemetryMeasurements,
   TelemetryProps,
-  TelemetrySeverity
+  TelemetrySeverity,
 } from './telemetry.service';
 import { TelemetryMessageId } from './telemetry-message-ids';
 
@@ -105,18 +101,17 @@ export class LoggerService {
     messageId: TelemetryMessageId,
     cause: unknown | null,
     props?: TelemetryProps,
-    httpCtx?: HttpErrorContext
+    httpCtx?: HttpErrorContext,
   ): void {
-    const normalized = cause === null || cause === undefined
-      ? undefined
-      : normalizeError(cause, httpCtx);
+    const normalized =
+      cause === null || cause === undefined ? undefined : normalizeError(cause, httpCtx);
     this.consoleMirror('error', messageId, props, normalized);
     this.handle({
       ts: Date.now(),
       severity: 'error',
       messageId,
       props,
-      error: normalized
+      error: normalized,
     });
   }
 
@@ -137,7 +132,7 @@ export class LoggerService {
   event(
     messageId: TelemetryMessageId,
     props?: TelemetryProps,
-    measurements?: TelemetryMeasurements
+    measurements?: TelemetryMeasurements,
   ): void {
     this.consoleMirrorEvent(messageId, props, measurements);
     this.handle({
@@ -146,7 +141,7 @@ export class LoggerService {
       kind: 'event',
       messageId,
       props,
-      measurements
+      measurements,
     });
   }
 
@@ -169,18 +164,14 @@ export class LoggerService {
   private dispatch(entry: PendingEntry): void {
     try {
       if (entry.kind === 'event') {
-        this.telemetry.trackEvent(
-          entry.messageId,
-          entry.props,
-          entry.measurements
-        );
+        this.telemetry.trackEvent(entry.messageId, entry.props, entry.measurements);
         return;
       }
       const severity = this.toSdkSeverity(entry.severity);
       if (entry.severity === 'error' && entry.error) {
         this.telemetry.trackException(entry.error, {
           ...entry.props,
-          messageId: entry.messageId
+          messageId: entry.messageId,
         });
       } else {
         this.telemetry.trackTrace(entry.messageId, severity, entry.props);
@@ -206,14 +197,11 @@ export class LoggerService {
     severity: Severity,
     messageId: TelemetryMessageId,
     props?: TelemetryProps,
-    error?: NormalizedError
+    error?: NormalizedError,
   ): void {
     // eslint-disable-next-line no-console
-    const fn = severity === 'error'
-      ? console.error
-      : severity === 'warn'
-        ? console.warn
-        : console.info;
+    const fn =
+      severity === 'error' ? console.error : severity === 'warn' ? console.warn : console.info;
     if (error) {
       fn(`[${messageId}]`, props ?? {}, error);
     } else {
@@ -224,7 +212,7 @@ export class LoggerService {
   private consoleMirrorEvent(
     messageId: TelemetryMessageId,
     props?: TelemetryProps,
-    measurements?: TelemetryMeasurements
+    measurements?: TelemetryMeasurements,
   ): void {
     // eslint-disable-next-line no-console
     console.info(`[event:${messageId}]`, props ?? {}, measurements ?? {});
@@ -242,9 +230,9 @@ export class LoggerService {
         {
           kind: 'error',
           name: parsed.name ?? 'BootError',
-          message: parsed.message ?? '<no message>'
+          message: parsed.message ?? '<no message>',
         },
-        { messageId: 'boot.failed' }
+        { messageId: 'boot.failed' },
       );
     } catch {
       // ignore

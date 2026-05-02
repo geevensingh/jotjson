@@ -17,6 +17,6 @@ export const armTemplateStrategy: SuggestionStrategy = (input) => {
   return {
     value: $localize`:@@toolbar.titleSuggestion.shape.armTemplate:ARM template`,
     source: 'armTemplate',
-    confidence: 85
+    confidence: 85,
   };
 };

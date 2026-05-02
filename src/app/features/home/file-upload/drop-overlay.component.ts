@@ -14,60 +14,58 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     role: 'status',
-    'aria-live': 'polite'
+    'aria-live': 'polite',
   },
   template: `
-    <div
-      class="drop-overlay"
-      [class.drop-overlay--visible]="visible()"
-    >
+    <div class="drop-overlay" [class.drop-overlay--visible]="visible()">
       <div class="drop-overlay__card">
-        <span
-          class="drop-overlay__message"
-          i18n="@@home.upload.dropOverlay.message"
-        >Drop JSON file here</span>
+        <span class="drop-overlay__message" i18n="@@home.upload.dropOverlay.message"
+          >Drop JSON file here</span
+        >
       </div>
     </div>
   `,
-  styles: [`
-    :host {
-      display: contents;
-    }
+  styles: [
+    `
+      :host {
+        display: contents;
+      }
 
-    .drop-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-      opacity: 0;
-      visibility: hidden;
-      background: rgba(0, 0, 0, 0.35);
-      transition: opacity 120ms ease-out;
-    }
+      .drop-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        background: rgba(0, 0, 0, 0.35);
+        transition: opacity 120ms ease-out;
+      }
 
-    .drop-overlay--visible {
-      opacity: 1;
-      visibility: visible;
-    }
+      .drop-overlay--visible {
+        opacity: 1;
+        visibility: visible;
+      }
 
-    .drop-overlay__card {
-      padding: 2.5rem 3.5rem;
-      border: 3px dashed var(--mat-sys-primary);
-      border-radius: 12px;
-      background: var(--mat-sys-surface-container);
-      color: var(--mat-sys-on-surface);
-      text-align: center;
-    }
+      .drop-overlay__card {
+        padding: 2.5rem 3.5rem;
+        border: 3px dashed var(--mat-sys-primary);
+        border-radius: 12px;
+        background: var(--mat-sys-surface-container);
+        color: var(--mat-sys-on-surface);
+        text-align: center;
+      }
 
-    .drop-overlay__message {
-      font-size: 1.5rem;
-      font-weight: 500;
-      color: var(--mat-sys-on-surface);
-    }
-  `]
+      .drop-overlay__message {
+        font-size: 1.5rem;
+        font-weight: 500;
+        color: var(--mat-sys-on-surface);
+      }
+    `,
+  ],
 })
 export class DropOverlayComponent {
   readonly visible = input.required<boolean>();

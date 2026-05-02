@@ -152,7 +152,7 @@ const DEFAULT_TREE_DATE_ANNOTATION_UNITS: TreeDateAnnotationUnits = {
   day: true,
   hour: true,
   minute: true,
-  second: true
+  second: true,
 };
 
 function defaultTreeDateAnnotationUnits(): TreeDateAnnotationUnits {
@@ -191,15 +191,15 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
       selectionColor: '#264f78',
       matchingValueColor: '#3e3d32',
       ancestorColor: '#2a2d2e',
-      searchHighlightColor: '#6a4c00'
+      searchHighlightColor: '#6a4c00',
     },
     light: {
       selectionColor: '#cce4f7',
       matchingValueColor: '#fff4cc',
       ancestorColor: '#ececec',
-      searchHighlightColor: '#ffe082'
-    }
-  }
+      searchHighlightColor: '#ffe082',
+    },
+  },
 };
 
 export class PreferenceValidationError extends Error {
@@ -213,8 +213,15 @@ export class PreferenceValidationError extends Error {
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 const THEMES: readonly UserPreferences['theme'][] = ['dark', 'light', 'system'] as const;
-const LAYOUTS: readonly UserPreferences['layoutOrientation'][] = ['horizontal', 'vertical'] as const;
-const SEARCH_SCOPES: readonly UserPreferences['searchScope'][] = ['keys', 'values', 'both'] as const;
+const LAYOUTS: readonly UserPreferences['layoutOrientation'][] = [
+  'horizontal',
+  'vertical',
+] as const;
+const SEARCH_SCOPES: readonly UserPreferences['searchScope'][] = [
+  'keys',
+  'values',
+  'both',
+] as const;
 const SEARCH_VALUE_TYPES: readonly UserPreferences['searchValueType'][] = [
   'all',
   'date',
@@ -231,17 +238,17 @@ const SEARCH_VALUE_TYPES: readonly UserPreferences['searchValueType'][] = [
   'boolean',
   'null',
   'array',
-  'object'
+  'object',
 ] as const;
 const QUOTA_STRATEGIES: readonly UserPreferences['blobQuotaStrategy'][] = [
   'auto_fifo',
-  'manual'
+  'manual',
 ] as const;
 const TREE_PATH_ROOTS: readonly UserPreferences['treePathRoot'][] = [
   'jsonpath',
   'none',
   'root',
-  'data'
+  'data',
 ] as const;
 const ANNOTATION_UNIT_KEYS: readonly (keyof TreeDateAnnotationUnits)[] = [
   'year',
@@ -249,7 +256,7 @@ const ANNOTATION_UNIT_KEYS: readonly (keyof TreeDateAnnotationUnits)[] = [
   'day',
   'hour',
   'minute',
-  'second'
+  'second',
 ] as const;
 
 /**
@@ -286,14 +293,14 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'seenBlobQuotaModal',
   'seenClipboardBanner',
   'treePathRoot',
-  'treeHighlightColors'
+  'treeHighlightColors',
 ] as const;
 
 const COLOR_SET_KEYS: readonly (keyof ThemeColorSet)[] = [
   'selectionColor',
   'matchingValueColor',
   'ancestorColor',
-  'searchHighlightColor'
+  'searchHighlightColor',
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -312,9 +319,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * read-time validation failure must never break `GET /api/me`. We only
  * patch the fields that changed shape.
  */
-export function normalizeStoredPreferences(
-  prefs: UserPreferences
-): UserPreferences {
+export function normalizeStoredPreferences(prefs: UserPreferences): UserPreferences {
   // Stored docs may include a legacy `historyTrackingMode` key that's
   // not part of the current `UserPreferences` shape. Use an extended
   // view to read and then strip it.
@@ -340,9 +345,7 @@ export function normalizeStoredPreferences(
     // matches DEFAULT_PREFERENCES.
     view.treeShowComments = true;
   }
-  view.treeDateAnnotationUnits = normalizeStoredAnnotationUnits(
-    view.treeDateAnnotationUnits
-  );
+  view.treeDateAnnotationUnits = normalizeStoredAnnotationUnits(view.treeDateAnnotationUnits);
   delete view.historyTrackingMode;
   // Stored docs written before issue #83 had `defaultRuleSetIds` (the
   // M6f-5 name) or, even earlier, the singular `defaultRuleSetId`.
@@ -374,24 +377,16 @@ export function normalizeStoredPreferences(
   return view;
 }
 
-function assertEnum<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-  field: string
-): T {
+function assertEnum<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
   if (typeof value !== 'string' || !(allowed as readonly string[]).includes(value)) {
-    throw new PreferenceValidationError(
-      `${field} must be one of ${allowed.join(', ')}`
-    );
+    throw new PreferenceValidationError(`${field} must be one of ${allowed.join(', ')}`);
   }
   return value as T;
 }
 
 function assertInt(value: unknown, field: string, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
-    throw new PreferenceValidationError(
-      `${field} must be an integer between ${min} and ${max}`
-    );
+    throw new PreferenceValidationError(`${field} must be an integer between ${min} and ${max}`);
   }
   return value;
 }
@@ -420,7 +415,7 @@ function normalizeStoredAnnotationUnits(input: unknown): TreeDateAnnotationUnits
     day: typeof input['day'] === 'boolean' ? input['day'] : true,
     hour: typeof input['hour'] === 'boolean' ? input['hour'] : true,
     minute: typeof input['minute'] === 'boolean' ? input['minute'] : true,
-    second: typeof input['second'] === 'boolean' ? input['second'] : true
+    second: typeof input['second'] === 'boolean' ? input['second'] : true,
   };
 }
 
@@ -439,7 +434,7 @@ function normalizeAnnotationUnits(input: unknown, field: string): TreeDateAnnota
     day: assertBool(input['day'], `${field}.day`),
     hour: assertBool(input['hour'], `${field}.hour`),
     minute: assertBool(input['minute'], `${field}.minute`),
-    second: assertBool(input['second'], `${field}.second`)
+    second: assertBool(input['second'], `${field}.second`),
   };
 }
 
@@ -456,7 +451,7 @@ function normalizeColorSet(input: unknown, field: string): ThemeColorSet {
     selectionColor: assertHex(input['selectionColor'], `${field}.selectionColor`),
     matchingValueColor: assertHex(input['matchingValueColor'], `${field}.matchingValueColor`),
     ancestorColor: assertHex(input['ancestorColor'], `${field}.ancestorColor`),
-    searchHighlightColor: assertHex(input['searchHighlightColor'], `${field}.searchHighlightColor`)
+    searchHighlightColor: assertHex(input['searchHighlightColor'], `${field}.searchHighlightColor`),
   };
 }
 
@@ -486,9 +481,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
   }
   for (const key of Object.keys(colors)) {
     if (key !== 'dark' && key !== 'light') {
-      throw new PreferenceValidationError(
-        `treeHighlightColors has unknown field "${key}"`
-      );
+      throw new PreferenceValidationError(`treeHighlightColors has unknown field "${key}"`);
     }
   }
 
@@ -498,7 +491,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     editorTabSize: (assertEnum(
       String(raw['editorTabSize']),
       ['2', '4'] as const,
-      'editorTabSize'
+      'editorTabSize',
     ) === '2'
       ? 2
       : 4) as UserPreferences['editorTabSize'],
@@ -506,7 +499,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
       raw['defaultTreeExpansionDepth'],
       'defaultTreeExpansionDepth',
       0,
-      10
+      10,
     ),
     editorWordWrap: assertBool(raw['editorWordWrap'], 'editorWordWrap'),
     layoutOrientation: assertEnum(raw['layoutOrientation'], LAYOUTS, 'layoutOrientation'),
@@ -516,28 +509,22 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     treeShowComments: assertBool(raw['treeShowComments'], 'treeShowComments'),
     treeDateAnnotationUnits: normalizeAnnotationUnits(
       raw['treeDateAnnotationUnits'],
-      'treeDateAnnotationUnits'
+      'treeDateAnnotationUnits',
     ),
     treeDateAnnotationFriendlyForms: assertBool(
       raw['treeDateAnnotationFriendlyForms'],
-      'treeDateAnnotationFriendlyForms'
+      'treeDateAnnotationFriendlyForms',
     ),
     treeAssumeUtcForIsoDateTime: assertBool(
       raw['treeAssumeUtcForIsoDateTime'],
-      'treeAssumeUtcForIsoDateTime'
+      'treeAssumeUtcForIsoDateTime',
     ),
     treeAssumeUtcForIsoDateOnly: assertBool(
       raw['treeAssumeUtcForIsoDateOnly'],
-      'treeAssumeUtcForIsoDateOnly'
+      'treeAssumeUtcForIsoDateOnly',
     ),
-    recentlyViewedEnabled: assertBool(
-      raw['recentlyViewedEnabled'],
-      'recentlyViewedEnabled'
-    ),
-    treeEditorSelectionSync: assertBool(
-      raw['treeEditorSelectionSync'],
-      'treeEditorSelectionSync'
-    ),
+    recentlyViewedEnabled: assertBool(raw['recentlyViewedEnabled'], 'recentlyViewedEnabled'),
+    treeEditorSelectionSync: assertBool(raw['treeEditorSelectionSync'], 'treeEditorSelectionSync'),
     treeAutoFitToWindow:
       raw['treeAutoFitToWindow'] !== undefined
         ? assertBool(raw['treeAutoFitToWindow'], 'treeAutoFitToWindow')
@@ -545,24 +532,16 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     searchCaseSensitive: assertBool(raw['searchCaseSensitive'], 'searchCaseSensitive'),
     searchRegexMode: assertBool(raw['searchRegexMode'], 'searchRegexMode'),
     searchScope: assertEnum(raw['searchScope'], SEARCH_SCOPES, 'searchScope'),
-    searchValueType: assertEnum(
-      raw['searchValueType'],
-      SEARCH_VALUE_TYPES,
-      'searchValueType'
-    ),
-    blobQuotaStrategy: assertEnum(
-      raw['blobQuotaStrategy'],
-      QUOTA_STRATEGIES,
-      'blobQuotaStrategy'
-    ),
+    searchValueType: assertEnum(raw['searchValueType'], SEARCH_VALUE_TYPES, 'searchValueType'),
+    blobQuotaStrategy: assertEnum(raw['blobQuotaStrategy'], QUOTA_STRATEGIES, 'blobQuotaStrategy'),
     seenBlobQuotaModal: assertBool(raw['seenBlobQuotaModal'], 'seenBlobQuotaModal'),
     seenClipboardBanner: assertBool(raw['seenClipboardBanner'], 'seenClipboardBanner'),
     treePathRoot: assertEnum(raw['treePathRoot'], TREE_PATH_ROOTS, 'treePathRoot'),
     treeHighlightColors: {
       dark: normalizeColorSet(colors['dark'], 'treeHighlightColors.dark'),
-      light: normalizeColorSet(colors['light'], 'treeHighlightColors.light')
+      light: normalizeColorSet(colors['light'], 'treeHighlightColors.light'),
     },
-    activeRuleSetIds: normalizeActiveRuleSetIds(raw)
+    activeRuleSetIds: normalizeActiveRuleSetIds(raw),
   };
 
   return normalized;
@@ -583,9 +562,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
 function normalizeActiveRuleSetIds(raw: Record<string, unknown>): string[] {
   const source = raw['activeRuleSetIds'] ?? [];
   if (!Array.isArray(source)) {
-    throw new PreferenceValidationError(
-      'activeRuleSetIds must be an array of strings'
-    );
+    throw new PreferenceValidationError('activeRuleSetIds must be an array of strings');
   }
   if (source.length > 32) {
     throw new PreferenceValidationError('activeRuleSetIds has too many entries');
@@ -594,9 +571,7 @@ function normalizeActiveRuleSetIds(raw: Record<string, unknown>): string[] {
   const result: string[] = [];
   for (const entry of source) {
     if (typeof entry !== 'string' || entry.length === 0) {
-      throw new PreferenceValidationError(
-        'activeRuleSetIds entries must be non-empty strings'
-      );
+      throw new PreferenceValidationError('activeRuleSetIds entries must be non-empty strings');
     }
     if (entry.length > 64) {
       throw new PreferenceValidationError('activeRuleSetIds entry is too long');

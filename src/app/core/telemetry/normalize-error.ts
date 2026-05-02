@@ -54,10 +54,7 @@ export function sanitizePath(rawUrl: string | null | undefined): string | undefi
   return rawUrl.slice(0, end);
 }
 
-export function normalizeError(
-  error: unknown,
-  ctx?: HttpErrorContext
-): NormalizedError {
+export function normalizeError(error: unknown, ctx?: HttpErrorContext): NormalizedError {
   if (error instanceof HttpErrorResponse) {
     let backendCode: string | undefined;
     const body = error.error as unknown;
@@ -74,7 +71,7 @@ export function normalizeError(
       statusText: error.statusText || undefined,
       method: ctx?.method,
       pathTemplate: ctx?.pathTemplate ?? sanitizePath(error.url ?? undefined),
-      backendCode
+      backendCode,
     };
   }
 
@@ -83,16 +80,15 @@ export function normalizeError(
       kind: 'error',
       name: error.name || 'Error',
       message: redactPii(truncate(error.message ?? '', MAX_MESSAGE)),
-      stack: error.stack
-        ? redactPii(truncate(error.stack, MAX_STACK))
-        : undefined
+      stack: error.stack ? redactPii(truncate(error.stack, MAX_STACK)) : undefined,
     };
   }
 
   return {
     kind: 'unknown',
-    repr: typeof error === 'string'
-      ? redactPii(truncate(error, MAX_MESSAGE))
-      : `<non-error thrown: ${typeof error}>`
+    repr:
+      typeof error === 'string'
+        ? redactPii(truncate(error, MAX_MESSAGE))
+        : `<non-error thrown: ${typeof error}>`,
   };
 }

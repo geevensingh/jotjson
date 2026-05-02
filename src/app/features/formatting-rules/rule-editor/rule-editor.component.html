@@ -10,23 +10,19 @@
   </header>
 
   @if (loadState() === 'loading') {
-    <p class="status" aria-busy="true" i18n="@@ruleEditor.loading">
-      Loading rule set...
-    </p>
+    <p class="status" aria-busy="true" i18n="@@ruleEditor.loading"> Loading rule set... </p>
   } @else if (loadState() === 'error') {
     <p class="status status-error" i18n="@@ruleEditor.loadError">
       Could not load this rule set. Please try again later.
     </p>
   } @else if (loadState() === 'not_found') {
-    <p class="status status-error" i18n="@@ruleEditor.notFoundInline">
-      Rule set not found.
-    </p>
+    <p class="status status-error" i18n="@@ruleEditor.notFoundInline"> Rule set not found. </p>
   } @else if (editable(); as set) {
     @if (conflict()) {
       <div class="conflict-banner" role="alert" data-testid="conflict-banner">
         <p class="conflict-message" i18n="@@ruleEditor.conflict.message">
-          This rule set was changed in another tab. Reload to discard
-          your in-progress changes and continue.
+          This rule set was changed in another tab. Reload to discard your in-progress changes and
+          continue.
         </p>
         <button
           mat-flat-button
@@ -64,11 +60,7 @@
           (input)="setName($any($event.target).value)"
           aria-describedby="rule-set-name-help"
         />
-        <p
-          id="rule-set-name-help"
-          class="name-help"
-          i18n="@@ruleEditor.nameHelp"
-        >
+        <p id="rule-set-name-help" class="name-help" i18n="@@ruleEditor.nameHelp">
           Up to 80 characters.
         </p>
       </div>
@@ -76,9 +68,7 @@
       <div class="status-row" data-testid="status-pill">
         @switch (pillState().kind) {
           @case ('reloading') {
-            <span class="pill pill-info" i18n="@@ruleEditor.pill.reloading"
-              >Reloading...</span
-            >
+            <span class="pill pill-info" i18n="@@ruleEditor.pill.reloading">Reloading...</span>
           }
           @case ('invalid') {
             <span
@@ -89,9 +79,7 @@
             >
           }
           @case ('saving') {
-            <span class="pill pill-info" i18n="@@ruleEditor.pill.saving"
-              >Saving...</span
-            >
+            <span class="pill pill-info" i18n="@@ruleEditor.pill.saving">Saving...</span>
           }
           @case ('error') {
             <button
@@ -106,9 +94,7 @@
             </button>
           }
           @case ('saved') {
-            <span class="pill pill-ok" i18n="@@ruleEditor.pill.saved"
-              >Saved</span
-            >
+            <span class="pill pill-ok" i18n="@@ruleEditor.pill.saved">Saved</span>
           }
           @case ('savedOffline') {
             <span
@@ -120,14 +106,10 @@
             >
           }
           @case ('editing') {
-            <span class="pill pill-info" i18n="@@ruleEditor.pill.editing"
-              >Editing</span
-            >
+            <span class="pill pill-info" i18n="@@ruleEditor.pill.editing">Editing</span>
           }
           @case ('idle') {
-            <span class="pill pill-idle" i18n="@@ruleEditor.pill.idle"
-              >All saved</span
-            >
+            <span class="pill pill-idle" i18n="@@ruleEditor.pill.idle">All saved</span>
           }
         }
       </div>
@@ -135,9 +117,7 @@
 
     <section class="rules-card" aria-labelledby="rules-list-heading">
       <div class="rules-header">
-        <h2 id="rules-list-heading" i18n="@@ruleEditor.rulesHeading">
-          Rules
-        </h2>
+        <h2 id="rules-list-heading" i18n="@@ruleEditor.rulesHeading"> Rules </h2>
         <button
           mat-stroked-button
           type="button"
@@ -203,9 +183,7 @@
 
             <div class="rule-grid">
               <div class="rule-field">
-                <label
-                  [attr.for]="'target-' + rule.id"
-                  i18n="@@ruleEditor.targetLabel"
+                <label [attr.for]="'target-' + rule.id" i18n="@@ruleEditor.targetLabel"
                   >Target</label
                 >
                 <mat-button-toggle-group
@@ -218,23 +196,17 @@
                   <mat-button-toggle value="key" i18n="@@ruleEditor.target.key"
                     >Key</mat-button-toggle
                   >
-                  <mat-button-toggle
-                    value="value"
-                    i18n="@@ruleEditor.target.value"
+                  <mat-button-toggle value="value" i18n="@@ruleEditor.target.value"
                     >Value</mat-button-toggle
                   >
-                  <mat-button-toggle
-                    value="key_and_value"
-                    i18n="@@ruleEditor.target.both"
+                  <mat-button-toggle value="key_and_value" i18n="@@ruleEditor.target.both"
                     >Both</mat-button-toggle
                   >
                 </mat-button-toggle-group>
               </div>
 
               <div class="rule-field">
-                <label
-                  [attr.for]="'match-type-' + rule.id"
-                  i18n="@@ruleEditor.matchTypeLabel"
+                <label [attr.for]="'match-type-' + rule.id" i18n="@@ruleEditor.matchTypeLabel"
                   >Match type</label
                 >
                 <mat-button-toggle-group
@@ -244,33 +216,23 @@
                   (change)="patchRule(i, { matchType: $event.value })"
                   hideSingleSelectionIndicator
                 >
-                  <mat-button-toggle
-                    value="exact"
-                    i18n="@@ruleEditor.matchType.exact"
+                  <mat-button-toggle value="exact" i18n="@@ruleEditor.matchType.exact"
                     >Exact</mat-button-toggle
                   >
-                  <mat-button-toggle
-                    value="contains"
-                    i18n="@@ruleEditor.matchType.contains"
+                  <mat-button-toggle value="contains" i18n="@@ruleEditor.matchType.contains"
                     >Contains</mat-button-toggle
                   >
-                  <mat-button-toggle
-                    value="starts_with"
-                    i18n="@@ruleEditor.matchType.startsWith"
+                  <mat-button-toggle value="starts_with" i18n="@@ruleEditor.matchType.startsWith"
                     >Starts with</mat-button-toggle
                   >
-                  <mat-button-toggle
-                    value="ends_with"
-                    i18n="@@ruleEditor.matchType.endsWith"
+                  <mat-button-toggle value="ends_with" i18n="@@ruleEditor.matchType.endsWith"
                     >Ends with</mat-button-toggle
                   >
                 </mat-button-toggle-group>
               </div>
 
               <div class="rule-field rule-field--wide">
-                <label
-                  [attr.for]="'match-value-' + rule.id"
-                  i18n="@@ruleEditor.matchValueLabel"
+                <label [attr.for]="'match-value-' + rule.id" i18n="@@ruleEditor.matchValueLabel"
                   >Match value</label
                 >
                 <input
@@ -282,7 +244,7 @@
                   maxlength="200"
                   (input)="
                     patchRule(i, {
-                      matchValue: $any($event.target).value
+                      matchValue: $any($event.target).value,
                     })
                   "
                 />
@@ -292,9 +254,7 @@
                 <mat-slide-toggle
                   [checked]="rule.caseSensitive"
                   [disabled]="formDisabled()"
-                  (change)="
-                    patchRule(i, { caseSensitive: $event.checked })
-                  "
+                  (change)="patchRule(i, { caseSensitive: $event.checked })"
                   i18n="@@ruleEditor.caseSensitiveLabel"
                   >Case sensitive</mat-slide-toggle
                 >
@@ -319,7 +279,7 @@
                   [attr.aria-describedby]="'bg-' + rule.id + '-hex'"
                   (input)="
                     patchStyle(i, {
-                      backgroundColor: $any($event.target).value
+                      backgroundColor: $any($event.target).value,
                     })
                   "
                 />
@@ -343,7 +303,7 @@
                   [attr.aria-describedby]="'text-' + rule.id + '-hex'"
                   (input)="
                     patchStyle(i, {
-                      textColor: $any($event.target).value
+                      textColor: $any($event.target).value,
                     })
                   "
                 />
@@ -367,7 +327,7 @@
                   [attr.aria-describedby]="'border-' + rule.id + '-hex'"
                   (input)="
                     patchStyle(i, {
-                      borderColor: $any($event.target).value
+                      borderColor: $any($event.target).value,
                     })
                   "
                 />
@@ -383,7 +343,7 @@
                     [checked]="rule.style.bold || false"
                     (change)="
                       patchStyle(i, {
-                        bold: $any($event.target).checked
+                        bold: $any($event.target).checked,
                       })
                     "
                   /><span i18n="@@ruleEditor.style.bold">Bold</span>
@@ -394,7 +354,7 @@
                     [checked]="rule.style.italic || false"
                     (change)="
                       patchStyle(i, {
-                        italic: $any($event.target).checked
+                        italic: $any($event.target).checked,
                       })
                     "
                   /><span i18n="@@ruleEditor.style.italic">Italic</span>
@@ -405,12 +365,10 @@
                     [checked]="rule.style.underline || false"
                     (change)="
                       patchStyle(i, {
-                        underline: $any($event.target).checked
+                        underline: $any($event.target).checked,
                       })
                     "
-                  /><span i18n="@@ruleEditor.style.underline"
-                    >Underline</span
-                  >
+                  /><span i18n="@@ruleEditor.style.underline">Underline</span>
                 </label>
               </div>
 
@@ -428,9 +386,7 @@
                   [disabled]="formDisabled()"
                   (change)="setIcon(i, $any($event.target).value)"
                 >
-                  <option value="" i18n="@@ruleEditor.style.icon.none">
-                    (none)
-                  </option>
+                  <option value="" i18n="@@ruleEditor.style.icon.none"> (none) </option>
                   @for (icon of icons; track icon) {
                     <option [value]="icon">{{ icon }}</option>
                   }

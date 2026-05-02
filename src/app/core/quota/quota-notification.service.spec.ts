@@ -5,7 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   QuotaFirstTimeDialogComponent,
   QuotaManualFullDialogComponent,
-  QuotaNotificationService
+  QuotaNotificationService,
 } from './quota-notification.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import type { UserPreferences } from '../api/models';
@@ -20,14 +20,16 @@ describe('QuotaNotificationService', () => {
   beforeEach(() => {
     prefsSignal = {
       seenBlobQuotaModal: false,
-      blobQuotaStrategy: 'auto_fifo'
+      blobQuotaStrategy: 'auto_fifo',
     } as unknown as UserPreferences;
 
     snackOpen = jasmine.createSpy('snack.open');
     dialogOpen = jasmine.createSpy('dialog.open');
-    prefsUpdate = jasmine.createSpy('prefs.update').and.callFake((patch: Partial<UserPreferences>) => {
-      Object.assign(prefsSignal, patch);
-    });
+    prefsUpdate = jasmine
+      .createSpy('prefs.update')
+      .and.callFake((patch: Partial<UserPreferences>) => {
+        Object.assign(prefsSignal, patch);
+      });
 
     TestBed.configureTestingModule({
       providers: [
@@ -38,10 +40,10 @@ describe('QuotaNotificationService', () => {
           provide: PreferencesService,
           useValue: {
             prefs: () => prefsSignal,
-            update: prefsUpdate
-          }
-        }
-      ]
+            update: prefsUpdate,
+          },
+        },
+      ],
     });
     service = TestBed.inject(QuotaNotificationService);
   });
@@ -65,10 +67,7 @@ describe('QuotaNotificationService', () => {
     it('opens the first-time modal and flips seenBlobQuotaModal=true', async () => {
       dialogOpen.and.returnValue({ afterClosed: () => of('keep_auto') });
       await service.notifyAutoDeleted({ id: 'x', slug: 's' });
-      expect(dialogOpen).toHaveBeenCalledWith(
-        QuotaFirstTimeDialogComponent,
-        jasmine.any(Object)
-      );
+      expect(dialogOpen).toHaveBeenCalledWith(QuotaFirstTimeDialogComponent, jasmine.any(Object));
       expect(prefsUpdate).toHaveBeenCalledWith({ seenBlobQuotaModal: true });
     });
 
@@ -90,10 +89,7 @@ describe('QuotaNotificationService', () => {
     it('opens the manual-full dialog and does not change prefs on dismiss', async () => {
       dialogOpen.and.returnValue({ afterClosed: () => of('dismiss') });
       await service.notifyQuotaExceededManual();
-      expect(dialogOpen).toHaveBeenCalledWith(
-        QuotaManualFullDialogComponent,
-        jasmine.any(Object)
-      );
+      expect(dialogOpen).toHaveBeenCalledWith(QuotaManualFullDialogComponent, jasmine.any(Object));
       expect(prefsUpdate).not.toHaveBeenCalled();
     });
 
@@ -102,7 +98,7 @@ describe('QuotaNotificationService', () => {
       await service.notifyQuotaExceededManual();
       expect(prefsUpdate).toHaveBeenCalledWith({
         blobQuotaStrategy: 'auto_fifo',
-        seenBlobQuotaModal: true
+        seenBlobQuotaModal: true,
       });
     });
   });

@@ -17,12 +17,12 @@ export const arrayShapeStrategy: SuggestionStrategy = (input) => {
     return {
       value: $localize`:@@toolbar.titleSuggestion.shape.emptyList:Empty list`,
       source: 'arrayShape',
-      confidence: 30
+      confidence: 30,
     };
   }
   return {
     value: $localize`:@@toolbar.titleSuggestion.shape.listOfNItems:List of ${len}:n: items`,
     source: 'arrayShape',
-    confidence: 30
+    confidence: 30,
   };
 };

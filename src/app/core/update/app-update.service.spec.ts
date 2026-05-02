@@ -4,7 +4,7 @@ import {
   SwUpdate,
   UnrecoverableStateEvent,
   VersionEvent,
-  VersionReadyEvent
+  VersionReadyEvent,
 } from '@angular/service-worker';
 import { Subject } from 'rxjs';
 import { LoggerService } from '../telemetry/logger.service';
@@ -24,14 +24,12 @@ function makeSwUpdateStub(enabled: boolean): {
 } {
   const versions$ = new Subject<VersionEvent>();
   const unrecoverable$ = new Subject<UnrecoverableStateEvent>();
-  const activate = jasmine
-    .createSpy('activateUpdate')
-    .and.returnValue(Promise.resolve(true));
+  const activate = jasmine.createSpy('activateUpdate').and.returnValue(Promise.resolve(true));
   const stub = {
     isEnabled: enabled,
     versionUpdates: versions$.asObservable(),
     unrecoverable: unrecoverable$.asObservable(),
-    activateUpdate: activate
+    activateUpdate: activate,
   } as unknown as SwUpdate;
   return { stub, versions$, unrecoverable$, activate };
 }
@@ -47,16 +45,11 @@ describe('AppUpdateService', () => {
     const sw = makeSwUpdateStub(enabled);
     actionSubject = new Subject<void>();
     snackRef = {
-      onAction: () => actionSubject.asObservable()
+      onAction: () => actionSubject.asObservable(),
     } as unknown as MatSnackBarRef<unknown>;
     snackOpen = jasmine.createSpy('snack.open').and.returnValue(snackRef);
-    logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
-      'event',
-      'warn'
-    ]);
-    telemetry = jasmine.createSpyObj<TelemetryService>('TelemetryService', [
-      'flush'
-    ]);
+    logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'warn']);
+    telemetry = jasmine.createSpyObj<TelemetryService>('TelemetryService', ['flush']);
     telemetry.flush.and.returnValue(Promise.resolve());
     TestBed.configureTestingModule({
       providers: [
@@ -64,14 +57,11 @@ describe('AppUpdateService', () => {
         { provide: SwUpdate, useValue: sw.stub },
         { provide: MatSnackBar, useValue: { open: snackOpen } },
         { provide: LoggerService, useValue: logger },
-        { provide: TelemetryService, useValue: telemetry }
-      ]
+        { provide: TelemetryService, useValue: telemetry },
+      ],
     });
     const service = TestBed.inject(AppUpdateService);
-    const reload = spyOn(
-      service as unknown as { reload: () => void },
-      'reload'
-    );
+    const reload = spyOn(service as unknown as { reload: () => void }, 'reload');
     return { service, sw, reload };
   }
 
@@ -81,7 +71,7 @@ describe('AppUpdateService', () => {
     sw.versions$.next({
       type: 'VERSION_READY',
       currentVersion: { hash: 'a' },
-      latestVersion: { hash: 'b' }
+      latestVersion: { hash: 'b' },
     } as VersionReadyEvent);
     expect(snackOpen).not.toHaveBeenCalled();
   });
@@ -92,13 +82,13 @@ describe('AppUpdateService', () => {
     sw.versions$.next({
       type: 'VERSION_READY',
       currentVersion: { hash: 'a' },
-      latestVersion: { hash: 'b' }
+      latestVersion: { hash: 'b' },
     } as VersionReadyEvent);
     expect(snackOpen).toHaveBeenCalledTimes(1);
     const [, action, config] = snackOpen.calls.mostRecent().args as [
       string,
       string,
-      { duration: number }
+      { duration: number },
     ];
     expect(action).toBe('Reload');
     expect(config.duration).toBe(0);
@@ -109,11 +99,11 @@ describe('AppUpdateService', () => {
     service.initialize();
     sw.versions$.next({
       type: 'VERSION_DETECTED',
-      version: { hash: 'b' }
+      version: { hash: 'b' },
     } as VersionEvent);
     sw.versions$.next({
       type: 'NO_NEW_VERSION_DETECTED',
-      version: { hash: 'a' }
+      version: { hash: 'a' },
     } as VersionEvent);
     expect(snackOpen).not.toHaveBeenCalled();
   });
@@ -129,16 +119,12 @@ describe('AppUpdateService', () => {
     sw.versions$.next({
       type: 'VERSION_READY',
       currentVersion: { hash: 'a' },
-      latestVersion: { hash: 'b' }
+      latestVersion: { hash: 'b' },
     } as VersionReadyEvent);
     actionSubject.next();
     await Promise.resolve();
     expect(sw.activate).toHaveBeenCalledTimes(1);
-    expect(logger.event).toHaveBeenCalledOnceWith(
-      'update.applied',
-      undefined,
-      undefined
-    );
+    expect(logger.event).toHaveBeenCalledOnceWith('update.applied', undefined, undefined);
     expect(telemetry.flush).toHaveBeenCalledTimes(1);
     expect(reload).not.toHaveBeenCalled();
     if (!resolveFlush) {
@@ -160,7 +146,7 @@ describe('AppUpdateService', () => {
     sw.versions$.next({
       type: 'VERSION_READY',
       currentVersion: { hash: 'a' },
-      latestVersion: { hash: 'b' }
+      latestVersion: { hash: 'b' },
     } as VersionReadyEvent);
     actionSubject.next();
     // Let the rejected promise + swallow-log + reload microtasks settle.
@@ -175,15 +161,15 @@ describe('AppUpdateService', () => {
     const { service, sw } = setup(true);
     const replace = spyOn(
       service as unknown as { replaceLocation: (url: string) => void },
-      'replaceLocation'
+      'replaceLocation',
     );
     service.initialize();
     sw.unrecoverable$.next({
       type: 'UNRECOVERABLE_STATE',
-      reason: 'manifest mismatch'
+      reason: 'manifest mismatch',
     } as UnrecoverableStateEvent);
     expect(logger.warn).toHaveBeenCalledWith('update.unrecoverable', {
-      reason: 'manifest mismatch'
+      reason: 'manifest mismatch',
     });
     expect(replace).toHaveBeenCalledTimes(1);
     const target = replace.calls.mostRecent().args[0] as string;
@@ -197,7 +183,7 @@ describe('AppUpdateService', () => {
     sw.versions$.next({
       type: 'VERSION_READY',
       currentVersion: { hash: 'a' },
-      latestVersion: { hash: 'b' }
+      latestVersion: { hash: 'b' },
     } as VersionReadyEvent);
     expect(snackOpen).toHaveBeenCalledTimes(1);
   });

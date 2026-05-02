@@ -37,7 +37,7 @@ export function computeTextStats(text: string): TextStats {
   return {
     chars: text.length,
     lines: newlines + 1,
-    bytes: new TextEncoder().encode(text).length
+    bytes: new TextEncoder().encode(text).length,
   };
 }
 

@@ -11,10 +11,7 @@ bootstrapApplication(AppComponent, appConfig)
       const sha = BUILD_INFO.sha;
       const isDev = sha === 'dev';
       const shortSha = isDev ? 'dev' : sha.slice(0, 7);
-      const url =
-        isDev || !BUILD_INFO.repoUrl
-          ? ''
-          : ` ${BUILD_INFO.repoUrl}/commit/${sha}`;
+      const url = isDev || !BUILD_INFO.repoUrl ? '' : ` ${BUILD_INFO.repoUrl}/commit/${sha}`;
       // eslint-disable-next-line no-console
       console.info(`JotJSON v${BUILD_INFO.version} (${shortSha})${url}`);
     } catch {
@@ -34,10 +31,7 @@ bootstrapApplication(AppComponent, appConfig)
         error instanceof Error
           ? (error.message ?? '').slice(0, 500)
           : '<non-error thrown at bootstrap>';
-      sessionStorage.setItem(
-        'jotjson.bootErr',
-        JSON.stringify({ name, message })
-      );
+      sessionStorage.setItem('jotjson.bootErr', JSON.stringify({ name, message }));
     } catch {
       // sessionStorage may be unavailable (privacy mode); ignore.
     }

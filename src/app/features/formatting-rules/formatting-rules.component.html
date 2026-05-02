@@ -4,9 +4,8 @@
   <header class="page-header">
     <h1 i18n="@@formattingRules.title">Formatting rules</h1>
     <p class="page-subtitle" i18n="@@formattingRules.subtitle">
-      Highlight matching keys and values when viewing JSON. Pick which
-      sets apply by default in the toolbar above the tree on the home
-      page.
+      Highlight matching keys and values when viewing JSON. Pick which sets apply by default in the
+      toolbar above the tree on the home page.
     </p>
   </header>
 
@@ -34,22 +33,18 @@
   </div>
 
   @if (loadState() === 'loading') {
-    <p class="status" aria-busy="true" i18n="@@formattingRules.loading">
-      Loading rule sets...
-    </p>
+    <p class="status" aria-busy="true" i18n="@@formattingRules.loading"> Loading rule sets... </p>
   } @else if (loadState() === 'error') {
     <div class="status status-error">
-      <p i18n="@@formattingRules.loadError">
-        Could not load your rule sets.
-      </p>
+      <p i18n="@@formattingRules.loadError"> Could not load your rule sets. </p>
       <button mat-stroked-button type="button" (click)="reload()">
         <span i18n="@@common.retry">Retry</span>
       </button>
     </div>
   } @else if (isEmpty()) {
     <p class="status" i18n="@@formattingRules.empty">
-      You do not have any rule sets yet. Click "+ New rule set" to
-      create one, or clone a preset from the home page toolbar.
+      You do not have any rule sets yet. Click "+ New rule set" to create one, or clone a preset
+      from the home page toolbar.
     </p>
   } @else {
     <ul class="rule-set-list" role="list">
@@ -60,9 +55,7 @@
             type="button"
             class="apply-toggle"
             [attr.aria-pressed]="isActive(set.id)"
-            [attr.aria-label]="
-              isActive(set.id) ? removeActiveLabel : setActiveLabel
-            "
+            [attr.aria-label]="isActive(set.id) ? removeActiveLabel : setActiveLabel"
             [disabled]="isBusy(set.id)"
             data-testid="apply-toggle"
             (click)="toggleActive(set)"
@@ -84,9 +77,7 @@
                   (keydown.escape)="cancelRename(); $event.preventDefault()"
                   (blur)="cancelRename()"
                   [attr.aria-invalid]="editingError() !== null"
-                  [attr.aria-describedby]="
-                    editingError() ? 'rename-error-' + set.id : null
-                  "
+                  [attr.aria-describedby]="editingError() ? 'rename-error-' + set.id : null"
                   i18n-aria-label="@@formattingRules.rename.aria"
                   aria-label="Rule set name"
                   data-testid="rename-input"
@@ -138,9 +129,7 @@
               </div>
             }
             <p class="rule-set-meta">
-              <span i18n="@@formattingRules.ruleCount"
-                >{{ set.rules.length }} rule(s)</span
-              >
+              <span i18n="@@formattingRules.ruleCount">{{ set.rules.length }} rule(s)</span>
               <span class="meta-dot">&middot;</span>
               <span class="meta-updated">{{ relativeTime(set.updatedAt) }}</span>
             </p>

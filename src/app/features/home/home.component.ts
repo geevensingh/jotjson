@@ -11,7 +11,7 @@ import {
   inject,
   input,
   signal,
-  viewChild
+  viewChild,
 } from '@angular/core';
 import { Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
@@ -20,7 +20,7 @@ import {
   applyEdits,
   createScanner,
   findNodeAtLocation,
-  Node as JsoncNode
+  Node as JsoncNode,
 } from 'jsonc-parser';
 
 // SyntaxKind values inlined: jsonc-parser exports SyntaxKind as a `const enum`,
@@ -45,16 +45,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import {
   ConfirmDialogComponent,
-  ConfirmDialogData
+  ConfirmDialogData,
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
-import {
-  JsonParserService,
-  JsonParseResult
-} from '../../core/json/json-parser.service';
-import {
-  JsonExtractorService,
-  ExtractedJson
-} from '../../core/json/json-extractor.service';
+import { JsonParserService, JsonParseResult } from '../../core/json/json-parser.service';
+import { JsonExtractorService, ExtractedJson } from '../../core/json/json-extractor.service';
 import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
 import type { SuggestionCandidate } from '../../core/title-suggester/types';
 import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
@@ -62,10 +56,7 @@ import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-b
 import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
 import { JsonTreeComponent } from '../../shared/components/json-tree/json-tree.component';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
-import {
-  PaneLayout,
-  ToolbarComponent
-} from '../../shared/components/toolbar/toolbar.component';
+import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/toolbar.component';
 import { EditorMode } from './editor-mode';
 import { StatusBarComponent } from './status-bar/status-bar.component';
 import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
@@ -102,15 +93,12 @@ type SignInRestoreSnapshot = {
 
 const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 
-const normalizeEol = (source: string): string =>
-  source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+const normalizeEol = (source: string): string => source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-const isSignInRestoreSnapshot = (
-  value: unknown
-): value is SignInRestoreSnapshot => {
+const isSignInRestoreSnapshot = (value: unknown): value is SignInRestoreSnapshot => {
   if (!isRecord(value)) return false;
   const slug = value['slug'];
   return (
@@ -137,11 +125,11 @@ const isSignInRestoreSnapshot = (
     RuleSetsToolbarComponent,
     DropOverlayComponent,
     ExtractJsonBannerComponent,
-    UploadErrorBannerComponent
+    UploadErrorBannerComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home.component.html',
-  styleUrl: './home.component.scss'
+  styleUrl: './home.component.scss',
 })
 export class HomeComponent implements OnInit, OnDestroy {
   private readonly draft = inject(DraftService);
@@ -209,9 +197,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    */
   readonly uploadError = signal<{ filename: string } | null>(null);
   readonly uploadErrorVisible = computed(() => this.uploadError() !== null);
-  readonly uploadErrorFilename = computed(
-    () => this.uploadError()?.filename ?? ''
-  );
+  readonly uploadErrorFilename = computed(() => this.uploadError()?.filename ?? '');
 
   /**
    * Single funnel for every content mutation in HomeComponent. Bumps
@@ -228,17 +214,14 @@ export class HomeComponent implements OnInit, OnDestroy {
     // count - that handler clears the candidate itself before calling
     // here.
     const previousCandidate = this.extractedCandidate();
-    if (
-      previousCandidate !== null &&
-      previousCandidate.sourceVersion === this.contentVersion()
-    ) {
+    if (previousCandidate !== null && previousCandidate.sourceVersion === this.contentVersion()) {
       this.logger.event(
         'home.extract.banner.dismiss',
         {
           source: previousCandidate.source,
-          reason: 'content.changed'
+          reason: 'content.changed',
         },
-        { blockCount: previousCandidate.data.blockCount }
+        { blockCount: previousCandidate.data.blockCount },
       );
       this.extractedCandidate.set(null);
     }
@@ -287,20 +270,19 @@ export class HomeComponent implements OnInit, OnDestroy {
    */
   private replaceExtractedCandidate(
     data: ExtractedJson | null,
-    source: ExtractSource | null
+    source: ExtractSource | null,
   ): void {
     const previousCandidate = this.extractedCandidate();
     const wasVisible =
-      previousCandidate !== null &&
-      previousCandidate.sourceVersion === this.contentVersion();
+      previousCandidate !== null && previousCandidate.sourceVersion === this.contentVersion();
     if (wasVisible) {
       this.logger.event(
         'home.extract.banner.dismiss',
         {
           source: previousCandidate.source,
-          reason: 'content.changed'
+          reason: 'content.changed',
         },
-        { blockCount: previousCandidate.data.blockCount }
+        { blockCount: previousCandidate.data.blockCount },
       );
     }
     if (data === null || source === null) {
@@ -310,7 +292,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.extractedCandidate.set({
       data,
       sourceVersion: this.contentVersion(),
-      source
+      source,
     });
     this.logger.event(
       'home.extract.banner.shown',
@@ -318,8 +300,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       {
         blockCount: data.blockCount,
         preservesComments: data.preservesComments ? 1 : 0,
-        hasComments: data.hasComments ? 1 : 0
-      }
+        hasComments: data.hasComments ? 1 : 0,
+      },
     );
     // Conditional auto-focus: only when the user clicked the toolbar
     // Paste button. Other surfaces (Ctrl+V, file upload, drag-drop)
@@ -370,9 +352,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private lastHydratedInputId: string | null = null;
   private signInRestoreAttempted = false;
 
-  readonly parseResult = computed<JsonParseResult>(() =>
-    this.parser.parse(this.content())
-  );
+  readonly parseResult = computed<JsonParseResult>(() => this.parser.parse(this.content()));
 
   readonly errors = computed(() => this.parseResult().errors);
 
@@ -405,7 +385,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     () =>
       this.auth.isSignedIn() &&
       this.hasContent() &&
-      (this.loadedBlob() === null || !this.isOwnedBlob() || this.dirty())
+      (this.loadedBlob() === null || !this.isOwnedBlob() || this.dirty()),
   );
 
   readonly isBlobPublic = computed(() => !!this.loadedBlob()?.isPublic);
@@ -422,20 +402,18 @@ export class HomeComponent implements OnInit, OnDestroy {
    * candidates from any non-empty content, so we don't peek at the
    * candidate count to decide enable/disable.
    */
-  readonly wandEnabled = computed(
-    () => this.title().trim().length === 0 && this.hasContent()
-  );
+  readonly wandEnabled = computed(() => this.title().trim().length === 0 && this.hasContent());
 
-  readonly clipboardState = computed<
-    'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'
-  >(() => {
-    const state = this.clipboard.permissionState();
-    if (state === 'denied') return 'denied';
-    if (state === 'granted') {
-      return this.clipboard.hasJson() ? 'enabled-json' : 'enabled-empty';
-    }
-    return 'fallback';
-  });
+  readonly clipboardState = computed<'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'>(
+    () => {
+      const state = this.clipboard.permissionState();
+      if (state === 'denied') return 'denied';
+      if (state === 'granted') {
+        return this.clipboard.hasJson() ? 'enabled-json' : 'enabled-empty';
+      }
+      return 'fallback';
+    },
+  );
 
   readonly clipboardPreview = computed(() => this.clipboard.preview());
 
@@ -449,7 +427,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (!Number.isFinite(parsed)) return 0.5;
       return Math.min(0.9, Math.max(0.1, parsed));
     },
-    serialize: (n) => String(n)
+    serialize: (n) => String(n),
   });
 
   /**
@@ -467,9 +445,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly paneVisibility = persistedSignal<PaneVisibility>({
     key: 'jotjson.paneVisibility.v1',
     defaultValue: 'both',
-    parse: (raw) =>
-      raw === 'editor-only' || raw === 'tree-only' ? raw : 'both',
-    serialize: (value) => value
+    parse: (raw) => (raw === 'editor-only' || raw === 'tree-only' ? raw : 'both'),
+    serialize: (value) => value,
   });
 
   /**
@@ -483,9 +460,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const visibility = this.paneVisibility();
     if (visibility === 'editor-only') return 'editor-only';
     if (visibility === 'tree-only') return 'tree-only';
-    return this.layoutOrientation() === 'vertical'
-      ? 'both-vertical'
-      : 'both-horizontal';
+    return this.layoutOrientation() === 'vertical' ? 'both-vertical' : 'both-horizontal';
   });
 
   readonly splitStyle = computed(() => {
@@ -504,11 +479,9 @@ export class HomeComponent implements OnInit, OnDestroy {
       : { 'grid-template-columns': `${leftPct} var(--splitter-size) ${rightPct}` };
   });
 
-  private readonly splitHost =
-    viewChild<ElementRef<HTMLElement>>('splitHost');
+  private readonly splitHost = viewChild<ElementRef<HTMLElement>>('splitHost');
 
-  private readonly treeHost =
-    viewChild<ElementRef<HTMLElement>>('treeHost');
+  private readonly treeHost = viewChild<ElementRef<HTMLElement>>('treeHost');
 
   private readonly tree = viewChild(JsonTreeComponent);
   private readonly editor = viewChild(JsonEditorComponent);
@@ -583,9 +556,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         return;
       }
       const label =
-        title.trim().length > 0
-          ? title.trim()
-          : $localize`:@@app.title.untitled:Untitled`;
+        title.trim().length > 0 ? title.trim() : $localize`:@@app.title.untitled:Untitled`;
       this.titleService.setTitle(`${dirtyPrefix}${label} | JotJSON`);
       if (blob.isPublic) {
         this.seo.setOpenGraphForBlob(blob);
@@ -695,8 +666,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (!this.syncEnabled()) return;
     const editor = this.editor();
     if (!editor) return;
-    const pathString =
-      path === null ? null : this.parser.pathToString([...path]);
+    const pathString = path === null ? null : this.parser.pathToString([...path]);
     if (this.pendingTreeApply === pathString) {
       this.pendingTreeApply = undefined;
       return;
@@ -723,16 +693,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     const bomShift = this.bomShift(text);
     const startOffset = target.offset + bomShift;
     const startPos = this.parser.offsetToPosition(text, startOffset);
-    const endPos = this.parser.offsetToPosition(
-      text,
-      startOffset + target.length
-    );
+    const endPos = this.parser.offsetToPosition(text, startOffset + target.length);
     this.pendingEditorReveal = pathString;
     editor.revealRange({
       startLineNumber: startPos.line,
       startColumn: startPos.column,
       endLineNumber: endPos.line,
-      endColumn: endPos.column
+      endColumn: endPos.column,
     });
   }
 
@@ -778,12 +745,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
 
     const ast = this.parseResult().ast;
-    if (
-      ast &&
-      adjusted >= ast.offset &&
-      adjusted <= ast.offset + ast.length &&
-      tree.hasPath('$')
-    ) {
+    if (ast && adjusted >= ast.offset && adjusted <= ast.offset + ast.length && tree.hasPath('$')) {
       return '$';
     }
     return null;
@@ -800,7 +762,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private afterFirstPaint(
     handlerStartedAt: number,
-    callback: (firstPaintMs: number) => void
+    callback: (firstPaintMs: number) => void,
   ): void {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -839,13 +801,9 @@ export class HomeComponent implements OnInit, OnDestroy {
         clipboardReadMs,
         parseMs,
         syncHandlerMs,
-        firstPaintMs
+        firstPaintMs,
       };
-      this.logger.event(
-        'paste.handle',
-        { sizeBytesBucket: bucketBytes(sizeBytes) },
-        measurements
-      );
+      this.logger.event('paste.handle', { sizeBytesBucket: bucketBytes(sizeBytes) }, measurements);
     });
   }
 
@@ -862,9 +820,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private runExtractorOnCurrentContent(source: ExtractSource): void {
     const parsed = this.parser.parse(this.content());
     const isObjectOrArray =
-      parsed.errors.length === 0 &&
-      typeof parsed.value === 'object' &&
-      parsed.value !== null;
+      parsed.errors.length === 0 && typeof parsed.value === 'object' && parsed.value !== null;
     if (isObjectOrArray) {
       this.replaceExtractedCandidate(null, null);
       return;
@@ -910,8 +866,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       {
         blockCount: candidate.data.blockCount,
         preservesComments: candidate.data.preservesComments ? 1 : 0,
-        hasComments: candidate.data.hasComments ? 1 : 0
-      }
+        hasComments: candidate.data.hasComments ? 1 : 0,
+      },
     );
     // Clear the candidate FIRST so `setContent`'s banner-replace guard
     // does not additionally fire `home.extract.banner.dismiss` with
@@ -926,7 +882,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.logger.event(
         'home.extract.banner.dismiss',
         { source: candidate.source, reason: 'user.click' },
-        { blockCount: candidate.data.blockCount }
+        { blockCount: candidate.data.blockCount },
       );
     }
     this.extractedCandidate.set(null);
@@ -964,11 +920,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.disposeDropHandler = this.dropController.registerEditorHandler(
-      (files) => {
-        void this.onFilesReceived(files, 'drag');
-      }
-    );
+    this.disposeDropHandler = this.dropController.registerEditorHandler((files) => {
+      void this.onFilesReceived(files, 'drag');
+    });
   }
 
   ngOnDestroy(): void {
@@ -980,10 +934,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     await this.onFilesReceived([file], 'pick');
   }
 
-  private async onFilesReceived(
-    files: readonly File[],
-    source: UploadSource
-  ): Promise<void> {
+  private async onFilesReceived(files: readonly File[], source: UploadSource): Promise<void> {
     const handlerStartedAt = performance.now();
     const fileReadStartedAt = performance.now();
     const result = await validateAndReadSingleFile(files);
@@ -1002,9 +953,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         // shared chokepoint.
         this.lastFilename.set(filename);
         this.suggestedTitlesForMenu.set([]);
-        this.runExtractorOnCurrentContent(
-          source === 'pick' ? 'upload.pick' : 'upload.drag'
-        );
+        this.runExtractorOnCurrentContent(source === 'pick' ? 'upload.pick' : 'upload.drag');
         // Surface upload-source validation errors as a persistent in-pane
         // banner (issue #36, spec §294). parseResult() shares its memoized
         // parse with the editor's render path, so this is not an extra
@@ -1028,12 +977,12 @@ export class HomeComponent implements OnInit, OnDestroy {
             fileReadMs,
             parseMs,
             syncHandlerMs,
-            firstPaintMs
+            firstPaintMs,
           };
           this.logger.event(
             'upload.handle',
             { sizeBytesBucket: bucketBytes(sizeBytes), source },
-            measurements
+            measurements,
           );
         });
         return;
@@ -1044,17 +993,17 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.snack.open(
           $localize`:@@home.upload.error.tooMany:Please drop one file at a time.`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 4000 }
+          { duration: 4000 },
         );
         return;
       case 'tooLarge':
         this.logger.warn('home.upload.tooLarge', {
-          sizeBytes: result.sizeBytes
+          sizeBytes: result.sizeBytes,
         });
         this.snack.open(
           $localize`:@@home.upload.error.tooLarge:File too large - max 5 MB`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 4000 }
+          { duration: 4000 },
         );
         return;
       case 'binary':
@@ -1062,17 +1011,17 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.snack.open(
           $localize`:@@home.upload.error.binary:File does not appear to be a text file - upload was ignored.`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 4000 }
+          { duration: 4000 },
         );
         return;
       case 'readFailed':
         this.logger.warn('home.upload.readFailed', {
-          cause: String(result.cause)
+          cause: String(result.cause),
         });
         this.snack.open(
           $localize`:@@home.upload.error.readFailed:Could not read file`,
           $localize`:@@common.dismiss:Dismiss`,
-          { duration: 4000 }
+          { duration: 4000 },
         );
         return;
     }
@@ -1126,7 +1075,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       jsonText: this.content(),
       parsed: parsed.empty ? undefined : parsed.value,
       hasParseErrors: parsed.errors.length > 0,
-      filename: this.lastFilename()
+      filename: this.lastFilename(),
     });
     this.suggestedTitlesForMenu.set(result);
   }
@@ -1135,7 +1084,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const snapshot: SignInRestoreSnapshot = {
       slug: this.loadedBlob()?.slug ?? null,
       content: this.content(),
-      title: this.title()
+      title: this.title(),
     };
 
     try {
@@ -1212,14 +1161,12 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.title.set(updated.title ?? '');
       } else {
         const created = await new Promise<CreateBlobResponse>((resolve, reject) => {
-          this.blobs
-            .create(content, titlePatch, false)
-            .subscribe({ next: resolve, error: reject });
+          this.blobs.create(content, titlePatch, false).subscribe({ next: resolve, error: reject });
         });
         this.logger.event(
           'share.created',
           { visibility: 'private' },
-          { sizeBytes: new Blob([content]).size }
+          { sizeBytes: new Blob([content]).size },
         );
         // Strip the auxiliary quota marker before we treat it as a JsonBlob
         // so loadedBlob stays clean.
@@ -1236,7 +1183,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (httpError.status === 409 && httpError.error?.code === 'quota_exceeded') {
         void this.quota.notifyQuotaExceededManual();
         this.saveError.set(
-          $localize`:@@save.error.quotaExceeded:Blob limit reached - delete one from your saved blobs to save a new blob.`
+          $localize`:@@save.error.quotaExceeded:Blob limit reached - delete one from your saved blobs to save a new blob.`,
         );
         return;
       }
@@ -1268,7 +1215,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const edits = jsoncFormat(text, undefined, {
       tabSize: this.prefs.prefs().editorTabSize,
       insertSpaces: true,
-      eol: '\n'
+      eol: '\n',
     });
     const next = applyEdits(text, edits);
     if (next !== text) this.setContent(next);
@@ -1327,8 +1274,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     // Three-state cycle driven by the raw preference: light -> dark -> system.
     // 'system' follows the OS's prefers-color-scheme setting.
     const current = this.prefs.prefs().theme;
-    const next =
-      current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';
+    const next = current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';
     this.prefs.update({ theme: next });
   }
 
@@ -1339,7 +1285,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     void this.clipboardCopy.copyWithToast(url, {
       success: $localize`:@@share.copyLink.success:Share link copied to clipboard.`,
       failed: $localize`:@@share.copyLink.failed:Failed to copy share link.`,
-      unsupported: $localize`:@@share.copyLink.unsupported:Copy is not supported in this browser.`
+      unsupported: $localize`:@@share.copyLink.unsupported:Copy is not supported in this browser.`,
     });
   }
 
@@ -1350,14 +1296,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (!user || user.id !== blob.ownerId) return;
     const next = !blob.isPublic;
     try {
-      const updated = await firstValueFrom(
-        this.blobs.update(blob.id, { isPublic: next })
-      );
+      const updated = await firstValueFrom(this.blobs.update(blob.id, { isPublic: next }));
       this.loadedBlob.set(updated);
       this.logger.event(
         'share.visibility.changed',
         { newVisibility: updated.isPublic ? 'public' : 'private' },
-        undefined
+        undefined,
       );
       const message = updated.isPublic
         ? $localize`:@@share.visibility.public:Blob is now public.`
@@ -1369,7 +1313,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.snack.open(
         $localize`:@@share.visibility.failed:Failed to update visibility.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 }
+        { duration: 4000 },
       );
     }
   }
@@ -1386,11 +1330,11 @@ export class HomeComponent implements OnInit, OnDestroy {
       message: $localize`:@@share.delete.message:"${label}:name:" will be permanently deleted. This cannot be undone.`,
       confirmLabel: $localize`:@@share.delete.confirm:Delete`,
       cancelLabel: $localize`:@@common.cancel:Cancel`,
-      destructive: true
+      destructive: true,
     };
     const ref = this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(
       ConfirmDialogComponent,
-      { data, width: '420px', autoFocus: 'dialog' }
+      { data, width: '420px', autoFocus: 'dialog' },
     );
     const confirmed = await firstValueFrom(ref.afterClosed());
     if (!confirmed) return;
@@ -1405,7 +1349,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.snack.open(
         $localize`:@@share.delete.success:Blob deleted.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 3000 }
+        { duration: 3000 },
       );
       void this.router.navigate(['/']);
     } catch (error) {
@@ -1414,7 +1358,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.snack.open(
         $localize`:@@share.delete.failed:Failed to delete blob.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 }
+        { duration: 4000 },
       );
     }
   }

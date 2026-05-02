@@ -65,16 +65,13 @@ export function persistedSignal<T>(opts: PersistedSignalOptions<T>): WritableSig
  * common case: a UTF-8 string that should be `removeItem`'d when
  * empty (so the storage slot doesn't linger as `""`).
  */
-export function persistedStringSignal(
-  key: string,
-  defaultValue = ''
-): WritableSignal<string> {
+export function persistedStringSignal(key: string, defaultValue = ''): WritableSignal<string> {
   return persistedSignal<string>({
     key,
     defaultValue,
     parse: (raw) => raw,
     serialize: (value) => value,
-    shouldRemove: (value) => value.length === 0
+    shouldRemove: (value) => value.length === 0,
   });
 }
 

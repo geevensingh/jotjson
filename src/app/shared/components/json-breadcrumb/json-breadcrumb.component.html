@@ -20,11 +20,7 @@
               {{ first.label }}
             </button>
             @if (hasOverflow() || trailingCrumbs().length > 0) {
-              <jj-icon
-                name="chevron-right"
-                class="jj-breadcrumb__sep"
-                [size]="12"
-              />
+              <jj-icon name="chevron-right" class="jj-breadcrumb__sep" [size]="12" />
             }
           </li>
         }
@@ -40,29 +36,17 @@
             </button>
             <mat-menu #overflowMenu="matMenu" class="jj-menu jj-breadcrumb__overflow-menu">
               @for (crumb of hiddenCrumbs(); track crumb.canonicalPath) {
-                <button
-                  type="button"
-                  mat-menu-item
-                  (click)="onCrumbClick(crumb)"
-                >
+                <button type="button" mat-menu-item (click)="onCrumbClick(crumb)">
                   {{ crumb.label }}
                 </button>
               }
             </mat-menu>
             @if (trailingCrumbs().length > 0) {
-              <jj-icon
-                name="chevron-right"
-                class="jj-breadcrumb__sep"
-                [size]="12"
-              />
+              <jj-icon name="chevron-right" class="jj-breadcrumb__sep" [size]="12" />
             }
           </li>
         }
-        @for (
-          crumb of trailingCrumbs();
-          track crumb.canonicalPath;
-          let last = $last
-        ) {
+        @for (crumb of trailingCrumbs(); track crumb.canonicalPath; let last = $last) {
           <li class="jj-breadcrumb__item">
             <button
               type="button"
@@ -76,11 +60,7 @@
               {{ crumb.label }}
             </button>
             @if (!last) {
-              <jj-icon
-                name="chevron-right"
-                class="jj-breadcrumb__sep"
-                [size]="12"
-              />
+              <jj-icon name="chevron-right" class="jj-breadcrumb__sep" [size]="12" />
             }
           </li>
         }

@@ -9,7 +9,7 @@ export const environment: Environment = {
     knownAuthorities: [],
     redirectUri: 'https://jotjson.com/',
     postLogoutRedirectUri: 'https://jotjson.com/',
-    scopes: []
+    scopes: [],
   },
-  appInsightsConnectionString: ''
+  appInsightsConnectionString: '',
 };

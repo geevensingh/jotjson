@@ -9,7 +9,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { AuthUser } from '../../core/auth/auth-user';
 import {
   DEFAULT_PREFERENCES,
-  PreferencesService
+  PreferencesService,
 } from '../../core/preferences/preferences.service';
 import { RuleSetsService } from '../../core/api/rule-sets.service';
 import { FormattingRuleSet, UserPreferences } from '../../core/api/models';
@@ -28,22 +28,19 @@ const DATE_ANNOTATION_UNIT_CASES: readonly DateAnnotationUnitCase[] = [
   { key: 'day', selector: '[data-date-annotation-unit="day"]' },
   { key: 'hour', selector: '[data-date-annotation-unit="hour"]' },
   { key: 'minute', selector: '[data-date-annotation-unit="minute"]' },
-  { key: 'second', selector: '[data-date-annotation-unit="second"]' }
+  { key: 'second', selector: '[data-date-annotation-unit="second"]' },
 ];
 const DATE_ANNOTATION_FRIENDLY_FORMS_SELECTOR = '[data-date-annotation-friendly-forms]';
 
 describe('ProfileComponent', () => {
-  async function create(overrides?: {
-    user?: AuthUser | null;
-    isConfigured?: boolean;
-  }) {
+  async function create(overrides?: { user?: AuthUser | null; isConfigured?: boolean }) {
     const userSignal = signal<AuthUser | null>(overrides?.user ?? null);
     const authStub = {
       user: userSignal.asReadonly(),
       isSignedIn: (() => userSignal() !== null) as unknown as AuthService['isSignedIn'],
       isConfigured: overrides?.isConfigured ?? false,
       signIn: jasmine.createSpy('signIn'),
-      signOut: jasmine.createSpy('signOut')
+      signOut: jasmine.createSpy('signOut'),
     } as unknown as AuthService;
 
     TestBed.resetTestingModule();
@@ -52,8 +49,8 @@ describe('ProfileComponent', () => {
       providers: [
         provideRouter([]),
         ...provideFakeAuth(),
-        { provide: AuthService, useValue: authStub }
-      ]
+        { provide: AuthService, useValue: authStub },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ProfileComponent);
     fixture.detectChanges();
@@ -64,19 +61,19 @@ describe('ProfileComponent', () => {
   function resetDateAnnotationPrefs(
     fixture: ComponentFixture<ProfileComponent>,
     prefs: PreferencesService,
-    treeShowDateAnnotations = true
+    treeShowDateAnnotations = true,
   ): void {
     prefs.update({
       treeShowDateAnnotations,
       treeDateAnnotationUnits: { ...DEFAULT_PREFERENCES.treeDateAnnotationUnits },
-      treeDateAnnotationFriendlyForms: true
+      treeDateAnnotationFriendlyForms: true,
     });
     fixture.detectChanges();
   }
 
   async function getSlideToggle(
     fixture: ComponentFixture<ProfileComponent>,
-    selector: string
+    selector: string,
   ): Promise<MatSlideToggleHarness> {
     const loader = TestbedHarnessEnvironment.loader(fixture);
     return loader.getHarness(MatSlideToggleHarness.with({ selector }));
@@ -84,14 +81,14 @@ describe('ProfileComponent', () => {
 
   async function getUnitCheckbox(
     fixture: ComponentFixture<ProfileComponent>,
-    selector: string
+    selector: string,
   ): Promise<MatCheckboxHarness> {
     const loader = TestbedHarnessEnvironment.loader(fixture);
     return loader.getHarness(MatCheckboxHarness.with({ selector }));
   }
 
   async function getDateAnnotationSubControls(
-    fixture: ComponentFixture<ProfileComponent>
+    fixture: ComponentFixture<ProfileComponent>,
   ): Promise<{ isDisabled(): Promise<boolean> }[]> {
     const controls: { isDisabled(): Promise<boolean> }[] = [];
     for (const unitCase of DATE_ANNOTATION_UNIT_CASES) {
@@ -119,7 +116,7 @@ describe('ProfileComponent', () => {
   it('renders display name and email when signed in', async () => {
     const { fixture } = await create({
       user: { id: 'oid-1', displayName: 'Ada Lovelace', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Ada Lovelace');
@@ -130,7 +127,7 @@ describe('ProfileComponent', () => {
   it('shows "Not provided" fallback when email claim is missing', async () => {
     const { fixture } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: undefined },
-      isConfigured: true
+      isConfigured: true,
     });
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Not provided');
@@ -145,7 +142,7 @@ describe('ProfileComponent', () => {
   it('calls signOut on the sign-out button click', async () => {
     const { fixture, authStub } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onSignOut();
     expect(authStub.signOut).toHaveBeenCalled();
@@ -154,7 +151,7 @@ describe('ProfileComponent', () => {
   it('renders the preferences card with all group headings when signed in', async () => {
     const { fixture } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Preferences');
@@ -174,7 +171,7 @@ describe('ProfileComponent', () => {
   it('writes editor font size through PreferencesService when changed', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onEditorFontSizeChange(20);
     expect(prefs.prefs().editorFontSize).toBe(20);
@@ -183,7 +180,7 @@ describe('ProfileComponent', () => {
   it('clamps editor font size to the supported range', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onEditorFontSizeChange(2);
     expect(prefs.prefs().editorFontSize).toBe(8);
@@ -194,7 +191,7 @@ describe('ProfileComponent', () => {
   it('rejects non-numeric editor font size and keeps the prior value', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     const before = prefs.prefs().editorFontSize;
     fixture.componentInstance.onEditorFontSizeChange('not-a-number');
@@ -206,7 +203,7 @@ describe('ProfileComponent', () => {
   it('writes editor tab size through PreferencesService when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onEditorTabSizeChange(4);
     expect(prefs.prefs().editorTabSize).toBe(4);
@@ -217,7 +214,7 @@ describe('ProfileComponent', () => {
   it('writes editor word wrap through PreferencesService when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onEditorWordWrapChange(false);
     expect(prefs.prefs().editorWordWrap).toBe(false);
@@ -228,7 +225,7 @@ describe('ProfileComponent', () => {
   it('writes default tree expansion depth and clamps to range', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onDefaultTreeExpansionDepthChange(5);
     expect(prefs.prefs().defaultTreeExpansionDepth).toBe(5);
@@ -241,41 +238,47 @@ describe('ProfileComponent', () => {
   it('renders the Fit tree to window checkbox', async () => {
     const { fixture } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     const loader = TestbedHarnessEnvironment.loader(fixture);
-    const checkbox = await loader.getHarness(MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }));
+    const checkbox = await loader.getHarness(
+      MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }),
+    );
     expect(await checkbox.getLabelText()).toContain('Fit tree to window');
   });
 
   it('checks the Fit tree to window checkbox when treeAutoFitToWindow is true', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     prefs.update({ treeAutoFitToWindow: true });
     fixture.detectChanges();
     const loader = TestbedHarnessEnvironment.loader(fixture);
-    const checkbox = await loader.getHarness(MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }));
+    const checkbox = await loader.getHarness(
+      MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }),
+    );
     expect(await checkbox.isChecked()).toBeTrue();
   });
 
   it('unchecks the Fit tree to window checkbox when treeAutoFitToWindow is false', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     prefs.update({ treeAutoFitToWindow: false });
     fixture.detectChanges();
     const loader = TestbedHarnessEnvironment.loader(fixture);
-    const checkbox = await loader.getHarness(MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }));
+    const checkbox = await loader.getHarness(
+      MatCheckboxHarness.with({ selector: '[data-tree-auto-fit]' }),
+    );
     expect(await checkbox.isChecked()).toBeFalse();
   });
 
   it('writes treeAutoFitToWindow through PreferencesService when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onTreeAutoFitToWindowChange(false);
     expect(prefs.prefs().treeAutoFitToWindow).toBe(false);
@@ -286,7 +289,7 @@ describe('ProfileComponent', () => {
   it('disables the expansion depth slider when treeAutoFitToWindow is true', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     prefs.update({ treeAutoFitToWindow: true });
     fixture.detectChanges();
@@ -298,7 +301,7 @@ describe('ProfileComponent', () => {
   it('enables the expansion depth slider when treeAutoFitToWindow is false', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     prefs.update({ treeAutoFitToWindow: false });
     fixture.detectChanges();
@@ -310,7 +313,7 @@ describe('ProfileComponent', () => {
   it('writes treeShowTypeLabels through PreferencesService when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onTreeShowTypeLabelsChange(false);
     expect(prefs.prefs().treeShowTypeLabels).toBe(false);
@@ -321,7 +324,7 @@ describe('ProfileComponent', () => {
   it('writes treeShowDateAnnotations through PreferencesService when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onTreeShowDateAnnotationsChange(false);
     expect(prefs.prefs().treeShowDateAnnotations).toBe(false);
@@ -332,7 +335,7 @@ describe('ProfileComponent', () => {
   it('writes treeShowComments through PreferencesService when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onTreeShowCommentsChange(false);
     expect(prefs.prefs().treeShowComments).toBe(false);
@@ -346,7 +349,7 @@ describe('ProfileComponent', () => {
     it(`writes ${unitCase.key} relative-time unit as a partial patch when clicked`, async () => {
       const { fixture, prefs } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
       resetDateAnnotationPrefs(fixture, prefs);
       const updateSpy = spyOn(prefs, 'update').and.callThrough();
@@ -358,11 +361,11 @@ describe('ProfileComponent', () => {
       expect(updateSpy.calls.count()).toBe(1);
       const actualPatch: unknown = updateSpy.calls.mostRecent().args[0];
       expect(actualPatch).toEqual({
-        treeDateAnnotationUnits: { [unitCase.key]: false }
+        treeDateAnnotationUnits: { [unitCase.key]: false },
       });
       expect(prefs.prefs().treeDateAnnotationUnits).toEqual({
         ...beforeUnits,
-        [unitCase.key]: false
+        [unitCase.key]: false,
       });
     });
   }
@@ -370,7 +373,7 @@ describe('ProfileComponent', () => {
   it('writes friendly relative-time forms when clicked', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     resetDateAnnotationPrefs(fixture, prefs);
     const updateSpy = spyOn(prefs, 'update').and.callThrough();
@@ -380,7 +383,7 @@ describe('ProfileComponent', () => {
 
     expect(updateSpy.calls.count()).toBe(1);
     expect(updateSpy.calls.mostRecent().args[0]).toEqual({
-      treeDateAnnotationFriendlyForms: false
+      treeDateAnnotationFriendlyForms: false,
     });
     expect(prefs.prefs().treeDateAnnotationFriendlyForms).toBeFalse();
   });
@@ -388,7 +391,7 @@ describe('ProfileComponent', () => {
   it('disables all date annotation sub-controls when annotations are off', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     resetDateAnnotationPrefs(fixture, prefs, false);
 
@@ -402,7 +405,7 @@ describe('ProfileComponent', () => {
   it('enables all date annotation sub-controls when annotations are on', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     resetDateAnnotationPrefs(fixture, prefs, true);
 
@@ -416,7 +419,7 @@ describe('ProfileComponent', () => {
   it('keeps date annotations enabled when all relative-time units are off', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     resetDateAnnotationPrefs(fixture, prefs, true);
 
@@ -431,7 +434,7 @@ describe('ProfileComponent', () => {
       day: false,
       hour: false,
       minute: false,
-      second: false
+      second: false,
     });
     expect(prefs.prefs().treeShowDateAnnotations).toBeTrue();
     expect(fixture.componentInstance.treeShowDateAnnotations()).toBeTrue();
@@ -440,7 +443,7 @@ describe('ProfileComponent', () => {
   it('writes treeAssumeUtcForIsoDateTime/Only through PreferencesService when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onTreeAssumeUtcForIsoDateTimeChange(false);
     expect(prefs.prefs().treeAssumeUtcForIsoDateTime).toBe(false);
@@ -456,7 +459,7 @@ describe('ProfileComponent', () => {
   it('writes tree font size and clamps to the supported range', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onTreeFontSizeChange(18);
     expect(prefs.prefs().treeFontSize).toBe(18);
@@ -474,7 +477,7 @@ describe('ProfileComponent', () => {
   it('writes searchCaseSensitive when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onSearchCaseSensitiveChange(true);
     expect(prefs.prefs().searchCaseSensitive).toBe(true);
@@ -485,7 +488,7 @@ describe('ProfileComponent', () => {
   it('writes searchRegexMode when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onSearchRegexModeChange(true);
     expect(prefs.prefs().searchRegexMode).toBe(true);
@@ -496,7 +499,7 @@ describe('ProfileComponent', () => {
   it('writes searchScope for valid values and ignores invalid ones', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onSearchScopeChange('keys');
     expect(prefs.prefs().searchScope).toBe('keys');
@@ -511,7 +514,7 @@ describe('ProfileComponent', () => {
   it('writes treePathRoot for valid values and ignores invalid ones', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     expect(prefs.prefs().treePathRoot).toBe('jsonpath');
     fixture.componentInstance.onTreePathRootChange('none');
@@ -529,7 +532,7 @@ describe('ProfileComponent', () => {
   it('writes recentlyViewedEnabled when toggled', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     expect(prefs.prefs().recentlyViewedEnabled).toBe(true);
     fixture.componentInstance.onRecentlyViewedEnabledChange(false);
@@ -541,7 +544,7 @@ describe('ProfileComponent', () => {
   it('writes treeEditorSelectionSync when toggled (issue #42)', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     expect(prefs.prefs().treeEditorSelectionSync).toBe(true);
     expect(fixture.componentInstance.treeEditorSelectionSync()).toBe(true);
@@ -555,7 +558,7 @@ describe('ProfileComponent', () => {
   it('writes blobQuotaStrategy for valid values', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onBlobQuotaStrategyChange('manual');
     expect(prefs.prefs().blobQuotaStrategy).toBe('manual');
@@ -568,7 +571,7 @@ describe('ProfileComponent', () => {
   it('writes theme for valid values', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onThemeChange('light');
     expect(prefs.prefs().theme).toBe('light');
@@ -583,7 +586,7 @@ describe('ProfileComponent', () => {
   it('writes layoutOrientation for valid values', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     });
     fixture.componentInstance.onLayoutOrientationChange('vertical');
     expect(prefs.prefs().layoutOrientation).toBe('vertical');
@@ -597,15 +600,13 @@ describe('ProfileComponent', () => {
     async function createSignedIn() {
       return create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
     }
 
     it('renders 8 color inputs (4 per theme)', async () => {
       const { fixture } = await createSignedIn();
-      const inputs = (fixture.nativeElement as HTMLElement).querySelectorAll(
-        'input[type="color"]'
-      );
+      const inputs = (fixture.nativeElement as HTMLElement).querySelectorAll('input[type="color"]');
       expect(inputs.length).toBe(8);
     });
 
@@ -659,9 +660,11 @@ describe('ProfileComponent', () => {
   describe('default rule sets section', () => {
     function setRuleSetCache(sets: FormattingRuleSet[] | null): void {
       const ruleSets = TestBed.inject(RuleSetsService);
-      (ruleSets as unknown as {
-        _serverSnapshot: { set(v: FormattingRuleSet[] | null): void };
-      })._serverSnapshot.set(sets);
+      (
+        ruleSets as unknown as {
+          _serverSnapshot: { set(v: FormattingRuleSet[] | null): void };
+        }
+      )._serverSnapshot.set(sets);
     }
 
     it('does not render the section when signed out', async () => {
@@ -673,7 +676,7 @@ describe('ProfileComponent', () => {
     it('renders the section heading when signed in', async () => {
       const { fixture } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
       const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
       expect(text).toContain('Default rule sets');
@@ -682,7 +685,7 @@ describe('ProfileComponent', () => {
     it('shows the empty-state hint when the user owns no rule sets', async () => {
       const { fixture } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
       setRuleSetCache([]);
       fixture.detectChanges();
@@ -693,18 +696,16 @@ describe('ProfileComponent', () => {
     it('renders one checkbox per cached rule set sorted by name', async () => {
       const { fixture } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
       setRuleSetCache([
         makeRuleSet({ id: 'rs-z', name: 'Zebra' }),
         makeRuleSet({ id: 'rs-a', name: 'Alpha' }),
-        makeRuleSet({ id: 'rs-m', name: 'Mike' })
+        makeRuleSet({ id: 'rs-m', name: 'Mike' }),
       ]);
       fixture.detectChanges();
       const labels = Array.from(
-        (fixture.nativeElement as HTMLElement).querySelectorAll(
-          '.pref-checkbox-list mat-checkbox'
-        )
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.pref-checkbox-list mat-checkbox'),
       ).map((el) => (el.textContent ?? '').trim());
       expect(labels).toEqual(['Alpha', 'Mike', 'Zebra']);
     });
@@ -712,11 +713,11 @@ describe('ProfileComponent', () => {
     it('reflects the current activeRuleSetIds via the checkbox checked state', async () => {
       const { fixture, prefs } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
       setRuleSetCache([
         makeRuleSet({ id: 'rs-1', name: 'One' }),
-        makeRuleSet({ id: 'rs-2', name: 'Two' })
+        makeRuleSet({ id: 'rs-2', name: 'Two' }),
       ]);
       prefs.update({ activeRuleSetIds: ['rs-2'] });
       fixture.detectChanges();
@@ -727,11 +728,11 @@ describe('ProfileComponent', () => {
     it('appends an ID when toggled on', async () => {
       const { fixture, prefs } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
       setRuleSetCache([
         makeRuleSet({ id: 'rs-1', name: 'One' }),
-        makeRuleSet({ id: 'rs-2', name: 'Two' })
+        makeRuleSet({ id: 'rs-2', name: 'Two' }),
       ]);
       prefs.update({ activeRuleSetIds: ['rs-1'] });
       fixture.componentInstance.onActiveRuleSetToggle('rs-2', true);
@@ -741,11 +742,11 @@ describe('ProfileComponent', () => {
     it('removes an ID when toggled off', async () => {
       const { fixture, prefs } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
       setRuleSetCache([
         makeRuleSet({ id: 'rs-1', name: 'One' }),
-        makeRuleSet({ id: 'rs-2', name: 'Two' })
+        makeRuleSet({ id: 'rs-2', name: 'Two' }),
       ]);
       prefs.update({ activeRuleSetIds: ['rs-1', 'rs-2'] });
       fixture.componentInstance.onActiveRuleSetToggle('rs-1', false);
@@ -755,7 +756,7 @@ describe('ProfileComponent', () => {
     it('is a no-op when toggling on an ID already present', async () => {
       const { fixture, prefs } = await create({
         user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-        isConfigured: true
+        isConfigured: true,
       });
       prefs.update({ activeRuleSetIds: ['rs-1'] });
       const before = prefs.prefs().activeRuleSetIds;
@@ -767,15 +768,13 @@ describe('ProfileComponent', () => {
   describe('flush-right layout', () => {
     const signedIn = {
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
-      isConfigured: true
+      isConfigured: true,
     };
 
     it('externalizes every settings slide-toggle label into a sibling pref-label', async () => {
       const { fixture } = await create(signedIn);
       const root = fixture.nativeElement as HTMLElement;
-      const toggles = Array.from(
-        root.querySelectorAll<HTMLElement>('.pref-row mat-slide-toggle')
-      );
+      const toggles = Array.from(root.querySelectorAll<HTMLElement>('.pref-row mat-slide-toggle'));
       for (const toggle of toggles) {
         expect(toggle.getAttribute('labelPosition')).not.toBe('before');
         const previousSibling = toggle.previousElementSibling;
@@ -824,7 +823,7 @@ describe('ProfileComponent', () => {
       const { fixture } = await create(signedIn);
       const root = fixture.nativeElement as HTMLElement;
       const unitCheckboxes = Array.from(
-        root.querySelectorAll('.date-annotation-unit-grid mat-checkbox')
+        root.querySelectorAll('.date-annotation-unit-grid mat-checkbox'),
       );
       expect(unitCheckboxes.length).toBe(6);
       for (const checkbox of unitCheckboxes) {
@@ -843,6 +842,6 @@ function makeRuleSet(partial: { id: string; name: string }): FormattingRuleSet {
     rules: [],
     version: 1,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 }

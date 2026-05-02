@@ -3,123 +3,123 @@
     <input
       #searchInput
       type="search"
-    class="tree-search"
-    [class.tree-search--invalid]="searchRegexInvalid()"
-    placeholder="Search keys, values, or paths..."
-    i18n-placeholder="@@tree.search.placeholder"
-    aria-label="Search tree"
-    i18n-aria-label="@@tree.search.aria"
-    [value]="search()"
-    (input)="onSearchInput($event)"
-    (keydown.escape)="onSearchEsc($event)"
-    (keydown.enter)="onSearchEnter($event)"
-    (keydown.shift.enter)="onSearchEnter($event)"
-  />
-  <button
-    type="button"
-    class="tree-select tree-search-toggle"
-    [class.is-active]="searchCaseSensitive()"
-    [attr.aria-pressed]="searchCaseSensitive()"
-    [title]="searchCaseSensitiveTooltip"
-    [attr.aria-label]="searchCaseSensitiveTooltip"
-    (click)="toggleSearchCaseSensitive()"
-  >
-    {{ searchCaseSensitiveLabel }}
-  </button>
-  <button
-    type="button"
-    class="tree-select tree-search-toggle"
-    [class.is-active]="searchRegexMode()"
-    [attr.aria-pressed]="searchRegexMode()"
-    [title]="searchRegexTooltip"
-    [attr.aria-label]="searchRegexTooltip"
-    (click)="toggleSearchRegexMode()"
-  >
-    {{ searchRegexLabel }}
-  </button>
-  <button
-    type="button"
-    class="tree-select tree-search-scope"
-    [matMenuTriggerFor]="scopeMenu"
-    [title]="searchScopeTooltip"
-    [attr.aria-label]="searchScopeTooltip"
-    aria-haspopup="menu"
-  >
-    {{ searchScopeButtonLabel() }}
-  </button>
-  <mat-menu #scopeMenu="matMenu" class="jj-menu">
+      class="tree-search"
+      [class.tree-search--invalid]="searchRegexInvalid()"
+      placeholder="Search keys, values, or paths..."
+      i18n-placeholder="@@tree.search.placeholder"
+      aria-label="Search tree"
+      i18n-aria-label="@@tree.search.aria"
+      [value]="search()"
+      (input)="onSearchInput($event)"
+      (keydown.escape)="onSearchEsc($event)"
+      (keydown.enter)="onSearchEnter($event)"
+      (keydown.shift.enter)="onSearchEnter($event)"
+    />
     <button
       type="button"
-      mat-menu-item
-      [attr.aria-checked]="searchScope() === 'keys'"
-      role="menuitemradio"
-      (click)="setSearchScope('keys')"
+      class="tree-select tree-search-toggle"
+      [class.is-active]="searchCaseSensitive()"
+      [attr.aria-pressed]="searchCaseSensitive()"
+      [title]="searchCaseSensitiveTooltip"
+      [attr.aria-label]="searchCaseSensitiveTooltip"
+      (click)="toggleSearchCaseSensitive()"
     >
-      {{ searchScopeKeysLabel }}
+      {{ searchCaseSensitiveLabel }}
     </button>
     <button
       type="button"
-      mat-menu-item
-      [attr.aria-checked]="searchScope() === 'values'"
-      role="menuitemradio"
-      (click)="setSearchScope('values')"
+      class="tree-select tree-search-toggle"
+      [class.is-active]="searchRegexMode()"
+      [attr.aria-pressed]="searchRegexMode()"
+      [title]="searchRegexTooltip"
+      [attr.aria-label]="searchRegexTooltip"
+      (click)="toggleSearchRegexMode()"
     >
-      {{ searchScopeValuesLabel }}
+      {{ searchRegexLabel }}
     </button>
     <button
       type="button"
-      mat-menu-item
-      [attr.aria-checked]="searchScope() === 'both'"
-      role="menuitemradio"
-      (click)="setSearchScope('both')"
+      class="tree-select tree-search-scope"
+      [matMenuTriggerFor]="scopeMenu"
+      [title]="searchScopeTooltip"
+      [attr.aria-label]="searchScopeTooltip"
+      aria-haspopup="menu"
     >
-      {{ searchScopeBothLabel }}
+      {{ searchScopeButtonLabel() }}
     </button>
-  </mat-menu>
-  <button
-    type="button"
-    class="tree-select tree-search-type"
-    [class.is-active]="searchValueType() !== 'all'"
-    [matMenuTriggerFor]="typeMenu"
-    [title]="searchValueTypeTooltip"
-    [attr.aria-label]="searchValueTypeTooltip"
-    aria-haspopup="menu"
-  >
-    {{ searchValueTypeButtonLabel() }}
-  </button>
-  <mat-menu #typeMenu="matMenu" class="jj-menu">
-    @for (t of searchValueTypes; track t) {
+    <mat-menu #scopeMenu="matMenu" class="jj-menu">
       <button
         type="button"
         mat-menu-item
-        [attr.aria-checked]="searchValueType() === t"
+        [attr.aria-checked]="searchScope() === 'keys'"
         role="menuitemradio"
-        (click)="setSearchValueType(t)"
+        (click)="setSearchScope('keys')"
       >
-        {{ valueTypeLabel(t) }}
+        {{ searchScopeKeysLabel }}
       </button>
-    }
-  </mat-menu>
-  <button
-    type="button"
-    class="tree-btn tree-search-nav"
-    [disabled]="searchPrevDisabled()"
-    [title]="searchPrevTooltip"
-    [attr.aria-label]="searchPrevTooltip"
-    (click)="goToPrevMatch()"
-  >
-    &lsaquo;
-  </button>
-  <button
-    type="button"
-    class="tree-btn tree-search-nav"
-    [disabled]="searchNextDisabled()"
-    [title]="searchNextTooltip"
-    [attr.aria-label]="searchNextTooltip"
-    (click)="goToNextMatch()"
-  >
-    &rsaquo;
-  </button>
+      <button
+        type="button"
+        mat-menu-item
+        [attr.aria-checked]="searchScope() === 'values'"
+        role="menuitemradio"
+        (click)="setSearchScope('values')"
+      >
+        {{ searchScopeValuesLabel }}
+      </button>
+      <button
+        type="button"
+        mat-menu-item
+        [attr.aria-checked]="searchScope() === 'both'"
+        role="menuitemradio"
+        (click)="setSearchScope('both')"
+      >
+        {{ searchScopeBothLabel }}
+      </button>
+    </mat-menu>
+    <button
+      type="button"
+      class="tree-select tree-search-type"
+      [class.is-active]="searchValueType() !== 'all'"
+      [matMenuTriggerFor]="typeMenu"
+      [title]="searchValueTypeTooltip"
+      [attr.aria-label]="searchValueTypeTooltip"
+      aria-haspopup="menu"
+    >
+      {{ searchValueTypeButtonLabel() }}
+    </button>
+    <mat-menu #typeMenu="matMenu" class="jj-menu">
+      @for (t of searchValueTypes; track t) {
+        <button
+          type="button"
+          mat-menu-item
+          [attr.aria-checked]="searchValueType() === t"
+          role="menuitemradio"
+          (click)="setSearchValueType(t)"
+        >
+          {{ valueTypeLabel(t) }}
+        </button>
+      }
+    </mat-menu>
+    <button
+      type="button"
+      class="tree-btn tree-search-nav"
+      [disabled]="searchPrevDisabled()"
+      [title]="searchPrevTooltip"
+      [attr.aria-label]="searchPrevTooltip"
+      (click)="goToPrevMatch()"
+    >
+      &lsaquo;
+    </button>
+    <button
+      type="button"
+      class="tree-btn tree-search-nav"
+      [disabled]="searchNextDisabled()"
+      [title]="searchNextTooltip"
+      [attr.aria-label]="searchNextTooltip"
+      (click)="goToNextMatch()"
+    >
+      &rsaquo;
+    </button>
     @if (searchCountLabel()) {
       <span class="tree-search-count">
         <span class="tree-search-count__live" aria-live="polite">{{ searchCountLabel() }}</span>
@@ -138,16 +138,36 @@
     {{ expandMenuButtonLabel }}
   </button>
   <mat-menu #expandMenu="matMenu" class="jj-menu">
-    <button type="button" mat-menu-item (click)="expandToLevel(1)" i18n="@@tree.expand.level.1">Expand: 1</button>
-    <button type="button" mat-menu-item (click)="expandToLevel(2)" i18n="@@tree.expand.level.2">Expand: 2</button>
-    <button type="button" mat-menu-item (click)="expandToLevel(3)" i18n="@@tree.expand.level.3">Expand: 3</button>
-    <button type="button" mat-menu-item (click)="expandToLevel(4)" i18n="@@tree.expand.level.4">Expand: 4</button>
-    <button type="button" mat-menu-item (click)="expandToLevel(5)" i18n="@@tree.expand.level.5">Expand: 5</button>
-    <button type="button" mat-menu-item (click)="expandToLevel(6)" i18n="@@tree.expand.level.6">Expand: 6</button>
-    <button type="button" mat-menu-item (click)="expandToLevel(7)" i18n="@@tree.expand.level.7">Expand: 7</button>
-    <button type="button" mat-menu-item (click)="expandToLevel(8)" i18n="@@tree.expand.level.8">Expand: 8</button>
-    <button type="button" mat-menu-item (click)="expandToLevel(9)" i18n="@@tree.expand.level.9">Expand: 9</button>
-    <button type="button" mat-menu-item (click)="expandAll()" i18n="@@tree.expand.level.all">Expand: all</button>
+    <button type="button" mat-menu-item (click)="expandToLevel(1)" i18n="@@tree.expand.level.1"
+      >Expand: 1</button
+    >
+    <button type="button" mat-menu-item (click)="expandToLevel(2)" i18n="@@tree.expand.level.2"
+      >Expand: 2</button
+    >
+    <button type="button" mat-menu-item (click)="expandToLevel(3)" i18n="@@tree.expand.level.3"
+      >Expand: 3</button
+    >
+    <button type="button" mat-menu-item (click)="expandToLevel(4)" i18n="@@tree.expand.level.4"
+      >Expand: 4</button
+    >
+    <button type="button" mat-menu-item (click)="expandToLevel(5)" i18n="@@tree.expand.level.5"
+      >Expand: 5</button
+    >
+    <button type="button" mat-menu-item (click)="expandToLevel(6)" i18n="@@tree.expand.level.6"
+      >Expand: 6</button
+    >
+    <button type="button" mat-menu-item (click)="expandToLevel(7)" i18n="@@tree.expand.level.7"
+      >Expand: 7</button
+    >
+    <button type="button" mat-menu-item (click)="expandToLevel(8)" i18n="@@tree.expand.level.8"
+      >Expand: 8</button
+    >
+    <button type="button" mat-menu-item (click)="expandToLevel(9)" i18n="@@tree.expand.level.9"
+      >Expand: 9</button
+    >
+    <button type="button" mat-menu-item (click)="expandAll()" i18n="@@tree.expand.level.all"
+      >Expand: all</button
+    >
   </mat-menu>
   <button type="button" class="tree-btn" (click)="expandAll()" i18n="@@tree.expand.all">
     Expand all
@@ -375,7 +395,13 @@
 
           <span class="tree-value-container">
             <span class="tree-value-brace">
-              {{ treeControl.isExpanded(node) ? (node.type === 'array' ? '[' : '{') : containerSummary(node) }}
+              {{
+                treeControl.isExpanded(node)
+                  ? node.type === 'array'
+                    ? '['
+                    : '{'
+                  : containerSummary(node)
+              }}
             </span>
           </span>
 
@@ -407,10 +433,7 @@
           </span>
         </div>
 
-        <div
-          class="tree-children"
-          [class.tree-children-hidden]="!treeControl.isExpanded(node)"
-        >
+        <div class="tree-children" [class.tree-children-hidden]="!treeControl.isExpanded(node)">
           <ng-container matTreeNodeOutlet></ng-container>
           @if (treeControl.isExpanded(node)) {
             <div class="tree-row tree-row--close">
@@ -464,12 +487,7 @@
 
 <mat-menu #rowMenu="matMenu" class="jj-menu tree-row-menu">
   @if (contextNode(); as cn) {
-    <button
-      mat-menu-item
-      type="button"
-      class="ctx-default-action"
-      (click)="copyValue(cn, 'menu')"
-    >
+    <button mat-menu-item type="button" class="ctx-default-action" (click)="copyValue(cn, 'menu')">
       {{ ctxCopyValueLabel }}
     </button>
     @if (showCopyKey(cn)) {

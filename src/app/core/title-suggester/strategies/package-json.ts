@@ -18,12 +18,7 @@ import { isPlainObject, readString } from './helpers';
  * Output: `name` if no version, otherwise `name@version`. Skips when
  * `name` is missing.
  */
-const MARKER_KEYS = [
-  'scripts',
-  'dependencies',
-  'devDependencies',
-  'peerDependencies'
-] as const;
+const MARKER_KEYS = ['scripts', 'dependencies', 'devDependencies', 'peerDependencies'] as const;
 
 export const packageJsonStrategy: SuggestionStrategy = (input) => {
   if (!isPlainObject(input.parsed)) return null;
@@ -33,14 +28,9 @@ export const packageJsonStrategy: SuggestionStrategy = (input) => {
 
   const filenameMatches =
     input.filename !== null &&
-    input.filename
-      .split(/[\\/]/)
-      .pop()!
-      .toLowerCase() === 'package.json';
+    input.filename.split(/[\\/]/).pop()!.toLowerCase() === 'package.json';
 
-  const hasMarkerKey = MARKER_KEYS.some((key) =>
-    Object.prototype.hasOwnProperty.call(obj, key)
-  );
+  const hasMarkerKey = MARKER_KEYS.some((key) => Object.prototype.hasOwnProperty.call(obj, key));
 
   if (!filenameMatches && !hasMarkerKey) return null;
 

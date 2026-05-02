@@ -75,7 +75,7 @@ export class DocumentDropController {
       // owner forgot to dispose. Tests assert this is non-fatal.
       console.warn(
         '[DocumentDropController] replacing existing editor drop handler; ' +
-          'previous owner did not dispose.'
+          'previous owner did not dispose.',
       );
     }
     this.registrationId += 1;
@@ -165,7 +165,7 @@ export class DocumentDropController {
     const ref = this.snack.open(
       $localize`:@@home.upload.error.dropElsewhere:Drop on the editor page to load a file`,
       $localize`:@@home.upload.error.dropElsewhere.action:Go to editor`,
-      { duration: 5000 }
+      { duration: 5000 },
     );
     ref.onAction().subscribe(() => {
       void this.router.navigateByUrl('/');

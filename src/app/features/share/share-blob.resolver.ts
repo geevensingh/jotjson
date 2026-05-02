@@ -20,7 +20,7 @@ export const shareBlobResolver: ResolveFn<JsonBlob | null> = (route) => {
   const goToNotFound = (attemptedSlug?: string): void => {
     void router.navigate(['/404'], {
       replaceUrl: true,
-      state: attemptedSlug ? { attemptedSlug } : undefined
+      state: attemptedSlug ? { attemptedSlug } : undefined,
     });
   };
   if (!slug) {
@@ -31,6 +31,6 @@ export const shareBlobResolver: ResolveFn<JsonBlob | null> = (route) => {
     catchError(() => {
       goToNotFound(slug);
       return of(null);
-    })
+    }),
   );
 };

@@ -14,19 +14,12 @@ describe('AppComponent', () => {
   let appUpdateServiceSpy: jasmine.SpyObj<AppUpdateService>;
 
   beforeEach(async () => {
-    loggerServiceSpy = jasmine.createSpyObj<LoggerService>(
-      'LoggerService',
-      ['event', 'connect']
-    );
+    loggerServiceSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'connect']);
     loggerServiceSpy.connect.and.resolveTo();
-    routeTrackerSpy = jasmine.createSpyObj<RouteTracker>(
-      'RouteTracker',
-      ['start', 'flushPending']
-    );
-    appUpdateServiceSpy = jasmine.createSpyObj<AppUpdateService>(
-      'AppUpdateService',
-      ['initialize']
-    );
+    routeTrackerSpy = jasmine.createSpyObj<RouteTracker>('RouteTracker', ['start', 'flushPending']);
+    appUpdateServiceSpy = jasmine.createSpyObj<AppUpdateService>('AppUpdateService', [
+      'initialize',
+    ]);
 
     // Stub DocumentDropController so we don't attach real document-level
     // drag/drop listeners that would leak across the Karma test run after
@@ -35,7 +28,7 @@ describe('AppComponent', () => {
       dropActive: signal(false).asReadonly(),
       registerEditorHandler: () => () => {
         /* noop */
-      }
+      },
     };
 
     await TestBed.configureTestingModule({
@@ -46,8 +39,8 @@ describe('AppComponent', () => {
         { provide: RouteTracker, useValue: routeTrackerSpy },
         { provide: AppUpdateService, useValue: appUpdateServiceSpy },
         { provide: DocumentDropController, useValue: dropControllerStub },
-        ...provideFakeAuth()
-      ]
+        ...provideFakeAuth(),
+      ],
     }).compileComponents();
   });
 
@@ -90,19 +83,19 @@ describe('AppComponent', () => {
         version: jasmine.any(String),
         sha: jasmine.any(String),
         branch: jasmine.any(String),
-        buildNumber: jasmine.any(String)
+        buildNumber: jasmine.any(String),
       },
-      undefined
+      undefined,
     );
     expect(callOrder).toEqual(['event', 'connect']);
   });
 
   it('initializes web vitals after app.boot connect during lazy initialization', async () => {
-    const initSpy = jasmine.createSpy<(
-      logger: LoggerService,
-      appVersion: string,
-      buildNumber: string
-    ) => Promise<void>>('initWebVitals').and.resolveTo();
+    const initSpy = jasmine
+      .createSpy<
+        (logger: LoggerService, appVersion: string, buildNumber: string) => Promise<void>
+      >('initWebVitals')
+      .and.resolveTo();
     const webVitalsModule = await import('./core/telemetry/web-vitals');
     webVitalsModule.__setInitWebVitalsImplForTesting(initSpy);
     try {

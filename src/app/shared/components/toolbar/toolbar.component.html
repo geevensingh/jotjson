@@ -102,10 +102,7 @@
 
   <div class="identity-control">
     @if (isAnonymousOnSavedBlob()) {
-      <span
-        class="title-display"
-        [class.untitled]="!loadedBlobTitle()"
-      >
+      <span class="title-display" [class.untitled]="!loadedBlobTitle()">
         {{ loadedBlobTitle() || untitledLabel }}
       </span>
     } @else if (isSignedIn()) {
@@ -135,22 +132,14 @@
       </button>
       <mat-menu #suggestionsMenu="matMenu" class="jj-menu">
         @for (candidate of suggestedTitles(); track candidate.value) {
-          <button
-            mat-menu-item
-            type="button"
-            (click)="onSuggestionSelected(candidate)"
-          >
+          <button mat-menu-item type="button" (click)="onSuggestionSelected(candidate)">
             <span>{{ candidate.value }}</span>
           </button>
         }
       </mat-menu>
     }
 
-    <div
-      [class]="'state-pill ' + pillStateClass()"
-      role="status"
-      aria-live="polite"
-    >
+    <div [class]="'state-pill ' + pillStateClass()" role="status" aria-live="polite">
       @if (isCta()) {
         <button
           mat-flat-button
@@ -204,11 +193,7 @@
             <jj-icon [name]="isPublic() ? 'lock' : 'globe'" />
             <span>{{ visibilityMenuLabel() }}</span>
           </button>
-          <button
-            mat-menu-item
-            type="button"
-            (click)="onDeleteBlobClick()"
-          >
+          <button mat-menu-item type="button" (click)="onDeleteBlobClick()">
             <jj-icon name="trash" />
             <span i18n="@@toolbar.overflow.delete">Delete this blob</span>
           </button>

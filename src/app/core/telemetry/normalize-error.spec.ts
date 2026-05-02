@@ -30,7 +30,7 @@ describe('normalizeError', () => {
       url: '/api/history?q=secret&continuationToken=xyz',
       status: 500,
       statusText: 'Internal Server Error',
-      error: { code: 'cosmos.unavailable', detail: 'sensitive data' }
+      error: { code: 'cosmos.unavailable', detail: 'sensitive data' },
     });
     const out = normalizeError(err, { method: 'GET' });
     expect(out.kind).toBe('http');
@@ -51,7 +51,7 @@ describe('normalizeError', () => {
   it('prefers ctx.pathTemplate over the raw URL', () => {
     const err = new HttpErrorResponse({
       url: '/api/blobs/abc?x=1',
-      status: 404
+      status: 404,
     });
     const out = normalizeError(err, { method: 'GET', pathTemplate: '/api/blobs/:slug' });
     expect(out.kind).toBe('http');

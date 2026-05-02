@@ -24,6 +24,6 @@ export const kubernetesStrategy: SuggestionStrategy = (input) => {
   return {
     value: `${kind}: ${name}`,
     source: 'kubernetes',
-    confidence: 92
+    confidence: 92,
   };
 };

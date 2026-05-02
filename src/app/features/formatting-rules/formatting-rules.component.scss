@@ -81,7 +81,7 @@
   pointer-events: none;
 }
 
-.apply-toggle[aria-pressed="true"] jj-icon {
+.apply-toggle[aria-pressed='true'] jj-icon {
   color: var(--mat-sys-primary, #1976d2);
 }
 
@@ -114,7 +114,7 @@
   box-sizing: border-box;
 }
 
-.rename-input[aria-invalid="true"] {
+.rename-input[aria-invalid='true'] {
   border-color: var(--mat-sys-error, #d32f2f);
   outline-color: var(--mat-sys-error, #d32f2f);
 }

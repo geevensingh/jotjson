@@ -7,7 +7,7 @@ describe('UploadErrorBannerComponent', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [UploadErrorBannerComponent],
-      providers: [provideNoopAnimations()]
+      providers: [provideNoopAnimations()],
     });
   });
 
@@ -51,11 +51,9 @@ describe('UploadErrorBannerComponent', () => {
 
     const host = fixture.nativeElement as HTMLElement;
     const buttons = Array.from(
-      host.querySelectorAll('.banner-actions button')
+      host.querySelectorAll('.banner-actions button'),
     ) as HTMLButtonElement[];
-    const dismissBtn = buttons.find(
-      (b) => (b.textContent ?? '').trim() === 'Dismiss'
-    );
+    const dismissBtn = buttons.find((b) => (b.textContent ?? '').trim() === 'Dismiss');
     expect(dismissBtn).withContext('Dismiss button rendered').toBeTruthy();
     dismissBtn!.click();
 

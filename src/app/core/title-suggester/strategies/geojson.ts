@@ -20,7 +20,7 @@ const GEOJSON_TYPES = new Set([
   'MultiLineString',
   'Polygon',
   'MultiPolygon',
-  'GeometryCollection'
+  'GeometryCollection',
 ]);
 
 export const geojsonStrategy: SuggestionStrategy = (input) => {
@@ -44,20 +44,20 @@ export const geojsonStrategy: SuggestionStrategy = (input) => {
         return {
           value: `GeoJSON: ${name}`,
           source: 'geojson',
-          confidence: 88
+          confidence: 88,
         };
       }
     }
     return {
       value: $localize`:@@toolbar.titleSuggestion.shape.geojsonFeature:GeoJSON: Feature`,
       source: 'geojson',
-      confidence: 88
+      confidence: 88,
     };
   }
 
   return {
     value: `GeoJSON: ${type}`,
     source: 'geojson',
-    confidence: 88
+    confidence: 88,
   };
 };

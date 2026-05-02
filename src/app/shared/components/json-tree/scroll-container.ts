@@ -13,15 +13,12 @@
  * @returns The first matching ancestor, or null if none found before
  *   reaching the document root.
  */
-export function findScrollableAncestor(
-  element: HTMLElement
-): HTMLElement | null {
+export function findScrollableAncestor(element: HTMLElement): HTMLElement | null {
   let current: HTMLElement | null = element.parentElement;
   while (current !== null) {
     const styles = getComputedStyle(current);
     const overflowY = styles.overflowY;
-    if ((overflowY === 'auto' || overflowY === 'scroll') &&
-        current.clientHeight > 0) {
+    if ((overflowY === 'auto' || overflowY === 'scroll') && current.clientHeight > 0) {
       return current;
     }
     current = current.parentElement;

@@ -10,17 +10,9 @@
  *
  * All routes require auth.
  */
-import {
-  app,
-  HttpRequest,
-  HttpResponseInit,
-  InvocationContext
-} from '@azure/functions';
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
-import {
-  clearAll,
-  listEntries
-} from '../shared/history';
+import { clearAll, listEntries } from '../shared/history';
 import { badRequest, internalError, unauthorized } from '../shared/http';
 
 function isIsoTimestamp(value: string): boolean {
@@ -37,7 +29,7 @@ function isIsoTimestamp(value: string): boolean {
 
 export async function getHistory(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -93,7 +85,7 @@ export async function getHistory(
       ...(continuationToken ? { continuationToken } : {}),
       ...(q !== undefined ? { q } : {}),
       ...(from !== undefined ? { from } : {}),
-      ...(to !== undefined ? { to } : {})
+      ...(to !== undefined ? { to } : {}),
     });
     return { status: 200, jsonBody: result };
   } catch (error) {
@@ -103,7 +95,7 @@ export async function getHistory(
 
 export async function deleteHistory(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -125,12 +117,12 @@ app.http('history-get', {
   methods: ['GET'],
   route: 'history',
   authLevel: 'anonymous',
-  handler: getHistory
+  handler: getHistory,
 });
 
 app.http('history-delete', {
   methods: ['DELETE'],
   route: 'history',
   authLevel: 'anonymous',
-  handler: deleteHistory
+  handler: deleteHistory,
 });

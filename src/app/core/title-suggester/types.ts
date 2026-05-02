@@ -76,6 +76,4 @@ export interface SuggestionInput {
  * A pure strategy function. Returns a candidate or `null` when the
  * strategy doesn't apply to the input.
  */
-export type SuggestionStrategy = (
-  input: SuggestionInput
-) => SuggestionCandidate | null;
+export type SuggestionStrategy = (input: SuggestionInput) => SuggestionCandidate | null;

@@ -22,7 +22,7 @@ function createFakeApi(): FakeWebVitalsApi {
   const invokeCallback = (
     callback: WebVitalsCallback | undefined,
     value: number,
-    metricName: string
+    metricName: string,
   ): void => {
     if (!callback) {
       throw new Error(`${metricName} callback was not registered`);
@@ -39,14 +39,14 @@ function createFakeApi(): FakeWebVitalsApi {
     },
     onCLS: (callback) => {
       clsCallback = callback;
-    }
+    },
   };
 
   return {
     api,
     emitLcp: (value) => invokeCallback(lcpCallback, value, 'LCP'),
     emitInp: (value) => invokeCallback(inpCallback, value, 'INP'),
-    emitCls: (value) => invokeCallback(clsCallback, value, 'CLS')
+    emitCls: (value) => invokeCallback(clsCallback, value, 'CLS'),
   };
 }
 
@@ -94,7 +94,7 @@ describe('setupWebVitals', () => {
     expect(logger.event).toHaveBeenCalledOnceWith(
       'webVitals',
       { appVersion: TEST_APP_VERSION, buildNumber: TEST_BUILD_NUMBER },
-      { lcpMs: 1234.5, inpMs: 56, cls: 0.07 }
+      { lcpMs: 1234.5, inpMs: 56, cls: 0.07 },
     );
   });
 
@@ -110,7 +110,7 @@ describe('setupWebVitals', () => {
     expect(logger.event).toHaveBeenCalledOnceWith(
       'webVitals',
       { appVersion: TEST_APP_VERSION, buildNumber: TEST_BUILD_NUMBER },
-      { lcpMs: 1234.5 }
+      { lcpMs: 1234.5 },
     );
     expect(Object.keys(measurements ?? {})).toEqual(['lcpMs']);
   });

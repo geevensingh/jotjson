@@ -13,12 +13,14 @@ describe('StatusBarComponent', () => {
     svc = TestBed.inject(JsonParserService);
   });
 
-  function create(inputs: Partial<{
-    text: string;
-    mode: 'json' | 'jsonc';
-    parseResult: ReturnType<JsonParserService['parse']>;
-    cursor: { line: number; column: number };
-  }> = {}) {
+  function create(
+    inputs: Partial<{
+      text: string;
+      mode: 'json' | 'jsonc';
+      parseResult: ReturnType<JsonParserService['parse']>;
+      cursor: { line: number; column: number };
+    }> = {},
+  ) {
     const fixture = TestBed.createComponent(StatusBarComponent);
     if (inputs.text !== undefined) fixture.componentRef.setInput('text', inputs.text);
     if (inputs.mode !== undefined) fixture.componentRef.setInput('mode', inputs.mode);
@@ -36,7 +38,7 @@ describe('StatusBarComponent', () => {
 
   function configureWithBuildInfo(
     buildInfo: BuildInfo,
-    copySpy?: jasmine.SpyObj<ClipboardCopyService>
+    copySpy?: jasmine.SpyObj<ClipboardCopyService>,
   ): jasmine.SpyObj<ClipboardCopyService> {
     const spy =
       copySpy ??
@@ -47,15 +49,15 @@ describe('StatusBarComponent', () => {
       imports: [StatusBarComponent],
       providers: [
         { provide: BUILD_INFO_TOKEN, useValue: buildInfo },
-        { provide: ClipboardCopyService, useValue: spy }
-      ]
+        { provide: ClipboardCopyService, useValue: spy },
+      ],
     });
     return spy;
   }
 
   function createWithBuildInfo(
     buildInfo: BuildInfo,
-    copySpy?: jasmine.SpyObj<ClipboardCopyService>
+    copySpy?: jasmine.SpyObj<ClipboardCopyService>,
   ) {
     const spy = configureWithBuildInfo(buildInfo, copySpy);
     const fixture = TestBed.createComponent(StatusBarComponent);
@@ -133,7 +135,7 @@ describe('StatusBarComponent', () => {
       branch: 'main',
       builtAt: '2026-05-01T00:00:00.000Z',
       repoUrl: 'https://github.com/geevensingh/jotjson',
-      buildNumber: '234'
+      buildNumber: '234',
     };
 
     it('renders link with version and short SHA when repo URL is set', () => {
@@ -148,7 +150,7 @@ describe('StatusBarComponent', () => {
       const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
 
       expect(link?.getAttribute('href')).toBe(
-        'https://github.com/geevensingh/jotjson/commit/0123456789abcdef0123456789abcdef01234567'
+        'https://github.com/geevensingh/jotjson/commit/0123456789abcdef0123456789abcdef01234567',
       );
       expect(link?.getAttribute('target')).toBe('_blank');
       expect(link?.getAttribute('rel')).toBe('noopener');
@@ -169,7 +171,9 @@ describe('StatusBarComponent', () => {
       const { fixture } = createWithBuildInfo({ ...fullBuildInfo, sha: 'dev' });
       const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
       const button = fixture.nativeElement.querySelector('.build-copy') as HTMLButtonElement | null;
-      const fallback = fixture.nativeElement.querySelector('.stat-build .value.sha') as HTMLElement | null;
+      const fallback = fixture.nativeElement.querySelector(
+        '.stat-build .value.sha',
+      ) as HTMLElement | null;
 
       expect(link).toBeNull();
       expect(button).toBeNull();
@@ -180,7 +184,9 @@ describe('StatusBarComponent', () => {
       const { fixture } = createWithBuildInfo({ ...fullBuildInfo, repoUrl: '' });
       const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
       const button = fixture.nativeElement.querySelector('.build-copy') as HTMLButtonElement | null;
-      const fallback = fixture.nativeElement.querySelector('.stat-build .value.sha') as HTMLElement | null;
+      const fallback = fixture.nativeElement.querySelector(
+        '.stat-build .value.sha',
+      ) as HTMLElement | null;
 
       expect(link).toBeNull();
       expect(button).toBeNull();
@@ -192,7 +198,7 @@ describe('StatusBarComponent', () => {
       const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
 
       expect(link?.getAttribute('title')).toBe(
-        'JotJSON v0.5.0 (build 234)\nbuilt 2026-05-01T00:00:00.000Z'
+        'JotJSON v0.5.0 (build 234)\nbuilt 2026-05-01T00:00:00.000Z',
       );
     });
 
@@ -201,16 +207,18 @@ describe('StatusBarComponent', () => {
       const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
 
       expect(link?.getAttribute('title')).toBe(
-        'JotJSON v0.5.0 (build 234) (main)\nbuilt 2026-05-01T00:00:00.000Z'
+        'JotJSON v0.5.0 (build 234) (main)\nbuilt 2026-05-01T00:00:00.000Z',
       );
     });
 
     it('omits (build N) from the tooltip for dev builds even when the counter is known', () => {
       const { fixture } = createWithBuildInfo({ ...fullBuildInfo, sha: 'dev' });
-      const fallback = fixture.nativeElement.querySelector('.stat-build .value.sha') as HTMLElement | null;
+      const fallback = fixture.nativeElement.querySelector(
+        '.stat-build .value.sha',
+      ) as HTMLElement | null;
 
       expect(fallback?.getAttribute('title')).toBe(
-        'JotJSON v0.5.0 (main)\nbuilt 2026-05-01T00:00:00.000Z'
+        'JotJSON v0.5.0 (main)\nbuilt 2026-05-01T00:00:00.000Z',
       );
     });
 
@@ -219,7 +227,7 @@ describe('StatusBarComponent', () => {
       const link = fixture.nativeElement.querySelector('.build-link') as HTMLAnchorElement | null;
 
       expect(link?.getAttribute('title')).toBe(
-        'JotJSON v0.5.0 (main)\nbuilt 2026-05-01T00:00:00.000Z'
+        'JotJSON v0.5.0 (main)\nbuilt 2026-05-01T00:00:00.000Z',
       );
     });
   });

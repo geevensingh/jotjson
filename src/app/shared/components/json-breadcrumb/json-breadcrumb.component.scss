@@ -69,8 +69,7 @@
 // produce an overflow chip (1 or 2) - we let the last item shrink
 // as a graceful final fallback so the bar doesn't blow out its
 // container.
-.jj-breadcrumb-bar.is-fully-collapsed
-  .jj-breadcrumb__list .jj-breadcrumb__item:last-child {
+.jj-breadcrumb-bar.is-fully-collapsed .jj-breadcrumb__list .jj-breadcrumb__item:last-child {
   flex: 0 1 auto;
 }
 

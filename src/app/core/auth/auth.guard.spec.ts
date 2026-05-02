@@ -7,26 +7,24 @@ describe('authGuard', () => {
   function setup(signedIn: boolean) {
     const auth = {
       isSignedIn: (() => signedIn) as AuthService['isSignedIn'],
-      signIn: jasmine.createSpy('signIn')
+      signIn: jasmine.createSpy('signIn'),
     };
     const router = {
-      createUrlTree: jasmine.createSpy('createUrlTree').and.returnValue({} as UrlTree)
+      createUrlTree: jasmine.createSpy('createUrlTree').and.returnValue({} as UrlTree),
     };
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         { provide: AuthService, useValue: auth },
-        { provide: Router, useValue: router }
-      ]
+        { provide: Router, useValue: router },
+      ],
     });
     return { auth, router };
   }
 
   it('allows activation when signed in', () => {
     const { auth, router } = setup(true);
-    const result = TestBed.runInInjectionContext(() =>
-      (authGuard as () => boolean | UrlTree)()
-    );
+    const result = TestBed.runInInjectionContext(() => (authGuard as () => boolean | UrlTree)());
     expect(result).toBe(true);
     expect(auth.signIn).not.toHaveBeenCalled();
     expect(router.createUrlTree).not.toHaveBeenCalled();
@@ -34,9 +32,7 @@ describe('authGuard', () => {
 
   it('redirects to / and triggers sign-in when anonymous', () => {
     const { auth, router } = setup(false);
-    const result = TestBed.runInInjectionContext(() =>
-      (authGuard as () => boolean | UrlTree)()
-    );
+    const result = TestBed.runInInjectionContext(() => (authGuard as () => boolean | UrlTree)());
     expect(auth.signIn).toHaveBeenCalled();
     expect(router.createUrlTree).toHaveBeenCalledWith(['/']);
     expect(result).toBeTruthy();

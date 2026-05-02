@@ -12,14 +12,14 @@ jest.mock('../shared/auth', () => {
   const actual = jest.requireActual('../shared/auth');
   return {
     ...actual,
-    requireAuth: jest.fn()
+    requireAuth: jest.fn(),
   };
 });
 
 jest.mock('../shared/users', () => ({
   readUser: jest.fn(),
   upsertUser: jest.fn(),
-  __resetUsersContainerForTesting: jest.fn()
+  __resetUsersContainerForTesting: jest.fn(),
 }));
 
 import { AuthError } from '../shared/auth';
@@ -37,7 +37,7 @@ function makeRequest(body?: unknown): HttpRequest {
     json: async () => {
       if (body === undefined) throw new Error('no body');
       return body;
-    }
+    },
   } as unknown as HttpRequest;
 }
 
@@ -67,7 +67,7 @@ describe('GET /api/me', () => {
       id: 'u-1',
       preferences: DEFAULT_PREFERENCES,
       createdAt: 'x',
-      updatedAt: 'y'
+      updatedAt: 'y',
     };
     readUser.mockResolvedValueOnce(doc);
     const res = await getMe(makeRequest(), ctx);
@@ -81,10 +81,10 @@ describe('GET /api/me', () => {
       preferences: {
         ...DEFAULT_PREFERENCES,
         defaultRuleSetIds: ['rs-x'],
-        activeRuleSetIds: undefined
+        activeRuleSetIds: undefined,
       },
       createdAt: 'x',
-      updatedAt: 'y'
+      updatedAt: 'y',
     };
     delete (stored.preferences as Record<string, unknown>)['activeRuleSetIds'];
     readUser.mockResolvedValueOnce(stored);
@@ -142,7 +142,7 @@ describe('PUT /api/me/preferences', () => {
       id: 'u-1',
       preferences: DEFAULT_PREFERENCES,
       createdAt: 't0',
-      updatedAt: 't0'
+      updatedAt: 't0',
     });
     upsertUser.mockImplementationOnce(async (doc) => doc);
     const updated = { ...DEFAULT_PREFERENCES, editorFontSize: 18 };
@@ -163,10 +163,7 @@ describe('PUT /api/me/preferences', () => {
   });
 
   it('rejects unknown keys', async () => {
-    const res = await putMePreferences(
-      makeRequest({ ...DEFAULT_PREFERENCES, foo: 1 }),
-      ctx
-    );
+    const res = await putMePreferences(makeRequest({ ...DEFAULT_PREFERENCES, foo: 1 }), ctx);
     expect(res.status).toBe(400);
     expect(upsertUser).not.toHaveBeenCalled();
   });

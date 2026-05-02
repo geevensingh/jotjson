@@ -15,17 +15,17 @@ module.exports = function (config) {
       require('karma-spec-reporter'),
       require('karma-junit-reporter'),
       require('karma-coverage'),
-      require('@angular-devkit/build-angular/plugins/karma')
+      require('@angular-devkit/build-angular/plugins/karma'),
     ],
     client: {
       jasmine: {},
-      clearContext: false
+      clearContext: false,
     },
     jasmineHtmlReporter: { suppressAll: true },
     coverageReporter: {
       dir: require('path').join(__dirname, './coverage/jotjson'),
       subdir: '.',
-      reporters: [{ type: 'html' }, { type: 'text-summary' }, { type: 'lcovonly' }]
+      reporters: [{ type: 'html' }, { type: 'text-summary' }, { type: 'lcovonly' }],
     },
     specReporter: {
       suppressErrorSummary: false,
@@ -33,23 +33,23 @@ module.exports = function (config) {
       suppressPassed: false,
       suppressSkipped: true,
       showSpecTiming: false,
-      failFast: false
+      failFast: false,
     },
     junitReporter: {
       outputDir: require('path').join(__dirname, './test-results/web'),
       outputFile: 'junit.xml',
       useBrowserName: false,
-      suite: 'web'
+      suite: 'web',
     },
     reporters,
     browsers: ['ChromeHeadless'],
     customLaunchers: {
       ChromeHeadlessCI: {
         base: 'ChromeHeadless',
-        flags: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
-      }
+        flags: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+      },
     },
     singleRun: false,
-    restartOnFileChange: true
+    restartOnFileChange: true,
   });
 };

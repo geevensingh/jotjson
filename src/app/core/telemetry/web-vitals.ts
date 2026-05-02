@@ -26,7 +26,7 @@ export interface WebVitalsApi {
 type InitWebVitalsImpl = (
   logger: LoggerService,
   appVersion: string,
-  buildNumber: string
+  buildNumber: string,
 ) => Promise<void>;
 
 /**
@@ -39,7 +39,7 @@ export function setupWebVitals(
   api: WebVitalsApi,
   logger: LoggerService,
   appVersion: string,
-  buildNumber: string
+  buildNumber: string,
 ): void {
   if (typeof window === 'undefined') {
     return;
@@ -59,28 +59,28 @@ export function setupWebVitals(
     latestCls = metric.value;
   });
 
-  window.addEventListener('pagehide', () => {
-    if (
-      latestLcpMs === undefined &&
-      latestInpMs === undefined &&
-      latestCls === undefined
-    ) {
-      return;
-    }
+  window.addEventListener(
+    'pagehide',
+    () => {
+      if (latestLcpMs === undefined && latestInpMs === undefined && latestCls === undefined) {
+        return;
+      }
 
-    const measurements: Record<string, number> = {};
-    if (latestLcpMs !== undefined) {
-      measurements['lcpMs'] = latestLcpMs;
-    }
-    if (latestInpMs !== undefined) {
-      measurements['inpMs'] = latestInpMs;
-    }
-    if (latestCls !== undefined) {
-      measurements['cls'] = latestCls;
-    }
+      const measurements: Record<string, number> = {};
+      if (latestLcpMs !== undefined) {
+        measurements['lcpMs'] = latestLcpMs;
+      }
+      if (latestInpMs !== undefined) {
+        measurements['inpMs'] = latestInpMs;
+      }
+      if (latestCls !== undefined) {
+        measurements['cls'] = latestCls;
+      }
 
-    logger.event('webVitals', { appVersion, buildNumber }, measurements);
-  }, { once: true });
+      logger.event('webVitals', { appVersion, buildNumber }, measurements);
+    },
+    { once: true },
+  );
 }
 
 /**
@@ -91,7 +91,7 @@ export function setupWebVitals(
 async function realInitWebVitals(
   logger: LoggerService,
   appVersion: string,
-  buildNumber: string
+  buildNumber: string,
 ): Promise<void> {
   if (typeof window === 'undefined') {
     return;
@@ -107,7 +107,7 @@ async function realInitWebVitals(
     },
     onCLS: (callback) => {
       webVitalsModule.onCLS(callback);
-    }
+    },
   };
 
   setupWebVitals(webVitalsApi, logger, appVersion, buildNumber);
@@ -115,9 +115,7 @@ async function realInitWebVitals(
 
 let initWebVitalsImpl: InitWebVitalsImpl = realInitWebVitals;
 
-export function __setInitWebVitalsImplForTesting(
-  impl: InitWebVitalsImpl
-): void {
+export function __setInitWebVitalsImplForTesting(impl: InitWebVitalsImpl): void {
   initWebVitalsImpl = impl;
 }
 
@@ -128,7 +126,7 @@ export function __resetInitWebVitalsImplForTesting(): void {
 export function initWebVitals(
   logger: LoggerService,
   appVersion: string,
-  buildNumber: string
+  buildNumber: string,
 ): Promise<void> {
   return initWebVitalsImpl(logger, appVersion, buildNumber);
 }

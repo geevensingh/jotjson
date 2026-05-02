@@ -40,8 +40,7 @@ export interface ClassifyOptions extends ParseOptions {
 const UUID_RE =
   /^(?:urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}|\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i;
 
-const URL_RE =
-  /^(?:https?|wss?|ftps?|file|mailto):[^\s]+$/i;
+const URL_RE = /^(?:https?|wss?|ftps?|file|mailto):[^\s]+$/i;
 
 // Local + @ + domain with at least one dot + 2+ alpha TLD.
 const EMAIL_RE =
@@ -80,7 +79,10 @@ function isPath(candidate: string): boolean {
 
   if (pathPart.startsWith('/')) {
     if (pathPart.startsWith('//')) return false;
-    const segments = pathPart.slice(1).split('/').filter((seg) => seg.length > 0);
+    const segments = pathPart
+      .slice(1)
+      .split('/')
+      .filter((seg) => seg.length > 0);
     return segments.length >= 2;
   }
   // Relative path: must not start with ? or # (already handled), and
@@ -130,7 +132,7 @@ function classifyString(value: string, opts?: ClassifyOptions): ValueClassificat
   if (opts?.detectDates !== false) {
     const parsed = parseAsDate(trimmed, undefined, {
       assumeUtcForIsoDateTime: opts?.assumeUtcForIsoDateTime,
-      assumeUtcForIsoDateOnly: opts?.assumeUtcForIsoDateOnly
+      assumeUtcForIsoDateOnly: opts?.assumeUtcForIsoDateOnly,
     });
     if (parsed) return parsed.hasTime ? 'date/time' : 'date';
   }
@@ -146,7 +148,7 @@ function classifyString(value: string, opts?: ClassifyOptions): ValueClassificat
 export function classifyValue(
   type: JsonValueType,
   value: unknown,
-  opts?: ClassifyOptions
+  opts?: ClassifyOptions,
 ): ValueClassification {
   switch (type) {
     case 'string':

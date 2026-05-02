@@ -1,7 +1,4 @@
-import {
-  __resetColdFlagsForTesting,
-  isColdAndMark
-} from './cold-flag';
+import { __resetColdFlagsForTesting, isColdAndMark } from './cold-flag';
 
 describe('cold-flag', () => {
   beforeEach(() => {

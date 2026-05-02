@@ -37,11 +37,7 @@ export class AppUpdateService {
     if (!this.swUpdate.isEnabled) return;
 
     this.swUpdate.versionUpdates
-      .pipe(
-        filter(
-          (evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'
-        )
-      )
+      .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
       .subscribe(() => this.promptReload());
 
     this.swUpdate.unrecoverable.subscribe((event) => {
@@ -54,7 +50,7 @@ export class AppUpdateService {
     const ref = this.snack.open(
       $localize`:@@update.available.message:A new version of JotJSON is available.`,
       $localize`:@@update.available.action:Reload`,
-      { duration: 0 }
+      { duration: 0 },
     );
     ref.onAction().subscribe(() => {
       void this.activateAndReload();

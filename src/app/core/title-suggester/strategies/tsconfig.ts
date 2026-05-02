@@ -16,13 +16,12 @@ const TSCONFIG_FILENAME_RE = /^tsconfig(?:\..+)?\.json$/i;
 export const tsconfigStrategy: SuggestionStrategy = (input) => {
   if (!isPlainObject(input.parsed)) return null;
   const filenameMatches =
-    input.filename !== null &&
-    TSCONFIG_FILENAME_RE.test(input.filename.split(/[\\/]/).pop()!);
+    input.filename !== null && TSCONFIG_FILENAME_RE.test(input.filename.split(/[\\/]/).pop()!);
   const hasCompilerOptions = isPlainObject(input.parsed['compilerOptions']);
   if (!filenameMatches && !hasCompilerOptions) return null;
   return {
     value: $localize`:@@toolbar.titleSuggestion.shape.tsconfig:tsconfig`,
     source: 'tsconfig',
-    confidence: 85
+    confidence: 85,
   };
 };

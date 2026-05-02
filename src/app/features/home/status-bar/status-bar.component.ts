@@ -17,7 +17,7 @@ import { computeTextStats, computeTreeStats, formatBytes } from './stats';
   imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './status-bar.component.html',
-  styleUrl: './status-bar.component.scss'
+  styleUrl: './status-bar.component.scss',
 })
 export class StatusBarComponent {
   readonly text = input<string>('');
@@ -78,7 +78,7 @@ export class StatusBarComponent {
     void this.clipboardCopy.copyWithToast(this.buildSha, {
       success: $localize`:@@status.build.copy.success:Copied commit SHA`,
       failed: $localize`:@@status.build.copy.failed:Failed to copy commit SHA`,
-      unsupported: $localize`:@@status.build.copy.unsupported:Clipboard unavailable`
+      unsupported: $localize`:@@status.build.copy.unsupported:Clipboard unavailable`,
     });
   }
 }

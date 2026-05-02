@@ -1,8 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { environment } from '../../../environments/environment';
 import { BlobService } from './blob.service';
@@ -14,7 +11,7 @@ describe('BlobService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()]
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     service = TestBed.inject(BlobService);
     httpMock = TestBed.inject(HttpTestingController);
@@ -45,7 +42,7 @@ describe('BlobService', () => {
     expect(req.request.body).toEqual({
       content: '{"a":1}',
       title: 'My Blob',
-      isPublic: true
+      isPublic: true,
     });
     req.flush({});
   });
@@ -57,7 +54,7 @@ describe('BlobService', () => {
     expect(req.request.body).toEqual({
       content: '{}',
       title: undefined,
-      isPublic: false
+      isPublic: false,
     });
     req.flush({});
   });

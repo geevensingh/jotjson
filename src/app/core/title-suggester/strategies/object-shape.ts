@@ -18,6 +18,6 @@ export const objectShapeStrategy: SuggestionStrategy = (input) => {
   return {
     value: $localize`:@@toolbar.titleSuggestion.shape.objectWithNKeys:Object with ${len}:n: keys`,
     source: 'objectShape',
-    confidence: 30
+    confidence: 30,
   };
 };

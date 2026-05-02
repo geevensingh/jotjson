@@ -47,5 +47,5 @@ export const STRATEGIES: readonly SuggestionStrategy[] = [
   objectShapeStrategy,
   primitiveStrategy,
   firstCharsStrategy,
-  untitledStrategy
+  untitledStrategy,
 ];

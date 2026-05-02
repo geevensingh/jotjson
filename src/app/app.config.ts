@@ -4,7 +4,7 @@ import {
   inject,
   isDevMode,
   provideAppInitializer,
-  provideZoneChangeDetection
+  provideZoneChangeDetection,
 } from '@angular/core';
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
@@ -26,13 +26,13 @@ export const appConfig: ApplicationConfig = {
     provideRouter(
       routes,
       withComponentInputBinding(),
-      withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' })
+      withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' }),
     ),
     provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
     provideAnimationsAsync(),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
-      registrationStrategy: 'registerWhenStable:30000'
+      registrationStrategy: 'registerWhenStable:30000',
     }),
     { provide: ErrorHandler, useClass: TelemetryErrorHandler },
     // Hide the Material 17+ selection-indicator checkmark on every
@@ -45,8 +45,8 @@ export const appConfig: ApplicationConfig = {
       provide: MAT_BUTTON_TOGGLE_DEFAULT_OPTIONS,
       useValue: {
         hideSingleSelectionIndicator: true,
-        hideMultipleSelectionIndicator: true
-      }
+        hideMultipleSelectionIndicator: true,
+      },
     },
     // MSAL wiring - deliberately NOT using `MsalRedirectComponent` or the
     // `MSAL_GUARD_CONFIG`/`MSAL_INTERCEPTOR_CONFIG` bundles, which assume an
@@ -66,7 +66,6 @@ export const appConfig: ApplicationConfig = {
     // swallowed inside `initializeFromRedirect()`, and it short-circuits
     // when MSAL is unconfigured (empty clientId in dev), so blocking
     // bootstrap on it is safe.
-    provideAppInitializer(() => inject(AuthService).initializeFromRedirect())
-  ]
+    provideAppInitializer(() => inject(AuthService).initializeFromRedirect()),
+  ],
 };
-

@@ -1,8 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import type { UserPreferences } from './models';
 import { UserApiService } from './user-api.service';
@@ -28,7 +25,7 @@ function fakePreferences(): UserPreferences {
       day: true,
       hour: true,
       minute: true,
-      second: true
+      second: true,
     },
     treeDateAnnotationFriendlyForms: true,
     recentlyViewedEnabled: true,
@@ -47,15 +44,15 @@ function fakePreferences(): UserPreferences {
         selectionColor: '#000000',
         matchingValueColor: '#111111',
         ancestorColor: '#222222',
-        searchHighlightColor: '#333333'
+        searchHighlightColor: '#333333',
       },
       light: {
         selectionColor: '#aaaaaa',
         matchingValueColor: '#bbbbbb',
         ancestorColor: '#cccccc',
-        searchHighlightColor: '#dddddd'
-      }
-    }
+        searchHighlightColor: '#dddddd',
+      },
+    },
   };
 }
 
@@ -66,7 +63,7 @@ describe('UserApiService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()]
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     service = TestBed.inject(UserApiService);
     httpMock = TestBed.inject(HttpTestingController);
@@ -79,7 +76,7 @@ describe('UserApiService', () => {
     let errored = false;
     service.getMe().subscribe({
       next: (value) => (received = value),
-      error: () => (errored = true)
+      error: () => (errored = true),
     });
     const req = httpMock.expectOne(base);
     expect(req.request.method).toBe('GET');
@@ -93,7 +90,7 @@ describe('UserApiService', () => {
     let caught: unknown = null;
     service.getMe().subscribe({
       next: (value) => (received = value),
-      error: (err) => (caught = err)
+      error: (err) => (caught = err),
     });
     const req = httpMock.expectOne(base);
     req.flush('boom', { status: 500, statusText: 'Server Error' });

@@ -103,7 +103,9 @@
   opacity: 0.5;
   cursor: pointer;
   border-radius: 2px;
-  transition: opacity 120ms ease, background 120ms ease;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
 
   &:hover,
   &:focus-visible {

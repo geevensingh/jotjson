@@ -1,7 +1,4 @@
-import {
-  MAX_UPLOAD_BYTES,
-  validateAndReadSingleFile,
-} from './upload-file-validator';
+import { MAX_UPLOAD_BYTES, validateAndReadSingleFile } from './upload-file-validator';
 
 function utf8Buffer(text: string): ArrayBuffer {
   const bytes = new TextEncoder().encode(text);
@@ -90,9 +87,7 @@ describe('validateAndReadSingleFile', () => {
   });
 
   it('returns binary for a ZIP/OOXML container (.docx)', async () => {
-    const zipBytes = new Uint8Array([
-      0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00,
-    ]);
+    const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00]);
     const docxFile = new File([zipBytes], 'report.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });

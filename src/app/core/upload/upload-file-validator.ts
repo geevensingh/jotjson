@@ -10,9 +10,7 @@ export type UploadResult =
   | { kind: 'binary'; filename: string }
   | { kind: 'readFailed'; cause: unknown };
 
-export async function validateAndReadSingleFile(
-  files: readonly File[]
-): Promise<UploadResult> {
+export async function validateAndReadSingleFile(files: readonly File[]): Promise<UploadResult> {
   if (files.length === 0) return { kind: 'empty' };
   if (files.length > 1) return { kind: 'tooMany' };
   const [file] = files;

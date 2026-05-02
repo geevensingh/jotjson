@@ -6,7 +6,7 @@ import {
   inject,
   input,
   output,
-  viewChild
+  viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
@@ -51,11 +51,7 @@ type PillTextVariant = 'full' | 'compact';
  * untouched (it gets restored when the user picks a `both-*` segment
  * again).
  */
-export type PaneLayout =
-  | 'editor-only'
-  | 'both-horizontal'
-  | 'both-vertical'
-  | 'tree-only';
+export type PaneLayout = 'editor-only' | 'both-horizontal' | 'both-vertical' | 'tree-only';
 
 @Component({
   selector: 'jj-toolbar',
@@ -66,11 +62,11 @@ export type PaneLayout =
     MatTooltipModule,
     MatButtonToggleModule,
     IconComponent,
-    SignedInDirective
+    SignedInDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toolbar.component.html',
-  styleUrl: './toolbar.component.scss'
+  styleUrl: './toolbar.component.scss',
 })
 export class ToolbarComponent {
   private readonly auth = inject(AuthService);
@@ -130,9 +126,9 @@ export class ToolbarComponent {
    *                      not yet prompted); click path does a user-gesture
    *                      read via `ClipboardPollingService.readForPaste`.
    */
-  readonly clipboardState = input<
-    'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'
-  >('fallback');
+  readonly clipboardState = input<'enabled-json' | 'enabled-empty' | 'denied' | 'fallback'>(
+    'fallback',
+  );
   readonly clipboardPreview = input<string>('');
 
   readonly pasteRequested = output<void>();
@@ -162,8 +158,7 @@ export class ToolbarComponent {
    */
   readonly suggestRequested = output<void>();
 
-  private readonly fileInput =
-    viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
+  private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
 
   readonly themeIcon = computed<JjIconName>(() => {
     const theme = this.prefs.prefs().theme;
@@ -179,16 +174,14 @@ export class ToolbarComponent {
    * key. Icon flips between `arrows-exchange` (on) and
    * `arrows-exchange-off` (off).
    */
-  readonly selectionSyncEnabled = computed(
-    () => this.prefs.prefs().treeEditorSelectionSync
-  );
+  readonly selectionSyncEnabled = computed(() => this.prefs.prefs().treeEditorSelectionSync);
   readonly selectionSyncIcon = computed<JjIconName>(() =>
-    this.selectionSyncEnabled() ? 'arrows-exchange' : 'arrows-exchange-off'
+    this.selectionSyncEnabled() ? 'arrows-exchange' : 'arrows-exchange-off',
   );
   readonly selectionSyncTooltip = computed(() =>
     this.selectionSyncEnabled()
       ? $localize`:@@toolbar.syncSelection.tooltip.on:Disable tree-editor selection sync`
-      : $localize`:@@toolbar.syncSelection.tooltip.off:Enable tree-editor selection sync`
+      : $localize`:@@toolbar.syncSelection.tooltip.off:Enable tree-editor selection sync`,
   );
   readonly selectionSyncAriaLabel = $localize`:@@toolbar.syncSelection.aria:Toggle tree-editor selection sync`;
 
@@ -214,22 +207,16 @@ export class ToolbarComponent {
     if (this.isDirty()) return 'modified';
     return 'saved';
   });
-  readonly pillTextFull = computed(() =>
-    this.pillTextForState(this.pillState(), 'full')
-  );
-  readonly pillTextCompact = computed(() =>
-    this.pillTextForState(this.pillState(), 'compact')
-  );
+  readonly pillTextFull = computed(() => this.pillTextForState(this.pillState(), 'full'));
+  readonly pillTextCompact = computed(() => this.pillTextForState(this.pillState(), 'compact'));
   readonly pillStateClass = computed(() => `state-pill--${this.pillState()}`);
   readonly isCta = computed(() => this.pillState() === 'signInToSave');
   readonly saveButtonLabel = computed(() =>
     this.isSavedBlob() && !this.ownsLoadedBlob()
       ? $localize`:@@toolbar.save.asCopy:Save as copy`
-      : $localize`:@@toolbar.save.label:Save`
+      : $localize`:@@toolbar.save.label:Save`,
   );
-  readonly isAnonymousOnSavedBlob = computed(
-    () => this.isSavedBlob() && !this.isSignedIn()
-  );
+  readonly isAnonymousOnSavedBlob = computed(() => this.isSavedBlob() && !this.isSignedIn());
   readonly untitledLabel = $localize`:@@toolbar.title.untitled:Untitled`;
 
   readonly wandAriaLabel = $localize`:@@toolbar.titleSuggestion.action.aria:Suggest a title`;
@@ -246,18 +233,14 @@ export class ToolbarComponent {
   readonly visibilityMenuLabel = computed(() =>
     this.isPublic()
       ? $localize`:@@toolbar.overflow.makePrivate:Make private`
-      : $localize`:@@toolbar.overflow.makePublic:Make public`
+      : $localize`:@@toolbar.overflow.makePublic:Make public`,
   );
 
   readonly saveTooltip = computed(() => {
     if (!this.saveInFlight() && this.saveDisabled()) {
       return $localize`:@@toolbar.save.disabledTooltip:No changes to save`;
     }
-    if (
-      !this.saveInFlight() &&
-      this.isSavedBlob() &&
-      !this.ownsLoadedBlob()
-    ) {
+    if (!this.saveInFlight() && this.isSavedBlob() && !this.ownsLoadedBlob()) {
       return $localize`:@@toolbar.save.asCopyTooltip:Save your changes as a new blob`;
     }
     return '';
@@ -381,7 +364,7 @@ export class ToolbarComponent {
     this.loggerService.event(
       'toolbar.titleSuggestionAccepted',
       { source: candidate.source },
-      { candidateCount: this.suggestedTitles().length }
+      { candidateCount: this.suggestedTitles().length },
     );
   }
 
@@ -426,4 +409,3 @@ export class ToolbarComponent {
     this.loggerService.event('toolbar.action', { action }, undefined);
   }
 }
-

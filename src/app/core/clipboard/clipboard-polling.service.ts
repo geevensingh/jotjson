@@ -1,12 +1,4 @@
-import {
-  DestroyRef,
-  Injectable,
-  OnDestroy,
-  Signal,
-  computed,
-  inject,
-  signal
-} from '@angular/core';
+import { DestroyRef, Injectable, OnDestroy, Signal, computed, inject, signal } from '@angular/core';
 
 /**
  * Permission state for the clipboard-read capability.
@@ -21,12 +13,7 @@ import {
  * - `denied` - user denied OR an explicit user-gesture read failed with
  *   `NotAllowedError`. Button is disabled with an informational tooltip.
  */
-export type ClipboardPermissionState =
-  | 'unsupported'
-  | 'unknown'
-  | 'prompt'
-  | 'granted'
-  | 'denied';
+export type ClipboardPermissionState = 'unsupported' | 'unknown' | 'prompt' | 'granted' | 'denied';
 
 const POLL_INTERVAL_MS = 2000;
 const PREVIEW_MAX_LENGTH = 80;
@@ -54,9 +41,7 @@ const PREVIEW_MAX_LENGTH = 80;
 export class ClipboardPollingService implements OnDestroy {
   private readonly destroyRef = inject(DestroyRef);
 
-  private readonly permissionStateSignal = signal<ClipboardPermissionState>(
-    this.initialState()
-  );
+  private readonly permissionStateSignal = signal<ClipboardPermissionState>(this.initialState());
   private readonly hasJsonSignal = signal<boolean>(false);
   private readonly previewSignal = signal<string>('');
 
@@ -71,7 +56,7 @@ export class ClipboardPollingService implements OnDestroy {
    * JSON-like content.
    */
   readonly isReady = computed(
-    () => this.permissionStateSignal() === 'granted' && this.hasJsonSignal()
+    () => this.permissionStateSignal() === 'granted' && this.hasJsonSignal(),
   );
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
@@ -214,15 +199,14 @@ export class ClipboardPollingService implements OnDestroy {
 
   private async queryPermission(): Promise<void> {
     if (!this.isSupported()) return;
-    const perms = (navigator as Navigator & { permissions?: Permissions })
-      .permissions;
+    const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
     if (!perms || typeof perms.query !== 'function') {
       this.permissionStateSignal.set('unknown');
       return;
     }
     try {
       const status = await perms.query({
-        name: 'clipboard-read' as PermissionName
+        name: 'clipboard-read' as PermissionName,
       });
       this.applyPermissionStatus(status);
       status.addEventListener?.('change', this.onPermissionChange);

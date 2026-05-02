@@ -4,7 +4,7 @@ import {
   OnInit,
   computed,
   inject,
-  signal
+  signal,
 } from '@angular/core';
 
 import { Router, RouterLink } from '@angular/router';
@@ -22,7 +22,7 @@ import { AppHeaderComponent } from '../../shared/components/app-header/app-heade
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import {
   ConfirmDialogComponent,
-  ConfirmDialogData
+  ConfirmDialogData,
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -30,16 +30,10 @@ type LoadState = 'loading' | 'ready' | 'error';
 @Component({
   selector: 'app-blobs',
   standalone: true,
-  imports: [
-    RouterLink,
-    MatButtonModule,
-    MatTooltipModule,
-    AppHeaderComponent,
-    IconComponent
-],
+  imports: [RouterLink, MatButtonModule, MatTooltipModule, AppHeaderComponent, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './blobs.component.html',
-  styleUrl: './blobs.component.scss'
+  styleUrl: './blobs.component.scss',
 })
 export class BlobsComponent implements OnInit {
   private readonly blobs = inject(BlobService);
@@ -54,9 +48,7 @@ export class BlobsComponent implements OnInit {
   readonly blobList = signal<JsonBlob[]>([]);
   readonly errorMessage = signal<string | null>(null);
 
-  readonly isEmpty = computed(
-    () => this.state() === 'ready' && this.blobList().length === 0
-  );
+  readonly isEmpty = computed(() => this.state() === 'ready' && this.blobList().length === 0);
 
   ngOnInit(): void {
     this.seo.clearBlobTags();
@@ -69,26 +61,20 @@ export class BlobsComponent implements OnInit {
     try {
       const list = await firstValueFrom(this.blobs.list());
       // Server returns updatedAt DESC already, but defend in depth.
-      const sorted = [...list].sort((a, b) =>
-        b.updatedAt.localeCompare(a.updatedAt)
-      );
+      const sorted = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       this.blobList.set(sorted);
       this.state.set('ready');
     } catch (error) {
       this.logger.warn('blobs.load.failed');
       void error;
-      this.errorMessage.set(
-        $localize`:@@blobs.load.failed:Failed to load your saved blobs.`
-      );
+      this.errorMessage.set($localize`:@@blobs.load.failed:Failed to load your saved blobs.`);
       this.state.set('error');
     }
   }
 
   displayTitle(blob: JsonBlob): string {
     const title = blob.title?.trim();
-    return title && title.length > 0
-      ? title
-      : $localize`:@@blobs.untitled:Untitled`;
+    return title && title.length > 0 ? title : $localize`:@@blobs.untitled:Untitled`;
   }
 
   relativeTime(iso: string): string {
@@ -114,7 +100,7 @@ export class BlobsComponent implements OnInit {
     const copied = await this.clipboardCopy.copyWithToast(url, {
       success: $localize`:@@blobs.copyLink.success:Link copied to clipboard`,
       failed: $localize`:@@blobs.copyLink.failed:Failed to copy link`,
-      unsupported: $localize`:@@blobs.copyLink.unsupported:Copy is not supported in this browser.`
+      unsupported: $localize`:@@blobs.copyLink.unsupported:Copy is not supported in this browser.`,
     });
     if (!copied) {
       this.logger.warn('blobs.copyLink.failed');
@@ -128,11 +114,11 @@ export class BlobsComponent implements OnInit {
       message: $localize`:@@blobs.delete.message:"${label}:name:" will be permanently deleted. This cannot be undone.`,
       confirmLabel: $localize`:@@share.delete.confirm:Delete`,
       cancelLabel: $localize`:@@common.cancel:Cancel`,
-      destructive: true
+      destructive: true,
     };
     const ref = this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(
       ConfirmDialogComponent,
-      { data, width: '420px', autoFocus: 'dialog' }
+      { data, width: '420px', autoFocus: 'dialog' },
     );
     const confirmed = await firstValueFrom(ref.afterClosed());
     if (!confirmed) return;
@@ -142,7 +128,7 @@ export class BlobsComponent implements OnInit {
       this.snack.open(
         $localize`:@@share.delete.success:Blob deleted.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 3000 }
+        { duration: 3000 },
       );
     } catch (error) {
       this.logger.warn('share.delete.failed');
@@ -150,7 +136,7 @@ export class BlobsComponent implements OnInit {
       this.snack.open(
         $localize`:@@share.delete.failed:Failed to delete blob.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 }
+        { duration: 4000 },
       );
     }
   }

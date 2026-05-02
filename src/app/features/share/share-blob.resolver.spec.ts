@@ -1,5 +1,10 @@
 import { TestBed } from '@angular/core/testing';
-import { Router, convertToParamMap, type ActivatedRouteSnapshot, type RouterStateSnapshot } from '@angular/router';
+import {
+  Router,
+  convertToParamMap,
+  type ActivatedRouteSnapshot,
+  type RouterStateSnapshot,
+} from '@angular/router';
 import { of, throwError, firstValueFrom, from, isObservable } from 'rxjs';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import { BlobService } from '../../core/api/blob.service';
@@ -8,7 +13,7 @@ import { shareBlobResolver } from './share-blob.resolver';
 
 function runResolver(slug: string): Promise<JsonBlob | null> {
   const route = {
-    paramMap: convertToParamMap({ slug })
+    paramMap: convertToParamMap({ slug }),
   } as unknown as ActivatedRouteSnapshot;
   const state = {} as RouterStateSnapshot;
   const out = TestBed.runInInjectionContext(() => shareBlobResolver(route, state));
@@ -27,7 +32,7 @@ describe('shareBlobResolver', () => {
       isPublic: false,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
-      ...overrides
+      ...overrides,
     };
   }
 
@@ -37,10 +42,7 @@ describe('shareBlobResolver', () => {
   beforeEach(() => {
     getSpy = jasmine.createSpy('get').and.returnValue(of(blob()));
     TestBed.configureTestingModule({
-      providers: [
-        ...provideFakeAuth(),
-        { provide: BlobService, useValue: { get: getSpy } }
-      ]
+      providers: [...provideFakeAuth(), { provide: BlobService, useValue: { get: getSpy } }],
     });
     navSpy = spyOn(TestBed.inject(Router), 'navigate').and.resolveTo(true);
   });
@@ -58,25 +60,23 @@ describe('shareBlobResolver', () => {
     expect(result).toBeNull();
     expect(navSpy).toHaveBeenCalledWith(['/404'], {
       replaceUrl: true,
-      state: { attemptedSlug: 'missing' }
+      state: { attemptedSlug: 'missing' },
     });
   });
 
   it('navigates to /404 (no state) and returns null when slug is empty', async () => {
     const route = {
-      paramMap: convertToParamMap({})
+      paramMap: convertToParamMap({}),
     } as unknown as ActivatedRouteSnapshot;
     const state = {} as RouterStateSnapshot;
-    const out = TestBed.runInInjectionContext(() =>
-      shareBlobResolver(route, state)
-    );
+    const out = TestBed.runInInjectionContext(() => shareBlobResolver(route, state));
     const result = isObservable(out)
       ? ((await firstValueFrom(out)) as JsonBlob | null)
       : ((await Promise.resolve(out)) as JsonBlob | null);
     expect(result).toBeNull();
     expect(navSpy).toHaveBeenCalledWith(['/404'], {
       replaceUrl: true,
-      state: undefined
+      state: undefined,
     });
     expect(getSpy).not.toHaveBeenCalled();
   });

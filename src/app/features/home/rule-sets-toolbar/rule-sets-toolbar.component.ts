@@ -4,7 +4,7 @@ import {
   DestroyRef,
   OnInit,
   computed,
-  inject
+  inject,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
@@ -15,7 +15,7 @@ import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import type { FormattingRuleSet } from '../../../core/api/models';
 import {
   ClonePresetDialogComponent,
-  ClonePresetDialogResult
+  ClonePresetDialogResult,
 } from './clone-preset-dialog.component';
 
 /**
@@ -43,7 +43,7 @@ import {
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './rule-sets-toolbar.component.html',
-  styleUrl: './rule-sets-toolbar.component.scss'
+  styleUrl: './rule-sets-toolbar.component.scss',
 })
 export class RuleSetsToolbarComponent implements OnInit {
   private readonly ruleSets = inject(RuleSetsService);
@@ -87,7 +87,7 @@ export class RuleSetsToolbarComponent implements OnInit {
       .subscribe({
         error: () => {
           /* surfaced once we add a sync-state signal to the service */
-        }
+        },
       });
   }
 
@@ -100,15 +100,14 @@ export class RuleSetsToolbarComponent implements OnInit {
   }
 
   async onClonePresetClick(): Promise<void> {
-    const ref = this.dialog.open<
+    const ref = this.dialog.open<ClonePresetDialogComponent, void, ClonePresetDialogResult>(
       ClonePresetDialogComponent,
-      void,
-      ClonePresetDialogResult
-    >(ClonePresetDialogComponent, {
-      width: '480px',
-      autoFocus: 'first-tabbable',
-      restoreFocus: true
-    });
+      {
+        width: '480px',
+        autoFocus: 'first-tabbable',
+        restoreFocus: true,
+      },
+    );
 
     const result = await firstValueFrom(ref.afterClosed());
     if (!result) return;
@@ -118,7 +117,7 @@ export class RuleSetsToolbarComponent implements OnInit {
 
     const message = $localize`:@@formattingRules.toolbar.cloneSuccess:Cloned ${result.preset.name}:name:.`;
     this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, {
-      duration: 4000
+      duration: 4000,
     });
   }
 

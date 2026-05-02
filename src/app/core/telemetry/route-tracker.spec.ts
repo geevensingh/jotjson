@@ -15,11 +15,11 @@ describe('RouteTracker', () => {
     events = new Subject<unknown>();
     const snapshotRoot: { routeConfig: { path?: string } | null; firstChild: unknown | null } = {
       routeConfig: routePath !== undefined ? { path: routePath } : null,
-      firstChild: null
+      firstChild: null,
     };
     routerStub = {
       events: events.asObservable() as unknown as Router['events'],
-      routerState: { snapshot: { root: snapshotRoot } } as unknown as Router['routerState']
+      routerState: { snapshot: { root: snapshotRoot } } as unknown as Router['routerState'],
     };
   }
 
@@ -31,14 +31,14 @@ describe('RouteTracker', () => {
       get isConnected() {
         return isConnected;
       },
-      trackPageView
+      trackPageView,
     };
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         { provide: Router, useValue: routerStub },
-        { provide: TelemetryService, useValue: telemetryStub }
-      ]
+        { provide: TelemetryService, useValue: telemetryStub },
+      ],
     });
     tracker = TestBed.inject(RouteTracker);
     tracker.start();

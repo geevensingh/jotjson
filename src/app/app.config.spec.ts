@@ -24,14 +24,14 @@ describe('appConfig', () => {
     // for any consumer and the one resolved by `inject(AuthService)` inside
     // the initializer share the same patched method.
     const spy = spyOn(AuthService.prototype, 'initializeFromRedirect').and.returnValue(
-      Promise.resolve()
+      Promise.resolve(),
     );
 
     TestBed.configureTestingModule({
       providers: [
         ...provideFakeAuth(new FakeMsalClient()),
-        provideAppInitializer(() => inject(AuthService).initializeFromRedirect())
-      ]
+        provideAppInitializer(() => inject(AuthService).initializeFromRedirect()),
+      ],
     });
 
     // TestBed initializes the EnvironmentInjector eagerly when providers are

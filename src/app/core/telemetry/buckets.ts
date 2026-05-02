@@ -22,12 +22,7 @@
  * upload / blob events queryable at meaningful granularity without
  * inventing new strings per call site.
  */
-export type SizeBucket =
-  | '<1KB'
-  | '1-10KB'
-  | '10-100KB'
-  | '100KB-1MB'
-  | '>1MB';
+export type SizeBucket = '<1KB' | '1-10KB' | '10-100KB' | '100KB-1MB' | '>1MB';
 
 /**
  * Closed-enum bucket for item counts (tree node count, ruleSet rule

@@ -14,7 +14,7 @@ function makeNode(depth: number, children?: TreeNode[]): TreeNode {
     value: null,
     type: 'null',
     depth,
-    children
+    children,
   };
 }
 
@@ -89,7 +89,7 @@ describe('computeAutoFitDepth', () => {
     const depth3Nodes = Array.from({ length: 25 }, (_, index) => makeNode(3));
     const depth2Nodes = [
       ...Array.from({ length: 25 }, (_, index) => makeNode(2, [depth3Nodes[index]])),
-      ...Array.from({ length: 3 }, (_, index) => makeNode(2))
+      ...Array.from({ length: 3 }, (_, index) => makeNode(2)),
     ];
     const depth1Node = makeNode(1, depth2Nodes);
     const root = makeNode(0, [depth1Node]);

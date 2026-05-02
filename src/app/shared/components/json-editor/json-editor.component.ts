@@ -12,7 +12,7 @@ import {
   input,
   output,
   signal,
-  viewChild
+  viewChild,
 } from '@angular/core';
 import type * as MonacoNS from 'monaco-editor';
 import { JsonParseError, JsonParserService } from '../../../core/json/json-parser.service';
@@ -25,7 +25,7 @@ import { loadMonaco } from './monaco-loader';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-editor.component.html',
-  styleUrl: './json-editor.component.scss'
+  styleUrl: './json-editor.component.scss',
 })
 export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   private readonly prefs = inject(PreferencesService);
@@ -76,7 +76,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       this.editor?.updateOptions({
         fontSize: currentPrefs.editorFontSize,
         tabSize: currentPrefs.editorTabSize,
-        wordWrap: currentPrefs.editorWordWrap ? 'on' : 'off'
+        wordWrap: currentPrefs.editorWordWrap ? 'on' : 'off',
       });
     });
 
@@ -129,19 +129,18 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         scrollBeyondLastLine: false,
         formatOnPaste: false,
         renderWhitespace: 'selection',
-        fontFamily:
-          "'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
+        fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
         fontLigatures: true,
         lineNumbersMinChars: 3,
         folding: true,
-        bracketPairColorization: { enabled: true }
+        bracketPairColorization: { enabled: true },
       });
 
       // JotJSON is JSONC - defer validation to our parser.
       monaco.json.jsonDefaults.setDiagnosticsOptions({
         validate: false,
         allowComments: true,
-        trailingCommas: 'ignore'
+        trailingCommas: 'ignore',
       });
 
       editor.onDidChangeModelContent(() => {
@@ -156,7 +155,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         const payload = {
           line: event.position.lineNumber,
           column: event.position.column,
-          offset
+          offset,
         };
         this.zone.run(() => this.cursorPositionChange.emit(payload));
       });
@@ -180,13 +179,13 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
             startLineNumber: 1,
             startColumn: 1,
             endLineNumber: event.range.startLineNumber,
-            endColumn: event.range.startColumn
+            endColumn: event.range.startColumn,
           });
           const after = full.substring(before.length + pasted.length);
           const hypothetical = before + unescaped + after;
           if (!this.parser.parse(hypothetical).errors.length) {
             editor.executeEdits('jotjson-unescape-paste', [
-              { range: event.range, text: unescaped, forceMoveMarkers: true }
+              { range: event.range, text: unescaped, forceMoveMarkers: true },
             ]);
             const lines = unescaped.split('\n');
             const endLineNumber = event.range.startLineNumber + lines.length - 1;
@@ -198,7 +197,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
               startLineNumber: event.range.startLineNumber,
               startColumn: event.range.startColumn,
               endLineNumber,
-              endColumn
+              endColumn,
             };
           }
         }
@@ -213,9 +212,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
           parseResult.errors.length === 0 &&
           typeof parseResult.value === 'object' &&
           parseResult.value !== null;
-        this.zone.run(() =>
-          this.paste.emit({ pastedText, postPasteContent, postPasteParses })
-        );
+        this.zone.run(() => this.paste.emit({ pastedText, postPasteContent, postPasteParses }));
       });
 
       this.editor = editor;
@@ -260,7 +257,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         range.endLineNumber,
         range.endColumn,
         range.startLineNumber,
-        range.startColumn
+        range.startColumn,
       );
       editor.setSelection(selection);
       editor.revealRangeInCenterIfOutsideViewport(selection);
@@ -280,8 +277,8 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         startLineNumber: parseError.line,
         startColumn: parseError.column,
         endLineNumber: parseError.line,
-        endColumn: parseError.column + Math.max(1, parseError.length)
-      }))
+        endColumn: parseError.column + Math.max(1, parseError.length),
+      })),
     );
   }
 
@@ -299,8 +296,8 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       rules: [],
       colors: {
         'editor.background': '#1e1e1e',
-        'editor.foreground': '#e4e4e4'
-      }
+        'editor.foreground': '#e4e4e4',
+      },
     });
     monaco.editor.defineTheme('jotjson-light', {
       base: 'vs',
@@ -308,8 +305,8 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       rules: [],
       colors: {
         'editor.background': '#fafafa',
-        'editor.foreground': '#1a1a1a'
-      }
+        'editor.foreground': '#1a1a1a',
+      },
     });
   }
 }

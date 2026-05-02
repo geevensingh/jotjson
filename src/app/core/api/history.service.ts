@@ -19,13 +19,15 @@ export class HistoryService {
   private readonly http = inject(HttpClient);
   private readonly base = `${environment.apiBaseUrl}/history`;
 
-  list(opts: {
-    pageSize?: number;
-    continuationToken?: string;
-    q?: string;
-    from?: string;
-    to?: string;
-  } = {}): Observable<HistoryPage> {
+  list(
+    opts: {
+      pageSize?: number;
+      continuationToken?: string;
+      q?: string;
+      from?: string;
+      to?: string;
+    } = {},
+  ): Observable<HistoryPage> {
     let params = new HttpParams();
     if (opts.pageSize !== undefined) {
       params = params.set('pageSize', String(opts.pageSize));

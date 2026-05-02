@@ -36,17 +36,15 @@ describe('ToolbarComponent', () => {
   });
 
   async function create(options: { signedIn?: boolean } = {}) {
-    const logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
-      'event'
-    ]);
+    const logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event']);
     await TestBed.configureTestingModule({
       imports: [ToolbarComponent],
       providers: [
         ...provideFakeAuth(),
         provideRouter([]),
         provideNoopAnimations(),
-        { provide: LoggerService, useValue: logger }
-      ]
+        { provide: LoggerService, useValue: logger },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ToolbarComponent);
     const auth = TestBed.inject(AuthService);
@@ -70,7 +68,7 @@ describe('ToolbarComponent', () => {
 
   function setToolbarInputs(
     fixture: ComponentFixture<ToolbarComponent>,
-    inputs: ToolbarInputOptions
+    inputs: ToolbarInputOptions,
   ): void {
     const componentRef = fixture.componentRef;
     if (inputs.hasContent !== undefined) {
@@ -102,7 +100,7 @@ describe('ToolbarComponent', () => {
 
   function queryByCss<TElement extends Element>(
     fixture: ComponentFixture<ToolbarComponent>,
-    selector: string
+    selector: string,
   ): TElement | null {
     const debugElement = fixture.debugElement.query(By.css(selector));
     if (!debugElement) return null;
@@ -111,7 +109,7 @@ describe('ToolbarComponent', () => {
 
   function queryAllByCss<TElement extends Element>(
     fixture: ComponentFixture<ToolbarComponent>,
-    selector: string
+    selector: string,
   ): TElement[] {
     return fixture.debugElement
       .queryAll(By.css(selector))
@@ -120,7 +118,7 @@ describe('ToolbarComponent', () => {
 
   function requireByCss<TElement extends Element>(
     fixture: ComponentFixture<ToolbarComponent>,
-    selector: string
+    selector: string,
   ): TElement {
     const element = queryByCss<TElement>(fixture, selector);
     if (!element) {
@@ -133,9 +131,7 @@ describe('ToolbarComponent', () => {
     return element.textContent?.replace(/\s+/g, ' ').trim() ?? '';
   }
 
-  function findSaveButton(
-    fixture: ComponentFixture<ToolbarComponent>
-  ): HTMLButtonElement {
+  function findSaveButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement {
     return requireByCss<HTMLButtonElement>(fixture, 'button.save-button');
   }
 
@@ -170,7 +166,7 @@ describe('ToolbarComponent', () => {
   describe('selection sync toggle (issue #42)', () => {
     function findSyncButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement {
       const button = (fixture.nativeElement as HTMLElement).querySelector(
-        'button[aria-label="Toggle tree-editor selection sync"]'
+        'button[aria-label="Toggle tree-editor selection sync"]',
       ) as HTMLButtonElement | null;
       if (!button) {
         throw new Error('selection-sync toggle button not found in toolbar');
@@ -223,11 +219,9 @@ describe('ToolbarComponent', () => {
   });
 
   describe('pane layout segmented control (issue #39 follow-up)', () => {
-    function findGroup(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): HTMLElement {
+    function findGroup(fixture: ComponentFixture<ToolbarComponent>): HTMLElement {
       const group = (fixture.nativeElement as HTMLElement).querySelector(
-        'mat-button-toggle-group.pane-layout-group'
+        'mat-button-toggle-group.pane-layout-group',
       );
       if (!group) {
         throw new Error('pane-layout group not found in toolbar');
@@ -237,10 +231,10 @@ describe('ToolbarComponent', () => {
 
     function findSegment(
       fixture: ComponentFixture<ToolbarComponent>,
-      value: string
+      value: string,
     ): HTMLButtonElement {
       const segment = findGroup(fixture).querySelector(
-        `mat-button-toggle[value="${value}"] button`
+        `mat-button-toggle[value="${value}"] button`,
       );
       if (!segment) {
         throw new Error(`segment "${value}" not found in pane-layout group`);
@@ -251,9 +245,7 @@ describe('ToolbarComponent', () => {
     it('renders all 4 segments in continuum order with their state-icons', async () => {
       const { fixture } = await create();
       const group = findGroup(fixture);
-      const segments = Array.from(
-        group.querySelectorAll('mat-button-toggle')
-      );
+      const segments = Array.from(group.querySelectorAll('mat-button-toggle'));
 
       expect(segments.length).toBe(4);
       expect(segments[0].getAttribute('value')).toBe('editor-only');
@@ -271,9 +263,7 @@ describe('ToolbarComponent', () => {
     it('group aria-label is set', async () => {
       const { fixture } = await create();
       const group = findGroup(fixture);
-      expect(group.getAttribute('aria-label')?.toLowerCase()).toBe(
-        'pane layout'
-      );
+      expect(group.getAttribute('aria-label')?.toLowerCase()).toBe('pane layout');
     });
 
     it('segment tooltips and aria-labels describe their target state', async () => {
@@ -285,35 +275,23 @@ describe('ToolbarComponent', () => {
       // the component exposes, then confirm the aria-label is
       // rendered on the DOM (matTooltip is not reflected as a
       // plain HTML attribute, only the directive carries it).
-      expect(c.paneLayoutEditorOnlyLabel.toLowerCase()).toContain(
-        'editor only'
-      );
-      expect(c.paneLayoutBothHorizontalLabel.toLowerCase()).toContain(
-        'side-by-side'
-      );
+      expect(c.paneLayoutEditorOnlyLabel.toLowerCase()).toContain('editor only');
+      expect(c.paneLayoutBothHorizontalLabel.toLowerCase()).toContain('side-by-side');
       expect(c.paneLayoutBothVerticalLabel.toLowerCase()).toContain('above');
       expect(c.paneLayoutTreeOnlyLabel.toLowerCase()).toContain('tree only');
 
       const group = findGroup(fixture);
-      const segments = Array.from(
-        group.querySelectorAll('mat-button-toggle')
-      );
+      const segments = Array.from(group.querySelectorAll('mat-button-toggle'));
       // Material's <mat-button-toggle> nulls out its own host
       // aria-label and forwards the user's value to the inner
       // <button>. Read it from there.
       const ariaFor = (value: string) => {
-        const seg = segments.find(
-          (s) => s.getAttribute('value') === value
-        );
-        return (
-          seg?.querySelector('button')?.getAttribute('aria-label') ?? ''
-        );
+        const seg = segments.find((s) => s.getAttribute('value') === value);
+        return seg?.querySelector('button')?.getAttribute('aria-label') ?? '';
       };
 
       expect(ariaFor('editor-only')).toBe(c.paneLayoutEditorOnlyLabel);
-      expect(ariaFor('both-horizontal')).toBe(
-        c.paneLayoutBothHorizontalLabel
-      );
+      expect(ariaFor('both-horizontal')).toBe(c.paneLayoutBothHorizontalLabel);
       expect(ariaFor('both-vertical')).toBe(c.paneLayoutBothVerticalLabel);
       expect(ariaFor('tree-only')).toBe(c.paneLayoutTreeOnlyLabel);
     });
@@ -324,12 +302,12 @@ describe('ToolbarComponent', () => {
         'editor-only',
         'both-horizontal',
         'both-vertical',
-        'tree-only'
+        'tree-only',
       ] as const) {
         fixture.componentRef.setInput('paneLayout', value);
         fixture.detectChanges();
         const checked = (fixture.nativeElement as HTMLElement).querySelector(
-          'mat-button-toggle-group.pane-layout-group .mat-button-toggle-checked'
+          'mat-button-toggle-group.pane-layout-group .mat-button-toggle-checked',
         );
         expect(checked?.getAttribute('value')).toBe(value);
       }
@@ -350,7 +328,7 @@ describe('ToolbarComponent', () => {
         'editor-only',
         'both-vertical',
         'tree-only',
-        'both-horizontal'
+        'both-horizontal',
       ] as const) {
         // Mirror what the parent does after each emission so the next
         // click is also a change.
@@ -359,12 +337,7 @@ describe('ToolbarComponent', () => {
         fixture.detectChanges();
       }
 
-      expect(emitted).toEqual([
-        'editor-only',
-        'both-vertical',
-        'tree-only',
-        'both-horizontal'
-      ]);
+      expect(emitted).toEqual(['editor-only', 'both-vertical', 'tree-only', 'both-horizontal']);
     });
 
     it('re-clicking the already-active segment does NOT emit paneLayoutChange', async () => {
@@ -386,12 +359,7 @@ describe('ToolbarComponent', () => {
   });
 
   describe('identity pill states (issue #84)', () => {
-    type IdentityPillState =
-      | 'draft'
-      | 'saved'
-      | 'modified'
-      | 'saving'
-      | 'signInToSave';
+    type IdentityPillState = 'draft' | 'saved' | 'modified' | 'saving' | 'signInToSave';
 
     const pillStateCases: ReadonlyArray<{
       readonly expectedState: IdentityPillState;
@@ -405,8 +373,8 @@ describe('ToolbarComponent', () => {
         signedIn: false,
         inputs: {
           isSavedBlob: false,
-          saveInFlight: false
-        }
+          saveInFlight: false,
+        },
       },
       {
         expectedState: 'saving',
@@ -415,8 +383,8 @@ describe('ToolbarComponent', () => {
         inputs: {
           isSavedBlob: true,
           isDirty: true,
-          saveInFlight: true
-        }
+          saveInFlight: true,
+        },
       },
       {
         expectedState: 'signInToSave',
@@ -424,8 +392,8 @@ describe('ToolbarComponent', () => {
         signedIn: false,
         inputs: {
           isSavedBlob: true,
-          saveInFlight: false
-        }
+          saveInFlight: false,
+        },
       },
       {
         expectedState: 'modified',
@@ -434,8 +402,8 @@ describe('ToolbarComponent', () => {
         inputs: {
           isSavedBlob: true,
           isDirty: true,
-          saveInFlight: false
-        }
+          saveInFlight: false,
+        },
       },
       {
         expectedState: 'saved',
@@ -444,9 +412,9 @@ describe('ToolbarComponent', () => {
         inputs: {
           isSavedBlob: true,
           isDirty: false,
-          saveInFlight: false
-        }
-      }
+          saveInFlight: false,
+        },
+      },
     ];
 
     for (const pillStateCase of pillStateCases) {
@@ -456,23 +424,14 @@ describe('ToolbarComponent', () => {
 
         const statePill = requireByCss<HTMLElement>(fixture, '.state-pill');
         expect(
-          statePill.classList.contains(
-            `state-pill--${pillStateCase.expectedState}`
-          )
+          statePill.classList.contains(`state-pill--${pillStateCase.expectedState}`),
         ).toBeTrue();
         expect(
-          normalizedText(
-            requireByCss<HTMLElement>(fixture, '.state-pill .pill-text-full')
-          )
+          normalizedText(requireByCss<HTMLElement>(fixture, '.state-pill .pill-text-full')),
         ).toBe(pillStateCase.expectedFullText);
-        expect(
-          requireByCss<HTMLElement>(fixture, '.state-pill .pill-text-compact')
-        ).toBeTruthy();
+        expect(requireByCss<HTMLElement>(fixture, '.state-pill .pill-text-compact')).toBeTruthy();
 
-        const ctaButton = queryByCss<HTMLButtonElement>(
-          fixture,
-          '.state-pill button.pill-cta'
-        );
+        const ctaButton = queryByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta');
         if (pillStateCase.expectedState === 'signInToSave') {
           expect(ctaButton).toBeTruthy();
         } else {
@@ -487,13 +446,12 @@ describe('ToolbarComponent', () => {
       const { fixture } = await create();
       setToolbarInputs(fixture, {
         isSavedBlob: true,
-        saveInFlight: false
+        saveInFlight: false,
       });
       const signInRequested = jasmine.createSpy('signInRequested');
       fixture.componentInstance.signInRequested.subscribe(signInRequested);
 
-      requireByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta')
-        .click();
+      requireByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta').click();
       fixture.detectChanges();
 
       expect(signInRequested).toHaveBeenCalledTimes(1);
@@ -507,14 +465,12 @@ describe('ToolbarComponent', () => {
         { isSavedBlob: false, saveInFlight: false },
         { isSavedBlob: true, saveInFlight: true },
         { isSavedBlob: true, isDirty: true, saveInFlight: false },
-        { isSavedBlob: true, isDirty: false, saveInFlight: false }
+        { isSavedBlob: true, isDirty: false, saveInFlight: false },
       ];
 
       for (const nonCtaState of nonCtaStates) {
         setToolbarInputs(fixture, nonCtaState);
-        expect(
-          queryByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta')
-        ).toBeNull();
+        expect(queryByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta')).toBeNull();
         requireByCss<HTMLElement>(fixture, '.state-pill').click();
         fixture.detectChanges();
       }
@@ -530,7 +486,7 @@ describe('ToolbarComponent', () => {
         canSave: true,
         isSavedBlob: true,
         isOwner: true,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
       expect(normalizedText(findSaveButton(fixture))).toBe('Save');
@@ -542,7 +498,7 @@ describe('ToolbarComponent', () => {
         canSave: true,
         isSavedBlob: true,
         isOwner: false,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
       expect(normalizedText(findSaveButton(fixture))).toBe('Save as copy');
@@ -554,7 +510,7 @@ describe('ToolbarComponent', () => {
         canSave: true,
         isSavedBlob: false,
         isOwner: false,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
       expect(normalizedText(findSaveButton(fixture))).toBe('Save');
@@ -565,7 +521,7 @@ describe('ToolbarComponent', () => {
       setToolbarInputs(fixture, {
         canSave: false,
         isSavedBlob: false,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
       expect(findSaveButton(fixture).disabled).toBeTrue();
@@ -576,7 +532,7 @@ describe('ToolbarComponent', () => {
       setToolbarInputs(fixture, {
         canSave: true,
         isSavedBlob: false,
-        saveInFlight: true
+        saveInFlight: true,
       });
 
       expect(findSaveButton(fixture).disabled).toBeTrue();
@@ -588,7 +544,7 @@ describe('ToolbarComponent', () => {
       const { fixture } = await create();
       setToolbarInputs(fixture, {
         isSavedBlob: true,
-        loadedBlobTitle: 'Shared blob'
+        loadedBlobTitle: 'Shared blob',
       });
 
       expect(queryByCss<HTMLElement>(fixture, '.title-display')).toBeTruthy();
@@ -599,7 +555,7 @@ describe('ToolbarComponent', () => {
       const { fixture } = await create();
       setToolbarInputs(fixture, {
         isSavedBlob: true,
-        loadedBlobTitle: null
+        loadedBlobTitle: null,
       });
       let titleDisplay = requireByCss<HTMLElement>(fixture, '.title-display');
       expect(normalizedText(titleDisplay)).toBe('Untitled');
@@ -607,7 +563,7 @@ describe('ToolbarComponent', () => {
 
       setToolbarInputs(fixture, {
         isSavedBlob: true,
-        loadedBlobTitle: ''
+        loadedBlobTitle: '',
       });
       titleDisplay = requireByCss<HTMLElement>(fixture, '.title-display');
       expect(normalizedText(titleDisplay)).toBe('Untitled');
@@ -618,7 +574,7 @@ describe('ToolbarComponent', () => {
       const { fixture } = await create();
       setToolbarInputs(fixture, {
         isSavedBlob: true,
-        loadedBlobTitle: 'Published example'
+        loadedBlobTitle: 'Published example',
       });
 
       const titleDisplay = requireByCss<HTMLElement>(fixture, '.title-display');
@@ -631,7 +587,7 @@ describe('ToolbarComponent', () => {
       setToolbarInputs(fixture, {
         isSavedBlob: true,
         loadedBlobTitle: 'Server title',
-        title: 'Editable title'
+        title: 'Editable title',
       });
       const titleChange = jasmine.createSpy('titleChange');
       fixture.componentInstance.titleChange.subscribe(titleChange);
@@ -654,28 +610,22 @@ describe('ToolbarComponent', () => {
       setToolbarInputs(fixture, {
         isSavedBlob: true,
         isDirty: false,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
-      expect(queryAllByCss<HTMLElement>(fixture, '.state-pill .pill-text-full').length)
-        .toBe(1);
-      expect(queryAllByCss<HTMLElement>(fixture, '.state-pill .pill-text-compact').length)
-        .toBe(1);
-      expect(queryByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta'))
-        .toBeNull();
+      expect(queryAllByCss<HTMLElement>(fixture, '.state-pill .pill-text-full').length).toBe(1);
+      expect(queryAllByCss<HTMLElement>(fixture, '.state-pill .pill-text-compact').length).toBe(1);
+      expect(queryByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta')).toBeNull();
     });
 
     it('renders full and compact spans inside the CTA button', async () => {
       const { fixture } = await create();
       setToolbarInputs(fixture, {
         isSavedBlob: true,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
-      const ctaButton = requireByCss<HTMLButtonElement>(
-        fixture,
-        '.state-pill button.pill-cta'
-      );
+      const ctaButton = requireByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta');
       expect(ctaButton.querySelector('.pill-text-full')).toBeTruthy();
       expect(ctaButton.querySelector('.pill-text-compact')).toBeTruthy();
     });
@@ -686,7 +636,7 @@ describe('ToolbarComponent', () => {
       const { fixture } = await create();
       setToolbarInputs(fixture, {
         isSavedBlob: false,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
       const statePill = requireByCss<HTMLElement>(fixture, '.state-pill');
@@ -698,14 +648,13 @@ describe('ToolbarComponent', () => {
       const { fixture } = await create();
       setToolbarInputs(fixture, {
         isSavedBlob: true,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
       expect(
-        requireByCss<HTMLButtonElement>(
-          fixture,
-          '.state-pill button.pill-cta'
-        ).getAttribute('aria-label')
+        requireByCss<HTMLButtonElement>(fixture, '.state-pill button.pill-cta').getAttribute(
+          'aria-label',
+        ),
       ).toBe('Sign in to save and share');
     });
   });
@@ -724,19 +673,14 @@ describe('ToolbarComponent', () => {
       setToolbarInputs(fixture, {
         isSavedBlob: false,
         isDirty: false,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
-      const identityControl = requireByCss<HTMLElement>(
-        fixture,
-        '.identity-control'
-      );
+      const identityControl = requireByCss<HTMLElement>(fixture, '.identity-control');
       expect(identityControl.children.length).toBe(5);
       expect(classOfChild(identityControl, 0)).toContain('title-input');
       expect(classOfChild(identityControl, 1)).toContain('title-suggest-wand');
-      expect(identityControl.children.item(2)?.tagName.toLowerCase()).toBe(
-        'mat-menu'
-      );
+      expect(identityControl.children.item(2)?.tagName.toLowerCase()).toBe('mat-menu');
       expect(classOfChild(identityControl, 3)).toContain('state-pill');
       expect(classOfChild(identityControl, 4)).toContain('save-button');
     });
@@ -746,46 +690,30 @@ describe('ToolbarComponent', () => {
       setToolbarInputs(fixture, {
         isSavedBlob: true,
         loadedBlobTitle: 'Shared blob',
-        saveInFlight: false
+        saveInFlight: false,
       });
 
-      const identityControl = requireByCss<HTMLElement>(
-        fixture,
-        '.identity-control'
-      );
+      const identityControl = requireByCss<HTMLElement>(fixture, '.identity-control');
       expect(identityControl.children.length).toBe(2);
       expect(classOfChild(identityControl, 0)).toContain('title-display');
       expect(classOfChild(identityControl, 1)).toContain('state-pill');
-      expect(
-        identityControl.querySelector('.state-pill button.pill-cta')
-      ).toBeTruthy();
-      expect(
-        identityControl.querySelector('.save-button')
-      ).toBeNull();
+      expect(identityControl.querySelector('.state-pill button.pill-cta')).toBeTruthy();
+      expect(identityControl.querySelector('.save-button')).toBeNull();
     });
 
     it('anonymous, no saved blob: state-pill is the only child; no title or save-button', async () => {
       const { fixture } = await create();
       setToolbarInputs(fixture, {
         isSavedBlob: false,
-        saveInFlight: false
+        saveInFlight: false,
       });
 
-      const identityControl = requireByCss<HTMLElement>(
-        fixture,
-        '.identity-control'
-      );
+      const identityControl = requireByCss<HTMLElement>(fixture, '.identity-control');
       expect(identityControl.children.length).toBe(1);
       expect(classOfChild(identityControl, 0)).toContain('state-pill');
-      expect(
-        identityControl.querySelector('.title-display')
-      ).toBeNull();
-      expect(
-        identityControl.querySelector('.title-input')
-      ).toBeNull();
-      expect(
-        identityControl.querySelector('.save-button')
-      ).toBeNull();
+      expect(identityControl.querySelector('.title-display')).toBeNull();
+      expect(identityControl.querySelector('.title-input')).toBeNull();
+      expect(identityControl.querySelector('.save-button')).toBeNull();
     });
   });
 
@@ -833,12 +761,10 @@ describe('ToolbarComponent', () => {
       'save',
       'copyShareLink',
       'togglePublic',
-      'deleteBlob'
+      'deleteBlob',
     ];
 
-    function configureActionFixture(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function configureActionFixture(fixture: ComponentFixture<ToolbarComponent>): void {
       fixture.componentRef.setInput('hasContent', true);
       fixture.componentRef.setInput('canSave', true);
       fixture.componentRef.setInput('saveInFlight', false);
@@ -847,33 +773,25 @@ describe('ToolbarComponent', () => {
       fixture.detectChanges();
     }
 
-    function hostElement(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): HTMLElement {
+    function hostElement(fixture: ComponentFixture<ToolbarComponent>): HTMLElement {
       return fixture.nativeElement as HTMLElement;
     }
 
     function findButtonByAriaLabel(
       fixture: ComponentFixture<ToolbarComponent>,
-      ariaLabel: string
+      ariaLabel: string,
     ): HTMLButtonElement {
       const button = Array.from(
-        hostElement(fixture).querySelectorAll<HTMLButtonElement>('button')
-      ).find(
-        (candidateButton) => candidateButton.getAttribute('aria-label') === ariaLabel
-      );
+        hostElement(fixture).querySelectorAll<HTMLButtonElement>('button'),
+      ).find((candidateButton) => candidateButton.getAttribute('aria-label') === ariaLabel);
       if (!button) {
         throw new Error(`button with aria-label "${ariaLabel}" not found`);
       }
       return button;
     }
 
-    function findFileInput(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): HTMLInputElement {
-      const fileInput = hostElement(fixture).querySelector<HTMLInputElement>(
-        'input[type="file"]'
-      );
+    function findFileInput(fixture: ComponentFixture<ToolbarComponent>): HTMLInputElement {
+      const fileInput = hostElement(fixture).querySelector<HTMLInputElement>('input[type="file"]');
       if (!fileInput) {
         throw new Error('hidden file input not found');
       }
@@ -883,10 +801,10 @@ describe('ToolbarComponent', () => {
     function findToggleSegment(
       fixture: ComponentFixture<ToolbarComponent>,
       groupSelector: string,
-      value: string
+      value: string,
     ): HTMLButtonElement {
       const segment = hostElement(fixture).querySelector<HTMLButtonElement>(
-        `${groupSelector} mat-button-toggle[value="${value}"] button`
+        `${groupSelector} mat-button-toggle[value="${value}"] button`,
       );
       if (!segment) {
         throw new Error(`toggle segment "${value}" not found`);
@@ -898,123 +816,100 @@ describe('ToolbarComponent', () => {
       return new File(['{"a":1}'], 'x.json', { type: 'application/json' });
     }
 
-    function triggerPasteButtonClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerPasteButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findButtonByAriaLabel(fixture, 'Paste JSON from clipboard').click();
       fixture.detectChanges();
     }
 
     function triggerCopyButtonClick(
       fixture: ComponentFixture<ToolbarComponent>,
-      options: { readonly altKey: boolean }
+      options: { readonly altKey: boolean },
     ): void {
-      findButtonByAriaLabel(
-        fixture,
-        'Copy editor contents to clipboard'
-      ).dispatchEvent(new MouseEvent('click', {
-        altKey: options.altKey,
-        bubbles: true
-      }));
+      findButtonByAriaLabel(fixture, 'Copy editor contents to clipboard').dispatchEvent(
+        new MouseEvent('click', {
+          altKey: options.altKey,
+          bubbles: true,
+        }),
+      );
       fixture.detectChanges();
     }
 
-    function triggerUploadButtonClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerUploadButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findButtonByAriaLabel(fixture, 'Upload file').click();
       fixture.detectChanges();
     }
 
     function triggerFileInputChangeWithFile(
       fixture: ComponentFixture<ToolbarComponent>,
-      file: File
+      file: File,
     ): void {
       const fileInput = findFileInput(fixture);
       Object.defineProperty(fileInput, 'files', {
         configurable: true,
-        value: [file]
+        value: [file],
       });
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
       fixture.detectChanges();
     }
 
-    function triggerFileInputChangeWithoutFile(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerFileInputChangeWithoutFile(fixture: ComponentFixture<ToolbarComponent>): void {
       const fileInput = findFileInput(fixture);
       Object.defineProperty(fileInput, 'files', {
         configurable: true,
-        value: []
+        value: [],
       });
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
       fixture.detectChanges();
     }
 
-    function triggerDownloadButtonClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerDownloadButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findButtonByAriaLabel(fixture, 'Download as file').click();
       fixture.detectChanges();
     }
 
-    function triggerFormatButtonClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerFormatButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findButtonByAriaLabel(fixture, 'Format').click();
       fixture.detectChanges();
     }
 
-    function triggerMinifyButtonClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerMinifyButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findButtonByAriaLabel(fixture, 'Minify').click();
       fixture.detectChanges();
     }
 
-    function triggerClearButtonClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerClearButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findButtonByAriaLabel(fixture, 'Clear editor').click();
       fixture.detectChanges();
     }
 
-    function triggerSaveButtonClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerSaveButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findSaveButton(fixture).click();
       fixture.detectChanges();
     }
 
-    function triggerTitleEnterKeydown(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
-      const titleInput = hostElement(fixture).querySelector<HTMLInputElement>(
-        'input.title-field'
-      );
+    function triggerTitleEnterKeydown(fixture: ComponentFixture<ToolbarComponent>): void {
+      const titleInput = hostElement(fixture).querySelector<HTMLInputElement>('input.title-field');
       if (!titleInput) {
         throw new Error('title input not found');
       }
-      titleInput.dispatchEvent(new KeyboardEvent('keydown', {
-        bubbles: true,
-        key: 'Enter'
-      }));
+      titleInput.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          key: 'Enter',
+        }),
+      );
       fixture.detectChanges();
     }
 
     function triggerMenuItemClick(
       fixture: ComponentFixture<ToolbarComponent>,
-      menuItemText: string
+      menuItemText: string,
     ): void {
       findButtonByAriaLabel(fixture, 'More actions for this blob').click();
       fixture.detectChanges();
       const menuItem = Array.from(
-        document.body.querySelectorAll<HTMLButtonElement>(
-          '.cdk-overlay-container button'
-        )
-      ).find((candidateButton) =>
-        candidateButton.textContent?.includes(menuItemText)
-      );
+        document.body.querySelectorAll<HTMLButtonElement>('.cdk-overlay-container button'),
+      ).find((candidateButton) => candidateButton.textContent?.includes(menuItemText));
       if (!menuItem) {
         throw new Error(`menu item "${menuItemText}" not found`);
       }
@@ -1022,54 +917,35 @@ describe('ToolbarComponent', () => {
       fixture.detectChanges();
     }
 
-    function triggerCopyShareLinkMenuClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerCopyShareLinkMenuClick(fixture: ComponentFixture<ToolbarComponent>): void {
       triggerMenuItemClick(fixture, 'Copy share link');
     }
 
-    function triggerTogglePublicMenuClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerTogglePublicMenuClick(fixture: ComponentFixture<ToolbarComponent>): void {
       triggerMenuItemClick(fixture, 'Make public');
     }
 
-    function triggerDeleteBlobMenuClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerDeleteBlobMenuClick(fixture: ComponentFixture<ToolbarComponent>): void {
       triggerMenuItemClick(fixture, 'Delete this blob');
     }
 
-    function triggerThemeToggleButtonClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
+    function triggerThemeToggleButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findButtonByAriaLabel(fixture, 'Toggle theme').click();
       fixture.detectChanges();
     }
 
-    function triggerSelectionSyncToggleClick(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
-      findButtonByAriaLabel(
-        fixture,
-        'Toggle tree-editor selection sync'
-      ).click();
+    function triggerSelectionSyncToggleClick(fixture: ComponentFixture<ToolbarComponent>): void {
+      findButtonByAriaLabel(fixture, 'Toggle tree-editor selection sync').click();
       fixture.detectChanges();
     }
 
-    function triggerPaneLayoutSegmentChange(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): void {
-      findToggleSegment(
-        fixture,
-        'mat-button-toggle-group.pane-layout-group',
-        'tree-only'
-      ).click();
+    function triggerPaneLayoutSegmentChange(fixture: ComponentFixture<ToolbarComponent>): void {
+      findToggleSegment(fixture, 'mat-button-toggle-group.pane-layout-group', 'tree-only').click();
       fixture.detectChanges();
     }
 
     function makeToolbarActionCases(
-      fixture: ComponentFixture<ToolbarComponent>
+      fixture: ComponentFixture<ToolbarComponent>,
     ): Array<[ToolbarAction, () => void]> {
       return [
         ['paste', () => triggerPasteButtonClick(fixture)],
@@ -1084,17 +960,15 @@ describe('ToolbarComponent', () => {
         ['save', () => triggerSaveButtonClick(fixture)],
         ['copyShareLink', () => triggerCopyShareLinkMenuClick(fixture)],
         ['togglePublic', () => triggerTogglePublicMenuClick(fixture)],
-        ['deleteBlob', () => triggerDeleteBlobMenuClick(fixture)]
+        ['deleteBlob', () => triggerDeleteBlobMenuClick(fixture)],
       ];
     }
 
     function findTriggerGesture(
       cases: Array<[ToolbarAction, () => void]>,
-      expectedAction: ToolbarAction
+      expectedAction: ToolbarAction,
     ): () => void {
-      const toolbarActionCase = cases.find(
-        ([action]) => action === expectedAction
-      );
+      const toolbarActionCase = cases.find(([action]) => action === expectedAction);
       if (!toolbarActionCase) {
         throw new Error(`toolbar.action case "${expectedAction}" not found`);
       }
@@ -1104,7 +978,7 @@ describe('ToolbarComponent', () => {
     function trackActionOutput(
       fixture: ComponentFixture<ToolbarComponent>,
       action: ToolbarAction,
-      orderedCalls: string[]
+      orderedCalls: string[],
     ): jasmine.Spy {
       if (action === 'openFile') {
         return spyOn(findFileInput(fixture), 'click').and.callFake(() => {
@@ -1157,12 +1031,10 @@ describe('ToolbarComponent', () => {
       return outputSpy;
     }
 
-    function expectNoToolbarActionEvent(
-      logger: jasmine.SpyObj<LoggerService>
-    ): void {
-      const toolbarActionCalls = logger.event.calls.allArgs().filter(
-        ([messageId]) => messageId === 'toolbar.action'
-      );
+    function expectNoToolbarActionEvent(logger: jasmine.SpyObj<LoggerService>): void {
+      const toolbarActionCalls = logger.event.calls
+        .allArgs()
+        .filter(([messageId]) => messageId === 'toolbar.action');
       expect(toolbarActionCalls).toEqual([]);
     }
 
@@ -1171,25 +1043,18 @@ describe('ToolbarComponent', () => {
         const { fixture, logger } = await create({ signedIn: true });
         configureActionFixture(fixture);
         const orderedCalls: string[] = [];
-        const outputSpy = trackActionOutput(
-          fixture,
-          expectedAction,
-          orderedCalls
-        );
+        const outputSpy = trackActionOutput(fixture, expectedAction, orderedCalls);
         logger.event.calls.reset();
         logger.event.and.callFake(() => {
           orderedCalls.push('event');
         });
 
-        findTriggerGesture(
-          makeToolbarActionCases(fixture),
-          expectedAction
-        )();
+        findTriggerGesture(makeToolbarActionCases(fixture), expectedAction)();
 
         expect(logger.event).toHaveBeenCalledOnceWith(
           'toolbar.action',
           { action: expectedAction },
-          undefined
+          undefined,
         );
         expect(outputSpy).toHaveBeenCalledTimes(1);
         expect(orderedCalls).toEqual(['event', 'output']);
@@ -1211,7 +1076,7 @@ describe('ToolbarComponent', () => {
       expect(logger.event).toHaveBeenCalledOnceWith(
         'toolbar.action',
         { action: 'save' },
-        undefined
+        undefined,
       );
       expect(outputSpy).toHaveBeenCalledTimes(1);
       expect(orderedCalls).toEqual(['event', 'output']);
@@ -1453,9 +1318,7 @@ describe('ToolbarComponent', () => {
       const cmp = fixture.componentInstance;
       expect(cmp.pasteDisabled()).toBe(false);
       expect(cmp.pasteTooltip()).toBe('Paste from clipboard');
-      const btn = (fixture.nativeElement as HTMLElement).querySelector(
-        'button.paste-ready'
-      );
+      const btn = (fixture.nativeElement as HTMLElement).querySelector('button.paste-ready');
       expect(btn).toBeNull();
     });
 
@@ -1467,9 +1330,7 @@ describe('ToolbarComponent', () => {
       const cmp = fixture.componentInstance;
       expect(cmp.pasteDisabled()).toBe(false);
       expect(cmp.pasteTooltip()).toContain('{"a":1}');
-      const btn = (fixture.nativeElement as HTMLElement).querySelector(
-        'button.paste-ready'
-      );
+      const btn = (fixture.nativeElement as HTMLElement).querySelector('button.paste-ready');
       expect(btn).toBeTruthy();
     });
 
@@ -1504,9 +1365,7 @@ describe('ToolbarComponent', () => {
   });
 
   describe('M7p title-suggester wand', () => {
-    function findWandButton(
-      fixture: ComponentFixture<ToolbarComponent>
-    ): HTMLButtonElement | null {
+    function findWandButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement | null {
       return queryByCss<HTMLButtonElement>(fixture, '.title-suggest-wand');
     }
 
@@ -1521,7 +1380,7 @@ describe('ToolbarComponent', () => {
       const { fixture } = await create({ signedIn: false });
       setToolbarInputs(fixture, {
         isSavedBlob: true,
-        loadedBlobTitle: 'My Blob'
+        loadedBlobTitle: 'My Blob',
       });
       expect(findWandButton(fixture)).toBeNull();
     });
@@ -1578,13 +1437,13 @@ describe('ToolbarComponent', () => {
       cmp.onSuggestionSelected({
         value: 'My Title',
         source: 'namedField',
-        confidence: 75
+        confidence: 75,
       });
       expect(spy).toHaveBeenCalledWith('My Title');
       expect(logger.event).toHaveBeenCalledWith(
         'toolbar.titleSuggestionAccepted',
         { source: 'namedField' },
-        { candidateCount: 0 }
+        { candidateCount: 0 },
       );
     });
 
@@ -1593,19 +1452,19 @@ describe('ToolbarComponent', () => {
       fixture.componentRef.setInput('suggestedTitles', [
         { value: 'A', source: 'filename', confidence: 95 },
         { value: 'B', source: 'namedField', confidence: 75 },
-        { value: 'C', source: 'firstChars', confidence: 10 }
+        { value: 'C', source: 'firstChars', confidence: 10 },
       ]);
       fixture.detectChanges();
       const cmp = fixture.componentInstance;
       cmp.onSuggestionSelected({
         value: 'A',
         source: 'filename',
-        confidence: 95
+        confidence: 95,
       });
       expect(logger.event).toHaveBeenCalledWith(
         'toolbar.titleSuggestionAccepted',
         { source: 'filename' },
-        { candidateCount: 3 }
+        { candidateCount: 3 },
       );
     });
   });

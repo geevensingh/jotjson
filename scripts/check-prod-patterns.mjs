@@ -43,20 +43,17 @@ const RULES = [
       "Cast 'as TelemetryMessageId' defeats the literal-union catalog." +
       ' Add the new id to TELEMETRY_MESSAGE_IDS in' +
       ' src/app/core/telemetry/telemetry-message-ids.ts (with JSDoc)' +
-      ' instead of casting at the call site.'
-  }
+      ' instead of casting at the call site.',
+  },
 ];
 
 function listProdFiles() {
   const out = execFileSync(
     'git',
     ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
-    { encoding: 'buffer' }
+    { encoding: 'buffer' },
   );
-  const all = out
-    .toString('utf8')
-    .split('\0')
-    .filter(Boolean);
+  const all = out.toString('utf8').split('\0').filter(Boolean);
   return all
     .filter((p) => p.endsWith('.ts'))
     .filter((p) => p.startsWith('src/') || p.startsWith('api/src/'))
@@ -105,7 +102,7 @@ const allViolations = files.flatMap(scan);
 
 if (allViolations.length === 0) {
   console.log(
-    `check-prod-patterns: OK (${files.length} production .ts files scanned, 0 violations)`
+    `check-prod-patterns: OK (${files.length} production .ts files scanned, 0 violations)`,
   );
   process.exit(0);
 }

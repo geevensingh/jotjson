@@ -92,7 +92,7 @@ function emitDevAuthWarnOnce(): void {
   console.warn(
     '[auth] JOTJSON_DEV_AUTH_BYPASS is enabled. ' +
       'Synthetic dev:<userId> tokens are being accepted on this process. ' +
-      'This must never run in production.'
+      'This must never run in production.',
   );
 }
 
@@ -128,8 +128,8 @@ export function tryDevAuthToken(token: string): AuthenticatedPrincipal | null {
       sub: userId,
       name: displayName,
       preferred_username: email,
-      email
-    } as JwtPayload
+      email,
+    } as JwtPayload,
   };
 }
 
@@ -206,14 +206,14 @@ function getJwksClient(authority: string): JwksClientLike {
     cacheMaxEntries: 5,
     cacheMaxAge: 10 * 60 * 1000,
     rateLimit: true,
-    jwksRequestsPerMinute: 10
+    jwksRequestsPerMinute: 10,
   });
   // Wrap the library client in a narrow adapter so callers see only the
   // single overload of `getSigningKey` that we actually use. The library's
   // overloaded callback/promise signatures don't structurally match
   // `JwksClientLike` directly.
   cachedClient = {
-    getSigningKey: (kid: string) => lib.getSigningKey(kid)
+    getSigningKey: (kid: string) => lib.getSigningKey(kid),
   };
   return cachedClient;
 }
@@ -236,7 +236,7 @@ function getKey(authority: string): GetPublicKeyOrSecret {
       .getSigningKey(header.kid)
       .then((key) => callback(null, key.getPublicKey()))
       .catch((error: unknown) =>
-        callback(error instanceof Error ? error : new Error('JWKS lookup failed'))
+        callback(error instanceof Error ? error : new Error('JWKS lookup failed')),
       );
   };
 }
@@ -248,8 +248,7 @@ type BearerTokenResult =
 
 function extractBearerToken(req: HttpRequest): BearerTokenResult {
   const custom =
-    req.headers.get('x-jotjson-authorization') ??
-    req.headers.get('X-Jotjson-Authorization');
+    req.headers.get('x-jotjson-authorization') ?? req.headers.get('X-Jotjson-Authorization');
   const fallback = req.headers.get('authorization') ?? req.headers.get('Authorization');
   const header = custom ?? fallback;
   if (!header) return { kind: 'absent' };
@@ -274,22 +273,22 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
       {
         audience: audiences,
         issuer: issuers,
-        algorithms: ['RS256']
+        algorithms: ['RS256'],
       },
       (error, decoded) => {
         if (error) {
           return reject(
             new AuthError(
               error.message,
-              error.name === 'TokenExpiredError' ? 'expired' : 'invalid_signature'
-            )
+              error.name === 'TokenExpiredError' ? 'expired' : 'invalid_signature',
+            ),
           );
         }
         if (!decoded || typeof decoded === 'string') {
           return reject(new AuthError('Invalid token payload', 'invalid_signature'));
         }
         resolve(decoded as JwtPayload);
-      }
+      },
     );
   });
 
@@ -305,7 +304,7 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
     id,
     displayName: claims.name,
     email: claims.email || claims.preferred_username,
-    claims
+    claims,
   };
 }
 

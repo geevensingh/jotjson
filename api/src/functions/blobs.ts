@@ -14,12 +14,7 @@
  *     blob and includes `autoDeleted: { id, slug, title? }` on the response.
  *   - "manual" strategy: returns 409 with `code: "quota_exceeded"`.
  */
-import {
-  app,
-  HttpRequest,
-  HttpResponseInit,
-  InvocationContext
-} from '@azure/functions';
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth, tryAuth } from '../shared/auth';
 import {
   BlobValidationError,
@@ -29,7 +24,7 @@ import {
   deleteBlobById,
   findBlobByIdOrSlug,
   listBlobsByOwner,
-  updateBlob
+  updateBlob,
 } from '../shared/blobs';
 import { getRecentViewAt, recordEntry, VIEW_DEBOUNCE_SECONDS } from '../shared/history';
 import {
@@ -38,7 +33,7 @@ import {
   internalError,
   notFound,
   quotaExceeded,
-  unauthorized
+  unauthorized,
 } from '../shared/http';
 import { readUser } from '../shared/users';
 
@@ -56,7 +51,7 @@ async function recordViewedSafely(
     blobId: string;
     slug?: string;
     title?: string;
-  }
+  },
 ): Promise<void> {
   try {
     await recordEntry({ ...input, action: 'viewed' });
@@ -81,7 +76,7 @@ async function recordViewedSafely(
  */
 async function readRecentlyViewedEnabled(
   context: InvocationContext,
-  userId: string
+  userId: string,
 ): Promise<boolean> {
   try {
     const user = await readUser(userId);
@@ -104,7 +99,7 @@ async function readRecentlyViewedEnabled(
 
 export async function postBlob(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -139,8 +134,8 @@ export async function postBlob(
             resource: 'blob',
             via: 'create',
             count: existing.length,
-            limit: MAX_BLOBS_PER_USER
-          }
+            limit: MAX_BLOBS_PER_USER,
+          },
         );
       }
       // auto_fifo: drop the oldest blob (by updatedAt, then createdAt as
@@ -154,7 +149,7 @@ export async function postBlob(
         autoDeleted = {
           id: oldest.id,
           slug: oldest.slug,
-          ...(oldest.title ? { title: oldest.title } : {})
+          ...(oldest.title ? { title: oldest.title } : {}),
         };
       }
     }
@@ -166,16 +161,19 @@ export async function postBlob(
     const saved = await createBlob(principal.id, {
       content: payload.content as string,
       ...(payload.title !== undefined ? { title: payload.title as string } : {}),
-      ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic as boolean } : {})
+      ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic as boolean } : {}),
     });
     return {
       status: 201,
-      jsonBody: autoDeleted ? { ...saved, autoDeleted } : saved
+      jsonBody: autoDeleted ? { ...saved, autoDeleted } : saved,
     };
   } catch (error) {
     if (error instanceof BlobValidationError) return badRequest(error.message);
     if (error instanceof SlugGenerationError) {
-      return { status: 503, jsonBody: { error: 'Could not allocate a unique slug - please retry' } };
+      return {
+        status: 503,
+        jsonBody: { error: 'Could not allocate a unique slug - please retry' },
+      };
     }
     return internalError(context, 'postBlob write', error);
   }
@@ -183,7 +181,7 @@ export async function postBlob(
 
 export async function getBlob(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   const idOrSlug = req.params['idOrSlug'] ?? '';
   if (!idOrSlug) return badRequest('Missing idOrSlug path parameter');
@@ -207,15 +205,14 @@ export async function getBlob(
           let withinDebounce = false;
           if (recent) {
             const ageMs = Date.now() - new Date(recent).getTime();
-            withinDebounce =
-              Number.isFinite(ageMs) && ageMs < VIEW_DEBOUNCE_SECONDS * 1000;
+            withinDebounce = Number.isFinite(ageMs) && ageMs < VIEW_DEBOUNCE_SECONDS * 1000;
           }
           if (!withinDebounce) {
             await recordViewedSafely(context, {
               userId: principal.id,
               blobId: blob.id,
               slug: blob.slug,
-              ...(blob.title ? { title: blob.title } : {})
+              ...(blob.title ? { title: blob.title } : {}),
             });
           }
         }
@@ -233,7 +230,7 @@ export async function getBlob(
 
 export async function listBlobs(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -253,7 +250,7 @@ export async function listBlobs(
 
 export async function deleteBlob(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -288,7 +285,7 @@ export async function deleteBlob(
 
 export async function putBlob(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
@@ -327,7 +324,7 @@ export async function putBlob(
     const saved = await updateBlob(existing, {
       ...(patch.content !== undefined ? { content: patch.content as string } : {}),
       ...(patch.title !== undefined ? { title: patch.title as string } : {}),
-      ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic as boolean } : {})
+      ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic as boolean } : {}),
     });
     return { status: 200, jsonBody: saved };
   } catch (error) {
@@ -340,33 +337,33 @@ app.http('blobs-post', {
   methods: ['POST'],
   route: 'blobs',
   authLevel: 'anonymous',
-  handler: postBlob
+  handler: postBlob,
 });
 
 app.http('blobs-list', {
   methods: ['GET'],
   route: 'blobs',
   authLevel: 'anonymous',
-  handler: listBlobs
+  handler: listBlobs,
 });
 
 app.http('blobs-get', {
   methods: ['GET'],
   route: 'blobs/{idOrSlug}',
   authLevel: 'anonymous',
-  handler: getBlob
+  handler: getBlob,
 });
 
 app.http('blobs-put', {
   methods: ['PUT'],
   route: 'blobs/{id}',
   authLevel: 'anonymous',
-  handler: putBlob
+  handler: putBlob,
 });
 
 app.http('blobs-delete', {
   methods: ['DELETE'],
   route: 'blobs/{id}',
   authLevel: 'anonymous',
-  handler: deleteBlob
+  handler: deleteBlob,
 });

@@ -33,7 +33,7 @@ describe('LoggerService', () => {
       },
       get isConnected() {
         return !disabled;
-      }
+      },
     };
     trackEvent = jasmine.createSpy('trackEvent');
     trackException = jasmine.createSpy('trackException');
@@ -42,7 +42,7 @@ describe('LoggerService', () => {
     (telemetry as TelemetryService).trackException = trackException;
     (telemetry as TelemetryService).trackTrace = trackTrace;
     TestBed.configureTestingModule({
-      providers: [{ provide: TelemetryService, useValue: telemetry }]
+      providers: [{ provide: TelemetryService, useValue: telemetry }],
     });
     return TestBed.inject(LoggerService);
   }
@@ -140,7 +140,7 @@ describe('LoggerService', () => {
   it('reads and clears sessionStorage boot error on connect', async () => {
     sessionStorage.setItem(
       'jotjson.bootErr',
-      JSON.stringify({ name: 'BootError', message: 'boot failed' })
+      JSON.stringify({ name: 'BootError', message: 'boot failed' }),
     );
     const log = makeWithFakeTelemetry(false);
     await log.connect();
@@ -174,7 +174,7 @@ describe('LoggerService', () => {
       expect(console.info).toHaveBeenCalledWith(
         '[event:app.unhandled]',
         { foo: 'bar' },
-        { ms: 12 }
+        { ms: 12 },
       );
     });
 

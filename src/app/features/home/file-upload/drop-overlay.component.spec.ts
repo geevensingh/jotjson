@@ -5,7 +5,7 @@ describe('DropOverlayComponent', () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      imports: [DropOverlayComponent]
+      imports: [DropOverlayComponent],
     });
   });
 
@@ -19,7 +19,7 @@ describe('DropOverlayComponent', () => {
   it('hides the overlay by default when visible input is false', () => {
     const fixture = create(false);
     const overlay = (fixture.nativeElement as HTMLElement).querySelector(
-      '.drop-overlay'
+      '.drop-overlay',
     ) as HTMLElement;
     expect(overlay).toBeTruthy();
     expect(overlay.classList.contains('drop-overlay--visible')).toBe(false);
@@ -30,7 +30,7 @@ describe('DropOverlayComponent', () => {
     fixture.componentRef.setInput('visible', true);
     fixture.detectChanges();
     const overlay = (fixture.nativeElement as HTMLElement).querySelector(
-      '.drop-overlay'
+      '.drop-overlay',
     ) as HTMLElement;
     expect(overlay.classList.contains('drop-overlay--visible')).toBe(true);
   });
@@ -45,7 +45,7 @@ describe('DropOverlayComponent', () => {
   it('renders the "Drop JSON file here" message', () => {
     const fixture = create(true);
     const message = (fixture.nativeElement as HTMLElement).querySelector(
-      '.drop-overlay__message'
+      '.drop-overlay__message',
     ) as HTMLElement;
     expect(message).toBeTruthy();
     expect(message.textContent?.trim()).toBe('Drop JSON file here');
