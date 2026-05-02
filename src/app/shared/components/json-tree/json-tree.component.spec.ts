@@ -37,13 +37,21 @@ describe('JsonTreeComponent', () => {
   let prefs: PreferencesService;
   let snackOpen: jasmine.Spy;
 
-  async function createWith(value: unknown, beforeDetectChanges?: () => void): Promise<void> {
+  async function createWith(
+    value: unknown,
+    beforeDetectChanges?: () => void,
+    loggerOverride?: jasmine.SpyObj<LoggerService>,
+  ): Promise<void> {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
     snackOpen = jasmine.createSpy('snackOpen');
     await TestBed.configureTestingModule({
       imports: [JsonTreeComponent],
-      providers: [...provideFakeAuth(), { provide: MatSnackBar, useValue: { open: snackOpen } }],
+      providers: [
+        ...provideFakeAuth(),
+        { provide: MatSnackBar, useValue: { open: snackOpen } },
+        ...(loggerOverride ? [{ provide: LoggerService, useValue: loggerOverride }] : []),
+      ],
     }).compileComponents();
     fixture = TestBed.createComponent(JsonTreeComponent);
     prefs = TestBed.inject(PreferencesService);
@@ -62,6 +70,17 @@ describe('JsonTreeComponent', () => {
       throw new Error('Logger event spy was not initialized');
     }
     return eventSpy;
+  }
+
+  async function createWithLoggerSpy(value: unknown): Promise<jasmine.SpyObj<LoggerService>> {
+    const logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
+      'event',
+      'info',
+      'warn',
+      'error',
+    ]);
+    await createWith(value, undefined, logger);
+    return logger;
   }
 
   function installAnimationFrameQueue(): FrameRequestCallback[] {
@@ -2159,6 +2178,113 @@ describe('JsonTreeComponent', () => {
         cmp.removeManualTreeHighlight(node);
 
         expect(events).toEqual([[{ path: '$.parent.child', color: '#fff59d', cascade: false }]]);
+      });
+    });
+
+    describe('manual highlight telemetry', () => {
+      it('logs tree.highlight.apply for a new single-row highlight', async () => {
+        const logger = await createWithLoggerSpy({ leaf: 1 });
+        enableHighlightEditing();
+        const node = nodeAt('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#ff0000');
+
+        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.apply', {
+          kind: 'single',
+          bucket: 'red',
+          replacedExisting: 'false',
+        });
+      });
+
+      it('logs tree.highlight.apply for a replaced cascade highlight', async () => {
+        const logger = await createWithLoggerSpy({ parent: { child: 1 } });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.parent', color: '#fff59d', cascade: true }]);
+        const node = nodeAt('$.parent');
+
+        cmp.applyManualHighlight(node, true, '#0000ff');
+
+        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.apply', {
+          kind: 'cascade',
+          bucket: 'blue',
+          replacedExisting: 'true',
+        });
+      });
+
+      it('does not log tree.highlight.apply for an idempotent re-apply', async () => {
+        const logger = await createWithLoggerSpy({ leaf: 1 });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.leaf', color: '#ff0000', cascade: false }]);
+        const node = nodeAt('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#ff0000');
+
+        expect(logger.info).not.toHaveBeenCalled();
+      });
+
+      it('logs tree.highlight.remove for a single-row highlight removal', async () => {
+        const logger = await createWithLoggerSpy({ leaf: 1, other: 2 });
+        enableHighlightEditing();
+        setHighlights([
+          { path: '$.leaf', color: '#fff59d', cascade: false },
+          { path: '$.other', color: '#b3e5fc', cascade: false },
+        ]);
+        const node = nodeAt('$.leaf');
+
+        cmp.removeManualHighlight(node);
+
+        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.remove', {
+          kind: 'single',
+          removedFromAncestor: 'false',
+        });
+      });
+
+      it('logs tree.highlight.remove for a cascade root removal', async () => {
+        const logger = await createWithLoggerSpy({ parent: { child: 1 }, other: 2 });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.parent', color: '#7e6500', cascade: true }]);
+        const node = nodeAt('$.parent');
+
+        cmp.removeManualTreeHighlight(node);
+
+        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.remove', {
+          kind: 'cascade',
+          removedFromAncestor: 'false',
+        });
+      });
+
+      it('logs tree.highlight.remove for a descendant cascade removal', async () => {
+        const logger = await createWithLoggerSpy({ parent: { child: 1 }, other: 2 });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.parent', color: '#7e6500', cascade: true }]);
+        const node = nodeAt('$.parent.child');
+
+        cmp.removeManualTreeHighlight(node);
+
+        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.remove', {
+          kind: 'cascade',
+          removedFromAncestor: 'true',
+        });
+      });
+
+      it('logs tree.highlight.swatchOpened for the single-row swatch menu', async () => {
+        const logger = await createWithLoggerSpy({ leaf: 1 });
+
+        cmp.onSwatchMenuOpened('single');
+
+        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.swatchOpened', {
+          kind: 'single',
+        });
+      });
+
+      it('logs tree.highlight.swatchOpened for the cascade swatch menu', async () => {
+        const logger = await createWithLoggerSpy({ parent: { child: 1 } });
+
+        cmp.onSwatchMenuOpened('cascade');
+
+        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.swatchOpened', {
+          kind: 'cascade',
+        });
       });
     });
 

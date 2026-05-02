@@ -22,6 +22,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { bucketColorHex } from '../../../core/preferences/pref-summarize';
 import { CommentBundle, JsonParserService } from '../../../core/json/json-parser.service';
 import type { ExtractedJson } from '../../../core/json/json-extractor.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
@@ -1654,6 +1655,11 @@ export class JsonTreeComponent {
 
     const nextHighlights = this.highlights().filter((highlight) => highlight.path !== path);
     nextHighlights.push({ path, color, cascade });
+    this.logger.info('tree.highlight.apply', {
+      kind: cascade ? 'cascade' : 'single',
+      bucket: bucketColorHex(color),
+      replacedExisting: existingHighlight ? 'true' : 'false',
+    });
     this.highlightsChange.emit(nextHighlights);
   }
 
@@ -1662,6 +1668,10 @@ export class JsonTreeComponent {
     const path = this.effectiveHighlightPath(node);
     const existingHighlight = this.highlightIndex().get(path);
     if (!existingHighlight || existingHighlight.cascade) return;
+    this.logger.info('tree.highlight.remove', {
+      kind: 'single',
+      removedFromAncestor: 'false',
+    });
     this.emitHighlightsWithoutPath(path);
   }
 
@@ -1669,7 +1679,16 @@ export class JsonTreeComponent {
     if (!this.canEditHighlights()) return;
     const cascadeHighlight = this.nearestCascadeForNode(node);
     if (!cascadeHighlight) return;
+    const removedFromAncestor = cascadeHighlight.path !== node.pathString;
+    this.logger.info('tree.highlight.remove', {
+      kind: 'cascade',
+      removedFromAncestor: removedFromAncestor ? 'true' : 'false',
+    });
     this.emitHighlightsWithoutPath(cascadeHighlight.path);
+  }
+
+  onSwatchMenuOpened(kind: 'single' | 'cascade'): void {
+    this.logger.info('tree.highlight.swatchOpened', { kind });
   }
 
   highlightSwatchLabel(swatch: PaletteSwatch): string {

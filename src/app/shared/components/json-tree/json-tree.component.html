@@ -556,12 +556,22 @@
       <mat-divider />
     }
     @if (showHighlight(cn)) {
-      <button mat-menu-item type="button" [matMenuTriggerFor]="highlightMenu">
+      <button
+        mat-menu-item
+        type="button"
+        [matMenuTriggerFor]="highlightMenu"
+        (menuOpened)="onSwatchMenuOpened('single')"
+      >
         {{ ctxHighlightLabel }}
       </button>
     }
     @if (showHighlightTree(cn)) {
-      <button mat-menu-item type="button" [matMenuTriggerFor]="highlightTreeMenu">
+      <button
+        mat-menu-item
+        type="button"
+        [matMenuTriggerFor]="highlightTreeMenu"
+        (menuOpened)="onSwatchMenuOpened('cascade')"
+      >
         {{ ctxHighlightTreeLabel }}
       </button>
     }

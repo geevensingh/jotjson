@@ -455,6 +455,42 @@ describe('PreferencesService', () => {
       );
     });
 
+    it('emits a color event when dark manualHighlightColor changes', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeHighlightPatch({ dark: { manualHighlightColor: '#ff0000' } }));
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeHighlightColors.dark.manualHighlightColor',
+          source: 'user',
+          kind: 'color',
+          isDefault: 'false',
+          bucket: 'red',
+        },
+        undefined,
+      );
+    });
+
+    it('emits a color event when light manualHighlightColor changes', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeHighlightPatch({ light: { manualHighlightColor: '#00ff00' } }));
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeHighlightColors.light.manualHighlightColor',
+          source: 'user',
+          kind: 'color',
+          isDefault: 'false',
+          bucket: 'green',
+        },
+        undefined,
+      );
+    });
+
     it('reset emits one user-sourced event per key that differs from defaults', () => {
       const svc = TestBed.inject(PreferencesService);
       svc.update({ theme: 'dark', editorFontSize: 18, treeShowTypeLabels: false });

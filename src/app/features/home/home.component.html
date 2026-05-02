@@ -45,7 +45,11 @@
     [style]="splitStyle()"
     #splitHost
   >
-    <section class="pane pane-editor" aria-label="JSON input">
+    <section
+      class="pane pane-editor"
+      aria-label="JSON input"
+      i18n-aria-label="@@home.editorPane.aria"
+    >
       <jj-clipboard-banner></jj-clipboard-banner>
       <jotjson-extract-json-banner
         [visible]="extractBannerVisible()"
@@ -79,7 +83,12 @@
       (pointerdown)="onSplitterPointerDown($event)"
     ></div>
 
-    <section class="pane pane-tree" aria-label="Tree view" #treeHost>
+    <section
+      class="pane pane-tree"
+      aria-label="Tree view"
+      i18n-aria-label="@@home.treePane.aria"
+      #treeHost
+    >
       <jj-rule-sets-toolbar></jj-rule-sets-toolbar>
       <jj-json-tree
         [value]="treeValue()"

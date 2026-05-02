@@ -916,6 +916,33 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: info
+   * Fired by: `JsonTreeComponent.applyManualHighlight`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   * Props: { kind: 'single' | 'cascade'; bucket: ColorBucket;
+   *   replacedExisting: 'true' | 'false' }.
+   */
+  'tree.highlight.apply',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.removeManualHighlight` and
+   *           `JsonTreeComponent.removeManualTreeHighlight`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   * Props: { kind: 'single' | 'cascade';
+   *   removedFromAncestor: 'true' | 'false' }.
+   */
+  'tree.highlight.remove',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onSwatchMenuOpened`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   * Props: { kind: 'single' | 'cascade' }.
+   */
+  'tree.highlight.swatchOpened',
+
+  /**
+   * Severity: info
    * Fired by: `JsonTreeComponent.copyKey`
    *           (`shared/components/json-tree/json-tree.component.ts`)
    * Props: none
