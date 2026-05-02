@@ -424,6 +424,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     return !!user && user.id === blob.ownerId;
   });
 
+  readonly canEditHighlights = computed(() => this.loadedBlob() === null || this.isOwnedBlob());
+
   readonly canSave = computed(
     () =>
       this.auth.isSignedIn() &&
@@ -1565,7 +1567,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       } else {
         const created = await new Promise<CreateBlobResponse>((resolve, reject) => {
           this.blobs
-            .create(submitted.content, titlePatch, false)
+            .create(submitted.content, titlePatch, false, [...highlights])
             .subscribe({ next: resolve, error: reject });
         });
         this.logger.event(

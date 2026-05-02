@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Observable, Subject, catchError, mergeMap, of, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import type { CreateBlobResponse, JsonBlob } from './models';
+import type { BlobHighlight, CreateBlobResponse, JsonBlob } from './models';
 
 export interface BlobSyncEvent {
   kind: 'conflict';
@@ -32,8 +32,17 @@ export class BlobService {
       .pipe(tap((blobs) => blobs.forEach((blob) => this.rememberBlob(blob))));
   }
 
-  create(content: string, title?: string, isPublic = false): Observable<CreateBlobResponse> {
-    return this.http.post<CreateBlobResponse>(this.base, { content, title, isPublic }).pipe(
+  create(
+    content: string,
+    title?: string,
+    isPublic = false,
+    highlights?: readonly BlobHighlight[],
+  ): Observable<CreateBlobResponse> {
+    const body =
+      highlights === undefined
+        ? { content, title, isPublic }
+        : { content, title, isPublic, highlights: [...highlights] };
+    return this.http.post<CreateBlobResponse>(this.base, body).pipe(
       tap((created) => {
         const { autoDeleted: _autoDeleted, ...blob } = created;
         void _autoDeleted;

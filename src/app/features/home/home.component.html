@@ -86,7 +86,7 @@
         [commentsByPath]="parseResult().commentsByPath"
         [viewResetToken]="viewResetTokenValue()"
         [highlights]="highlights()"
-        [canEditHighlights]="isOwnedBlob()"
+        [canEditHighlights]="canEditHighlights()"
         [extractCandidates]="treeStringExtractor.candidates()"
         [extractSourceVersion]="treeStringExtractor.currentVersion()"
         (selectionChange)="onTreeSelectionChange($event)"

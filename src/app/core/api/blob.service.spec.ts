@@ -78,6 +78,19 @@ describe('BlobService', () => {
     req.flush(makeBlob({ content: '{}' }));
   });
 
+  it('POSTs highlights on create when provided', () => {
+    service.create('{}', undefined, false, [highlight]).subscribe();
+    const req = httpMock.expectOne(base);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      content: '{}',
+      title: undefined,
+      isPublic: false,
+      highlights: [highlight],
+    });
+    req.flush(makeBlob({ content: '{}', highlights: [highlight] }));
+  });
+
   it('uses the cached version as If-Match on PUT by UUID id', () => {
     service.get(id).subscribe();
     httpMock.expectOne(`${base}/${id}`).flush(makeBlob({ version: 7 }));

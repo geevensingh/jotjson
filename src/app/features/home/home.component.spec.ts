@@ -1495,6 +1495,8 @@ describe('HomeComponent save() branching (M4a)', () => {
     ...overrides,
   });
 
+  const sourceHighlight: BlobHighlight = { path: '$.a', color: '#fff59d', cascade: false };
+
   interface StubBlobService {
     create: jasmine.Spy;
     update: jasmine.Spy;
@@ -1593,7 +1595,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     fixture.componentInstance.content.set(content);
     fixture.componentInstance.title.set('My title');
     await fixture.componentInstance.onSave();
-    expect(stub.create).toHaveBeenCalledWith(content, 'My title', false);
+    expect(stub.create).toHaveBeenCalledWith(content, 'My title', false, []);
     expect(fixture.componentInstance.loadedBlob()).toEqual(created);
     expect(navSpy).toHaveBeenCalledWith(['/s', 'newslug']);
     expect(eventSpy).toHaveBeenCalledOnceWith(
@@ -1612,6 +1614,69 @@ describe('HomeComponent save() branching (M4a)', () => {
     await fixture.componentInstance.onSave();
     expect(stub.create).toHaveBeenCalled();
     expect(stub.update).not.toHaveBeenCalled();
+  });
+
+  it('create path: fork inherits source highlights', async () => {
+    const created = blob({
+      id: 'fork-id',
+      slug: 'forkslug',
+      ownerId: 'u1',
+      content: '{"a":1}',
+      highlights: [sourceHighlight],
+    });
+    const { fixture, stub, router } = setup({ userId: 'u1', createResult: created });
+    spyOn(router, 'navigate').and.resolveTo(true);
+    fixture.componentInstance.__loadBlobForTesting(
+      blob({ content: '{"a":1}', ownerId: 'someone-else', highlights: [sourceHighlight] }),
+    );
+
+    await fixture.componentInstance.onSave();
+
+    expect(stub.create).toHaveBeenCalledWith('{"a":1}', 'Hello', false, [sourceHighlight]);
+    expect(stub.update).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.highlights()).toEqual([sourceHighlight]);
+    expect(fixture.componentInstance.canEditHighlights()).toBeTrue();
+  });
+
+  it('create path: fork sends an empty highlight list when the source has none', async () => {
+    const created = blob({ id: 'fork-id', slug: 'forkslug', ownerId: 'u1' });
+    const { fixture, stub, router } = setup({ userId: 'u1', createResult: created });
+    spyOn(router, 'navigate').and.resolveTo(true);
+    fixture.componentInstance.__loadBlobForTesting(
+      blob({ content: '{"a":1}', ownerId: 'someone-else' }),
+    );
+
+    await fixture.componentInstance.onSave();
+
+    expect(stub.create).toHaveBeenCalledWith('{"a":1}', 'Hello', false, []);
+    expect(stub.update).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.highlights()).toEqual([]);
+  });
+
+  it('create path: fork preserves the maximum highlight list', async () => {
+    const sourceHighlights: BlobHighlight[] = [];
+    for (let i = 0; i < 100; i += 1) {
+      sourceHighlights.push({ path: `$.items[${i}]`, color: '#fff59d', cascade: false });
+    }
+    const content = `{"items":[${sourceHighlights.map(() => '0').join(',')}]}`;
+    const created = blob({
+      id: 'fork-id',
+      slug: 'forkslug',
+      ownerId: 'u1',
+      content,
+      highlights: sourceHighlights,
+    });
+    const { fixture, stub, router } = setup({ userId: 'u1', createResult: created });
+    spyOn(router, 'navigate').and.resolveTo(true);
+    fixture.componentInstance.__loadBlobForTesting(
+      blob({ content, ownerId: 'someone-else', highlights: sourceHighlights }),
+    );
+
+    await fixture.componentInstance.onSave();
+
+    expect(stub.create).toHaveBeenCalledWith(content, 'Hello', false, sourceHighlights);
+    expect(stub.update).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.highlights()).toEqual(sourceHighlights);
   });
 
   it('update path: owner updates in place (same slug, no navigation) without share.created', async () => {
@@ -1646,7 +1711,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     fixture.componentInstance.content.set('{"a":1}');
     fixture.componentInstance.title.set('   ');
     await fixture.componentInstance.onSave();
-    expect(stub.create).toHaveBeenCalledWith('{"a":1}', undefined, false);
+    expect(stub.create).toHaveBeenCalledWith('{"a":1}', undefined, false, []);
   });
 
   it('save sets saveInFlight during request and clears it after', async () => {
@@ -1731,7 +1796,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
   const highlightBar: BlobHighlight = { path: '$.bar', color: '#00ff00', cascade: true };
 
   function setup(
-    opts: { userId?: string; updateResult?: JsonBlob | Error; dialogResult?: boolean } = {},
+    opts: { userId?: string | null; updateResult?: JsonBlob | Error; dialogResult?: boolean } = {},
   ) {
     clearHomeStorage();
     TestBed.resetTestingModule();
@@ -1750,11 +1815,14 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
       events$: eventsSubject.asObservable(),
     };
     const fakeAuth: Partial<AuthService> = {
-      user: (() => ({
-        id: opts.userId ?? 'owner-me',
-        displayName: 'Test User',
-      })) as AuthService['user'],
-      isSignedIn: (() => true) as AuthService['isSignedIn'],
+      user: (() =>
+        opts.userId === null
+          ? null
+          : {
+              id: opts.userId ?? 'owner-me',
+              displayName: 'Test User',
+            }) as AuthService['user'],
+      isSignedIn: (() => opts.userId !== null) as AuthService['isSignedIn'],
       isConfigured: true,
     };
     const dialogRef = { afterClosed: () => of(opts.dialogResult === true) };
@@ -1781,7 +1849,126 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     return { fixture, stub, eventsSubject, dialog, snack };
   }
 
-  afterEach(() => clearHomeStorage());
+  afterEach(() => {
+    closeOpenTreeMenus();
+    clearHomeStorage();
+  });
+
+  function getTree(
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,
+  ): JsonTreeComponent {
+    return fixture.debugElement.query(By.directive(JsonTreeComponent))
+      .componentInstance as JsonTreeComponent;
+  }
+
+  function closeOpenTreeMenus(): void {
+    document.body
+      .querySelectorAll('.cdk-overlay-backdrop')
+      .forEach((backdrop) => (backdrop as HTMLElement).click());
+  }
+
+  async function openTreeMenuForPath(
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,
+    path: string,
+  ): Promise<void> {
+    closeOpenTreeMenus();
+    fixture.detectChanges();
+    const tree = getTree(fixture);
+    tree.expandAll();
+    fixture.detectChanges();
+    await Promise.resolve();
+    const host = fixture.nativeElement as HTMLElement;
+    const kebab = host.querySelector<HTMLButtonElement>(
+      `.tree-row[data-path="${path}"] .tree-kebab-pill`,
+    );
+    expect(kebab).withContext(`found a kebab for ${path}`).toBeTruthy();
+    kebab!.click();
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  function openMenuItemLabels(): string[] {
+    return Array.from(document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'))
+      .map((menuItem) => (menuItem.textContent ?? '').trim())
+      .filter((text) => text.length > 0);
+  }
+
+  function expectHighlightActionsVisible(visible: boolean): void {
+    const labels = openMenuItemLabels();
+    for (const label of [
+      'Highlight',
+      'Highlight tree',
+      'Remove highlight',
+      'Remove tree highlight',
+    ]) {
+      expect(labels.includes(label)).withContext(`${label} visibility`).toBe(visible);
+    }
+  }
+
+  function highlightedReadOnlyBlob(ownerId: string): JsonBlob {
+    return blob({
+      content: '{"parent":{"child":{"leaf":1}}}',
+      ownerId,
+      isPublic: true,
+      highlights: [
+        { path: '$.parent', color: '#7e6500', cascade: true },
+        { path: '$.parent.child', color: '#fff59d', cascade: false },
+      ],
+    });
+  }
+
+  it('passes canEditHighlights false and hides highlight menu actions for anonymous public viewers', async () => {
+    const { fixture } = setup({ userId: null });
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(highlightedReadOnlyBlob('owner-me'));
+
+    await openTreeMenuForPath(fixture, '$.parent.child');
+
+    const tree = getTree(fixture);
+    expect(tree.canEditHighlights()).toBeFalse();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-row[data-path="$.parent.child"].has-manual-highlight',
+      ),
+    ).toBeTruthy();
+    expectHighlightActionsVisible(false);
+  });
+
+  it('passes canEditHighlights false and hides highlight menu actions for signed-in non-owners', async () => {
+    const { fixture } = setup({ userId: 'viewer-me' });
+    fixture.componentInstance.__loadBlobForTesting(highlightedReadOnlyBlob('owner-me'));
+
+    await openTreeMenuForPath(fixture, '$.parent.child');
+
+    expect(getTree(fixture).canEditHighlights()).toBeFalse();
+    expectHighlightActionsVisible(false);
+  });
+
+  it('passes canEditHighlights true and shows highlight menu actions for the owner', async () => {
+    const { fixture } = setup({ userId: 'owner-me' });
+    fixture.componentInstance.__loadBlobForTesting(highlightedReadOnlyBlob('owner-me'));
+
+    await openTreeMenuForPath(fixture, '$.parent.child');
+
+    expect(getTree(fixture).canEditHighlights()).toBeTrue();
+    expectHighlightActionsVisible(true);
+  });
+
+  it('passes canEditHighlights true for an unsaved buffer', async () => {
+    const { fixture } = setup({ userId: null });
+    const component = fixture.componentInstance;
+    component.content.set('{"parent":{"child":{"leaf":1}}}');
+    component.highlights.set([
+      { path: '$.parent', color: '#7e6500', cascade: true },
+      { path: '$.parent.child', color: '#fff59d', cascade: false },
+    ]);
+
+    await openTreeMenuForPath(fixture, '$.parent.child');
+
+    expect(getTree(fixture).canEditHighlights()).toBeTrue();
+    expectHighlightActionsVisible(true);
+  });
 
   it('save round-trips highlights and clears dirty from the server response', async () => {
     const serverHighlight: BlobHighlight = { path: '$.foo', color: '#00ff00', cascade: false };
@@ -1839,6 +2026,60 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
       isPublic: false,
       highlights: [highlightFoo],
     });
+  });
+
+  it('prunes stale paths before PUT and adopts the echoed highlights', async () => {
+    const highlightA: BlobHighlight = { path: '$.a', color: '#fff59d', cascade: false };
+    const highlightBC: BlobHighlight = { path: '$.b.c', color: '#b3e5fc', cascade: false };
+    const highlightD: BlobHighlight = { path: '$.d', color: '#c8e6c9', cascade: false };
+    const survivingHighlights = [highlightA, highlightD];
+    const { fixture, stub } = setup({
+      updateResult: blob({ content: '{"a":1,"d":3}', highlights: survivingHighlights, version: 2 }),
+    });
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(
+      blob({
+        content: '{"a":1,"b":{"c":2},"d":3}',
+        highlights: [highlightA, highlightBC, highlightD],
+      }),
+    );
+    component.content.set('{"a":1,"d":3}');
+
+    await component.onSave();
+
+    expect(stub.update.calls.mostRecent().args[1]).toEqual({
+      content: '{"a":1,"d":3}',
+      title: 'Saved title',
+      isPublic: false,
+      highlights: survivingHighlights,
+    });
+    expect(component.highlights()).toEqual(survivingHighlights);
+    expect(component.dirty()).toBeFalse();
+  });
+
+  it('skips pruning all highlights when saved content has a syntax error', async () => {
+    const highlightA: BlobHighlight = { path: '$.a', color: '#fff59d', cascade: false };
+    const highlightBC: BlobHighlight = { path: '$.b.c', color: '#b3e5fc', cascade: false };
+    const highlightD: BlobHighlight = { path: '$.d', color: '#c8e6c9', cascade: false };
+    const allHighlights = [highlightA, highlightBC, highlightD];
+    const { fixture, stub } = setup({
+      updateResult: blob({ content: '{"a":1,"d":', highlights: allHighlights, version: 2 }),
+    });
+    const component = fixture.componentInstance;
+    component.__loadBlobForTesting(
+      blob({ content: '{"a":1,"b":{"c":2},"d":3}', highlights: allHighlights }),
+    );
+    component.content.set('{"a":1,"d":');
+
+    await component.onSave();
+
+    expect(stub.update.calls.mostRecent().args[1]).toEqual({
+      content: '{"a":1,"d":',
+      title: 'Saved title',
+      isPublic: false,
+      highlights: allHighlights,
+    });
+    expect(component.highlights()).toEqual(allHighlights);
   });
 
   it('keeps dirty true when highlights change while save is in flight', async () => {
