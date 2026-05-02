@@ -331,7 +331,12 @@ describe('assertRule', () => {
       assertRule(
         {
           ...validPairRule(),
-          valueMatch: { kind: 'text', matchType: 'exact', matchValue: tooLong, caseSensitive: false },
+          valueMatch: {
+            kind: 'text',
+            matchType: 'exact',
+            matchValue: tooLong,
+            caseSensitive: false,
+          },
         },
         'rule',
       ),
@@ -402,7 +407,9 @@ describe('assertRule', () => {
 
   it('accepts matchValue at exactly MAX_RULE_MATCH_VALUE_LENGTH chars', () => {
     const exact = 'x'.repeat(200);
-    expect(assertRule(validRule({ matchValue: exact }), 'rule')).toEqual(validRule({ matchValue: exact }));
+    expect(assertRule(validRule({ matchValue: exact }), 'rule')).toEqual(
+      validRule({ matchValue: exact }),
+    );
   });
 
   it('rejects unknown rule fields', () => {
@@ -450,7 +457,9 @@ describe('assertRuleSetPayload', () => {
 
   it('rejects more than 50 mixed simple and pair rules', () => {
     const rules = Array.from({ length: 51 }, (_, index) =>
-      index % 2 === 0 ? validRule({ id: `simple-${index}` }) : validPairRule({ id: `pair-${index}` }),
+      index % 2 === 0
+        ? validRule({ id: `simple-${index}` })
+        : validPairRule({ id: `pair-${index}` }),
     );
     expect(() => assertRuleSetPayload({ name: 'x', rules })).toThrow(/max 50/);
   });

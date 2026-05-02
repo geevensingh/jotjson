@@ -332,7 +332,9 @@ function assertSimpleRule(raw: unknown, field: string): FormattingRuleSimple {
 
   const id = assertRuleId(raw['id'], `${field}.id`);
   const kind =
-    raw['kind'] === undefined ? undefined : assertEnum(raw['kind'], ['simple'] as const, `${field}.kind`);
+    raw['kind'] === undefined
+      ? undefined
+      : assertEnum(raw['kind'], ['simple'] as const, `${field}.kind`);
   const target = assertEnum(raw['target'], RULE_TARGETS, `${field}.target`);
   const matchType = assertEnum(raw['matchType'], MATCH_TYPES, `${field}.matchType`);
   const matchValue = assertMatchValue(raw['matchValue'], `${field}.matchValue`);
