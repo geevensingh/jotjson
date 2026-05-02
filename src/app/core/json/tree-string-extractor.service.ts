@@ -53,6 +53,7 @@ export class TreeStringExtractorService {
     new Map<string, ExtractedJson>(),
   );
   private readonly scannerUnavailableSignal = signal(false);
+  private readonly scanInFlightSignal = signal(false);
   private readonly currentVersionSignal = signal(0);
   private worker: Worker | null = null;
   private nextVersion = 0;
@@ -60,6 +61,7 @@ export class TreeStringExtractorService {
   readonly candidates: Signal<ReadonlyMap<string, ExtractedJson>> =
     this.candidatesSignal.asReadonly();
   readonly scannerUnavailable: Signal<boolean> = this.scannerUnavailableSignal.asReadonly();
+  readonly scanInFlight: Signal<boolean> = this.scanInFlightSignal.asReadonly();
   readonly currentVersion: Signal<number> = this.currentVersionSignal.asReadonly();
 
   beginGeneration(): number {
@@ -69,6 +71,7 @@ export class TreeStringExtractorService {
     this.currentGenerationInFlight.clear();
     this.currentGenerationResults.clear();
     this.pendingChunksByVersion.clear();
+    this.scanInFlightSignal.set(false);
     this.candidatesSignal.set(new Map<string, ExtractedJson>());
     return sourceVersion;
   }
@@ -211,6 +214,7 @@ export class TreeStringExtractorService {
       return;
     }
     this.pendingChunksByVersion.set(sourceVersion, [ownedChunk]);
+    this.refreshScanInFlight();
   }
 
   private shiftPendingChunk(sourceVersion: number): string[] | undefined {
@@ -223,7 +227,15 @@ export class TreeStringExtractorService {
     if (pendingChunks.length === 0) {
       this.pendingChunksByVersion.delete(sourceVersion);
     }
+    this.refreshScanInFlight();
     return chunk;
+  }
+
+  private refreshScanInFlight(): void {
+    this.scanInFlightSignal.set(
+      !this.scannerUnavailableSignal() &&
+        this.pendingChunksByVersion.has(this.currentVersionSignal()),
+    );
   }
 
   private handleWorkerMessage(event: MessageEvent<unknown>): void {
@@ -280,6 +292,7 @@ export class TreeStringExtractorService {
     this.scannerUnavailableSignal.set(true);
     this.currentGenerationInFlight.clear();
     this.pendingChunksByVersion.clear();
+    this.scanInFlightSignal.set(false);
   }
 }
 

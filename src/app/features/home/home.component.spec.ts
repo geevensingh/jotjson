@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { Title, By } from '@angular/platform-browser';
 import { of, throwError } from 'rxjs';
@@ -17,11 +17,14 @@ import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { JsonExtractorService } from '../../core/json/json-extractor.service';
+import type { ExtractedJson } from '../../core/json/json-extractor.service';
+import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
 import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
+import type { TreeExtractRequest } from '../../shared/components/json-tree/json-tree.component';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -3475,4 +3478,245 @@ describe('HomeComponent M7p title-suggester wiring', () => {
     fixture.componentInstance.onFormat();
     expect(fixture.componentInstance.lastFilename()).toBe('config.json');
   });
+});
+
+describe('HomeComponent tree extract wiring (M7s)', () => {
+  setupMinimalMonacoStub();
+
+  class FakeTreeStringExtractor {
+    readonly candidatesSignal = signal<ReadonlyMap<string, ExtractedJson>>(
+      new Map<string, ExtractedJson>(),
+    );
+    readonly scannerUnavailableSignal = signal(false);
+    readonly scanInFlightSignal = signal(false);
+    readonly currentVersionSignal = signal(0);
+    readonly candidates = this.candidatesSignal.asReadonly();
+    readonly scannerUnavailable = this.scannerUnavailableSignal.asReadonly();
+    readonly scanInFlight = this.scanInFlightSignal.asReadonly();
+    readonly currentVersion = this.currentVersionSignal.asReadonly();
+    readonly beginGeneration = jasmine.createSpy('beginGeneration').and.callFake((): number => {
+      const sourceVersion = this.currentVersionSignal() + 1;
+      this.currentVersionSignal.set(sourceVersion);
+      this.candidatesSignal.set(new Map<string, ExtractedJson>());
+      this.scanInFlightSignal.set(false);
+      return sourceVersion;
+    });
+    readonly enqueueScan = jasmine.createSpy('enqueueScan');
+
+    setVersion(sourceVersion: number): void {
+      this.currentVersionSignal.set(sourceVersion);
+    }
+
+    setCandidates(candidates: ReadonlyMap<string, ExtractedJson>): void {
+      this.candidatesSignal.set(candidates);
+    }
+  }
+
+  function extracted(text: string, blockCount = 1): ExtractedJson {
+    return {
+      text,
+      blockCount,
+      preservesComments: true,
+      hasComments: text.includes('//') || text.includes('/*'),
+    };
+  }
+
+  function extractRequest(
+    replacement: ExtractedJson,
+    overrides: Partial<TreeExtractRequest> = {},
+  ): TreeExtractRequest {
+    return {
+      path: ['payload'],
+      sourceVersion: 1,
+      replacement,
+      source: 'rowButton',
+      ...overrides,
+    };
+  }
+
+  function setup(): {
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>;
+    component: HomeComponent;
+    treeExtractor: FakeTreeStringExtractor;
+    eventSpy: jasmine.Spy;
+    warnSpy: jasmine.Spy;
+  } {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    const treeExtractor = new FakeTreeStringExtractor();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: TreeStringExtractorService, useValue: treeExtractor },
+      ],
+    });
+    const logger = TestBed.inject(LoggerService);
+    const eventSpy = spyOn(logger, 'event');
+    const warnSpy = spyOn(logger, 'warn');
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.detectChanges();
+    return { fixture, component: fixture.componentInstance, treeExtractor, eventSpy, warnSpy };
+  }
+
+  afterEach(() => {
+    clearHomeStorage();
+  });
+
+  it('applies patched text from a tree extract request', () => {
+    const { component, treeExtractor } = setup();
+    treeExtractor.setVersion(1);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}","keep":true}');
+
+    component.onExtractRequest(extractRequest(extracted('{"a":1}')));
+
+    expect(component.content()).toBe('{"payload":{"a":1},"keep":true}');
+  });
+
+  it('drops stale tree extract clicks and logs a warning', () => {
+    const { component, treeExtractor, warnSpy } = setup();
+    treeExtractor.setVersion(2);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}"}');
+    const before = component.content();
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 1,
+      }),
+    );
+
+    expect(component.content()).toBe(before);
+    expect(warnSpy).toHaveBeenCalledWith('tree.extract.staleClick', {
+      eventVersion: 1,
+      currentVersion: 2,
+    });
+  });
+
+  it('emits click telemetry after a successful tree extract request', () => {
+    const { component, treeExtractor, eventSpy } = setup();
+    treeExtractor.setVersion(4);
+    const replacement = extracted('{"a":1}', 3);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}"}');
+
+    component.onExtractRequest(
+      extractRequest(replacement, {
+        sourceVersion: 4,
+        source: 'contextMenu',
+      }),
+    );
+
+    expect(eventSpy).toHaveBeenCalledWith(
+      'tree.extract.click',
+      { source: 'contextMenu' },
+      { blockCount: 3 },
+    );
+  });
+
+  it('preserves comments inside the extracted replacement payload', () => {
+    const { component, treeExtractor } = setup();
+    treeExtractor.setVersion(5);
+    component.onValueChange('{\n  "payload": "INFO {\\"a\\":1}"\n}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{\n  // inside extracted payload\n  "a": 1\n}'), {
+        sourceVersion: 5,
+      }),
+    );
+
+    expect(component.content()).toContain('// inside extracted payload');
+    expect(component.content()).toContain('"a": 1');
+  });
+
+  it('preserves comments outside the replaced subtree', () => {
+    const { component, treeExtractor } = setup();
+    treeExtractor.setVersion(6);
+    component.onValueChange(
+      '{\n  // leading outside\n  "payload": "INFO {\\"a\\":1}", // trailing outside\n  "keep": true\n}',
+    );
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 6,
+      }),
+    );
+
+    expect(component.content()).toContain('// leading outside');
+    expect(component.content()).toContain('"payload": {"a":1}, // trailing outside');
+    expect(component.content()).toContain('"keep": true');
+  });
+
+  it('reindents multi-line extracted replacement text', () => {
+    const { component, treeExtractor } = setup();
+    treeExtractor.setVersion(7);
+    component.onValueChange('{\n  "payload": "INFO {\\"a\\":1}"\n}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{\n  "a": 1\n}'), {
+        sourceVersion: 7,
+      }),
+    );
+
+    expect(component.content()).toBe('{\n  "payload": {\n               "a": 1\n             }\n}');
+  });
+
+  it('debounces tree string scans after treeValue changes', fakeAsync(() => {
+    const { fixture, component, treeExtractor } = setup();
+
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}","other":"plain"}');
+    fixture.detectChanges();
+    tick(999);
+
+    expect(treeExtractor.beginGeneration).not.toHaveBeenCalled();
+
+    tick(1);
+
+    expect(treeExtractor.beginGeneration).toHaveBeenCalledTimes(1);
+    expect(treeExtractor.enqueueScan).toHaveBeenCalledWith(['INFO {"a":1}', 'plain']);
+  }));
+
+  it('cancels the pending tree string scan when treeValue changes again', fakeAsync(() => {
+    const { fixture, component, treeExtractor } = setup();
+
+    component.onValueChange('{"payload":"first {\\"a\\":1}"}');
+    fixture.detectChanges();
+    tick(500);
+    component.onValueChange('{"payload":"second {\\"b\\":2}"}');
+    fixture.detectChanges();
+    tick(999);
+
+    expect(treeExtractor.beginGeneration).not.toHaveBeenCalled();
+
+    tick(1);
+
+    expect(treeExtractor.beginGeneration).toHaveBeenCalledTimes(1);
+    expect(treeExtractor.enqueueScan).toHaveBeenCalledWith(['second {"b":2}']);
+  }));
+
+  it('emits shown telemetry once the tree string scan completes', fakeAsync(() => {
+    const { fixture, component, treeExtractor, eventSpy } = setup();
+    treeExtractor.enqueueScan.and.callFake(() => {
+      treeExtractor.scanInFlightSignal.set(true);
+    });
+    component.onValueChange(
+      '{"a":"dup {\\"x\\":1}","b":"dup {\\"x\\":1}","c":"other {\\"y\\":2}"}',
+    );
+    fixture.detectChanges();
+    tick(1000);
+
+    expect(eventSpy).not.toHaveBeenCalledWith('tree.extract.shown', undefined, jasmine.any(Object));
+
+    treeExtractor.setCandidates(
+      new Map<string, ExtractedJson>([['dup {"x":1}', extracted('{"x":1}')]]),
+    );
+    treeExtractor.scanInFlightSignal.set(false);
+    fixture.detectChanges();
+    tick();
+
+    expect(eventSpy).toHaveBeenCalledWith('tree.extract.shown', undefined, {
+      uniqueStringsScanned: 2,
+      uniqueCandidates: 1,
+      candidateNodes: 2,
+    });
+  }));
 });

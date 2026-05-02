@@ -13,6 +13,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import {
@@ -42,19 +43,23 @@ import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { firstValueFrom } from 'rxjs';
+import { debounceTime, firstValueFrom } from 'rxjs';
 import {
   ConfirmDialogComponent,
   ConfirmDialogData,
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 import { JsonParserService, JsonParseResult } from '../../core/json/json-parser.service';
 import { JsonExtractorService, ExtractedJson } from '../../core/json/json-extractor.service';
+import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
 import type { SuggestionCandidate } from '../../core/title-suggester/types';
 import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
-import { JsonTreeComponent } from '../../shared/components/json-tree/json-tree.component';
+import {
+  JsonTreeComponent,
+  type TreeExtractRequest,
+} from '../../shared/components/json-tree/json-tree.component';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/toolbar.component';
 import { EditorMode } from './editor-mode';
@@ -66,6 +71,9 @@ import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { validateAndReadSingleFile } from '../../core/upload/upload-file-validator';
+import { patchExtractedValue } from './extract-json-patcher';
+import type { PatchResult } from './extract-json-patcher';
+import { collectStringLeaves } from './string-leaf-collector';
 
 /**
  * Local-only pane visibility (issue #39). Stored in `localStorage`
@@ -92,6 +100,8 @@ type SignInRestoreSnapshot = {
 };
 
 const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
+
+const TREE_EXTRACT_SCAN_DEBOUNCE_MS = 1000;
 
 const normalizeEol = (source: string): string => source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
@@ -132,10 +142,12 @@ const isSignInRestoreSnapshot = (value: unknown): value is SignInRestoreSnapshot
   styleUrl: './home.component.scss',
 })
 export class HomeComponent implements OnInit, OnDestroy {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly draft = inject(DraftService);
   private readonly prefs = inject(PreferencesService);
   private readonly parser = inject(JsonParserService);
   private readonly extractor = inject(JsonExtractorService);
+  readonly treeStringExtractor = inject(TreeStringExtractorService);
   private readonly titleSuggester = inject(TitleSuggesterService);
   private readonly auth = inject(AuthService);
   private readonly blobs = inject(BlobService);
@@ -361,6 +373,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     return result.empty ? undefined : result.value;
   });
 
+  private readonly treeValueChanges$ = toObservable(this.treeValue);
+
   readonly layoutOrientation = computed(() => this.prefs.prefs().layoutOrientation);
 
   readonly hasContent = computed(() => this.content().trim().length > 0);
@@ -503,6 +517,11 @@ export class HomeComponent implements OnInit, OnDestroy {
    */
   private pendingEditorReveal: string | null | undefined = undefined;
   private pendingTreeApply: string | null | undefined = undefined;
+  private pendingTreeExtractTelemetry: {
+    sourceVersion: number;
+    stringLeaves: readonly string[];
+    uniqueStringsScanned: number;
+  } | null = null;
 
   constructor() {
     // Persist anonymous draft edits only while no saved blob is loaded.
@@ -566,6 +585,19 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
     });
 
+    this.treeValueChanges$
+      .pipe(debounceTime(TREE_EXTRACT_SCAN_DEBOUNCE_MS), takeUntilDestroyed(this.destroyRef))
+      .subscribe((value) => this.scanTreeStringLeaves(value));
+
+    effect(() => {
+      const scanInFlight = this.treeStringExtractor.scanInFlight();
+      const sourceVersion = this.treeStringExtractor.currentVersion();
+      const candidates = this.treeStringExtractor.candidates();
+      if (!scanInFlight) {
+        this.emitTreeExtractShownTelemetryIfPending(sourceVersion, candidates);
+      }
+    });
+
     // splitRatio is persisted via persistedSignal at the field declaration
     // above. Intentionally local-only (not part of UserPreferences / Cosmos
     // roaming): viewport-dependent, couples with layoutOrientation, transient
@@ -591,7 +623,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('focus', onFocus);
-    inject(DestroyRef).onDestroy(() => {
+    this.destroyRef.onDestroy(() => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', onFocus);
       this.clipboard.stopPolling();
@@ -605,6 +637,60 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.clipboard.stopPolling();
       }
     });
+  }
+
+  private scanTreeStringLeaves(value: unknown): void {
+    if (value === null || value === undefined) {
+      this.pendingTreeExtractTelemetry = null;
+      return;
+    }
+
+    const sourceVersion = this.treeStringExtractor.beginGeneration();
+    const stringLeaves = collectStringLeaves(value);
+    this.pendingTreeExtractTelemetry = {
+      sourceVersion,
+      stringLeaves,
+      uniqueStringsScanned: new Set(stringLeaves).size,
+    };
+    this.treeStringExtractor.enqueueScan(stringLeaves);
+
+    if (!this.treeStringExtractor.scanInFlight()) {
+      this.emitTreeExtractShownTelemetryIfPending(
+        sourceVersion,
+        this.treeStringExtractor.candidates(),
+      );
+    }
+  }
+
+  private emitTreeExtractShownTelemetryIfPending(
+    sourceVersion: number,
+    candidates: ReadonlyMap<string, ExtractedJson>,
+  ): void {
+    const pending = this.pendingTreeExtractTelemetry;
+    if (!pending || pending.sourceVersion !== sourceVersion) {
+      return;
+    }
+
+    const candidateNodes = this.countCandidateStringLeaves(pending.stringLeaves, candidates);
+    this.logger.event('tree.extract.shown', undefined, {
+      uniqueStringsScanned: pending.uniqueStringsScanned,
+      uniqueCandidates: candidates.size,
+      candidateNodes,
+    });
+    this.pendingTreeExtractTelemetry = null;
+  }
+
+  private countCandidateStringLeaves(
+    stringLeaves: readonly string[],
+    candidates: ReadonlyMap<string, ExtractedJson>,
+  ): number {
+    let count = 0;
+    for (const stringLeaf of stringLeaves) {
+      if (candidates.has(stringLeaf)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   onSplitterPointerDown(ev: PointerEvent): void {
@@ -701,6 +787,34 @@ export class HomeComponent implements OnInit, OnDestroy {
       endLineNumber: endPos.line,
       endColumn: endPos.column,
     });
+  }
+
+  onExtractRequest(event: TreeExtractRequest): void {
+    const currentVersion = this.treeStringExtractor.currentVersion();
+    if (event.sourceVersion !== currentVersion) {
+      this.logger.warn('tree.extract.staleClick', {
+        eventVersion: event.sourceVersion,
+        currentVersion,
+      });
+      return;
+    }
+
+    let result: PatchResult;
+    try {
+      result = patchExtractedValue(this.content(), event.path, event.replacement);
+    } catch (error) {
+      this.logger.warn('tree.extract.applyFailed', {
+        reason: error instanceof Error ? error.message : 'unknown',
+      });
+      return;
+    }
+
+    this.logger.event(
+      'tree.extract.click',
+      { source: event.source },
+      { blockCount: event.replacement.blockCount },
+    );
+    this.setContent(result.patched);
   }
 
   onToggleSelectionSync(): void {

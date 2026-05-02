@@ -861,6 +861,48 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'tree.stringExtractor.workerUnavailable',
 
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.emitTreeExtractShownTelemetryIfPending`
+   *           (`features/home/home.component.ts`) once a debounced tree
+   *           string-leaf scan has completed for the current source version.
+   * Props: none.
+   * Measurements: { uniqueStringsScanned: number; uniqueCandidates: number;
+   *   candidateNodes: number }. `candidateNodes` counts visible string rows
+   *   whose raw value has an extractable replacement; user strings and paths
+   *   are never logged.
+   */
+  'tree.extract.shown',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.onExtractRequest`
+   *           (`features/home/home.component.ts`) after a non-stale tree
+   *           extract click patches the editor text successfully.
+   * Props: { source: 'rowButton' | 'contextMenu' }.
+   * Measurements: { blockCount: number }.
+   */
+  'tree.extract.click',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent.onExtractRequest`
+   *           (`features/home/home.component.ts`) when a tree extract click
+   *           belongs to an older source version than the current scan.
+   * Props: { eventVersion: number; currentVersion: number }.
+   */
+  'tree.extract.staleClick',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent.onExtractRequest`
+   *           (`features/home/home.component.ts`) when a tree extract click
+   *           cannot be spliced into the current editor text.
+   * Props: { reason: 'extract.patch.parse-failed' | 'extract.patch.path-not-found'
+   *   | 'unknown' }.
+   */
+  'tree.extract.applyFailed',
+
   // Tree row context menu (M7q)
 
   /**

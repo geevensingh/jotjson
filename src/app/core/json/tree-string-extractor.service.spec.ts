@@ -307,10 +307,12 @@ describe('TreeStringExtractorService', () => {
 
     service.enqueueScan(strings);
 
+    expect(service.scanInFlight()).toBeTrue();
     expect(mockWorker.postedMessages.length).toBe(4);
     for (let messageIndex = 0; messageIndex < 4; messageIndex++) {
       mockWorker.respondToMessage(messageIndex);
       expect(service.candidates().size).toBe((messageIndex + 1) * TREE_STRING_EXTRACTOR_BATCH_SIZE);
+      expect(service.scanInFlight()).toBe(messageIndex < 3);
     }
   });
 
@@ -363,10 +365,46 @@ describe('TreeStringExtractorService', () => {
     service.enqueueScan([rawJsonString(51)]);
 
     expect(service.scannerUnavailable()).toBeTrue();
+    expect(service.scanInFlight()).toBeFalse();
     expect(mockWorker.postedMessages.length).toBe(1);
     expect(logger.warn).toHaveBeenCalledOnceWith('tree.stringExtractor.workerUnavailable', {
       reason: 'messageerror',
     });
+  });
+
+  it('reports scanInFlight while a worker request is pending', () => {
+    const rawString = rawJsonString(60);
+
+    expect(service.scanInFlight()).toBeFalse();
+
+    service.enqueueScan([rawString]);
+
+    expect(service.scanInFlight()).toBeTrue();
+
+    mockWorker.respondToMessage(0);
+
+    expect(service.scanInFlight()).toBeFalse();
+  });
+
+  it('resets scanInFlight when a new generation begins', () => {
+    service.enqueueScan([rawJsonString(61)]);
+    expect(service.scanInFlight()).toBeTrue();
+
+    service.beginGeneration();
+
+    expect(service.scanInFlight()).toBeFalse();
+  });
+
+  it('keeps scanInFlight false when all results are served from cache', () => {
+    const rawString = rawJsonString(62);
+    service.enqueueScan([rawString]);
+    mockWorker.respondToMessage(0);
+
+    service.beginGeneration();
+    service.enqueueScan([rawString]);
+
+    expect(service.scanInFlight()).toBeFalse();
+    expectCandidateText(rawString, rawString);
   });
 
   function expectCandidateText(rawString: string, expectedText: string): void {

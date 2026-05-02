@@ -85,7 +85,10 @@
         [value]="treeValue()"
         [commentsByPath]="parseResult().commentsByPath"
         [viewResetToken]="viewResetTokenValue()"
+        [extractCandidates]="treeStringExtractor.candidates()"
+        [extractSourceVersion]="treeStringExtractor.currentVersion()"
         (selectionChange)="onTreeSelectionChange($event)"
+        (extractRequest)="onExtractRequest($event)"
       ></jj-json-tree>
     </section>
   </div>
