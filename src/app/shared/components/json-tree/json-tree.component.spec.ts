@@ -11,6 +11,7 @@ import { bucketCount } from '../../../core/telemetry/buckets';
 import type { ExtractedJson } from '../../../core/json/json-extractor.service';
 import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
 import type {
+  BlobHighlight,
   FormattingRule,
   FormattingRuleSet,
   FormattingRuleSimple,
@@ -1735,6 +1736,91 @@ describe('JsonTreeComponent', () => {
       ) as HTMLElement;
       expect(xRow.classList.contains('is-selected')).toBeTrue();
       expect(xRow.classList.contains('is-search-hit')).toBeTrue();
+    });
+  });
+
+  describe('manual highlights', () => {
+    function setHighlights(highlights: readonly BlobHighlight[]): void {
+      fixture.componentRef.setInput('highlights', highlights);
+      fixture.detectChanges();
+    }
+
+    function findRow(path: string): HTMLElement {
+      cmp.expandAll();
+      fixture.detectChanges();
+      const row = (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${path}"]`,
+      ) as HTMLElement | null;
+      if (!row) {
+        throw new Error(`No .tree-row found for path ${path}`);
+      }
+      return row;
+    }
+
+    it('renders manual highlight classes and colors for direct and cascaded rows', async () => {
+      await createWith({ a: { child: 1 }, b: 2, c: 3 });
+      setHighlights([
+        { path: '$.a', color: '#ffe082', cascade: true },
+        { path: '$.c', color: '#abcdef', cascade: false },
+      ]);
+
+      const parentRow = findRow('$.a');
+      const childRow = findRow('$.a.child');
+      const siblingRow = findRow('$.b');
+      const directRow = findRow('$.c');
+
+      expect(parentRow.classList.contains('has-manual-highlight')).toBeTrue();
+      expect(parentRow.style.getPropertyValue('--manual-highlight').trim()).toBe('#ffe082');
+      expect(childRow.classList.contains('has-manual-highlight')).toBeTrue();
+      expect(childRow.style.getPropertyValue('--manual-highlight').trim()).toBe('#ffe082');
+      expect(directRow.classList.contains('has-manual-highlight')).toBeTrue();
+      expect(directRow.style.getPropertyValue('--manual-highlight').trim()).toBe('#abcdef');
+      expect(siblingRow.classList.contains('has-manual-highlight')).toBeFalse();
+      expect(siblingRow.style.getPropertyValue('--manual-highlight').trim()).toBe('');
+    });
+
+    it('renders no manual highlight classes when no highlights are provided', async () => {
+      await createWith({ a: { child: 1 }, b: 2 });
+      setHighlights([]);
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      const highlightedRows = (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '.tree-row.has-manual-highlight',
+      );
+      expect(highlightedRows.length).toBe(0);
+    });
+
+    it('adds the screen-reader annotation only to highlighted rows', async () => {
+      await createWith({ a: 1, b: 2 });
+      setHighlights([{ path: '$.a', color: '#ffe082', cascade: false }]);
+
+      const highlightedRow = findRow('$.a');
+      const plainRow = findRow('$.b');
+
+      expect(highlightedRow.querySelector('.sr-only')?.textContent?.trim()).toBe('highlighted');
+      expect(plainRow.querySelector('.sr-only')).toBeNull();
+    });
+
+    it('paints close rows only when a cascade applies', async () => {
+      await createWith({ a: { child: 1 } });
+      setHighlights([{ path: '$.a', color: '#ffe082', cascade: false }]);
+      cmp.expandAll();
+      fixture.detectChanges();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tree-row--close.has-manual-highlight',
+        ).length,
+      ).toBe(0);
+
+      setHighlights([{ path: '$.a', color: '#ffe082', cascade: true }]);
+      cmp.expandAll();
+      fixture.detectChanges();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tree-row--close.has-manual-highlight',
+        ).length,
+      ).toBe(1);
     });
   });
 

@@ -130,7 +130,7 @@
   // a matched formatting rule, the engine sets these custom properties
   // inline on the row element. Defaults paint nothing - so unset rows
   // render exactly as before. The row-background var sits BELOW the
-  // priority highlights below (search/ancestor/match/selection) so a
+  // priority highlights below (manual/search/ancestor/match/selection) so a
   // selection still wins over a formatting-rule background, per the
   // priority order documented in DESIGN_SPEC.md §Features 7.
   background: var(--tree-row-format-bg, transparent);
@@ -156,9 +156,6 @@
     background: rgba(127, 127, 127, 0.08);
   }
 
-  // Highlight priority (lowest to highest source order so later rules
-  // win on equal specificity): search -> ancestor -> match -> selection.
-  // Tested in json-tree.component.spec.ts.
   &.is-search-hit {
     background: var(--highlight-search);
   }

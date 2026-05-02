@@ -203,11 +203,14 @@
     <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
       <!-- Leaf nodes -->
       <mat-nested-tree-node *matTreeNodeDef="let node">
+        @let manualHighlight = resolvedHighlightsByPath().get(node.pathString);
         <div
           class="tree-row jj-no-select"
           [attr.data-path]="node.pathString"
           [style]="ruleStyleVars(node)"
+          [style.--manual-highlight]="manualHighlight?.color ?? null"
           [attr.title]="matchedRuleTitle(node)"
+          [class.has-manual-highlight]="manualHighlight"
           [class.is-search-hit]="searchHits().has(node.pathString)"
           [class.is-active-match]="activeHitPath() === node.pathString"
           [class.is-ancestor]="ancestorPaths().has(node.pathString)"
@@ -366,16 +369,22 @@
               </button>
             </span>
           }
+          @if (manualHighlight) {
+            <span class="sr-only" i18n="@@tree.highlighted.aria">highlighted</span>
+          }
         </div>
       </mat-nested-tree-node>
 
       <!-- Container nodes -->
       <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
+        @let manualHighlight = resolvedHighlightsByPath().get(node.pathString);
         <div
           class="tree-row jj-no-select"
           [attr.data-path]="node.pathString"
           [style]="ruleStyleVars(node)"
+          [style.--manual-highlight]="manualHighlight?.color ?? null"
           [attr.title]="matchedRuleTitle(node)"
+          [class.has-manual-highlight]="manualHighlight"
           [class.is-search-hit]="searchHits().has(node.pathString)"
           [class.is-active-match]="activeHitPath() === node.pathString"
           [class.is-ancestor]="ancestorPaths().has(node.pathString)"
@@ -457,12 +466,20 @@
               <jj-icon name="more-vert" [size]="15" />
             </button>
           </span>
+          @if (manualHighlight) {
+            <span class="sr-only" i18n="@@tree.highlighted.aria">highlighted</span>
+          }
         </div>
 
         <div class="tree-children" [class.tree-children-hidden]="!treeControl.isExpanded(node)">
           <ng-container matTreeNodeOutlet></ng-container>
           @if (treeControl.isExpanded(node)) {
-            <div class="tree-row tree-row--close">
+            @let closeManualHighlight = cascadeHighlightsByPath().get(node.pathString);
+            <div
+              class="tree-row tree-row--close"
+              [class.has-manual-highlight]="closeManualHighlight"
+              [style.--manual-highlight]="closeManualHighlight?.color ?? null"
+            >
               @if (showComments() && closeLeadingComment(node); as cl) {
                 <span
                   class="tree-comment tree-comment-leading tree-comment-leading--close"
@@ -481,6 +498,9 @@
                   matTooltipPosition="above"
                   >{{ commentFirstLine(tc) }}</span
                 >
+              }
+              @if (closeManualHighlight) {
+                <span class="sr-only" i18n="@@tree.highlighted.aria">highlighted</span>
               }
             </div>
           }

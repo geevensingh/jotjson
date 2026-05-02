@@ -28,7 +28,7 @@ import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { bucketCount } from '../../../core/telemetry/buckets';
 import { isColdAndMark } from '../../../core/telemetry/cold-flag';
-import type { FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
+import type { BlobHighlight, FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
@@ -48,6 +48,8 @@ import { ParsedDate, formatDateAnnotation, parseAsDate } from '../../utils/date-
 import { classifyJsonValue, isJsonValueEmpty } from '../../utils/formatting-value-kind';
 import { classifyValue, ValueClassification } from '../../utils/value-classifier';
 import { computeAutoFitDepth } from './auto-fit-depth';
+import { findNearestCascade, indexHighlights, resolveManualHighlight } from './highlight-resolver';
+import type { ResolvedHighlight } from './highlight-resolver';
 import { findScrollableAncestor } from './scroll-container';
 
 /**
@@ -116,6 +118,11 @@ interface TreeBuildCounter {
   nodeCount: number;
 }
 
+interface ManualHighlightRows {
+  resolvedHighlightsByPath: ReadonlyMap<string, ResolvedHighlight>;
+  cascadeHighlightsByPath: ReadonlyMap<string, { path: string; color: string }>;
+}
+
 /**
  * Escapes a value for use in a CSS attribute selector. Falls back to
  * a manual escape when the platform `CSS.escape` is unavailable
@@ -168,6 +175,8 @@ export class JsonTreeComponent {
 
   readonly value = input<unknown>(undefined);
   readonly viewResetToken = input<number>(0);
+  readonly highlights = input<readonly BlobHighlight[]>([]);
+  readonly canEditHighlights = input<boolean>(false);
 
   /**
    * M6d-3 preview hook. When non-null, this list of rule sets replaces
@@ -276,6 +285,7 @@ export class JsonTreeComponent {
    */
   readonly selectionChange = output<readonly (string | number)[] | null>();
   readonly extractRequest = output<TreeExtractRequest>();
+  readonly highlightsChange = output<BlobHighlight[]>();
 
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
@@ -354,6 +364,38 @@ export class JsonTreeComponent {
     }
     return this.buildRoot(raw);
   });
+
+  private readonly highlightIndex = computed(() => indexHighlights(this.highlights()));
+
+  private readonly manualHighlightRows = computed<ManualHighlightRows>(() => {
+    const highlightIndex = this.highlightIndex();
+    const resolvedHighlightsByPath = new Map<string, ResolvedHighlight>();
+    const cascadeHighlightsByPath = new Map<string, { path: string; color: string }>();
+    const walk = (node: TreeNode | undefined): void => {
+      if (!node) return;
+      const resolvedHighlight = resolveManualHighlight(node.pathString, highlightIndex);
+      if (resolvedHighlight) {
+        resolvedHighlightsByPath.set(node.pathString, resolvedHighlight);
+      }
+      if ((node.children?.length ?? 0) > 0) {
+        const cascadeHighlight = findNearestCascade(node.pathString, highlightIndex);
+        if (cascadeHighlight) {
+          cascadeHighlightsByPath.set(node.pathString, cascadeHighlight);
+        }
+      }
+      node.children?.forEach(walk);
+    };
+    walk(this.root());
+    return { resolvedHighlightsByPath, cascadeHighlightsByPath };
+  });
+
+  readonly resolvedHighlightsByPath = computed(
+    () => this.manualHighlightRows().resolvedHighlightsByPath,
+  );
+
+  readonly cascadeHighlightsByPath = computed(
+    () => this.manualHighlightRows().cascadeHighlightsByPath,
+  );
 
   readonly showTypeBadges = computed(() => this.prefs.prefs().treeShowTypeLabels);
   readonly showDateAnnotations = computed(() => this.prefs.prefs().treeShowDateAnnotations);
