@@ -1,0 +1,32 @@
+# Build artifacts
+dist/
+.angular/
+coverage/
+node_modules/
+api/dist/
+api/node_modules/
+
+# Generated/local-only files (also gitignored)
+src/generated/
+src/environments/environment.ts
+api/local.settings.json
+infra/**/*.json
+
+# Lock files
+package-lock.json
+api/package-lock.json
+
+# Locale (auto-extracted from templates by ng extract-i18n)
+src/locale/messages.xlf
+
+# Test fixtures (preserve exact formatting; some are deliberately invalid)
+src/testing/fixtures/
+
+# Markdown stays hand-formatted (DESIGN_SPEC.md, AGENTS.md, etc. - the
+# .editorconfig keeps trailing whitespace in .md for hard line breaks).
+*.md
+
+# GitHub Actions workflows - exclude from the initial sweep until
+# actionlint can validate locally before push. Workflows can be
+# folded back in once that validation step is added.
+.github/workflows/
