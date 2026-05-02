@@ -144,7 +144,8 @@ Node Functions" config.
 ```bash
 npm start              # ng serve on http://localhost:4200 (proxies /api/*)
 npm run build          # production build to dist/jotjson
-npm run lint           # tsc --noEmit type-check
+npm run lint           # tsc + ASCII + spec/prod patterns + prettier
+npm run lint:all       # root lint + api workspace lint (CI-equivalent)
 npm run check:ascii    # fail if non-allowlisted non-ASCII sneaks in
 npm test               # Karma + Jasmine, ChromeHeadless, single run
 npm run test:ci        # Same, with coverage reporter (CI profile)

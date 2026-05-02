@@ -25,6 +25,7 @@
     "lint:spec-patterns": "node scripts/check-spec-patterns.mjs",
     "lint:prod-patterns": "node scripts/check-prod-patterns.mjs",
     "lint:format": "node scripts/check-format.mjs",
+    "lint:all": "npm run lint && npm --prefix api run lint",
     "check:ascii": "node scripts/check-ascii.mjs",
     "check:spec-patterns": "node scripts/check-spec-patterns.mjs",
     "check:prod-patterns": "node scripts/check-prod-patterns.mjs",

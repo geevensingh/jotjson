@@ -38,7 +38,7 @@ frameworks, or cloud services without prior approval.
    `inject()`, Signals, kebab-case filenames, co-located `*.spec.ts`).
 4. **Test** - add or update tests for any logic change. No test = not done.
 5. **Validate** locally:
-   - `npm run lint` (frontend and `api/`)
+   - `npm run lint:all` (root lint + api workspace lint - canonical local gate)
    - `npm test` (frontend and `api/`)
    - `npm run build` / `ng build --configuration production`
 6. **Commit** in small, focused commits with imperative subjects

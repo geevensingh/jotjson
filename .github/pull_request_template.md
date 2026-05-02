@@ -34,7 +34,7 @@ AGENTS.md for the full guidelines.
 - [ ] Aligned with [`DESIGN_SPEC.md`](../DESIGN_SPEC.md) (spec updated if
       behavior or architecture changed)
 - [ ] Unit tests added or updated (`*.spec.ts`)
-- [ ] `npm run lint` passes (frontend and `api/`)
+- [ ] `npm run lint:all` passes (root lint + api workspace lint)
 - [ ] `npm test` passes (frontend and `api/`)
 - [ ] `npm run build` / `ng build --configuration production` succeeds
 - [ ] No secrets, tokens, or PII in code, logs, or tests

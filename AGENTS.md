@@ -473,7 +473,10 @@ For inner-loop iteration use `npm run verify:fast` (see §5 "Fast inner
 loop"); the steps below are the final sweep.
 
 Before finishing a task:
-1. `npm run lint` passes (frontend and `api/`). Frontend lint is
+1. `npm run lint:all` passes -- it is the canonical local gate that
+   runs root lint + api workspace lint, mirroring what CI lints across
+   both workspaces. (You can still run them individually: root
+   `npm run lint` and `npm --prefix api run lint`.) Frontend lint is
    `tsc --noEmit -p tsconfig.app.json` + `check-ascii.mjs`,
    `check-spec-patterns.mjs`, `check-prod-patterns.mjs`, and
    `check-format.mjs` (the prettier annotation wrapper -
