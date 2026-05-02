@@ -476,9 +476,22 @@ Before finishing a task:
 1. `npm run lint` passes (frontend and `api/`). Frontend lint is
    `tsc --noEmit -p tsconfig.app.json` + `check-ascii.mjs`,
    `check-spec-patterns.mjs`, `check-prod-patterns.mjs`, and
-   `prettier --check .` (formatting is enforced repo-wide,
-   including `api/**`, from the root). The `api/` lint is
-   `tsc --noEmit`. ESLint is not installed.
+   `check-format.mjs` (the prettier annotation wrapper -
+   `npm run format:check` is the equivalent for direct invocation).
+   Formatting is enforced repo-wide, including `api/**`, from the
+   root. The `api/` lint is `tsc --noEmit`. ESLint is not installed.
+
+   Each gate also has its own per-script entry point so CI can run
+   them as separate steps with inline annotations and a per-gate
+   summary: `npm run lint:tsc`, `npm run lint:ascii`,
+   `npm run lint:spec-patterns`, `npm run lint:prod-patterns`,
+   `npm run lint:format`. **When CI fails, look at the failing
+   step's name in the run page** - the gate that broke is named
+   directly (e.g., "Lint - Prettier formatting"). The "Lint
+   summary" rollup step at the end of the job restates which gate
+   failed and the exact fix command. File-level (and where
+   available, line-level) failures are surfaced as inline
+   annotations on the PR Files Changed view.
 2. `npm test` passes (frontend and `api/`).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
 4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the

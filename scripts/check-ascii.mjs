@@ -115,6 +115,23 @@ function formatCodepoint(cp) {
   return 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
 }
 
+function escapeAnnotation(text) {
+  // GitHub workflow command escaping rules for the message body.
+  return String(text).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+}
+
+function emitGitHubAnnotations(violations) {
+  if (process.env.GITHUB_ACTIONS !== 'true') return;
+  for (const v of violations) {
+    const file = v.path.replace(/%/g, '%25');
+    const msg = escapeAnnotation(
+      `Disallowed non-ASCII codepoint ${formatCodepoint(v.cp)} (${JSON.stringify(v.char)}). ` +
+        'If intentional, add it to the ALLOWED set in scripts/check-ascii.mjs with a comment.',
+    );
+    console.log(`::error file=${file},line=${v.line},col=${v.col}::${msg}`);
+  }
+}
+
 function main() {
   const files = listTrackedFiles();
   const allViolations = [];
@@ -135,6 +152,7 @@ function main() {
   console.error('');
   console.error('If a codepoint is genuinely needed, add it (with a comment) to the ALLOWED');
   console.error('set in scripts/check-ascii.mjs and re-run.');
+  emitGitHubAnnotations(allViolations);
   process.exit(1);
 }
 

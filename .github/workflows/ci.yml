@@ -36,7 +36,77 @@ jobs:
       - run: npm ci
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
-      - run: npm run lint
+      - name: Generate build-info.ts
+        # Replaces the prelint side effect that the compound `npm run lint`
+        # used to provide. The split per-gate scripts below do not have a
+        # prelint hook, so we materialize src/generated/build-info.ts here
+        # (it is imported by the production bundle).
+        run: npm run build:info
+      - name: Lint - TypeScript
+        id: lint-tsc
+        run: |
+          echo "::add-matcher::${GITHUB_WORKSPACE}/.github/problem-matchers/tsc.json"
+          npm run lint:tsc
+          echo "::remove-matcher owner=tsc-jotjson::"
+      - name: Lint - ASCII allowlist
+        id: lint-ascii
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:ascii
+      - name: Lint - Spec patterns
+        id: lint-spec-patterns
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:spec-patterns
+      - name: Lint - Production patterns
+        id: lint-prod-patterns
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:prod-patterns
+      - name: Lint - Prettier formatting
+        id: lint-format
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:format
+      - name: Lint summary
+        # Inspects each gate's outcome and writes a single
+        # $GITHUB_STEP_SUMMARY block listing every failing gate and its
+        # fix command. Per-gate `if: failure()` would not work here
+        # because failure() is job-wide and would fire for every later
+        # gate once any earlier gate failed.
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        env:
+          OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
+          OUTCOME_ASCII: ${{ steps.lint-ascii.outcome }}
+          OUTCOME_SPEC: ${{ steps.lint-spec-patterns.outcome }}
+          OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
+          OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
+        run: |
+          fail=0
+          {
+            echo "## Lint results"
+            echo ""
+            emit() {
+              local label="$1"
+              local outcome="$2"
+              local fix="$3"
+              if [ "$outcome" = "success" ]; then
+                echo "- :white_check_mark: ${label}"
+              elif [ "$outcome" = "failure" ]; then
+                fail=1
+                echo "- :x: **${label}** - fix: \`${fix}\`"
+              else
+                echo "- :grey_question: ${label} (${outcome})"
+              fi
+            }
+            emit "TypeScript (tsc)"        "$OUTCOME_TSC"    "fix the type error reported above"
+            emit "ASCII allowlist"         "$OUTCOME_ASCII"  "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
+            emit "Spec patterns"           "$OUTCOME_SPEC"   "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
+            emit "Production patterns"     "$OUTCOME_PROD"   "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
+            emit "Prettier formatting"     "$OUTCOME_FORMAT" "npm run format"
+            echo ""
+            if [ "$fail" -eq 1 ]; then
+              echo "One or more lint gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
+            else
+              echo "All 5 lint gates passed."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts
         # Only bake real secrets on push-to-main. PRs build against the
         # placeholder environment.prod.ts checked into the repo (gate-only
@@ -148,7 +218,11 @@ jobs:
           cache: npm
           cache-dependency-path: api/package-lock.json
       - run: npm ci
-      - run: npm run lint
+      - name: Lint (tsc --noEmit)
+        run: |
+          echo "::add-matcher::${GITHUB_WORKSPACE}/.github/problem-matchers/tsc.json"
+          npx tsc --pretty false --noEmit
+          echo "::remove-matcher owner=tsc-jotjson::"
       - name: Run tests
         run: npm test
       - name: Upload api JUnit
