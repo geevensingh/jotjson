@@ -3,7 +3,9 @@
 // -> `uuid` (ESM-only) at import time. Jest hoists `jest.mock` factories above
 // the import below.
 jest.mock('@azure/identity', () => ({
-  DefaultAzureCredential: jest.fn().mockImplementation(() => ({ __kind: 'DefaultAzureCredential' })),
+  DefaultAzureCredential: jest
+    .fn()
+    .mockImplementation(() => ({ __kind: 'DefaultAzureCredential' })),
 }));
 
 interface CosmosClientOptions {
@@ -75,7 +77,11 @@ describe('shared/cosmos getCosmos', () => {
     process.env['COSMOS_KEY'] = FAKE_KEY;
     process.env['WEBSITE_INSTANCE_ID'] = 'host-1';
     const result = getCosmos();
-    const client = result.client as unknown as { __endpoint: string; __key?: string; __aad?: unknown };
+    const client = result.client as unknown as {
+      __endpoint: string;
+      __key?: string;
+      __aad?: unknown;
+    };
     expect(client.__endpoint).toBe(FAKE_ENDPOINT);
     expect(client.__key).toBe(FAKE_KEY);
     expect(client.__aad).toBeUndefined();
@@ -84,7 +90,11 @@ describe('shared/cosmos getCosmos', () => {
   it('falls through to the AAD branch in non-Azure (local-dev) env when COSMOS_KEY is absent', () => {
     process.env['COSMOS_ENDPOINT'] = FAKE_ENDPOINT;
     const result = getCosmos();
-    const client = result.client as unknown as { __endpoint: string; __key?: string; __aad?: { __kind: string } };
+    const client = result.client as unknown as {
+      __endpoint: string;
+      __key?: string;
+      __aad?: { __kind: string };
+    };
     expect(client.__endpoint).toBe(FAKE_ENDPOINT);
     expect(client.__key).toBeUndefined();
     expect(client.__aad).toEqual({ __kind: 'DefaultAzureCredential' });
