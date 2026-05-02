@@ -1,8 +1,12 @@
 import {
   BlobValidationError,
   MAX_BLOB_BYTES,
+  MAX_HIGHLIGHT_PATH_LENGTH,
+  MAX_HIGHLIGHTS,
   MAX_TITLE_LENGTH,
   SlugGenerationError,
+  assertHighlightPath,
+  assertHighlights,
   createBlob,
   deleteBlobById,
   findBlobByIdOrSlug,
@@ -10,7 +14,9 @@ import {
   updateBlob,
   __resetBlobsContainerForTesting,
   type BlobDocument,
+  type BlobHighlight,
 } from './blobs';
+import { HIGHLIGHT_PATH_FIXTURES } from '../../../src/testing/fixtures/highlight-paths.fixture';
 
 // In-memory fake Cosmos container. Tracks items + exposes the query / create /
 // replace entry points that blobs.ts uses.
@@ -94,6 +100,64 @@ beforeEach(() => {
   __resetBlobsContainerForTesting();
 });
 
+const VALID_HIGHLIGHT: BlobHighlight = {
+  path: '$.foo',
+  color: '#ffeb3b',
+  cascade: false,
+};
+
+function makeHighlight(overrides: Partial<BlobHighlight> = {}): BlobHighlight {
+  return { ...VALID_HIGHLIGHT, ...overrides };
+}
+
+describe('highlight validators', () => {
+  it('accepts every canonical path from the shared corpus', () => {
+    for (const fixtureEntry of HIGHLIGHT_PATH_FIXTURES) {
+      expect(assertHighlightPath(fixtureEntry.path)).toBe(fixtureEntry.path);
+    }
+  });
+
+  it('rejects non-hex colors', () => {
+    expect(() => assertHighlights([{ ...VALID_HIGHLIGHT, color: 'yellow' }])).toThrow(
+      BlobValidationError,
+    );
+  });
+
+  it('rejects non-canonical paths', () => {
+    const invalidPaths = ['foo', '$.foo..bar', '$.foo[01]', '$[abc]', '$["weird\\u0020key"]'];
+    for (const path of invalidPaths) {
+      expect(() => assertHighlights([makeHighlight({ path })])).toThrow(BlobValidationError);
+    }
+  });
+
+  it('rejects empty and over-long paths', () => {
+    expect(() => assertHighlights([makeHighlight({ path: '' })])).toThrow(BlobValidationError);
+    const overLongPath = `$.${'a'.repeat(MAX_HIGHLIGHT_PATH_LENGTH)}`;
+    expect(() => assertHighlights([makeHighlight({ path: overLongPath })])).toThrow(
+      BlobValidationError,
+    );
+  });
+
+  it('rejects duplicate paths', () => {
+    expect(() =>
+      assertHighlights([makeHighlight({ color: '#111111' }), makeHighlight({ color: '#222222' })]),
+    ).toThrow(BlobValidationError);
+  });
+
+  it('rejects oversize arrays', () => {
+    const tooManyHighlights = Array.from({ length: MAX_HIGHLIGHTS + 1 }, (_unused, index) =>
+      makeHighlight({ path: `$.path${index}` }),
+    );
+    expect(() => assertHighlights(tooManyHighlights)).toThrow(BlobValidationError);
+  });
+
+  it('rejects non-boolean cascade values', () => {
+    expect(() => assertHighlights([{ ...VALID_HIGHLIGHT, cascade: 'yes' }])).toThrow(
+      BlobValidationError,
+    );
+  });
+});
+
 describe('createBlob', () => {
   it('persists a new blob with generated id, slug, and timestamps', async () => {
     const doc = await createBlob('owner-1', { content: '{"a":1}' });
@@ -124,6 +188,14 @@ describe('createBlob', () => {
     expect(b.isPublic).toBe(true);
   });
 
+  it('stores highlights supplied on create', async () => {
+    const highlights = [makeHighlight({ path: '$.created', cascade: true })];
+    const doc = await createBlob('owner-1', { content: '{"created":{}}', highlights });
+    expect(doc.highlights).toEqual(highlights);
+    expect(fake.items).toHaveLength(1);
+    expect(fake.items[0]?.highlights).toEqual(highlights);
+  });
+
   it('rejects content larger than MAX_BLOB_BYTES', async () => {
     const tooBig = 'a'.repeat(MAX_BLOB_BYTES + 1);
     await expect(createBlob('owner-1', { content: tooBig })).rejects.toBeInstanceOf(
@@ -137,10 +209,17 @@ describe('createBlob', () => {
     expect(doc.content).toBe(exact);
   });
 
-  it('rejects non-string content', async () => {
+  it('rejects content whose serialized document exceeds the total cap', async () => {
+    const escapingContent = '"'.repeat(MAX_BLOB_BYTES);
     await expect(
-      createBlob('owner-1', { content: 42 as unknown as string }),
-    ).rejects.toBeInstanceOf(BlobValidationError);
+      createBlob('owner-1', { content: escapingContent, highlights: [VALID_HIGHLIGHT] }),
+    ).rejects.toThrow(/blob document too large/);
+  });
+
+  it('rejects non-string content', async () => {
+    await expect(createBlob('owner-1', { content: 42 })).rejects.toBeInstanceOf(
+      BlobValidationError,
+    );
   });
 
   it('rejects title longer than MAX_TITLE_LENGTH', async () => {
@@ -223,6 +302,27 @@ describe('updateBlob', () => {
     const orig = await seed();
     const updated = await updateBlob(orig, { title: '' });
     expect(updated.title).toBeUndefined();
+  });
+
+  it('round-trips replaced highlights across create, read, update, and read', async () => {
+    const created = await createBlob('owner-1', { content: '{"foo":1}' });
+    expect((await findBlobByIdOrSlug(created.id))?.highlights).toBeUndefined();
+
+    const highlights = [makeHighlight({ path: '$.foo', color: '#00ffaa', cascade: true })];
+    await updateBlob(created, { highlights });
+
+    const found = await findBlobByIdOrSlug(created.id);
+    expect(found?.highlights).toEqual(highlights);
+  });
+
+  it('preserves stored highlights when the update omits highlights', async () => {
+    const highlights = [makeHighlight({ path: '$.foo', color: '#abcdef', cascade: true })];
+    const original = await createBlob('owner-1', { content: '{"foo":1}', highlights });
+
+    const updated = await updateBlob(original, { title: 'renamed' });
+
+    expect(updated.highlights).toEqual(highlights);
+    expect((await findBlobByIdOrSlug(original.id))?.highlights).toEqual(highlights);
   });
 
   it('enforces size limit on content updates', async () => {

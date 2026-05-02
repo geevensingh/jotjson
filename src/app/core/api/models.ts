@@ -1,3 +1,9 @@
+export interface BlobHighlight {
+  path: string;
+  color: string;
+  cascade: boolean;
+}
+
 export interface JsonBlob {
   id: string;
   slug: string;
@@ -7,6 +13,7 @@ export interface JsonBlob {
   updatedAt: string;
   ownerId: string;
   isPublic: boolean;
+  highlights?: BlobHighlight[];
 }
 
 /**

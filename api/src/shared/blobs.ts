@@ -12,6 +12,7 @@
  *   title?: string,
  *   ownerId: string,      // Entra oid of the owner; partition key
  *   isPublic: boolean,
+ *   highlights?: BlobHighlight[],
  *   createdAt: string,    // ISO
  *   updatedAt: string     // ISO
  * }
@@ -24,7 +25,14 @@
  */
 import type { Container, ItemResponse } from '@azure/cosmos';
 import { randomBytes, randomUUID } from 'crypto';
+import { parse, type ParseError } from 'jsonc-parser';
 import { getCosmos } from './cosmos';
+
+export interface BlobHighlight {
+  path: string;
+  color: string;
+  cascade: boolean;
+}
 
 export interface BlobDocument {
   id: string;
@@ -33,25 +41,35 @@ export interface BlobDocument {
   title?: string;
   ownerId: string;
   isPublic: boolean;
+  highlights?: BlobHighlight[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateBlobInput {
-  content: string;
-  title?: string;
-  isPublic?: boolean;
+  content: unknown;
+  title?: unknown;
+  isPublic?: unknown;
+  highlights?: unknown;
 }
 
 export interface UpdateBlobPatch {
-  content?: string;
-  title?: string;
-  isPublic?: boolean;
+  content?: unknown;
+  title?: unknown;
+  isPublic?: unknown;
+  highlights?: unknown;
 }
 
-export const MAX_BLOB_BYTES = 1_000_000; // 1 MB, per DESIGN_SPEC §Constraints
+export const MAX_BLOB_BYTES = 1_000_000; // 1 MB, per DESIGN_SPEC section Constraints
+export const MAX_HIGHLIGHTS = 100;
+export const MAX_HIGHLIGHT_PATH_LENGTH = 1024;
+export const MAX_HIGHLIGHTS_SERIALIZED_CHARS = 16_384;
+// Keeps the existing 1 MB raw-content allowance while bounding highlight overhead
+// to 16 KB plus a small JSON envelope.
+export const MAX_BLOB_DOCUMENT_SERIALIZED_CHARS =
+  MAX_BLOB_BYTES + MAX_HIGHLIGHTS_SERIALIZED_CHARS + 128;
 export const MAX_TITLE_LENGTH = 200;
-export const MAX_BLOBS_PER_USER = 100; // free-tier quota, DESIGN_SPEC §Constraints
+export const MAX_BLOBS_PER_USER = 100; // free-tier quota, DESIGN_SPEC section Constraints
 export const SLUG_LENGTH = 6;
 export const MAX_SLUG_ATTEMPTS = 5;
 
@@ -103,6 +121,244 @@ export function getBlobsContainer(): Container {
 /** Reset the cached container - used by tests. */
 export function __resetBlobsContainerForTesting(): void {
   cached = undefined;
+}
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const IDENTIFIER_START = /^[A-Za-z_$]$/;
+const IDENTIFIER_PART = /^[A-Za-z0-9_$]$/;
+const DECIMAL_DIGIT = /^[0-9]$/;
+const NON_ZERO_DECIMAL_DIGIT = /^[1-9]$/;
+const HEX_DIGIT = /^[0-9a-fA-F]$/;
+const HIGHLIGHT_KEYS = ['path', 'color', 'cascade'] as const;
+const JSON_STRING_ESCAPES = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't']);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isDecimalDigit(character: string | undefined): boolean {
+  return character !== undefined && DECIMAL_DIGIT.test(character);
+}
+
+function assertBool(value: unknown, field: string): boolean {
+  if (typeof value !== 'boolean') {
+    throw new BlobValidationError(`${field} must be a boolean`);
+  }
+  return value;
+}
+
+function consumeIdentifier(path: string, startIndex: number): number | null {
+  const firstCharacter = path[startIndex];
+  if (!firstCharacter || !IDENTIFIER_START.test(firstCharacter)) {
+    return null;
+  }
+
+  let index = startIndex + 1;
+  while (index < path.length) {
+    const character = path[index];
+    if (!character || !IDENTIFIER_PART.test(character)) {
+      break;
+    }
+    index += 1;
+  }
+  return index;
+}
+
+function consumeArrayIndex(path: string, startIndex: number): number | null {
+  const firstCharacter = path[startIndex];
+  let index = startIndex;
+  if (firstCharacter === '0') {
+    index += 1;
+  } else if (firstCharacter && NON_ZERO_DECIMAL_DIGIT.test(firstCharacter)) {
+    index += 1;
+    while (isDecimalDigit(path[index])) {
+      index += 1;
+    }
+  } else {
+    return null;
+  }
+
+  if (path[index] !== ']') {
+    return null;
+  }
+  return index + 1;
+}
+
+function consumeJsonString(path: string, quoteIndex: number): number | null {
+  let index = quoteIndex + 1;
+  while (index < path.length) {
+    const character = path[index];
+    if (!character) {
+      return null;
+    }
+    if (character.charCodeAt(0) < 0x20) {
+      return null;
+    }
+    if (character === '"') {
+      return index + 1;
+    }
+    if (character === '\\') {
+      index += 1;
+      const escapeCharacter = path[index];
+      if (!escapeCharacter) {
+        return null;
+      }
+      if (escapeCharacter === 'u') {
+        for (let offset = 1; offset <= 4; offset++) {
+          if (!HEX_DIGIT.test(path[index + offset] ?? '')) {
+            return null;
+          }
+        }
+        index += 5;
+      } else if (JSON_STRING_ESCAPES.has(escapeCharacter)) {
+        index += 1;
+      } else {
+        return null;
+      }
+      continue;
+    }
+    index += 1;
+  }
+  return null;
+}
+
+function parseCanonicalJsonString(jsonText: string): string | null {
+  const errors: ParseError[] = [];
+  const parsed: unknown = parse(jsonText, errors, {
+    allowTrailingComma: false,
+    disallowComments: true,
+  });
+  if (errors.length > 0 || typeof parsed !== 'string') {
+    return null;
+  }
+  if (JSON.stringify(parsed) !== jsonText) {
+    return null;
+  }
+  return parsed;
+}
+
+function consumeBracketedString(path: string, quoteIndex: number): number | null {
+  const stringEndIndex = consumeJsonString(path, quoteIndex);
+  if (stringEndIndex === null || path[stringEndIndex] !== ']') {
+    return null;
+  }
+
+  const jsonText = path.slice(quoteIndex, stringEndIndex);
+  if (parseCanonicalJsonString(jsonText) === null) {
+    return null;
+  }
+  return stringEndIndex + 1;
+}
+
+function consumeBracketSegment(path: string, startIndex: number): number | null {
+  const firstCharacter = path[startIndex];
+  if (firstCharacter === '"') {
+    return consumeBracketedString(path, startIndex);
+  }
+  if (isDecimalDigit(firstCharacter)) {
+    return consumeArrayIndex(path, startIndex);
+  }
+  return null;
+}
+
+export function assertHighlightPath(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new BlobValidationError('highlight path must be a string');
+  }
+  if (value.length === 0) {
+    throw new BlobValidationError('highlight path is required');
+  }
+  if (value.length > MAX_HIGHLIGHT_PATH_LENGTH) {
+    throw new BlobValidationError(
+      `highlight path too long - max ${MAX_HIGHLIGHT_PATH_LENGTH} characters (got ${value.length})`,
+    );
+  }
+  if (value[0] !== '$') {
+    throw new BlobValidationError('highlight path must be a canonical JSON tree path');
+  }
+
+  let index = 1;
+  while (index < value.length) {
+    const character = value[index];
+    let nextIndex: number | null = null;
+    if (character === '.') {
+      nextIndex = consumeIdentifier(value, index + 1);
+    } else if (character === '[') {
+      nextIndex = consumeBracketSegment(value, index + 1);
+    }
+    if (nextIndex === null) {
+      throw new BlobValidationError('highlight path must be a canonical JSON tree path');
+    }
+    index = nextIndex;
+  }
+
+  return value;
+}
+
+export function assertHighlightColor(value: unknown): string {
+  if (typeof value !== 'string' || !HEX_COLOR.test(value)) {
+    throw new BlobValidationError('highlight color must be a #RRGGBB hex color');
+  }
+  return value;
+}
+
+export function assertHighlight(value: unknown): BlobHighlight {
+  if (!isRecord(value)) {
+    throw new BlobValidationError('highlight must be an object');
+  }
+  for (const key of Object.keys(value)) {
+    if (!(HIGHLIGHT_KEYS as readonly string[]).includes(key)) {
+      throw new BlobValidationError(`highlight has unknown field "${key}"`);
+    }
+  }
+  return {
+    path: assertHighlightPath(value['path']),
+    color: assertHighlightColor(value['color']),
+    cascade: assertBool(value['cascade'], 'highlight.cascade'),
+  };
+}
+
+export function assertHighlights(value: unknown): BlobHighlight[] {
+  if (!Array.isArray(value)) {
+    throw new BlobValidationError('highlights must be an array');
+  }
+  if (value.length > MAX_HIGHLIGHTS) {
+    throw new BlobValidationError(
+      `highlights has too many entries - max ${MAX_HIGHLIGHTS} (got ${value.length})`,
+    );
+  }
+
+  const seenPaths = new Set<string>();
+  const highlights: BlobHighlight[] = [];
+  for (const entry of value) {
+    const highlight = assertHighlight(entry);
+    if (seenPaths.has(highlight.path)) {
+      throw new BlobValidationError(`highlights contains duplicate path "${highlight.path}"`);
+    }
+    seenPaths.add(highlight.path);
+    highlights.push(highlight);
+  }
+  return highlights;
+}
+
+function validateBlobDocumentSize(content: string, highlights: BlobHighlight[] | undefined): void {
+  const normalizedHighlights = highlights ?? [];
+  const serializedHighlightsLength = JSON.stringify(normalizedHighlights).length;
+  if (serializedHighlightsLength > MAX_HIGHLIGHTS_SERIALIZED_CHARS) {
+    throw new BlobValidationError(
+      `highlights too large - max ${MAX_HIGHLIGHTS_SERIALIZED_CHARS} serialized characters (got ${serializedHighlightsLength})`,
+    );
+  }
+
+  const serializedDocumentLength = JSON.stringify({
+    content,
+    highlights: normalizedHighlights,
+  }).length;
+  if (serializedDocumentLength > MAX_BLOB_DOCUMENT_SERIALIZED_CHARS) {
+    throw new BlobValidationError(
+      `blob document too large - max ${MAX_BLOB_DOCUMENT_SERIALIZED_CHARS} serialized characters including content and highlights (got ${serializedDocumentLength})`,
+    );
+  }
 }
 
 function validateContent(content: unknown): string {
@@ -175,6 +431,9 @@ export async function createBlob(ownerId: string, input: CreateBlobInput): Promi
   const content = validateContent(input.content);
   const title = validateTitle(input.title);
   const isPublic = validateIsPublic(input.isPublic);
+  const highlights =
+    input.highlights !== undefined ? assertHighlights(input.highlights) : undefined;
+  validateBlobDocumentSize(content, highlights);
 
   let slug: string | undefined;
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
@@ -198,6 +457,7 @@ export async function createBlob(ownerId: string, input: CreateBlobInput): Promi
     ...(title !== undefined ? { title } : {}),
     ownerId,
     isPublic,
+    ...(highlights !== undefined ? { highlights } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -231,6 +491,10 @@ export async function updateBlob(
   if (patch.isPublic !== undefined) {
     next.isPublic = validateIsPublic(patch.isPublic);
   }
+  if (patch.highlights !== undefined) {
+    next.highlights = assertHighlights(patch.highlights);
+  }
+  validateBlobDocumentSize(next.content, next.highlights);
   next.updatedAt = new Date().toISOString();
 
   const response: ItemResponse<BlobDocument> = await getBlobsContainer()

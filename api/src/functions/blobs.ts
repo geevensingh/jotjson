@@ -25,6 +25,8 @@ import {
   findBlobByIdOrSlug,
   listBlobsByOwner,
   updateBlob,
+  type BlobDocument,
+  type BlobHighlight,
 } from '../shared/blobs';
 import { getRecentViewAt, recordEntry, VIEW_DEBOUNCE_SECONDS } from '../shared/history';
 import {
@@ -58,6 +60,12 @@ async function recordViewedSafely(
   } catch (error) {
     context.warn('history record failed', { action: 'viewed', error });
   }
+}
+
+type BlobResponseBody = BlobDocument & { highlights: BlobHighlight[] };
+
+function withResponseHighlights(blob: BlobDocument): BlobResponseBody {
+  return { ...blob, highlights: blob.highlights ?? [] };
 }
 
 /**
@@ -119,7 +127,12 @@ export async function postBlob(
   if (!body || typeof body !== 'object') {
     return badRequest('Request body must be an object');
   }
-  const payload = body as { content?: unknown; title?: unknown; isPublic?: unknown };
+  const payload = body as {
+    content?: unknown;
+    title?: unknown;
+    isPublic?: unknown;
+    highlights?: unknown;
+  };
 
   let autoDeleted: { id: string; slug: string; title?: string } | undefined;
   try {
@@ -159,9 +172,10 @@ export async function postBlob(
 
   try {
     const saved = await createBlob(principal.id, {
-      content: payload.content as string,
-      ...(payload.title !== undefined ? { title: payload.title as string } : {}),
-      ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic as boolean } : {}),
+      content: payload.content,
+      ...(payload.title !== undefined ? { title: payload.title } : {}),
+      ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic } : {}),
+      ...(payload.highlights !== undefined ? { highlights: payload.highlights } : {}),
     });
     return {
       status: 201,
@@ -222,7 +236,7 @@ export async function getBlob(
       // Surface in logs but never fail the read.
       context.warn('getBlob history hook failed', error);
     }
-    return { status: 200, jsonBody: blob };
+    return { status: 200, jsonBody: withResponseHighlights(blob) };
   } catch (error) {
     return internalError(context, 'getBlob read', error);
   }
@@ -242,7 +256,7 @@ export async function listBlobs(
 
   try {
     const blobs = await listBlobsByOwner(principal.id);
-    return { status: 200, jsonBody: blobs };
+    return { status: 200, jsonBody: blobs.map(withResponseHighlights) };
   } catch (error) {
     return internalError(context, 'listBlobs read', error);
   }
@@ -307,7 +321,12 @@ export async function putBlob(
   if (!body || typeof body !== 'object') {
     return badRequest('Request body must be an object');
   }
-  const patch = body as { content?: unknown; title?: unknown; isPublic?: unknown };
+  const patch = body as {
+    content?: unknown;
+    title?: unknown;
+    isPublic?: unknown;
+    highlights?: unknown;
+  };
 
   try {
     const existing = await findBlobByIdOrSlug(id);
@@ -322,9 +341,10 @@ export async function putBlob(
     }
 
     const saved = await updateBlob(existing, {
-      ...(patch.content !== undefined ? { content: patch.content as string } : {}),
-      ...(patch.title !== undefined ? { title: patch.title as string } : {}),
-      ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic as boolean } : {}),
+      ...(patch.content !== undefined ? { content: patch.content } : {}),
+      ...(patch.title !== undefined ? { title: patch.title } : {}),
+      ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic } : {}),
+      ...(patch.highlights !== undefined ? { highlights: patch.highlights } : {}),
     });
     return { status: 200, jsonBody: saved };
   } catch (error) {

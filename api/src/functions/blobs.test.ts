@@ -55,6 +55,7 @@ import {
   findBlobByIdOrSlug as findBlobMock,
   listBlobsByOwner as listBlobsByOwnerMock,
   updateBlob as updateBlobMock,
+  type BlobHighlight,
 } from '../shared/blobs';
 import {
   recordEntry as recordEntryMock,
@@ -109,6 +110,8 @@ beforeEach(() => {
   listBlobsSpy.mockResolvedValue([]);
 });
 
+const sampleHighlights: BlobHighlight[] = [{ path: '$.hello', color: '#ffeb3b', cascade: false }];
+
 const sampleBlob = {
   id: 'uuid-1',
   slug: 'abc123',
@@ -156,6 +159,23 @@ describe('POST /api/blobs', () => {
     createBlob.mockResolvedValueOnce(sampleBlob);
     await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
     expect(createBlob).toHaveBeenCalledWith('u-1', { content: '{}' });
+  });
+
+  it('passes highlights through when supplied', async () => {
+    const saved = { ...sampleBlob, highlights: sampleHighlights };
+    createBlob.mockResolvedValueOnce(saved);
+
+    const response = await postBlob(
+      makeRequest({ body: { content: '{}', highlights: sampleHighlights } }),
+      ctx,
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.jsonBody).toEqual(saved);
+    expect(createBlob).toHaveBeenCalledWith('u-1', {
+      content: '{}',
+      highlights: sampleHighlights,
+    });
   });
 
   it('translates BlobValidationError into 400', async () => {
@@ -265,10 +285,18 @@ describe('POST /api/blobs - quota enforcement', () => {
 describe('GET /api/blobs/:idOrSlug', () => {
   it('returns the blob when found (no auth required)', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
-    const res = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
-    expect(res.status).toBe(200);
-    expect(res.jsonBody).toEqual(sampleBlob);
+    const response = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+    expect(response.status).toBe(200);
+    expect(response.jsonBody).toEqual({ ...sampleBlob, highlights: [] });
     expect(requireAuth).not.toHaveBeenCalled();
+  });
+
+  it('returns stored highlights when present', async () => {
+    const highlightedBlob = { ...sampleBlob, highlights: sampleHighlights };
+    findBlob.mockResolvedValueOnce(highlightedBlob);
+    const response = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+    expect(response.status).toBe(200);
+    expect(response.jsonBody).toEqual(highlightedBlob);
   });
 
   it('returns 404 when not found', async () => {
@@ -352,6 +380,24 @@ describe('PUT /api/blobs/:id', () => {
     });
   });
 
+  it('passes highlights through on update when supplied', async () => {
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    const updated = { ...sampleBlob, highlights: sampleHighlights, updatedAt: '2026-01-02' };
+    updateBlob.mockResolvedValueOnce(updated);
+
+    const response = await putBlob(
+      makeRequest({
+        params: { id: 'uuid-1' },
+        body: { highlights: sampleHighlights },
+      }),
+      ctx,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.jsonBody).toEqual(updated);
+    expect(updateBlob).toHaveBeenCalledWith(sampleBlob, { highlights: sampleHighlights });
+  });
+
   it('translates BlobValidationError into 400', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
     updateBlob.mockRejectedValueOnce(new BlobValidationError('content too large'));
@@ -375,7 +421,7 @@ describe('GET /api/blobs (list)', () => {
     listBlobsSpy.mockResolvedValueOnce([sampleBlob]);
     const res = await listBlobs(makeRequest(), ctx);
     expect(res.status).toBe(200);
-    expect(res.jsonBody).toEqual([sampleBlob]);
+    expect(res.jsonBody).toEqual([{ ...sampleBlob, highlights: [] }]);
     expect(listBlobsSpy).toHaveBeenCalledWith('u-1');
   });
 

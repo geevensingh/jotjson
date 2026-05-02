@@ -16,6 +16,7 @@ import type {
   FormattingRuleSimple,
 } from '../../../core/api/models';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
+import { HIGHLIGHT_PATH_FIXTURES } from '../../../../testing/fixtures/highlight-paths.fixture';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
@@ -159,6 +160,17 @@ describe('JsonTreeComponent', () => {
   });
 
   describe('root() and path formatting', () => {
+    function collectPathStrings(node: BuiltNode | undefined): string[] {
+      if (!node) {
+        return [];
+      }
+      const paths = [node.pathString];
+      for (const child of node.children ?? []) {
+        paths.push(...collectPathStrings(child));
+      }
+      return paths;
+    }
+
     it('returns undefined when no value is set', async () => {
       await createWith(undefined);
       expect(cmp.root()).toBeUndefined();
@@ -186,6 +198,17 @@ describe('JsonTreeComponent', () => {
       const paths = root.children!.map((c) => c.pathString);
       expect(paths).toContain('$["weird key"]');
       expect(paths).toContain('$["1leading"]');
+    });
+
+    it('matches the shared manual-highlight path corpus', async () => {
+      for (const fixtureEntry of HIGHLIGHT_PATH_FIXTURES) {
+        await createWith(fixtureEntry.value);
+        const root = cmp.root() as unknown as BuiltNode | undefined;
+        const paths = collectPathStrings(root);
+        expect(paths)
+          .withContext(`formatPath should emit ${fixtureEntry.path}`)
+          .toContain(fixtureEntry.path);
+      }
     });
 
     it('tracks node depth correctly', async () => {
