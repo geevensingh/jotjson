@@ -30,6 +30,7 @@ describe('shareBlobResolver', () => {
       content: '{"a":1}',
       ownerId: 'owner',
       isPublic: false,
+      version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
       ...overrides,

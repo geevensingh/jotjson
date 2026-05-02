@@ -13,6 +13,7 @@
  *   ownerId: string,      // Entra oid of the owner; partition key
  *   isPublic: boolean,
  *   highlights?: BlobHighlight[],
+ *   version: number,      // monotonic client-facing revision
  *   createdAt: string,    // ISO
  *   updatedAt: string     // ISO
  * }
@@ -42,8 +43,11 @@ export interface BlobDocument {
   ownerId: string;
   isPublic: boolean;
   highlights?: BlobHighlight[];
+  version: number;
   createdAt: string;
   updatedAt: string;
+  /** Cosmos system ETag used only for server-side optimistic concurrency. */
+  _etag?: string;
 }
 
 export interface CreateBlobInput {
@@ -109,6 +113,13 @@ export class SlugGenerationError extends Error {
   }
 }
 
+export class BlobVersionConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BlobVersionConflictError';
+  }
+}
+
 let cached: Container | undefined;
 
 export function getBlobsContainer(): Container {
@@ -134,6 +145,21 @@ const JSON_STRING_ESCAPES = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeVersion(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 1;
+}
+
+function normalizeBlobDocument(doc: BlobDocument): BlobDocument {
+  const version = normalizeVersion(doc.version);
+  return doc.version === version ? doc : { ...doc, version };
+}
+
+function isCosmosPreconditionFailed(error: unknown): boolean {
+  if (!isRecord(error)) return false;
+  const code = error['code'];
+  return code === 412 || code === 'PreconditionFailed';
 }
 
 function isDecimalDigit(character: string | undefined): boolean {
@@ -407,7 +433,8 @@ export async function findBlobByIdOrSlug(idOrSlug: string): Promise<BlobDocument
       parameters: [{ name: '@key', value: idOrSlug }],
     })
     .fetchAll();
-  return resources[0] ?? null;
+  const found = resources[0];
+  return found ? normalizeBlobDocument(found) : null;
 }
 
 async function slugExists(slug: string): Promise<boolean> {
@@ -458,6 +485,7 @@ export async function createBlob(ownerId: string, input: CreateBlobInput): Promi
     ownerId,
     isPublic,
     ...(highlights !== undefined ? { highlights } : {}),
+    version: 1,
     createdAt: now,
     updatedAt: now,
   };
@@ -475,8 +503,20 @@ export async function createBlob(ownerId: string, input: CreateBlobInput): Promi
 export async function updateBlob(
   existing: BlobDocument,
   patch: UpdateBlobPatch,
+  expectedVersion: number,
 ): Promise<BlobDocument> {
-  const next: BlobDocument = { ...existing };
+  const current = normalizeBlobDocument(existing);
+  if (current.version !== expectedVersion) {
+    throw new BlobVersionConflictError(
+      `Blob was modified by another writer (expected version ${expectedVersion}, found ${current.version})`,
+    );
+  }
+  if (!current._etag) {
+    throw new BlobVersionConflictError('Blob is missing the Cosmos ETag required for replace');
+  }
+
+  const next: BlobDocument = { ...current };
+  delete next._etag;
   if (patch.content !== undefined) {
     next.content = validateContent(patch.content);
   }
@@ -495,12 +535,24 @@ export async function updateBlob(
     next.highlights = assertHighlights(patch.highlights);
   }
   validateBlobDocumentSize(next.content, next.highlights);
+  next.version = current.version + 1;
   next.updatedAt = new Date().toISOString();
 
-  const response: ItemResponse<BlobDocument> = await getBlobsContainer()
-    .item(existing.id, existing.ownerId)
-    .replace<BlobDocument>(next);
-  return response.resource ?? next;
+  try {
+    const response: ItemResponse<BlobDocument> = await getBlobsContainer()
+      .item(current.id, current.ownerId)
+      .replace<BlobDocument>(next, {
+        accessCondition: { type: 'IfMatch', condition: current._etag },
+      });
+    return normalizeBlobDocument(response.resource ?? next);
+  } catch (error) {
+    if (isCosmosPreconditionFailed(error)) {
+      throw new BlobVersionConflictError(
+        `Blob was modified by another writer (expected version ${expectedVersion})`,
+      );
+    }
+    throw error;
+  }
 }
 
 /**
@@ -533,5 +585,5 @@ export async function listBlobsByOwner(ownerId: string): Promise<BlobDocument[]>
       parameters: [{ name: '@ownerId', value: ownerId }],
     })
     .fetchAll();
-  return resources;
+  return resources.map(normalizeBlobDocument);
 }

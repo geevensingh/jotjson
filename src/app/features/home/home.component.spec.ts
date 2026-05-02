@@ -78,6 +78,7 @@ function makeIdentityBlob(overrides: Partial<JsonBlob> = {}): JsonBlob {
     title: 'Saved title',
     ownerId: 'owner-me',
     isPublic: false,
+    version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
     ...overrides,
@@ -199,6 +200,7 @@ describe('HomeComponent (unit-level)', () => {
       title: 'hello',
       ownerId: 'me',
       isPublic: false,
+      version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     });
@@ -217,6 +219,7 @@ describe('HomeComponent (unit-level)', () => {
       title: 'hello',
       ownerId: 'me',
       isPublic: false,
+      version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     };
@@ -249,6 +252,7 @@ describe('HomeComponent (unit-level)', () => {
       title: 'hello',
       ownerId: 'me',
       isPublic: false,
+      version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     };
@@ -298,6 +302,7 @@ describe('HomeComponent (unit-level)', () => {
       title: 'hello',
       ownerId: 'me',
       isPublic: false,
+      version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     };
@@ -308,6 +313,7 @@ describe('HomeComponent (unit-level)', () => {
       title: 'world',
       ownerId: 'me',
       isPublic: false,
+      version: 1,
       createdAt: '2024-02-01T00:00:00Z',
       updatedAt: '2024-02-01T00:00:00Z',
     };
@@ -339,6 +345,7 @@ describe('HomeComponent (unit-level)', () => {
       title: 'hello',
       ownerId: 'me',
       isPublic: false,
+      version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     };
@@ -1493,6 +1500,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     title: 'Hello',
     ownerId: 'owner-me',
     isPublic: false,
+    version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
     ...overrides,
@@ -1742,6 +1750,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       title: 'My Config',
       ownerId: 'o1',
       isPublic: false,
+      version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     });
@@ -1762,6 +1771,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       content: '{}',
       ownerId: 'o1',
       isPublic: false,
+      version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     });
@@ -1923,6 +1933,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     content: '{"a":1}',
     ownerId: 'owner-me',
     isPublic: false,
+    version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
     ...overrides,

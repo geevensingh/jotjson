@@ -10,6 +10,7 @@ function blob(overrides: Partial<JsonBlob> = {}): JsonBlob {
     content: '{"a":1}',
     ownerId: 'u1',
     isPublic: true,
+    version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
     ...overrides,

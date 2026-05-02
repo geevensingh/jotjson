@@ -34,6 +34,12 @@ jest.mock('../shared/blobs', () => ({
       this.name = 'SlugGenerationError';
     }
   },
+  BlobVersionConflictError: class BlobVersionConflictError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'BlobVersionConflictError';
+    }
+  },
 }));
 
 jest.mock('../shared/users', () => ({
@@ -49,6 +55,7 @@ jest.mock('../shared/history', () => ({
 import { AuthError, requireAuth as requireAuthMock, tryAuth as tryAuthMock } from '../shared/auth';
 import {
   BlobValidationError,
+  BlobVersionConflictError,
   SlugGenerationError,
   createBlob as createBlobMock,
   deleteBlobById as deleteBlobByIdMock,
@@ -86,9 +93,20 @@ const updateBlob = updateBlobMock as unknown as jest.Mock;
 const recordEntry = recordEntryMock as unknown as jest.Mock;
 const getRecentViewAt = getRecentViewAtMock as unknown as jest.Mock;
 
-function makeRequest(opts: { body?: unknown; params?: Record<string, string> } = {}): HttpRequest {
+function makeRequest(
+  opts: { body?: unknown; params?: Record<string, string>; headers?: Record<string, string> } = {},
+): HttpRequest {
   return {
-    headers: { get: (_: string) => 'Bearer fake' },
+    headers: {
+      get: (name: string) => {
+        const requestedName = name.toLowerCase();
+        const supplied = Object.entries(opts.headers ?? {}).find(
+          ([headerName]) => headerName.toLowerCase() === requestedName,
+        );
+        if (supplied) return supplied[1];
+        return requestedName === 'authorization' ? 'Bearer fake' : null;
+      },
+    },
     params: opts.params ?? {},
     json: async () => {
       if (opts.body === undefined) throw new Error('no body');
@@ -118,9 +136,12 @@ const sampleBlob = {
   content: '{"hello":"world"}',
   ownerId: 'u-1',
   isPublic: false,
+  version: 1,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 };
+
+const currentIfMatch = { 'If-Match': '"1"' };
 
 describe('POST /api/blobs', () => {
   it('returns 401 when unauthenticated', async () => {
@@ -147,6 +168,7 @@ describe('POST /api/blobs', () => {
       ctx,
     );
     expect(res.status).toBe(201);
+    expect(res.headers).toEqual({ ETag: '"1"' });
     expect(res.jsonBody).toEqual(sampleBlob);
     expect(createBlob).toHaveBeenCalledWith('u-1', {
       content: '{}',
@@ -171,6 +193,7 @@ describe('POST /api/blobs', () => {
     );
 
     expect(response.status).toBe(201);
+    expect(response.headers).toEqual({ ETag: '"1"' });
     expect(response.jsonBody).toEqual(saved);
     expect(createBlob).toHaveBeenCalledWith('u-1', {
       content: '{}',
@@ -287,6 +310,7 @@ describe('GET /api/blobs/:idOrSlug', () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
     const response = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
     expect(response.status).toBe(200);
+    expect(response.headers).toEqual({ ETag: '"1"' });
     expect(response.jsonBody).toEqual({ ...sampleBlob, highlights: [] });
     expect(requireAuth).not.toHaveBeenCalled();
   });
@@ -296,6 +320,7 @@ describe('GET /api/blobs/:idOrSlug', () => {
     findBlob.mockResolvedValueOnce(highlightedBlob);
     const response = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
     expect(response.status).toBe(200);
+    expect(response.headers).toEqual({ ETag: '"1"' });
     expect(response.jsonBody).toEqual(highlightedBlob);
   });
 
@@ -332,10 +357,33 @@ describe('PUT /api/blobs/:id', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects missing If-Match with 400', async () => {
+    const response = await putBlob(
+      makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
+      ctx,
+    );
+    expect(response.status).toBe(400);
+    expect((response.jsonBody as Record<string, unknown>)['error']).toMatch(/If-Match/);
+    expect(findBlob).not.toHaveBeenCalled();
+  });
+
+  it('rejects weak If-Match validators with 400', async () => {
+    const response = await putBlob(
+      makeRequest({
+        params: { id: 'uuid-1' },
+        headers: { 'If-Match': 'W/"1"' },
+        body: { content: '{}' },
+      }),
+      ctx,
+    );
+    expect(response.status).toBe(400);
+    expect(findBlob).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when the blob does not exist', async () => {
     findBlob.mockResolvedValueOnce(null);
     const res = await putBlob(
-      makeRequest({ params: { id: 'uuid-x' }, body: { content: '{}' } }),
+      makeRequest({ params: { id: 'uuid-x' }, headers: currentIfMatch, body: { content: '{}' } }),
       ctx,
     );
     expect(res.status).toBe(404);
@@ -345,7 +393,7 @@ describe('PUT /api/blobs/:id', () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
     const res = await putBlob(
       // caller passed the slug - sampleBlob.id !== 'abc123'
-      makeRequest({ params: { id: 'abc123' }, body: { content: '{}' } }),
+      makeRequest({ params: { id: 'abc123' }, headers: currentIfMatch, body: { content: '{}' } }),
       ctx,
     );
     expect(res.status).toBe(400);
@@ -354,58 +402,125 @@ describe('PUT /api/blobs/:id', () => {
   it('returns 403 when the blob belongs to another owner', async () => {
     findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'u-2' });
     const res = await putBlob(
-      makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { content: '{}' } }),
       ctx,
     );
     expect(res.status).toBe(403);
   });
 
+  it('returns 412 when If-Match is stale', async () => {
+    findBlob.mockResolvedValueOnce({ ...sampleBlob, version: 2 });
+    const response = await putBlob(
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { content: '{}' } }),
+      ctx,
+    );
+    expect(response.status).toBe(412);
+    expect(updateBlob).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['title-only', { title: 'renamed' }],
+    ['isPublic-only', { isPublic: true }],
+  ])('returns 412 for stale %s updates', async (_name, body) => {
+    findBlob.mockResolvedValueOnce({ ...sampleBlob, version: 2 });
+    const response = await putBlob(
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body }),
+      ctx,
+    );
+    expect(response.status).toBe(412);
+    expect(updateBlob).not.toHaveBeenCalled();
+  });
+
+  it('round-trips the ETag header from GET to PUT', async () => {
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    const getResponse = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+    const headers = getResponse.headers as Record<string, string>;
+
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    updateBlob.mockResolvedValueOnce({ ...sampleBlob, version: 2, title: 'roundtrip' });
+    const putResponse = await putBlob(
+      makeRequest({
+        params: { id: 'uuid-1' },
+        headers: { 'If-Match': headers['ETag'] },
+        body: { title: 'roundtrip' },
+      }),
+      ctx,
+    );
+
+    expect(putResponse.status).toBe(200);
+    expect(putResponse.headers).toEqual({ ETag: '"2"' });
+    expect(updateBlob).toHaveBeenCalledWith(sampleBlob, { title: 'roundtrip' }, 1);
+  });
+
   it('updates the blob when the caller owns it', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
-    const updated = { ...sampleBlob, content: '{"b":2}', updatedAt: '2026-01-02' };
+    const updated = { ...sampleBlob, content: '{"b":2}', version: 2, updatedAt: '2026-01-02' };
     updateBlob.mockResolvedValueOnce(updated);
 
     const res = await putBlob(
       makeRequest({
         params: { id: 'uuid-1' },
+        headers: currentIfMatch,
         body: { content: '{"b":2}', title: 'renamed' },
       }),
       ctx,
     );
     expect(res.status).toBe(200);
+    expect(res.headers).toEqual({ ETag: '"2"' });
     expect(res.jsonBody).toEqual(updated);
-    expect(updateBlob).toHaveBeenCalledWith(sampleBlob, {
-      content: '{"b":2}',
-      title: 'renamed',
-    });
+    expect(updateBlob).toHaveBeenCalledWith(
+      sampleBlob,
+      {
+        content: '{"b":2}',
+        title: 'renamed',
+      },
+      1,
+    );
   });
 
   it('passes highlights through on update when supplied', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
-    const updated = { ...sampleBlob, highlights: sampleHighlights, updatedAt: '2026-01-02' };
+    const updated = {
+      ...sampleBlob,
+      highlights: sampleHighlights,
+      version: 2,
+      updatedAt: '2026-01-02',
+    };
     updateBlob.mockResolvedValueOnce(updated);
 
     const response = await putBlob(
       makeRequest({
         params: { id: 'uuid-1' },
+        headers: currentIfMatch,
         body: { highlights: sampleHighlights },
       }),
       ctx,
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers).toEqual({ ETag: '"2"' });
     expect(response.jsonBody).toEqual(updated);
-    expect(updateBlob).toHaveBeenCalledWith(sampleBlob, { highlights: sampleHighlights });
+    expect(updateBlob).toHaveBeenCalledWith(sampleBlob, { highlights: sampleHighlights }, 1);
   });
 
   it('translates BlobValidationError into 400', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
     updateBlob.mockRejectedValueOnce(new BlobValidationError('content too large'));
     const res = await putBlob(
-      makeRequest({ params: { id: 'uuid-1' }, body: { content: 'big' } }),
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { content: 'big' } }),
       ctx,
     );
     expect(res.status).toBe(400);
+  });
+
+  it('translates BlobVersionConflictError into 412', async () => {
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    updateBlob.mockRejectedValueOnce(new BlobVersionConflictError('race'));
+    const response = await putBlob(
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { title: 'new' } }),
+      ctx,
+    );
+    expect(response.status).toBe(412);
   });
 });
 
@@ -511,7 +626,10 @@ describe('history recording hooks (v1: viewed only)', () => {
     it('does not record any history on update', async () => {
       findBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
       updateBlob.mockResolvedValueOnce({ ...sampleBlob, id: 'uuid-1' });
-      await putBlob(makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }), ctx);
+      await putBlob(
+        makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { content: '{}' } }),
+        ctx,
+      );
       expect(recordEntry).not.toHaveBeenCalled();
     });
   });
@@ -646,7 +764,7 @@ describe('access.forbidden telemetry emission from blob handlers', () => {
   it('putBlob emits resource=blob when the caller does not own the blob', async () => {
     findBlob.mockResolvedValueOnce({ ...sampleBlob, ownerId: 'someone-else' });
     const res = await putBlob(
-      makeRequest({ params: { id: 'uuid-1' }, body: { content: '{}' } }),
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { content: '{}' } }),
       ctx,
     );
     expect(res.status).toBe(403);

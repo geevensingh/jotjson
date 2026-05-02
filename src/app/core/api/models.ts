@@ -14,6 +14,7 @@ export interface JsonBlob {
   ownerId: string;
   isPublic: boolean;
   highlights?: BlobHighlight[];
+  version: number;
 }
 
 /**

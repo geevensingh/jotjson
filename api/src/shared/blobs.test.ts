@@ -1,5 +1,6 @@
 import {
   BlobValidationError,
+  BlobVersionConflictError,
   MAX_BLOB_BYTES,
   MAX_HIGHLIGHT_PATH_LENGTH,
   MAX_HIGHLIGHTS,
@@ -22,11 +23,12 @@ import { HIGHLIGHT_PATH_FIXTURES } from '../../../src/testing/fixtures/highlight
 // replace entry points that blobs.ts uses.
 interface FakeContainer {
   items: BlobDocument[];
+  nextEtag: number;
   forceSlugCollision?: boolean;
 }
 
 function makeFakeContainer(): FakeContainer {
-  return { items: [] };
+  return { items: [], nextEtag: 1 };
 }
 
 let fake: FakeContainer;
@@ -71,16 +73,31 @@ jest.mock('./cosmos', () => {
               },
             }),
             create: async (doc: BlobDocument) => {
-              fake.items.push(doc);
-              return { resource: doc };
+              const stored = { ...doc, _etag: `etag-${fake.nextEtag}` };
+              fake.nextEtag += 1;
+              fake.items.push(stored);
+              return { resource: stored };
             },
           },
           item: (id: string, partitionKey: string) => ({
-            replace: async (doc: BlobDocument) => {
-              const idx = fake.items.findIndex((b) => b.id === id && b.ownerId === partitionKey);
-              if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
-              fake.items[idx] = doc;
-              return { resource: doc };
+            replace: async (
+              doc: BlobDocument,
+              options?: { accessCondition?: { type: string; condition: string } },
+            ) => {
+              const index = fake.items.findIndex(
+                (blob) => blob.id === id && blob.ownerId === partitionKey,
+              );
+              if (index === -1) throw Object.assign(new Error('not found'), { code: 404 });
+              const current = fake.items[index];
+              if (!current) throw Object.assign(new Error('not found'), { code: 404 });
+              const condition = options?.accessCondition;
+              if (condition?.type === 'IfMatch' && condition.condition !== current._etag) {
+                throw Object.assign(new Error('precondition failed'), { code: 412 });
+              }
+              const stored = { ...doc, _etag: `etag-${fake.nextEtag}` };
+              fake.nextEtag += 1;
+              fake.items[index] = stored;
+              return { resource: stored };
             },
             delete: async () => {
               const idx = fake.items.findIndex((b) => b.id === id && b.ownerId === partitionKey);
@@ -167,6 +184,7 @@ describe('createBlob', () => {
     expect(doc.ownerId).toBe('owner-1');
     expect(doc.isPublic).toBe(false);
     expect(doc.title).toBeUndefined();
+    expect(doc.version).toBe(1);
     expect(doc.createdAt).toBe(doc.updatedAt);
     expect(fake.items).toHaveLength(1);
   });
@@ -280,8 +298,9 @@ describe('updateBlob', () => {
   it('replaces content and stamps updatedAt', async () => {
     const orig = await seed();
     await new Promise((r) => setTimeout(r, 2));
-    const updated = await updateBlob(orig, { content: '{"b":2}' });
+    const updated = await updateBlob(orig, { content: '{"b":2}' }, orig.version);
     expect(updated.content).toBe('{"b":2}');
+    expect(updated.version).toBe(2);
     expect(updated.id).toBe(orig.id);
     expect(updated.slug).toBe(orig.slug);
     expect(updated.createdAt).toBe(orig.createdAt);
@@ -292,7 +311,7 @@ describe('updateBlob', () => {
 
   it('updates title and isPublic independently', async () => {
     const orig = await seed();
-    const updated = await updateBlob(orig, { title: 'new', isPublic: true });
+    const updated = await updateBlob(orig, { title: 'new', isPublic: true }, orig.version);
     expect(updated.title).toBe('new');
     expect(updated.isPublic).toBe(true);
     expect(updated.content).toBe(orig.content);
@@ -300,7 +319,7 @@ describe('updateBlob', () => {
 
   it('clears the title when patched to an empty string', async () => {
     const orig = await seed();
-    const updated = await updateBlob(orig, { title: '' });
+    const updated = await updateBlob(orig, { title: '' }, orig.version);
     expect(updated.title).toBeUndefined();
   });
 
@@ -309,7 +328,7 @@ describe('updateBlob', () => {
     expect((await findBlobByIdOrSlug(created.id))?.highlights).toBeUndefined();
 
     const highlights = [makeHighlight({ path: '$.foo', color: '#00ffaa', cascade: true })];
-    await updateBlob(created, { highlights });
+    await updateBlob(created, { highlights }, created.version);
 
     const found = await findBlobByIdOrSlug(created.id);
     expect(found?.highlights).toEqual(highlights);
@@ -319,7 +338,7 @@ describe('updateBlob', () => {
     const highlights = [makeHighlight({ path: '$.foo', color: '#abcdef', cascade: true })];
     const original = await createBlob('owner-1', { content: '{"foo":1}', highlights });
 
-    const updated = await updateBlob(original, { title: 'renamed' });
+    const updated = await updateBlob(original, { title: 'renamed' }, original.version);
 
     expect(updated.highlights).toEqual(highlights);
     expect((await findBlobByIdOrSlug(original.id))?.highlights).toEqual(highlights);
@@ -328,15 +347,58 @@ describe('updateBlob', () => {
   it('enforces size limit on content updates', async () => {
     const orig = await seed();
     const tooBig = 'a'.repeat(MAX_BLOB_BYTES + 1);
-    await expect(updateBlob(orig, { content: tooBig })).rejects.toBeInstanceOf(BlobValidationError);
+    await expect(updateBlob(orig, { content: tooBig }, orig.version)).rejects.toBeInstanceOf(
+      BlobValidationError,
+    );
   });
 
   it('ignores undefined patch fields', async () => {
     const orig = await seed();
-    const updated = await updateBlob(orig, {});
+    const updated = await updateBlob(orig, {}, orig.version);
     expect(updated.content).toBe(orig.content);
     expect(updated.title).toBe(orig.title);
     expect(updated.isPublic).toBe(orig.isPublic);
+  });
+
+  it('rejects stale expected versions before replacing', async () => {
+    const original = await seed();
+    await expect(
+      updateBlob(original, { title: 'stale' }, original.version + 1),
+    ).rejects.toBeInstanceOf(BlobVersionConflictError);
+  });
+
+  it('normalizes legacy docs without version and persists version 2 on update', async () => {
+    const created = await seed();
+    const legacy = { ...created } as Partial<BlobDocument>;
+    delete legacy.version;
+    fake.items[0] = legacy as BlobDocument;
+
+    const found = await findBlobByIdOrSlug(created.id);
+    expect(found?.version).toBe(1);
+    const list = await listBlobsByOwner('owner-1');
+    expect(list[0]?.version).toBe(1);
+
+    const updated = await updateBlob(found!, { title: 'migrated' }, 1);
+    expect(updated.version).toBe(2);
+    expect(fake.items[0]?.version).toBe(2);
+  });
+
+  it('uses Cosmos ETag preconditions so concurrent snapshots cannot both replace', async () => {
+    const created = await seed();
+    const firstSnapshot = await findBlobByIdOrSlug(created.id);
+    const secondSnapshot = await findBlobByIdOrSlug(created.id);
+
+    const results = await Promise.allSettled([
+      updateBlob(firstSnapshot!, { title: 'first' }, 1),
+      updateBlob(secondSnapshot!, { title: 'second' }, 1),
+    ]);
+
+    const fulfilled = results.filter((result) => result.status === 'fulfilled');
+    const rejected = results.filter((result) => result.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(BlobVersionConflictError);
+    expect(fake.items[0]?.version).toBe(2);
   });
 });
 

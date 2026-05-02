@@ -18,6 +18,7 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { AuthError, requireAuth, tryAuth } from '../shared/auth';
 import {
   BlobValidationError,
+  BlobVersionConflictError,
   MAX_BLOBS_PER_USER,
   SlugGenerationError,
   createBlob,
@@ -62,10 +63,40 @@ async function recordViewedSafely(
   }
 }
 
-type BlobResponseBody = BlobDocument & { highlights: BlobHighlight[] };
+type PublicBlobDocument = Omit<BlobDocument, '_etag'>;
+type BlobResponseBody = PublicBlobDocument & { highlights: BlobHighlight[] };
+
+function publicBlob(blob: BlobDocument): PublicBlobDocument {
+  const { _etag: _cosmosEtag, ...doc } = blob;
+  void _cosmosEtag;
+  return doc;
+}
 
 function withResponseHighlights(blob: BlobDocument): BlobResponseBody {
-  return { ...blob, highlights: blob.highlights ?? [] };
+  const doc = publicBlob(blob);
+  return { ...doc, highlights: doc.highlights ?? [] };
+}
+
+function preconditionFailed(message: string): HttpResponseInit {
+  return { status: 412, jsonBody: { error: message } };
+}
+
+function withEtag(status: number, doc: BlobDocument): HttpResponseInit {
+  return {
+    status,
+    headers: { ETag: `"${doc.version}"` },
+    jsonBody: publicBlob(doc),
+  };
+}
+
+function parseIfMatch(headerValue: string | null | undefined): number | null {
+  if (typeof headerValue !== 'string') return null;
+  const trimmed = headerValue.trim();
+  if (trimmed.length === 0 || trimmed.startsWith('W/')) return null;
+  const unquoted = trimmed.replace(/^"|"$/g, '');
+  if (!/^\d+$/.test(unquoted)) return null;
+  const value = Number.parseInt(unquoted, 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 /**
@@ -177,9 +208,11 @@ export async function postBlob(
       ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic } : {}),
       ...(payload.highlights !== undefined ? { highlights: payload.highlights } : {}),
     });
+    const response = withEtag(201, saved);
+    if (!autoDeleted) return response;
     return {
-      status: 201,
-      jsonBody: autoDeleted ? { ...saved, autoDeleted } : saved,
+      ...response,
+      jsonBody: { ...(response.jsonBody as PublicBlobDocument), autoDeleted },
     };
   } catch (error) {
     if (error instanceof BlobValidationError) return badRequest(error.message);
@@ -236,7 +269,7 @@ export async function getBlob(
       // Surface in logs but never fail the read.
       context.warn('getBlob history hook failed', error);
     }
-    return { status: 200, jsonBody: withResponseHighlights(blob) };
+    return withEtag(200, withResponseHighlights(blob));
   } catch (error) {
     return internalError(context, 'getBlob read', error);
   }
@@ -312,6 +345,11 @@ export async function putBlob(
   const id = req.params['id'] ?? '';
   if (!id) return badRequest('Missing id path parameter');
 
+  const expectedVersion = parseIfMatch(req.headers.get('If-Match'));
+  if (expectedVersion === null) {
+    return badRequest('PUT requires a valid If-Match header carrying the blob version');
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -339,16 +377,26 @@ export async function putBlob(
     if (existing.ownerId !== principal.id) {
       return forbidden('You do not own this blob', 'blob');
     }
+    if (existing.version !== expectedVersion) {
+      return preconditionFailed(
+        `Blob was modified by another writer (expected version ${expectedVersion}, found ${existing.version})`,
+      );
+    }
 
-    const saved = await updateBlob(existing, {
-      ...(patch.content !== undefined ? { content: patch.content } : {}),
-      ...(patch.title !== undefined ? { title: patch.title } : {}),
-      ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic } : {}),
-      ...(patch.highlights !== undefined ? { highlights: patch.highlights } : {}),
-    });
-    return { status: 200, jsonBody: saved };
+    const saved = await updateBlob(
+      existing,
+      {
+        ...(patch.content !== undefined ? { content: patch.content } : {}),
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic } : {}),
+        ...(patch.highlights !== undefined ? { highlights: patch.highlights } : {}),
+      },
+      expectedVersion,
+    );
+    return withEtag(200, saved);
   } catch (error) {
     if (error instanceof BlobValidationError) return badRequest(error.message);
+    if (error instanceof BlobVersionConflictError) return preconditionFailed(error.message);
     return internalError(context, 'putBlob write', error);
   }
 }
