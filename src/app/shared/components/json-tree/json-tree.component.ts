@@ -50,6 +50,12 @@ import { classifyValue, ValueClassification } from '../../utils/value-classifier
 import { computeAutoFitDepth } from './auto-fit-depth';
 import { findNearestCascade, indexHighlights, resolveManualHighlight } from './highlight-resolver';
 import type { ResolvedHighlight } from './highlight-resolver';
+import {
+  HIGHLIGHT_PALETTE_DARK,
+  HIGHLIGHT_PALETTE_LIGHT,
+  contrastText,
+  type PaletteSwatch,
+} from './highlight-palette';
 import { findScrollableAncestor } from './scroll-container';
 
 /**
@@ -162,7 +168,7 @@ const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
-  styleUrl: './json-tree.component.scss',
+  styleUrls: ['./json-tree.component.scss', './json-tree-highlights.scss'],
 })
 export class JsonTreeComponent {
   private readonly prefs = inject(PreferencesService);
@@ -252,6 +258,7 @@ export class JsonTreeComponent {
    * is ignored in `onRowContextMenu`.
    */
   readonly contextNode = signal<TreeNode | null>(null);
+  private readonly contextIsCloseRow = signal(false);
   readonly ctxX = signal(0);
   readonly ctxY = signal(0);
 
@@ -323,6 +330,11 @@ export class JsonTreeComponent {
   readonly ctxExpandToDepth5Label = $localize`:@@tree.contextMenu.expandToDepth.5:Expand 5 levels from here`;
   readonly ctxIsolateLabel = $localize`:@@tree.contextMenu.isolate:Isolate`;
   readonly ctxCollapseSiblingsLabel = $localize`:@@tree.contextMenu.collapseSiblings:Collapse siblings`;
+  readonly ctxHighlightLabel = $localize`:@@tree.contextMenu.highlight:Highlight`;
+  readonly ctxHighlightTreeLabel = $localize`:@@tree.contextMenu.highlightTree:Highlight tree`;
+  readonly ctxRemoveHighlightLabel = $localize`:@@tree.contextMenu.removeHighlight:Remove highlight`;
+  readonly ctxRemoveTreeHighlightLabel = $localize`:@@tree.contextMenu.removeTreeHighlight:Remove tree highlight`;
+  readonly preferredHighlightLabel = $localize`:@@tree.highlight.swatch.preferred:Preferred`;
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
 
@@ -396,6 +408,20 @@ export class JsonTreeComponent {
   readonly cascadeHighlightsByPath = computed(
     () => this.manualHighlightRows().cascadeHighlightsByPath,
   );
+
+  readonly activePalette = computed<readonly PaletteSwatch[]>(() =>
+    this.prefs.effectiveTheme() === 'dark' ? HIGHLIGHT_PALETTE_DARK : HIGHLIGHT_PALETTE_LIGHT,
+  );
+  readonly preferredHighlightColor = computed(
+    () => this.prefs.prefs().treeHighlightColors[this.prefs.effectiveTheme()].manualHighlightColor,
+  );
+  readonly preferredHighlightTextColor = computed(() =>
+    contrastText(this.preferredHighlightColor()),
+  );
+  readonly preferredHighlightAriaLabel = computed(() => {
+    const hex = this.preferredHighlightColor();
+    return $localize`:@@tree.highlight.swatch.preferred.aria:Apply preferred highlight color (${hex}:hex:)`;
+  });
 
   readonly showTypeBadges = computed(() => this.prefs.prefs().treeShowTypeLabels);
   readonly showDateAnnotations = computed(() => this.prefs.prefs().treeShowDateAnnotations);
@@ -1367,7 +1393,19 @@ export class JsonTreeComponent {
     ) {
       return;
     }
-    this.openContextMenuAt(event, node, 'row');
+    this.openContextMenuAt(event, node, 'row', false);
+  }
+
+  onCloseRowContextMenu(event: MouseEvent, node: TreeNode): void {
+    if (event.clientX === 0 && event.clientY === 0) return;
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')
+    ) {
+      return;
+    }
+    this.openContextMenuAt(event, node, 'row', true);
   }
 
   /**
@@ -1385,7 +1423,7 @@ export class JsonTreeComponent {
   onBreadcrumbContextMenu(payload: BreadcrumbContextMenu): void {
     const node = this.nodeIndex().get(payload.canonicalPath);
     if (!node) return;
-    this.openContextMenuAt(payload.event, node, 'breadcrumb');
+    this.openContextMenuAt(payload.event, node, 'breadcrumb', false);
   }
 
   /**
@@ -1413,13 +1451,19 @@ export class JsonTreeComponent {
    * the row by design. Its own logger call (with `source: 'kebab'`)
    * lives in `onKebabClick`.
    */
-  private openContextMenuAt(event: MouseEvent, node: TreeNode, source: 'row' | 'breadcrumb'): void {
+  private openContextMenuAt(
+    event: MouseEvent,
+    node: TreeNode,
+    source: 'row' | 'breadcrumb',
+    isCloseRow: boolean,
+  ): void {
     event.preventDefault();
     const trigger = this.ctxTrigger();
     const apply = (): void => {
       this.ctxX.set(event.clientX);
       this.ctxY.set(event.clientY);
       this.contextNode.set(node);
+      this.contextIsCloseRow.set(isCloseRow);
       this.logger.info('tree.contextMenu.opened', { source });
       queueMicrotask(() => trigger?.openMenu());
     };
@@ -1468,6 +1512,7 @@ export class JsonTreeComponent {
   onKebabClick(event: MouseEvent, node: TreeNode): void {
     event.stopPropagation();
     this.contextNode.set(node);
+    this.contextIsCloseRow.set(false);
     this.selectedPath.set(node.pathString);
     this.logger.info('tree.contextMenu.opened', { source: 'kebab' });
   }
@@ -1591,6 +1636,80 @@ export class JsonTreeComponent {
     });
     this.search.set(query);
     this.activateClickedHitOrFirst(node.pathString);
+  }
+
+  applyManualHighlight(node: TreeNode, cascade: boolean, color: string): void {
+    if (!this.canEditHighlights()) return;
+    if (cascade) {
+      if (!this.showHighlightTree(node)) return;
+    } else if (!this.showHighlight(node)) {
+      return;
+    }
+
+    const path = this.effectiveHighlightPath(node);
+    const existingHighlight = this.highlightIndex().get(path);
+    if (existingHighlight?.color === color && existingHighlight.cascade === cascade) {
+      return;
+    }
+
+    const nextHighlights = this.highlights().filter((highlight) => highlight.path !== path);
+    nextHighlights.push({ path, color, cascade });
+    this.highlightsChange.emit(nextHighlights);
+  }
+
+  removeManualHighlight(node: TreeNode): void {
+    if (!this.canEditHighlights() || this.contextIsCloseRow()) return;
+    const path = this.effectiveHighlightPath(node);
+    const existingHighlight = this.highlightIndex().get(path);
+    if (!existingHighlight || existingHighlight.cascade) return;
+    this.emitHighlightsWithoutPath(path);
+  }
+
+  removeManualTreeHighlight(node: TreeNode): void {
+    if (!this.canEditHighlights()) return;
+    const cascadeHighlight = this.nearestCascadeForNode(node);
+    if (!cascadeHighlight) return;
+    this.emitHighlightsWithoutPath(cascadeHighlight.path);
+  }
+
+  highlightSwatchLabel(swatch: PaletteSwatch): string {
+    return $localize`:@@tree.highlight.swatch.aria:${swatch.name}:name: ${swatch.hex}:hex:`;
+  }
+
+  removeTreeHighlightAriaLabel(node: TreeNode): string {
+    const cascadeHighlight = this.nearestCascadeForNode(node);
+    if (!cascadeHighlight || cascadeHighlight.path === this.effectiveHighlightPath(node)) {
+      return this.ctxRemoveTreeHighlightLabel;
+    }
+    const ancestorPath = cascadeHighlight.path;
+    return $localize`:@@tree.contextMenu.removeTreeHighlight.rooted:Remove tree highlight rooted at ${ancestorPath}:ancestorPath:`;
+  }
+
+  showAnyHighlightAction(node: TreeNode): boolean {
+    return (
+      this.showHighlight(node) ||
+      this.showHighlightTree(node) ||
+      this.showRemoveHighlight(node) ||
+      this.showRemoveTreeHighlight(node)
+    );
+  }
+
+  showHighlight(node: TreeNode): boolean {
+    return this.canEditHighlights() && !this.contextIsCloseRow() && this.hasOwnHighlightPath(node);
+  }
+
+  showHighlightTree(node: TreeNode): boolean {
+    return this.canEditHighlights() && (this.contextIsCloseRow() || this.isContainerNode(node));
+  }
+
+  showRemoveHighlight(node: TreeNode): boolean {
+    if (!this.canEditHighlights() || this.contextIsCloseRow()) return false;
+    const existingHighlight = this.highlightIndex().get(this.effectiveHighlightPath(node));
+    return existingHighlight?.cascade === false;
+  }
+
+  showRemoveTreeHighlight(node: TreeNode): boolean {
+    return this.canEditHighlights() && this.nearestCascadeForNode(node) !== undefined;
   }
 
   /**
@@ -1831,6 +1950,28 @@ export class JsonTreeComponent {
   }
 
   // ---- Helpers ----
+
+  private effectiveHighlightPath(node: TreeNode): string {
+    return node.pathString;
+  }
+
+  private hasOwnHighlightPath(node: TreeNode): boolean {
+    return node.pathString.length > 0;
+  }
+
+  private isContainerNode(node: TreeNode): boolean {
+    return node.type === 'object' || node.type === 'array';
+  }
+
+  private nearestCascadeForNode(node: TreeNode): { path: string; color: string } | undefined {
+    return findNearestCascade(this.effectiveHighlightPath(node), this.highlightIndex());
+  }
+
+  private emitHighlightsWithoutPath(path: string): void {
+    const nextHighlights = this.highlights().filter((highlight) => highlight.path !== path);
+    if (nextHighlights.length === this.highlights().length) return;
+    this.highlightsChange.emit(nextHighlights);
+  }
 
   /**
    * Serializes a node's value for the clipboard. Primitives stringify

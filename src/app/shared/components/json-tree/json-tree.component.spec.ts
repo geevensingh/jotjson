@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
+import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
@@ -1821,6 +1822,387 @@ describe('JsonTreeComponent', () => {
           '.tree-row--close.has-manual-highlight',
         ).length,
       ).toBe(1);
+    });
+
+    type ManualHighlightNode = NonNullable<ReturnType<JsonTreeComponent['root']>>;
+
+    function enableHighlightEditing(): void {
+      fixture.componentRef.setInput('canEditHighlights', true);
+      fixture.detectChanges();
+    }
+
+    function nodeAt(path: string): ManualHighlightNode {
+      const root = cmp.root();
+      if (!root) {
+        throw new Error('Tree root was not built');
+      }
+      const stack: ManualHighlightNode[] = [root];
+      while (stack.length > 0) {
+        const currentNode = stack.pop();
+        if (!currentNode) break;
+        if (currentNode.pathString === path) return currentNode;
+        for (const child of currentNode.children ?? []) {
+          stack.push(child);
+        }
+      }
+      throw new Error(`No node at path ${path}`);
+    }
+
+    function setRowContext(path: string): ManualHighlightNode {
+      const node = nodeAt(path);
+      cmp.onKebabClick(new MouseEvent('click', { bubbles: true, cancelable: true }), node);
+      fixture.detectChanges();
+      return node;
+    }
+
+    async function setCloseRowContext(path: string): Promise<ManualHighlightNode> {
+      const node = nodeAt(path);
+      cmp.onCloseRowContextMenu(
+        new MouseEvent('contextmenu', {
+          clientX: 100,
+          clientY: 100,
+          bubbles: true,
+          cancelable: true,
+        }),
+        node,
+      );
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+      return node;
+    }
+
+    function captureHighlightChanges(): BlobHighlight[][] {
+      const events: BlobHighlight[][] = [];
+      cmp.highlightsChange.subscribe((highlights) => events.push(highlights));
+      return events;
+    }
+
+    function closeOpenMenus(): void {
+      document.body
+        .querySelectorAll('.cdk-overlay-backdrop')
+        .forEach((backdrop) => (backdrop as HTMLElement).click());
+      fixture.detectChanges();
+    }
+
+    function setPreferredHighlightColor(hex: string): void {
+      const currentColors = prefs.prefs().treeHighlightColors;
+      prefs.update({
+        theme: 'light',
+        treeHighlightColors: {
+          ...currentColors,
+          light: {
+            ...currentColors.light,
+            manualHighlightColor: hex,
+          },
+        },
+      });
+      fixture.detectChanges();
+    }
+
+    async function openMenuFor(path: string): Promise<void> {
+      closeOpenMenus();
+      const kebab = (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${path}"] .tree-kebab-pill`,
+      ) as HTMLButtonElement | null;
+      expect(kebab).withContext(`found a kebab for ${path}`).toBeTruthy();
+      kebab!.click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    function menuItemContaining(label: string): HTMLButtonElement {
+      const item = Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      ).find((menuItem) => (menuItem.textContent ?? '').trim().includes(label));
+      if (!item) {
+        throw new Error(`No menu item found for ${label}`);
+      }
+      return item;
+    }
+
+    async function openHighlightFlyout(path: string, label: string): Promise<HTMLElement> {
+      await openMenuFor(path);
+      const item = menuItemContaining(label);
+      item.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
+      item.click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+      const flyouts = Array.from(document.body.querySelectorAll<HTMLElement>('.highlight-flyout'));
+      const flyout = flyouts[flyouts.length - 1];
+      expect(flyout).withContext(`opened flyout for ${label}`).toBeTruthy();
+      return flyout as HTMLElement;
+    }
+
+    function normalizeBlackWhiteColor(color: string): string {
+      const normalized = color.toLowerCase().replace(/\s/g, '');
+      if (normalized === '#000000' || normalized === 'rgb(0,0,0)') return '#000000';
+      if (normalized === '#ffffff' || normalized === 'rgb(255,255,255)') return '#ffffff';
+      return normalized;
+    }
+
+    afterEach(() => {
+      closeOpenMenus();
+    });
+
+    describe('context menu highlight visibility', () => {
+      it('shows Highlight and Highlight tree for container rows', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        const node = setRowContext('$.parent');
+
+        expect(cmp.showHighlight(node)).toBeTrue();
+        expect(cmp.showHighlightTree(node)).toBeTrue();
+        expect(cmp.showRemoveHighlight(node)).toBeFalse();
+        expect(cmp.showRemoveTreeHighlight(node)).toBeFalse();
+      });
+
+      it('shows only Highlight for primitive rows without inherited cascade', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        const node = setRowContext('$.leaf');
+
+        expect(cmp.showHighlight(node)).toBeTrue();
+        expect(cmp.showHighlightTree(node)).toBeFalse();
+        expect(cmp.showRemoveHighlight(node)).toBeFalse();
+        expect(cmp.showRemoveTreeHighlight(node)).toBeFalse();
+      });
+
+      it('shows only tree-scope highlight actions for closing-brace rows', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.parent', color: '#7e6500', cascade: true }]);
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = await setCloseRowContext('$.parent');
+
+        expect(cmp.showHighlight(node)).toBeFalse();
+        expect(cmp.showHighlightTree(node)).toBeTrue();
+        expect(cmp.showRemoveHighlight(node)).toBeFalse();
+        expect(cmp.showRemoveTreeHighlight(node)).toBeTrue();
+      });
+
+      it('shows Remove highlight only for an own non-cascade entry', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.leaf', color: '#fff59d', cascade: false }]);
+        const node = setRowContext('$.leaf');
+
+        expect(cmp.showRemoveHighlight(node)).toBeTrue();
+        expect(cmp.showRemoveTreeHighlight(node)).toBeFalse();
+      });
+
+      it('shows Remove tree highlight for inherited cascade without showing Remove highlight', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.parent', color: '#7e6500', cascade: true }]);
+        const node = setRowContext('$.parent.child');
+
+        expect(cmp.showRemoveHighlight(node)).toBeFalse();
+        expect(cmp.showRemoveTreeHighlight(node)).toBeTrue();
+      });
+
+      it('shows both remove items for own non-cascade plus inherited cascade', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        setHighlights([
+          { path: '$.parent', color: '#7e6500', cascade: true },
+          { path: '$.parent.child', color: '#fff59d', cascade: false },
+        ]);
+        const node = setRowContext('$.parent.child');
+
+        expect(cmp.showRemoveHighlight(node)).toBeTrue();
+        expect(cmp.showRemoveTreeHighlight(node)).toBeTrue();
+      });
+
+      it('hides all highlight menu actions when editing is disabled', async () => {
+        await createWith({ parent: { child: 1 } });
+        setHighlights([
+          { path: '$.parent', color: '#7e6500', cascade: true },
+          { path: '$.parent.child', color: '#fff59d', cascade: false },
+        ]);
+        const node = setRowContext('$.parent.child');
+
+        expect(cmp.showHighlight(node)).toBeFalse();
+        expect(cmp.showHighlightTree(node)).toBeFalse();
+        expect(cmp.showRemoveHighlight(node)).toBeFalse();
+        expect(cmp.showRemoveTreeHighlight(node)).toBeFalse();
+      });
+    });
+
+    describe('context menu highlight clicks', () => {
+      it('clicking Highlight then Preferred emits a non-cascade entry with the preferred color', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        setPreferredHighlightColor('#123456');
+        const events = captureHighlightChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        flyout.querySelector<HTMLButtonElement>('.preferred-bar')!.click();
+        fixture.detectChanges();
+
+        expect(events).toEqual([[{ path: '$.leaf', color: '#123456', cascade: false }]]);
+      });
+
+      it('clicking Highlight then a swatch emits a non-cascade entry with the swatch color', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const events = captureHighlightChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        flyout.querySelector<HTMLButtonElement>('[aria-label="Yellow #fff59d"]')!.click();
+        fixture.detectChanges();
+
+        expect(events).toEqual([[{ path: '$.leaf', color: '#fff59d', cascade: false }]]);
+      });
+
+      it('clicking Highlight tree then a swatch emits a cascade entry', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const events = captureHighlightChanges();
+        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel);
+
+        flyout.querySelector<HTMLButtonElement>('[aria-label="Cyan #b3e5fc"]')!.click();
+        fixture.detectChanges();
+
+        expect(events).toEqual([[{ path: '$.parent', color: '#b3e5fc', cascade: true }]]);
+      });
+
+      it('retargets closing-brace highlight tree clicks to the parent path', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        cmp.expandAll();
+        fixture.detectChanges();
+        const events = captureHighlightChanges();
+        const node = await setCloseRowContext('$.parent');
+
+        cmp.applyManualHighlight(node, true, '#b3e5fc');
+
+        expect(events).toEqual([[{ path: '$.parent', color: '#b3e5fc', cascade: true }]]);
+      });
+
+      it('does not emit when re-applying the same color and cascade flag', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.leaf', color: '#fff59d', cascade: false }]);
+        const events = captureHighlightChanges();
+        const node = setRowContext('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#fff59d');
+
+        expect(events).toEqual([]);
+      });
+    });
+
+    describe('context menu highlight removal', () => {
+      it('Remove highlight emits the list without the own non-cascade entry', async () => {
+        await createWith({ leaf: 1, other: 2 });
+        enableHighlightEditing();
+        setHighlights([
+          { path: '$.leaf', color: '#fff59d', cascade: false },
+          { path: '$.other', color: '#b3e5fc', cascade: false },
+        ]);
+        const events = captureHighlightChanges();
+        const node = setRowContext('$.leaf');
+
+        cmp.removeManualHighlight(node);
+
+        expect(events).toEqual([[{ path: '$.other', color: '#b3e5fc', cascade: false }]]);
+      });
+
+      it('Remove tree highlight on the cascade root removes that root entry', async () => {
+        await createWith({ parent: { child: 1 }, other: 2 });
+        enableHighlightEditing();
+        setHighlights([
+          { path: '$.parent', color: '#7e6500', cascade: true },
+          { path: '$.other', color: '#fff59d', cascade: false },
+        ]);
+        const events = captureHighlightChanges();
+        const node = setRowContext('$.parent');
+
+        cmp.removeManualTreeHighlight(node);
+
+        expect(events).toEqual([[{ path: '$.other', color: '#fff59d', cascade: false }]]);
+      });
+
+      it('Remove tree highlight on a descendant removes the ancestor cascade entry', async () => {
+        await createWith({ parent: { child: 1 }, other: 2 });
+        enableHighlightEditing();
+        setHighlights([
+          { path: '$.parent', color: '#7e6500', cascade: true },
+          { path: '$.other', color: '#fff59d', cascade: false },
+        ]);
+        const events = captureHighlightChanges();
+        const node = setRowContext('$.parent.child');
+
+        cmp.removeManualTreeHighlight(node);
+
+        expect(events).toEqual([[{ path: '$.other', color: '#fff59d', cascade: false }]]);
+      });
+
+      it('Remove tree highlight with own override removes the ancestor cascade, not the own entry', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        setHighlights([
+          { path: '$.parent', color: '#7e6500', cascade: true },
+          { path: '$.parent.child', color: '#fff59d', cascade: false },
+        ]);
+        const events = captureHighlightChanges();
+        const node = setRowContext('$.parent.child');
+
+        cmp.removeManualTreeHighlight(node);
+
+        expect(events).toEqual([[{ path: '$.parent.child', color: '#fff59d', cascade: false }]]);
+      });
+    });
+
+    describe('context menu highlight accessibility', () => {
+      it('labels every swatch with its name and hex color', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        const labels = Array.from(flyout.querySelectorAll<HTMLButtonElement>('.swatch')).map(
+          (button) => button.getAttribute('aria-label'),
+        );
+
+        expect(labels).toEqual(
+          HIGHLIGHT_PALETTE_LIGHT.map((swatch) => `${swatch.name} ${swatch.hex}`),
+        );
+      });
+
+      it('sets the Preferred bar aria label and contrast text color from the preferred color', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        setPreferredHighlightColor('#123456');
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+        const preferredBar = flyout.querySelector<HTMLButtonElement>('.preferred-bar')!;
+        const expectedTextColor = contrastText('#123456');
+
+        expect(preferredBar.getAttribute('aria-label')).toBe(
+          'Apply preferred highlight color (#123456)',
+        );
+        expect(normalizeBlackWhiteColor(preferredBar.style.color)).toBe(expectedTextColor);
+      });
+
+      it('enriches Remove tree highlight aria-label with the cascade ancestor path', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        setHighlights([{ path: '$.parent', color: '#7e6500', cascade: true }]);
+        await openMenuFor('$.parent.child');
+
+        const item = menuItemContaining(cmp.ctxRemoveTreeHighlightLabel);
+
+        expect(item.getAttribute('aria-label')).toContain('$.parent');
+      });
     });
   });
 
