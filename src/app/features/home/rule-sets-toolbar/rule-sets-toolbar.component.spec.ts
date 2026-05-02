@@ -6,13 +6,18 @@ import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testin
 import { AuthService } from '../../../core/auth/auth.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
-import type { FormattingRule, FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
+import type {
+  FormattingRule,
+  FormattingRuleSet,
+  FormattingRuleSimple,
+  RuleSetPreset,
+} from '../../../core/api/models';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar.component';
 import { ClonePresetDialogComponent } from './clone-preset-dialog.component';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 
-function rule(id: string, target: FormattingRule['target'] = 'key'): FormattingRule {
+function rule(id: string, target: FormattingRuleSimple['target'] = 'key'): FormattingRuleSimple {
   return {
     id,
     target,

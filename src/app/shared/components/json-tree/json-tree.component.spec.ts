@@ -9,7 +9,11 @@ import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { bucketCount } from '../../../core/telemetry/buckets';
 import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
-import type { FormattingRule, FormattingRuleSet } from '../../../core/api/models';
+import type {
+  FormattingRule,
+  FormattingRuleSet,
+  FormattingRuleSimple,
+} from '../../../core/api/models';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
@@ -2461,7 +2465,7 @@ describe('JsonTreeComponent', () => {
       req.flush(sets);
     }
 
-    function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+    function makeRule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
       return {
         id: 'r1',
         target: 'value',
@@ -2693,7 +2697,7 @@ describe('JsonTreeComponent', () => {
     let httpMock: HttpTestingController;
     let ruleSets: RuleSetsService;
 
-    function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+    function makeRule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
       return {
         id: 'r1',
         target: 'value',

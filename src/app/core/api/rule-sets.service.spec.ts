@@ -6,7 +6,13 @@ import { AuthUser } from '../auth/auth-user';
 import { PreferencesService } from '../preferences/preferences.service';
 import { LoggerService } from '../telemetry/logger.service';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
-import { FormattingRule, FormattingRuleSet, RuleSetPayload, RuleSetPreset } from './models';
+import {
+  FormattingRule,
+  FormattingRuleSet,
+  FormattingRuleSimple,
+  RuleSetPayload,
+  RuleSetPreset,
+} from './models';
 import { RuleSetsService } from './rule-sets.service';
 
 const BASE = `${environment.apiBaseUrl}/rule-sets`;
@@ -14,7 +20,7 @@ const PRESETS_BASE = `${environment.apiBaseUrl}/rule-set-presets`;
 
 type PairFormattingRule = Extract<FormattingRule, { kind: 'pair' }>;
 
-function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+function makeRule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
   return {
     id: 'rule-1',
     target: 'key',
