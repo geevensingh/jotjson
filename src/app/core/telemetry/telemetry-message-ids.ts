@@ -820,7 +820,11 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Fired by: `RuleSetsService.update` (live PUT success) and the
    *           drain branch in `RuleSetsService` (queued offline write
    *           later flushed), both in `core/api/rule-sets.service.ts`
-   * Props: { ruleCount: number }.
+   * Props: { ruleCount: number; pairRuleCount: number;
+   *   predicateRuleCount: number }.
+   * `pairRuleCount` and `predicateRuleCount` are coarse counts only;
+   * no key strings, match values, match types, or predicate identities
+   * are logged.
    */
   'ruleSets.updated',
 

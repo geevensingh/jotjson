@@ -12,6 +12,8 @@ import { RuleSetsService } from './rule-sets.service';
 const BASE = `${environment.apiBaseUrl}/rule-sets`;
 const PRESETS_BASE = `${environment.apiBaseUrl}/rule-set-presets`;
 
+type PairFormattingRule = Extract<FormattingRule, { kind: 'pair' }>;
+
 function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
   return {
     id: 'rule-1',
@@ -20,6 +22,26 @@ function makeRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     matchValue: 'error',
     caseSensitive: false,
     style: { backgroundColor: '#ffcdd2' },
+    ...overrides,
+  };
+}
+
+function makePairRule(overrides: Partial<PairFormattingRule> = {}): PairFormattingRule {
+  return {
+    id: 'pair-1',
+    kind: 'pair',
+    keyMatch: {
+      matchType: 'exact',
+      matchValue: 'status',
+      caseSensitive: false,
+    },
+    valueMatch: {
+      kind: 'text',
+      matchType: 'exact',
+      matchValue: 'error',
+      caseSensitive: false,
+    },
+    style: { backgroundColor: '#bbdefb' },
     ...overrides,
   };
 }
@@ -382,6 +404,23 @@ describe('RuleSetsService', () => {
       TestBed.flushEffects();
     });
 
+    function saveRulesAndReadUpdatedTelemetry(
+      rules: FormattingRule[],
+      expectedTelemetry: {
+        ruleCount: number;
+        pairRuleCount: number;
+        predicateRuleCount: number;
+      },
+    ): Record<string, unknown> {
+      const payload: RuleSetPayload = { name: 'X', rules };
+      service.update('a', payload, 7).subscribe();
+      httpMock.expectOne(`${BASE}/a`).flush(makeSet({ id: 'a', rules }));
+      expect(infoSpy).toHaveBeenCalledWith('ruleSets.updated', expectedTelemetry);
+      const matchingCall = infoSpy.calls.allArgs().find((args) => args[0] === 'ruleSets.updated');
+      expect(matchingCall).toBeDefined();
+      return matchingCall?.[1] as Record<string, unknown>;
+    }
+
     it('emits ruleSets.created with manual source on create() success', () => {
       const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
       service.create(payload).subscribe();
@@ -403,15 +442,87 @@ describe('RuleSetsService', () => {
       expect(infoSpy).not.toHaveBeenCalledWith('ruleSets.created', jasmine.anything());
     });
 
-    it('emits ruleSets.updated with the rule count on update() success', () => {
-      const payload: RuleSetPayload = { name: 'X', rules: [makeRule()] };
-      service.update('a', payload, 7).subscribe();
-      httpMock
-        .expectOne(`${BASE}/a`)
-        .flush(
-          makeSet({ id: 'a', rules: [makeRule(), makeRule({ id: 'r2' }), makeRule({ id: 'r3' })] }),
-        );
-      expect(infoSpy).toHaveBeenCalledWith('ruleSets.updated', { ruleCount: 3 });
+    it('emits zero pair and predicate counts when saved rules are all simple', () => {
+      saveRulesAndReadUpdatedTelemetry(
+        [
+          makeRule({ id: 'r1', kind: 'simple' }),
+          makeRule({ id: 'r2', kind: 'simple' }),
+          makeRule({ id: 'r3', kind: 'simple' }),
+        ],
+        { ruleCount: 3, pairRuleCount: 0, predicateRuleCount: 0 },
+      );
+    });
+
+    it('emits pair and predicate counts when saved rules mix simple, text-pair, and predicate-pair rules', () => {
+      saveRulesAndReadUpdatedTelemetry(
+        [
+          makeRule({ id: 'r1', kind: 'simple' }),
+          makePairRule({ id: 'pair-text' }),
+          makePairRule({
+            id: 'pair-predicate',
+            valueMatch: { kind: 'predicate', predicate: 'is_null' },
+          }),
+        ],
+        { ruleCount: 3, pairRuleCount: 2, predicateRuleCount: 1 },
+      );
+    });
+
+    it('emits matching pair and predicate counts when all saved pair rules use predicates', () => {
+      saveRulesAndReadUpdatedTelemetry(
+        [
+          makePairRule({
+            id: 'pair-null',
+            valueMatch: { kind: 'predicate', predicate: 'is_null' },
+          }),
+          makePairRule({
+            id: 'pair-empty',
+            valueMatch: { kind: 'predicate', predicate: 'is_empty' },
+          }),
+        ],
+        { ruleCount: 2, pairRuleCount: 2, predicateRuleCount: 2 },
+      );
+    });
+
+    it('treats saved legacy rules with missing kind as simple for pair counts', () => {
+      saveRulesAndReadUpdatedTelemetry(
+        [makeRule({ id: 'legacy-1' }), makeRule({ id: 'legacy-2' })],
+        { ruleCount: 2, pairRuleCount: 0, predicateRuleCount: 0 },
+      );
+    });
+
+    it('does not include match values, key match shapes, or predicate identities in saved rule telemetry', () => {
+      const telemetryPayload = saveRulesAndReadUpdatedTelemetry(
+        [
+          makePairRule({
+            id: 'pair-private-text',
+            keyMatch: { matchType: 'contains', matchValue: 'private-key', caseSensitive: true },
+            valueMatch: {
+              kind: 'text',
+              matchType: 'contains',
+              matchValue: 'private-value',
+              caseSensitive: true,
+            },
+          }),
+          makePairRule({
+            id: 'pair-private-predicate',
+            keyMatch: {
+              matchType: 'starts_with',
+              matchValue: 'secret-prefix',
+              caseSensitive: false,
+            },
+            valueMatch: { kind: 'predicate', predicate: 'is_null' },
+          }),
+        ],
+        { ruleCount: 2, pairRuleCount: 2, predicateRuleCount: 1 },
+      );
+      const telemetryJson = JSON.stringify(telemetryPayload);
+
+      expect(telemetryJson).not.toContain('matchValue');
+      expect(telemetryJson).not.toContain('keyMatch');
+      expect(telemetryJson).not.toContain('is_null');
+      expect(telemetryJson).not.toContain('private-key');
+      expect(telemetryJson).not.toContain('private-value');
+      expect(telemetryJson).not.toContain('secret-prefix');
     });
 
     it('does NOT emit ruleSets.updated on 412 conflict', () => {

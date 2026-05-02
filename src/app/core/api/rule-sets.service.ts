@@ -6,7 +6,8 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from '../auth/auth.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { LoggerService } from '../telemetry/logger.service';
-import type { FormattingRuleSet, RuleSetPayload, RuleSetPreset } from './models';
+import type { TelemetryProps } from '../telemetry/telemetry.service';
+import type { FormattingRule, FormattingRuleSet, RuleSetPayload, RuleSetPreset } from './models';
 
 /**
  * One pending write that has not yet been acknowledged by the server.
@@ -338,9 +339,7 @@ export class RuleSetsService {
       .pipe(
         tap((next) => {
           this.applyServerSet(next);
-          this.logger.info('ruleSets.updated', {
-            ruleCount: next.rules.length,
-          });
+          this.logger.info('ruleSets.updated', ruleSetSaveTelemetryProps(next.rules));
         }),
         catchError((err: HttpErrorResponse) => {
           // Status 0 is a network failure (offline mid-request, DNS,
@@ -540,7 +539,7 @@ export class RuleSetsService {
             if (gen !== this._drainGen) return;
             this._inFlight.set(null);
             this.applyServerSet(set);
-            this.logger.info('ruleSets.updated', { ruleCount: set.rules.length });
+            this.logger.info('ruleSets.updated', ruleSetSaveTelemetryProps(set.rules));
             this.tryDrain();
           },
           error: (err: HttpErrorResponse) => {
@@ -654,6 +653,34 @@ export class RuleSetsService {
       }
     }
   }
+}
+
+function ruleSetSaveTelemetryProps(rules: readonly FormattingRule[]): TelemetryProps {
+  let pairRuleCount = 0;
+  let predicateRuleCount = 0;
+
+  for (const rule of rules) {
+    if (!isPairFormattingRule(rule)) {
+      continue;
+    }
+
+    pairRuleCount++;
+    if (rule.valueMatch.kind === 'predicate') {
+      predicateRuleCount++;
+    }
+  }
+
+  return {
+    ruleCount: rules.length,
+    pairRuleCount,
+    predicateRuleCount,
+  };
+}
+
+function isPairFormattingRule(
+  rule: FormattingRule,
+): rule is Extract<FormattingRule, { kind: 'pair' }> {
+  return (rule.kind ?? 'simple') === 'pair';
 }
 
 /**
