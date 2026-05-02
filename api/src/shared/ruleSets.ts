@@ -45,7 +45,28 @@ export type RuleTarget = 'key' | 'value' | 'key_and_value';
  * pending a safe-evaluation strategy (see DESIGN_SPEC.md §Features 7,
  * "Regex policy"). Add `'regex'` back here when the engine ships it.
  */
-export type RuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
+export type FormattingRuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
+
+// Backwards-compatible alias for older API workspace callers.
+export type RuleMatchType = FormattingRuleMatchType;
+
+export type ValuePredicate =
+  | 'is_null'
+  | 'is_not_null'
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'is_string'
+  | 'is_not_string'
+  | 'is_number'
+  | 'is_not_number'
+  | 'is_integer'
+  | 'is_not_integer'
+  | 'is_boolean'
+  | 'is_not_boolean'
+  | 'is_object'
+  | 'is_not_object'
+  | 'is_array'
+  | 'is_not_array';
 
 /**
  * Closed icon whitelist. Mirrors the `FormattingIcon` union on the
@@ -67,12 +88,37 @@ const FORMATTING_ICONS: readonly FormattingIcon[] = [
 
 const RULE_TARGETS: readonly RuleTarget[] = ['key', 'value', 'key_and_value'] as const;
 
-const MATCH_TYPES: readonly RuleMatchType[] = [
+const MATCH_TYPES: readonly FormattingRuleMatchType[] = [
   'exact',
   'contains',
   'starts_with',
   'ends_with',
 ] as const;
+
+const VALUE_PREDICATES: readonly ValuePredicate[] = [
+  'is_null',
+  'is_not_null',
+  'is_empty',
+  'is_not_empty',
+  'is_string',
+  'is_not_string',
+  'is_number',
+  'is_not_number',
+  'is_integer',
+  'is_not_integer',
+  'is_boolean',
+  'is_not_boolean',
+  'is_object',
+  'is_not_object',
+  'is_array',
+  'is_not_array',
+] as const;
+
+const VALUE_MATCH_KINDS = ['text', 'predicate'] as const;
+const RULE_KINDS = ['simple', 'pair'] as const;
+
+type RuleKind = (typeof RULE_KINDS)[number];
+type ValueMatchKind = (typeof VALUE_MATCH_KINDS)[number];
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -86,14 +132,49 @@ export interface FormattingStyle {
   icon?: FormattingIcon;
 }
 
-export interface FormattingRule {
+export interface KeyMatch {
+  matchType: FormattingRuleMatchType;
+  matchValue: string;
+  caseSensitive: boolean;
+}
+
+export type ValueMatch =
+  | {
+      kind: 'text';
+      matchType: FormattingRuleMatchType;
+      matchValue: string;
+      caseSensitive: boolean;
+    }
+  | {
+      kind: 'predicate';
+      predicate: ValuePredicate;
+    };
+
+export interface FormattingRuleSimple {
   id: string;
+  kind?: 'simple';
   target: RuleTarget;
-  matchType: RuleMatchType;
+  matchType: FormattingRuleMatchType;
   matchValue: string;
   caseSensitive: boolean;
   style: FormattingStyle;
+  keyMatch?: never;
+  valueMatch?: never;
 }
+
+export interface FormattingRulePair {
+  id: string;
+  kind: 'pair';
+  keyMatch: KeyMatch;
+  valueMatch: ValueMatch;
+  style: FormattingStyle;
+  target?: never;
+  matchType?: never;
+  matchValue?: never;
+  caseSensitive?: never;
+}
+
+export type FormattingRule = FormattingRuleSimple | FormattingRulePair;
 
 export interface RuleSetDocument {
   id: string;
@@ -168,9 +249,50 @@ const STYLE_KEYS = new Set([
   'icon',
 ]);
 
-const RULE_KEYS = new Set(['id', 'target', 'matchType', 'matchValue', 'caseSensitive', 'style']);
+const RULE_KEYS: Record<RuleKind, ReadonlySet<string>> = {
+  simple: new Set(['id', 'kind', 'target', 'matchType', 'matchValue', 'caseSensitive', 'style']),
+  pair: new Set(['id', 'kind', 'keyMatch', 'valueMatch', 'style']),
+};
+
+const KEY_MATCH_KEYS: ReadonlySet<string> = new Set(['matchType', 'matchValue', 'caseSensitive']);
+
+const VALUE_MATCH_KEYS: Record<ValueMatchKind, ReadonlySet<string>> = {
+  text: new Set(['kind', 'matchType', 'matchValue', 'caseSensitive']),
+  predicate: new Set(['kind', 'predicate']),
+};
 
 const RULE_SET_PAYLOAD_KEYS = new Set(['name', 'rules']);
+
+function assertKnownKeys(
+  value: Record<string, unknown>,
+  allowedKeys: ReadonlySet<string>,
+  field: string,
+): void {
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new RuleSetValidationError(`${field} has unknown field "${key}"`);
+    }
+  }
+}
+
+function assertRuleId(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 64) {
+    throw new RuleSetValidationError(`${field} must be a 1-64 character string`);
+  }
+  return value;
+}
+
+function assertMatchValue(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new RuleSetValidationError(`${field} must be a non-empty string`);
+  }
+  if (value.length > MAX_RULE_MATCH_VALUE_LENGTH) {
+    throw new RuleSetValidationError(
+      `${field} too long - max ${MAX_RULE_MATCH_VALUE_LENGTH} chars (got ${value.length})`,
+    );
+  }
+  return value;
+}
 
 export function assertStyle(value: unknown, field: string): FormattingStyle {
   if (!isRecord(value)) {
@@ -202,36 +324,99 @@ export function assertStyle(value: unknown, field: string): FormattingStyle {
   return out;
 }
 
+function assertSimpleRule(raw: unknown, field: string): FormattingRuleSimple {
+  if (!isRecord(raw)) {
+    throw new RuleSetValidationError(`${field} must be an object`);
+  }
+  assertKnownKeys(raw, RULE_KEYS.simple, field);
+
+  const id = assertRuleId(raw['id'], `${field}.id`);
+  const kind =
+    raw['kind'] === undefined ? undefined : assertEnum(raw['kind'], ['simple'] as const, `${field}.kind`);
+  const target = assertEnum(raw['target'], RULE_TARGETS, `${field}.target`);
+  const matchType = assertEnum(raw['matchType'], MATCH_TYPES, `${field}.matchType`);
+  const matchValue = assertMatchValue(raw['matchValue'], `${field}.matchValue`);
+  const caseSensitive = assertBool(raw['caseSensitive'], `${field}.caseSensitive`);
+  const style = assertStyle(raw['style'], `${field}.style`);
+
+  if (kind === undefined) {
+    return { id, target, matchType, matchValue, caseSensitive, style };
+  }
+  return { id, kind, target, matchType, matchValue, caseSensitive, style };
+}
+
+export function assertKeyMatch(value: unknown, field = 'keyMatch'): KeyMatch {
+  if (!isRecord(value)) {
+    throw new RuleSetValidationError(`${field} must be an object`);
+  }
+  assertKnownKeys(value, KEY_MATCH_KEYS, field);
+  return {
+    matchType: assertEnum(value['matchType'], MATCH_TYPES, `${field}.matchType`),
+    matchValue: assertMatchValue(value['matchValue'], `${field}.matchValue`),
+    caseSensitive: assertBool(value['caseSensitive'], `${field}.caseSensitive`),
+  };
+}
+
+export function assertTextMatch(
+  value: unknown,
+  field = 'valueMatch',
+): Extract<ValueMatch, { kind: 'text' }> {
+  if (!isRecord(value)) {
+    throw new RuleSetValidationError(`${field} must be an object`);
+  }
+  assertKnownKeys(value, VALUE_MATCH_KEYS.text, field);
+  return {
+    kind: assertEnum(value['kind'], ['text'] as const, `${field}.kind`),
+    matchType: assertEnum(value['matchType'], MATCH_TYPES, `${field}.matchType`),
+    matchValue: assertMatchValue(value['matchValue'], `${field}.matchValue`),
+    caseSensitive: assertBool(value['caseSensitive'], `${field}.caseSensitive`),
+  };
+}
+
+export function assertPredicateMatch(
+  value: unknown,
+  field = 'valueMatch',
+): Extract<ValueMatch, { kind: 'predicate' }> {
+  if (!isRecord(value)) {
+    throw new RuleSetValidationError(`${field} must be an object`);
+  }
+  assertKnownKeys(value, VALUE_MATCH_KEYS.predicate, field);
+  return {
+    kind: assertEnum(value['kind'], ['predicate'] as const, `${field}.kind`),
+    predicate: assertEnum(value['predicate'], VALUE_PREDICATES, `${field}.predicate`),
+  };
+}
+
+export function assertValueMatch(value: unknown, field = 'valueMatch'): ValueMatch {
+  if (!isRecord(value)) {
+    throw new RuleSetValidationError(`${field} must be an object`);
+  }
+  const kind = assertEnum(value['kind'], VALUE_MATCH_KINDS, `${field}.kind`);
+  return kind === 'text' ? assertTextMatch(value, field) : assertPredicateMatch(value, field);
+}
+
+export function assertPairRule(raw: unknown, field = 'rule'): FormattingRulePair {
+  if (!isRecord(raw)) {
+    throw new RuleSetValidationError(`${field} must be an object`);
+  }
+  assertKnownKeys(raw, RULE_KEYS.pair, field);
+  return {
+    id: assertRuleId(raw['id'], `${field}.id`),
+    kind: assertEnum(raw['kind'], ['pair'] as const, `${field}.kind`),
+    keyMatch: assertKeyMatch(raw['keyMatch'], `${field}.keyMatch`),
+    valueMatch: assertValueMatch(raw['valueMatch'], `${field}.valueMatch`),
+    style: assertStyle(raw['style'], `${field}.style`),
+  };
+}
+
 export function assertRule(value: unknown, field: string): FormattingRule {
   if (!isRecord(value)) {
     throw new RuleSetValidationError(`${field} must be an object`);
   }
-  for (const key of Object.keys(value)) {
-    if (!RULE_KEYS.has(key)) {
-      throw new RuleSetValidationError(`${field} has unknown field "${key}"`);
-    }
-  }
-  const id = value['id'];
-  if (typeof id !== 'string' || id.length === 0 || id.length > 64) {
-    throw new RuleSetValidationError(`${field}.id must be a 1-64 character string`);
-  }
-  const matchValue = value['matchValue'];
-  if (typeof matchValue !== 'string' || matchValue.length === 0) {
-    throw new RuleSetValidationError(`${field}.matchValue must be a non-empty string`);
-  }
-  if (matchValue.length > MAX_RULE_MATCH_VALUE_LENGTH) {
-    throw new RuleSetValidationError(
-      `${field}.matchValue too long - max ${MAX_RULE_MATCH_VALUE_LENGTH} chars (got ${matchValue.length})`,
-    );
-  }
-  return {
-    id,
-    target: assertEnum(value['target'], RULE_TARGETS, `${field}.target`),
-    matchType: assertEnum(value['matchType'], MATCH_TYPES, `${field}.matchType`),
-    matchValue,
-    caseSensitive: assertBool(value['caseSensitive'], `${field}.caseSensitive`),
-    style: assertStyle(value['style'], `${field}.style`),
-  };
+  const kind =
+    value['kind'] === undefined ? 'simple' : assertEnum(value['kind'], RULE_KINDS, `${field}.kind`);
+  assertKnownKeys(value, RULE_KEYS[kind], field);
+  return kind === 'simple' ? assertSimpleRule(value, field) : assertPairRule(value, field);
 }
 
 /**

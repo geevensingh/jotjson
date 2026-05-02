@@ -11,8 +11,10 @@ import {
   readRuleSet,
   replaceRuleSet,
   __resetRuleSetsContainerForTesting,
-  type FormattingRule,
+  type FormattingRulePair,
+  type FormattingRuleSimple,
   type RuleSetDocument,
+  type ValuePredicate,
 } from './ruleSets';
 
 interface FakeContainer {
@@ -92,13 +94,52 @@ beforeEach(() => {
   __resetRuleSetsContainerForTesting();
 });
 
-function validRule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+const VALUE_PREDICATES: readonly ValuePredicate[] = [
+  'is_null',
+  'is_not_null',
+  'is_empty',
+  'is_not_empty',
+  'is_string',
+  'is_not_string',
+  'is_number',
+  'is_not_number',
+  'is_integer',
+  'is_not_integer',
+  'is_boolean',
+  'is_not_boolean',
+  'is_object',
+  'is_not_object',
+  'is_array',
+  'is_not_array',
+] as const;
+
+function validRule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
   return {
     id: 'r1',
     target: 'key',
     matchType: 'contains',
     matchValue: 'error',
     caseSensitive: false,
+    style: { backgroundColor: '#ffeb3b' },
+    ...overrides,
+  };
+}
+
+function validPairRule(overrides: Partial<FormattingRulePair> = {}): FormattingRulePair {
+  return {
+    id: 'pair-1',
+    kind: 'pair',
+    keyMatch: {
+      matchType: 'exact',
+      matchValue: 'status',
+      caseSensitive: false,
+    },
+    valueMatch: {
+      kind: 'text',
+      matchType: 'exact',
+      matchValue: '500',
+      caseSensitive: false,
+    },
     style: { backgroundColor: '#ffeb3b' },
     ...overrides,
   };
@@ -140,8 +181,209 @@ describe('assertStyle', () => {
 });
 
 describe('assertRule', () => {
-  it('accepts a valid rule', () => {
+  it('accepts a valid legacy rule without kind', () => {
     expect(assertRule(validRule(), 'rule')).toEqual(validRule());
+  });
+
+  it('accepts an explicit simple kind', () => {
+    const rule = validRule({ kind: 'simple' });
+    expect(assertRule(rule, 'rule')).toEqual(rule);
+  });
+
+  it('rejects invalid rule kinds', () => {
+    for (const invalidKind of ['unknown', '', 42, null]) {
+      expect(() => assertRule({ ...validRule(), kind: invalidKind }, 'rule')).toThrow(/rule.kind/);
+    }
+  });
+
+  it('accepts a pair rule with text valueMatch', () => {
+    const rule = validPairRule();
+    expect(assertRule(rule, 'rule')).toEqual(rule);
+  });
+
+  it('accepts each predicate valueMatch on a pair rule', () => {
+    for (const predicate of VALUE_PREDICATES) {
+      const rule = validPairRule({
+        id: `pair-${predicate}`,
+        valueMatch: { kind: 'predicate', predicate },
+      });
+      expect(assertRule(rule, 'rule')).toEqual(rule);
+    }
+  });
+
+  it('rejects legacy simple fields on pair rules', () => {
+    const legacyFields: ReadonlyArray<readonly [string, unknown]> = [
+      ['target', 'key'],
+      ['matchType', 'contains'],
+      ['matchValue', 'error'],
+      ['caseSensitive', false],
+    ];
+
+    for (const [fieldName, fieldValue] of legacyFields) {
+      expect(() => assertRule({ ...validPairRule(), [fieldName]: fieldValue }, 'rule')).toThrow(
+        new RegExp(`unknown field "${fieldName}"`),
+      );
+    }
+  });
+
+  it('rejects pair fields on simple rules', () => {
+    const pairFields: ReadonlyArray<readonly [string, unknown]> = [
+      ['keyMatch', validPairRule().keyMatch],
+      ['valueMatch', validPairRule().valueMatch],
+    ];
+
+    for (const [fieldName, fieldValue] of pairFields) {
+      expect(() => assertRule({ ...validRule(), [fieldName]: fieldValue }, 'rule')).toThrow(
+        new RegExp(`unknown field "${fieldName}"`),
+      );
+      expect(() =>
+        assertRule({ ...validRule({ kind: 'simple' }), [fieldName]: fieldValue }, 'rule'),
+      ).toThrow(new RegExp(`unknown field "${fieldName}"`));
+    }
+  });
+
+  it('rejects pair rules missing keyMatch or valueMatch', () => {
+    expect(() =>
+      assertRule(
+        {
+          id: 'pair-1',
+          kind: 'pair',
+          valueMatch: validPairRule().valueMatch,
+          style: { backgroundColor: '#ffeb3b' },
+        },
+        'rule',
+      ),
+    ).toThrow(/keyMatch.*object/);
+
+    expect(() =>
+      assertRule(
+        {
+          id: 'pair-1',
+          kind: 'pair',
+          keyMatch: validPairRule().keyMatch,
+          style: { backgroundColor: '#ffeb3b' },
+        },
+        'rule',
+      ),
+    ).toThrow(/valueMatch.*object/);
+  });
+
+  it('rejects pair rules with unknown valueMatch kind', () => {
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          valueMatch: { kind: 'number', predicate: 'is_number' },
+        },
+        'rule',
+      ),
+    ).toThrow(/valueMatch.kind/);
+  });
+
+  it('rejects pair rules with unknown predicates', () => {
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          valueMatch: { kind: 'predicate', predicate: 'is_date' },
+        },
+        'rule',
+      ),
+    ).toThrow(/valueMatch.predicate/);
+  });
+
+  it('rejects empty matchValue in pair key and text value matches', () => {
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          keyMatch: { ...validPairRule().keyMatch, matchValue: '' },
+        },
+        'rule',
+      ),
+    ).toThrow(/keyMatch.matchValue.*non-empty/);
+
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          valueMatch: { kind: 'text', matchType: 'exact', matchValue: '', caseSensitive: false },
+        },
+        'rule',
+      ),
+    ).toThrow(/valueMatch.matchValue.*non-empty/);
+  });
+
+  it('rejects matchValue over the cap in pair key and text value matches', () => {
+    const tooLong = 'x'.repeat(201);
+
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          keyMatch: { ...validPairRule().keyMatch, matchValue: tooLong },
+        },
+        'rule',
+      ),
+    ).toThrow(/keyMatch.matchValue.*max 200/);
+
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          valueMatch: { kind: 'text', matchType: 'exact', matchValue: tooLong, caseSensitive: false },
+        },
+        'rule',
+      ),
+    ).toThrow(/valueMatch.matchValue.*max 200/);
+  });
+
+  it('rejects extra fields in pair rule shapes', () => {
+    expect(() => assertRule({ ...validPairRule(), extra: true }, 'rule')).toThrow(
+      /unknown field "extra"/,
+    );
+
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          keyMatch: { ...validPairRule().keyMatch, extra: true },
+        },
+        'rule',
+      ),
+    ).toThrow(/keyMatch.*unknown field "extra"/);
+
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          valueMatch: { ...validPairRule().valueMatch, extra: true },
+        },
+        'rule',
+      ),
+    ).toThrow(/valueMatch.*unknown field "extra"/);
+  });
+
+  it('rejects text fields on predicate valueMatch', () => {
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          valueMatch: { kind: 'predicate', predicate: 'is_null', matchValue: 'null' },
+        },
+        'rule',
+      ),
+    ).toThrow(/valueMatch.*unknown field "matchValue"/);
+
+    expect(() =>
+      assertRule(
+        {
+          ...validPairRule(),
+          valueMatch: { kind: 'predicate', predicate: 'is_null', matchType: 'exact' },
+        },
+        'rule',
+      ),
+    ).toThrow(/valueMatch.*unknown field "matchType"/);
   });
 
   it('rejects regex match-type (deferred to v1.1)', () => {
@@ -160,7 +402,7 @@ describe('assertRule', () => {
 
   it('accepts matchValue at exactly MAX_RULE_MATCH_VALUE_LENGTH chars', () => {
     const exact = 'x'.repeat(200);
-    expect(assertRule(validRule({ matchValue: exact }), 'rule').matchValue).toBe(exact);
+    expect(assertRule(validRule({ matchValue: exact }), 'rule')).toEqual(validRule({ matchValue: exact }));
   });
 
   it('rejects unknown rule fields', () => {
@@ -206,6 +448,13 @@ describe('assertRuleSetPayload', () => {
     expect(() => assertRuleSetPayload({ name: 'x', rules })).toThrow(/max 50/);
   });
 
+  it('rejects more than 50 mixed simple and pair rules', () => {
+    const rules = Array.from({ length: 51 }, (_, index) =>
+      index % 2 === 0 ? validRule({ id: `simple-${index}` }) : validPairRule({ id: `pair-${index}` }),
+    );
+    expect(() => assertRuleSetPayload({ name: 'x', rules })).toThrow(/max 50/);
+  });
+
   it('accepts exactly MAX_RULES_PER_SET rules', () => {
     const rules = Array.from({ length: 50 }, (_, i) => validRule({ id: `r${i}` }));
     const out = assertRuleSetPayload({ name: 'x', rules });
@@ -230,6 +479,13 @@ describe('assertRuleSetPayload', () => {
   it('passes a valid payload through', () => {
     const out = assertRuleSetPayload({ name: 'Errors', rules: [validRule()] });
     expect(out).toEqual({ name: 'Errors', rules: [validRule()] });
+  });
+
+  it('passes mixed simple and pair rules through', () => {
+    const simpleRule = validRule({ id: 'simple-1' });
+    const pairRule = validPairRule({ id: 'pair-1' });
+    const out = assertRuleSetPayload({ name: 'Mixed', rules: [simpleRule, pairRule] });
+    expect(out).toEqual({ name: 'Mixed', rules: [simpleRule, pairRule] });
   });
 });
 
