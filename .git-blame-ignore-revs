@@ -1,0 +1,13 @@
+# Commits listed here are skipped by `git blame` when the
+# `blame.ignoreRevsFile = .git-blame-ignore-revs` setting is
+# active. Configure once per clone with:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Add a new entry here whenever you push a commit whose only
+# change is mass formatting / mechanical refactoring. Include
+# the commit subject as a comment so future readers can confirm
+# they are skipping the right commit.
+
+# chore: format codebase with prettier (initial Prettier rollout)
+15e23c408430cd1a261ed85aee72a4a0a5073c6a

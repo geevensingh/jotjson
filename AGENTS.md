@@ -473,30 +473,36 @@ For inner-loop iteration use `npm run verify:fast` (see §5 "Fast inner
 loop"); the steps below are the final sweep.
 
 Before finishing a task:
-1. `npm run lint` passes (frontend and `api/`). Lint is currently
-   `tsc --noEmit` plus `check-ascii.mjs` and `check-spec-patterns.mjs`;
-   ESLint is not yet installed.
+1. `npm run lint` passes (frontend and `api/`). Frontend lint is
+   `tsc --noEmit -p tsconfig.app.json` + `check-ascii.mjs`,
+   `check-spec-patterns.mjs`, `check-prod-patterns.mjs`, and
+   `prettier --check .` (formatting is enforced repo-wide,
+   including `api/**`, from the root). The `api/` lint is
+   `tsc --noEmit`. ESLint is not installed.
 2. `npm test` passes (frontend and `api/`).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
 4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the
    allowlist in `scripts/check-ascii.mjs`).
-5. Only run the suites that exist - do not introduce new toolchains to satisfy
+5. `npm run format` to reformat changed files (or rely on editor
+   format-on-save). `npm run format:check` is a read-only equivalent
+   that runs as part of `npm run lint`.
+6. Only run the suites that exist - do not introduce new toolchains to satisfy
    this checklist. If a suite isn't set up yet and the task is scaffolding,
    set it up per the spec.
-6. No new TypeScript errors or console warnings introduced.
-7. Spec is updated if behavior or architecture changed.
-8. Telemetry decision recorded: explicitly decide whether the change
+7. No new TypeScript errors or console warnings introduced.
+8. Spec is updated if behavior or architecture changed.
+9. Telemetry decision recorded: explicitly decide whether the change
    warrants a telemetry event. If you add one, ensure the messageId
    is registered (frontend), the emit-shape spec is in place, and
    `docs/telemetry.md`'s Backend events table is updated for backend
    events. See §4 Telemetry.
-9. **SemVer bump decision recorded.** Before committing, decide
-   explicitly whether the change warrants a SemVer bump per
-   `DESIGN_SPEC.md` -> Versioning -> SemVer bump rules. If yes, edit
-   `package.json` in the same commit. If no, state "no bump" in the
-   response (and ideally in the commit body) so the decision is on
-   the record. The build counter + SHA already give per-deploy
-   resolution, so most non-feature work is "no bump."
+10. **SemVer bump decision recorded.** Before committing, decide
+    explicitly whether the change warrants a SemVer bump per
+    `DESIGN_SPEC.md` -> Versioning -> SemVer bump rules. If yes, edit
+    `package.json` in the same commit. If no, state "no bump" in the
+    response (and ideally in the commit body) so the decision is on
+    the record. The build counter + SHA already give per-deploy
+    resolution, so most non-feature work is "no bump."
 
 ## 8. Git & PR Hygiene
 
