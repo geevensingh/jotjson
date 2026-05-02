@@ -201,14 +201,64 @@ export interface FormattingStyle {
  */
 export type FormattingRuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
 
-export interface FormattingRule {
+export interface FormattingRuleSimple {
   id: string;
+  /** Missing legacy kind is read as 'simple'. */
+  kind?: 'simple';
   target: 'key' | 'value' | 'key_and_value';
   matchType: FormattingRuleMatchType;
   matchValue: string;
   caseSensitive: boolean;
   style: FormattingStyle;
 }
+
+export interface FormattingRulePair {
+  id: string;
+  kind: 'pair';
+  keyMatch: KeyMatch;
+  valueMatch: ValueMatch;
+  style: FormattingStyle;
+}
+
+export interface KeyMatch {
+  matchType: FormattingRuleMatchType;
+  matchValue: string;
+  caseSensitive: boolean;
+}
+
+export type ValueMatch =
+  | {
+      kind: 'text';
+      matchType: FormattingRuleMatchType;
+      matchValue: string;
+      caseSensitive: boolean;
+    }
+  | {
+      kind: 'predicate';
+      predicate: ValuePredicate;
+    };
+
+export type ValuePredicate =
+  | 'is_null'
+  | 'is_not_null'
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'is_string'
+  | 'is_not_string'
+  | 'is_number'
+  | 'is_not_number'
+  | 'is_integer'
+  | 'is_not_integer'
+  | 'is_boolean'
+  | 'is_not_boolean'
+  | 'is_object'
+  | 'is_not_object'
+  | 'is_array'
+  | 'is_not_array';
+
+export type ValueKind = 'string' | 'number' | 'integer' | 'boolean' | 'null' | 'array' | 'object';
+
+export type FormattingRule = FormattingRuleSimple | FormattingRulePair;
 
 export interface FormattingRuleSet {
   id: string;

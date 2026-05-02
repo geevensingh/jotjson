@@ -3,10 +3,19 @@ import {
   describeRule,
   evaluateFormattingRules,
   type RuleEngineNode,
+  type RuleEngineResult,
 } from './formatting-rules-engine';
-import type { FormattingRule, FormattingRuleSet, FormattingStyle } from '../../../core/api/models';
+import type {
+  FormattingRule,
+  FormattingRuleMatchType,
+  FormattingRulePair,
+  FormattingRuleSet,
+  FormattingRuleSimple,
+  FormattingStyle,
+  ValuePredicate,
+} from '../../../core/api/models';
 
-function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
+function rule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
   return {
     id: 'r1',
     target: 'key',
@@ -16,6 +25,33 @@ function rule(overrides: Partial<FormattingRule> = {}): FormattingRule {
     style: {},
     ...overrides,
   };
+}
+
+function pairRule(overrides: Partial<FormattingRulePair> = {}): FormattingRulePair {
+  return {
+    id: 'pair-r1',
+    kind: 'pair',
+    keyMatch: {
+      matchType: 'exact',
+      matchValue: 'status',
+      caseSensitive: false,
+    },
+    valueMatch: {
+      kind: 'text',
+      matchType: 'exact',
+      matchValue: 'ok',
+      caseSensitive: false,
+    },
+    style: {},
+    ...overrides,
+  };
+}
+
+function predicatePairRule(
+  predicate: ValuePredicate,
+  overrides: Partial<FormattingRulePair> = {},
+): FormattingRulePair {
+  return pairRule({ valueMatch: { kind: 'predicate', predicate }, ...overrides });
 }
 
 function set(
@@ -35,7 +71,14 @@ function set(
 }
 
 function node(overrides: Partial<RuleEngineNode> = {}): RuleEngineNode {
-  return { key: null, valueText: null, isContainer: false, ...overrides };
+  return {
+    key: null,
+    valueText: null,
+    isContainer: false,
+    valueKind: null,
+    isEmpty: false,
+    ...overrides,
+  };
 }
 
 const RED_BG: FormattingStyle = { backgroundColor: '#ff0000' };
@@ -203,6 +246,322 @@ describe('evaluateFormattingRules', () => {
       const onlyValue = evaluateFormattingRules([set([r])], node({ key: 'x', valueText: 'foo' }));
       expect(onlyKey.rowStyle.backgroundColor).toBe('#ff0000');
       expect(onlyValue.rowStyle.backgroundColor).toBe('#ff0000');
+    });
+  });
+
+  describe('simple rule compatibility', () => {
+    it('treats missing kind as simple for backwards compatibility', () => {
+      const legacyRule = rule({
+        target: 'value',
+        matchType: 'exact',
+        matchValue: '200',
+        style: BOLD,
+      });
+      const result = evaluateFormattingRules(
+        [set([legacyRule])],
+        node({ key: 'status', valueText: '200', valueKind: 'integer' }),
+      );
+
+      expect(result.valueStyle.bold).toBe(true);
+      expect(result.keyStyle).toEqual({});
+    });
+  });
+
+  describe('pair rules with text value matches', () => {
+    const textMatchCases: readonly {
+      matchType: FormattingRuleMatchType;
+      matchValue: string;
+      matchingText: string;
+      failingText: string;
+    }[] = [
+      { matchType: 'exact', matchValue: 'Alpha', matchingText: 'Alpha', failingText: 'AlphaBeta' },
+      { matchType: 'contains', matchValue: 'lph', matchingText: 'Alpha', failingText: 'Beta' },
+      { matchType: 'starts_with', matchValue: 'Al', matchingText: 'Alpha', failingText: 'BetaAl' },
+      { matchType: 'ends_with', matchValue: 'ha', matchingText: 'Alpha', failingText: 'haBeta' },
+    ];
+
+    it('matches only when both key and value text conditions match for every matchType combo', () => {
+      for (const keyCase of textMatchCases) {
+        for (const valueCase of textMatchCases) {
+          const formattingRule = pairRule({
+            keyMatch: {
+              matchType: keyCase.matchType,
+              matchValue: keyCase.matchValue,
+              caseSensitive: false,
+            },
+            valueMatch: {
+              kind: 'text',
+              matchType: valueCase.matchType,
+              matchValue: valueCase.matchValue,
+              caseSensitive: false,
+            },
+            style: BOLD,
+          });
+
+          const matchingResult = evaluateFormattingRules(
+            [set([formattingRule])],
+            node({
+              key: keyCase.matchingText,
+              valueText: valueCase.matchingText,
+              valueKind: 'string',
+            }),
+          );
+          expect(matchingResult.keyStyle.bold)
+            .withContext(`${keyCase.matchType} key and ${valueCase.matchType} value should match`)
+            .toBe(true);
+          expect(matchingResult.valueStyle.bold).toBe(true);
+
+          const keyMissResult = evaluateFormattingRules(
+            [set([formattingRule])],
+            node({
+              key: keyCase.failingText,
+              valueText: valueCase.matchingText,
+              valueKind: 'string',
+            }),
+          );
+          expect(keyMissResult)
+            .withContext(`${keyCase.matchType} key miss should skip pair rule`)
+            .toBe(EMPTY_RULE_RESULT);
+
+          const valueMissResult = evaluateFormattingRules(
+            [set([formattingRule])],
+            node({
+              key: keyCase.matchingText,
+              valueText: valueCase.failingText,
+              valueKind: 'string',
+            }),
+          );
+          expect(valueMissResult)
+            .withContext(`${valueCase.matchType} value miss should skip pair rule`)
+            .toBe(EMPTY_RULE_RESULT);
+        }
+      }
+    });
+  });
+
+  describe('pair rules with predicate value matches', () => {
+    function predicateResult(
+      predicate: ValuePredicate,
+      overrides: Partial<RuleEngineNode>,
+      style: FormattingStyle = BOLD,
+    ): RuleEngineResult {
+      return evaluateFormattingRules(
+        [set([predicatePairRule(predicate, { style })])],
+        node({ key: 'status', ...overrides }),
+      );
+    }
+
+    it('matches is_null only for JSON null, not the string literal "null"', () => {
+      expect(
+        predicateResult('is_null', { valueKind: 'null', valueText: 'null' }).keyStyle.bold,
+      ).toBe(true);
+      expect(predicateResult('is_null', { valueKind: 'string', valueText: 'null' })).toBe(
+        EMPTY_RULE_RESULT,
+      );
+    });
+
+    it('matches string, number, and integer value kinds explicitly', () => {
+      expect(
+        predicateResult('is_string', { valueKind: 'string', valueText: 'abc' }).keyStyle.bold,
+      ).toBe(true);
+      expect(
+        predicateResult('is_number', { valueKind: 'number', valueText: '1.5' }).keyStyle.bold,
+      ).toBe(true);
+      expect(
+        predicateResult('is_integer', { valueKind: 'integer', valueText: '1' }).keyStyle.bold,
+      ).toBe(true);
+      expect(predicateResult('is_string', { valueKind: 'number', valueText: '1.5' })).toBe(
+        EMPTY_RULE_RESULT,
+      );
+    });
+
+    it('keeps is_number and is_integer mutually exclusive', () => {
+      expect(predicateResult('is_number', { valueKind: 'integer', valueText: '1' })).toBe(
+        EMPTY_RULE_RESULT,
+      );
+      expect(predicateResult('is_integer', { valueKind: 'number', valueText: '1.5' })).toBe(
+        EMPTY_RULE_RESULT,
+      );
+    });
+
+    it('implements the is_empty truth table', () => {
+      const emptyCases: readonly Partial<RuleEngineNode>[] = [
+        { valueKind: 'string', valueText: '' },
+        { valueKind: 'array', valueText: null, isContainer: true, isEmpty: true },
+        { valueKind: 'object', valueText: null, isContainer: true, isEmpty: true },
+      ];
+      for (const emptyCase of emptyCases) {
+        expect(predicateResult('is_empty', emptyCase).keyStyle.bold).toBe(true);
+      }
+
+      const nonEmptyCases: readonly Partial<RuleEngineNode>[] = [
+        { valueKind: 'string', valueText: '0' },
+        { valueKind: 'string', valueText: 'a' },
+        { valueKind: 'string', valueText: ' ' },
+        { valueKind: 'integer', valueText: '0' },
+        { valueKind: 'number', valueText: '0.5' },
+        { valueKind: 'null', valueText: 'null' },
+      ];
+      for (const nonEmptyCase of nonEmptyCases) {
+        expect(predicateResult('is_empty', nonEmptyCase)).toBe(EMPTY_RULE_RESULT);
+      }
+    });
+
+    it('implements every is_not predicate as the opposite truth value', () => {
+      const predicateCases: readonly {
+        positive: ValuePredicate;
+        negative: ValuePredicate;
+        matchingNode: Partial<RuleEngineNode>;
+        nonMatchingNode: Partial<RuleEngineNode>;
+      }[] = [
+        {
+          positive: 'is_null',
+          negative: 'is_not_null',
+          matchingNode: { valueKind: 'null', valueText: 'null' },
+          nonMatchingNode: { valueKind: 'string', valueText: 'null' },
+        },
+        {
+          positive: 'is_empty',
+          negative: 'is_not_empty',
+          matchingNode: { valueKind: 'string', valueText: '' },
+          nonMatchingNode: { valueKind: 'string', valueText: 'x' },
+        },
+        {
+          positive: 'is_string',
+          negative: 'is_not_string',
+          matchingNode: { valueKind: 'string', valueText: 'x' },
+          nonMatchingNode: { valueKind: 'boolean', valueText: 'true' },
+        },
+        {
+          positive: 'is_number',
+          negative: 'is_not_number',
+          matchingNode: { valueKind: 'number', valueText: '1.5' },
+          nonMatchingNode: { valueKind: 'integer', valueText: '1' },
+        },
+        {
+          positive: 'is_integer',
+          negative: 'is_not_integer',
+          matchingNode: { valueKind: 'integer', valueText: '1' },
+          nonMatchingNode: { valueKind: 'number', valueText: '1.5' },
+        },
+        {
+          positive: 'is_boolean',
+          negative: 'is_not_boolean',
+          matchingNode: { valueKind: 'boolean', valueText: 'false' },
+          nonMatchingNode: { valueKind: 'string', valueText: 'false' },
+        },
+        {
+          positive: 'is_object',
+          negative: 'is_not_object',
+          matchingNode: { valueKind: 'object', valueText: null, isContainer: true },
+          nonMatchingNode: { valueKind: 'array', valueText: null, isContainer: true },
+        },
+        {
+          positive: 'is_array',
+          negative: 'is_not_array',
+          matchingNode: { valueKind: 'array', valueText: null, isContainer: true },
+          nonMatchingNode: { valueKind: 'object', valueText: null, isContainer: true },
+        },
+      ];
+
+      for (const predicateCase of predicateCases) {
+        expect(predicateResult(predicateCase.positive, predicateCase.matchingNode).keyStyle.bold)
+          .withContext(`${predicateCase.positive} should match its positive node`)
+          .toBe(true);
+        expect(predicateResult(predicateCase.positive, predicateCase.nonMatchingNode))
+          .withContext(`${predicateCase.positive} should miss its negative node`)
+          .toBe(EMPTY_RULE_RESULT);
+        expect(predicateResult(predicateCase.negative, predicateCase.matchingNode))
+          .withContext(`${predicateCase.negative} should miss the positive node`)
+          .toBe(EMPTY_RULE_RESULT);
+        expect(predicateResult(predicateCase.negative, predicateCase.nonMatchingNode).keyStyle.bold)
+          .withContext(`${predicateCase.negative} should match the negative node`)
+          .toBe(true);
+      }
+    });
+  });
+
+  describe('pair rules on container rows', () => {
+    it('skips text valueMatch when valueText is null', () => {
+      const formattingRule = pairRule({ style: BOLD });
+      const result = evaluateFormattingRules(
+        [set([formattingRule])],
+        node({ key: 'status', valueText: null, valueKind: 'object', isContainer: true }),
+      );
+
+      expect(result).toBe(EMPTY_RULE_RESULT);
+    });
+
+    it('allows predicate valueMatch to evaluate object containers', () => {
+      const objectRule = predicatePairRule('is_object', { style: BOLD });
+      const emptyRule = predicatePairRule('is_empty', { id: 'empty-object', style: BLUE_TEXT });
+      const result = evaluateFormattingRules(
+        [set([objectRule, emptyRule])],
+        node({
+          key: 'status',
+          valueText: null,
+          valueKind: 'object',
+          isContainer: true,
+          isEmpty: true,
+        }),
+      );
+
+      expect(result.keyStyle.bold).toBe(true);
+      expect(result.valueStyle.bold).toBe(true);
+      expect(result.keyStyle.color).toBe('#0000ff');
+      expect(result.valueStyle.color).toBe('#0000ff');
+    });
+  });
+
+  describe('pair style projection', () => {
+    it('applies inline style to both keyStyle and valueStyle on match', () => {
+      const formattingRule = pairRule({ style: BLUE_TEXT });
+      const result = evaluateFormattingRules(
+        [set([formattingRule])],
+        node({ key: 'status', valueText: 'ok', valueKind: 'string' }),
+      );
+
+      expect(result.keyStyle.color).toBe('#0000ff');
+      expect(result.valueStyle.color).toBe('#0000ff');
+    });
+
+    it('projects backgroundColor to rowStyle, not inline styles', () => {
+      const formattingRule = pairRule({ style: RED_BG });
+      const result = evaluateFormattingRules(
+        [set([formattingRule])],
+        node({ key: 'status', valueText: 'ok', valueKind: 'string' }),
+      );
+
+      expect(result.rowStyle.backgroundColor).toBe('#ff0000');
+      expect(result.keyStyle).toEqual({});
+      expect(result.valueStyle).toEqual({});
+    });
+  });
+
+  describe('mixed simple and pair rule merge order', () => {
+    it('lets a later pair rule override a simple keyStyle color in the same set', () => {
+      const simpleRule = rule({
+        id: 'simple-color',
+        target: 'key',
+        matchType: 'exact',
+        matchValue: 'status',
+        style: { textColor: '#ff0000' },
+      });
+      const laterPairRule = pairRule({
+        id: 'pair-color',
+        style: { textColor: '#0000ff' },
+      });
+      const result = evaluateFormattingRules(
+        [set([simpleRule, laterPairRule])],
+        node({ key: 'status', valueText: 'ok', valueKind: 'string' }),
+      );
+
+      expect(result.keyStyle.color).toBe('#0000ff');
+      expect(result.valueStyle.color).toBe('#0000ff');
+      expect(result.matchedRules.map((match) => match.ruleId)).toEqual([
+        'simple-color',
+        'pair-color',
+      ]);
     });
   });
 
@@ -399,6 +758,50 @@ describe('evaluateFormattingRules', () => {
       const result = evaluateFormattingRules([set([r])], node({ key: 'foo' }));
       expect(result).toBe(EMPTY_RULE_RESULT);
     });
+
+    it('unknown rule kind is skipped without throwing', () => {
+      const unknownKindRule = {
+        ...rule({ style: BOLD }),
+        kind: 'unknown_kind',
+      } as unknown as FormattingRule;
+
+      const result = evaluateFormattingRules([set([unknownKindRule])], node({ key: 'error' }));
+      expect(result).toBe(EMPTY_RULE_RESULT);
+    });
+
+    it('pair rule missing keyMatch or valueMatch is skipped without throwing', () => {
+      const missingKeyMatchRule = {
+        id: 'missing-key-match',
+        kind: 'pair',
+        valueMatch: { kind: 'predicate', predicate: 'is_string' },
+        style: BOLD,
+      } as unknown as FormattingRule;
+      const missingValueMatchRule = {
+        id: 'missing-value-match',
+        kind: 'pair',
+        keyMatch: { matchType: 'exact', matchValue: 'status', caseSensitive: false },
+        style: BOLD,
+      } as unknown as FormattingRule;
+
+      const result = evaluateFormattingRules(
+        [set([missingKeyMatchRule, missingValueMatchRule])],
+        node({ key: 'status', valueText: 'ok', valueKind: 'string' }),
+      );
+      expect(result).toBe(EMPTY_RULE_RESULT);
+    });
+
+    it('pair rule with unknown predicate is skipped without throwing', () => {
+      const unknownPredicateRule = pairRule({
+        valueMatch: { kind: 'predicate', predicate: 'is_date' as ValuePredicate },
+        style: BOLD,
+      });
+
+      const result = evaluateFormattingRules(
+        [set([unknownPredicateRule])],
+        node({ key: 'status', valueText: '2026-01-01', valueKind: 'string' }),
+      );
+      expect(result).toBe(EMPTY_RULE_RESULT);
+    });
   });
 
   describe('icon projection', () => {
@@ -465,6 +868,17 @@ describe('describeRule', () => {
     expect(
       describeRule(rule({ target: 'key_and_value', matchType: 'starts_with', matchValue: 'x_' })),
     ).toBe('key or value starts_with "x_"');
+  });
+
+  it('renders a pair rule as key and value descriptions joined by AND', () => {
+    expect(
+      describeRule(
+        pairRule({
+          keyMatch: { matchType: 'exact', matchValue: 'testHeader', caseSensitive: false },
+          valueMatch: { kind: 'predicate', predicate: 'is_not_null' },
+        }),
+      ),
+    ).toBe('key exact "testHeader" AND value is_not_null');
   });
 
   it('annotates case-sensitive rules', () => {
