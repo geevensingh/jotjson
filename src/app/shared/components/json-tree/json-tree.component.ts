@@ -43,6 +43,7 @@ import {
   evaluateFormattingRules,
 } from './formatting-rules-engine';
 import { ParsedDate, formatDateAnnotation, parseAsDate } from '../../utils/date-detect';
+import { classifyJsonValue, isJsonValueEmpty } from '../../utils/formatting-value-kind';
 import { classifyValue, ValueClassification } from '../../utils/value-classifier';
 import { computeAutoFitDepth } from './auto-fit-depth';
 import { findScrollableAncestor } from './scroll-container';
@@ -1902,8 +1903,9 @@ export class JsonTreeComponent {
    * The cache key collapses two leaves to the same entry only when
    * their inputs to the engine are identical: same key (or both null
    * for root/array elements), same unquoted display text, same
-   * container-ness. That is exactly the surface the engine reads, so
-   * collisions are correctness-preserving.
+   * container-ness, same deterministic value kind, and same emptiness
+   * flag. That is exactly the surface the engine reads, so collisions
+   * are correctness-preserving.
    *
    * Returns `EMPTY_RULE_RESULT` (frozen sentinel) by identity when no
    * active sets are configured, which lets callers short-circuit
@@ -1918,11 +1920,17 @@ export class JsonTreeComponent {
     const cache = new Map<string, RuleEngineResult>();
     return (node: TreeNode): RuleEngineResult => {
       const engineNode = this.toEngineNode(node);
-      // Cache key explicitly delimits the three components so two
+      // Cache key explicitly delimits the five components so two
       // distinct (key, valueText) pairs cannot collide via accidental
       // concatenation. The unit separator (\u001f) is JSON-illegal, so
       // it cannot appear inside `key` or `valueText`.
-      const cacheKey = `${engineNode.key ?? '\u0000'}\u001f${engineNode.valueText ?? '\u0000'}\u001f${engineNode.isContainer ? '1' : '0'}`;
+      const cacheKey = [
+        engineNode.key ?? '\u0000',
+        engineNode.valueText ?? '\u0000',
+        engineNode.isContainer ? '1' : '0',
+        engineNode.valueKind ?? '\u0000',
+        engineNode.isEmpty ? '1' : '0',
+      ].join('\u001f');
       let cached = cache.get(cacheKey);
       if (!cached) {
         cached = evaluateFormattingRules(sets, engineNode);
@@ -1938,18 +1946,21 @@ export class JsonTreeComponent {
    * are passed through raw (no JSON.stringify quoting), numbers /
    * booleans are stringified, null becomes `'null'`. Container nodes
    * carry `valueText: null` and `isContainer: true` so the engine can
-   * skip value-target rules without having to re-detect them.
+   * skip value-target text rules without having to re-detect them.
+   * Pair-rule predicates also receive deterministic `valueKind` and
+   * `isEmpty` values from the preference-free formatting classifier.
    *
    * The root and array elements have `key: null`. Object-member keys
    * arrive as the literal string segment.
    */
   private toEngineNode(node: TreeNode): RuleEngineNode {
     const isContainer = node.type === 'object' || node.type === 'array';
+    const isClassifiable = node.type !== 'undefined';
     let valueText: string | null = null;
     if (!isContainer) {
       switch (node.type) {
         case 'string':
-          valueText = node.value as string;
+          valueText = typeof node.value === 'string' ? node.value : String(node.value);
           break;
         case 'number':
         case 'boolean':
@@ -1964,7 +1975,9 @@ export class JsonTreeComponent {
       }
     }
     const key = typeof node.segment === 'string' ? node.segment : null;
-    return { key, valueText, isContainer };
+    const valueKind = isClassifiable ? classifyJsonValue(node.value) : null;
+    const isEmpty = isClassifiable ? isJsonValueEmpty(node.value) : false;
+    return { key, valueText, isContainer, valueKind, isEmpty };
   }
 
   /**
