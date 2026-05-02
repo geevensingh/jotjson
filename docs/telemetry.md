@@ -791,10 +791,10 @@ documented earlier in this file: a workbook with five sections (Health,
 Performance, Auth & Access, API, Quotas) and four scheduled-query-rule alerts
 wired to a single action group.
 
-The action group ships with no receivers by default; issue #94 tracks wiring up
-`notificationEmail`. Alerts still evaluate and surface in the Azure portal
-Alerts blade with no receivers configured. Emails are added by passing a
-non-empty `notificationEmail` parameter at deploy time.
+The action group is wired to `jotjsonadmin@gmail.com` in
+`infra/parameters/dev.bicepparam`. Override at deploy time by
+passing a different `notificationEmail` parameter. Issue #94 (the
+M7i follow-up to wire any receiver at all) is closed.
 
 ### Workbook vs alert schema split
 
@@ -850,14 +850,37 @@ silently breaks evaluation; queries return 0 rows or fail.
   `count > 0` over a 15-minute window. Severity: 1. Indicates token-validation
   config drift. Broader auth-rejection alert: issue #91.
 
+### Alert query gotcha: row-based, not summarize-based
+
+Scheduled-query-rule alerts use `timeAggregation: 'Count'`, which
+counts the **rows the query returns**, not the value of an aggregate
+column. KQL's `summarize` without a `by` clause always returns
+exactly one row, so a query like:
+
+```kql
+AppRequests
+| where ResultCode startswith '5'
+| summarize count = count()
+```
+
+paired with `Count >= 2` is **unreachable** -- the row count is
+always 1. The fix is to drop the `summarize` and let `Count` count
+matching rows directly:
+
+```kql
+AppRequests
+| where ResultCode startswith '5'
+```
+
+If you need to compare against an aggregate value instead of a row
+count, set `timeAggregation: 'Total'` and `metricMeasureColumn:
+'<column>'`. We don't currently use that pattern; see the 5/1
+incident retrospective in commit history for context.
+
 ### Receivers (action group)
 
-The action group defaults to empty: no email, SMS, Teams, or webhook receivers.
-Alerts still fire and are visible in Azure portal -> Monitor -> Alerts.
-
-To add an email receiver, pass `notificationEmail=<address>` at deploy time.
-Stack `dev.bicepparam` first (provides Entra config) and override
-`notificationEmail` on top:
+The action group is wired to `jotjsonadmin@gmail.com` for `dev` via
+`infra/parameters/dev.bicepparam`. To override at deploy time:
 
 ```sh
 az deployment group create \
@@ -867,11 +890,10 @@ az deployment group create \
   --parameters notificationEmail=alerts@example.com
 ```
 
-Equivalently, edit `infra/parameters/dev.bicepparam` to set
-`notificationEmail` and let the `infra` workflow pick it up.
+Equivalently, edit `infra/parameters/dev.bicepparam` to set a
+different `notificationEmail` and let the `infra` workflow pick it up.
 
-This is tracked by issue #94. Issue #92 covers expanding to SMS / Teams /
-webhook receivers.
+Issue #92 covers expanding to SMS / Teams / webhook receivers.
 
 ### Tuning thresholds
 
@@ -895,4 +917,3 @@ webhook receivers.
 - #91 broad auth-rejection alert
 - #92 more receivers
 - #93 stg/prod params
-- #94 wire `notificationEmail`
