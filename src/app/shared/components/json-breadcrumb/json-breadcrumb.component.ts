@@ -12,7 +12,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { MatMenuModule } from '@angular/material/menu';
+import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import { IconComponent } from '../icon/icon.component';
 
 /**
@@ -74,7 +74,7 @@ export interface BreadcrumbContextMenu {
 @Component({
   selector: 'jj-breadcrumb',
   standalone: true,
-  imports: [MatMenuModule, IconComponent],
+  imports: [...JJ_MENU_IMPORTS, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-breadcrumb.component.html',
   styleUrl: './json-breadcrumb.component.scss',

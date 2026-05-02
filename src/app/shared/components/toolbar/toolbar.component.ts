@@ -9,13 +9,13 @@ import {
   viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { SignedInDirective } from '../../directives/signed-in.directive';
+import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 import type { SuggestionCandidate } from '../../../core/title-suggester/types';
 
@@ -58,7 +58,7 @@ export type PaneLayout = 'editor-only' | 'both-horizontal' | 'both-vertical' | '
   standalone: true,
   imports: [
     MatButtonModule,
-    MatMenuModule,
+    ...JJ_MENU_IMPORTS,
     MatTooltipModule,
     MatButtonToggleModule,
     IconComponent,

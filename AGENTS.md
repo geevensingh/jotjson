@@ -103,6 +103,12 @@ Place new code in the correct bucket:
   button-toggle overrides in
   `src/app/features/profile/profile.component.scss` are reference
   examples.
+- MatMenu use must go through `JJ_MENU_IMPORTS` (from
+  `src/app/shared/material/jj-menu-imports.ts`), not `MatMenuModule`
+  directly. The barrel bundles `MatMenuModule` with
+  `CloseMatMenuOnWindowBlurDirective` so every `MatMenuTrigger`
+  auto-dismisses on `window.blur`; direct `MatMenuModule` imports skip
+  that behavior.
 - Logging and telemetry: see §4 Telemetry below for the unified rules
   (frontend `LoggerService`, backend `trackEvent`, message-id catalog,
   privacy guardrails). The TL;DR for Angular code is "use

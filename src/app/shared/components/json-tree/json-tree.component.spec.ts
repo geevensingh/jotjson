@@ -3458,6 +3458,45 @@ describe('JsonTreeComponent', () => {
       });
     });
 
+    describe('window.blur dismissal (M7q + JJ_MENU_IMPORTS)', () => {
+      it('closes the open row context menu when window.blur fires', async () => {
+        await createWith({ a: 1, b: 2 });
+        cmp.expandAll();
+        fixture.detectChanges();
+
+        const row = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-row[data-path="$.a"]',
+        ) as HTMLElement | null;
+        expect(row).withContext('found a row to right-click').toBeTruthy();
+
+        try {
+          row!.dispatchEvent(
+            new MouseEvent('contextmenu', {
+              clientX: 100,
+              clientY: 100,
+              bubbles: true,
+              cancelable: true,
+            }),
+          );
+          fixture.detectChanges();
+          await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+          fixture.detectChanges();
+
+          expect(cmp.ctxTrigger()?.menuOpen).toBeTrue();
+
+          window.dispatchEvent(new Event('blur'));
+          fixture.detectChanges();
+          await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+          fixture.detectChanges();
+
+          expect(cmp.ctxTrigger()?.menuOpen).toBeFalse();
+        } finally {
+          cmp.ctxTrigger()?.closeMenu();
+          fixture.detectChanges();
+        }
+      });
+    });
+
     describe('onBreadcrumbContextMenu', () => {
       function ctxMouseEvent(): MouseEvent {
         return new MouseEvent('contextmenu', {

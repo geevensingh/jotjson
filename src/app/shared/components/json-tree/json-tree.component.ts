@@ -15,7 +15,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { MatMenuTrigger } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { MatDividerModule } from '@angular/material/divider';
@@ -31,6 +31,7 @@ import { isColdAndMark } from '../../../core/telemetry/cold-flag';
 import type { FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
 import { IconComponent } from '../icon/icon.component';
+import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import {
   JsonBreadcrumbComponent,
   type BreadcrumbClick,
@@ -145,7 +146,7 @@ const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
   standalone: true,
   imports: [
     FormsModule,
-    MatMenuModule,
+    ...JJ_MENU_IMPORTS,
     MatTooltipModule,
     MatTreeModule,
     MatDividerModule,

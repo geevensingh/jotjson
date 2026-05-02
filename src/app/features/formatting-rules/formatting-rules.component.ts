@@ -15,7 +15,6 @@ import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
@@ -28,6 +27,7 @@ import {
 } from '../../core/preferences/preferences.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
+import { JJ_MENU_IMPORTS } from '../../shared/material/jj-menu-imports';
 import {
   ConfirmDialogComponent,
   ConfirmDialogData,
@@ -50,7 +50,7 @@ const DUP_SUFFIX = ' (copy)';
 @Component({
   selector: 'app-formatting-rules',
   standalone: true,
-  imports: [AppHeaderComponent, IconComponent, MatButtonModule, MatMenuModule, RouterLink],
+  imports: [AppHeaderComponent, IconComponent, MatButtonModule, ...JJ_MENU_IMPORTS, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './formatting-rules.component.html',
   styleUrl: './formatting-rules.component.scss',
