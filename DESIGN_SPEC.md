@@ -64,9 +64,29 @@ Browser (Angular SPA)
   createdAt: DateTime,
   updatedAt: DateTime,
   ownerId: string (every server-persisted blob has an owner; anonymous users keep their JSON only in localStorage),
-  isPublic: boolean
+  isPublic: boolean,
+  highlights?: BlobHighlight[] (optional sidecar manual highlights; absent on legacy blobs; max 100 entries; paths unique),
+  version: number (monotonic concurrency token; surfaced as the strong ETag and required via If-Match on PUT)
 }
 ```
+
+#### BlobHighlight
+```
+{
+  path: string (canonical JSON tree path; max 1024 characters),
+  color: string (literal #RRGGBB hex color),
+  cascade: boolean (true means the highlight applies to descendants unless they have their own entry)
+}
+```
+
+Manual highlight paths use the tree's canonical JSONPath grammar:
+root is `$`; valid JavaScript identifier keys use dot notation such as
+`$.foo.bar`; other object keys use bracketed JSON string notation such
+as `$["weird key"]` or `$["with-dash"]`; array indexes use bracketed
+integers such as `$.items[0]`. Equivalent paths must canonicalize to the
+same string before write. The server rejects non-canonical paths,
+duplicate paths in one blob, paths over 1024 characters, and colors that
+are not 6-digit hex.
 
 #### User
 ```
@@ -149,7 +169,8 @@ ThemeColorSet {
   selectionColor: string,          # primary - the selected row
   matchingValueColor: string,      # secondary - other rows with the same value
   ancestorColor: string,           # parent chain - all ancestors of the selected node
-  searchHighlightColor: string     # search matches - rows matching the search query
+  searchHighlightColor: string,    # search matches - rows matching the search query
+  manualHighlightColor: string     # preferred manual-highlight swatch for this theme
 }
 ```
 
@@ -161,8 +182,9 @@ ThemeColorSet {
 | `matchingValueColor` | `#3e3d32` (warm gray) | `#fff4cc` (pale amber) |
 | `ancestorColor` | `#2a2d2e` (subtle dark) | `#ececec` (subtle light gray) |
 | `searchHighlightColor` | `#6a4c00` (muted amber/gold) | `#ffe082` (soft yellow) |
+| `manualHighlightColor` | `#7e6500` (muted gold) | `#fff59d` (soft yellow) |
 
-When the user has not overridden a color for a given theme, the app uses that theme's default. Switching themes swaps the active color set; overrides for the inactive theme are preserved. The "Reset to defaults" button in Profile -> Preferences restores the defaults for the **currently active theme only**.
+When the user has not overridden a color for a given theme, the app uses that theme's default. Switching themes swaps the active color set; overrides for the inactive theme are preserved. The "Reset to defaults" button in Profile -> Preferences restores the defaults for the **currently active theme only**. `manualHighlightColor` is the per-theme default used for the first, preferred swatch in the manual-highlight flyout; it is user-editable and does not have to match one of the hardcoded palette colors.
 
 #### HistoryEntry
 
@@ -489,6 +511,62 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Expand all from here** - hides itself when every container in the subtree is already expanded.
     - **Expand to depth +1..+5 from here** - **expand-only** semantics: each container in the subtree at relative depth `< N` is expanded if it is currently collapsed, and nothing is ever collapsed (the action is purely additive and idempotent). An entry is shown only when (a) `N` does not exceed the deepest descendant's relative depth from the clicked node, and (b) at least one container at relative depth `< N` somewhere in the subtree (including hidden under a collapsed ancestor) is currently collapsed - i.e., the action would actually expand something. Together these hide redundant entries deeper than the subtree (`+4`/`+5` on a 3-level subtree) and entries that have nothing left to do (everything `+1..+N` on a fully-expanded subtree). Trade-off: there is no per-row "collapse to depth +N" - to reset a partially-expanded subtree the user invokes **Collapse** then re-expands. The toolbar's global **Expand to Level** dropdown still uses snap-to-exact semantics across the whole tree; only the per-row context menu is expand-only.
     - The right-click flow positions the menu at the cursor; the kebab self-anchors at its own location. Re-right-clicking a different row while the menu is open repositions it. Keyboard-fired contextmenu (`clientX/Y === 0`) is ignored in v1; full keyboard support is a follow-up. Each invoked action emits an info-level telemetry event under `tree.contextMenu.*`; no user content is logged.
+  - **Manual highlights** - owners can persist row-background marks on saved blobs so recipients can see the author's focus.
+    - The per-row context menu (right-click or kebab) adds, in order:
+      **Highlight**, **Highlight tree**, **Remove highlight**, and
+      **Remove tree highlight**. Highlight actions open an 11-swatch
+      flyout: the user's preferred `manualHighlightColor` first,
+      visually marked, then 10 hardcoded palette colors for the
+      active theme. Choosing a swatch paints the row with that literal
+      hex color.
+    - `Highlight` stores or replaces one `BlobHighlight` at the row's
+      canonical path with `cascade: false`. `Highlight tree` stores or
+      replaces one entry at the row's canonical path, with `cascade: true`,
+      and resolves it at render time for all descendants. A child's own entry
+      always beats an inherited ancestor cascade. Array order is not
+      meaningful; paths are unique.
+    - `Remove highlight` is visible only when the row owns a non-cascade
+      manual highlight, and removes that entry. `Remove tree highlight`
+      is visible whenever any cascade entry exists on the row's self-or-
+      ancestor chain, even if a nearer non-cascade entry is currently
+      painting the row; it removes the nearest cascade entry.
+    - Tree-highlight availability is gated by JSON type in the UI.
+      Object and array rows, including empty containers, show both
+      Highlight and Highlight tree. Primitive rows show only Highlight.
+      Closing-brace rows have no independent path, so they show only
+      the tree-scope actions, retargeted to the matching opener's path
+      (the parent container's path). The server validates shape and path
+      grammar but does not enforce this type gate.
+    - Manual highlights are stored as `JsonBlob.highlights?:
+      BlobHighlight[]`, a sidecar on the blob. They are edited in
+      memory until save; `POST /api/blobs` and `PUT /api/blobs/:id`
+      carry them with the other blob fields. Read-only viewers
+      (anonymous public/unlisted readers and signed-in non-owners) see
+      existing highlights but cannot add, change, or remove them.
+      Fork-on-save copies the source blob's highlights into the new
+      owner-owned blob.
+    - The renderer keeps provenance for the winning manual highlight:
+      color, source path, whether it was a cascade, and whether it was
+      inherited. This drives cascade-removal ARIA text and ensures the
+      nearest cascade can be removed even when it is not the visible
+      winning color.
+    - Highlight colors are stored as literal `#RRGGBB` hex, not theme
+      tokens. This preserves exact same-color fidelity for recipients
+      but is a v1 contrast tradeoff: if an author in dark mode picks
+      `#7e6500` and shares with a friend in light mode, the friend still
+      sees `#7e6500` on a light background, which may have poor
+      contrast.
+    - Stale paths are kept in storage and render as nothing when they no
+      longer resolve. On successful save, the client prunes
+      unresolvable paths only when the current content parses cleanly;
+      if content is syntactically invalid, pruning is skipped and all
+      stored highlights ride through unchanged.
+    - Accessibility and i18n: swatches expose labels that include the
+      color name and hex, highlighted rows append a screen-reader-only
+      "highlighted" annotation, parent context-menu items remain
+      keyboard-reachable through standard menu navigation, and every new
+      user-facing string is extractable. Keyboard navigation inside the
+      swatch grid is deferred beyond v1.
   - **Double-click a row** copies the row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text for primitives, pretty-printed JSON for containers). The dblclick path excludes the kebab pill and twisty toggle the same way single-click selection does, so clicking those buttons twice never triggers an unintended value copy. Emits the `tree.row.doubleClickCopyValue` telemetry event.
   - **Search highlight** - a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
@@ -496,7 +574,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - The matched substring within the key or value text has an **inline background highlight** so users can see exactly what matched.
     - A match count is displayed next to the search field (e.g., "12 matches").
     - **Previous / Next** navigation buttons (and `Enter` / `Shift+Enter` shortcuts) jump between matches, auto-expanding collapsed parent nodes as needed and scrolling the match into view.
-    - **Highlight priority**: if a row is both a search match and has a selection/matching-value/ancestor highlight, the selection highlights take precedence and the search highlight is suppressed for that row (avoiding visual noise).
+    - **Highlight priority**: row backgrounds resolve from highest to lowest as selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> manual highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
     - Options available via small toggles next to the search field: **case sensitive**, **regex mode**, **keys only / values only / both**.
     - Clearing the search field (or pressing `Escape` while focused in it) removes all search highlights.
     - The search field is always visible - it does not need to be toggled open.
@@ -521,7 +599,8 @@ Available to **registered users** (create/manage). **Anonymous users can view an
 - Owner can update or delete the blob.
 - **Fork-on-save**: a signed-in non-owner who saves edits to a shared blob
   creates a new blob owned by that user with its own slug. The original blob is
-  unchanged, and the Home toolbar labels this action `Save as copy`.
+  unchanged, the source blob's manual highlights are copied into the fork, and
+  the Home toolbar labels this action `Save as copy`.
 
 ### 3. Blobs + History Pages
 
@@ -629,6 +708,9 @@ Available to **registered users** only. The route is auth-guarded.
       `true`, and `friendlyForms` is `true`.
   - **Search**: scope (keys / values / keys and values), case
     sensitive toggle, regex mode toggle.
+  - **Highlights**: per-theme color pickers for selected row,
+    matching values, ancestor chain, search hits, and the default
+    manual-highlight color.
   - **History & storage**: recently-viewed tracking toggle (records
     `viewed` entries when you open shared blobs you don't own; on
     by default), blob quota strategy (auto-delete oldest /
@@ -902,7 +984,7 @@ servers.
   - **Across active rule sets:** sets are evaluated in `createdAt` order (oldest first) - the same order they appear in the user's saved list and the formatting toolbar. Later evaluations override earlier ones for conflicting style properties. Drag-to-reorder of active sets is a post-v1 follow-up.
   - The optional `borderColor` style renders as a 4px left-edge accent strip on the affected row (consistent with the `.pref-substack` pattern on the profile page) so it does not collide with the selection outline or ancestor highlights.
   - A tooltip on hover shows which rule(s) matched a given node (keeps the tree visually clean). Tooltip labels are auto-generated from each rule's match config.
-  - **Highlight priority** (highest to lowest): selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
+  - **Highlight priority** (highest to lowest): selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> manual highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
   - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply. Toolbar state is the user's `activeRuleSetIds` preference and persists across sessions and devices; the same selection appears in the Profile "Default rule sets" multi-select.
 
 - **Built-in Presets** - ship a few starter rule sets users can clone and customize. Preset IDs are stable kebab-case slugs (not UUIDs) so the clone endpoint URLs are human-readable and stable across rebuilds; user-created rule sets always get UUIDs.
@@ -973,7 +1055,7 @@ for setup. The bypass cannot engage in any Azure-hosted environment.
 | POST | `/api/blobs` | Required | Create a new JSON blob |
 | GET | `/api/blobs` | Required | List caller's blobs (newest first) |
 | GET | `/api/blobs/:id` | Optional | Get a blob by UUID or slug. Public / unlisted blobs do not require auth; owner-only blobs (post-v1) will. |
-| PUT | `/api/blobs/:id` | Required (owner) | Update a blob's content, title, or `isPublic` flag |
+| PUT | `/api/blobs/:id` | Required (owner) | Update a blob's content, title, `isPublic` flag, or manual highlights |
 | DELETE | `/api/blobs/:id` | Required (owner) | Delete a blob |
 | GET | `/api/me` | Required | Read the current user document. Returns 404 if not yet seeded. |
 | POST | `/api/me` | Required | First-time seed: create the user document from the request body (typically the anon user's local preferences). Idempotent; 409 if already seeded. |
@@ -997,8 +1079,34 @@ for setup. The bypass cannot engage in any Azure-hosted environment.
 | GET | `/api/rule-set-presets` | Required | M6 | List built-in preset rule sets. Uses a top-level path (not `/api/rule-sets/presets`) because the Azure Functions Node.js v4 router resolves the latter to the parameterized `/rule-sets/{id}` handler |
 | POST | `/api/rule-set-presets/:id/clone` | Required | M6 | Clone a preset into the user's rule sets |
 
+### Blob write semantics and concurrency
+
+`POST /api/blobs` accepts optional `highlights`; when omitted the new
+blob has no manual highlights. `PUT /api/blobs/:id` uses the existing
+patch-style semantics for mutable blob fields: omitting `highlights`
+leaves the stored sidecar unchanged, while providing `highlights` (even
+`[]`) replaces the array wholesale. Blob saves send the current content,
+title, visibility, and highlights through the same PUT surface.
+
+Every `JsonBlob` carries a numeric `version` field. `GET /api/blobs/:id`,
+`POST /api/blobs`, and successful `PUT /api/blobs/:id` responses include
+the same value in the JSON body and as a strong `ETag` header, e.g.
+`version: 3` with `ETag: "3"`. Clients must echo the loaded version on
+every blob PUT as `If-Match: "<version>"`. Missing or malformed
+`If-Match` is **400 Bad Request**; a stale version is **412 Precondition
+Failed**. On 412, the client refetches, surfaces the conflict, and rebases
+or prompts before retrying rather than silently clobbering another tab.
+
+RuleSets use the same client-facing numeric `version` / strong `ETag` /
+`If-Match` contract (see Formatting Rules Page -> Concurrency). Blob
+writes also pass Cosmos DB's `_etag` as a server-internal `IfMatch`
+precondition on replace so the update is atomically guarded even if two
+writers race after reading the same version.
+
 ### Validation Rules
-- Max blob size: **1 MB** (free tier).
+- Max raw blob content size: **1,000,000 UTF-8 bytes** (free tier).
+- Total saved content-plus-highlights envelope: `JSON.stringify({ content, highlights: highlights ?? [] })` must be <= **1,016,512 serialized characters**. This preserves the 1,000,000-byte content allowance while bounding highlight overhead to 16,384 serialized characters plus a small JSON envelope.
+- Manual highlights: max **100** per blob; `color` must be a 6-digit `#RRGGBB` hex string; `path` must be a unique canonical JSON tree path, non-empty, and <= **1024 characters**.
 - Max blob title length: **200 characters**. The server trims surrounding whitespace before validating; a title that is empty or whitespace-only after trimming is stored as `undefined` (no title). Anything longer than 200 characters after trimming is rejected with a `BlobValidationError`.
 - Must be valid JSON or JSONC (server re-validates using JSONC-aware parser).
 - Rate limiting: 60 requests/min per IP (anonymous), 120/min (authenticated).
@@ -1781,8 +1889,8 @@ there is no need to bump SemVer just to mark a deploy.
      returning the M6a.5 `RuleEngineResult`. Implements within-set
      rule-list order, cross-set `createdAt` order (later overrides
      earlier), and the highlight-priority suppression rule
-     (selection -> match-value -> ancestor -> search -> formatting
-     rules). Memoization keyed on
+     (selection -> match-value -> ancestor -> search -> manual ->
+     formatting rules). Memoization keyed on
      `(activeSetIds, ruleSetVersionBitmap, key, value, type)` so a
      5 MB tree (perf NFR §Non-Functional Requirements) does not
      re-evaluate on unrelated state changes. Tree row applies the
