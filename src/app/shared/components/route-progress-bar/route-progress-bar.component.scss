@@ -62,12 +62,27 @@
 
 @media (prefers-reduced-motion: reduce) {
   .route-progress-bar__stripe--primary {
-    animation: none;
+    animation: route-progress-bar-pulse 1.4s ease-in-out infinite;
     left: 0;
-    right: 60%;
-    opacity: 0.6;
+    right: 0;
   }
   .route-progress-bar__stripe--secondary {
     display: none;
+  }
+}
+
+// Reduced-motion fallback: pulse the bar's opacity instead of holding
+// it at a fixed mid-screen position. Remote Desktop and the Windows
+// "animation effects: off" toggle both trigger prefers-reduced-motion,
+// and a static stripe under that fallback is indistinguishable from a
+// frozen page. Pulsing keeps the "work in progress" cue without any
+// positional motion (which is what reduced-motion is meant to avoid).
+@keyframes route-progress-bar-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
   }
 }

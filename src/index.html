@@ -115,13 +115,21 @@
       }
       @media (prefers-reduced-motion: reduce) {
         .jot-splash__bar::before {
-          animation: none;
+          animation: jot-pulse 1.4s ease-in-out infinite;
           left: 0;
-          right: 60%;
-          opacity: 0.6;
+          right: 0;
         }
         .jot-splash__bar::after {
           display: none;
+        }
+      }
+      @keyframes jot-pulse {
+        0%,
+        100% {
+          opacity: 0.35;
+        }
+        50% {
+          opacity: 1;
         }
       }
       .jot-splash__logo {
