@@ -3950,14 +3950,28 @@
         <source>Jump to hidden beacon (<x id="icon" equiv-text="icon"/>)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">2618</context>
+          <context context-type="linenumber">2617</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.beacon.badge.tooltip.many" datatype="html">
         <source>Jump to first of <x id="count" equiv-text="descendantCount"/> hidden <x id="icon" equiv-text="icon"/> beacons</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.ts</context>
-          <context context-type="linenumber">2619</context>
+          <context context-type="linenumber">2618</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="splash.label.blob" datatype="html">
+        <source>Loading JSON...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/loading-splash/loading-splash.component.ts</context>
+          <context context-type="linenumber">34</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="splash.label.jotjson" datatype="html">
+        <source>Loading JotJSON...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/loading-splash/loading-splash.component.ts</context>
+          <context context-type="linenumber">37</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.beacon.pill.tooltip.single" datatype="html">

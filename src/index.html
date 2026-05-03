@@ -143,11 +143,44 @@
         color: var(--jot-fg-dim);
         margin: 0;
       }
+      /*
+       * Two labels coexist in the static splash: one for cold-boot to
+       * any non-share route, one for cold-boot to /s/:slug. The inline
+       * script below sets data-jot-splash-kind="blob" on <html> when
+       * the path matches the share route, swapping which label is
+       * visible. CSS handles the swap so the splash paints with the
+       * correct text on the very first frame, no JavaScript-driven
+       * re-render. Hidden labels sit at display:none so they're also
+       * excluded from the accessibility tree - the visible <p> is the
+       * sole accessible name for the role="status" region.
+       */
+      .jot-splash__label--blob {
+        display: none;
+      }
+      [data-jot-splash-kind='blob'] .jot-splash__label--default {
+        display: none;
+      }
+      [data-jot-splash-kind='blob'] .jot-splash__label--blob {
+        display: block;
+      }
     </style>
+    <script>
+      // Pre-bootstrap URL-kind detection for the static splash. Runs
+      // synchronously in <head> so the attribute is set before <body>
+      // parses; the static splash CSS rules above pick up the right
+      // label on its first paint, eliminating any "Loading JotJSON..."
+      // -> "Loading JSON..." flicker on cold-boot deep-links to /s/.
+      // Pattern matches the actual share route shape (single segment
+      // after /s/) - bare /s/ and nested /s/foo/bar fall through to
+      // the default label and the eventual /404 page.
+      if (/^\/s\/[^\/]+$/.test(location.pathname)) {
+        document.documentElement.setAttribute('data-jot-splash-kind', 'blob');
+      }
+    </script>
   </head>
   <body class="theme-system">
     <app-root>
-      <div class="jot-splash" role="status" aria-live="polite" aria-label="Loading JotJSON">
+      <div class="jot-splash" role="status" aria-live="polite">
         <div class="jot-splash__bar" aria-hidden="true"></div>
         <svg
           class="jot-splash__logo"
@@ -179,7 +212,8 @@
             stroke-linejoin="round"
           />
         </svg>
-        <p class="jot-splash__label">Loading JotJSON...</p>
+        <p class="jot-splash__label jot-splash__label--default">Loading JotJSON...</p>
+        <p class="jot-splash__label jot-splash__label--blob">Loading JSON...</p>
       </div>
     </app-root>
   </body>

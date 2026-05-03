@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { LoadingSplashService } from '../../../core/loading-splash/loading-splash.service';
 import { NavigationProgressService } from '../../../core/navigation/navigation-progress.service';
 
 /**
@@ -9,6 +10,12 @@ import { NavigationProgressService } from '../../../core/navigation/navigation-p
  * `src/index.html` so the handoff at first NavigationEnd is visually
  * continuous: same 8px height, same `top: 0`, same primary color, same
  * glow.
+ *
+ * Suppressed while `LoadingSplashService` reports a non-null kind: the
+ * splash already has its own animated bar in the same position and
+ * stacking the route bar on top would double-render. Once the first
+ * navigation settles the splash latches to `null` and this bar takes
+ * over for all subsequent in-app navigations.
  *
  * Decorative: `aria-hidden="true"`. Screen readers should announce the
  * route change after activation, not the indicator itself. The cold-boot
@@ -23,4 +30,8 @@ import { NavigationProgressService } from '../../../core/navigation/navigation-p
 })
 export class RouteProgressBarComponent {
   protected readonly progress = inject(NavigationProgressService);
+  private readonly splash = inject(LoadingSplashService);
+  protected readonly visible = computed(
+    () => this.progress.pending() && this.splash.kind() === null,
+  );
 }

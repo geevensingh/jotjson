@@ -1,0 +1,36 @@
+@if (label(); as text) {
+  <div class="jot-splash" role="status" aria-live="polite">
+    <div class="jot-splash__bar" aria-hidden="true"></div>
+    <svg
+      class="jot-splash__logo"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+    >
+      <rect width="512" height="512" rx="96" ry="96" fill="#1e1e1e" />
+      <g
+        fill="none"
+        stroke="#00bcd4"
+        stroke-width="36"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M168 112 C 132 112, 120 132, 120 164 L 120 228 C 120 248, 108 256, 88 256 C 108 256, 120 264, 120 284 L 120 348 C 120 380, 132 400, 168 400"
+        />
+        <path
+          d="M344 112 C 380 112, 392 132, 392 164 L 392 228 C 392 248, 404 256, 424 256 C 404 256, 392 264, 392 284 L 392 348 C 392 380, 380 400, 344 400"
+        />
+      </g>
+      <path
+        d="M296 144 L 296 316 C 296 360, 268 384, 232 384 C 200 384, 176 364, 168 336"
+        fill="none"
+        stroke="#00bcd4"
+        stroke-width="44"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+    <p class="jot-splash__label">{{ text }}</p>
+  </div>
+}

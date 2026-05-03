@@ -1,12 +1,14 @@
 import { Component, OnInit, inject, Injector } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
+import { LoadingSplashService } from './core/loading-splash/loading-splash.service';
 import { NavigationProgressService } from './core/navigation/navigation-progress.service';
+import { LoadingSplashComponent } from './shared/components/loading-splash/loading-splash.component';
 import { RouteProgressBarComponent } from './shared/components/route-progress-bar/route-progress-bar.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouteProgressBarComponent],
+  imports: [LoadingSplashComponent, RouteProgressBarComponent, RouterOutlet],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -29,6 +31,13 @@ export class AppComponent implements OnInit {
   // path. See also `core/telemetry/route-tracker.ts`, which handles the
   // analogous timing problem for telemetry.
   private readonly navigationProgress = inject(NavigationProgressService);
+
+  // Eagerly inject for the same reason as NavigationProgressService:
+  // the splash service must observe the very first NavigationStart so
+  // the cold-boot to /s/:slug confirms kind='blob' (the constructor's
+  // URL peek already set it), keeps it through the resolver wait, and
+  // latches kind=null once the first nav settles.
+  private readonly loadingSplash = inject(LoadingSplashService);
 
   ngOnInit(): void {
     // Note: returning-redirect handling and `AuthService.userSignal`

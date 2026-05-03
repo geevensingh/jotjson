@@ -136,8 +136,10 @@ Place new code in the correct bucket:
   in `src/index.html`) sit outside the i18n pipeline by necessity -
   `$localize` and `i18n` attributes only resolve once Angular is up.
   These strings stay hardcoded in English. Keep the set as small as
-  possible (currently just the splash label "Loading JotJSON...");
-  any new pre-bootstrap text needs the same exception comment.
+  possible (currently the splash labels "Loading JotJSON..." and
+  "Loading JSON...", with the latter shown on cold-boot deep-links
+  to `/s/:slug`); any new pre-bootstrap text needs the same exception
+  comment.
 - Never use plain strings in templates or `console.warn`/`toast` calls when
   they are user-visible.
 - Run `npm run extract-i18n` to refresh `src/locale/messages.xlf` when you add
