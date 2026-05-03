@@ -4297,6 +4297,36 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     expect(component.content()).toBe('{\n  "payload": {\n               "a": 1\n             }\n}');
   });
 
+  it('auto-expands the just-extracted node by exactly one level', () => {
+    const expandSpy = spyOn(JsonTreeComponent.prototype, 'expandNodeAtPath').and.callThrough();
+    const { component, treeExtractor } = setup();
+    treeExtractor.setVersion(8);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}","keep":true}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 8,
+      }),
+    );
+
+    expect(expandSpy).toHaveBeenCalledOnceWith(['payload']);
+  });
+
+  it('does not expand the node when the extract is dropped as stale', () => {
+    const expandSpy = spyOn(JsonTreeComponent.prototype, 'expandNodeAtPath').and.callThrough();
+    const { component, treeExtractor } = setup();
+    treeExtractor.setVersion(2);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}"}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 1,
+      }),
+    );
+
+    expect(expandSpy).not.toHaveBeenCalled();
+  });
+
   it('debounces tree string scans after treeValue changes', fakeAsync(() => {
     const { fixture, component, treeExtractor } = setup();
 

@@ -1101,6 +1101,31 @@ export class JsonTreeComponent {
   }
 
   /**
+   * Expand exactly the node at `path` by one level (the node itself;
+   * not its descendants). No-op when the path is not in `nodeIndex`.
+   * Used by the home component after a tree-extract patch to reveal
+   * the immediate children of the just-mutated node (e.g. show
+   * `prefix`/`json`/`suffix` after wrapping a string).
+   *
+   * Accepts the canonical `(string | number)[]` form (as carried by
+   * `TreeExtractRequest.path`); converts to the tree's internal
+   * pathString via `formatPath` for the `nodeIndex` lookup.
+   *
+   * Safe to call before the post-mutation re-parse has propagated:
+   * the underlying CDK `NestedTreeControl` is constructed with
+   * `trackBy: (n) => n.pathString`, so expansion is keyed on the
+   * stable path string. Adding the path to the expansion model via
+   * the pre-mutation `TreeNode` reference means the post-mutation
+   * node will render expanded as soon as it appears in the data
+   * source.
+   */
+  expandNodeAtPath(path: (string | number)[]): void {
+    const node = this.nodeIndex().get(this.formatPath(path));
+    if (!node) return;
+    this.treeControl.expand(node);
+  }
+
+  /**
    * Breadcrumb chip activation handler. Logs telemetry (depth-only;
    * the canonical path content is potentially user-sensitive and is
    * NOT recorded) and re-selects the ancestor via the existing

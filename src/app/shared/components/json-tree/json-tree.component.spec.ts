@@ -3497,6 +3497,62 @@ describe('JsonTreeComponent', () => {
       expect(cmp.treeControl.isExpanded(bNode)).toBeTrue();
     });
 
+    it('expandNodeAtPath expands exactly the named node (no descendants, no ancestors)', async () => {
+      await createWith({ outer: { target: { inner: { leaf: 1 } } } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      const rootNode = cmp.root()!;
+      const outerNode = rootNode.children!.find((child) => child.segment === 'outer')!;
+      const targetNode = outerNode.children!.find((child) => child.segment === 'target')!;
+      const innerNode = targetNode.children!.find((child) => child.segment === 'inner')!;
+
+      cmp.expandNodeAtPath(['outer', 'target']);
+
+      expect(cmp.treeControl.isExpanded(targetNode)).withContext('target expanded').toBeTrue();
+      expect(cmp.treeControl.isExpanded(outerNode))
+        .withContext('outer (ancestor) NOT expanded')
+        .toBeFalse();
+      expect(cmp.treeControl.isExpanded(innerNode))
+        .withContext('inner (descendant) NOT expanded')
+        .toBeFalse();
+    });
+
+    it('expandNodeAtPath silently no-ops for unknown paths', async () => {
+      await createWith({ a: { b: 1 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      const aNode = cmp.root()!.children!.find((child) => child.segment === 'a')!;
+
+      expect(() => cmp.expandNodeAtPath(['does', 'not', 'exist'])).not.toThrow();
+      expect(cmp.treeControl.isExpanded(aNode)).toBeFalse();
+    });
+
+    it('expandNodeAtPath persists across re-parse via pathString trackBy', async () => {
+      // Mimics the post-extract flow: caller invokes expandNodeAtPath
+      // before the value re-flows. The expansion model is keyed on
+      // pathString, so the post-mutation node renders expanded.
+      await createWith({ a: 'string-value' });
+      cmp.collapseAll();
+      fixture.detectChanges();
+
+      cmp.expandNodeAtPath(['a']);
+
+      // Now mutate $.a from a leaf string to an object container.
+      // Do not await whenStable() here: the component owns a persistent
+      // setInterval (NOW_TICK_MS) that keeps the zone busy, so whenStable
+      // would never resolve under Karma+Zone. detectChanges flushes the
+      // input change synchronously, which is sufficient.
+      fixture.componentRef.setInput('value', { a: { wrapped: 1 } });
+      fixture.detectChanges();
+
+      const newRootNode = cmp.root()!;
+      const newANode = newRootNode.children!.find((child) => child.segment === 'a')!;
+      expect(newANode.children?.length).toBeGreaterThan(0);
+      expect(cmp.treeControl.isExpanded(newANode))
+        .withContext('post-mutation node honors pre-mutation expand call')
+        .toBeTrue();
+    });
+
     it('selectionChange emits structural path when selectedPath changes (e.g. via user click)', async () => {
       // selectedPath is the canonical funnel for both user clicks
       // (via onSelect) and programmatic selection. Drive it directly

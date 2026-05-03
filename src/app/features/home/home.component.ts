@@ -1101,6 +1101,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       },
     );
     this.setContent(result.patched);
+    this.tree()?.expandNodeAtPath(event.path);
   }
 
   onToggleSelectionSync(): void {
