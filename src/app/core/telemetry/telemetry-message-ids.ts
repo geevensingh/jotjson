@@ -955,7 +955,9 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           branch) (`shared/components/json-tree/json-tree.component.ts`).
    *           See also `tree.row.doubleClickCopyValue` for the
    *           `'dblclick'` branch.
-   * Props: none
+   * Props: { escaped: boolean }. `true` when Alt was held during the
+   * menu-item click; emits the JSON-string-literal variant of the
+   * value (DESIGN_SPEC.md §443).
    */
   'tree.contextMenu.copyValue',
 
@@ -1047,7 +1049,9 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           branch) (`shared/components/json-tree/json-tree.component.ts`).
    *           See also `tree.contextMenu.copyValue` for the
    *           menu-driven entry point; both share copy semantics.
-   * Props: none
+   * Props: { escaped: boolean }. `true` when Alt was held during the
+   * row double-click; emits the JSON-string-literal variant of the
+   * value (DESIGN_SPEC.md §443).
    */
   'tree.row.doubleClickCopyValue',
 

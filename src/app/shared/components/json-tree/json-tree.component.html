@@ -535,7 +535,12 @@
 
 <mat-menu #rowMenu="matMenu" class="jj-menu tree-row-menu">
   @if (contextNode(); as cn) {
-    <button mat-menu-item type="button" class="ctx-default-action" (click)="copyValue(cn, 'menu')">
+    <button
+      mat-menu-item
+      type="button"
+      class="ctx-default-action"
+      (click)="copyValue(cn, 'menu', $event.altKey)"
+    >
       {{ ctxCopyValueLabel }}
     </button>
     @if (showCopyKey(cn)) {

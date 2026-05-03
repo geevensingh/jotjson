@@ -4988,4 +4988,148 @@ describe('JsonTreeComponent', () => {
       });
     });
   });
+
+  describe('Alt-modifier copy escape', () => {
+    const rawGreeting = 'hello\nworld';
+    const escapedGreeting = JSON.stringify(rawGreeting);
+
+    async function createAltCopyFixture(): Promise<jasmine.SpyObj<LoggerService>> {
+      const logger = await createWithLoggerSpy({ greeting: rawGreeting });
+      cmp.expandAll();
+      fixture.detectChanges();
+      return logger;
+    }
+
+    function greetingRow(): HTMLElement {
+      const row = (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-row[data-path="$.greeting"]',
+      ) as HTMLElement | null;
+      expect(row).withContext('found the $.greeting tree row').toBeTruthy();
+      return row!;
+    }
+
+    function withClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
+      const original = (navigator as { clipboard?: Clipboard }).clipboard;
+      const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
+      try {
+        return run();
+      } finally {
+        if (hadOwn && original) {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: original,
+          });
+        } else {
+          delete (navigator as { clipboard?: unknown }).clipboard;
+        }
+      }
+    }
+
+    async function flushCopyMicrotasks(): Promise<void> {
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    async function openGreetingContextMenu(): Promise<HTMLButtonElement> {
+      greetingRow().dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: 100,
+          clientY: 100,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      fixture.detectChanges();
+      await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+      fixture.detectChanges();
+      const button = document.body.querySelector(
+        'button.ctx-default-action.mat-mdc-menu-item, button.ctx-default-action[mat-menu-item]',
+      ) as HTMLButtonElement | null;
+      expect(button).withContext('found the Copy value context-menu item').toBeTruthy();
+      return button!;
+    }
+
+    function closeOpenMenus(): void {
+      cmp.ctxTrigger()?.closeMenu();
+      document.body
+        .querySelectorAll('.cdk-overlay-backdrop')
+        .forEach((backdrop) => (backdrop as HTMLElement).click());
+      fixture.detectChanges();
+    }
+
+    afterEach(() => {
+      closeOpenMenus();
+    });
+
+    it('dblclick without Alt', async () => {
+      const logger = await createAltCopyFixture();
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+
+      withClipboard({ writeText }, () => {
+        greetingRow().dispatchEvent(
+          new MouseEvent('dblclick', { bubbles: true, cancelable: true, altKey: false }),
+        );
+      });
+      await flushCopyMicrotasks();
+
+      expect(writeText).toHaveBeenCalledWith(rawGreeting);
+      expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickCopyValue', {
+        escaped: false,
+      });
+    });
+
+    it('dblclick with Alt', async () => {
+      const logger = await createAltCopyFixture();
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+
+      withClipboard({ writeText }, () => {
+        greetingRow().dispatchEvent(
+          new MouseEvent('dblclick', { bubbles: true, cancelable: true, altKey: true }),
+        );
+      });
+      await flushCopyMicrotasks();
+
+      expect(writeText).toHaveBeenCalledWith(escapedGreeting);
+      expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickCopyValue', {
+        escaped: true,
+      });
+    });
+
+    it('Menu Copy value without Alt (DOM-level)', async () => {
+      const logger = await createAltCopyFixture();
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      const button = await openGreetingContextMenu();
+
+      withClipboard({ writeText }, () => {
+        button.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, altKey: false }),
+        );
+      });
+      await flushCopyMicrotasks();
+
+      expect(writeText).toHaveBeenCalledWith(rawGreeting);
+      expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.copyValue', {
+        escaped: false,
+      });
+    });
+
+    it('Menu Copy value with Alt (DOM-level)', async () => {
+      const logger = await createAltCopyFixture();
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      const button = await openGreetingContextMenu();
+
+      withClipboard({ writeText }, () => {
+        button.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, altKey: true }),
+        );
+      });
+      await flushCopyMicrotasks();
+
+      expect(writeText).toHaveBeenCalledWith(escapedGreeting);
+      expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.copyValue', {
+        escaped: true,
+      });
+    });
+  });
 });

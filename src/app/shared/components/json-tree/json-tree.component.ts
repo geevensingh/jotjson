@@ -1522,7 +1522,7 @@ export class JsonTreeComponent {
     ) {
       return;
     }
-    this.copyValue(node, 'dblclick');
+    this.copyValue(node, 'dblclick', event.altKey);
   }
 
   /**
@@ -1588,12 +1588,19 @@ export class JsonTreeComponent {
    *
    * `source` distinguishes menu-driven from double-click-driven invocations
    * for telemetry; both paths use identical copy semantics.
+   *
+   * When `escaped` is true, the serialized text is wrapped with
+   * `JSON.stringify(...)` -- the JSON-string-literal variant matching the
+   * toolbar Copy button's Alt+click affordance (DESIGN_SPEC.md §443). This
+   * lets users embed the row's value as a string in another JSON document.
    */
-  copyValue(node: TreeNode, source: 'menu' | 'dblclick'): void {
-    this.logger.info(
-      source === 'menu' ? 'tree.contextMenu.copyValue' : 'tree.row.doubleClickCopyValue',
-    );
-    void this.clipboardCopy.copyWithToast(this.serializeNodeValueForCopy(node), {
+  copyValue(node: TreeNode, source: 'menu' | 'dblclick', escaped = false): void {
+    const messageId =
+      source === 'menu' ? 'tree.contextMenu.copyValue' : 'tree.row.doubleClickCopyValue';
+    this.logger.info(messageId, { escaped });
+    const raw = this.serializeNodeValueForCopy(node);
+    const text = escaped ? this.jsonParser.escapeAsJsonString(raw) : raw;
+    void this.clipboardCopy.copyWithToast(text, {
       success: $localize`:@@tree.contextMenu.copy.success.value:Value copied to clipboard.`,
       failed: $localize`:@@tree.contextMenu.copy.failed.value:Failed to copy value.`,
       unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`,
