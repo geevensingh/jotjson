@@ -219,4 +219,48 @@ describe('buildBeaconIndex', () => {
     // so callers know not to defensive-copy.
     expect(matches![0]).toBe(a.path);
   });
+
+  it('dedupes a single icon repeated in iconsForNode for the same node (pair-rule case)', () => {
+    // Pair rules in the formatting-rules engine project the same
+    // icon onto both keyStyle.icons and valueStyle.icons. The tree
+    // component's lambda concats both sides, so the helper sees
+    // [warning, warning] for a single node. matchesByIcon must
+    // count this as one match - otherwise toolbar pill counts
+    // over-report. Regression for issue surfaced after 0.10.0:
+    // pasting `{"testHeader":{"x":null}}` with a pair rule showed
+    // pill count "2" for a single matched row.
+    const root = makeNode(undefined, [], '$', [leaf('testHeader', [], '$.testHeader')]);
+    const result = buildBeaconIndex(root, (node) =>
+      node.segment === 'testHeader' ? (['warning', 'warning'] as const) : [],
+    );
+    const warningMatches = result.matchesByIcon.get('warning');
+    expect(warningMatches).toBeDefined();
+    expect(warningMatches!.length).toBe(1);
+    expect(warningMatches![0]).toEqual(['testHeader']);
+  });
+
+  it('dedupes per-node while preserving distinct icons and pre-order across nodes', () => {
+    // Mixed: one node projects [warning, info, warning] (a pair
+    // rule + an unrelated key-side info rule), another projects
+    // [info]. Each (node, icon) pair must count once; both
+    // buckets keep pre-order across nodes; no spurious extra
+    // entries from the duplicate.
+    const a = leaf('a', [], '$.a');
+    const b = leaf('b', [], '$.b');
+    const root = makeNode(undefined, [], '$', [a, b]);
+    const result = buildBeaconIndex(root, (node) => {
+      if (node.segment === 'a') return ['warning', 'info', 'warning'] as const;
+      if (node.segment === 'b') return ['info'] as const;
+      return [];
+    });
+    const warningMatches = result.matchesByIcon.get('warning');
+    const infoMatches = result.matchesByIcon.get('info');
+    expect(warningMatches).toBeDefined();
+    expect(warningMatches!.length).toBe(1);
+    expect(warningMatches![0]).toEqual(['a']);
+    expect(infoMatches).toBeDefined();
+    expect(infoMatches!.length).toBe(2);
+    expect(infoMatches![0]).toEqual(['a']);
+    expect(infoMatches![1]).toEqual(['b']);
+  });
 });

@@ -83,7 +83,13 @@ export function buildBeaconIndex(
     const directIcons = iconsForNode(node);
     const subtreeIcons = new Set<FormattingIcon>();
 
-    for (const icon of directIcons) {
+    // Dedupe per-node: a pair rule projects the same icon onto both
+    // `keyStyle.icons` and `valueStyle.icons`, so callers that union
+    // both sides may pass us `[warning, warning]` for one node. Each
+    // (node, icon) pair must appear in `matchesByIcon` at most once
+    // - otherwise the toolbar pill count over-reports. JS Set
+    // preserves insertion order, so pre-order semantics are kept.
+    for (const icon of new Set(directIcons)) {
       subtreeIcons.add(icon);
       let bucket = matchesByIcon.get(icon);
       if (bucket === undefined) {

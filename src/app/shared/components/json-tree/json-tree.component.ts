@@ -2520,11 +2520,10 @@ export class JsonTreeComponent {
       }
       if (keyIconList === undefined) return valueIconList ?? EMPTY_ICONS;
       if (valueIconList === undefined) return keyIconList;
-      // Rare: both sides project icons. Concat (engine already
-      // dedupes within each side; cross-side duplicates are
-      // harmless because matchesByIcon order is what matters and
-      // the beacon-index helper dedupes via Set on the descendant
-      // side).
+      // Pair rules project the same icon onto both keyStyle and
+      // valueStyle, so concat may contain duplicates. The helper
+      // (`buildBeaconIndex`) dedupes per-node before populating
+      // `matchesByIcon`, so passing duplicates here is safe.
       return [...keyIconList, ...valueIconList];
     });
   });

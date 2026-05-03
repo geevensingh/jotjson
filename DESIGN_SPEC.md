@@ -1761,6 +1761,13 @@ there is no need to bump SemVer just to mark a deploy.
   closed-enum props only (icon, direction, target, paneVisibility,
   source, plus bounded numeric measurements; no paths, no key/value
   content).
+- **0.10.1**: Beacon pill double-count fix - `buildBeaconIndex` now
+  dedupes the per-node icon set before populating `matchesByIcon`, so
+  pair rules (which project the same icon onto both `keyStyle.icons`
+  and `valueStyle.icons`) no longer cause a single matched row to be
+  counted twice in the toolbar pill count chip. Inline icons and
+  ancestor badges were unaffected (the descendant Set already
+  deduped); only pill counts over-reported.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
