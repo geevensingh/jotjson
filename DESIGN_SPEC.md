@@ -1666,10 +1666,18 @@ there is no need to bump SemVer just to mark a deploy.
   key/value AND matching and value predicates.
 - **0.7.1**: Test Header Content preset - adds `has_content` /
   `lacks_content` value predicates for null-or-empty highlighting.
+- **0.7.2**: M7t prose-preserving in-tree extraction - tree extract on
+  a string containing prose around embedded JSON wraps the result in
+  `{ prefix?, json, suffix? }` (single block) or
+  `{ prefix?, json1, between_1_and_2?, json2, ..., suffix? }`
+  (multi-block) so surrounding prose is preserved.
+- **0.7.3**: Tree extract auto-expand - after in-tree extraction
+  replaces a string value with the new wrapper, the just-extracted
+  node auto-expands by one level so the structure is immediately
+  visible without an extra click.
 - **0.7.4**: Alt-modifier copy-as-escaped-JSON now honored on tree row
   double-click and the row's "Copy value" context-menu item, matching the
-  toolbar Copy button's Alt+click affordance. (History gap: `0.7.2` and
-  `0.7.3` were shipped without history entries; not backfilled here.)
+  toolbar Copy button's Alt+click affordance.
 - **0.8.0**: Decoded view toggle - per-row pill on string leaves whose
   JSON-escaped form contains escape-worthy characters. Toggles the row's
   rendering between the JSON-escaped single-line form and the decoded
