@@ -50,6 +50,7 @@ export type JjIconName =
   | 'flag'
   | 'bookmark'
   | 'extract'
+  | 'decoded'
   | 'wand';
 
 @Component({
@@ -346,6 +347,14 @@ export type JjIconName =
           <path d="M19 20v-3M19 20h-3" />
           <path d="M10 9.5c-.7 0-1 .3-1 1v.5c0 .5-.5 1-1 1 .5 0 1 .3 1 1v.5c0 .7.3 1 1 1" />
           <path d="M14 9.5c.7 0 1 .3 1 1v.5c0 .5.5 1 1 1-.5 0-1 .3-1 1v.5c0 .7-.3 1-1 1" />
+        }
+        @case ('decoded') {
+          <path d="M5 4v3M5 4h3" />
+          <path d="M19 4v3M19 4h-3" />
+          <path d="M5 20v-3M5 20h3" />
+          <path d="M19 20v-3M19 20h-3" />
+          <path d="M9 9.5h6" />
+          <path d="M12 9.5v5" />
         }
         @case ('wand') {
           <path d="M5 19 L13 11" />

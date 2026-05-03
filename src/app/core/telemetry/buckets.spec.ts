@@ -1,4 +1,4 @@
-import { bucketBytes, bucketCount } from './buckets';
+import { bucketBytes, bucketCount, bucketLineCount } from './buckets';
 
 describe('telemetry bucket helpers', () => {
   describe('bucketBytes', () => {
@@ -69,6 +69,64 @@ describe('telemetry bucket helpers', () => {
       expect(bucketCount(-5)).toBe('<100');
       expect(bucketCount(NaN)).toBe('<100');
       expect(bucketCount(Infinity)).toBe('>10K');
+    });
+  });
+
+  describe('bucketLineCount', () => {
+    it('returns "1" for an empty string', () => {
+      expect(bucketLineCount('')).toBe('1');
+    });
+
+    it('returns "1" for a string with no line breaks', () => {
+      expect(bucketLineCount('hello world')).toBe('1');
+    });
+
+    it('returns "2-5" for a single \\n', () => {
+      expect(bucketLineCount('a\nb')).toBe('2-5');
+    });
+
+    it('returns "2-5" at the upper boundary of 5 lines (4 breaks)', () => {
+      expect(bucketLineCount('1\n2\n3\n4\n5')).toBe('2-5');
+    });
+
+    it('returns "6-20" at the lower boundary of 6 lines (5 breaks)', () => {
+      expect(bucketLineCount('1\n2\n3\n4\n5\n6')).toBe('6-20');
+    });
+
+    it('returns "6-20" at the upper boundary of 20 lines (19 breaks)', () => {
+      const text = Array.from({ length: 20 }, (_, i) => String(i)).join('\n');
+      expect(bucketLineCount(text)).toBe('6-20');
+    });
+
+    it('returns "21-100" at the lower boundary of 21 lines (20 breaks)', () => {
+      const text = Array.from({ length: 21 }, (_, i) => String(i)).join('\n');
+      expect(bucketLineCount(text)).toBe('21-100');
+    });
+
+    it('returns "21-100" at the upper boundary of 100 lines (99 breaks)', () => {
+      const text = Array.from({ length: 100 }, (_, i) => String(i)).join('\n');
+      expect(bucketLineCount(text)).toBe('21-100');
+    });
+
+    it('returns "100+" at and above 101 lines (100 breaks)', () => {
+      const text = Array.from({ length: 101 }, (_, i) => String(i)).join('\n');
+      expect(bucketLineCount(text)).toBe('100+');
+      const huge = Array.from({ length: 5000 }, () => 'x').join('\n');
+      expect(bucketLineCount(huge)).toBe('100+');
+    });
+
+    it('treats CRLF as a single line break', () => {
+      expect(bucketLineCount('a\r\nb')).toBe('2-5');
+      expect(bucketLineCount('1\r\n2\r\n3\r\n4\r\n5')).toBe('2-5');
+    });
+
+    it('treats a bare \\r (old Mac) as a line break', () => {
+      expect(bucketLineCount('a\rb')).toBe('2-5');
+    });
+
+    it('counts mixed \\r and \\n correctly', () => {
+      // \r alone, \n alone, \r\n: three line breaks, four lines total
+      expect(bucketLineCount('a\rb\nc\r\nd')).toBe('2-5');
     });
   });
 });

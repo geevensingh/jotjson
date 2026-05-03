@@ -28,7 +28,7 @@ import { CommentBundle, JsonParserService } from '../../../core/json/json-parser
 import type { ExtractedJson } from '../../../core/json/json-extractor.service';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
-import { bucketCount } from '../../../core/telemetry/buckets';
+import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
 import { isColdAndMark } from '../../../core/telemetry/cold-flag';
 import type { BlobHighlight, FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
@@ -354,6 +354,16 @@ export class JsonTreeComponent {
   readonly preferredHighlightLabel = $localize`:@@tree.highlight.swatch.preferred:Preferred`;
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
+
+  // Decoded toggle (per-row): mirrors the Extract pill but is purely
+  // display-only - it does not mutate the underlying value, copy
+  // semantics, or search behavior.
+  readonly decodedShowTitleLabel = $localize`:@@tree.decoded.button.title.show:Show as decoded text`;
+  readonly decodedHideTitleLabel = $localize`:@@tree.decoded.button.title.hide:Show as JSON-escaped string`;
+  readonly decodedShowAriaLabel = $localize`:@@tree.decoded.button.aria.show:Show this string as decoded multi-line text`;
+  readonly decodedHideAriaLabel = $localize`:@@tree.decoded.button.aria.hide:Show this string as a JSON-escaped single-line string`;
+  readonly decodedShowMenuLabel = $localize`:@@tree.decoded.menu.label.show:Show as decoded text`;
+  readonly decodedHideMenuLabel = $localize`:@@tree.decoded.menu.label.hide:Show as JSON-escaped string`;
 
   // Breadcrumb labels (Phase 2). Stable English source strings; i18n
   // IDs feed through the standard pipeline (extract-i18n).
@@ -802,6 +812,20 @@ export class JsonTreeComponent {
   private cancelledRender = false;
 
   /**
+   * Per-row "show as decoded text" toggle state. A path is in this set
+   * iff the user has explicitly opted that row into decoded display.
+   * Membership alone is not authoritative: {@link isDecoded} also
+   * requires {@link decodedCandidate} to return true, so stale entries
+   * for rows whose value has since changed render harmlessly as the
+   * normal JSON-escaped form.
+   *
+   * Cleared on every {@link viewResetToken} bump (blob change). NOT
+   * cleared on format-driven reparse so toggling Format/Minify keeps
+   * the user's per-row toggle state stable.
+   */
+  private readonly decodedExpandedPaths = signal<ReadonlySet<string>>(new Set<string>());
+
+  /**
    * Cached probe row height keyed by `treeFontSize`. Invalidated
    * when the user changes the font size. Cheap microreflow once
    * per font size; repeated calls re-use the cached value.
@@ -858,6 +882,11 @@ export class JsonTreeComponent {
       if (token > 0 && token !== this.lastObservedResetToken) {
         this.lastObservedResetToken = token;
         this.hasInitializedExpansion = false;
+        // Blob-change reset: drop any per-row decoded toggle state so
+        // a fresh blob never inherits the prior blob's UI mode.
+        // Format/Minify reparse does NOT bump viewResetToken, so the
+        // user's toggle state is preserved across formatting changes.
+        untracked(() => this.decodedExpandedPaths.set(new Set<string>()));
       }
       // Fires for every root or token change; invalidates any in-flight
       // prior-run auto-fit rAF before it can emit stale telemetry.
@@ -1580,6 +1609,74 @@ export class JsonTreeComponent {
     if (!candidate) return;
     const sourceVersion = this.extractSourceVersion() ?? -1;
     this.extractRequest.emit({ path: node.path, sourceVersion, replacement: candidate, source });
+  }
+
+  /**
+   * Returns true when this node is a string leaf whose parsed value
+   * benefits from a "show as decoded text" pill. The predicate is
+   * intentionally broad: any control character that JSON would have
+   * escaped (\n, \r, \t), plus embedded quotes (") or backslashes (\),
+   * makes the JSON-escaped single-line rendering harder to read than
+   * the raw string. A string with only printable ASCII and no embedded
+   * quotes/backslashes shows fine as-is and gets no pill.
+   */
+  decodedCandidate(node: TreeNode): boolean {
+    if (node.type !== 'string' || typeof node.value !== 'string') return false;
+    return /[\n\r\t"\\]/.test(node.value);
+  }
+
+  /**
+   * True iff the user has explicitly toggled this row into the decoded
+   * view AND the node is still a decoded candidate. Gating on the
+   * predicate makes stale entries (e.g. value type changed under the
+   * same path) render as the normal JSON-escaped form.
+   */
+  isDecoded(node: TreeNode): boolean {
+    if (!this.decodedCandidate(node)) return false;
+    return this.decodedExpandedPaths().has(node.pathString);
+  }
+
+  /**
+   * Template-only renderer for value text. For string leaves in the
+   * decoded view, returns the raw string wrapped in JSON quotes so the
+   * row still reads as a string (just with real newlines and a
+   * `pre-wrap` whitespace style). For everything else delegates to
+   * {@link renderLeaf} so search (which calls renderLeaf directly)
+   * remains the canonical "what does this row show" source of truth.
+   */
+  displayLeaf(node: TreeNode): string {
+    if (node.type === 'string' && typeof node.value === 'string' && this.isDecoded(node)) {
+      return `"${node.value}"`;
+    }
+    return this.renderLeaf(node.value, node.type);
+  }
+
+  onDecodedButtonClick(node: TreeNode, event: MouseEvent): void {
+    event.stopPropagation();
+    this.toggleDecoded(node, 'rowButton');
+  }
+
+  onDecodedMenuClick(node: TreeNode): void {
+    this.toggleDecoded(node, 'contextMenu');
+  }
+
+  private toggleDecoded(node: TreeNode, source: 'rowButton' | 'contextMenu'): void {
+    if (!this.decodedCandidate(node)) return;
+    const value = node.value as string;
+    const current = this.decodedExpandedPaths();
+    const next = new Set(current);
+    const wasOn = next.has(node.pathString);
+    if (wasOn) {
+      next.delete(node.pathString);
+    } else {
+      next.add(node.pathString);
+    }
+    this.decodedExpandedPaths.set(next);
+    this.logger.event('tree.decoded.click', {
+      source,
+      direction: wasOn ? 'off' : 'on',
+      lineCountBucket: bucketLineCount(value),
+    });
   }
 
   /**

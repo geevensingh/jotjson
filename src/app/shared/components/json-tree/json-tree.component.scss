@@ -271,6 +271,12 @@
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
   word-break: break-word;
+
+  // Decoded view (per-row toggle): real newlines render literally
+  // for the string value span only; row chrome stays unaffected.
+  &.tree-value-decoded {
+    white-space: pre-wrap;
+  }
 }
 
 .tree-date-annotation {
@@ -436,6 +442,7 @@
 }
 
 .tree-extract-pill,
+.tree-decoded-pill,
 .tree-kebab-pill {
   display: inline-flex;
   align-items: center;
@@ -453,6 +460,11 @@
     color: var(--color-primary);
     background: rgba(127, 127, 127, 0.12);
   }
+}
+
+.tree-decoded-pill[aria-pressed='true'] {
+  color: var(--color-primary);
+  background: rgba(127, 127, 127, 0.12);
 }
 
 // Hidden positional anchor used by the cursor-driven right-click flow

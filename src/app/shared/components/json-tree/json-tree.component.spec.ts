@@ -4109,6 +4109,372 @@ describe('JsonTreeComponent', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Decoded view toggle (per-row pill on string leaves)
+  //
+  // Display-only sibling of the Extract pill. Toggles a string leaf
+  // between its single-line JSON-escaped rendering and its decoded
+  // multi-line form (real \n / \t / unescaped quotes). State is purely
+  // ephemeral: a `Set<pathString>` cleared on `viewResetToken` bump,
+  // never persisted. Does NOT mutate the underlying value, copy
+  // semantics, search, or rule evaluation.
+  // ---------------------------------------------------------------------------
+  describe('decoded view toggle', () => {
+    function decodedButtonFor(pathString: string): HTMLButtonElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${pathString}"] .tree-decoded-pill`,
+      ) as HTMLButtonElement | null;
+    }
+
+    function valueSpanFor(pathString: string): HTMLElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${pathString}"] .tree-value-string`,
+      ) as HTMLElement | null;
+    }
+
+    async function openMenuFor(pathString: string): Promise<void> {
+      const kebab = (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${pathString}"] .tree-kebab-pill`,
+      ) as HTMLButtonElement | null;
+      expect(kebab).withContext(`found a kebab for ${pathString}`).toBeTruthy();
+      kebab!.click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    function decodedMenuItem(): HTMLButtonElement | null {
+      return (
+        Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        ).find((item) => /decoded text|JSON-escaped string/.test(item.textContent ?? '')) ?? null
+      );
+    }
+
+    function closeOpenMenus(): void {
+      document.body
+        .querySelectorAll('.cdk-overlay-backdrop')
+        .forEach((backdrop) => (backdrop as HTMLElement).click());
+      fixture.detectChanges();
+    }
+
+    describe('decodedCandidate predicate', () => {
+      it('is true for strings with embedded \\n', async () => {
+        await createWith({ note: 'first\nsecond' });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(true);
+      });
+
+      it('is true for strings with embedded \\r', async () => {
+        await createWith({ note: 'a\rb' });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(true);
+      });
+
+      it('is true for strings with embedded \\t', async () => {
+        await createWith({ note: 'col1\tcol2' });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(true);
+      });
+
+      it('is true for strings with embedded quotes', async () => {
+        await createWith({ note: 'say "hi"' });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(true);
+      });
+
+      it('is true for strings with backslashes', async () => {
+        await createWith({ path: 'C:\\Users' });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(true);
+      });
+
+      it('is false for plain ASCII strings without escape-worthy chars', async () => {
+        await createWith({ name: 'jotjson rocks' });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(false);
+      });
+
+      it('is false for non-string leaves', async () => {
+        await createWith({ count: 42, flag: true, blank: null });
+        const root = cmp.root()!;
+        expect(cmp.decodedCandidate(root.children![0]!)).toBe(false);
+        expect(cmp.decodedCandidate(root.children![1]!)).toBe(false);
+        expect(cmp.decodedCandidate(root.children![2]!)).toBe(false);
+      });
+    });
+
+    describe('pill rendering and click handling', () => {
+      it('renders the decoded pill on candidate string leaves', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        expect(decodedButtonFor('$.note')).not.toBeNull();
+      });
+
+      it('does not render the decoded pill on plain string leaves', async () => {
+        await createWith({ name: 'plain' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        expect(decodedButtonFor('$.name')).toBeNull();
+      });
+
+      it('does not render the decoded pill on non-string leaves', async () => {
+        await createWith({ count: 42 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        expect(decodedButtonFor('$.count')).toBeNull();
+      });
+
+      it('starts in the off state (aria-pressed=false)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const button = decodedButtonFor('$.note');
+        expect(button!.getAttribute('aria-pressed')).toBe('false');
+      });
+
+      it('toggles aria-pressed and the value span class on click', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const button = decodedButtonFor('$.note');
+        const span = valueSpanFor('$.note');
+        expect(span!.classList.contains('tree-value-decoded')).toBe(false);
+
+        button!.click();
+        fixture.detectChanges();
+        expect(button!.getAttribute('aria-pressed')).toBe('true');
+        expect(valueSpanFor('$.note')!.classList.contains('tree-value-decoded')).toBe(true);
+      });
+
+      it('a second click returns to the off state (idempotent toggle)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const button = decodedButtonFor('$.note');
+        button!.click();
+        fixture.detectChanges();
+        button!.click();
+        fixture.detectChanges();
+        expect(decodedButtonFor('$.note')!.getAttribute('aria-pressed')).toBe('false');
+        expect(valueSpanFor('$.note')!.classList.contains('tree-value-decoded')).toBe(false);
+      });
+
+      it('click does not propagate to the row (row selection unchanged)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const button = decodedButtonFor('$.note');
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+        const stopSpy = spyOn(event, 'stopPropagation').and.callThrough();
+        button!.dispatchEvent(event);
+        fixture.detectChanges();
+        expect(stopSpy).toHaveBeenCalled();
+        expect(cmp.selectedPath()).toBeNull();
+      });
+
+      it('renders the decoded value with embedded newlines (no JSON escape)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        const span = valueSpanFor('$.note');
+        expect(span!.textContent).toBe('"first\nsecond"');
+      });
+    });
+
+    describe('display vs renderLeaf vs copy', () => {
+      it('displayLeaf returns the JSON-escaped form when toggle is off', async () => {
+        await createWith({ note: 'a\nb' });
+        const node = cmp.root()!.children![0]!;
+        expect(cmp.displayLeaf(node)).toBe('"a\\nb"');
+      });
+
+      it('displayLeaf returns the decoded form when toggle is on', async () => {
+        await createWith({ note: 'a\nb' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        const node = cmp.root()!.children![0]!;
+        expect(cmp.displayLeaf(node)).toBe('"a\nb"');
+      });
+
+      it('renderLeaf is unchanged by the toggle (search uses the JSON-escaped form)', async () => {
+        await createWith({ note: 'a\nb' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = cmp.root()!.children![0]!;
+        expect(cmp.renderLeaf(node.value, node.type)).toBe('"a\\nb"');
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(cmp.renderLeaf(node.value, node.type)).toBe('"a\\nb"');
+      });
+
+      it('search continues to match the JSON-escaped substring after toggling on', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        prefs.update({ searchScope: 'values' });
+        cmp.search.set('first\\nsecond');
+        fixture.detectChanges();
+        expect(cmp.searchHits().has('$.note')).toBe(true);
+      });
+
+      it('copyValue still copies the raw string (no JSON quotes) regardless of toggle state', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = cmp.root()!.children![0]!;
+        const original = (navigator as { clipboard?: Clipboard }).clipboard;
+        const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: { writeText },
+        });
+        try {
+          cmp.copyValue(node, 'menu');
+          await Promise.resolve();
+          await Promise.resolve();
+          expect(writeText).toHaveBeenCalledWith('first\nsecond');
+        } finally {
+          if (hadOwn && original) {
+            Object.defineProperty(navigator, 'clipboard', {
+              configurable: true,
+              value: original,
+            });
+          } else {
+            delete (navigator as { clipboard?: Clipboard }).clipboard;
+          }
+        }
+      });
+    });
+
+    describe('telemetry', () => {
+      it('logs tree.decoded.click with rowButton source and correct direction', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const event = spyOn(TestBed.inject(LoggerService), 'event');
+
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(event).toHaveBeenCalledWith('tree.decoded.click', {
+          source: 'rowButton',
+          direction: 'on',
+          lineCountBucket: '2-5',
+        });
+
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(event).toHaveBeenCalledWith('tree.decoded.click', {
+          source: 'rowButton',
+          direction: 'off',
+          lineCountBucket: '2-5',
+        });
+      });
+
+      it('logs tree.decoded.click with contextMenu source from the kebab menu', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const event = spyOn(TestBed.inject(LoggerService), 'event');
+
+        try {
+          await openMenuFor('$.note');
+          const item = decodedMenuItem();
+          expect(item).withContext('decoded menu item should be present').toBeTruthy();
+          item!.click();
+          fixture.detectChanges();
+          expect(event).toHaveBeenCalledWith('tree.decoded.click', {
+            source: 'contextMenu',
+            direction: 'on',
+            lineCountBucket: '2-5',
+          });
+        } finally {
+          closeOpenMenus();
+        }
+      });
+    });
+
+    describe('reset semantics', () => {
+      it('clears decoded state when viewResetToken bumps (blob change)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(true);
+
+        fixture.componentRef.setInput('viewResetToken', 1);
+        fixture.detectChanges();
+
+        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(false);
+      });
+
+      it('preserves decoded state when only the value reference changes (format/minify reparse)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(true);
+
+        // Reparse: same shape and same string at $.note, but a new
+        // top-level reference. viewResetToken stays at 0, so the
+        // decoded set must NOT be cleared.
+        fixture.componentRef.setInput('value', { note: 'first\nsecond' });
+        fixture.detectChanges();
+
+        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(true);
+      });
+
+      it('isDecoded is false when the path no longer resolves to a candidate (stale entry)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(true);
+
+        // Same path, but value type changed to a non-candidate. The
+        // entry remains in the set (not cleared on reparse), but
+        // isDecoded must still report false because the predicate
+        // gates on decodedCandidate.
+        fixture.componentRef.setInput('value', { note: 42 });
+        fixture.detectChanges();
+
+        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(false);
+      });
+    });
+
+    describe('menu label flips with state', () => {
+      it("shows 'Show as decoded text' when off and 'Show as JSON-escaped string' when on", async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+
+        try {
+          await openMenuFor('$.note');
+          const item = decodedMenuItem();
+          expect(item).toBeTruthy();
+          expect(item!.textContent).toMatch(/Show as decoded text/);
+          item!.click();
+          fixture.detectChanges();
+          closeOpenMenus();
+
+          await openMenuFor('$.note');
+          const item2 = decodedMenuItem();
+          expect(item2).toBeTruthy();
+          expect(item2!.textContent).toMatch(/Show as JSON-escaped string/);
+        } finally {
+          closeOpenMenus();
+        }
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // M7q tree-row context menu
   //
   // Covers: right-click + kebab triggers, action methods (copy / search /

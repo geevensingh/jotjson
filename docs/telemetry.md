@@ -362,6 +362,35 @@ If p90 or p99 is consistently > 200%, the tolerance is too aggressive
 and we should consider reducing it or adding a corrective
 measure-after-expand pass.
 
+#### `tree.decoded.click`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired every time the user toggles the per-row "decoded view" pill on a
+string leaf. Toggling on AND off both emit one event each. Display-only
+toggle: does not mutate the value, copy text, search results, or any
+persisted state. The event lets us see how often the affordance is
+used and at what payload size, without ever logging the string itself.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| source | string | `rowButton` (clicked the pill) or `contextMenu` (clicked the kebab-menu item). |
+| direction | string | `on` (entered the decoded view) or `off` (returned to the JSON-escaped view). |
+| lineCountBucket | string | Bucketed line count of the string at click time: `1`, `2-5`, `6-20`, `21-100`, `100+`. CRLF counts as one line break. |
+
+**Measurements:** none (line count is reported as a closed-enum bucket
+in `lineCountBucket` to keep the schema small).
+
+**Example: split between row pill and context menu**
+
+```kusto
+customEvents
+| where name == "tree.decoded.click"
+| summarize count() by tostring(customDimensions.source)
+```
+
 ---
 
 ## How to view the logs

@@ -876,6 +876,26 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
+   * Fired by: `JsonTreeComponent.onDecodedButtonClick` /
+   *           `onDecodedMenuClick`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           when the user toggles the per-row "decoded" view on a
+   *           string leaf whose parsed value contains escaped JSON
+   *           string control characters (newline, tab, carriage
+   *           return, embedded quote, or backslash). Display-only:
+   *           does NOT mutate the underlying value, copy semantics, or
+   *           search behavior.
+   * Props: { source: 'rowButton' | 'contextMenu';
+   *          direction: 'on' | 'off';
+   *          lineCountBucket: '1' | '2-5' | '6-20' | '21-100' | '100+' }.
+   *          `lineCountBucket` is the line count of the decoded
+   *          payload at click time (independent of direction); user
+   *          string contents are never logged.
+   */
+  'tree.decoded.click',
+
+  /**
+   * Kind: event
    * Fired by: `HomeComponent.onExtractRequest`
    *           (`features/home/home.component.ts`) after a non-stale tree
    *           extract click patches the editor text successfully.
