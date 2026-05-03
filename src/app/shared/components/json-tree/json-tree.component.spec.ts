@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { By } from '@angular/platform-browser';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
@@ -49,6 +50,15 @@ describe('JsonTreeComponent', () => {
       imports: [JsonTreeComponent],
       providers: [
         ...provideFakeAuth(),
+        // Provide noop animations so Angular Material's MatMenu sets
+        // its internal `_animationsDisabled` flag to true. Without
+        // this, on Linux headless Chrome `prefers-reduced-motion` is
+        // false, animations stay enabled, and `_setIsOpen(false)`
+        // schedules a 200 ms exit-fallback timer instead of the
+        // immediate microtask-style `setTimeout(0)`. The
+        // highlight-menu close behavior tests rely on synchronous
+        // tear-down via short `setTimeout(0)` flushes.
+        provideNoopAnimations(),
         { provide: MatSnackBar, useValue: { open: snackOpen } },
         ...(loggerOverride ? [{ provide: LoggerService, useValue: loggerOverride }] : []),
       ],
