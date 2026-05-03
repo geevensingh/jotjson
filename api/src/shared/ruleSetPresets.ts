@@ -41,26 +41,46 @@ const STYLE_GREEN_BG = { backgroundColor: '#c8e6c9' };
 const STYLE_AMBER_BG = { backgroundColor: '#ffe0b2' };
 const STYLE_YELLOW_BG = { backgroundColor: '#fff59d' };
 
+// Convenience composite styles. These reuse `STYLE_RED_BG`'s
+// `backgroundColor` and add the corresponding default icon, so a
+// preset rule that wants a red row with an error icon can write
+// `style: STYLE_RED_BG_WITH_ERROR_ICON` instead of repeating the
+// shape inline. Defined here (alongside the other shared color
+// styles) so future preset additions stay one-liners.
+const STYLE_RED_BG_WITH_ERROR_ICON = { ...STYLE_RED_BG, icon: 'error' as const };
+const STYLE_RED_BG_WITH_WARNING_ICON = { ...STYLE_RED_BG, icon: 'warning' as const };
+
 // -------- Preset definitions --------
 
 /**
  * Error Detection - flags keys (and most values) that name an
- * error / failure concept with a red background.
+ * error / failure concept with a red background and the `error`
+ * icon (so each match also surfaces as a beacon).
  *
  * Spec lists "error, err, exception, fault" as the target keywords;
  * v1.1 adds "failure" and "failed" because they're equally common
  * in real JSON and the bare term "Error Detection" reads as
- * inclusive. Each lands as its own `contains` rule (instead of a
- * single regex) because the regex match type is deferred to v1.1.
- * `contains` is preferred over `exact` so the preset matches
- * `errors`, `errorMessage`, `lastError`, `TypeError`, `ParseError`,
- * etc., which is what users actually have in their JSON.
+ * inclusive. Most terms land as their own `contains` rule (instead
+ * of a single regex) because the regex match type is deferred to
+ * v1.1, and `contains` catches embedded forms like `errorMessage`,
+ * `lastError`, `TypeError`, `ParseError`.
  *
- * `err` is keys-only (`target: 'key'`) because case-insensitive
- * contains-match for "err" hits common English words ("merry",
- * "berry", "where", "every"). It's safe in keys (developer-chosen
- * identifiers) but too noisy in values (arbitrary user data). The
- * other terms use `target: 'key_and_value'` so a value like
+ * Two terms use a tighter match-type than `contains` because the
+ * literal substring is too noisy to scan arbitrary text with:
+ * - `err` is keys-only (`target: 'key'`) and uses `matchType: 'exact'`
+ *   because case-insensitive contains-match for "err" hits "merry",
+ *   "berry", "where", "every", and case-insensitive contains-match
+ *   in keys also fires on `lastError` / `TypeError` (already covered
+ *   by the `error` rule). Exact-match keeps the rule meaningful for
+ *   the bare key `err` without piling onto rows the other rules
+ *   already flag.
+ * - `fault` uses `matchType: 'starts_with'` because the substring
+ *   "fault" embeds in the very common word "default", which is
+ *   pervasive in configuration and code-generated JSON. Starts-with
+ *   keeps `fault`, `faultCount`, `FaultDetail` matching while
+ *   skipping `default`, `defaultValue`, etc.
+ *
+ * The other terms use `target: 'key_and_value'` so a value like
  * "TypeError" or "ParseError" gets highlighted on its own.
  */
 const ERROR_DETECTION: RuleSetPreset = {
@@ -73,15 +93,15 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'error',
       caseSensitive: false,
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_ERROR_ICON,
     },
     {
       id: 'err',
       target: 'key',
-      matchType: 'contains',
+      matchType: 'exact',
       matchValue: 'err',
       caseSensitive: false,
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_ERROR_ICON,
     },
     {
       id: 'exception',
@@ -89,15 +109,15 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'exception',
       caseSensitive: false,
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_ERROR_ICON,
     },
     {
       id: 'fault',
       target: 'key_and_value',
-      matchType: 'contains',
+      matchType: 'starts_with',
       matchValue: 'fault',
       caseSensitive: false,
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_ERROR_ICON,
     },
     {
       id: 'failure',
@@ -105,7 +125,7 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'failure',
       caseSensitive: false,
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_ERROR_ICON,
     },
     {
       id: 'failed',
@@ -113,7 +133,7 @@ const ERROR_DETECTION: RuleSetPreset = {
       matchType: 'contains',
       matchValue: 'failed',
       caseSensitive: false,
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_ERROR_ICON,
     },
   ],
 };
@@ -270,8 +290,10 @@ const STATUS_HIGHLIGHTS: RuleSetPreset = {
 /**
  * Test Header Content - highlights `test-header`, `testHeader`, and
  * `test_header` pairs based on whether the value carries content, so
- * test header fields with payload stand out red and missing / empty
- * payloads show as green.
+ * test header fields with payload stand out red (with the `warning`
+ * icon, since a populated test-header is usually noteworthy in
+ * production-side data) and missing / empty payloads show as green
+ * (no icon).
  *
  * The `has_content` and `lacks_content` predicates are complementary:
  * for any matched key, exactly one rule fires, keeping the matched-rule
@@ -294,7 +316,7 @@ const TEST_HEADER_CONTENT: RuleSetPreset = {
         caseSensitive: false,
       },
       valueMatch: { kind: 'predicate', predicate: 'has_content' },
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_WARNING_ICON,
     },
     {
       id: 'kebab-lacks',
@@ -316,7 +338,7 @@ const TEST_HEADER_CONTENT: RuleSetPreset = {
         caseSensitive: false,
       },
       valueMatch: { kind: 'predicate', predicate: 'has_content' },
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_WARNING_ICON,
     },
     {
       id: 'camel-lacks',
@@ -338,7 +360,7 @@ const TEST_HEADER_CONTENT: RuleSetPreset = {
         caseSensitive: false,
       },
       valueMatch: { kind: 'predicate', predicate: 'has_content' },
-      style: STYLE_RED_BG,
+      style: STYLE_RED_BG_WITH_WARNING_ICON,
     },
     {
       id: 'snake-lacks',

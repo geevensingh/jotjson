@@ -233,7 +233,7 @@
             >
           }
 
-          @if (keyIcon(node); as ki) {
+          @for (ki of keyIcons(node); track ki) {
             <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="13" />
           }
           @if (node.segment !== undefined) {
@@ -244,7 +244,7 @@
             }
           }
 
-          @if (valueIcon(node); as vi) {
+          @for (vi of valueIcons(node); track vi) {
             <jj-icon class="tree-rule-icon tree-rule-icon--value" [name]="vi" [size]="13" />
           }
           @switch (node.type) {
@@ -443,7 +443,7 @@
             >
           }
 
-          @if (keyIcon(node); as ki) {
+          @for (ki of keyIcons(node); track ki) {
             <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="13" />
           }
           @if (node.segment !== undefined) {

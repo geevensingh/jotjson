@@ -3412,8 +3412,8 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       const root = cmp.root()!;
       const warnNode = root.children!.find((c) => c.segment === 'warning')!;
-      expect(cmp.keyIcon(warnNode)).toBe('warning');
-      expect(cmp.valueIcon(warnNode)).toBeNull();
+      expect(cmp.keyIcons(warnNode)).toEqual(['warning']);
+      expect(cmp.valueIcons(warnNode)).toEqual([]);
       const iconEl = (fixture.nativeElement as HTMLElement).querySelector('.tree-rule-icon--key');
       expect(iconEl).not.toBeNull();
     });

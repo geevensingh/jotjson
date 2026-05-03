@@ -153,6 +153,13 @@ const TREE_RENDER_SLOW_THRESHOLD_MS = 200;
 const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
 
 /**
+ * Frozen empty-array sentinel returned by `keyIcons` / `valueIcons`
+ * when the engine projects no icons. Identity-shared so `OnPush`
+ * change detection treats unchanged rows as equal.
+ */
+const EMPTY_ICONS: readonly FormattingIcon[] = Object.freeze([]);
+
+/**
  * Interactive tree viewer for parsed JSON, built on Angular Material's
  * mat-tree (nested variant). JsonParserService is the source of the value.
  */
@@ -2453,14 +2460,21 @@ export class JsonTreeComponent {
     return Object.keys(out).length === 0 ? null : out;
   }
 
-  /** Engine-supplied icon for the matched key side, or null. */
-  keyIcon(node: TreeNode): FormattingIcon | null {
-    return this.ruleResultFor(node).keyStyle.icon ?? null;
+  /**
+   * Engine-supplied icons for the matched key side. Returns an empty
+   * array when no rules with icons match. Multiple rules contributing
+   * the same icon are deduped (engine guarantees this).
+   */
+  keyIcons(node: TreeNode): readonly FormattingIcon[] {
+    return this.ruleResultFor(node).keyStyle.icons ?? EMPTY_ICONS;
   }
 
-  /** Engine-supplied icon for the matched value side, or null. */
-  valueIcon(node: TreeNode): FormattingIcon | null {
-    return this.ruleResultFor(node).valueStyle.icon ?? null;
+  /**
+   * Engine-supplied icons for the matched value side. Same shape as
+   * `keyIcons`.
+   */
+  valueIcons(node: TreeNode): readonly FormattingIcon[] {
+    return this.ruleResultFor(node).valueStyle.icons ?? EMPTY_ICONS;
   }
 
   /**

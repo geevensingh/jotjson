@@ -982,18 +982,25 @@ describe('evaluateFormattingRules', () => {
   });
 
   describe('icon projection', () => {
-    it('latest icon wins when two rules both project icons', () => {
+    it('accumulates icons across multiple rules, deduped and in declaration order', () => {
       const r1 = rule({ id: 'r1', matchValue: 'foo', style: { icon: 'warning' } });
       const r2 = rule({ id: 'r2', matchValue: 'foo', style: { icon: 'error' } });
       const result = evaluateFormattingRules([set([r1, r2])], node({ key: 'foo' }));
-      expect(result.keyStyle.icon).toBe('error');
+      expect(result.keyStyle.icons).toEqual(['warning', 'error']);
+    });
+
+    it('dedupes when two rules project the same icon', () => {
+      const r1 = rule({ id: 'r1', matchValue: 'foo', style: { icon: 'warning' } });
+      const r2 = rule({ id: 'r2', matchValue: 'foo', style: { icon: 'warning' } });
+      const result = evaluateFormattingRules([set([r1, r2])], node({ key: 'foo' }));
+      expect(result.keyStyle.icons).toEqual(['warning']);
     });
 
     it('icon projects to keyStyle for target=key', () => {
       const r = rule({ target: 'key', matchValue: 'foo', style: { icon: 'star' } });
       const result = evaluateFormattingRules([set([r])], node({ key: 'foo' }));
-      expect(result.keyStyle.icon).toBe('star');
-      expect(result.valueStyle.icon).toBeUndefined();
+      expect(result.keyStyle.icons).toEqual(['star']);
+      expect(result.valueStyle.icons).toBeUndefined();
     });
 
     it('icon projects to valueStyle for target=value', () => {
@@ -1004,8 +1011,8 @@ describe('evaluateFormattingRules', () => {
         style: { icon: 'check' },
       });
       const result = evaluateFormattingRules([set([r])], node({ key: 'status', valueText: '200' }));
-      expect(result.valueStyle.icon).toBe('check');
-      expect(result.keyStyle.icon).toBeUndefined();
+      expect(result.valueStyle.icons).toEqual(['check']);
+      expect(result.keyStyle.icons).toBeUndefined();
     });
   });
 

@@ -45,21 +45,30 @@ describe('built-in rule-set presets', () => {
     }
   });
 
-  it('error-detection targets keys and values with contains', () => {
+  it('error-detection targets keys and values, mostly with contains', () => {
     const preset = findPreset('error-detection')!;
     expect(preset).toBeDefined();
     expect(preset.rules).toHaveLength(6);
     for (const rule of preset.rules) {
-      expect(rule.matchType).toBe('contains');
       expect(rule.caseSensitive).toBe(false);
       expect(rule.style.backgroundColor).toBe('#ffcdd2');
+      expect(rule.style.icon).toBe('error');
     }
-    // `err` stays keys-only because case-insensitive contains "err"
-    // hits common English words in arbitrary value text. Every
-    // other term targets both sides so values like "TypeError" or
-    // "ParseError" highlight on their own.
     const byId = new Map(preset.rules.map((r) => [r.id, r]));
+    // `err` is keys-only and exact-match because case-insensitive
+    // `contains 'err'` hits common English noise (`merry`, `where`,
+    // `every`) and embedded-error keys (`lastError`) are already
+    // covered by the `error` rule.
     expect(byId.get('err')?.target).toBe('key');
+    expect(byId.get('err')?.matchType).toBe('exact');
+    // `fault` uses `starts_with` because contains-match for "fault"
+    // hits the very common word "default".
+    expect(byId.get('fault')?.matchType).toBe('starts_with');
+    // The remaining rules retain `contains` so they catch embedded
+    // forms like `lastError`, `TypeError`, `failureCount`, `failedAt`.
+    for (const id of ['error', 'exception', 'failure', 'failed']) {
+      expect(byId.get(id)?.matchType).toBe('contains');
+    }
     for (const id of ['error', 'exception', 'fault', 'failure', 'failed']) {
       expect(byId.get(id)?.target).toBe('key_and_value');
     }
@@ -183,6 +192,9 @@ describe('built-in rule-set presets', () => {
         );
         expect(hasContentRules).toHaveLength(1);
         expect(hasContentRules[0]?.style.backgroundColor).toBe(redBackgroundColor);
+        // has_content rules carry the `warning` icon so populated
+        // test-header values surface as beacons.
+        expect(hasContentRules[0]?.style.icon).toBe('warning');
 
         const lacksContentRules = rulesForSpelling.filter(
           (rule) =>
@@ -190,6 +202,9 @@ describe('built-in rule-set presets', () => {
         );
         expect(lacksContentRules).toHaveLength(1);
         expect(lacksContentRules[0]?.style.backgroundColor).toBe(greenBackgroundColor);
+        // lacks_content rules carry no icon - an empty test-header
+        // is the boring/expected case.
+        expect(lacksContentRules[0]?.style.icon).toBeUndefined();
       }
     });
   });

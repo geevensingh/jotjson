@@ -982,19 +982,19 @@ servers.
 - **How it works in the Tree View:**
   - When a rule set is active, the tree view scans each node's key and value.
   - Matching nodes receive the configured inline styles (background, text color, font weight, etc.).
-  - **Within a rule set:** multiple rules can match the same node - styles are merged in rule-list order (later rules override earlier ones for conflicting properties).
-  - **Across active rule sets:** sets are evaluated in `createdAt` order (oldest first) - the same order they appear in the user's saved list and the formatting toolbar. Later evaluations override earlier ones for conflicting style properties. Drag-to-reorder of active sets is a post-v1 follow-up.
+  - **Within a rule set:** multiple rules can match the same node. Style projection is **additive across non-conflicting fields**: scalar properties (text color, bold, italic, underline, background, border) are last-wins across overlapping rules, but `icon` is set-union - if three rules with three different icons all match, the row surfaces all three icons (deduped, in first-occurrence order). This lets a row simultaneously be e.g. red-background AND error-icon AND bold without one rule clobbering the other's contribution.
+  - **Across active rule sets:** sets are evaluated in `createdAt` order (oldest first) - the same order they appear in the user's saved list and the formatting toolbar. Later evaluations override earlier ones for conflicting scalar style properties; icons continue to accumulate across sets. Drag-to-reorder of active sets is a post-v1 follow-up.
   - The optional `borderColor` style renders as a 4px left-edge accent strip on the affected row (consistent with the `.pref-substack` pattern on the profile page) so it does not collide with the selection outline or ancestor highlights.
   - A tooltip on hover shows which rule(s) matched a given node (keeps the tree visually clean). Tooltip labels are auto-generated from each rule's match config.
   - **Highlight priority** (highest to lowest): selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> manual highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
   - A **formatting toolbar** above the tree view lets users quickly toggle rule sets on/off or pick which set to apply. Toolbar state is the user's `activeRuleSetIds` preference and persists across sessions and devices; the same selection appears in the Profile "Default rule sets" multi-select.
 
 - **Built-in Presets** - ship a few starter rule sets users can clone and customize. Preset IDs are stable kebab-case slugs (not UUIDs) so the clone endpoint URLs are human-readable and stable across rebuilds; user-created rule sets always get UUIDs.
-  - `error-detection` ("Error Detection") - highlights keys and values that name an error / failure concept in red. Six rules, all `contains` and case-insensitive: `error`, `exception`, `fault`, `failure`, `failed` target both keys and values (so `{"data":"TypeError"}` highlights the value); `err` targets keys only because case-insensitive contains-match for "err" hits common English words in arbitrary value text (merry, berry, where, every).
+  - `error-detection` ("Error Detection") - highlights keys and values that name an error / failure concept in red, and surfaces each match as a beacon (the rule carries the `error` icon by default). Six rules, all case-insensitive: `error`, `exception`, `failure`, `failed` use `contains` against both keys and values (so `{"data":"TypeError"}` highlights the value); `err` targets keys only and uses `exact`-match because case-insensitive contains-match for "err" hits common English words in arbitrary text (merry, berry, where, every) and the embedded-error keys are already covered by the `error` rule; `fault` uses `starts_with` so the very common word `default` does not match while `fault`, `faultCount`, `FaultDetail` still do.
   - `status-codes` ("Status Codes") - color-codes a fixed list of common HTTP response code values via `exact` matches: `200`, `201`, `204` (green); `400`, `401`, `403`, `404` (amber); `500`, `502`, `503` (red). Individual rules per code rather than a single regex - a documented v1 trade-off until the regex match type lands in v1.1.
   - `null-finder` ("Null Finder") - highlights all `null` values with a yellow background.
   - `status-highlights` ("Status Highlights") - color-codes outcome and lifecycle vocabulary on both keys and values, case-insensitive. Green: `success`, `succeeded`, `passed` (`contains`), `ok` (`exact` - avoids partial matches like "took" / "look" / "broken" while still catching `{"status":"OK"}`). Amber: `warning`, `pending`, `retry` (`contains`), `warn` (`exact` - avoids "Warner" / "warned" while catching `{"level":"warn"}`).
-  - `test-header-content` ("Test Header Content") - highlights values under keys named `test-header`, `testHeader`, or `test_header` with case-insensitive exact matching (so `Test-Header`, `TESTHEADER`, etc. also match). It uses complementary pair-value predicates: `has_content` paints red, `lacks_content` paints green; because those predicates are mutually exclusive, a matched node's tooltip gets exactly one label. Whitespace-only strings like `"   "` are treated as content (red) because `is_empty` is strict-literal-empty. The preset paints row backgrounds, so when it is active with another row-background preset such as `null-finder`, the final color follows cross-set `createdAt ASC` precedence.
+  - `test-header-content` ("Test Header Content") - highlights values under keys named `test-header`, `testHeader`, or `test_header` with case-insensitive exact matching (so `Test-Header`, `TESTHEADER`, etc. also match). It uses complementary pair-value predicates: `has_content` paints red and carries the `warning` icon (so populated test-header values surface as beacons - usually noteworthy in production-side data); `lacks_content` paints green and carries no icon (an empty test-header is the boring/expected case). Because those predicates are mutually exclusive, a matched node's tooltip gets exactly one label. Whitespace-only strings like `"   "` are treated as content (red) because `is_empty` is strict-literal-empty. The preset paints row backgrounds, so when it is active with another row-background preset such as `null-finder`, the final color follows cross-set `createdAt ASC` precedence.
 
 - **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set, rule-set name <= 80 chars, rule matchValue <= 200 chars. Enforced server-side as hardcoded constants in `api/src/shared/limits.ts` (mirrors the 100-blob cap pattern); raising them later is one edit.
 
@@ -1683,6 +1683,21 @@ there is no need to bump SemVer just to mark a deploy.
   rendering between the JSON-escaped single-line form and the decoded
   multi-line form; display-only (does not affect copy, search, or
   persistence).
+- **0.9.0**: Additive style projection + preset polish - the formatting
+  rules engine now accumulates `icon` set-union across overlapping rules
+  (deduped, in first-occurrence order) while keeping the other inline
+  styles (color, bold, italic, underline) on last-wins semantics, so a
+  row can simultaneously carry e.g. a red background, an error icon,
+  and bold text without one rule clobbering the others. Built-in
+  presets updated to take advantage: every Error Detection rule now
+  carries the `error` icon by default; the three `has_content`
+  Test Header Content rules carry the `warning` icon (lacks_content
+  unchanged). Two error-detection match-type refinements ship in the
+  same release: `err` switches from `contains` to `exact` (the embedded
+  forms are already covered by the `error` rule, and case-insensitive
+  contains-match was hitting English noise like "merry" / "where"),
+  and `fault` switches from `contains` to `starts_with` (so the very
+  common word "default" no longer triggers it).
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

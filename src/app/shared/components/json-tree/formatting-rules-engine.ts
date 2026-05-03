@@ -36,13 +36,22 @@ import type {
  * Per-target inline style projection. Mirrors `FormattingStyle` minus
  * the row-level fields (`backgroundColor`, `borderColor`) which always
  * land on `rowStyle`.
+ *
+ * `icons` is **set-accumulating** across matched rules, deduped, in
+ * first-occurrence order. The other style properties (`color`,
+ * `bold`, `italic`, `underline`) keep last-wins semantics: when two
+ * rules both project the same property, the later rule's value
+ * overwrites the earlier. This asymmetry is intentional: a single
+ * row can usefully display multiple icons (different rules flagging
+ * different concerns), but a single row can only have one text
+ * color or one boldness state.
  */
 export interface RuleStyleProjection {
   color?: string;
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
-  icon?: FormattingIcon;
+  icons?: readonly FormattingIcon[];
 }
 
 /**
@@ -301,17 +310,30 @@ function evaluatePredicate(predicate: ValuePredicate, node: RuleEngineNode): boo
  * Project a rule's `style` onto a `RuleStyleProjection` (the
  * per-target inline style). Mutates `target` in place. Skips
  * properties whose value is `undefined` so a rule that doesn't
- * specify (e.g.) `bold` can't erase a previously-set `bold`. Each
- * defined property overwrites the existing value - that includes
- * explicit `false` deliberately clobbering an earlier `true` (the
- * documented expected behaviour, plan.md M6f spec tests).
+ * specify (e.g.) `bold` can't erase a previously-set `bold`.
+ *
+ * Last-wins for the scalar properties (`color`, `bold`, `italic`,
+ * `underline`) - that includes explicit `false` deliberately
+ * clobbering an earlier `true` (M6f spec).
+ *
+ * Set-union for `icons`: each rule's `style.icon` is appended (if
+ * not already present), so a row matching three rules with three
+ * different icons surfaces all three. Order is first-occurrence
+ * across the rule iteration order so it is stable and deterministic.
  */
 function projectInlineStyle(target: RuleStyleProjection, style: FormattingStyle): void {
   if (style.textColor !== undefined) target.color = style.textColor;
   if (style.bold !== undefined) target.bold = style.bold;
   if (style.italic !== undefined) target.italic = style.italic;
   if (style.underline !== undefined) target.underline = style.underline;
-  if (style.icon !== undefined) target.icon = style.icon;
+  if (style.icon !== undefined) {
+    const existing = target.icons;
+    if (existing === undefined) {
+      target.icons = [style.icon];
+    } else if (!existing.includes(style.icon)) {
+      target.icons = [...existing, style.icon];
+    }
+  }
 }
 
 /**
