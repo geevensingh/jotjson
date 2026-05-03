@@ -433,6 +433,19 @@
             />
           </button>
 
+          @for (ai of ancestorBeaconIcons(node); track ai) {
+            <button
+              type="button"
+              class="tree-beacon-badge"
+              [attr.aria-label]="ancestorBadgeTooltip(node, ai)"
+              [matTooltip]="ancestorBadgeTooltip(node, ai)"
+              matTooltipShowDelay="500"
+              (click)="onAncestorBadgeClick(node, ai, $event)"
+            >
+              <jj-icon [name]="ai" [size]="12" />
+            </button>
+          }
+
           @if (showComments() && leadingComment(node); as lc) {
             <span
               class="tree-comment tree-comment-leading"

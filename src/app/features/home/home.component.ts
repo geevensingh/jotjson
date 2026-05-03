@@ -41,6 +41,10 @@ import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.servi
 import { SeoService } from '../../core/seo/seo.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
+import {
+  BeaconNavigationService,
+  type BeaconJumpRequest,
+} from '../../core/beacons/beacon-navigation.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { debounceTime, firstValueFrom } from 'rxjs';
@@ -60,6 +64,10 @@ import {
   JsonTreeComponent,
   type TreeExtractRequest,
 } from '../../shared/components/json-tree/json-tree.component';
+import {
+  EMPTY_BEACON_INDEX,
+  type BeaconIndex,
+} from '../../shared/components/json-tree/formatting-beacons-index';
 import { highlightsEqual } from '../../shared/components/json-tree/highlight-resolver';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/toolbar.component';
@@ -181,6 +189,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly logger = inject(LoggerService);
   private readonly dropController = inject(DocumentDropController);
+  private readonly beaconNav = inject(BeaconNavigationService);
 
   /** Mirrors the controller's drag-active signal for the drop overlay. */
   readonly dropActive = this.dropController.dropActive;
@@ -426,6 +435,18 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   readonly canEditHighlights = computed(() => this.loadedBlob() === null || this.isOwnedBlob());
 
+  /**
+   * Beacon index from the live tree component. Returns the
+   * identity-shared `EMPTY_BEACON_INDEX` when the tree has not yet
+   * mounted. Passed through to the toolbar so the beacon-pills
+   * sub-component can render one pill per icon-bucket.
+   */
+  readonly treeBeaconIndex = computed<BeaconIndex>(() => {
+    const tree = this.tree();
+    if (!tree) return EMPTY_BEACON_INDEX;
+    return tree.beaconIndex();
+  });
+
   readonly canSave = computed(
     () =>
       this.auth.isSignedIn() &&
@@ -617,6 +638,17 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.treeValueChanges$
       .pipe(debounceTime(TREE_EXTRACT_SCAN_DEBOUNCE_MS), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.scanTreeStringLeaves(value));
+
+    // Beacon cross-pane dispatcher: a pill click (or ancestor-badge
+    // click) emits a jump request through `BeaconNavigationService`.
+    // We translate it into a tree expand+select OR an editor reveal
+    // depending on `paneVisibility()` + `lastActivePane()`. The
+    // service captures `lastActivePane` BEFORE the click handler ran,
+    // so the value here reflects the user's intent rather than the
+    // post-click focused element (always the pill or badge button).
+    this.beaconNav.jumpRequest$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((request) => this.dispatchBeaconJump(request));
 
     this.blobs.events$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((event) => {
       const blob = this.loadedBlob();
@@ -1016,6 +1048,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   onCursorChange(pos: { line: number; column: number; offset: number }): void {
     this.cursor.set({ line: pos.line, column: pos.column });
+    this.beaconNav.markEditorActive();
     if (!this.syncEnabled()) return;
     const tree = this.tree();
     if (!tree) return;
@@ -1032,6 +1065,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   onTreeSelectionChange(path: readonly (string | number)[] | null): void {
+    this.beaconNav.markTreeActive();
     if (!this.syncEnabled()) return;
     const editor = this.editor();
     if (!editor) return;
@@ -1064,6 +1098,64 @@ export class HomeComponent implements OnInit, OnDestroy {
     const startPos = this.parser.offsetToPosition(text, startOffset);
     const endPos = this.parser.offsetToPosition(text, startOffset + target.length);
     this.pendingEditorReveal = pathString;
+    editor.revealRange({
+      startLineNumber: startPos.line,
+      startColumn: startPos.column,
+      endLineNumber: endPos.line,
+      endColumn: endPos.column,
+    });
+  }
+
+  /**
+   * Cross-pane dispatcher for beacon jump intents (pill clicks +
+   * ancestor-badge clicks). Decides whether to drive the tree or the
+   * editor based on `paneVisibility()` plus
+   * `BeaconNavigationService.lastActivePane()` (the latter only used
+   * when both panes are visible). Always emits
+   * `beacons.crossPane.dispatched` telemetry with closed-enum props
+   * (no paths, no key/value content).
+   */
+  private dispatchBeaconJump(request: BeaconJumpRequest): void {
+    const paneVisibility = this.paneVisibility();
+    const lastActive = this.beaconNav.lastActivePane();
+    const target: 'tree' | 'editor' =
+      paneVisibility === 'editor-only'
+        ? 'editor'
+        : paneVisibility === 'tree-only'
+          ? 'tree'
+          : lastActive;
+    this.logger.info('beacons.crossPane.dispatched', {
+      target,
+      paneVisibility,
+      source: request.source,
+      icon: request.icon,
+    });
+    if (target === 'tree') {
+      const tree = this.tree();
+      if (!tree) return;
+      const pathString = this.parser.pathToString([...request.path]);
+      tree.selectByPathString(pathString);
+      return;
+    }
+    // Editor target: reveal the value in Monaco directly without
+    // going through the tree (mirrors the tree->editor branch of
+    // `onTreeSelectionChange`, but without selectionChange echoes).
+    const editor = this.editor();
+    if (!editor) return;
+    const ast = this.parseResult().ast;
+    if (!ast) return;
+    const valueNode = findNodeAtLocation(ast, [...request.path]);
+    if (!valueNode) return;
+    const targetNode =
+      (valueNode.type === 'object' || valueNode.type === 'array') &&
+      valueNode.parent?.type === 'property'
+        ? valueNode.parent
+        : valueNode;
+    const text = this.content();
+    const bomShift = this.bomShift(text);
+    const startOffset = targetNode.offset + bomShift;
+    const startPos = this.parser.offsetToPosition(text, startOffset);
+    const endPos = this.parser.offsetToPosition(text, startOffset + targetNode.length);
     editor.revealRange({
       startLineNumber: startPos.line,
       startColumn: startPos.column,

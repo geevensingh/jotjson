@@ -295,6 +295,14 @@
   margin-left: 0.4rem;
 }
 
+.rule-icon-beacon-hint {
+  flex: 1 0 100%;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 .status {
   margin: 2rem 0;
   color: var(--mat-sys-on-surface-variant);

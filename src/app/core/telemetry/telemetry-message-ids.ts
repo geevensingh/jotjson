@@ -1097,6 +1097,71 @@ export const TELEMETRY_MESSAGE_IDS = [
    * parity with `tree.breadcrumb.click`.
    */
   'tree.breadcrumb.copyPath',
+
+  // Beacons (icon-bearing rules surfaced via toolbar pills + ancestor badges)
+
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent`'s `beaconIndex` computed signal
+   *           via an `effect` that observes recompute results
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Fires at most once per recompute. Skipped when the
+   *           index is identity-equal to `EMPTY_BEACON_INDEX`.
+   * Props: none.
+   * Measurements: { iconCount: number; totalMatches: number }.
+   *   - `iconCount` is the number of distinct icon-types with at
+   *     least one match in the current tree.
+   *   - `totalMatches` is the sum of matches across all icon-types
+   *     (a node that matches two icons counts twice). Both are
+   *     small bounded counts (icons are a 7-value closed enum;
+   *     totalMatches is bounded by tree node count, already gated
+   *     by upstream tree-build limits).
+   */
+  'beacons.evaluated',
+
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent.onAncestorBadgeClick`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           when a user clicks an ancestor-badge on a collapsed
+   *           tree row to expand the path to a hidden beacon match.
+   * Props: { icon: FormattingIcon }. Closed enum (7 values: warning,
+   *   check, star, info, error, flag, bookmark).
+   * Measurements: { descendantCount: number }. Number of beacon
+   *   matches under this ancestor for this icon-type. No paths,
+   *   no key/value strings.
+   */
+  'beacons.badge.clicked',
+
+  /**
+   * Kind: event
+   * Fired by: `ToolbarBeaconPillsComponent.onPillClick`
+   *           (`shared/components/toolbar-beacon-pills/`) when the
+   *           user clicks a beacon pill to cycle through matches in
+   *           that bucket.
+   * Props: { icon: FormattingIcon; direction: 'forward' | 'backward' }.
+   *   `direction` is `'backward'` when the user holds Shift while
+   *   clicking; otherwise `'forward'`.
+   * Measurements: { bucketSize: number }. Number of matches in this
+   *   icon's bucket at click time. No paths, no key/value strings.
+   */
+  'beacons.pill.clicked',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent`'s `BeaconNavigationService.jumpRequest$`
+   *           subscription (`features/home/home.component.ts`) once
+   *           per dispatched jump.
+   * Props: { target: 'tree' | 'editor';
+   *          paneVisibility: 'editor-only' | 'tree-only' | 'both';
+   *          source: 'pill' | 'badge';
+   *          icon: FormattingIcon }.
+   *   All closed enums. `target` is the pane that handled the jump;
+   *   `paneVisibility` is the layout state that drove dispatch;
+   *   `source` distinguishes pill clicks from ancestor-badge clicks;
+   *   `icon` identifies the bucket. No paths, no key/value strings.
+   */
+  'beacons.crossPane.dispatched',
 ] as const;
 
 export type TelemetryMessageId = (typeof TELEMETRY_MESSAGE_IDS)[number];

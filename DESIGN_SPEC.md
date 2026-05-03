@@ -784,7 +784,8 @@ Available to **registered users** only.
     - Bold / italic / underline toggles.
     - Border/outline color.
     - Optional icon badge - closed whitelist (`warning`, `check`,
-      `star`, `info`, `error`, `flag`, `bookmark`).
+      `star`, `info`, `error`, `flag`, `bookmark`). Picking an icon
+      also opts the rule into the **Beacon surfacing UI** (see below).
   - **Live preview** - a sample JSON snippet updates in real time as the user configures the rule, showing how matches will look.
   - **Field-length caps:** rule-set `name` <= 80 chars, rule
     `matchValue` <= 200 chars. Enforced in `api/src/shared/limits.ts`
@@ -997,6 +998,43 @@ servers.
   - `test-header-content` ("Test Header Content") - highlights values under keys named `test-header`, `testHeader`, or `test_header` with case-insensitive exact matching (so `Test-Header`, `TESTHEADER`, etc. also match). It uses complementary pair-value predicates: `has_content` paints red and carries the `warning` icon (so populated test-header values surface as beacons - usually noteworthy in production-side data); `lacks_content` paints green and carries no icon (an empty test-header is the boring/expected case). Because those predicates are mutually exclusive, a matched node's tooltip gets exactly one label. Whitespace-only strings like `"   "` are treated as content (red) because `is_empty` is strict-literal-empty. The preset paints row backgrounds, so when it is active with another row-background preset such as `null-finder`, the final color follows cross-set `createdAt ASC` precedence.
 
 - **Limits (free tier):** max 20 rule sets per user, max 50 rules per rule set, rule-set name <= 80 chars, rule matchValue <= 200 chars. Enforced server-side as hardcoded constants in `api/src/shared/limits.ts` (mirrors the 100-blob cap pattern); raising them later is one edit.
+
+- **Beacon surfacing UI** (0.10.0) - any rule whose `style.icon` is set
+  becomes a "beacon": its matches surface in three places without any
+  new schema or new opt-in.
+  - **Inline icons** (existing): the engine already projects matched
+    icons next to the key/value on the row itself.
+  - **Ancestor badges**: a collapsed container row whose subtree
+    contains hidden beacons renders one badge per icon-type next to
+    the chevron (subtree icons minus the icons already on the row
+    itself, so we never duplicate a visible icon as a badge). Click
+    expands the path to and selects the first hidden match for that
+    icon. Click stops propagation so the row's own click handler does
+    not also fire.
+  - **Toolbar pills** (`<jj-toolbar-beacon-pills>`): one pill per
+    icon-bucket with at least one match in the current tree. Click
+    cycles forward through the bucket in pre-order (depth-first); a
+    Shift+click cycles backward. Per-icon cursors are kept locally and
+    clamp on bucket shrink. The count chip appears only when the
+    bucket has >= 2 matches.
+  - **Cross-pane navigation**: pill clicks (and ancestor-badge clicks
+    for parity / dashboard symmetry) emit jump intents through the
+    root-provided `BeaconNavigationService`. `HomeComponent` subscribes
+    via `takeUntilDestroyed()` and dispatches each request to the tree
+    or to Monaco based on `paneVisibility()` plus a tracked
+    `lastActivePane()` (updated on tree pointerdown / selection and on
+    Monaco cursor moves; NOT updated by the click that produced the
+    request - the dispatcher reads pre-click state). In `editor-only`
+    or `tree-only` modes the visible pane is the unconditional target.
+  - **Trigger discoverability**: the rule editor's icon picker has an
+    inline hint
+    (`@@ruleEditor.icon.beaconHint`) explaining that picking an icon
+    opts the rule into the surfacing UI.
+  - **Telemetry** (closed-enum props only - icon, direction, target,
+    paneVisibility, source - plus bounded numeric measurements; no
+    paths and no key/value content): `beacons.evaluated` (per
+    recompute, skipped when nothing matched), `beacons.badge.clicked`,
+    `beacons.pill.clicked`, `beacons.crossPane.dispatched`.
 
 ---
 
@@ -1698,6 +1736,31 @@ there is no need to bump SemVer just to mark a deploy.
   contains-match was hitting English noise like "merry" / "where"),
   and `fault` switches from `contains` to `starts_with` (so the very
   common word "default" no longer triggers it).
+- **0.10.0**: Beacon Rules surfacing UI - a "beacon" is any formatting
+  rule that projects an icon. Beacons surface in three places without
+  any new rule schema: (a) on each tree row, the engine-projected key
+  and value icons render inline next to the key/value (existing
+  behavior, kept); (b) collapsed container rows whose subtree contains
+  hidden beacons render an extra ancestor-badge per icon-type next to
+  the chevron - clicking a badge expands the path to (and selects) the
+  first hidden match for that icon; (c) a new `<jj-toolbar-beacon-pills>`
+  segment between the pane-layout group and the divider in the toolbar
+  shows one pill per icon-bucket with at least one match in the tree -
+  click cycles forward through the matches in pre-order (depth-first)
+  and Shift+click cycles backward; the count chip appears only when the
+  bucket has 2+ matches. Per-icon cursors are kept in component-local
+  state and clamp on bucket shrink. Cross-pane navigation routes
+  through a new `BeaconNavigationService` (root-provided): pill / badge
+  clicks emit jump intents, and `HomeComponent` dispatches them to the
+  tree or to Monaco based on `paneVisibility()` plus a tracked
+  `lastActivePane()` (updated on tree pointerdown/selection and on
+  Monaco cursor moves). Rule editor gains an inline hint near the icon
+  picker explaining the beacon trigger. Telemetry: `beacons.evaluated`
+  (per-recompute, skipped when nothing matched), `beacons.badge.clicked`,
+  `beacons.pill.clicked`, `beacons.crossPane.dispatched` - all
+  closed-enum props only (icon, direction, target, paneVisibility,
+  source, plus bounded numeric measurements; no paths, no key/value
+  content).
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

@@ -17,6 +17,7 @@
       [loadedBlobTitle]="loadedBlob()?.title ?? null"
       [suggestedTitles]="suggestedTitlesForMenu()"
       [wandEnabled]="wandEnabled()"
+      [beaconIndex]="treeBeaconIndex()"
       (pasteRequested)="onPaste()"
       (copyRequested)="onCopy()"
       (copyEscaped)="onCopyEscaped()"

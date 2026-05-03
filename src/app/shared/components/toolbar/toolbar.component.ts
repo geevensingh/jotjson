@@ -18,6 +18,8 @@ import { SignedInDirective } from '../../directives/signed-in.directive';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import { IconComponent, JjIconName } from '../icon/icon.component';
 import type { SuggestionCandidate } from '../../../core/title-suggester/types';
+import { ToolbarBeaconPillsComponent } from '../toolbar-beacon-pills/toolbar-beacon-pills.component';
+import { EMPTY_BEACON_INDEX, type BeaconIndex } from '../json-tree/formatting-beacons-index';
 
 type ToolbarAction =
   | 'paste'
@@ -63,6 +65,7 @@ export type PaneLayout = 'editor-only' | 'both-horizontal' | 'both-vertical' | '
     MatButtonToggleModule,
     IconComponent,
     SignedInDirective,
+    ToolbarBeaconPillsComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './toolbar.component.html',
@@ -129,6 +132,14 @@ export class ToolbarComponent {
     'fallback',
   );
   readonly clipboardPreview = input<string>('');
+
+  /**
+   * Beacon index passed through to `<jj-toolbar-beacon-pills>`. The
+   * pills component renders nothing when the index is the
+   * identity-shared `EMPTY_BEACON_INDEX`, so callers can default this
+   * input rather than conditionally attaching the child component.
+   */
+  readonly beaconIndex = input<BeaconIndex>(EMPTY_BEACON_INDEX);
 
   readonly pasteRequested = output<void>();
   readonly copyRequested = output<void>();

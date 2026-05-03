@@ -59,6 +59,8 @@ import {
   type PaletteSwatch,
 } from './highlight-palette';
 import { findScrollableAncestor } from './scroll-container';
+import { EMPTY_BEACON_INDEX, buildBeaconIndex, type BeaconIndex } from './formatting-beacons-index';
+import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation.service';
 
 /**
  * Search-by-type filter values. `'all'` is the no-filter sentinel.
@@ -187,6 +189,7 @@ export class JsonTreeComponent {
   private readonly jsonParser = inject(JsonParserService);
   private readonly ruleSets = inject(RuleSetsService);
   private readonly logger = inject(LoggerService);
+  private readonly beaconNav = inject(BeaconNavigationService);
 
   readonly value = input<unknown>(undefined);
   readonly viewResetToken = input<number>(0);
@@ -1013,6 +1016,23 @@ export class JsonTreeComponent {
       const node = this.nodeIndex().get(selected);
       if (!node) return;
       this.selectionChange.emit(node.path);
+    });
+
+    // Beacon evaluation telemetry: emit one event per recompute that
+    // produced a non-empty index. Skipped when identity-equal to the
+    // shared empty sentinel (so trees with no beacons do not log
+    // anything on every rule-set toggle).
+    effect(() => {
+      const index = this.beaconIndex();
+      if (index === EMPTY_BEACON_INDEX) return;
+      let totalMatches = 0;
+      for (const bucket of index.matchesByIcon.values()) {
+        totalMatches += bucket.length;
+      }
+      this.logger.info('beacons.evaluated', {
+        iconCount: index.matchesByIcon.size,
+        totalMatches,
+      });
     });
   }
 
@@ -2475,6 +2495,128 @@ export class JsonTreeComponent {
    */
   valueIcons(node: TreeNode): readonly FormattingIcon[] {
     return this.ruleResultFor(node).valueStyle.icons ?? EMPTY_ICONS;
+  }
+
+  /**
+   * Pre-computed beacon index over the current tree. Drives toolbar
+   * pills (one per matched icon-bucket) and ancestor badges on
+   * collapsed rows. Returns `EMPTY_BEACON_INDEX` (identity-shared)
+   * when nothing matched, so OnPush short-circuits via `===`.
+   *
+   * Reactive on the tree `root()` and on `evaluateNode()` (which
+   * itself reactively tracks rule-set changes), so this recomputes
+   * exactly when matches could have changed.
+   */
+  readonly beaconIndex = computed<BeaconIndex>(() => {
+    const root = this.root();
+    if (!root) return EMPTY_BEACON_INDEX;
+    const evaluate = this.evaluateNode();
+    return buildBeaconIndex(root, (node) => {
+      const result = evaluate(node);
+      const keyIconList = result.keyStyle.icons;
+      const valueIconList = result.valueStyle.icons;
+      if (keyIconList === undefined && valueIconList === undefined) {
+        return EMPTY_ICONS;
+      }
+      if (keyIconList === undefined) return valueIconList ?? EMPTY_ICONS;
+      if (valueIconList === undefined) return keyIconList;
+      // Rare: both sides project icons. Concat (engine already
+      // dedupes within each side; cross-side duplicates are
+      // harmless because matchesByIcon order is what matters and
+      // the beacon-index helper dedupes via Set on the descendant
+      // side).
+      return [...keyIconList, ...valueIconList];
+    });
+  });
+
+  /**
+   * Icons present *strictly under* a collapsed node (subtree icons
+   * minus the icons on this row itself). Used for ancestor-badge
+   * rendering: when a container row is collapsed and there are
+   * beacons hidden below, we surface their icon types here.
+   * Returns `EMPTY_ICONS` (identity-shared) when there is nothing
+   * to badge.
+   *
+   * - Always empty for leaf nodes (no `children`).
+   * - Always empty for an expanded container (its children render
+   *   their own icons / their own badges; no need to duplicate).
+   * - Drops icons that are also on this row itself (already shown
+   *   inline next to the key/value).
+   */
+  ancestorBeaconIcons(node: TreeNode): readonly FormattingIcon[] {
+    if (!node.children?.length) return EMPTY_ICONS;
+    if (this.treeControl.isExpanded(node)) return EMPTY_ICONS;
+    const subtreeIcons = this.beaconIndex().descendantIconsByPath.get(node.pathString);
+    if (!subtreeIcons || subtreeIcons.size === 0) return EMPTY_ICONS;
+    const selfIcons = new Set<FormattingIcon>([...this.keyIcons(node), ...this.valueIcons(node)]);
+    const out: FormattingIcon[] = [];
+    for (const icon of subtreeIcons) {
+      if (!selfIcons.has(icon)) out.push(icon);
+    }
+    return out.length === 0 ? EMPTY_ICONS : out;
+  }
+
+  /**
+   * Click handler for an ancestor badge. Expands the path to (and
+   * selects) the first beacon match for `icon` under `node`. Stops
+   * propagation so the row's own click handler does not also run
+   * (which would re-select the ancestor instead). Always emits
+   * `beacons.badge.clicked`; emits `beacons.crossPane.dispatched`
+   * via the navigation service for parity with pill clicks (so
+   * dashboards can compare the two surfaces side by side).
+   */
+  onAncestorBadgeClick(node: TreeNode, icon: FormattingIcon, event: MouseEvent): void {
+    event.stopPropagation();
+    const matches = this.beaconIndex().matchesByIcon.get(icon);
+    if (!matches || matches.length === 0) return;
+    const ancestorPathString = node.pathString;
+    let descendantCount = 0;
+    let firstMatch: readonly (string | number)[] | undefined;
+    for (const candidate of matches) {
+      const candidatePathString = this.formatPath([...candidate]);
+      if (candidatePathString === ancestorPathString) continue;
+      if (!candidatePathString.startsWith(ancestorPathString)) continue;
+      // Ensure it's a strict descendant boundary (not just a prefix
+      // collision like `$.foo` vs `$.foobar`). The next char after
+      // the ancestor pathString must be `.` or `[` -- both are
+      // path-separator tokens in the canonical form.
+      const next = candidatePathString.charAt(ancestorPathString.length);
+      if (next !== '.' && next !== '[') continue;
+      if (firstMatch === undefined) firstMatch = candidate;
+      descendantCount += 1;
+    }
+    if (firstMatch === undefined) return;
+    this.logger.info('beacons.badge.clicked', {
+      icon,
+      descendantCount,
+    });
+    this.beaconNav.markTreeActive();
+    this.beaconNav.requestJump({
+      path: firstMatch,
+      icon,
+      source: 'badge',
+    });
+  }
+
+  /**
+   * Tooltip / aria text for an ancestor badge. Same wording shape as
+   * the toolbar pill tooltip (single-vs-many).
+   */
+  ancestorBadgeTooltip(node: TreeNode, icon: FormattingIcon): string {
+    const matches = this.beaconIndex().matchesByIcon.get(icon) ?? [];
+    const ancestorPathString = node.pathString;
+    let descendantCount = 0;
+    for (const candidate of matches) {
+      const candidatePathString = this.formatPath([...candidate]);
+      if (candidatePathString === ancestorPathString) continue;
+      if (!candidatePathString.startsWith(ancestorPathString)) continue;
+      const next = candidatePathString.charAt(ancestorPathString.length);
+      if (next !== '.' && next !== '[') continue;
+      descendantCount += 1;
+    }
+    return descendantCount === 1
+      ? $localize`:@@tree.beacon.badge.tooltip.single:Jump to hidden beacon (${icon}:icon:)`
+      : $localize`:@@tree.beacon.badge.tooltip.many:Jump to first of ${descendantCount}:count: hidden ${icon}:icon: beacons`;
   }
 
   /**
