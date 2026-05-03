@@ -1,0 +1,210 @@
+# Why JotJSON?
+
+**JotJSON** ([jotjson.com](https://jotjson.com)) does the obvious things every
+JSON tool does - format, minify, validate, search, tree view - and a stack of
+less-obvious things that no other JSON tool does. This doc is about the
+latter.
+
+---
+
+## Things you can't get elsewhere
+
+These are features that competing online JSON tools (jsoncrack, jsonhero,
+jsoneditoronline, jsonformatter.org, code beautifiers) either don't have or
+only do partially.
+
+### Find JSON hiding inside your JSON
+
+Real-world API responses often look like this:
+
+```json
+{ "status": "ok", "body": "{\"userId\":42,\"prefs\":{\"theme\":\"dark\"}}" }
+```
+
+Other tools render `body` as one long unreadable escaped string. JotJSON
+spots that the string itself contains JSON, surfaces a small **Extract**
+pill on the row, and one click splices the parsed structure back into the
+tree. If the embedded JSON is wrapped in prose (a log line, a `curl -v`
+transcript), the result preserves the prose under `prefix` / `suffix` keys
+so nothing gets lost. Every string leaf in the document is scanned in a
+background worker - not just the top-level paste.
+
+### Extract JSON from logs and mixed text on paste
+
+Pasted a `curl -v` output? A log line with a payload glued to it? A stack
+trace with a JSON body? JotJSON scans the buffer for embedded `{...}` and
+`[...]` blocks and shows a non-destructive banner: **[Extract JSON]** /
+**[Dismiss]**. Your raw paste stays in the editor either way. Single block
+extracted with comments preserved; multiple blocks combined into an array.
+
+### Auto-unescape on paste (and copy back)
+
+Pasted `{\"a\":1}` (out of a debugger, a log, a database column) doesn't
+parse as JSON. JotJSON quietly tries unescaping it; if the result is a
+clean object or array, it loads the unescaped version and formats it.
+Ctrl+Z gets you back the raw paste. The inverse - **Copy as escaped
+string** - is available with Alt+click on any copy action, completing the
+round-trip you usually have to do by hand.
+
+### Decoded view for escaped strings
+
+Strings with embedded `\n`, `\t`, or `\"` are hard to read in their
+JSON-escaped form. JotJSON adds a pill on those rows that flips the value
+between escaped one-liner and decoded multi-line view. Purely visual: copy
+still gives you the literal raw string.
+
+### JSONC as a first-class input
+
+Paste configs with `//` or `/* */` comments and trailing commas - JotJSON
+parses them, renders them in the tree, **and surfaces each comment inline
+on the row it documents**. Trailing comments next to the value, leading
+comments before it, multi-line block comments collapsed with full text in
+a tooltip. Almost no other web JSON tool accepts comments at all.
+
+### Formatting rule sets
+
+Define named rule sets ("Error Highlighter", "API Status Codes") once and
+apply them to any document. A rule has:
+
+- **Target**: the key, the value, either side, **or both must match** (pair rule).
+- **Match type**: exact / contains / starts-with / ends-with.
+- **Predicates** (pair rules): `is_null`, `is_empty`, `has_content`,
+  `is_number`, `is_array`, etc. - so you can say "highlight any key called
+  `error` whose value is non-empty."
+- **Style**: background, text color, bold/italic/underline, border accent,
+  icon badge.
+
+Apply multiple rule sets at once. Built-in presets cover errors, HTTP status
+codes, null finding, and status vocabulary.
+
+### Beacons
+
+Any rule whose style includes an icon opts into the **Beacon UI**: matches
+surface as inline icons on the row, **ancestor badges** on collapsed parent
+rows ("there's an error icon hidden somewhere down here"), and **toolbar
+pills** that cycle through every match in pre-order. Combined with rule
+sets, it turns a 2000-line response into "click the red dot, get to the
+failure."
+
+### Manual highlights that travel with the link
+
+Right-click any row to paint it (or its whole subtree) a literal color.
+The highlights are stored on the saved blob, so when you send the link,
+**the recipient sees your highlights**. No other JSON share tool lets the
+author point at "look at this row" with real ink rather than just a JSON
+path.
+
+### Layered selection highlighting
+
+Click a row and three highlights light up at once: the selected row, every
+row whose value is identical (type-aware: `"1"` is not `1`), and every
+ancestor up to the root - each in its own theme-aware color. The
+matching-value lights are gold for finding repeated IDs, magic strings, or
+duplicated config across a big document.
+
+### Tree-editor selection sync, bidirectional
+
+Click a tree row and the editor scrolls to and highlights the matching
+token range. Move the editor cursor and the matching tree row selects,
+expanding collapsed ancestors and scrolling into view. Both directions,
+single toggle. Other tools don't sync, or only sync one way.
+
+### Per-row Isolate / Collapse siblings
+
+Right-click any row to fold the rest of the tree to focus on that branch:
+
+- **Isolate** collapses every expanded peer at every ancestor level.
+- **Collapse siblings** only collapses peers in the immediate parent.
+
+Both leave your row's own subtree expansion intact. **Expand to depth +N
+from here** does additive-only expansion underneath the row - it never
+collapses anything you'd already opened.
+
+### Auto-fit tree to your viewport
+
+The first time a document renders, JotJSON picks an expansion depth that
+fills the visible window without overflowing - a small object opens fully,
+a 50,000-row monster opens collapsed at the right depth. Your manual
+expand/collapse choices afterwards stick.
+
+### Title suggestions
+
+Hit the wand icon next to the title input. JotJSON looks at your document
+and proposes 2-7 candidate titles. It recognizes `package.json`,
+Kubernetes manifests, OpenAPI specs, JSON Schema, GeoJSON, ARM templates,
+`tsconfig`, GitHub Actions workflows, Postman collections, and HAL
+self-links, plus common identifier fields (`name`, `title`, `displayName`,
+the first sentence of `description`).
+
+### Configurable date/time annotations
+
+When a string parses as a date, JotJSON appends `(Nov 5, 2024 - 1 year ago)`
+in muted italic next to the raw value. The relative time updates live, the
+formatter is per-unit configurable (turn off years, or seconds, or just
+months), and you can choose friendly phrases ("yesterday") vs. always-
+numeric ("in 1 day"). Plus separate toggles for whether unzoned ISO
+strings are read as UTC or local.
+
+---
+
+## Plus the basics, done well
+
+- Format / minify, with a comment-preserving formatter (`jsonc-parser`)
+- One-click smart-paste button that lights up when the clipboard contains JSON
+- Drag-and-drop file upload (up to 5 MB) with binary-file rejection
+- Download as `.json` / `.jsonc` (extension auto-picked from content)
+- Live validation with line + column on parse errors
+- Search across keys, values, or both, with case-sensitive and regex toggles
+- Collapse all / expand all / expand to level 1-10, with keyboard shortcuts
+- Selection breadcrumb with **Copy JSON path** and a configurable root prefix
+  (`$`, lodash-style, `root.`, `Data.`, or none)
+- Per-row context menu: copy key / value / path, search by key / value, expand-from-here
+- Double-click any row to copy its value
+- Inferred type badges on every row: `uuid`, `url`, `email`, `path`, `ipv4`,
+  `ipv6`, `date`, plus container item / key counts
+- Status bar: byte size, line count, cursor position, total node count, max
+  depth, array vs. object counts
+- Themes: dark / light / match-system, with per-theme color customization for
+  every highlight slot
+- 4-way layout: editor only, side-by-side, stacked, tree only - resizable split
+- Editor / tree / search preferences (font size, tab size, word wrap, default
+  expansion depth, default search scope)
+- Keyboard shortcuts: `Ctrl+F` (context-aware between editor and tree),
+  `Ctrl+Shift+[` / `]`, `Alt+1` .. `Alt+9`
+
+---
+
+## With an account
+
+JotJSON works fully without an account. Signing in adds:
+
+- **Save & share** as `jotjson.com/s/abc123` - the link works for anyone you
+  send it to. Up to 100 saved blobs, 1 MB per blob.
+- **Fork-on-save** - open someone else's blob, save it, you get a new blob
+  under your account with its own slug. The Save button labels itself
+  **Save as copy** so the action is never a surprise.
+- **Anonymous edit + sign-in restore** - anonymous viewers can still edit a
+  shared blob locally; clicking "Sign in to save" snapshots their work,
+  redirects through sign-in, and restores it on return.
+- **Synced across devices** - your theme, highlight colors, active rule
+  sets, default expansion depth, and path-prefix preference all roam.
+
+## Privacy
+
+Clipboard contents and uploaded files are read entirely client-side.
+Nothing leaves your browser unless you explicitly Save & Share. Telemetry
+is closed-enum counts only - never your keys, values, paths, or text.
+
+## Install it
+
+JotJSON is a Progressive Web App. Install it from the browser's address
+bar to get a standalone window that works offline; previously opened blobs
+and queued local changes drain when you come back online.
+
+---
+
+## Try it
+
+[**jotjson.com**](https://jotjson.com)
+
+Paste your worst real-world JSON and see what falls out.
