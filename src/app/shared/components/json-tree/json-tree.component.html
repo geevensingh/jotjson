@@ -565,6 +565,7 @@
         mat-menu-item
         type="button"
         [matMenuTriggerFor]="highlightMenu"
+        (click)="onHighlightItemClick($event, cn, false)"
         (menuOpened)="onSwatchMenuOpened('single')"
       >
         {{ ctxHighlightLabel }}
@@ -575,6 +576,7 @@
         mat-menu-item
         type="button"
         [matMenuTriggerFor]="highlightTreeMenu"
+        (click)="onHighlightItemClick($event, cn, true)"
         (menuOpened)="onSwatchMenuOpened('cascade')"
       >
         {{ ctxHighlightTreeLabel }}

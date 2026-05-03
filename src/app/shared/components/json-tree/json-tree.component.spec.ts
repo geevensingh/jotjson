@@ -1944,8 +1944,12 @@ describe('JsonTreeComponent', () => {
     async function openHighlightFlyout(path: string, label: string): Promise<HTMLElement> {
       await openMenuFor(path);
       const item = menuItemContaining(label);
+      // Open the swatch flyout via Material's hover-to-open submenu path.
+      // We deliberately avoid `item.click()` here because clicking the
+      // parent "Highlight" / "Highlight tree" item is now a meaningful
+      // user gesture (applies the preferred color) and would skew the
+      // emit-count assertions in tests that exercise the swatch path.
       item.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
-      item.click();
       fixture.detectChanges();
       await Promise.resolve();
       fixture.detectChanges();
@@ -2328,6 +2332,133 @@ describe('JsonTreeComponent', () => {
         const item = menuItemContaining(cmp.ctxRemoveTreeHighlightLabel);
 
         expect(item.getAttribute('aria-label')).toContain('$.parent');
+      });
+    });
+
+    describe('context menu close behavior', () => {
+      function isAnyMenuPanelOpen(): boolean {
+        return document.body.querySelectorAll('.mat-mdc-menu-panel').length > 0;
+      }
+
+      function highlightFlyoutCount(): number {
+        return document.body.querySelectorAll('.highlight-flyout').length;
+      }
+
+      async function flushMenuClose(): Promise<void> {
+        for (let i = 0; i < 6; i += 1) {
+          fixture.detectChanges();
+          // Real macrotask so Material's `setTimeout(_onAnimationDone)`
+          // (scheduled by `_setIsOpen(false)` even when animations are
+          // disabled) can fire and complete the overlay tear-down.
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+        fixture.detectChanges();
+      }
+
+      it('closes the menu chain after clicking a single-row swatch', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        flyout.querySelector<HTMLButtonElement>('[aria-label="Yellow #fff59d"]')!.click();
+        await flushMenuClose();
+
+        expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
+      });
+
+      it('closes the menu chain after clicking a cascade swatch', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel);
+
+        flyout.querySelector<HTMLButtonElement>('[aria-label="Cyan #b3e5fc"]')!.click();
+        await flushMenuClose();
+
+        expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
+      });
+
+      it('closes the menu chain after clicking the Preferred bar', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        setPreferredHighlightColor('#123456');
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        flyout.querySelector<HTMLButtonElement>('.preferred-bar')!.click();
+        await flushMenuClose();
+
+        expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
+      });
+
+      it('closes the menu chain on idempotent re-apply (same color, same cascade)', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        setHighlights([{ path: '$.leaf', color: '#fff59d', cascade: false }]);
+        const events = captureHighlightChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        flyout.querySelector<HTMLButtonElement>('[aria-label="Yellow #fff59d"]')!.click();
+        await flushMenuClose();
+
+        expect(events).withContext('no emit on idempotent re-apply').toEqual([]);
+        expect(isAnyMenuPanelOpen())
+          .withContext('menu still closes for selection feedback')
+          .toBeFalse();
+      });
+
+      it('clicking the Highlight item directly applies the preferred color and closes', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        setPreferredHighlightColor('#abcdef');
+        const events = captureHighlightChanges();
+        await openMenuFor('$.leaf');
+
+        const item = menuItemContaining(cmp.ctxHighlightLabel);
+        item.click();
+        await flushMenuClose();
+
+        expect(events).toEqual([[{ path: '$.leaf', color: '#abcdef', cascade: false }]]);
+        expect(highlightFlyoutCount()).withContext('flyout did not open').toBe(0);
+        expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
+      });
+
+      it('clicking the Highlight tree item directly applies the preferred color and closes', async () => {
+        await createWith({ parent: { child: 1 } });
+        enableHighlightEditing();
+        setPreferredHighlightColor('#abcdef');
+        const events = captureHighlightChanges();
+        await openMenuFor('$.parent');
+
+        const item = menuItemContaining(cmp.ctxHighlightTreeLabel);
+        item.click();
+        await flushMenuClose();
+
+        expect(events).toEqual([[{ path: '$.parent', color: '#abcdef', cascade: true }]]);
+        expect(highlightFlyoutCount()).withContext('flyout did not open').toBe(0);
+        expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
+      });
+
+      it('keyboard Enter on the Highlight item applies preferred and closes', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        setPreferredHighlightColor('#abcdef');
+        const events = captureHighlightChanges();
+        await openMenuFor('$.leaf');
+
+        const item = menuItemContaining(cmp.ctxHighlightLabel);
+        // Browsers synthesize a click with detail=0 for keyboard Enter on a
+        // focused button; mimic that path so this covers keyboard parity.
+        item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+        await flushMenuClose();
+
+        expect(events).toEqual([[{ path: '$.leaf', color: '#abcdef', cascade: false }]]);
+        expect(highlightFlyoutCount()).withContext('flyout did not open').toBe(0);
+        expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
       });
     });
   });

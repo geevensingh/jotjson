@@ -12,6 +12,7 @@ import {
   signal,
   untracked,
   viewChild,
+  viewChildren,
   type WritableSignal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -271,6 +272,21 @@ export class JsonTreeComponent {
    * this trigger.
    */
   readonly ctxTrigger = viewChild<MatMenuTrigger>('ctxTrigger');
+
+  /**
+   * All `MatMenuTrigger` directives in the component view: the right-click
+   * anchor (`ctxTrigger`), every per-row kebab button, the parent
+   * "Highlight" / "Highlight tree" submenu triggers, and the toolbar
+   * scope/type/expand triggers. Used by `closeHighlightMenuChain` to
+   * dismiss the entire chain after a highlight is applied without
+   * needing to know exactly which trigger opened the row menu.
+   *
+   * The toolbar triggers are inert during a highlight context-menu
+   * interaction (their `.menuOpen` is false), so iterating them is
+   * harmless; we only call `closeMenu()` on triggers whose `.menuOpen`
+   * is currently true.
+   */
+  readonly allMatMenuTriggers = viewChildren(MatMenuTrigger);
 
   /**
    * Hidden offscreen probe row used to measure the rendered row
@@ -1682,6 +1698,7 @@ export class JsonTreeComponent {
     const path = this.effectiveHighlightPath(node);
     const existingHighlight = this.highlightIndex().get(path);
     if (existingHighlight?.color === color && existingHighlight.cascade === cascade) {
+      this.closeHighlightMenuChain();
       return;
     }
 
@@ -1693,6 +1710,52 @@ export class JsonTreeComponent {
       replacedExisting: existingHighlight ? 'true' : 'false',
     });
     this.highlightsChange.emit(nextHighlights);
+    this.closeHighlightMenuChain();
+  }
+
+  /**
+   * Click handler for the parent "Highlight" / "Highlight tree"
+   * mat-menu items. The swatch flyout still opens on hover via
+   * `[matMenuTriggerFor]`, but a click on the parent item itself
+   * applies the preferred color (matching the visual affordance:
+   * the row label is unmistakably button-like). We use
+   * `stopImmediatePropagation` to block `MatMenuTrigger`'s own
+   * host click listener, which would otherwise open the flyout
+   * panel under our just-dismissed row menu. `applyManualHighlight`
+   * dismisses the row menu via `closeHighlightMenuChain` once the
+   * change is emitted (or on idempotent skip).
+   *
+   * Keyboard parity: pressing Enter on a focused mat-menu-item
+   * fires a synthetic click in browsers, so this same path covers
+   * the keyboard case without a separate `(keydown.enter)` handler.
+   */
+  onHighlightItemClick(event: MouseEvent, node: TreeNode, cascade: boolean): void {
+    event.stopImmediatePropagation();
+    this.applyManualHighlight(node, cascade, this.preferredHighlightColor());
+  }
+
+  /**
+   * Dismiss every open `MatMenuTrigger` in the component view.
+   * Called after a successful (or idempotent) highlight apply so the
+   * row menu plus any swatch flyout get out of the user's way and
+   * provide selection-confirmation feedback. The toolbar's other
+   * triggers (scope/type/expand) are not open during a highlight
+   * context-menu interaction, so this is effectively scoped to the
+   * highlight chain.
+   *
+   * We use `closeMenu()` per-trigger instead of relying on Material's
+   * `'click'`-reason cascade because viewChild references to the
+   * MatMenu directives inside an `<mat-menu>` portal do not always
+   * resolve, and even when they do, only the active opener trigger
+   * destroys the overlay - other open triggers remain. Iterating
+   * triggers and closing each is robust to any chain configuration.
+   */
+  private closeHighlightMenuChain(): void {
+    for (const trigger of this.allMatMenuTriggers()) {
+      if (trigger.menuOpen) {
+        trigger.closeMenu();
+      }
+    }
   }
 
   removeManualHighlight(node: TreeNode): void {
