@@ -530,12 +530,21 @@ Before finishing a task:
    set it up per the spec.
 7. No new TypeScript errors or console warnings introduced.
 8. Spec is updated if behavior or architecture changed.
-9. Telemetry decision recorded: explicitly decide whether the change
-   warrants a telemetry event. If you add one, ensure the messageId
-   is registered (frontend), the emit-shape spec is in place, and
-   `docs/telemetry.md`'s Backend events table is updated for backend
-   events. See §4 Telemetry.
-10. **SemVer bump decision recorded.** Before committing, decide
+9. **`why-jotjson.md` updated when user-facing features change.**
+   [`why-jotjson.md`](why-jotjson.md) is the public pitch doc shared
+   with prospective users to answer "why should I use JotJSON?" When
+   a change adds, removes, or significantly alters a user-facing
+   feature, update it in the same PR. Backend, infra, refactoring,
+   and bug-fix changes typically do not require an update. Genuinely
+   novel features (those competing JSON tools don't have) go in the
+   "Things you can't get elsewhere" section; standard features get a
+   one-line bullet under "Plus the basics, done well."
+10. Telemetry decision recorded: explicitly decide whether the change
+    warrants a telemetry event. If you add one, ensure the messageId
+    is registered (frontend), the emit-shape spec is in place, and
+    `docs/telemetry.md`'s Backend events table is updated for backend
+    events. See §4 Telemetry.
+11. **SemVer bump decision recorded.** Before committing, decide
     explicitly whether the change warrants a SemVer bump per
     `DESIGN_SPEC.md` -> Versioning -> SemVer bump rules. If yes, edit
     `package.json` in the same commit. If no, state "no bump" in the

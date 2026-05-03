@@ -28,6 +28,9 @@ making any non-trivial change. The summary below is for quick reference only;
   and `api/`. Don't introduce new toolchains to satisfy this.
 - Update `DESIGN_SPEC.md` in the same change when behavior or architecture
   changes.
+- Update [`why-jotjson.md`](why-jotjson.md) in the same change when a
+  user-facing feature is added, removed, or significantly altered. It
+  is the public pitch doc, not engineering documentation.
 
 ## Security & Privacy
 

@@ -66,6 +66,9 @@ frameworks, or cloud services without prior approval.
 - Keep PRs focused - one logical change per PR.
 - Link the relevant issue or spec section.
 - Update `DESIGN_SPEC.md` in the same PR if behavior or architecture changes.
+- Update [`why-jotjson.md`](why-jotjson.md) in the same PR if a user-facing
+  feature is added, removed, or significantly altered. Keep entries
+  terse - it is the public pitch doc, not engineering documentation.
 - CI (lint, test, build for both frontend and Functions) must be green.
 - At least one review approval required before merge.
 
