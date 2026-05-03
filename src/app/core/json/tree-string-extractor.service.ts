@@ -34,6 +34,7 @@ interface ExtractedJsonWireFormat {
   text: string;
   blockCount: number;
   preservesComments: boolean;
+  proseSegments?: number;
   hasComments: boolean;
 }
 
@@ -318,6 +319,7 @@ function toExtractedJson(wireResult: ExtractedJsonWireFormat): ExtractedJson {
     text: wireResult.text,
     blockCount: wireResult.blockCount,
     preservesComments: wireResult.preservesComments,
+    proseSegments: wireResult.proseSegments ?? 0,
     hasComments: wireResult.hasComments,
   };
 }

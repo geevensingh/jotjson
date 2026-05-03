@@ -24,6 +24,7 @@ export interface ExtractedJsonWireFormat {
   text: string;
   blockCount: number;
   preservesComments: boolean;
+  proseSegments: number;
   hasComments: boolean;
 }
 
@@ -35,12 +36,13 @@ addEventListener('message', (event: MessageEvent<ScanRequest>) => {
 
   const results = message.strings.map((value) => {
     try {
-      const extracted = extractFromMixedText(value, parseJsonCandidate);
+      const extracted = extractFromMixedText(value, parseJsonCandidate, { mode: 'preserveProse' });
       if (!extracted) return null;
       return {
         text: extracted.text,
         blockCount: extracted.blockCount,
         preservesComments: extracted.preservesComments,
+        proseSegments: extracted.proseSegments ?? 0,
         hasComments: extracted.hasComments,
       };
     } catch {

@@ -25,6 +25,7 @@ interface ExtractedJsonWireFormat {
   text: string;
   blockCount: number;
   preservesComments: boolean;
+  proseSegments?: number;
   hasComments: boolean;
 }
 
@@ -407,6 +408,25 @@ describe('TreeStringExtractorService', () => {
     expectCandidateText(rawString, rawString);
   });
 
+  it('forwards prose segment counts from worker results', () => {
+    const rawString = rawJsonString(63);
+
+    service.enqueueScan([rawString]);
+    mockWorker.respondToMessage(0, [
+      {
+        text: '{"prefix":"before ","json":{"id":63}}',
+        blockCount: 1,
+        preservesComments: true,
+        proseSegments: 1,
+        hasComments: false,
+      },
+    ]);
+
+    const candidate = service.candidates().get(rawString);
+    expect(candidate).toBeDefined();
+    expect(candidate?.proseSegments).toBe(1);
+  });
+
   function expectCandidateText(rawString: string, expectedText: string): void {
     const candidate = service.candidates().get(rawString);
     expect(candidate).toBeDefined();
@@ -423,6 +443,7 @@ function wireResultFor(rawString: string): ExtractedJson {
     text: rawString,
     blockCount: 1,
     preservesComments: true,
+    proseSegments: 0,
     hasComments: false,
   };
 }

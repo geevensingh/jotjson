@@ -5,6 +5,11 @@ export interface ExtractedJson {
   blockCount: number;
   preservesComments: boolean;
   /**
+   * Number of non-whitespace prose segments preserved in wrapper output.
+   * Default unwrap mode reports 0.
+   */
+  proseSegments?: number;
+  /**
    * True when at least one accepted candidate's slice contained a JSONC
    * comment (`//` line or `/* ... *\/` block). Used by the home component
    * to decide whether to surface a "Comments will be dropped" warning in
@@ -14,6 +19,8 @@ export interface ExtractedJson {
    */
   hasComments: boolean;
 }
+
+export type ExtractMode = 'unwrap' | 'preserveProse';
 
 export interface JsonExtractorParseResult {
   value: unknown;
@@ -83,23 +90,35 @@ const CHARACTER_BYTE_ORDER_MARK = 0xfeff;
 export function extractFromMixedText(
   input: string,
   parseJsonCandidate: ParseJsonCandidate,
+  options?: { mode?: ExtractMode },
 ): ExtractedJson | null {
   if (!input) return null;
 
-  const strippedInput = input.charCodeAt(0) === CHARACTER_BYTE_ORDER_MARK ? input.slice(1) : input;
-  if (strippedInput.length > MAX_INPUT_LENGTH) return null;
+  const mode = options?.mode ?? 'unwrap';
+  const scanInput =
+    mode === 'unwrap' && input.charCodeAt(0) === CHARACTER_BYTE_ORDER_MARK ? input.slice(1) : input;
+  if (scanInput.length > MAX_INPUT_LENGTH) return null;
 
-  const candidates = scan(strippedInput, parseJsonCandidate);
+  const candidates = scan(scanInput, parseJsonCandidate);
   if (candidates.length === 0) return null;
 
+  if (mode === 'preserveProse') {
+    return buildPreserveProseResult(scanInput, candidates);
+  }
+
+  return buildUnwrapResult(candidates);
+}
+
+function buildUnwrapResult(candidates: readonly JsonExtractorCandidate[]): ExtractedJson | null {
   if (candidates.length === 1) {
-    const [candidate] = candidates;
+    const candidate = candidates[0];
     if (candidate === undefined) return null;
 
     return {
       text: formatExtractedJson(candidate.slice),
       blockCount: 1,
       preservesComments: true,
+      proseSegments: 0,
       hasComments: candidate.hasComments,
     };
   }
@@ -112,8 +131,149 @@ export function extractFromMixedText(
     ),
     blockCount: candidates.length,
     preservesComments: false,
+    proseSegments: 0,
     hasComments: candidates.some((candidate) => candidate.hasComments),
   };
+}
+
+function buildPreserveProseResult(
+  input: string,
+  candidates: readonly JsonExtractorCandidate[],
+): ExtractedJson | null {
+  if (candidates.length === 1) {
+    const candidate = candidates[0];
+    if (candidate === undefined) return null;
+
+    const proseSegments = countSingleBlockProseSegments(input, candidate);
+    if (proseSegments === 0) {
+      return buildUnwrapResult(candidates);
+    }
+
+    return {
+      text: buildSingleBlockProseWrapper(input, candidate),
+      blockCount: 1,
+      preservesComments: true,
+      proseSegments,
+      hasComments: candidate.hasComments,
+    };
+  }
+
+  const proseSegments = countMultiBlockProseSegments(input, candidates);
+  if (proseSegments === 0) {
+    return buildUnwrapResult(candidates);
+  }
+
+  return {
+    text: buildMultiBlockProseWrapper(input, candidates),
+    blockCount: candidates.length,
+    preservesComments: false,
+    proseSegments,
+    hasComments: candidates.some((candidate) => candidate.hasComments),
+  };
+}
+
+function buildSingleBlockProseWrapper(input: string, candidate: JsonExtractorCandidate): string {
+  const parts: string[] = [];
+  const prefix = input.slice(0, candidate.startIndex);
+  addProsePart(parts, 'prefix', prefix);
+  parts.push(`"json": ${formatExtractedJson(candidate.slice)}`);
+  const suffix = input.slice(candidate.endIndex);
+  addProsePart(parts, 'suffix', suffix);
+  return formatExtractedJson(`{\n${parts.join(',\n')}\n}`);
+}
+
+function buildMultiBlockProseWrapper(
+  input: string,
+  candidates: readonly JsonExtractorCandidate[],
+): string {
+  const parts: string[] = [];
+  const firstCandidate = candidates[0];
+  const lastCandidate = candidates[candidates.length - 1];
+  if (firstCandidate === undefined || lastCandidate === undefined) {
+    return '{}';
+  }
+
+  addProsePart(parts, 'prefix', input.slice(0, firstCandidate.startIndex));
+  for (let index = 0; index < candidates.length; index++) {
+    const candidate = candidates[index];
+    if (candidate === undefined) {
+      continue;
+    }
+    parts.push(`"json${index + 1}": ${jsonStringifyValue(candidate.value)}`);
+    if (index < candidates.length - 1) {
+      const nextCandidate = candidates[index + 1];
+      if (nextCandidate !== undefined) {
+        addProsePart(
+          parts,
+          `between_${index + 1}_and_${index + 2}`,
+          input.slice(candidate.endIndex, nextCandidate.startIndex),
+        );
+      }
+    }
+  }
+  addProsePart(parts, 'suffix', input.slice(lastCandidate.endIndex));
+  return formatExtractedJson(`{\n${parts.join(',\n')}\n}`);
+}
+
+function countSingleBlockProseSegments(input: string, candidate: JsonExtractorCandidate): number {
+  let proseSegments = 0;
+  if (hasProse(input.slice(0, candidate.startIndex))) {
+    proseSegments++;
+  }
+  if (hasProse(input.slice(candidate.endIndex))) {
+    proseSegments++;
+  }
+  return proseSegments;
+}
+
+function countMultiBlockProseSegments(
+  input: string,
+  candidates: readonly JsonExtractorCandidate[],
+): number {
+  const firstCandidate = candidates[0];
+  const lastCandidate = candidates[candidates.length - 1];
+  if (firstCandidate === undefined || lastCandidate === undefined) {
+    return 0;
+  }
+
+  let proseSegments = 0;
+  if (hasProse(input.slice(0, firstCandidate.startIndex))) {
+    proseSegments++;
+  }
+  for (let index = 0; index < candidates.length - 1; index++) {
+    const candidate = candidates[index];
+    const nextCandidate = candidates[index + 1];
+    if (candidate !== undefined && nextCandidate !== undefined) {
+      if (hasProse(input.slice(candidate.endIndex, nextCandidate.startIndex))) {
+        proseSegments++;
+      }
+    }
+  }
+  if (hasProse(input.slice(lastCandidate.endIndex))) {
+    proseSegments++;
+  }
+  return proseSegments;
+}
+
+function addProsePart(parts: string[], key: string, prose: string): void {
+  if (hasProse(prose)) {
+    parts.push(`"${key}": ${jsonEscapeString(prose)}`);
+  }
+}
+
+function hasProse(prose: string): boolean {
+  return prose.trim().length > 0;
+}
+
+function jsonEscapeString(prose: string): string {
+  return (JSON.stringify(prose) ?? '""')
+    .replace(/\uFEFF/g, '\\uFEFF')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+function jsonStringifyValue(value: unknown): string {
+  return JSON.stringify(value) ?? 'null';
 }
 
 export function scan(

@@ -2,6 +2,8 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { Title, By } from '@angular/platform-browser';
 import { EMPTY, Subject, of, throwError } from 'rxjs';
+import { parse } from 'jsonc-parser';
+import type { ParseError } from 'jsonc-parser';
 import { HomeComponent } from './home.component';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { DraftService } from '../../core/preferences/draft.service';
@@ -18,6 +20,8 @@ import { DocumentDropController } from '../../core/upload/document-drop-controll
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { JsonExtractorService } from '../../core/json/json-extractor.service';
 import type { ExtractedJson } from '../../core/json/json-extractor.service';
+import { extractFromMixedText as extractFromMixedTextCore } from '../../core/json/json-extractor.core';
+import type { ParseJsonCandidate } from '../../core/json/json-extractor.core';
 import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
@@ -4024,6 +4028,19 @@ describe('HomeComponent M7p title-suggester wiring', () => {
 describe('HomeComponent tree extract wiring (M7s)', () => {
   setupMinimalMonacoStub();
 
+  let realWorldFixtureText = '';
+
+  beforeAll(async () => {
+    const response = await fetch('/fixtures/JsonExtraction.json');
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load fixtures/JsonExtraction.json: HTTP ${response.status}. ` +
+          `Ensure src/testing/fixtures is registered in angular.json test assets.`,
+      );
+    }
+    realWorldFixtureText = await response.text();
+  });
+
   class FakeTreeStringExtractor {
     readonly candidatesSignal = signal<ReadonlyMap<string, ExtractedJson>>(
       new Map<string, ExtractedJson>(),
@@ -4053,11 +4070,12 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     }
   }
 
-  function extracted(text: string, blockCount = 1): ExtractedJson {
+  function extracted(text: string, blockCount = 1, proseSegments = 0): ExtractedJson {
     return {
       text,
       blockCount,
       preservesComments: true,
+      proseSegments,
       hasComments: text.includes('//') || text.includes('/*'),
     };
   }
@@ -4073,6 +4091,43 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
       source: 'rowButton',
       ...overrides,
     };
+  }
+
+  const parseJsonCandidate: ParseJsonCandidate = (candidateText: string) => {
+    const errors: ParseError[] = [];
+    const value: unknown = parse(candidateText, errors, {
+      allowTrailingComma: true,
+      disallowComments: false,
+    });
+    return { value, errors };
+  };
+
+  function parseJsoncForTreeExtract(text: string): unknown {
+    const errors: ParseError[] = [];
+    const value: unknown = parse(text, errors, {
+      allowTrailingComma: true,
+      disallowComments: false,
+    });
+    expect(errors).toEqual([]);
+    return value;
+  }
+
+  function requireRecord(value: unknown, context: string): Record<string, unknown> {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error(`Expected ${context} to be an object`);
+    }
+    return value as Record<string, unknown>;
+  }
+
+  function readFirstParameterValue(text: string): unknown {
+    const root = requireRecord(parseJsoncForTreeExtract(text), 'fixture root');
+    const parameters = root['Parameters'];
+    if (!Array.isArray(parameters)) {
+      throw new Error('Expected fixture Parameters to be an array');
+    }
+    const firstParameter = parameters[0];
+    const parameterRecord = requireRecord(firstParameter, 'first parameter');
+    return parameterRecord['Value'];
   }
 
   function setup(): {
@@ -4115,6 +4170,47 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     expect(component.content()).toBe('{"payload":{"a":1},"keep":true}');
   });
 
+  it('preserves prose when extracting the real-world Parameters[0].Value fixture', () => {
+    const { component, treeExtractor } = setup();
+    treeExtractor.setVersion(8);
+    const rawParameterValue = readFirstParameterValue(realWorldFixtureText);
+    if (typeof rawParameterValue !== 'string') {
+      throw new Error('Expected fixture Parameters[0].Value to be a string');
+    }
+    const replacement = extractFromMixedTextCore(rawParameterValue, parseJsonCandidate, {
+      mode: 'preserveProse',
+    });
+    if (replacement === null) {
+      throw new Error('Expected fixture Parameters[0].Value to be extractable');
+    }
+    expect(replacement.proseSegments).toBe(2);
+
+    component.onValueChange(realWorldFixtureText);
+    component.onExtractRequest(
+      extractRequest(replacement, {
+        path: ['Parameters', 0, 'Value'],
+        sourceVersion: 8,
+      }),
+    );
+
+    const patchedValue = readFirstParameterValue(component.content());
+    const wrapper = requireRecord(patchedValue, 'patched Parameters[0].Value');
+    const prefix = wrapper['prefix'];
+    const suffix = wrapper['suffix'];
+    if (typeof prefix !== 'string' || typeof suffix !== 'string') {
+      throw new Error('Expected prefix and suffix strings in patched wrapper');
+    }
+    const json = requireRecord(wrapper['json'], 'patched json body');
+
+    expect(prefix.trim().length).toBeGreaterThan(0);
+    expect(prefix).toContain('POST https://billingservice.cp.microsoft.com');
+    expect(json['ip_address']).toBe('127.0.0.1');
+    expect(suffix.trim()).toBe('here is more post json text');
+    expect(component.content()).toContain('"prefix"');
+    expect(component.content()).toContain('"json"');
+    expect(component.content()).toContain('"suffix"');
+  });
+
   it('drops stale tree extract clicks and logs a warning', () => {
     const { component, treeExtractor, warnSpy } = setup();
     treeExtractor.setVersion(2);
@@ -4137,7 +4233,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
   it('emits click telemetry after a successful tree extract request', () => {
     const { component, treeExtractor, eventSpy } = setup();
     treeExtractor.setVersion(4);
-    const replacement = extracted('{"a":1}', 3);
+    const replacement = extracted('{"a":1}', 3, 2);
     component.onValueChange('{"payload":"INFO {\\"a\\":1}"}');
 
     component.onExtractRequest(
@@ -4150,7 +4246,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'tree.extract.click',
       { source: 'contextMenu' },
-      { blockCount: 3 },
+      { blockCount: 3, proseSegments: 2 },
     );
   });
 

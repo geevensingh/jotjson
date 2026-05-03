@@ -880,7 +880,7 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           (`features/home/home.component.ts`) after a non-stale tree
    *           extract click patches the editor text successfully.
    * Props: { source: 'rowButton' | 'contextMenu' }.
-   * Measurements: { blockCount: number }.
+   * Measurements: { blockCount: number; proseSegments: number }.
    */
   'tree.extract.click',
 

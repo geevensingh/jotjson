@@ -6,6 +6,7 @@ function replacement(text: string): ExtractedJson {
     text,
     blockCount: 1,
     preservesComments: true,
+    proseSegments: 0,
     hasComments: text.includes('//') || text.includes('/*'),
   };
 }
@@ -29,6 +30,31 @@ describe('patchExtractedValue', () => {
 
     expect(result.patched).toBe(
       '{\n  "payload": {\n               "a": 1,\n               "b": true\n             },\n  "keep": true\n}',
+    );
+  });
+
+  it('reindents a multi-line wrapper replacement in a nested object', () => {
+    const text = '{\n  "foo": {\n    "bar": "prefix {\\"a\\":1} suffix"\n  }\n}';
+    const replacementText =
+      '{\n  "prefix": "prefix ",\n  "json": {\n    "a": 1\n  },\n  "suffix": " suffix"\n}';
+    const valueIndent = ' '.repeat(11);
+    const propertyIndent = `${valueIndent}  `;
+    const nestedPropertyIndent = `${valueIndent}    `;
+
+    const result = patchExtractedValue(text, ['foo', 'bar'], replacement(replacementText));
+
+    expect(result.patched).toBe(
+      '{\n' +
+        '  "foo": {\n' +
+        '    "bar": {\n' +
+        `${propertyIndent}"prefix": "prefix ",\n` +
+        `${propertyIndent}"json": {\n` +
+        `${nestedPropertyIndent}"a": 1\n` +
+        `${propertyIndent}},\n` +
+        `${propertyIndent}"suffix": " suffix"\n` +
+        `${valueIndent}}\n` +
+        '  }\n' +
+        '}',
     );
   });
 

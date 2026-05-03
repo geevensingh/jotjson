@@ -1095,7 +1095,10 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.logger.event(
       'tree.extract.click',
       { source: event.source },
-      { blockCount: event.replacement.blockCount },
+      {
+        blockCount: event.replacement.blockCount,
+        proseSegments: event.replacement.proseSegments ?? 0,
+      },
     );
     this.setContent(result.patched);
   }
