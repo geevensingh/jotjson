@@ -1,10 +1,12 @@
 import { Component, OnInit, inject, Injector } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
+import { NavigationProgressService } from './core/navigation/navigation-progress.service';
+import { RouteProgressBarComponent } from './shared/components/route-progress-bar/route-progress-bar.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, RouteProgressBarComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -18,6 +20,15 @@ export class AppComponent implements OnInit {
   // (on /history, /profile, etc.) are intercepted even if the user has
   // not yet visited Home.
   private readonly dropController = inject(DocumentDropController);
+
+  // Eagerly inject so the router-events subscription is established
+  // before the very first NavigationStart fires. The cold-boot deep-link
+  // to /s/:slug fires NavigationStart almost immediately after bootstrap;
+  // a late subscriber would miss it and the route progress bar would
+  // never appear during the resolver wait - exactly the M8 critical
+  // path. See also `core/telemetry/route-tracker.ts`, which handles the
+  // analogous timing problem for telemetry.
+  private readonly navigationProgress = inject(NavigationProgressService);
 
   ngOnInit(): void {
     // Note: returning-redirect handling and `AuthService.userSignal`

@@ -1,0 +1,73 @@
+@use '../../../../styles/variables' as v;
+
+.route-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: rgba(0, 188, 212, 0.18);
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 188, 212, 0.6);
+  z-index: 100;
+  pointer-events: none;
+}
+
+.route-progress-bar__stripe {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: v.$color-primary;
+  will-change: left, right;
+}
+
+.route-progress-bar__stripe--primary {
+  animation: route-progress-bar-indeterminate-1 2s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+}
+
+.route-progress-bar__stripe--secondary {
+  animation: route-progress-bar-indeterminate-2 2s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
+  animation-delay: 1.15s;
+}
+
+@keyframes route-progress-bar-indeterminate-1 {
+  0% {
+    left: -35%;
+    right: 100%;
+  }
+  60% {
+    left: 100%;
+    right: -90%;
+  }
+  100% {
+    left: 100%;
+    right: -90%;
+  }
+}
+
+@keyframes route-progress-bar-indeterminate-2 {
+  0% {
+    left: -200%;
+    right: 100%;
+  }
+  60% {
+    left: 107%;
+    right: -8%;
+  }
+  100% {
+    left: 107%;
+    right: -8%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-progress-bar__stripe--primary {
+    animation: none;
+    left: 0;
+    right: 60%;
+    opacity: 0.6;
+  }
+  .route-progress-bar__stripe--secondary {
+    display: none;
+  }
+}
