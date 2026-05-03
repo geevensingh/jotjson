@@ -1,6 +1,11 @@
 @if (label(); as text) {
   <div class="jot-splash" role="status" aria-live="polite">
-    <div class="jot-splash__bar" aria-hidden="true"></div>
+    <div
+      class="jot-splash__bar"
+      [class.jot-splash__bar--determinate]="determinate()"
+      [style.--jot-progress]="progressFraction()"
+      aria-hidden="true"
+    ></div>
     <svg
       class="jot-splash__logo"
       xmlns="http://www.w3.org/2000/svg"

@@ -89,6 +89,38 @@ function withEtag(status: number, doc: BlobDocument): HttpResponseInit {
   };
 }
 
+/**
+ * GET-only response helper that takes ownership of body serialization so we
+ * can advertise the uncompressed body byte count via X-Jotjson-Body-Length.
+ *
+ * Why a custom header instead of relying on Content-Length? Azure Front Door
+ * (in front of Static Web Apps) compresses application/json on the fly with
+ * gzip/br and switches the response to Transfer-Encoding: chunked, dropping
+ * Content-Length entirely. The frontend needs the uncompressed total to drive
+ * a determinate progress bar for share-link blob loads. AFD passes unknown
+ * custom headers through unchanged, so X-Jotjson-Body-Length survives the
+ * compression pipeline.
+ *
+ * Browsers report decompressed bytes on XHR `progress` events, so dividing
+ * `loaded` by this header value yields a clean 0..1 fraction without clamping.
+ *
+ * Only the GET handler uses this helper; PUT continues with `withEtag` because
+ * its response is consumed as a parsed body, not streamed for progress.
+ */
+function withEtagAndBodyLength(status: number, blob: BlobDocument): HttpResponseInit {
+  const responseBody = withResponseHighlights(blob);
+  const body = JSON.stringify(responseBody);
+  return {
+    status,
+    headers: {
+      ETag: `"${blob.version}"`,
+      'Content-Type': 'application/json',
+      'X-Jotjson-Body-Length': String(Buffer.byteLength(body, 'utf8')),
+    },
+    body,
+  };
+}
+
 function parseIfMatch(headerValue: string | null | undefined): number | null {
   if (typeof headerValue !== 'string') return null;
   const trimmed = headerValue.trim();
@@ -269,7 +301,7 @@ export async function getBlob(
       // Surface in logs but never fail the read.
       context.warn('getBlob history hook failed', error);
     }
-    return withEtag(200, withResponseHighlights(blob));
+    return withEtagAndBodyLength(200, blob);
   } catch (error) {
     return internalError(context, 'getBlob read', error);
   }

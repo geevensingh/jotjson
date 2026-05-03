@@ -177,4 +177,117 @@ describe('LoadingSplashService', () => {
     end(1, '/s/abc?foo=bar');
     expect(service.kind()).toBeNull();
   });
+
+  describe('progress signal', () => {
+    it('starts as null (indeterminate)', () => {
+      const service = init('/s/abc');
+      expect(service.progress()).toBeNull();
+    });
+
+    it('reportBlobProgress(loaded, total) sets the clamped fraction', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(0, 1000);
+      expect(service.progress()).toBe(0);
+      service.reportBlobProgress(250, 1000);
+      expect(service.progress()).toBe(0.25);
+      service.reportBlobProgress(1000, 1000);
+      expect(service.progress()).toBe(1);
+    });
+
+    it('clamps loaded > total to 1.0', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(1500, 1000);
+      expect(service.progress()).toBe(1);
+    });
+
+    it('clamps loaded < 0 to 0', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(-1, 1000);
+      expect(service.progress()).toBe(0);
+    });
+
+    it('treats null total as indeterminate', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(500, 1000);
+      expect(service.progress()).toBe(0.5);
+      service.reportBlobProgress(750, null);
+      expect(service.progress()).toBeNull();
+    });
+
+    it('treats zero or negative total as indeterminate', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(500, 0);
+      expect(service.progress()).toBeNull();
+      service.reportBlobProgress(500, -100);
+      expect(service.progress()).toBeNull();
+    });
+
+    it('treats non-finite total as indeterminate', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(500, Number.NaN);
+      expect(service.progress()).toBeNull();
+      service.reportBlobProgress(500, Number.POSITIVE_INFINITY);
+      expect(service.progress()).toBeNull();
+    });
+
+    it('treats non-finite loaded as indeterminate', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(Number.NaN, 1000);
+      expect(service.progress()).toBeNull();
+    });
+
+    it('resets to null on every NavigationStart (handles cancelled-then-restarted blob navs)', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(500, 1000);
+      expect(service.progress()).toBe(0.5);
+      // User cancels nav 1 by clicking another share link mid-fetch.
+      cancel(1, '/s/abc');
+      // Splash already hid (firstNavComplete latched), but verify the
+      // signal is null too -- guards against stale fractions leaking
+      // into the next blob nav.
+      expect(service.progress()).toBeNull();
+    });
+
+    it('resets to null on NavigationStart even mid-fraction', () => {
+      const service = init('/');
+      start(1, '/');
+      end(1, '/');
+      // First nav complete; splash hidden. User clicks a blob, route
+      // bar takes over.
+      service.reportBlobProgress(750, 1000);
+      // Wait, that would never happen because no NavigationStart yet.
+      // Let's do it the realistic way: another nav starts.
+      start(2, '/s/xyz');
+      expect(service.progress())
+        .withContext('NavigationStart resets stale progress before the new fetch reports')
+        .toBeNull();
+      service.reportBlobProgress(100, 1000);
+      expect(service.progress()).toBe(0.1);
+      // Mid-fetch, user clicks yet another link.
+      start(3, '/s/another');
+      expect(service.progress())
+        .withContext('overlapping NavigationStart wipes stale fraction from cancelled fetch')
+        .toBeNull();
+    });
+
+    it('resets to null on first-nav-settle (alongside kind transitioning to null)', () => {
+      const service = init('/s/abc');
+      start(1, '/s/abc');
+      service.reportBlobProgress(800, 1000);
+      expect(service.progress()).toBe(0.8);
+      end(1, '/s/abc');
+      expect(service.kind()).toBeNull();
+      expect(service.progress())
+        .withContext('progress must clear when the splash hides so the route bar starts clean')
+        .toBeNull();
+    });
+  });
 });

@@ -1,6 +1,7 @@
 @use '../../../../styles/variables' as v;
 
 .route-progress-bar {
+  --jot-progress: 0;
   position: fixed;
   top: 0;
   left: 0;
@@ -28,6 +29,30 @@
 .route-progress-bar__stripe--secondary {
   animation: route-progress-bar-indeterminate-2 2s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
   animation-delay: 1.15s;
+}
+
+// Determinate fill: hidden by default, only painted when the
+// LoadingSplashService streams a real progress fraction (currently
+// only the share-blob resolver does this). The 200ms transition
+// smooths the steps between progress events; under reduced motion we
+// snap without transition.
+.route-progress-bar__fill {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: v.$color-primary;
+  transform-origin: left center;
+  transform: scaleX(var(--jot-progress, 0));
+  transition: transform 200ms ease-out;
+  will-change: transform;
+}
+
+.route-progress-bar--determinate .route-progress-bar__stripe {
+  display: none;
+}
+
+.route-progress-bar--determinate .route-progress-bar__fill {
+  display: block;
 }
 
 @keyframes route-progress-bar-indeterminate-1 {
@@ -68,6 +93,9 @@
   }
   .route-progress-bar__stripe--secondary {
     display: none;
+  }
+  .route-progress-bar--determinate .route-progress-bar__fill {
+    transition: none;
   }
 }
 

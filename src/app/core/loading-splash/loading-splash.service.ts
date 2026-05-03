@@ -69,6 +69,27 @@ export class LoadingSplashService {
   private readonly _kind = signal<'jotjson' | 'blob' | null>('jotjson');
   readonly kind: Signal<'jotjson' | 'blob' | null> = this._kind.asReadonly();
 
+  /**
+   * Determinate progress fraction in `[0, 1]` for the in-flight blob
+   * fetch, or `null` to indicate indeterminate (no progress signal
+   * available). Drives the smooth-fill variant of the splash bar and
+   * the in-app route progress bar.
+   *
+   * Lifecycle is fully router-driven so the resolver does not need to
+   * coordinate clears:
+   * - reset to `null` on every `NavigationStart` (covers
+   *   cancelled-then-restarted blob navs and overlapping in-app navs
+   *   without explicit owner tokens),
+   * - reset to `null` when `kind` transitions to `null` on
+   *   first-nav-settle (covers splash hide).
+   *
+   * The resolver pushes values via `reportBlobProgress` while a fetch
+   * is in flight and snaps to `1.0` on the terminal `Response` event
+   * so the bar visually completes before the splash disappears.
+   */
+  private readonly _progress = signal<number | null>(null);
+  readonly progress: Signal<number | null> = this._progress.asReadonly();
+
   private readonly inFlight = new Set<number>();
   private readonly inFlightBlob = new Set<number>();
   private firstNavStarted = false;
@@ -79,6 +100,40 @@ export class LoadingSplashService {
       this._kind.set('blob');
     }
     inject(Router).events.subscribe((event) => this.handle(event));
+  }
+
+  /**
+   * Push a progress update for the in-flight blob fetch. Clamps the
+   * fraction to `[0, 1]` when `total` is a positive finite number;
+   * otherwise sets progress back to indeterminate (`null`). Safe to
+   * call repeatedly during a fetch and once more with
+   * `reportBlobProgress(total, total)` on the terminal event to snap
+   * the bar to `1.0` for visual closure before the splash hides.
+   *
+   * Lifecycle note: callers MUST NOT clear progress manually -- the
+   * service resets on `NavigationStart` and on `kind=null` transitions
+   * automatically. This is what keeps overlapping or cancelled-and-
+   * restarted blob navs from leaking stale fractions.
+   */
+  reportBlobProgress(loaded: number, total: number | null): void {
+    if (typeof total !== 'number' || !Number.isFinite(total) || total <= 0) {
+      this._progress.set(null);
+      return;
+    }
+    if (typeof loaded !== 'number' || !Number.isFinite(loaded)) {
+      this._progress.set(null);
+      return;
+    }
+    const fraction = loaded / total;
+    if (fraction < 0) {
+      this._progress.set(0);
+      return;
+    }
+    if (fraction > 1) {
+      this._progress.set(1);
+      return;
+    }
+    this._progress.set(fraction);
   }
 
   private initialPath(): string {
@@ -95,6 +150,7 @@ export class LoadingSplashService {
       if (this.isBlobUrl(event.url)) {
         this.inFlightBlob.add(event.id);
       }
+      this._progress.set(null);
       this.recomputeKind();
       return;
     }
@@ -116,6 +172,7 @@ export class LoadingSplashService {
   private recomputeKind(): void {
     if (this.firstNavComplete) {
       this._kind.set(null);
+      this._progress.set(null);
       return;
     }
     if (this.inFlightBlob.size > 0) {

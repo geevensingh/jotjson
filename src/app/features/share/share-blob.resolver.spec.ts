@@ -5,10 +5,12 @@ import {
   type ActivatedRouteSnapshot,
   type RouterStateSnapshot,
 } from '@angular/router';
-import { of, throwError, firstValueFrom, from, isObservable } from 'rxjs';
+import { Observable, firstValueFrom, isObservable, throwError } from 'rxjs';
 import { provideFakeAuth } from '../../../testing/auth.testing';
-import { BlobService } from '../../core/api/blob.service';
+import { BlobService, type BlobFetchEvent } from '../../core/api/blob.service';
 import type { JsonBlob } from '../../core/api/models';
+import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
+import { LoggerService } from '../../core/telemetry/logger.service';
 import { shareBlobResolver } from './share-blob.resolver';
 
 function runResolver(slug: string): Promise<JsonBlob | null> {
@@ -37,26 +39,47 @@ describe('shareBlobResolver', () => {
     };
   }
 
-  let getSpy: jasmine.Spy;
+  let getWithProgressSpy: jasmine.Spy<(slug: string) => Observable<BlobFetchEvent>>;
   let navSpy: jasmine.Spy;
+  let reportProgressSpy: jasmine.Spy;
+  let eventSpy: jasmine.Spy;
+
+  function makeStream(...events: BlobFetchEvent[]): Observable<BlobFetchEvent> {
+    return new Observable<BlobFetchEvent>((subscriber) => {
+      for (const event of events) subscriber.next(event);
+      subscriber.complete();
+    });
+  }
 
   beforeEach(() => {
-    getSpy = jasmine.createSpy('get').and.returnValue(of(blob()));
+    getWithProgressSpy = jasmine
+      .createSpy<(slug: string) => Observable<BlobFetchEvent>>('getWithProgress')
+      .and.returnValue(makeStream({ kind: 'blob', blob: blob() }));
+    reportProgressSpy = jasmine.createSpy('reportBlobProgress');
+    eventSpy = jasmine.createSpy('event');
     TestBed.configureTestingModule({
-      providers: [...provideFakeAuth(), { provide: BlobService, useValue: { get: getSpy } }],
+      providers: [
+        ...provideFakeAuth(),
+        { provide: BlobService, useValue: { getWithProgress: getWithProgressSpy } },
+        {
+          provide: LoadingSplashService,
+          useValue: { reportBlobProgress: reportProgressSpy },
+        },
+        { provide: LoggerService, useValue: { event: eventSpy } },
+      ],
     });
     navSpy = spyOn(TestBed.inject(Router), 'navigate').and.resolveTo(true);
   });
 
   it('returns the fetched blob on success', async () => {
     const result = await runResolver('abc123');
-    expect(getSpy).toHaveBeenCalledWith('abc123');
+    expect(getWithProgressSpy).toHaveBeenCalledWith('abc123');
     expect(result).toEqual(blob());
     expect(navSpy).not.toHaveBeenCalled();
   });
 
   it('navigates to /404 with attemptedSlug and returns null on error', async () => {
-    getSpy.and.returnValue(throwError(() => ({ status: 404 })));
+    getWithProgressSpy.and.returnValue(throwError(() => ({ status: 404 })));
     const result = await runResolver('missing');
     expect(result).toBeNull();
     expect(navSpy).toHaveBeenCalledWith(['/404'], {
@@ -79,10 +102,55 @@ describe('shareBlobResolver', () => {
       replaceUrl: true,
       state: undefined,
     });
-    expect(getSpy).not.toHaveBeenCalled();
+    expect(getWithProgressSpy).not.toHaveBeenCalled();
+  });
+
+  it('forwards progress events into LoadingSplashService.reportBlobProgress', async () => {
+    getWithProgressSpy.and.returnValue(
+      makeStream(
+        { kind: 'progress', loaded: 256, total: 1024 },
+        { kind: 'progress', loaded: 768, total: 1024 },
+        { kind: 'blob', blob: blob() },
+      ),
+    );
+    await runResolver('abc123');
+    const calls = reportProgressSpy.calls.allArgs();
+    // Three calls: two from progress events + one snap-to-1.0.
+    expect(calls.length).toBe(3);
+    expect(calls[0]).toEqual([256, 1024]);
+    expect(calls[1]).toEqual([768, 1024]);
+    expect(calls[2])
+      .withContext('snap-to-1.0 on terminal event so the bar visually completes')
+      .toEqual([1024, 1024]);
+  });
+
+  it('does not snap when no determinate total was ever observed', async () => {
+    getWithProgressSpy.and.returnValue(
+      makeStream({ kind: 'progress', loaded: 256, total: null }, { kind: 'blob', blob: blob() }),
+    );
+    await runResolver('abc123');
+    expect(reportProgressSpy.calls.allArgs()).toEqual([[256, null]]);
+  });
+
+  it('emits blob.fetch.complete with determinateProgress=true when a total was observed', async () => {
+    getWithProgressSpy.and.returnValue(
+      makeStream({ kind: 'progress', loaded: 100, total: 1000 }, { kind: 'blob', blob: blob() }),
+    );
+    await runResolver('abc123');
+    expect(eventSpy).toHaveBeenCalledWith('blob.fetch.complete', { determinateProgress: true });
+  });
+
+  it('emits blob.fetch.complete with determinateProgress=false when no total was observed', async () => {
+    getWithProgressSpy.and.returnValue(
+      makeStream({ kind: 'progress', loaded: 100, total: null }, { kind: 'blob', blob: blob() }),
+    );
+    await runResolver('abc123');
+    expect(eventSpy).toHaveBeenCalledWith('blob.fetch.complete', { determinateProgress: false });
+  });
+
+  it('emits blob.fetch.complete only on success, not on error', async () => {
+    getWithProgressSpy.and.returnValue(throwError(() => ({ status: 404 })));
+    await runResolver('missing');
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 });
-
-// Suppress unused-import warnings for `from` (kept so helpers can be extended
-// without another import churn).
-void from;

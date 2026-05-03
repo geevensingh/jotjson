@@ -6,11 +6,14 @@ import { LoadingSplashComponent } from './loading-splash.component';
 describe('LoadingSplashComponent', () => {
   let fixture: ComponentFixture<LoadingSplashComponent>;
   const kindSignal = signal<'jotjson' | 'blob' | null>(null);
+  const progressSignal = signal<number | null>(null);
 
   beforeEach(() => {
     kindSignal.set(null);
+    progressSignal.set(null);
     const stub: Partial<LoadingSplashService> = {
       kind: kindSignal.asReadonly(),
+      progress: progressSignal.asReadonly(),
     };
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -23,6 +26,10 @@ describe('LoadingSplashComponent', () => {
 
   function splash(): HTMLElement | null {
     return fixture.nativeElement.querySelector('.jot-splash');
+  }
+
+  function bar(): HTMLElement | null {
+    return fixture.nativeElement.querySelector('.jot-splash__bar');
   }
 
   function labelText(): string {
@@ -79,5 +86,59 @@ describe('LoadingSplashComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.jot-splash__bar')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.jot-splash__logo')).not.toBeNull();
+  });
+
+  describe('progress binding', () => {
+    it('omits the determinate class when progress is null (indeterminate)', () => {
+      kindSignal.set('blob');
+      progressSignal.set(null);
+      fixture.detectChanges();
+      const element = bar()!;
+      expect(element.classList.contains('jot-splash__bar--determinate'))
+        .withContext('null progress means indeterminate; sliding-stripe animation stays')
+        .toBeFalse();
+    });
+
+    it('applies the determinate class and binds --jot-progress when progress is a fraction', () => {
+      kindSignal.set('blob');
+      progressSignal.set(0.42);
+      fixture.detectChanges();
+      const element = bar()!;
+      expect(element.classList.contains('jot-splash__bar--determinate')).toBeTrue();
+      // Browsers may serialize the bound CSS variable as either a
+      // bare number or with a unit; assert the prefix to keep the
+      // test resilient to formatting differences.
+      const cssVar = element.style.getPropertyValue('--jot-progress');
+      expect(cssVar.trim()).toBe('0.42');
+    });
+
+    it('updates --jot-progress as the fraction advances', () => {
+      kindSignal.set('blob');
+      progressSignal.set(0.1);
+      fixture.detectChanges();
+      progressSignal.set(0.6);
+      fixture.detectChanges();
+      const element = bar()!;
+      expect(element.style.getPropertyValue('--jot-progress').trim()).toBe('0.6');
+    });
+
+    it('flips back to indeterminate when progress resets to null mid-flight', () => {
+      kindSignal.set('blob');
+      progressSignal.set(0.5);
+      fixture.detectChanges();
+      expect(bar()!.classList.contains('jot-splash__bar--determinate')).toBeTrue();
+      progressSignal.set(null);
+      fixture.detectChanges();
+      expect(bar()!.classList.contains('jot-splash__bar--determinate')).toBeFalse();
+    });
+
+    it('binds 0 to --jot-progress at the start of a determinate fetch', () => {
+      kindSignal.set('blob');
+      progressSignal.set(0);
+      fixture.detectChanges();
+      const element = bar()!;
+      expect(element.classList.contains('jot-splash__bar--determinate')).toBeTrue();
+      expect(element.style.getPropertyValue('--jot-progress').trim()).toBe('0');
+    });
   });
 });

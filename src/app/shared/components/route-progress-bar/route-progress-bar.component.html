@@ -1,6 +1,12 @@
 @if (visible()) {
-  <div class="route-progress-bar" aria-hidden="true">
+  <div
+    class="route-progress-bar"
+    [class.route-progress-bar--determinate]="determinate()"
+    [style.--jot-progress]="fillFraction()"
+    aria-hidden="true"
+  >
     <span class="route-progress-bar__stripe route-progress-bar__stripe--primary"></span>
     <span class="route-progress-bar__stripe route-progress-bar__stripe--secondary"></span>
+    <span class="route-progress-bar__fill" aria-hidden="true"></span>
   </div>
 }

@@ -560,6 +560,22 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'share.delete.failed',
 
+  /**
+   * Kind: event
+   * Fired by: `shareBlobResolver`
+   *           (`features/share/share-blob.resolver.ts`) after the
+   *           terminal blob is resolved (success path only -- the
+   *           4xx/error path navigates to /404 via `goToNotFound`
+   *           and does not emit this event).
+   * Props: { determinateProgress: boolean }. `true` when the resolver
+   *   observed a non-null `total` (from `X-Jotjson-Body-Length`) at
+   *   any point during the fetch, `false` otherwise. Used to spot
+   *   regressions if AFD configuration drifts at the edge fleet
+   *   level and starts stripping the custom header.
+   * Measurements: none.
+   */
+  'blob.fetch.complete',
+
   // Blobs
 
   /**

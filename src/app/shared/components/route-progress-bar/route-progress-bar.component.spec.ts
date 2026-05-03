@@ -8,15 +8,18 @@ describe('RouteProgressBarComponent', () => {
   let fixture: ComponentFixture<RouteProgressBarComponent>;
   const pendingSignal = signal(false);
   const splashKindSignal = signal<'jotjson' | 'blob' | null>(null);
+  const splashProgressSignal = signal<number | null>(null);
 
   beforeEach(() => {
     pendingSignal.set(false);
     splashKindSignal.set(null);
+    splashProgressSignal.set(null);
     const progressStub: Partial<NavigationProgressService> = {
       pending: pendingSignal.asReadonly(),
     };
     const splashStub: Partial<LoadingSplashService> = {
       kind: splashKindSignal.asReadonly(),
+      progress: splashProgressSignal.asReadonly(),
     };
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -92,5 +95,41 @@ describe('RouteProgressBarComponent', () => {
     splashKindSignal.set(null);
     fixture.detectChanges();
     expect(bar()).not.toBeNull();
+  });
+
+  describe('determinate variant', () => {
+    it('stays indeterminate when splash.progress is null', () => {
+      pendingSignal.set(true);
+      splashProgressSignal.set(null);
+      fixture.detectChanges();
+      const element = bar()!;
+      expect(element.classList.contains('route-progress-bar--determinate')).toBeFalse();
+    });
+
+    it('flips to determinate and binds --jot-progress when splash.progress is a fraction', () => {
+      pendingSignal.set(true);
+      splashProgressSignal.set(0.33);
+      fixture.detectChanges();
+      const element = bar()!;
+      expect(element.classList.contains('route-progress-bar--determinate')).toBeTrue();
+      expect(element.style.getPropertyValue('--jot-progress').trim()).toBe('0.33');
+    });
+
+    it('updates the CSS variable as progress advances', () => {
+      pendingSignal.set(true);
+      splashProgressSignal.set(0.2);
+      fixture.detectChanges();
+      splashProgressSignal.set(0.85);
+      fixture.detectChanges();
+      const element = bar()!;
+      expect(element.style.getPropertyValue('--jot-progress').trim()).toBe('0.85');
+    });
+
+    it('renders the determinate fill element under the determinate class', () => {
+      pendingSignal.set(true);
+      splashProgressSignal.set(0.5);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.route-progress-bar__fill')).not.toBeNull();
+    });
   });
 });

@@ -167,6 +167,17 @@ Place new code in the correct bucket:
   - `500` server error - log full detail; respond with a generic
     message.
 - Auth: validate Entra External ID-issued JWTs on every protected route.
+- **Custom response/request headers**: use the `X-Jotjson-*` prefix for
+  all first-party headers we own end-to-end. Examples in production
+  today: `X-Jotjson-Authorization` (request, carries the bearer token
+  to dodge the SWA managed-Functions `Authorization`-header rewrite)
+  and `X-Jotjson-Body-Length` (response, GET `/api/blobs/{idOrSlug}`
+  uncompressed UTF-8 byte count, used to drive the determinate
+  blob-fetch progress bar because Azure Front Door's gzip pass strips
+  `Content-Length`). The prefix matches what AFD lets through
+  unchanged and avoids collisions with any standard or third-party
+  header names. New first-party headers should follow the same
+  pattern.
 
 ### Telemetry
 

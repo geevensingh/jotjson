@@ -28,6 +28,9 @@ import { LoadingSplashService } from '../../../core/loading-splash/loading-splas
 export class LoadingSplashComponent {
   private readonly splash = inject(LoadingSplashService);
   protected readonly kind = this.splash.kind;
+  protected readonly progress = this.splash.progress;
+  protected readonly determinate = computed(() => this.progress() !== null);
+  protected readonly progressFraction = computed(() => this.progress() ?? 0);
   protected readonly label = computed(() => {
     const current = this.kind();
     if (current === 'blob') {

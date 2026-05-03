@@ -310,8 +310,12 @@ describe('GET /api/blobs/:idOrSlug', () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
     const response = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
     expect(response.status).toBe(200);
-    expect(response.headers).toEqual({ ETag: '"1"' });
-    expect(response.jsonBody).toEqual({ ...sampleBlob, highlights: [] });
+    const headers = response.headers as Record<string, string>;
+    const expectedBody = JSON.stringify({ ...sampleBlob, highlights: [] });
+    expect(headers['ETag']).toBe('"1"');
+    expect(headers['Content-Type']).toBe('application/json');
+    expect(headers['X-Jotjson-Body-Length']).toBe(String(Buffer.byteLength(expectedBody, 'utf8')));
+    expect(JSON.parse(response.body as string)).toEqual({ ...sampleBlob, highlights: [] });
     expect(requireAuth).not.toHaveBeenCalled();
   });
 
@@ -320,8 +324,24 @@ describe('GET /api/blobs/:idOrSlug', () => {
     findBlob.mockResolvedValueOnce(highlightedBlob);
     const response = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
     expect(response.status).toBe(200);
-    expect(response.headers).toEqual({ ETag: '"1"' });
-    expect(response.jsonBody).toEqual(highlightedBlob);
+    const headers = response.headers as Record<string, string>;
+    expect(headers['ETag']).toBe('"1"');
+    expect(JSON.parse(response.body as string)).toEqual(highlightedBlob);
+  });
+
+  it('reports a UTF-8 byte count (not character count) in X-Jotjson-Body-Length', async () => {
+    const multibyteBlob = {
+      ...sampleBlob,
+      content: '"\u4e2d\u6587\u30c6\u30b9\u30c8 \ud83d\ude80"',
+      title: 'multibyte test',
+    };
+    findBlob.mockResolvedValueOnce(multibyteBlob);
+    const response = await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
+    expect(response.status).toBe(200);
+    const headers = response.headers as Record<string, string>;
+    const body = response.body as string;
+    expect(headers['X-Jotjson-Body-Length']).toBe(String(Buffer.byteLength(body, 'utf8')));
+    expect(Buffer.byteLength(body, 'utf8')).toBeGreaterThan(body.length);
   });
 
   it('returns 404 when not found', async () => {

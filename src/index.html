@@ -132,6 +132,43 @@
           opacity: 1;
         }
       }
+      /*
+       * Determinate variant: the resolver streams progress fractions
+       * into LoadingSplashService, which the LoadingSplashComponent
+       * binds via [style.--jot-progress] (range [0..1]). The bar uses
+       * a single ::before fill at 100% width, scaled horizontally
+       * from the left. The 200ms ease-out transition smooths the
+       * jumps between progress events; under prefers-reduced-motion
+       * we drop the transition so updates snap (no positional motion,
+       * no animation cues).
+       *
+       * The static splash inside <app-root> never enters this state -
+       * by definition we have no progress signal before Angular boots.
+       * Only the Angular splash component (post-bootstrap) toggles
+       * `.jot-splash__bar--determinate`.
+       */
+      .jot-splash__bar--determinate {
+        --jot-progress: 0;
+      }
+      .jot-splash__bar--determinate::before {
+        animation: none;
+        left: 0;
+        right: 0;
+        transform-origin: left center;
+        transform: scaleX(var(--jot-progress, 0));
+        transition: transform 200ms ease-out;
+        will-change: transform;
+      }
+      .jot-splash__bar--determinate::after {
+        display: none;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .jot-splash__bar--determinate::before {
+          animation: none;
+          transition: none;
+          opacity: 1;
+        }
+      }
       .jot-splash__logo {
         width: 96px;
         height: 96px;
