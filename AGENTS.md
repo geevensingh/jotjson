@@ -30,7 +30,10 @@ unless a task explicitly overrides a specific rule.
 - **Hosting:** Azure Static Web Apps with managed Functions.
 
 Do not introduce new frameworks, languages, ORMs, state libraries, CSS
-frameworks, or cloud services without explicit approval.
+frameworks, or cloud services without explicit approval. Likewise, do
+not work around npm peer-dependency installation errors with
+`npm install --legacy-peer-deps` or `--force` without explicit user
+approval (see §7).
 
 ## 3. Repository Layout
 
@@ -586,22 +589,28 @@ Before finishing a task:
    both workspaces. (You can still run them individually: root
    `npm run lint` and `npm --prefix api run lint`.) Frontend lint is
    `tsc --noEmit -p tsconfig.app.json` + `check-ascii.mjs`,
-   `check-spec-patterns.mjs`, `check-prod-patterns.mjs`, and
-   `check-format.mjs` (the prettier annotation wrapper -
-   `npm run format:check` is the equivalent for direct invocation).
+   `check-spec-patterns.mjs`, `check-prod-patterns.mjs`,
+   `check-lockfile.mjs`, and `check-format.mjs` (the prettier
+   annotation wrapper - `npm run format:check` is the equivalent for
+   direct invocation).
    Formatting is enforced repo-wide, including `api/**`, from the
    root. The `api/` lint is `tsc --noEmit`. ESLint is not installed.
 
-   Each gate also has its own per-script entry point so CI can run
-   them as separate steps with inline annotations and a per-gate
+   Each gate also has its own per-script entry point. CI runs most
+   of them as separate steps with inline annotations and a per-gate
    summary: `npm run lint:tsc`, `npm run lint:ascii`,
    `npm run lint:spec-patterns`, `npm run lint:prod-patterns`,
-   `npm run lint:format`. **When CI fails, look at the failing
-   step's name in the run page** - the gate that broke is named
-   directly (e.g., "Lint - Prettier formatting"). The "Lint
-   summary" rollup step at the end of the job restates which gate
-   failed and the exact fix command. File-level (and where
-   available, line-level) failures are surfaced as inline
+   `npm run lint:format`. (The `lint:lockfile` gate is
+   intentionally **not** a separate CI step: CI's job-level
+   `npm ci` already enforces lockfile-vs-manifest sync natively, so
+   a duplicate CI step would never fire. The script exists as a
+   `lint:*` entry point so it shows up in `lint:all` and can be
+   invoked directly during local debugging.) **When CI fails, look
+   at the failing step's name in the run page** - the gate that
+   broke is named directly (e.g., "Lint - Prettier formatting").
+   The "Lint summary" rollup step at the end of the job restates
+   which gate failed and the exact fix command. File-level (and
+   where available, line-level) failures are surfaced as inline
    annotations on the PR Files Changed view.
 
    A husky pre-commit hook installed by `npm install`'s `prepare`
@@ -646,6 +655,27 @@ Before finishing a task:
     response (and ideally in the commit body) so the decision is on
     the record. The build counter + SHA already give per-deploy
     resolution, so most non-feature work is "no bump."
+12. **Never use `npm install --legacy-peer-deps` or `--force`** to
+    work around peer-dependency installation errors without explicit
+    user approval. These flags are known lockfile-drift attractors:
+    they skip recording transitive optional-peer entries that
+    `npm ci` on Linux later rejects, breaking CI for everyone (see
+    retro: M7h CI break, fix in commit 78c0dd7). If npm refuses an
+    install on peer-dep grounds, stop and ask the user whether to
+    bump the conflicting package, pin a different version, or accept
+    the override - do not work around silently.
+
+    If the user does approve an override, it must be persisted before
+    commit by either:
+    - committing the matching flag in `.npmrc` at the workspace root
+      (so subsequent `npm ci` runs use the same resolution), or
+    - regenerating the lockfile afterward with the override removed
+      (`Remove-Item package-lock.json; npm install --package-lock-only`)
+      so the committed lockfile is valid under default settings.
+
+    Either way, `npm run lint:lockfile` (which runs `npm ci --dry-run`
+    against root and `api/`) must pass before commit. The `lint`
+    chain runs it automatically, so this is enforced by `lint:all`.
 
 ## 8. Git & PR Hygiene
 
