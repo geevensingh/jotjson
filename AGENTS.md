@@ -481,6 +481,15 @@ After the initial cold start, every save reports type errors and
 re-runs affected tests in seconds. Stop the watchers before running
 the full DoD cycle to avoid Karma port collisions.
 
+**Align local with CI before non-trivial work.** Run `npm ci` (root)
+and `npm --prefix api ci` once at the start of a meaningful change
+so local `node_modules` matches the lockfile CI installs from. Plain
+`npm install` floats transitive deps to the latest version matching
+the semver range and can drift from what's pinned -- a "passes
+locally" claim against drifted `node_modules` is not equivalent to
+"passes on CI." After the initial `npm ci`, plain `npm test` is fine
+for the iteration loop.
+
 ## 6. Security & Privacy
 
 - **Never** log or transmit clipboard contents, editor contents, or PII beyond
