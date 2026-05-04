@@ -13,7 +13,7 @@
     "prestart": "npm run build",
     "start": "func start",
     "test": "jest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "@azure/cosmos": "^4.1.1",
