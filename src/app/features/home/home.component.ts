@@ -87,6 +87,7 @@ import { validateAndReadSingleFile } from '../../core/upload/upload-file-validat
 import { patchExtractedValue } from './extract-json-patcher';
 import type { PatchResult } from './extract-json-patcher';
 import { collectStringLeaves } from './string-leaf-collector';
+import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
 
 /**
  * Local-only pane visibility (issue #39). Stored in `localStorage`
@@ -522,21 +523,47 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   /**
-   * 4-state derived view of `paneVisibility` + `layoutOrientation`,
-   * matching the segments of the toolbar's pane-layout segmented
-   * control. Single-pane states ignore the orientation pref - it is
-   * preserved untouched and re-applied when the user picks a `both-*`
-   * segment again.
+   * `true` when the viewport is narrow per the M7l breakpoint
+   * (< 768px). Drives `effectivePaneVisibility` below; the persisted
+   * `paneVisibility` is never mutated by this signal.
+   */
+  readonly narrowViewport = createNarrowViewportSignal();
+
+  /**
+   * Effective (rendered) pane visibility (M7l). At narrow widths the
+   * `'both'` state collapses to `'tree-only'` so the user sees the
+   * tree (the primary value at small sizes per AGENTS.md). Persisted
+   * single-pane choices are honored unchanged. The persisted
+   * `paneVisibility` is never mutated; widening the viewport restores
+   * the original choice. All behavior consumers (paneLayout,
+   * splitStyle, beacon dispatch, Ctrl+F routing, template class
+   * bindings) read this signal rather than `paneVisibility` directly.
+   */
+  readonly effectivePaneVisibility = computed<PaneVisibility>(() => {
+    const persisted = this.paneVisibility();
+    if (this.narrowViewport() && persisted === 'both') return 'tree-only';
+    return persisted;
+  });
+
+  /**
+   * 4-state derived view of `effectivePaneVisibility` +
+   * `layoutOrientation`, matching the segments of the toolbar's
+   * pane-layout segmented control. Single-pane states ignore the
+   * orientation pref - it is preserved untouched and re-applied when
+   * the user picks a `both-*` segment again. Deriving from the
+   * effective (not persisted) visibility ensures the highlighted
+   * segment is always one of the visible segments at narrow widths
+   * where the `both-*` segments are CSS-hidden.
    */
   readonly paneLayout = computed<PaneLayout>(() => {
-    const visibility = this.paneVisibility();
+    const visibility = this.effectivePaneVisibility();
     if (visibility === 'editor-only') return 'editor-only';
     if (visibility === 'tree-only') return 'tree-only';
     return this.layoutOrientation() === 'vertical' ? 'both-vertical' : 'both-horizontal';
   });
 
   readonly splitStyle = computed(() => {
-    const visibility = this.paneVisibility();
+    const visibility = this.effectivePaneVisibility();
     const orientation = this.layoutOrientation();
     if (visibility !== 'both') {
       return orientation === 'vertical'
@@ -1046,6 +1073,12 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   onSplitterPointerDown(ev: PointerEvent): void {
     if (ev.button !== 0) return;
+    // Defensive guard: at narrow viewport widths the splitter is
+    // CSS-hidden via `display:none`, so this handler should be
+    // unreachable. If a stale event still fires (e.g. during a
+    // viewport-width transition), refuse to start a drag rather than
+    // mutate the persisted desktop split ratio.
+    if (this.effectivePaneVisibility() !== 'both') return;
     const host = this.splitHost()?.nativeElement;
     if (!host) return;
     ev.preventDefault();
@@ -1054,6 +1087,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     const vertical = this.layoutOrientation() === 'vertical';
 
     const move = (e: PointerEvent): void => {
+      // Mid-drag guard (M7l): if the viewport crosses into narrow
+      // mid-drag, the splitter is no longer rendered. Stop writing
+      // splitRatio so the persisted desktop ratio survives the
+      // transition unchanged.
+      if (this.effectivePaneVisibility() !== 'both') return;
       const rect = host.getBoundingClientRect();
       const raw = vertical
         ? (e.clientY - rect.top) / rect.height
@@ -1145,14 +1183,15 @@ export class HomeComponent implements OnInit, OnDestroy {
   /**
    * Cross-pane dispatcher for beacon jump intents (pill clicks +
    * ancestor-badge clicks). Decides whether to drive the tree or the
-   * editor based on `paneVisibility()` plus
+   * editor based on `effectivePaneVisibility()` plus
    * `BeaconNavigationService.lastActivePane()` (the latter only used
-   * when both panes are visible). Always emits
-   * `beacons.crossPane.dispatched` telemetry with closed-enum props
-   * (no paths, no key/value content).
+   * when both panes are visible). Reads *effective* visibility (M7l)
+   * so narrow-viewport dispatches never route to a hidden pane.
+   * Always emits `beacons.crossPane.dispatched` telemetry with
+   * closed-enum props (no paths, no key/value content).
    */
   private dispatchBeaconJump(request: BeaconJumpRequest): void {
-    const paneVisibility = this.paneVisibility();
+    const paneVisibility = this.effectivePaneVisibility();
     const lastActive = this.beaconNav.lastActivePane();
     const target: 'tree' | 'editor' =
       paneVisibility === 'editor-only'
@@ -1941,13 +1980,14 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     // Ctrl+F when focus is NOT in the editor -> focus tree search. When in the
     // editor, Monaco's native find runs. When the tree pane is hidden via the
-    // 3-state pane visibility toggle (issue #39) we skip the routing rather
-    // than focusing a `display:none` input - the keypress falls through to
-    // the browser default.
+    // 3-state pane visibility toggle (issue #39) or by the M7l narrow-viewport
+    // override we skip the routing rather than focusing a `display:none`
+    // input - the keypress falls through to the browser default. Reads
+    // *effective* visibility so the narrow-viewport collapse is honored.
     if ((ev.ctrlKey || ev.metaKey) && ev.key === 'f') {
       const active = document.activeElement;
       const inEditor = active?.closest('.monaco-editor') != null;
-      const treeHidden = this.paneVisibility() === 'editor-only';
+      const treeHidden = this.effectivePaneVisibility() === 'editor-only';
       if (!inEditor && !treeHidden) {
         ev.preventDefault();
         this.focusTreeSearch();

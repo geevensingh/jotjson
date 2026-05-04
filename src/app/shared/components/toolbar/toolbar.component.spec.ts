@@ -356,6 +356,74 @@ describe('ToolbarComponent', () => {
 
       expect(emitCount).toBe(0);
     });
+
+    describe('M7l narrow viewport collapse', () => {
+      const NARROW_THRESHOLD = 768;
+
+      function isNarrow(): boolean {
+        return window.innerWidth < NARROW_THRESHOLD;
+      }
+
+      function displayOf(fixture: ComponentFixture<ToolbarComponent>, value: string): string {
+        const segment = findGroup(fixture).querySelector(
+          `mat-button-toggle[value="${value}"]`,
+        ) as HTMLElement | null;
+        if (!segment) return '';
+        return window.getComputedStyle(segment).display;
+      }
+
+      it('hides both-horizontal and both-vertical segments at narrow widths', async () => {
+        if (!isNarrow()) {
+          pending(
+            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+              'cannot exercise narrow SCSS media query. Skipping.',
+          );
+          return;
+        }
+        const { fixture } = await create();
+        fixture.componentRef.setInput('paneLayout', 'tree-only');
+        fixture.detectChanges();
+
+        expect(displayOf(fixture, 'both-horizontal')).toBe('none');
+        expect(displayOf(fixture, 'both-vertical')).toBe('none');
+      });
+
+      it('keeps editor-only and tree-only segments visible at narrow widths', async () => {
+        if (!isNarrow()) {
+          pending(
+            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+              'cannot exercise narrow SCSS media query. Skipping.',
+          );
+          return;
+        }
+        const { fixture } = await create();
+        fixture.componentRef.setInput('paneLayout', 'tree-only');
+        fixture.detectChanges();
+
+        expect(displayOf(fixture, 'editor-only')).not.toBe('none');
+        expect(displayOf(fixture, 'tree-only')).not.toBe('none');
+      });
+
+      it('highlights tree-only when paneLayout is tree-only at narrow widths', async () => {
+        if (!isNarrow()) {
+          pending(
+            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+              'cannot exercise narrow SCSS media query. Skipping.',
+          );
+          return;
+        }
+        const { fixture } = await create();
+        fixture.componentRef.setInput('paneLayout', 'tree-only');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const checked = (fixture.nativeElement as HTMLElement).querySelector(
+          'mat-button-toggle-group.pane-layout-group .mat-button-toggle-checked',
+        );
+        expect(checked?.getAttribute('value')).toBe('tree-only');
+      });
+    });
   });
 
   describe('identity pill states (issue #84)', () => {

@@ -43,8 +43,8 @@
     <h1 class="sr-only" i18n="@@home.h1">JSON editor</h1>
     <div
       class="split"
-      [class.editor-only]="paneVisibility() === 'editor-only'"
-      [class.tree-only]="paneVisibility() === 'tree-only'"
+      [class.editor-only]="effectivePaneVisibility() === 'editor-only'"
+      [class.tree-only]="effectivePaneVisibility() === 'tree-only'"
       [style]="splitStyle()"
       #splitHost
     >

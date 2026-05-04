@@ -582,13 +582,13 @@ The primary page. Available to **all users** (anonymous + registered).
     - The search field is always visible - it does not need to be toggled open.
     - Keyboard shortcut: `Ctrl+F` is **context-aware** - when the editor panel is focused, it triggers Monaco's built-in find; when the tree panel is focused (or no panel is focused), it focuses the tree search field.
 
-- **Layout:** Split-pane (resizable). A 4-state segmented control in the toolbar picks one of `Editor only`, `Editor + tree side-by-side` (default), `Editor above tree`, or `Tree only`. The two "both" segments are direct-jump variants of `layoutOrientation` (which is roamed across devices); the two single-pane segments leave `layoutOrientation` untouched and persist locally under `jotjson.paneVisibility.v1` (parallel to `splitRatio`). When the user returns to a both-* segment, the previously saved `splitRatio` is automatically restored. On mobile (< 768px), the rendering always stacks vertically regardless of the user's choice; the segmented control continues to highlight the stored preference, so resizing the viewport above 768px immediately restores the chosen orientation. Single-pane segments remove the inactive pane and the splitter from layout via `display:none`.
+- **Layout:** Split-pane (resizable). A 4-state segmented control in the toolbar picks one of `Editor only`, `Editor + tree side-by-side` (default), `Editor above tree`, or `Tree only`. The two "both" segments are direct-jump variants of `layoutOrientation` (which is roamed across devices); the two single-pane segments leave `layoutOrientation` untouched and persist locally under `jotjson.paneVisibility.v1` (parallel to `splitRatio`). When the user returns to a both-* segment, the previously saved `splitRatio` is automatically restored. On narrow viewports (< 768px) the rendering collapses to a single visible pane: when the persisted `paneVisibility` is `both`, the tree pane is shown by default (the app at narrow widths is primarily for *viewing* JSON; editing in Monaco at <= 360px is impractical). When the persisted choice is `editor-only` or `tree-only`, that single-pane choice is honored. The toolbar's segmented control collapses to a 2-state toggle (`editor-only` | `tree-only`) at narrow widths via SCSS - the two `both-*` segments are hidden so the highlighted segment is always one of the visible ones. The persisted `paneVisibility` is **never** mutated by the override; resizing the viewport back above 768px immediately restores the user's stored choice (including `both`). Single-pane segments remove the inactive pane and the splitter from layout via `display:none`.
 
 - **Status bar** (always-visible strip along the bottom of the page, shipped in M7m):
   - **Left cluster** (raw text stats): byte size in UTF-8, line count, current cursor position (`Ln X, Col Y`).
   - **Right cluster** (parsed tree stats): total node count, max depth, counts of arrays vs. objects, a JSON / JSONC mode badge, and a build indicator. The build indicator currently shows the local-git short SHA (with a `*` suffix when the working tree was dirty) sourced from a build-time generated module, as a short-term placeholder pending M7n; M7n replaces it with a CI-authoritative `vX.Y.Z - <shortsha>` badge that links to the commit on GitHub and copies the full SHA on click.
   - Stats update reactively as the user types. No interactivity beyond the version badge in v1.
-  - On narrow viewports (< 768px) the bar collapses to a single-line summary per M7l, keeping Bytes, Lines, and the Mode badge and hiding cursor/nodes/depth/counts.
+  - On narrow viewports (< 768px) the bar collapses to a single-line summary per M7l, keeping Lines, Size (Bytes), and the Mode badge and hiding Chars, cursor, nodes, depth, object/array counts, and the build/version badge.
 
 ### 2. Persistent Link / Share  (`/s/:id`)
 
@@ -1934,6 +1934,32 @@ Out of scope (for v1):
   same milestone and gates the foundations against regression. Later
   M7g waves (3b tree, 3c Monaco, 3d contrast, 3e focus polish,
   3f reduced-motion) follow under their own plan-and-approve cycles.
+- **0.13.0**: M7l responsive layout - on viewports narrower than
+  768px the editor/tree split now collapses to a single visible pane
+  rather than the previously-spec'd "stacked-both" layout. When the
+  persisted `paneVisibility` is `both`, the tree pane renders by
+  default (the app at narrow widths is primarily for *viewing* JSON;
+  Monaco editing at <= 360px is impractical). Persisted single-pane
+  choices (`editor-only` or `tree-only`) are honored. The toolbar's
+  segmented control collapses to a 2-state toggle (the two `both-*`
+  segments hide via SCSS); the persisted `paneVisibility` is **never**
+  mutated by the override, so resizing back above 768px immediately
+  restores the user's stored choice (including `both`). The status bar
+  also collapses to a single-line summary keeping only Lines, Size,
+  and the Mode badge; Chars, cursor, nodes, depth, object/array
+  counts, and the build/version badge are hidden. A new
+  `createNarrowViewportSignal()` helper at `src/app/core/layout/`
+  wraps `window.matchMedia('(max-width: 767.98px)')` with the same
+  no-window fallback pattern used by `PreferencesService` for
+  `prefers-color-scheme`. All four behavioral consumers in
+  `HomeComponent` (`paneLayout`, `splitStyle`, `dispatchBeaconJump`,
+  Ctrl+F tree-search guard) read an `effectivePaneVisibility`
+  computed that overrides the persisted value while narrow,
+  guaranteeing beacon clicks never route to the hidden editor and
+  the highlighted toolbar segment is always visible. The splitter
+  pointer-down handler also bails when effective visibility is not
+  `both`, both at entry and inside the move closure to handle
+  mid-drag viewport resizes.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
@@ -2227,7 +2253,7 @@ Out of scope (for v1):
      - App Insights workbook (5 sections) + 4 alerts + 1 action group shipped. Bicep modules: `infra/modules/{actionGroup,alerts,monitoringWorkbook}.bicep` + `infra/main.bicep` wiring + `infra/modules/appInsights.bicep` outputs. Docs: see `docs/telemetry.md` -> "Dashboards & alerts (M7i)". Post-V1 follow-ups: issues #87-#94.
    - ~~**M7j**: Static Web Apps upgrade to Standard tier - flipped during M7e (commit 1ba34e1) because apex custom-domain binding requires Standard. See M7o for the BYO Functions follow-up.~~ (done)
    - ~~**M7k**: Surface JSONC comments in the tree view - the parser harvests every `//` and `/* */` comment in a second pass and attaches it to the nearest tree node; comments render as dimmed inline annotations on the same row as the value they document (trailing slot when on the same source line as the value, leading slot when introducing the next value). Single-line + ellipsis with full text via tooltip; toggleable via `treeShowComments` (default true). Comments do not participate in formatting-rules matching or tree search. Decoration-vs-data font philosophy codified alongside (commits `7d937c5` M7k-0 mockup-rule docs, `82f9073` M7k-1 parser harvest, `4f7d604` M7k-2 tree rendering, `66f695d` font philosophy, `fa02122` placement fix-up, plus this commit for M7k-3 preference + spec).~~ (done)
-   - **M7l**: Responsive layout - on viewports narrower than 768px, force the editor/tree split to stack vertically (editor on top, tree below) regardless of the user's `layoutOrientation` preference, per Home page §Layout. Also collapse the status bar (M7m) to a single-line summary - keep Bytes, Lines, and Mode; hide cursor, nodes, depth, and object/array counts.
+   - ~~**M7l**: Responsive layout - on viewports narrower than 768px, collapse the editor/tree split to a single visible pane: when persisted `paneVisibility` is `both`, render the tree pane by default (view-first at narrow widths); when persisted is `editor-only` or `tree-only`, honor the single-pane choice. The toolbar's segmented control collapses to a 2-state toggle (`editor-only` | `tree-only`); the persisted `paneVisibility` is never mutated by the override. Also collapse the status bar (M7m) to a single-line summary - keep Bytes, Lines, and Mode; hide Chars, cursor, nodes, depth, object/array counts, and the build/version badge.~~ (done)
    - ~~**M7m**: Status bar - a slim, always-visible strip along the bottom of the Home page that surfaces at-a-glance stats about the current document. Left cluster covers the raw text (character count, line count, byte size in UTF-8, current cursor line/column); right cluster covers the parsed tree (total node count, max depth, array vs. object counts, JSON vs. JSONC mode indicator). Stats update reactively as the user types. Hidden or collapsed to a single-line summary on narrow viewports (see M7l). No interactivity required in v1 - purely informational.~~ (done)
    - ~~**M7n**: Version & commit surfacing - replace the short-term `dev`/local-git SHA indicator with a CI-authoritative version badge. Build tooling injects `{ version, sha, builtAt, branch }` from `package.json` + `GITHUB_SHA` / `GITHUB_REF_NAME` env vars into a generated module (no local `git` dependency). Status bar (right cluster, after the mode badge) shows `vX.Y.Z - abc1234`, clickable to copy the full SHA to the clipboard and linking to the corresponding commit on GitHub. Also emit a one-line `console.info` banner on app start so the version lands in bug-report consoles. Release discipline: bump `package.json` `version` on user-visible releases (via `npm version`). Future follow-up (not part of this step): a `GET /api/version` endpoint so the frontend can also surface the backend SHA and flag skew.~~ (done)
      - Build-time version module (`src/app/core/version/version.ts`) generated from `package.json` + `GITHUB_SHA` / `GITHUB_REF_NAME`. Status bar surfaces `vX.Y.Z - abc1234` with click-to-copy SHA and a GitHub commit link; one-line `console.info` banner on boot. `GET /api/version` follow-up remains a future step. Commit `04d542f`.

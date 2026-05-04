@@ -231,4 +231,69 @@ describe('StatusBarComponent', () => {
       );
     });
   });
+
+  describe('M7l narrow viewport collapse', () => {
+    const NARROW_THRESHOLD = 768;
+
+    function isNarrow(): boolean {
+      return window.innerWidth < NARROW_THRESHOLD;
+    }
+
+    function displayOf(fixture: ReturnType<typeof create>, selector: string): string {
+      const el = fixture.nativeElement.querySelector(selector) as HTMLElement | null;
+      if (!el) return '';
+      return window.getComputedStyle(el).display;
+    }
+
+    it('hides Chars/Cursor/Nodes/Depth/Obj/Arr/Build at narrow widths', () => {
+      if (!isNarrow()) {
+        pending(
+          `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+            'cannot exercise narrow SCSS media query. Skipping.',
+        );
+        return;
+      }
+      const text = '{"a":[1,2]}';
+      const f = create({ text, parseResult: svc.parse(text) });
+
+      expect(displayOf(f, '.stat-chars')).toBe('none');
+      expect(displayOf(f, '.stat-cursor')).toBe('none');
+      expect(displayOf(f, '.stat-nodes')).toBe('none');
+      expect(displayOf(f, '.stat-depth')).toBe('none');
+      expect(displayOf(f, '.stat-obj')).toBe('none');
+      expect(displayOf(f, '.stat-arr')).toBe('none');
+      expect(displayOf(f, '.stat-build')).toBe('none');
+    });
+
+    it('keeps Lines/Size/Mode visible at narrow widths', () => {
+      if (!isNarrow()) {
+        pending(
+          `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+            'cannot exercise narrow SCSS media query. Skipping.',
+        );
+        return;
+      }
+      const text = '{"a":[1,2]}';
+      const f = create({ text, parseResult: svc.parse(text) });
+
+      expect(displayOf(f, '.stat-lines')).not.toBe('none');
+      expect(displayOf(f, '.stat-bytes')).not.toBe('none');
+      expect(displayOf(f, '.stat-mode')).not.toBe('none');
+    });
+
+    it('does not flex-wrap the surviving stats at narrow widths', () => {
+      if (!isNarrow()) {
+        pending(
+          `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+            'cannot exercise narrow SCSS media query. Skipping.',
+        );
+        return;
+      }
+      const f = create();
+      const left = f.nativeElement.querySelector('.left') as HTMLElement | null;
+      const right = f.nativeElement.querySelector('.right') as HTMLElement | null;
+      expect(window.getComputedStyle(left!).flexWrap).toBe('nowrap');
+      expect(window.getComputedStyle(right!).flexWrap).toBe('nowrap');
+    });
+  });
 });

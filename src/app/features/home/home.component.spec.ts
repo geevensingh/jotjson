@@ -33,6 +33,8 @@ import {
   JsonTreeComponent,
   type TreeExtractRequest,
 } from '../../shared/components/json-tree/json-tree.component';
+import { BeaconNavigationService } from '../../core/beacons/beacon-navigation.service';
+import { installMatchMediaStub } from '../../../testing/match-media.testing';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -52,8 +54,32 @@ const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
  * integration layer's job. See DESIGN_SPEC.md > Testing strategy.
  */
 function setupMinimalMonacoStub(): void {
-  beforeEach(() => installMinimalMonacoStub());
-  afterEach(() => restoreMonacoStub());
+  beforeEach(() => {
+    installMinimalMonacoStub();
+    sharedMatchMediaHarness = installMatchMediaStub();
+    sharedMatchMediaHarness.set('(max-width: 767.98px)', false);
+  });
+  afterEach(() => {
+    restoreMonacoStub();
+    sharedMatchMediaHarness?.uninstall();
+    sharedMatchMediaHarness = null;
+  });
+}
+
+let sharedMatchMediaHarness: ReturnType<typeof installMatchMediaStub> | null = null;
+
+function setNarrowViewport(narrow: boolean): void {
+  if (!sharedMatchMediaHarness) {
+    throw new Error('setupMinimalMonacoStub() must be active to control narrow viewport');
+  }
+  sharedMatchMediaHarness.set('(max-width: 767.98px)', narrow);
+}
+
+function fireNarrowViewport(narrow: boolean): void {
+  if (!sharedMatchMediaHarness) {
+    throw new Error('setupMinimalMonacoStub() must be active to control narrow viewport');
+  }
+  sharedMatchMediaHarness.fire('(max-width: 767.98px)', narrow);
 }
 
 function waitForSingleAnimationFrame(): Promise<void> {
@@ -846,6 +872,230 @@ describe('HomeComponent (unit-level)', () => {
     c.onKeydown(ev2);
     expect(focusSpy).toHaveBeenCalled();
     expect(ev2.preventDefault).toHaveBeenCalled();
+  });
+});
+
+describe('HomeComponent narrow-viewport responsive layout (M7l)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])],
+    });
+  });
+
+  afterEach(() => {
+    clearHomeStorage();
+  });
+
+  function createHome(narrow: boolean): {
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>;
+    c: HomeComponent;
+  } {
+    setNarrowViewport(narrow);
+    const fixture = TestBed.createComponent(HomeComponent);
+    return { fixture, c: fixture.componentInstance };
+  }
+
+  it('effectivePaneVisibility collapses persisted "both" to "tree-only" only when narrow', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    c.paneVisibility.set('editor-only');
+    expect(c.effectivePaneVisibility()).toBe('editor-only');
+
+    c.paneVisibility.set('tree-only');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    fireNarrowViewport(false);
+    c.paneVisibility.set('both');
+    expect(c.effectivePaneVisibility()).toBe('both');
+
+    c.paneVisibility.set('editor-only');
+    expect(c.effectivePaneVisibility()).toBe('editor-only');
+
+    c.paneVisibility.set('tree-only');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+  });
+
+  it('persisted paneVisibility is never mutated by the narrow override', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.paneVisibility()).toBe('both');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    fireNarrowViewport(false);
+    expect(c.paneVisibility()).toBe('both');
+    expect(c.effectivePaneVisibility()).toBe('both');
+  });
+
+  it('paneLayout reflects effective (not persisted) visibility at narrow', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.paneLayout()).toBe('tree-only');
+
+    fireNarrowViewport(false);
+    expect(c.paneLayout()).toBe('both-horizontal');
+
+    TestBed.inject(PreferencesService).update({ layoutOrientation: 'vertical' });
+    expect(c.paneLayout()).toBe('both-vertical');
+
+    fireNarrowViewport(true);
+    expect(c.paneLayout()).toBe('tree-only');
+  });
+
+  it('splitStyle collapses to a single 1fr track when effective visibility is single-pane at narrow', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.splitStyle()).toEqual({ 'grid-template-columns': '1fr' });
+
+    fireNarrowViewport(false);
+    expect(c.splitStyle()['grid-template-columns']).toContain('50.000%');
+  });
+
+  it('host element gets .tree-only class at narrow when persisted is "both"', () => {
+    const { fixture } = createHome(true);
+    fixture.componentInstance.paneVisibility.set('both');
+    fixture.detectChanges();
+    const split = fixture.nativeElement.querySelector('.split') as HTMLElement | null;
+    expect(split?.classList.contains('tree-only')).toBeTrue();
+    expect(split?.classList.contains('editor-only')).toBeFalse();
+  });
+
+  it('host element honors persisted "editor-only" at narrow', () => {
+    const { fixture } = createHome(true);
+    fixture.componentInstance.paneVisibility.set('editor-only');
+    fixture.detectChanges();
+    const split = fixture.nativeElement.querySelector('.split') as HTMLElement | null;
+    expect(split?.classList.contains('editor-only')).toBeTrue();
+    expect(split?.classList.contains('tree-only')).toBeFalse();
+  });
+
+  it('dispatchBeaconJump routes to tree (not the hidden editor) at narrow with persisted "both" + lastActive "editor"', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    const beaconNav = TestBed.inject(BeaconNavigationService);
+    beaconNav.markEditorActive();
+    expect(beaconNav.lastActivePane()).toBe('editor');
+
+    const tree = jasmine.createSpyObj('JsonTreeComponent', ['selectByPathString']);
+    spyOn(c as unknown as { tree: () => unknown }, 'tree').and.returnValue(tree);
+
+    beaconNav.requestJump({ path: ['a', 0], icon: 'warning', source: 'pill' });
+
+    expect(tree.selectByPathString).toHaveBeenCalled();
+  });
+
+  it('dispatchBeaconJump still uses lastActivePane when wide with persisted "both"', () => {
+    const { c } = createHome(false);
+    c.paneVisibility.set('both');
+    const beaconNav = TestBed.inject(BeaconNavigationService);
+    beaconNav.markEditorActive();
+
+    const tree = jasmine.createSpyObj('JsonTreeComponent', ['selectByPathString']);
+    spyOn(c as unknown as { tree: () => unknown }, 'tree').and.returnValue(tree);
+
+    beaconNav.requestJump({ path: ['a', 0], icon: 'warning', source: 'pill' });
+
+    expect(tree.selectByPathString).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+F skips tree-search routing at narrow when persisted is "both" (tree pane is hidden via override)', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    const focusSpy = spyOn(c as unknown as { focusTreeSearch: () => void }, 'focusTreeSearch');
+    const ev = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true });
+    spyOn(ev, 'preventDefault');
+    c.onKeydown(ev);
+    expect(focusSpy).toHaveBeenCalled();
+    expect(ev.preventDefault).toHaveBeenCalled();
+  });
+
+  it('onSplitterPointerDown is a no-op when effective visibility is not "both" at narrow', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    const setPointerCapture = jasmine.createSpy('setPointerCapture');
+    const addEventListener = jasmine.createSpy('addEventListener');
+    const target = {
+      setPointerCapture,
+      addEventListener,
+      removeEventListener: jasmine.createSpy('removeEventListener'),
+    } as unknown as HTMLElement;
+    const before = c.splitRatio();
+    c.onSplitterPointerDown({
+      button: 0,
+      pointerId: 1,
+      currentTarget: target,
+      preventDefault: jasmine.createSpy('preventDefault'),
+    } as unknown as PointerEvent);
+
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(addEventListener).not.toHaveBeenCalled();
+    expect(c.splitRatio()).toBe(before);
+  });
+
+  it('mid-drag move handler bails when narrow flips during drag', () => {
+    const { fixture, c } = createHome(false);
+    c.paneVisibility.set('both');
+    c.splitRatio.set(0.5);
+    fixture.detectChanges();
+    expect(c.effectivePaneVisibility()).toBe('both');
+
+    const splitHostEl = (
+      c as unknown as { splitHost: () => { nativeElement: HTMLElement } | undefined }
+    ).splitHost();
+    expect(splitHostEl).toBeTruthy();
+    spyOn(splitHostEl!.nativeElement, 'getBoundingClientRect').and.returnValue({
+      top: 0,
+      left: 0,
+      right: 1000,
+      bottom: 1000,
+      width: 1000,
+      height: 1000,
+      x: 0,
+      y: 0,
+      toJSON(): unknown {
+        return {};
+      },
+    });
+
+    let moveHandler: ((event: PointerEvent) => void) | null = null;
+    const target = {
+      setPointerCapture: jasmine.createSpy('setPointerCapture'),
+      releasePointerCapture: jasmine.createSpy('releasePointerCapture'),
+      addEventListener: jasmine
+        .createSpy('addEventListener')
+        .and.callFake((type: string, fn: (event: PointerEvent) => void) => {
+          if (type === 'pointermove') moveHandler = fn;
+        }),
+      removeEventListener: jasmine.createSpy('removeEventListener'),
+    } as unknown as HTMLElement;
+
+    c.onSplitterPointerDown({
+      button: 0,
+      pointerId: 1,
+      currentTarget: target,
+      preventDefault: jasmine.createSpy('preventDefault'),
+    } as unknown as PointerEvent);
+
+    expect(moveHandler).withContext('move handler should have been registered').not.toBeNull();
+
+    moveHandler!({ clientX: 700, clientY: 500 } as PointerEvent);
+    expect(c.splitRatio()).toBeCloseTo(0.7, 3);
+
+    fireNarrowViewport(true);
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    moveHandler!({ clientX: 200, clientY: 500 } as PointerEvent);
+    expect(c.splitRatio()).toBeCloseTo(0.7, 3);
   });
 });
 

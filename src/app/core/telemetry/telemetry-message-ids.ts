@@ -1218,7 +1218,9 @@ export const TELEMETRY_MESSAGE_IDS = [
    *          source: 'pill' | 'badge';
    *          icon: FormattingIcon }.
    *   All closed enums. `target` is the pane that handled the jump;
-   *   `paneVisibility` is the layout state that drove dispatch;
+   *   `paneVisibility` is the *effective* layout state that drove
+   *   dispatch (post-M7l narrow-viewport override; equal to the
+   *   persisted state on wide viewports);
    *   `source` distinguishes pill clicks from ancestor-badge clicks;
    *   `icon` identifies the bucket. No paths, no key/value strings.
    */

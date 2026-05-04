@@ -242,6 +242,19 @@
   .title-suggest-wand {
     display: none;
   }
+
+  // M7l: collapse the pane-layout segmented control to two segments
+  // (`editor-only` | `tree-only`) at narrow widths. The two `both-*`
+  // segments hide because there is not enough room to show both
+  // panes meaningfully on phones / narrow split-screen views; the
+  // app's primary value at this size is viewing the tree (see
+  // AGENTS.md and DESIGN_SPEC.md M7l). `paneLayout` is derived from
+  // the *effective* visibility, so the active segment is always one
+  // of the two visible ones - no hidden-selected state.
+  .pane-layout-group mat-button-toggle[value='both-horizontal'],
+  .pane-layout-group mat-button-toggle[value='both-vertical'] {
+    display: none;
+  }
 }
 
 .paste-ready {

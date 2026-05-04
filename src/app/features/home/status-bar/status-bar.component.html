@@ -1,18 +1,26 @@
 <div class="status-bar jj-no-select" role="status" aria-live="polite">
   <div class="left">
-    <span class="stat" aria-label="Characters" i18n-aria-label="@@status.chars.aria">
+    <span class="stat stat-chars" aria-label="Characters" i18n-aria-label="@@status.chars.aria">
       <span class="label" i18n="@@status.chars.label">Chars</span>
       <span class="value">{{ textStats().chars }}</span>
     </span>
-    <span class="stat" aria-label="Lines" i18n-aria-label="@@status.lines.aria">
+    <span class="stat stat-lines" aria-label="Lines" i18n-aria-label="@@status.lines.aria">
       <span class="label" i18n="@@status.lines.label">Lines</span>
       <span class="value">{{ textStats().lines }}</span>
     </span>
-    <span class="stat" aria-label="Size in UTF-8 bytes" i18n-aria-label="@@status.bytes.aria">
+    <span
+      class="stat stat-bytes"
+      aria-label="Size in UTF-8 bytes"
+      i18n-aria-label="@@status.bytes.aria"
+    >
       <span class="label" i18n="@@status.bytes.label">Size</span>
       <span class="value">{{ bytesLabel() }}</span>
     </span>
-    <span class="stat" aria-label="Cursor position" i18n-aria-label="@@status.cursor.aria">
+    <span
+      class="stat stat-cursor"
+      aria-label="Cursor position"
+      i18n-aria-label="@@status.cursor.aria"
+    >
       <span class="label" i18n="@@status.cursor.label">Ln</span>
       <span class="value">{{ cursorLabel().line }}</span>
       <span class="label" i18n="@@status.col.label">Col</span>
@@ -21,19 +29,19 @@
   </div>
 
   <div class="right">
-    <span class="stat" aria-label="Total nodes" i18n-aria-label="@@status.nodes.aria">
+    <span class="stat stat-nodes" aria-label="Total nodes" i18n-aria-label="@@status.nodes.aria">
       <span class="label" i18n="@@status.nodes.label">Nodes</span>
       <span class="value">{{ treeStats()?.nodes ?? placeholder }}</span>
     </span>
-    <span class="stat" aria-label="Maximum depth" i18n-aria-label="@@status.depth.aria">
+    <span class="stat stat-depth" aria-label="Maximum depth" i18n-aria-label="@@status.depth.aria">
       <span class="label" i18n="@@status.depth.label">Depth</span>
       <span class="value">{{ treeStats()?.depth ?? placeholder }}</span>
     </span>
-    <span class="stat" aria-label="Object count" i18n-aria-label="@@status.objects.aria">
+    <span class="stat stat-obj" aria-label="Object count" i18n-aria-label="@@status.objects.aria">
       <span class="label" i18n="@@status.objects.label">Obj</span>
       <span class="value">{{ treeStats()?.objects ?? placeholder }}</span>
     </span>
-    <span class="stat" aria-label="Array count" i18n-aria-label="@@status.arrays.aria">
+    <span class="stat stat-arr" aria-label="Array count" i18n-aria-label="@@status.arrays.aria">
       <span class="label" i18n="@@status.arrays.label">Arr</span>
       <span class="value">{{ treeStats()?.arrays ?? placeholder }}</span>
     </span>

@@ -118,3 +118,31 @@
     outline-offset: 1px;
   }
 }
+
+// M7l: at narrow viewports, collapse the status bar to a single
+// line keeping only the items that survive the smallest target
+// width (~320px): Lines, Size, and the Mode badge. Hide the rest
+// (Chars, Cursor, Nodes, Depth, Obj, Arr, build/version). Tighten
+// gap and padding so the surviving items fit without wrapping.
+@media (max-width: v.$breakpoint-mobile) {
+  .status-bar {
+    gap: 8px;
+    padding: 3px 8px;
+  }
+
+  .left,
+  .right {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+
+  .stat-chars,
+  .stat-cursor,
+  .stat-nodes,
+  .stat-depth,
+  .stat-obj,
+  .stat-arr,
+  .stat-build {
+    display: none;
+  }
+}

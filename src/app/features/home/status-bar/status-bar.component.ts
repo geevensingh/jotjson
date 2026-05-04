@@ -8,8 +8,9 @@ import { computeTextStats, computeTreeStats, formatBytes } from './stats';
 
 /**
  * Home page status bar (M7m). Purely informational row showing text and tree
- * stats. Read-only; no interactivity in v1. Responsive collapsing is deferred
- * to M7l per DESIGN_SPEC.md.
+ * stats. Read-only; no interactivity in v1. On narrow viewports the bar
+ * collapses via CSS to a single line keeping only Lines, Size, and the Mode
+ * badge (M7l - see status-bar.component.scss).
  */
 @Component({
   selector: 'jj-status-bar',
