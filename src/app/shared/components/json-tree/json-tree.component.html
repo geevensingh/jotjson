@@ -200,12 +200,26 @@
     <span class="tree-value-string">"x"</span>
   </div>
   @if (root()) {
-    <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
+    <mat-tree
+      [dataSource]="dataSource"
+      [treeControl]="treeControl"
+      [attr.aria-label]="treeAriaLabel"
+    >
       <!-- Leaf nodes -->
-      <mat-nested-tree-node *matTreeNodeDef="let node">
+      <mat-nested-tree-node
+        *matTreeNodeDef="let node"
+        [attr.data-tree-node-path]="node.pathString"
+        [attr.aria-level]="nodeAriaLevel(node)"
+        [attr.aria-posinset]="nodePosInSet(node)"
+        [attr.aria-setsize]="nodeSetSize(node)"
+        [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
+        [attr.tabindex]="rowTabIndex(node)"
+        (keydown)="onTreeKeydown($event, node)"
+      >
         @let manualHighlight = resolvedHighlightsByPath().get(node.pathString);
         <div
           class="tree-row jj-no-select"
+          role="presentation"
           [attr.data-path]="node.pathString"
           [style]="ruleStyleVars(node)"
           [style.--manual-highlight]="manualHighlight?.color ?? null"
@@ -216,7 +230,6 @@
           [class.is-ancestor]="ancestorPaths().has(node.pathString)"
           [class.is-match]="matchingPaths().has(node.pathString)"
           [class.is-selected]="selectedPath() === node.pathString"
-          [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
           (click)="onSelect(node, $event)"
           (contextmenu)="onRowContextMenu($event, node)"
           (dblclick)="onRowDblClick($event, node)"
@@ -402,10 +415,21 @@
       </mat-nested-tree-node>
 
       <!-- Container nodes -->
-      <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
+      <mat-nested-tree-node
+        *matTreeNodeDef="let node; when: hasChild"
+        [attr.data-tree-node-path]="node.pathString"
+        [attr.aria-level]="nodeAriaLevel(node)"
+        [attr.aria-posinset]="nodePosInSet(node)"
+        [attr.aria-setsize]="nodeSetSize(node)"
+        [attr.aria-expanded]="treeControl.isExpanded(node)"
+        [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
+        [attr.tabindex]="rowTabIndex(node)"
+        (keydown)="onTreeKeydown($event, node)"
+      >
         @let manualHighlight = resolvedHighlightsByPath().get(node.pathString);
         <div
           class="tree-row jj-no-select"
+          role="presentation"
           [attr.data-path]="node.pathString"
           [style]="ruleStyleVars(node)"
           [style.--manual-highlight]="manualHighlight?.color ?? null"
@@ -416,7 +440,6 @@
           [class.is-ancestor]="ancestorPaths().has(node.pathString)"
           [class.is-match]="matchingPaths().has(node.pathString)"
           [class.is-selected]="selectedPath() === node.pathString"
-          [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
           (click)="onSelect(node, $event)"
           (contextmenu)="onRowContextMenu($event, node)"
           (dblclick)="onRowDblClick($event, node)"
@@ -510,12 +533,17 @@
           }
         </div>
 
-        <div class="tree-children" [class.tree-children-hidden]="!treeControl.isExpanded(node)">
+        <div
+          class="tree-children"
+          role="group"
+          [class.tree-children-hidden]="!treeControl.isExpanded(node)"
+        >
           <ng-container matTreeNodeOutlet></ng-container>
           @if (treeControl.isExpanded(node)) {
             @let closeManualHighlight = cascadeHighlightsByPath().get(node.pathString);
             <div
               class="tree-row tree-row--close"
+              role="presentation"
               [attr.data-close-path]="node.pathString"
               [class.has-manual-highlight]="closeManualHighlight"
               [style.--manual-highlight]="closeManualHighlight?.color ?? null"

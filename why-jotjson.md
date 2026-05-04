@@ -175,6 +175,12 @@ strings are read as UTC or local.
   Tab stop on every route, primary navigation marked up as a real `<nav>`
   landmark, and screen-reader focus moves to the new page on every route
   change
+- Keyboard-navigable tree view: Tab to enter, Up/Down/Home/End to move
+  between rows, Right/Left to expand/collapse or jump to first child /
+  parent, Enter or Space to select, Shift+F10 / ContextMenu key to open
+  the row menu - with the full WAI-ARIA Tree contract (`role="treeitem"`,
+  level / position / set-size / expanded state) so screen readers
+  announce position and structure on every move
 
 ---
 

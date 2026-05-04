@@ -1548,7 +1548,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set(path);
       fixture.detectChanges();
       const selected = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row[aria-selected="true"]',
+        'mat-nested-tree-node[aria-selected="true"] .tree-row',
       ) as HTMLElement | null;
       cmp.selectedPath.set(null);
       fixture.detectChanges();
@@ -1568,7 +1568,7 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       expect(cmp.selectedPath()).toBe('$.a');
       const stillSelected = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row.is-selected[aria-selected="true"]',
+        'mat-nested-tree-node[aria-selected="true"] .tree-row.is-selected',
       );
       expect(stillSelected).toBeTruthy();
     });
@@ -1762,7 +1762,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set('$.a.x');
       fixture.detectChanges();
       const xRow = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row[aria-selected="true"]',
+        'mat-nested-tree-node[aria-selected="true"] .tree-row',
       ) as HTMLElement;
       expect(xRow.classList.contains('is-selected')).toBeTrue();
       expect(xRow.classList.contains('is-search-hit')).toBeTrue();
@@ -5637,6 +5637,356 @@ describe('JsonTreeComponent', () => {
       expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.copyValue', {
         escaped: true,
       });
+    });
+  });
+
+  describe('M7g-3b: keyboard navigation and ARIA attributes', () => {
+    /**
+     * Resolve the rendered <mat-nested-tree-node> for a given pathString.
+     * Throws if no node is rendered for that path (caller should
+     * `expandAll()` first when the row sits below the auto-fit depth).
+     */
+    function nodeEl(pathString: string): HTMLElement {
+      const el = (fixture.nativeElement as HTMLElement).querySelector(
+        `mat-nested-tree-node[data-tree-node-path="${pathString.replace(/"/g, '\\"')}"]`,
+      ) as HTMLElement | null;
+      if (!el) {
+        throw new Error(`No mat-nested-tree-node rendered for path ${pathString}`);
+      }
+      return el;
+    }
+
+    function dispatchKey(target: HTMLElement, key: string, init: KeyboardEventInit = {}): void {
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
+      );
+    }
+
+    /**
+     * Wait one rAF so `moveFocusTo` has a chance to commit the deferred
+     * DOM `focus()` call.
+     */
+    function nextRaf(): Promise<void> {
+      return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    }
+
+    it('renders aria-level/posinset/setsize/expanded and exactly one tabindex=0', async () => {
+      await createWith({ a: 1, b: 2, c: 3 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      const root = nodeEl('$');
+      expect(root.getAttribute('role')).toBe('treeitem');
+      expect(root.getAttribute('aria-level')).toBe('1');
+      expect(root.getAttribute('aria-posinset')).toBe('1');
+      expect(root.getAttribute('aria-setsize')).toBe('1');
+      expect(root.getAttribute('aria-expanded')).toBe('true');
+
+      const a = nodeEl('$.a');
+      expect(a.getAttribute('aria-level')).toBe('2');
+      expect(a.getAttribute('aria-posinset')).toBe('1');
+      expect(a.getAttribute('aria-setsize')).toBe('3');
+
+      const c = nodeEl('$.c');
+      expect(c.getAttribute('aria-posinset')).toBe('3');
+      expect(c.getAttribute('aria-setsize')).toBe('3');
+
+      const focused = (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'mat-nested-tree-node[tabindex="0"]',
+      );
+      expect(focused.length).toBe(1);
+    });
+
+    it('aria-expanded flips when the container is toggled', async () => {
+      await createWith({ a: { x: 1 } });
+      const a = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.expand(a);
+      fixture.detectChanges();
+      expect(nodeEl('$.a').getAttribute('aria-expanded')).toBe('true');
+
+      cmp.treeControl.collapse(a);
+      fixture.detectChanges();
+      expect(nodeEl('$.a').getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('initial focus lands on the first visible row', async () => {
+      await createWith({ a: 1, b: 2 });
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+      expect(cmp.focusedPath()).toBe('$');
+      expect(nodeEl('$').getAttribute('tabindex')).toBe('0');
+    });
+
+    it('ArrowDown/ArrowUp move focus through visible rows', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$'), 'ArrowDown');
+      expect(cmp.focusedPath()).toBe('$.a');
+
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$.a'), 'ArrowDown');
+      expect(cmp.focusedPath()).toBe('$.b');
+
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$.b'), 'ArrowUp');
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowDown does not move past the last visible row', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$.a'), 'ArrowDown');
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowUp does not move past the first visible row', async () => {
+      await createWith({ a: 1 });
+      fixture.detectChanges();
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$'), 'ArrowUp');
+      expect(cmp.focusedPath()).toBe('$');
+    });
+
+    it('Home and End jump to first/last visible rows', async () => {
+      await createWith({ a: 1, b: 2, c: 3 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      cmp.focusedPath.set('$.b');
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$.b'), 'Home');
+      expect(cmp.focusedPath()).toBe('$');
+
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$'), 'End');
+      expect(cmp.focusedPath()).toBe('$.c');
+    });
+
+    it('ArrowRight on a collapsed container expands without moving focus', async () => {
+      await createWith({ a: { x: 1 } });
+      const aNode = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.collapse(aNode);
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowRight');
+      expect(cmp.treeControl.isExpanded(aNode)).toBeTrue();
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowRight on an expanded container moves focus to first child', async () => {
+      await createWith({ a: { x: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowRight');
+      expect(cmp.focusedPath()).toBe('$.a.x');
+    });
+
+    it('ArrowRight on a leaf does not move focus or expand', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowRight');
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowLeft on an expanded container collapses without moving focus', async () => {
+      await createWith({ a: { x: 1 } });
+      const aNode = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.expand(aNode);
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowLeft');
+      expect(cmp.treeControl.isExpanded(aNode)).toBeFalse();
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowLeft on a collapsed container moves focus to parent', async () => {
+      await createWith({ a: { x: 1 } });
+      const aNode = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.collapse(aNode);
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowLeft');
+      expect(cmp.focusedPath()).toBe('$');
+    });
+
+    it('ArrowLeft on a leaf moves focus to parent', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowLeft');
+      expect(cmp.focusedPath()).toBe('$');
+    });
+
+    it('Enter on the focused row sets selectedPath', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'Enter');
+      expect(cmp.selectedPath()).toBe('$.a');
+    });
+
+    it('Space on the focused row sets selectedPath and prevents default', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+      nodeEl('$.a').dispatchEvent(ev);
+      expect(cmp.selectedPath()).toBe('$.a');
+      expect(ev.defaultPrevented).toBeTrue();
+    });
+
+    it('clicking a row sets BOTH selectedPath and focusedPath', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      // Reset initial focus so we can verify the click moves it.
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+
+      const aRow = nodeEl('$.a').querySelector('.tree-row') as HTMLElement;
+      aRow.click();
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.a');
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('search Enter does not yank focus from the search input', async () => {
+      await createWith({ alpha: 1, beta: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      // Attach to body so the input can receive real DOM focus.
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const input = (fixture.nativeElement as HTMLElement).querySelector(
+          'input.tree-search',
+        ) as HTMLInputElement;
+        input.focus();
+        cmp.search.set('alpha');
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        // Sanity: search produced a hit.
+        expect(cmp.searchHitCount()).toBeGreaterThan(0);
+
+        // Trigger the search-Enter cycle directly (mirrors what
+        // `(keydown.enter)="onSearchEnter($event)"` would do).
+        const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'target', { value: input });
+        cmp.onSearchEnter(ev);
+        fixture.detectChanges();
+
+        expect(cmp.focusedPath()).toBe('$.alpha');
+        expect(document.activeElement).toBe(input);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('focus recovery walks up to the nearest visible ancestor when collapsed', async () => {
+      await createWith({ a: { x: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a.x');
+      fixture.detectChanges();
+      expect(cmp.focusedPath()).toBe('$.a.x');
+
+      // Collapsing $.a hides $.a.x; the lifecycle effect should
+      // recover focus to $.a (the nearest visible ancestor).
+      const aNode = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.collapse(aNode);
+      fixture.detectChanges();
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('focus recovery resets to first visible row when the JSON shape changes', async () => {
+      await createWith({ a: { x: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a.x');
+      fixture.detectChanges();
+      expect(cmp.focusedPath()).toBe('$.a.x');
+
+      fixture.componentRef.setInput('value', { totally: 'different' });
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(cmp.focusedPath()).toBe('$');
+    });
+
+    it('Shift+F10 opens the row context menu via openContextMenuAt', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+      // Attach so getBoundingClientRect returns non-zero values.
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const aNode = cmp['nodeIndex']().get('$.a')!;
+        dispatchKey(nodeEl('$.a'), 'F10', { shiftKey: true });
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        expect(cmp.contextNode()).toBe(aNode);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('focus the row when moveFocusTo runs (rAF deferred)', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        dispatchKey(nodeEl('$'), 'ArrowDown');
+        fixture.detectChanges();
+        await nextRaf();
+        expect(cmp.focusedPath()).toBe('$.a');
+        expect(document.activeElement).toBe(nodeEl('$.a'));
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
     });
   });
 });

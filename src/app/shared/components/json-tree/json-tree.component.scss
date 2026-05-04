@@ -181,6 +181,25 @@
   }
 }
 
+// M7g-3b. Roving keyboard-focus ring on the focused tree node. Drawn
+// just outside the row using `box-shadow` so it stacks with the
+// existing `.is-active-match` outline (which is drawn just inside at
+// `outline-offset: -2px`). When a row is both keyboard-focused AND
+// the active search hit, both rings render concurrently.
+//
+// The browser default outline is suppressed because the box-shadow
+// above already conveys focus.
+mat-nested-tree-node:focus-visible {
+  outline: none;
+
+  > .tree-row {
+    box-shadow:
+      inset 4px 0 0 var(--tree-row-format-border, transparent),
+      0 0 0 2px var(--mat-sys-primary, var(--color-primary));
+    border-radius: 3px;
+  }
+}
+
 .tree-match-badge {
   display: inline-flex;
   align-items: center;

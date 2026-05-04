@@ -21,9 +21,14 @@ const WCAG_AA_TAGS: ReadonlyArray<string> = ['wcag2a', 'wcag2aa', 'wcag21a', 'wc
  * to commit any deferred styles, one frame for the OverlayContainer's first
  * paint cycle.
  */
-async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
+async function settle(
+  fixture: ComponentFixture<unknown>,
+  options: { skipWhenStable?: boolean } = {},
+): Promise<void> {
   fixture.detectChanges();
-  await fixture.whenStable();
+  if (!options.skipWhenStable) {
+    await fixture.whenStable();
+  }
   fixture.detectChanges();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -92,6 +97,17 @@ interface RunAxeOptions {
    * that lives in `document.body` alongside the fixture wrapper.
    */
   exclude?: string[];
+  /**
+   * Skip `await fixture.whenStable()` during settle. Required for
+   * components that hold a long-running zone task (e.g., a `setInterval`
+   * tick) which prevents Angular's stability promise from ever
+   * resolving; the json-tree component is the canonical example -- it
+   * runs a `NOW_TICK_MS` `setInterval` to power "saved 3s ago"-style
+   * timestamps, so `whenStable()` never resolves under it. Two
+   * `requestAnimationFrame` waits still run, which is sufficient for
+   * layout to settle before axe scans.
+   */
+  skipWhenStable?: boolean;
 }
 
 /**
@@ -125,7 +141,7 @@ export async function runA11yScan(
   fixture: ComponentFixture<unknown>,
   options: RunAxeOptions = {},
 ): Promise<AxeResults> {
-  await settle(fixture);
+  await settle(fixture, { skipWhenStable: options.skipWhenStable });
 
   const target = options.target ?? (fixture.nativeElement as Element);
   const context: axe.ElementContext =

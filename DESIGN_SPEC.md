@@ -1960,6 +1960,37 @@ Out of scope (for v1):
   pointer-down handler also bails when effective visibility is not
   `both`, both at entry and inside the move closure to handle
   mid-drag viewport resizes.
+- **0.13.1**: Splash polish - cover the prerendered server-skeleton on
+  cold boot so the bare-bones SEO HTML never flashes between the
+  prerender unmount and Angular bootstrap; restore the SEO `<h1>` mark
+  to the prerendered shell so search-engine crawlers always see a
+  top-level heading on the share-blob route.
+- **0.14.0**: M7g-3b json-tree WAI-ARIA Tree pattern (audit findings
+  F2.1-F2.3). Each `<mat-nested-tree-node>` now carries the full tree
+  ARIA contract -- `role="treeitem"` (CDK default), `aria-level`,
+  `aria-posinset`, `aria-setsize`, and (for containers) `aria-expanded`
+  -- with a roving `tabindex` so exactly one row is in the Tab order
+  at a time. `<mat-tree>` gets an `aria-label` (`@@tree.aria`,
+  "JSON tree"); `.tree-row` and `.tree-row--close` become
+  `role="presentation"` (visual chrome, not the tree node);
+  `.tree-children` carries `role="group"`. Keyboard navigation lands
+  per the WAI-ARIA Tree pattern: Up/Down moves between visible rows,
+  Home/End jumps to first/last visible, Right expands a collapsed
+  container or moves to the first child of an expanded container,
+  Left collapses an expanded container or moves to the parent,
+  Enter/Space selects the focused row, Shift+F10 / ContextMenu opens
+  the row context menu via the existing `openContextMenuAt`
+  hidden-anchor path. A new `focusedPath` signal drives roving
+  tabindex independently of `selectedPath` (selection and focus stay
+  separate); a single lifecycle effect handles initial focus, hidden-
+  focus recovery on ancestor collapse, and reset-to-first-visible on
+  JSON re-parse. Pointer clicks update both signals. Search-input
+  Enter / Shift+Enter handoff updates `focusedPath` silently so
+  repeated cycling stays in the search input. Type-ahead deferred to
+  issue #108. Wave 3b also drops a structural `*.a11y.spec.ts` for
+  the tree (role chain + roving-tabindex assertions); the strict axe
+  scan is deferred to M7g-3d alongside the broader contrast
+  remediation.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

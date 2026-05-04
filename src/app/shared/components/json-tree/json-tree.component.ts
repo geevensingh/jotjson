@@ -262,6 +262,31 @@ export class JsonTreeComponent {
   readonly selectedPath = signal<string | null>(null);
 
   /**
+   * M7g-3b. Path of the row that currently owns the keyboard cursor
+   * (roving `tabindex=0`), or `null` when no row is focusable yet
+   * (empty tree or pre-initial-focus). Decoupled from `selectedPath`
+   * because the WAI-ARIA Tree pattern distinguishes the two: the
+   * focused row is the keyboard cursor target; the selected row is
+   * the user's chosen value. Pointer click sets BOTH (so a click +
+   * ArrowDown moves from the just-clicked row); keyboard Enter / Space
+   * sets `selectedPath` from `focusedPath`. Search-Enter updates
+   * `focusedPath` silently without calling DOM `focus()` (the search
+   * input keeps focus so repeated Enter / Shift+Enter cycle hits).
+   */
+  readonly focusedPath = signal<string | null>(null);
+
+  /**
+   * M7g-3b. Bumped on every `treeControl.expansionModel.changed`
+   * emission so `computed()` signals can register a dependency on
+   * "any expand/collapse occurred" without subscribing themselves.
+   * Catches every expansion path (direct `treeControl.toggle`,
+   * `matTreeNodeToggle` clicks, `expandAll` / `collapseAll` /
+   * `expandToLevel` / `expandAndScroll`, and the initial auto-fit
+   * expansion) because they all flow through `expansionModel`.
+   */
+  private readonly expansionVersion = signal(0);
+
+  /**
    * Context-menu state (M7q). `contextNode` is the row whose menu is
    * currently open (or about to open). `ctxX` / `ctxY` carry the cursor
    * coordinates for the right-click flow; the kebab flow self-anchors
@@ -323,6 +348,8 @@ export class JsonTreeComponent {
 
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
+
+  readonly treeAriaLabel = $localize`:@@tree.aria:JSON tree`;
 
   readonly expandMenuButtonLabel = $localize`:@@tree.expand.menu.button:Expand to...`;
   readonly matchingValueAriaLabel = $localize`:@@tree.matchValue.aria:Matches the selected value`;
@@ -716,6 +743,28 @@ export class JsonTreeComponent {
   });
 
   /**
+   * M7g-3b. Visible rows in document order (depth-first walk skipping
+   * collapsed subtrees). Drives ArrowUp / ArrowDown / Home / End
+   * navigation and the focus-recovery lifecycle effect. Re-evaluates
+   * whenever `root()` rebuilds OR `expansionVersion` increments
+   * (i.e., any expand/collapse).
+   */
+  private readonly visibleRowsInOrder = computed<readonly TreeNode[]>(() => {
+    this.expansionVersion();
+    const rootNode = this.root();
+    if (!rootNode) return [];
+    const out: TreeNode[] = [];
+    const walk = (node: TreeNode): void => {
+      out.push(node);
+      if (node.children?.length && this.treeControl.isExpanded(node)) {
+        for (const child of node.children) walk(child);
+      }
+    };
+    walk(rootNode);
+    return out;
+  });
+
+  /**
    * Path from the root to the currently-selected row, suitable for
    * the breadcrumb above the tree. The last crumb represents the
    * selected row itself (flagged with `current: true`); earlier
@@ -1034,6 +1083,69 @@ export class JsonTreeComponent {
         totalMatches,
       });
     });
+
+    // M7g-3b. Track CDK expansion-model changes via a counter signal so
+    // computed() (notably visibleRowsInOrder) can register a clean
+    // dependency on "any expand/collapse occurred". The subscription
+    // lives for the component's lifetime; expansionModel is owned by
+    // treeControl (which is owned by this component), so we don't need
+    // takeUntilDestroyed - the model is GC'd with the component.
+    const expansionSub = this.treeControl.expansionModel.changed.subscribe(() => {
+      this.expansionVersion.update((v) => v + 1);
+    });
+    this.destroyRef.onDestroy(() => expansionSub.unsubscribe());
+
+    // M7g-3b. Lifecycle effect for `focusedPath` recovery. Handles five
+    // cases in one place:
+    //   1. Empty tree -> clear focus.
+    //   2. Initial mount / no focus yet -> pick first visible row.
+    //   3. Still visible -> no-op.
+    //   4. Hidden by ancestor collapse -> walk up to nearest visible
+    //      ancestor.
+    //   5. Path no longer exists (JSON re-parse) -> reset to first
+    //      visible row.
+    // `untracked` writes prevent recursive effect runs.
+    effect(() => {
+      const visible = this.visibleRowsInOrder();
+      const path = this.focusedPath();
+
+      if (visible.length === 0) {
+        if (path !== null) untracked(() => this.focusedPath.set(null));
+        return;
+      }
+
+      if (path === null) {
+        const first = visible[0]!;
+        untracked(() => this.focusedPath.set(first.pathString));
+        return;
+      }
+
+      const visibleSet = new Set(visible.map((n) => n.pathString));
+      if (visibleSet.has(path)) return;
+
+      // Walk up the path of the (possibly hidden) node to find the
+      // nearest currently-visible ancestor.
+      const node = this.nodeIndex().get(path);
+      if (node) {
+        const parts: (string | number)[] = [];
+        let recovered: string | null = null;
+        for (let i = 0; i < node.path.length; i++) {
+          parts.push(node.path[i]!);
+          const ancestorPath = this.formatPath(parts);
+          if (visibleSet.has(ancestorPath)) recovered = ancestorPath;
+        }
+        // Root may also be the recovery target (path === '$').
+        if (recovered === null && visibleSet.has('$')) recovered = '$';
+        if (recovered !== null) {
+          const finalRecovered = recovered;
+          untracked(() => this.focusedPath.set(finalRecovered));
+          return;
+        }
+      }
+
+      // Path no longer exists in the index at all -- reset to first.
+      untracked(() => this.focusedPath.set(visible[0]!.pathString));
+    });
   }
 
   hasChild = (_: number, node: TreeNode): boolean => !!node.children && node.children.length > 0;
@@ -1042,6 +1154,12 @@ export class JsonTreeComponent {
    * Click handler for `.tree-row`. Selects the row unless the click
    * target is an interactive child (twisty toggle, kebab button,
    * etc.) in which case the child's own handler takes precedence.
+   *
+   * M7g-3b: also moves the keyboard cursor (`focusedPath`) to the
+   * clicked row so a subsequent ArrowDown moves from the row the user
+   * just clicked, not from a stale "previously focused" row. DOM
+   * focus follows automatically because the click already landed on
+   * the row element.
    */
   onSelect(node: TreeNode, event: Event): void {
     const target = event.target;
@@ -1050,7 +1168,210 @@ export class JsonTreeComponent {
       return;
     }
     this.selectedPath.set(node.pathString);
+    this.focusedPath.set(node.pathString);
     event.stopPropagation();
+  }
+
+  /**
+   * M7g-3b. Returns the roving tabindex for a tree node: `0` for the
+   * one node that owns the keyboard cursor, `-1` for everyone else.
+   * Exactly one tree node has `tabindex=0` at any time (or none if
+   * the tree is empty and `focusedPath` is `null`).
+   */
+  rowTabIndex(node: TreeNode): 0 | -1 {
+    return this.focusedPath() === node.pathString ? 0 : -1;
+  }
+
+  /**
+   * M7g-3b. Returns the 1-based depth used as `aria-level`. A root
+   * node sits at level 1 per WAI-ARIA Tree convention.
+   */
+  nodeAriaLevel(node: TreeNode): number {
+    return node.depth + 1;
+  }
+
+  /**
+   * M7g-3b. Returns 1-based position of `node` among its siblings,
+   * suitable for `aria-posinset`. Root is treated as a single-item
+   * set ("1 of 1").
+   */
+  nodePosInSet(node: TreeNode): number {
+    if (node.path.length === 0) return 1;
+    const parent = this.parentOf(node);
+    const siblings = parent?.children ?? [];
+    const idx = siblings.indexOf(node);
+    return idx >= 0 ? idx + 1 : 1;
+  }
+
+  /**
+   * M7g-3b. Returns the size of the sibling set this node belongs to,
+   * suitable for `aria-setsize`. Root is `1`.
+   */
+  nodeSetSize(node: TreeNode): number {
+    if (node.path.length === 0) return 1;
+    const parent = this.parentOf(node);
+    return parent?.children?.length ?? 1;
+  }
+
+  private parentOf(node: TreeNode): TreeNode | undefined {
+    if (node.path.length === 0) return undefined;
+    const parentPath = node.path.slice(0, -1);
+    return this.nodeIndex().get(this.formatPath(parentPath));
+  }
+
+  /**
+   * M7g-3b. Updates `focusedPath` and DOM-focuses the matching row
+   * after Angular renders the new `tabindex=0`. Defers to
+   * `requestAnimationFrame` so the tabindex flip is committed before
+   * we call `focus()`.
+   */
+  private moveFocusTo(path: string | null): void {
+    if (path === null) return;
+    this.focusedPath.set(path);
+    requestAnimationFrame(() => {
+      const el = this.host.nativeElement.querySelector(
+        `mat-nested-tree-node[data-tree-node-path="${cssEscape(path)}"]`,
+      ) as HTMLElement | null;
+      el?.focus({ preventScroll: false });
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }
+
+  /**
+   * M7g-3b. Keyboard handler bound on `<mat-nested-tree-node>` (both
+   * leaf and container variants). Implements the WAI-ARIA Tree
+   * pattern minus type-ahead (deferred to issue #108):
+   *
+   *  - Arrow Up / Down / Home / End: roving focus through visible
+   *    rows.
+   *  - Arrow Right on a collapsed container: expands; focus stays.
+   *  - Arrow Right on an expanded container: focus -> first child.
+   *  - Arrow Right on a leaf: no-op.
+   *  - Arrow Left on an expanded container: collapses; focus stays.
+   *  - Arrow Left on a collapsed container or a leaf: focus -> parent.
+   *  - Enter / Space: select the focused row (mirrors click).
+   *  - Shift+F10 / ContextMenu: open the row context menu via the
+   *    existing `openContextMenuAt` path, anchored at the row's
+   *    bounding rect.
+   *
+   * Printable characters are intentionally NOT handled; type-ahead
+   * (D9 in plan.md / issue #108) is deferred to a follow-up wave so
+   * Wave 3b lands only the SERIOUS-bar fixes.
+   */
+  onTreeKeydown(event: KeyboardEvent, node: TreeNode): void {
+    // Only act when the event originated at THIS treeitem. Without
+    // this guard, a keydown that bubbles up from a descendant
+    // treeitem (or from an interactive descendant like the twisty,
+    // kebab, beacon, extract pill, or decoded pill) would run the
+    // ancestor's handler too and overwrite the descendant's writes.
+    // We compare against `currentTarget` rather than calling
+    // `stopPropagation()` so document-level handlers (e.g., Escape)
+    // still see the events we don't handle ourselves.
+    if (event.currentTarget !== event.target) {
+      return;
+    }
+
+    const visible = this.visibleRowsInOrder();
+    const currentIndex = visible.findIndex((n) => n.pathString === node.pathString);
+    const isContainer = !!node.children && node.children.length > 0;
+    const isExpanded = isContainer && this.treeControl.isExpanded(node);
+
+    switch (event.key) {
+      case 'ArrowDown': {
+        event.preventDefault();
+        if (currentIndex >= 0 && currentIndex < visible.length - 1) {
+          this.moveFocusTo(visible[currentIndex + 1]!.pathString);
+        }
+        return;
+      }
+      case 'ArrowUp': {
+        event.preventDefault();
+        if (currentIndex > 0) {
+          this.moveFocusTo(visible[currentIndex - 1]!.pathString);
+        }
+        return;
+      }
+      case 'Home': {
+        event.preventDefault();
+        if (visible.length > 0) {
+          this.moveFocusTo(visible[0]!.pathString);
+        }
+        return;
+      }
+      case 'End': {
+        event.preventDefault();
+        if (visible.length > 0) {
+          this.moveFocusTo(visible[visible.length - 1]!.pathString);
+        }
+        return;
+      }
+      case 'ArrowRight': {
+        event.preventDefault();
+        if (isContainer && !isExpanded) {
+          this.treeControl.expand(node);
+        } else if (isContainer && isExpanded && node.children && node.children.length > 0) {
+          this.moveFocusTo(node.children[0]!.pathString);
+        }
+        // Leaf: no-op.
+        return;
+      }
+      case 'ArrowLeft': {
+        event.preventDefault();
+        if (isContainer && isExpanded) {
+          this.treeControl.collapse(node);
+        } else {
+          const parent = this.parentOf(node);
+          if (parent) this.moveFocusTo(parent.pathString);
+        }
+        return;
+      }
+      case 'Enter':
+      case ' ':
+      case 'Spacebar': {
+        event.preventDefault();
+        this.selectedPath.set(node.pathString);
+        return;
+      }
+      case 'F10': {
+        if (event.shiftKey) {
+          event.preventDefault();
+          this.openRowContextMenuFromKeyboard(node);
+        }
+        return;
+      }
+      case 'ContextMenu': {
+        event.preventDefault();
+        this.openRowContextMenuFromKeyboard(node);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /**
+   * M7g-3b. Open the row context menu from a keyboard gesture
+   * (Shift+F10 or ContextMenu key) by reusing the proven
+   * `openContextMenuAt` path with a synthesized `MouseEvent`. The
+   * anchor coordinates are the centre of the focused row's bounding
+   * rect so the menu lands visibly attached to the row.
+   *
+   * Silently no-ops when the row element is not in the DOM (race with
+   * a re-render).
+   */
+  private openRowContextMenuFromKeyboard(node: TreeNode): void {
+    const el = this.host.nativeElement.querySelector(
+      `mat-nested-tree-node[data-tree-node-path="${cssEscape(node.pathString)}"] > .tree-row`,
+    ) as HTMLElement | null;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const ev = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: Math.round(rect.left + rect.width / 2),
+      clientY: Math.round(rect.top + rect.height / 2),
+    });
+    this.openContextMenuAt(ev, node, 'row', false);
   }
 
   clearSelection(): void {
@@ -1109,6 +1430,11 @@ export class JsonTreeComponent {
     this.activeHitIndex.set(next);
     const path = paths[next] as string;
     this.selectedPath.set(path);
+    // M7g-3b. Also update `focusedPath` silently so a subsequent Tab
+    // into the tree lands on the active hit. Do NOT call DOM focus()
+    // on the row -- the search input keeps focus so repeated Enter /
+    // Shift+Enter keep cycling matches.
+    this.focusedPath.set(path);
     this.revealHit(path);
   }
 
@@ -1120,6 +1446,9 @@ export class JsonTreeComponent {
     this.activeHitIndex.set(prev);
     const path = paths[prev] as string;
     this.selectedPath.set(path);
+    // See goToNextMatch: focused-but-not-DOM-focused so the search
+    // input keeps focus.
+    this.focusedPath.set(path);
     this.revealHit(path);
   }
 
