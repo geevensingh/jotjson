@@ -89,7 +89,12 @@ function extractInlineScripts(html) {
 }
 
 function sha256Token(content) {
-  const digest = createHash('sha256').update(content, 'utf8').digest('base64');
+  // Normalize CRLF -> LF before hashing. Files checked out on Windows may
+  // have CRLF locally while the production bundle (built and uploaded by
+  // Linux CI) ships LF; both should agree on the same hash. Browsers hash
+  // the served bytes, which on Azure SWA (Linux) are LF.
+  const normalized = content.replace(/\r\n/g, '\n');
+  const digest = createHash('sha256').update(normalized, 'utf8').digest('base64');
   return `'sha256-${digest}'`;
 }
 
