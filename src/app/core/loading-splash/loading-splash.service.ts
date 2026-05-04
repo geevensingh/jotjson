@@ -1,4 +1,4 @@
-import { DOCUMENT, isPlatformBrowser } from '@angular/common';
+import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, Signal, inject, signal } from '@angular/core';
 import {
   Event as RouterEvent,
@@ -89,29 +89,38 @@ import { LoggerService } from '../telemetry/logger.service';
  * forever.
  */
 /**
- * Returns `true` when this bootstrap is reading a prerendered HTML
- * file (server platform during static prerender, OR browser platform
- * loading an HTML file with the postbuild-injected
- * `<meta name="prerendered" content="true">`). Used both for the
- * initial `kind` and to pre-latch `firstNavComplete` so the Angular
- * splash never covers already-painted prerendered content.
+ * Returns `true` only on the server platform during the static
+ * prerender pass. Used both for the initial `kind` (null on server
+ * so the prerendered <app-loading-splash> serializes to an empty
+ * placeholder, leaving crawlers with the route's own server-side
+ * content) and to pre-latch `firstNavComplete` (irrelevant on
+ * server, but cheap defense in depth).
  *
- * On the server, the marker is irrelevant (the prerender pipeline
- * doesn't read it - the file doesn't exist yet). The decision tree
- * collapses to "always treat server as prerendered" so any prerender
- * pass renders an empty splash, regardless of which page is being
- * built.
+ * **Browser-side intentionally always returns `false`**, regardless
+ * of the postbuild-injected `<meta name="prerendered">` marker.
+ * Prior to v0.12.1 the browser branch checked the marker so the
+ * Angular splash would not paint on top of already-rendered
+ * prerender content; in practice that meant the home server-skeleton
+ * (brand + tagline + description, intended for crawlers) bled through
+ * to users for hundreds of ms during cold-boot of `/`. The fix is
+ * to (a) render the static splash as a `<body>` sibling of
+ * `<app-root>` so the prerender pipeline cannot strip it, and
+ * (b) always boot the Angular splash on browser so it covers the
+ * server-skeleton as Angular bootstraps. AppComponent removes the
+ * static splash via `afterNextRender + double-rAF` once the Angular
+ * splash has painted on top -- see AppComponent for the handoff.
+ *
+ * The `<meta name="prerendered">` marker is still injected by
+ * `scripts/postbuild-seo.mjs` and validated by
+ * `scripts/check-prerender.mjs`; it just no longer drives splash
+ * discrimination.
  *
  * MUST be called only inside an injection context (constructor /
  * field initializer / `inject`-context callback) - it calls
- * `inject(PLATFORM_ID)` and `inject(DOCUMENT)` directly.
+ * `inject(PLATFORM_ID)` directly.
  */
 function isPrerenderedBoot(): boolean {
-  if (!isPlatformBrowser(inject(PLATFORM_ID))) {
-    return true;
-  }
-  const documentRef = inject(DOCUMENT);
-  return documentRef.querySelector('meta[name="prerendered"][content="true"]') !== null;
+  return !isPlatformBrowser(inject(PLATFORM_ID));
 }
 
 @Injectable({ providedIn: 'root' })

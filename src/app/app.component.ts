@@ -1,4 +1,4 @@
-import { Component, OnInit, PLATFORM_ID, inject, Injector } from '@angular/core';
+import { afterNextRender, Component, OnInit, PLATFORM_ID, inject, Injector } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { PreferencesNotificationService } from './core/preferences/preferences-notification.service';
@@ -60,6 +60,29 @@ export class AppComponent implements OnInit {
   // can branch on platform without calling `inject()` inside a
   // lifecycle hook (which would throw NG0203).
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
+  // Remove the pre-bootstrap static splash (`#jot-static-splash` in
+  // src/index.html) after the Angular splash has painted on top of
+  // it. The static splash is a sibling of `<app-root>` so the
+  // prerender pipeline cannot strip it; the trade-off is we have to
+  // remove it explicitly once Angular has taken over.
+  //
+  // `afterNextRender` is browser-only (no-op during SSR), runs after
+  // Angular's render phases, and the inner double-rAF defers the
+  // removal one full paint past Angular's first commit. This matches
+  // the canonical paint-barrier idiom used by HomeComponent and
+  // JsonTreeComponent: a single rAF can fire on the same tick as the
+  // pending paint, leaving a flash gap; double-rAF guarantees the
+  // browser has actually painted the Angular splash before the
+  // static splash is detached, so the visual handoff is seamless
+  // (both render the identical `.jot-splash` markup).
+  private readonly _removeStaticSplash = afterNextRender(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.getElementById('jot-static-splash')?.remove();
+      });
+    });
+  });
 
   ngOnInit(): void {
     // Skip browser-only side effects during static prerender. The

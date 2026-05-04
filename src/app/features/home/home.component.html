@@ -40,7 +40,9 @@
   </jj-app-header>
 
   <main id="main-content" class="home-main" tabindex="-1">
-    <h1 class="sr-only" i18n="@@home.h1">JSON editor</h1>
+    @if (isBrowser) {
+      <h1 class="sr-only" i18n="@@home.h1">JSON editor</h1>
+    }
     <div
       class="split"
       [class.editor-only]="effectivePaneVisibility() === 'editor-only'"
@@ -109,7 +111,7 @@
         </section>
       } @else {
         <section class="server-skeleton" aria-hidden="true">
-          <h2 i18n="@@home.server.brand">JotJSON</h2>
+          <h1 i18n="@@home.server.brand">JotJSON</h1>
           <p i18n="@@home.server.tagline">JSON viewer, formatter, and tree explorer</p>
           <p i18n="@@home.server.description">
             Paste, format, validate, and share JSON or JSONC. Browse large documents in a fast tree

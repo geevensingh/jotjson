@@ -8,6 +8,20 @@ import { AppUpdateService } from './core/update/app-update.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import { provideFakeAuth } from '../testing/auth.testing';
 
+function waitForSingleAnimationFrame(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+function waitForDoubleAnimationFrame(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
 describe('AppComponent', () => {
   let loggerServiceSpy: jasmine.SpyObj<LoggerService>;
   let routeTrackerSpy: jasmine.SpyObj<RouteTracker>;
@@ -42,6 +56,12 @@ describe('AppComponent', () => {
         ...provideFakeAuth(),
       ],
     }).compileComponents();
+  });
+
+  afterEach(() => {
+    // Clean up any static-splash element a test left behind so it
+    // does not bleed into subsequent specs.
+    document.getElementById('jot-static-splash')?.remove();
   });
 
   it('creates the component', () => {
@@ -112,5 +132,73 @@ describe('AppComponent', () => {
     } finally {
       webVitalsModule.__resetInitWebVitalsImplForTesting();
     }
+  });
+
+  describe('static splash removal (v0.12.1)', () => {
+    function setUpStaticSplash(): HTMLDivElement {
+      // Match the production markup shape from src/index.html so the
+      // test exercises the same selector AppComponent's removal hook
+      // queries against.
+      const splash = document.createElement('div');
+      splash.id = 'jot-static-splash';
+      splash.className = 'jot-splash';
+      splash.setAttribute('role', 'status');
+      splash.setAttribute('aria-live', 'polite');
+      document.body.appendChild(splash);
+      return splash;
+    }
+
+    it('removes #jot-static-splash after the Angular splash has painted on top', async () => {
+      const splash = setUpStaticSplash();
+      expect(document.getElementById('jot-static-splash'))
+        .withContext('precondition: static splash present in DOM before AppComponent mounts')
+        .toBe(splash);
+
+      const fixture = TestBed.createComponent(AppComponent);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      // Both rAFs of the double-rAF paint barrier must flush before
+      // the removal hook fires; matches the AppComponent
+      // afterNextRender + double-rAF idiom.
+      await waitForDoubleAnimationFrame();
+
+      expect(document.getElementById('jot-static-splash'))
+        .withContext('static splash must be removed once Angular splash takes over')
+        .toBeNull();
+    });
+
+    it('keeps #jot-static-splash present after only one rAF turn (guards single-rAF regression)', async () => {
+      // Sentinel test: if the removal hook ever drops the inner rAF
+      // (regressing back to single-rAF after afterNextRender), this
+      // assertion fails because the static splash gets detached one
+      // rAF earlier than intended -- before the browser has actually
+      // committed the Angular splash paint, leaving a flash gap.
+      setUpStaticSplash();
+
+      const fixture = TestBed.createComponent(AppComponent);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await waitForSingleAnimationFrame();
+
+      expect(document.getElementById('jot-static-splash'))
+        .withContext(
+          'static splash must still be present after only one rAF turn so the Angular splash has time to paint',
+        )
+        .not.toBeNull();
+    });
+
+    it('does not throw when #jot-static-splash is absent (e.g. shell.html serve path)', async () => {
+      // shell.html and any post-bootstrap hot-reload path will not
+      // have the static splash element. The removal hook is
+      // null-safe via optional chaining and must not throw.
+      expect(document.getElementById('jot-static-splash')).toBeNull();
+
+      const fixture = TestBed.createComponent(AppComponent);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await waitForDoubleAnimationFrame();
+
+      expect(document.getElementById('jot-static-splash')).toBeNull();
+    });
   });
 });

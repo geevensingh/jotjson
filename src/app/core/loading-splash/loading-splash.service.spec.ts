@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { PLATFORM_ID } from '@angular/core';
 import { Subject } from 'rxjs';
 import {
   Event as RouterEvent,
@@ -30,6 +31,28 @@ describe('LoadingSplashService', () => {
       providers: [
         { provide: Router, useValue: routerStub },
         { provide: LoggerService, useValue: logger },
+      ],
+    });
+    return TestBed.inject(LoadingSplashService);
+  }
+
+  function initOnServerPlatform(initialPath = '/'): LoadingSplashService {
+    // Override PLATFORM_ID to simulate the server-platform branch the
+    // static prerender pipeline runs in. Other Angular APIs aren't
+    // exercised in this spec, so a bare PLATFORM_ID swap is enough
+    // -- no need to bring in @angular/platform-server.
+    events = new Subject<RouterEvent>();
+    logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event']);
+    const routerStub: Partial<Router> = {
+      events: events.asObservable() as unknown as Router['events'],
+    };
+    history.replaceState(null, '', initialPath);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: Router, useValue: routerStub },
+        { provide: LoggerService, useValue: logger },
+        { provide: PLATFORM_ID, useValue: 'server' },
       ],
     });
     return TestBed.inject(LoadingSplashService);
@@ -576,53 +599,81 @@ describe('LoadingSplashService', () => {
     });
   });
 
-  describe('prerender-marker boot (M7h)', () => {
-    function initWithMarker(initialPath = '/'): LoadingSplashService {
+  describe('prerender-marker boot (v0.12.1: marker is splash-discrimination no-op on browser)', () => {
+    function withPrerenderMarker<T>(action: () => T): T {
       const meta = document.createElement('meta');
       meta.setAttribute('name', 'prerendered');
       meta.setAttribute('content', 'true');
       document.head.appendChild(meta);
       try {
-        return init(initialPath);
+        return action();
       } finally {
         meta.remove();
       }
     }
 
-    it('starts at kind=null when <meta name="prerendered" content="true"> is present', () => {
-      const service = initWithMarker('/');
+    it('browser-side: <meta name="prerendered"> no longer suppresses the Angular splash', () => {
+      // Pre-v0.12.1 the marker pre-latched firstNavComplete so the
+      // Angular splash stayed at kind=null; that masked the home
+      // server-skeleton bleed-through with a blank screen instead of
+      // covering it with a splash. v0.12.1 drops the marker check on
+      // browser so the splash boots normally on prerendered routes
+      // -- AppComponent's removal of #jot-static-splash hands the
+      // overlay off to the Angular splash (visually identical).
+      const service = withPrerenderMarker(() => init('/'));
       expect(service.kind())
         .withContext(
-          'prerendered route boot must NOT cover the prerendered HTML with the Angular splash',
+          'prerendered route boot must NOT pre-latch firstNavComplete; the Angular splash boots like any other browser cold-boot',
         )
-        .toBeNull();
+        .toBe('jotjson');
       expect(service.renderPending()).toBeFalse();
     });
 
-    it('first NavigationStart on a prerendered route stays at kind=null (firstNavComplete pre-latched)', () => {
-      const service = initWithMarker('/');
+    it('browser-side: NavigationStart on prerendered route flows like a normal cold boot', () => {
+      const service = withPrerenderMarker(() => init('/'));
       start(1, '/');
       expect(service.kind())
-        .withContext(
-          'pre-latched firstNavComplete prevents recomputeKind from flipping to "jotjson"',
-        )
-        .toBeNull();
+        .withContext('non-blob URL during first-nav window stays at jotjson')
+        .toBe('jotjson');
       end(1, '/');
-      expect(service.kind()).toBeNull();
+      expect(service.kind())
+        .withContext('first NavigationEnd latches firstNavComplete and hides the splash')
+        .toBeNull();
       expect(service.renderPending()).toBeFalse();
     });
 
-    it('shell-fallback boot (no marker) preserves the legacy splash lifecycle', () => {
+    it('browser-side: shell-fallback boot (no marker) is identical to marker-present boot', () => {
+      // Regression-prevention: with the marker check dropped on
+      // browser, marker presence is irrelevant. Both paths must boot
+      // at kind=jotjson and follow the standard splash lifecycle.
       const service = init('/blobs');
       expect(service.kind())
-        .withContext(
-          'no marker -> identical pre-M7h behavior; static splash flows into Angular splash',
-        )
+        .withContext('no marker -> splash boots at jotjson (matches marker-present case)')
         .toBe('jotjson');
       start(1, '/blobs');
       expect(service.kind()).toBe('jotjson');
       end(1, '/blobs');
       expect(service.kind()).toBeNull();
+    });
+
+    it('server platform: kind=null and firstNavComplete is pre-latched (SSR pass renders empty splash for crawlers)', () => {
+      // The SSR pass during static prerender must NOT serialize a
+      // visible splash overlay into the prerendered HTML; crawlers
+      // would index splash markup instead of the route's actual
+      // server-side content (e.g. home brand + tagline).
+      const service = initOnServerPlatform('/');
+      expect(service.kind())
+        .withContext('server platform forces kind=null so <app-loading-splash> serializes empty')
+        .toBeNull();
+      // Firing a synthetic NavigationStart confirms firstNavComplete
+      // is pre-latched: kind stays null even before any End event.
+      start(1, '/');
+      expect(service.kind())
+        .withContext('pre-latched firstNavComplete keeps kind=null on server through nav events')
+        .toBeNull();
+      end(1, '/');
+      expect(service.kind()).toBeNull();
+      expect(service.renderPending()).toBeFalse();
     });
   });
 });
