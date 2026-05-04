@@ -1917,6 +1917,23 @@ Out of scope (for v1):
   "Preferences were changed in another window" snackbar via a new
   `PreferencesNotificationService` on 412. Pre-1.0 carve-out
   applies (breaking change shipped as minor; see Versioning).
+- **0.12.0**: M7g-3a app-shell accessibility foundations - app-header
+  gains a "Skip to main content" link (visually hidden until keyboard
+  focus, then pops to the top-left of the viewport) and a
+  `<nav aria-label="Primary">` landmark wrapping the auth-side route
+  links. Every route now exposes `<main id="main-content"
+  tabindex="-1">` plus an `<h1>` so the skip-link target works
+  everywhere and screen readers always have a top-level heading to
+  announce. A new `RouteFocusService` (root singleton) moves
+  programmatic focus to `<main>` on every router `NavigationEnd`
+  after the initial bootstrap navigation, so screen-reader and
+  keyboard users hear / start from the new page on every in-app
+  transition. Audit tooling (axe-core inside Karma, the
+  `*.a11y.spec.ts` convention, the `src/testing/a11y.ts` harness with
+  WCAG-AA-only `critical` + `serious` strict gating) landed in the
+  same milestone and gates the foundations against regression. Later
+  M7g waves (3b tree, 3c Monaco, 3d contrast, 3e focus polish,
+  3f reduced-motion) follow under their own plan-and-approve cycles.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

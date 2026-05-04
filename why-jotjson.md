@@ -171,6 +171,10 @@ strings are read as UTC or local.
   expansion depth, default search scope)
 - Keyboard shortcuts: `Ctrl+F` (context-aware between editor and tree),
   `Ctrl+Shift+[` / `]`, `Alt+1` .. `Alt+9`
+- Keyboard-friendly app shell: a "Skip to main content" link as the first
+  Tab stop on every route, primary navigation marked up as a real `<nav>`
+  landmark, and screen-reader focus moves to the new page on every route
+  change
 
 ---
 

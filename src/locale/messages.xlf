@@ -1977,39 +1977,46 @@
           <context context-type="linenumber">23,27</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="home.h1" datatype="html">
+        <source>JSON editor</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/home.component.html</context>
+          <context context-type="linenumber">43,45</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="home.editorPane.aria" datatype="html">
         <source>JSON input</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">52,53</context>
+          <context context-type="linenumber">54,55</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.treePane.aria" datatype="html">
         <source>Tree view</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">90,91</context>
+          <context context-type="linenumber">92,93</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.server.brand" datatype="html">
         <source>JotJSON</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">110,111</context>
+          <context context-type="linenumber">112,113</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.server.tagline" datatype="html">
         <source>JSON viewer, formatter, and tree explorer</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">111,112</context>
+          <context context-type="linenumber">113,114</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.server.description" datatype="html">
         <source> Paste, format, validate, and share JSON or JSONC. Browse large documents in a fast tree explorer with formatting rules, history, and shareable links. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.html</context>
-          <context context-type="linenumber">113,116</context>
+          <context context-type="linenumber">115,117</context>
         </context-group>
       </trans-unit>
       <trans-unit id="app.title.homepage" datatype="html">
@@ -3048,95 +3055,109 @@
           <context context-type="linenumber">680,683</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="appHeader.skipLink" datatype="html">
+        <source>Skip to main content</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
+          <context context-type="linenumber">2,5</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="appHeader.brand.aria" datatype="html">
         <source>JotJSON - back to editor</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">5,6</context>
+          <context context-type="linenumber">6,7</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="appHeader.nav.primary" datatype="html">
+        <source>Primary</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
+          <context context-type="linenumber">16</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.blobs.tooltip" datatype="html">
         <source>Your saved blobs</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">21,22</context>
+          <context context-type="linenumber">22,23</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.blobs.aria" datatype="html">
         <source>Your saved blobs</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">23,24</context>
+          <context context-type="linenumber">24,25</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.formattingRules.tooltip" datatype="html">
         <source>Formatting rules</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">31,32</context>
+          <context context-type="linenumber">32,33</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.formattingRules.aria" datatype="html">
         <source>Formatting rules</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">33,34</context>
+          <context context-type="linenumber">34,35</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.history.tooltip" datatype="html">
         <source>Recently viewed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">41,42</context>
+          <context context-type="linenumber">42,43</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.history.aria" datatype="html">
         <source>Recently viewed</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">43,44</context>
+          <context context-type="linenumber">44,45</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.profile.tooltip" datatype="html">
         <source>View profile</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">51,52</context>
+          <context context-type="linenumber">52,53</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.profile.aria" datatype="html">
         <source>View profile</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">53,54</context>
+          <context context-type="linenumber">54,55</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.signIn.tooltip" datatype="html">
         <source>Sign in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">61,62</context>
+          <context context-type="linenumber">62,63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.signIn.aria" datatype="html">
         <source>Sign in</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">63,64</context>
+          <context context-type="linenumber">64,65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.signIn.notConfigured.tooltip" datatype="html">
         <source>Sign in (not configured)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">75,76</context>
+          <context context-type="linenumber">76,77</context>
         </context-group>
       </trans-unit>
       <trans-unit id="appHeader.signIn.notConfigured.aria" datatype="html">
         <source>Sign in (not configured)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/app-header/app-header.component.html</context>
-          <context context-type="linenumber">77,78</context>
+          <context context-type="linenumber">78,79</context>
         </context-group>
       </trans-unit>
       <trans-unit id="editor.loading" datatype="html">

@@ -37,6 +37,16 @@ describe('NotFoundComponent (a11y)', () => {
     document.head.querySelector('meta[name="robots"]')?.remove();
   });
 
+  it('renders <main id="main-content"> as the skip-link target', () => {
+    const fixture = TestBed.createComponent(NotFoundComponent);
+    teardown = attachFixtureToBody(fixture);
+    fixture.detectChanges();
+    const main = fixture.nativeElement.querySelector('main#main-content');
+    expect(main)
+      .withContext('every route must expose <main id="main-content"> for the app-header skip-link')
+      .not.toBeNull();
+  });
+
   it('has no critical or serious WCAG 2.1 AA violations in the generic state', async () => {
     const fixture = TestBed.createComponent(NotFoundComponent);
     teardown = attachFixtureToBody(fixture);

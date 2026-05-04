@@ -5,6 +5,7 @@ import { PreferencesNotificationService } from './core/preferences/preferences-n
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import { LoadingSplashService } from './core/loading-splash/loading-splash.service';
 import { NavigationProgressService } from './core/navigation/navigation-progress.service';
+import { RouteFocusService } from './core/navigation/route-focus.service';
 import { LoadingSplashComponent } from './shared/components/loading-splash/loading-splash.component';
 import { RouteProgressBarComponent } from './shared/components/route-progress-bar/route-progress-bar.component';
 
@@ -40,6 +41,12 @@ export class AppComponent implements OnInit {
   // URL peek already set it), keeps it through the resolver wait, and
   // latches kind=null once the first nav settles.
   private readonly loadingSplash = inject(LoadingSplashService);
+
+  // Eagerly inject so focus-to-<main> behaviour is wired before the
+  // first in-app NavigationEnd. Skipping the initial bootstrap nav is
+  // built into the service; subsequent transitions get programmatic
+  // focus so screen-reader users hear the new page's heading announced.
+  private readonly routeFocus = inject(RouteFocusService);
 
   // Eagerly inject so the conflict-toast subscription is alive before
   // the user can possibly trigger a 412 from PreferencesService. The

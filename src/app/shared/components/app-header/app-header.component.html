@@ -1,4 +1,5 @@
 <header class="app-header" role="banner">
+  <a class="skip-link" href="#main-content" i18n="@@appHeader.skipLink">Skip to main content</a>
   <a
     class="brand"
     routerLink="/"
@@ -12,7 +13,7 @@
     <ng-content></ng-content>
   </div>
 
-  <div class="auth">
+  <nav class="auth" aria-label="Primary" i18n-aria-label="@@appHeader.nav.primary">
     @if (authConfigured) {
       @if (isSignedIn()) {
         <a
@@ -80,5 +81,5 @@
         <jj-icon name="sign-in" />
       </button>
     }
-  </div>
+  </nav>
 </header>
