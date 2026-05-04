@@ -1207,8 +1207,61 @@ tripwires together make IfMatch protection the default for every
 - Dates, times, and relative-time annotations in the tree view already use `Intl.DateTimeFormat` / `Intl.RelativeTimeFormat` with the user's browser locale (independent of UI language).
 
 ### SEO / Social
-- Pre-rendering at build time for the `/` landing page (compatible with Static Web Apps; no server runtime needed).
-- Open Graph tags for **public** shared blob links (`/s/:id`) - show preview of JSON structure. Private (unlisted) blobs emit a `noindex` meta tag and omit OG previews.
+
+- **Static prerender at build time** for `/` and `/404` via `@angular/ssr` with
+  `outputMode: "static"` and a `ServerRoute[]` configuration in
+  `src/app/app.routes.server.ts` (`/` and `/404` -> `RenderMode.Prerender`,
+  everything else -> `RenderMode.Client`). Crawlers and social unfurlers see
+  real HTML for the homepage and 404 page without a server runtime.
+- **Shell fallback for every other route.** `scripts/postbuild-seo.mjs`
+  renames Angular's `index.csr.html` to `shell.html` post-build.
+  `staticwebapp.config.json`'s `navigationFallback.rewrite` points at
+  `/shell.html`, which boots the SPA exactly as the pre-M7h `index.html` did
+  (static splash + Angular bootstrap). Auth-gated routes (`/blobs`,
+  `/history`, `/profile`, `/formatting-rules*`) and dynamic routes
+  (`/s/:slug`) all flow through the shell.
+- **Splash UX preservation.** `scripts/postbuild-seo.mjs` injects
+  `<meta name="prerendered" content="true">` into prerendered HTML files
+  only. `LoadingSplashService` reads this marker at construction; when
+  present it pre-latches `firstNavComplete = true` so the Angular splash
+  (`<app-loading-splash>`) never paints on top of the prerendered home
+  content. Shell-fallback boots have no marker and continue the legacy
+  splash lifecycle.
+- **Server-platform safety.** No client hydration in v1 - prerender is a
+  "head start" for crawlers and first paint, not a hydration source.
+  Browser-API call sites that run during construction or eagerly-fired
+  effects (`window`, `localStorage`, MSAL) are guarded with
+  `isPlatformBrowser(inject(PLATFORM_ID))`. A server-only `app.config.server.ts`
+  provides MSAL no-op stubs and skips `provideServiceWorker` /
+  `provideAppInitializer(AuthService.initializeFromRedirect)`.
+- **Open Graph + Twitter defaults** on `src/index.html` cover the homepage
+  and survive into the prerendered `index.html`. Per-blob OG/Twitter and
+  `noindex` for unlisted blobs are still set client-side by `SeoService`
+  (M4c). `home.component.ts`'s constructor effect that wipes OG tags when
+  no blob is loaded is gated on `isBrowser` so the static defaults are not
+  stripped during prerender.
+- **`og.png`** at `public/og.png` (1200x630, `summary_large_image`).
+- **`robots.txt` + `sitemap.xml`** at `public/robots.txt` and
+  `public/sitemap.xml`, listing `https://jotjson.com/` (homepage only;
+  /404 is excluded from sitemaps).
+- **404 noindex.** `NotFoundComponent.ngOnInit()` calls
+  `seo.setNoindex(true)` and `seo.clearBlobTags()`, both of which fire
+  during the `/404` prerender so the emitted HTML carries
+  `<meta name="robots" content="noindex">` for crawlers.
+- **Service worker config.** `ngsw-config.json` `index` is `/shell.html` so
+  the SW falls back to the SPA shell for unknown navigation URLs.
+  Prerendered `/index.html` and `/404/index.html`, plus `og.png`,
+  `robots.txt`, and `sitemap.xml`, are precached.
+- **Build-time integration check.** `scripts/check-prerender.mjs`
+  (npm `check:prerender`) validates the dist layout, marker placement,
+  brand text, OG defaults, noindex, and asset presence after every build.
+- **Out of scope for v1** (tracked as priority:low follow-up issues):
+  - Server-visible OG / `noindex` for `/s/:slug`. Slug space is unbounded
+    and per-blob visibility is dynamic, so static prerender cannot
+    satisfy this. Issue: `followup-share-og`.
+  - True HTTP 404 status for unknown paths. SWA's `navigationFallback`
+    returns 200 and would need `responseOverrides` config. Issue:
+    `followup-true-404`.
 
 ### Progressive Web App (PWA)
 - The site is installable as a **browser app** (PWA) on desktop and mobile.
@@ -2138,7 +2191,21 @@ Out of scope (for v1):
    - ~~**M7e**: Custom domain (`jotjson.com`).~~ (done)
    - **M7f**: Dark/light theme polish.
    - **M7g**: Accessibility audit.
-   - **M7h**: SEO (pre-rendering + OG tags).
+   - ~~**M7h**: SEO (pre-rendering + OG tags).~~ (done)
+     - `@angular/ssr` static prerender of `/` and `/404`; `shell.html`
+       fallback for everything else via `scripts/postbuild-seo.mjs`.
+       Splash discrimination via `<meta name="prerendered">` marker
+       (`LoadingSplashService` pre-latches `firstNavComplete` when
+       present). Static OG/Twitter defaults + canonical in
+       `src/index.html`; `public/{og.png,robots.txt,sitemap.xml}` shipped.
+       Server-platform safety: `app.config.server.ts` MSAL stubs, no
+       service worker on server, browser-only `inject()` guards in
+       `LoadingSplashService` / `RuleSetsService` / `AppComponent` /
+       `HomeComponent`. Build integration check at
+       `scripts/check-prerender.mjs`. Out of scope (deferred):
+       per-`/s/:slug` server-visible OG (`followup-share-og`) and
+       real HTTP 404 status (`followup-true-404`). See SEO / Social
+       section above for the full implementation.
    - ~~**M7i**: Monitoring (App Insights dashboards & alerts).~~ (done)
      - App Insights workbook (5 sections) + 4 alerts + 1 action group shipped. Bicep modules: `infra/modules/{actionGroup,alerts,monitoringWorkbook}.bicep` + `infra/main.bicep` wiring + `infra/modules/appInsights.bicep` outputs. Docs: see `docs/telemetry.md` -> "Dashboards & alerts (M7i)". Post-V1 follow-ups: issues #87-#94.
    - ~~**M7j**: Static Web Apps upgrade to Standard tier - flipped during M7e (commit 1ba34e1) because apex custom-domain binding requires Standard. See M7o for the BYO Functions follow-up.~~ (done)

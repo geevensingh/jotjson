@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
   "navigationFallback": {
-    "rewrite": "/index.html",
+    "rewrite": "/shell.html",
     "exclude": ["/api/*", "/*.{js,css,svg,ico,png,jpg,webp,woff,woff2,webmanifest}"]
   },
   "routes": [
@@ -11,6 +11,18 @@
     },
     {
       "route": "/index.html",
+      "headers": {
+        "Cache-Control": "no-cache, must-revalidate"
+      }
+    },
+    {
+      "route": "/shell.html",
+      "headers": {
+        "Cache-Control": "no-cache, must-revalidate"
+      }
+    },
+    {
+      "route": "/404/index.html",
       "headers": {
         "Cache-Control": "no-cache, must-revalidate"
       }

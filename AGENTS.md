@@ -114,6 +114,62 @@ Place new code in the correct bucket:
   privacy guardrails). The TL;DR for Angular code is "use
   `LoggerService` not `console.*` in production."
 
+### Server-platform safety (prerender)
+
+The home (`/`) and 404 (`/404`) routes are statically prerendered by
+`@angular/ssr` running in Node at build time (M7h). The build runs
+component constructors, field initializers, and eagerly-fired effects
+on the **server platform**, which has no `window`, no `localStorage` /
+`sessionStorage`, no `navigator`, no `IntersectionObserver`, no
+`document.addEventListener` semantics for `online` / `offline`, etc.
+A throw at any of these call sites aborts the prerender and the home
+route silently emits `index.csr.html` (the SPA shell) instead of a real
+prerendered `index.html`.
+
+Rules for code that reaches the prerender path:
+
+- **Inject `PLATFORM_ID` and gate browser-API code** with
+  `isPlatformBrowser(inject(PLATFORM_ID))`. Establish the browser flag
+  as a `protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));`
+  field initializer (injection context); never call `inject()` from
+  inside `ngOnInit` or other lifecycle hooks. Reference examples:
+  `src/app/core/loading-splash/loading-splash.service.ts`,
+  `src/app/core/api/rule-sets.service.ts`,
+  `src/app/features/home/home.component.ts`.
+- **Effects in constructors fire during prerender.** Anything an
+  `effect()` does on the first sync run hits the server platform.
+  Gate browser-only side effects (`localStorage` writes,
+  `seo.clearBlobTags()`, `MatSnackBar.open()`, audio/clipboard
+  bindings) on `this.isBrowser` inside the effect body, or skip the
+  effect entirely with an early return.
+- **Heavy components** (Monaco, JsonTree, status bar) keep the
+  ApplicationRef unstable forever and time out the prerender. Wrap
+  them in `@if (isBrowser) { ... } @else { <server-skeleton/> }`. The
+  `@else` block ships the SEO copy crawlers should see (`<h1>` brand,
+  tagline, description); the real components mount after client
+  bootstrap. Reference: `src/app/features/home/home.component.html`.
+- **Server-only providers** live in `src/app/app.config.server.ts`.
+  This config supplies MSAL no-op stubs (`MSAL_INSTANCE`,
+  `MsalService`, `MsalBroadcastService`), skips
+  `provideServiceWorker`, and replaces
+  `provideAppInitializer(AuthService.initializeFromRedirect)` with a
+  no-op. Do not modify the browser `app.config.ts` to "be safe on the
+  server" - keep server-specific behavior in `app.config.server.ts`.
+- **Splash discrimination.** Prerendered HTML files carry
+  `<meta name="prerendered" content="true">` (injected by
+  `scripts/postbuild-seo.mjs`). `LoadingSplashService` reads the marker
+  at construction and pre-latches `firstNavComplete = true` so the
+  Angular splash never paints over prerendered content. Shell-fallback
+  boots (every other route) have no marker and follow the legacy
+  splash lifecycle.
+- **Verify in CI.** `npm run check:prerender` (run by the postbuild
+  pipeline) asserts the dist layout, marker placement, OG defaults,
+  noindex, and asset presence. Run it locally after touching any of
+  `src/index.html`, `app.config*.ts`, `app.routes.server.ts`,
+  `home.component.*`, `not-found.component.*`,
+  `loading-splash.service.ts`, `staticwebapp.config.json`, or
+  `scripts/postbuild-seo.mjs`.
+
 ### Internationalization (i18n)
 - v1 ships in English only, but **all user-facing strings must be extractable**
   per `DESIGN_SPEC.md` §Internationalization.

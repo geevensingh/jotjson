@@ -6,6 +6,7 @@ import {
   HostListener,
   OnDestroy,
   OnInit,
+  PLATFORM_ID,
   afterNextRender,
   computed,
   effect,
@@ -14,6 +15,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
@@ -193,6 +195,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly dropController = inject(DocumentDropController);
   private readonly beaconNav = inject(BeaconNavigationService);
   private readonly loadingSplash = inject(LoadingSplashService);
+  protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   /** Mirrors the controller's drag-active signal for the drop overlay. */
   readonly dropActive = this.dropController.dropActive;
@@ -638,17 +641,25 @@ export class HomeComponent implements OnInit, OnDestroy {
       const dirtyPrefix = this.dirty() ? '* ' : '';
       if (!blob) {
         this.titleService.setTitle(`${dirtyPrefix}${this.homepageTitle}`);
-        this.seo.clearBlobTags();
+        // Skip on server prerender so the static OG defaults from
+        // index.html survive into the prerendered HTML. Crawlers see the
+        // homepage's og:title / og:description / og:type / og:url /
+        // og:site_name / twitter:card without an Angular-side wipe.
+        if (this.isBrowser) {
+          this.seo.clearBlobTags();
+        }
         return;
       }
       const label =
         title.trim().length > 0 ? title.trim() : $localize`:@@app.title.untitled:Untitled`;
       this.titleService.setTitle(`${dirtyPrefix}${label} | JotJSON`);
-      if (blob.isPublic) {
-        this.seo.setOpenGraphForBlob(blob);
-      } else {
-        this.seo.clearBlobTags();
-        this.seo.setNoindex(true);
+      if (this.isBrowser) {
+        if (blob.isPublic) {
+          this.seo.setOpenGraphForBlob(blob);
+        } else {
+          this.seo.clearBlobTags();
+          this.seo.setNoindex(true);
+        }
       }
     });
 
@@ -695,33 +706,41 @@ export class HomeComponent implements OnInit, OnDestroy {
     // page visibility. Visibilitychange / focus listeners force a re-check
     // when the user returns to the tab, so the Paste button updates
     // promptly after an external copy.
-    this.clipboard.checkOnce();
-    const onVisibility = (): void => {
-      if (document.visibilityState === 'visible') {
-        this.clipboard.checkOnce();
-      } else {
-        this.clipboard.stopPolling();
-      }
-    };
-    const onFocus = (): void => {
+    //
+    // Skip on the server platform - the static prerender of `/` runs in
+    // Node where `document` and `window` are not defined; the listeners
+    // and the gating effect both reference them. The full clipboard wiring
+    // re-attaches naturally once the browser bootstrap reaches this same
+    // constructor.
+    if (this.isBrowser) {
       this.clipboard.checkOnce();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', onFocus);
-    this.destroyRef.onDestroy(() => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', onFocus);
-      this.clipboard.stopPolling();
-    });
-
-    effect(() => {
-      const state = this.clipboard.permissionState();
-      if (state === 'granted' && document.visibilityState === 'visible') {
-        this.clipboard.startPolling();
-      } else {
+      const onVisibility = (): void => {
+        if (document.visibilityState === 'visible') {
+          this.clipboard.checkOnce();
+        } else {
+          this.clipboard.stopPolling();
+        }
+      };
+      const onFocus = (): void => {
+        this.clipboard.checkOnce();
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      window.addEventListener('focus', onFocus);
+      this.destroyRef.onDestroy(() => {
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('focus', onFocus);
         this.clipboard.stopPolling();
-      }
-    });
+      });
+
+      effect(() => {
+        const state = this.clipboard.permissionState();
+        if (state === 'granted' && document.visibilityState === 'visible') {
+          this.clipboard.startPolling();
+        } else {
+          this.clipboard.stopPolling();
+        }
+      });
+    }
   }
 
   private applyLoadedBlob(blob: JsonBlob): void {

@@ -1,4 +1,5 @@
-import { Injectable, Signal, inject, signal } from '@angular/core';
+import { DOCUMENT, isPlatformBrowser } from '@angular/common';
+import { Injectable, PLATFORM_ID, Signal, inject, signal } from '@angular/core';
 import {
   Event as RouterEvent,
   NavigationCancel,
@@ -87,9 +88,42 @@ import { LoggerService } from '../telemetry/logger.service';
  * never flip and the splash would stick on the bootstrap label
  * forever.
  */
+/**
+ * Returns `true` when this bootstrap is reading a prerendered HTML
+ * file (server platform during static prerender, OR browser platform
+ * loading an HTML file with the postbuild-injected
+ * `<meta name="prerendered" content="true">`). Used both for the
+ * initial `kind` and to pre-latch `firstNavComplete` so the Angular
+ * splash never covers already-painted prerendered content.
+ *
+ * On the server, the marker is irrelevant (the prerender pipeline
+ * doesn't read it - the file doesn't exist yet). The decision tree
+ * collapses to "always treat server as prerendered" so any prerender
+ * pass renders an empty splash, regardless of which page is being
+ * built.
+ *
+ * MUST be called only inside an injection context (constructor /
+ * field initializer / `inject`-context callback) - it calls
+ * `inject(PLATFORM_ID)` and `inject(DOCUMENT)` directly.
+ */
+function isPrerenderedBoot(): boolean {
+  if (!isPlatformBrowser(inject(PLATFORM_ID))) {
+    return true;
+  }
+  const documentRef = inject(DOCUMENT);
+  return documentRef.querySelector('meta[name="prerendered"][content="true"]') !== null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class LoadingSplashService {
-  private readonly _kind = signal<'jotjson' | 'blob' | null>('jotjson');
+  // Captured first so other field initializers below can reference it.
+  // Both `_kind` initial value and `firstNavComplete` pre-latch depend
+  // on whether this bootstrap is reading a prerendered HTML file.
+  private readonly _prerenderedBoot = isPrerenderedBoot();
+
+  private readonly _kind = signal<'jotjson' | 'blob' | null>(
+    this._prerenderedBoot ? null : 'jotjson',
+  );
   readonly kind: Signal<'jotjson' | 'blob' | null> = this._kind.asReadonly();
 
   /**
@@ -145,7 +179,20 @@ export class LoadingSplashService {
   private readonly inFlight = new Set<number>();
   private readonly inFlightBlob = new Set<number>();
   private firstNavStarted = false;
-  private firstNavComplete = false;
+  /**
+   * Latches once the first navigation has reached a terminal Router
+   * event (End / Cancel / Error / Skipped) AND no other navs are
+   * still in flight. While `false`, splash kind tracks navigation
+   * state. Once `true`, the splash is permanently hidden and the
+   * route-progress bar takes over for in-app navigation.
+   *
+   * On prerender-marker boots the prerendered HTML is already the
+   * "first navigation result"; we pre-latch this to `true` at
+   * construction so the Angular splash never shows on top of the
+   * already-painted prerender, and the very first NavigationEnd
+   * resolves to `kind = null` cleanly.
+   */
+  private firstNavComplete = this._prerenderedBoot;
 
   /**
    * `performance.now()` timestamp captured at the moment

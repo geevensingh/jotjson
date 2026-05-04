@@ -575,4 +575,54 @@ describe('LoadingSplashService', () => {
         .toBeNull();
     });
   });
+
+  describe('prerender-marker boot (M7h)', () => {
+    function initWithMarker(initialPath = '/'): LoadingSplashService {
+      const meta = document.createElement('meta');
+      meta.setAttribute('name', 'prerendered');
+      meta.setAttribute('content', 'true');
+      document.head.appendChild(meta);
+      try {
+        return init(initialPath);
+      } finally {
+        meta.remove();
+      }
+    }
+
+    it('starts at kind=null when <meta name="prerendered" content="true"> is present', () => {
+      const service = initWithMarker('/');
+      expect(service.kind())
+        .withContext(
+          'prerendered route boot must NOT cover the prerendered HTML with the Angular splash',
+        )
+        .toBeNull();
+      expect(service.renderPending()).toBeFalse();
+    });
+
+    it('first NavigationStart on a prerendered route stays at kind=null (firstNavComplete pre-latched)', () => {
+      const service = initWithMarker('/');
+      start(1, '/');
+      expect(service.kind())
+        .withContext(
+          'pre-latched firstNavComplete prevents recomputeKind from flipping to "jotjson"',
+        )
+        .toBeNull();
+      end(1, '/');
+      expect(service.kind()).toBeNull();
+      expect(service.renderPending()).toBeFalse();
+    });
+
+    it('shell-fallback boot (no marker) preserves the legacy splash lifecycle', () => {
+      const service = init('/blobs');
+      expect(service.kind())
+        .withContext(
+          'no marker -> identical pre-M7h behavior; static splash flows into Angular splash',
+        )
+        .toBe('jotjson');
+      start(1, '/blobs');
+      expect(service.kind()).toBe('jotjson');
+      end(1, '/blobs');
+      expect(service.kind()).toBeNull();
+    });
+  });
 });

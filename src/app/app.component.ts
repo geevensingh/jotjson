@@ -1,4 +1,5 @@
-import { Component, OnInit, inject, Injector } from '@angular/core';
+import { Component, OnInit, PLATFORM_ID, inject, Injector } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { PreferencesNotificationService } from './core/preferences/preferences-notification.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
@@ -48,7 +49,21 @@ export class AppComponent implements OnInit {
   // be missed because Subjects don't replay.
   private readonly preferencesNotifications = inject(PreferencesNotificationService);
 
+  // Captured at construction time (an injection context) so `ngOnInit`
+  // can branch on platform without calling `inject()` inside a
+  // lifecycle hook (which would throw NG0203).
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
   ngOnInit(): void {
+    // Skip browser-only side effects during static prerender. The
+    // server platform has no `window`, no `localStorage`, no service
+    // worker, and no SDK targets to talk to - and the lazy chunks
+    // below all assume one of those. The browser bootstrap on the
+    // hydrated client re-runs this same `ngOnInit`, so nothing is
+    // permanently lost.
+    if (!this.isBrowser) {
+      return;
+    }
     // Note: returning-redirect handling and `AuthService.userSignal`
     // hydration are driven from `provideAppInitializer` in `app.config.ts`
     // so the router waits for MSAL before activating routes (otherwise
