@@ -1,6 +1,14 @@
 import { CosmosClient, Database } from '@azure/cosmos';
 import type { Container, ItemResponse } from '@azure/cosmos';
-import { DefaultAzureCredential } from '@azure/identity';
+// `@azure/identity` is loaded lazily inside `getCosmos` (only on the
+// dead-code AAD branch) because its transitive dep on `@azure/msal-node`
+// pulls in `uuid` (ESM-only). Importing it at the top level forces every
+// test that does `jest.requireActual('./cosmos')` to drag the ESM chain
+// through Jest's CJS transformer, which fails under a clean CI install.
+// The `aadCredentials` branch is reserved for the future M7o
+// BYO-Functions migration; in production today the COSMOS_KEY branch is
+// always taken, so the lazy require has no startup cost in the prod hot
+// path.
 
 let cachedClient: CosmosClient | undefined;
 let cachedDatabase: Database | undefined;
@@ -52,7 +60,12 @@ export function getCosmos(): { client: CosmosClient; database: Database } {
 
     cachedClient = key
       ? new CosmosClient({ endpoint, key })
-      : new CosmosClient({ endpoint, aadCredentials: new DefaultAzureCredential() });
+      : new CosmosClient({
+          endpoint,
+          aadCredentials: new (
+            require('@azure/identity') as typeof import('@azure/identity')
+          ).DefaultAzureCredential(),
+        });
     cachedDatabase = cachedClient.database(dbName);
   }
   return { client: cachedClient, database: cachedDatabase };

@@ -14,11 +14,10 @@ jest.mock('../shared/auth', () => {
 });
 
 // We can't use `jest.requireActual('../shared/ruleSets')` for the
-// validator because that module transitively imports `./cosmos`,
-// which loads `@azure/identity` -> `uuid` (ESM) - a chain that Jest's
-// CJS transform can't currently parse. Instead, we hand-roll a
-// minimal validator with just enough behaviour to exercise the
-// handler's success and validation-failure paths.
+// validator because spreading the real module would also expose the
+// mocked-here exports as their real implementations - we want the
+// handler to exercise the wired stubs (`createRuleSet`, etc.). Keep
+// a minimal hand-rolled validator alongside the stubs.
 class _RuleSetValidationError extends Error {
   constructor(message: string) {
     super(message);
