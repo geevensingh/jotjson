@@ -391,6 +391,46 @@ customEvents
 | summarize count() by tostring(customDimensions.source)
 ```
 
+#### `blob.coldBoot.firstPaint`
+
+**Kind:** event   **Level:** info   **Cold flag:** yes (one-shot per cold-boot blob nav)   **Sampling:** 100% (unsampled)
+
+Fired exactly once per session, after the loading splash's
+"Rendering tree..." stage clears on a cold-boot deep-link to
+`/s/:slug`. Measures the gap between the share-blob `NavigationEnd`
+and the first browser paint that includes the rendered tree, deferred
+through `afterNextRender` plus a double-`requestAnimationFrame` paint
+barrier in `HomeComponent`. Lets us see how long users actually stare
+at the "Rendering tree..." label and prioritize incremental tree
+rendering if the distribution warrants it.
+
+Naturally bounded: only the cold-boot first-nav blob NavigationEnd
+sets `renderPending=true`. The `firstNavComplete` latch prevents
+in-app `/` -> `/s/:slug` navs from re-arming the stage, and
+`markBlobRenderComplete` short-circuits when `renderPending` is
+already false (so re-instantiating `HomeComponent` for in-app navs
+never double-counts).
+
+**Properties:** none.
+
+**Measurements:**
+
+| name | type | meaning |
+| --- | --- | --- |
+| durationMs | number | `performance.now()` delta from the cold-boot blob `NavigationEnd` to the moment the inner-rAF callback fires `markBlobRenderComplete`. Raw value, no bucket dimension - distribution percentiles derive in KQL. |
+
+**Example: render-pending duration distribution**
+
+```kusto
+customEvents
+| where name == "blob.coldBoot.firstPaint"
+| extend durationMs = todouble(customMeasurements.durationMs)
+| summarize p50 = percentile(durationMs, 50),
+            p90 = percentile(durationMs, 90),
+            p99 = percentile(durationMs, 99),
+            count_ = count()
+```
+
 ---
 
 ## How to view the logs

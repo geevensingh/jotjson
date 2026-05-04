@@ -1,11 +1,13 @@
-@if (label(); as text) {
+@if (visible()) {
   <div class="jot-splash" role="status" aria-live="polite">
-    <div
-      class="jot-splash__bar"
-      [class.jot-splash__bar--determinate]="determinate()"
-      [style.--jot-progress]="progressFraction()"
-      aria-hidden="true"
-    ></div>
+    @if (barVisible()) {
+      <div
+        class="jot-splash__bar"
+        [class.jot-splash__bar--determinate]="determinate()"
+        [style.--jot-progress]="progressFraction()"
+        aria-hidden="true"
+      ></div>
+    }
     <svg
       class="jot-splash__logo"
       xmlns="http://www.w3.org/2000/svg"
@@ -36,6 +38,6 @@
         stroke-linejoin="round"
       />
     </svg>
-    <p class="jot-splash__label">{{ text }}</p>
+    <p class="jot-splash__label">{{ label() }}</p>
   </div>
 }

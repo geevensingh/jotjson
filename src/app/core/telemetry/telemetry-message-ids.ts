@@ -576,6 +576,39 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'blob.fetch.complete',
 
+  /**
+   * Kind: event
+   * Fired by: `LoadingSplashService.markBlobRenderComplete`
+   *           (`core/loading-splash/loading-splash.service.ts`)
+   *           when called while `renderPending === true`. The
+   *           `markBlobRenderComplete` call is wired into
+   *           `HomeComponent`'s constructor via
+   *           `afterNextRender` + double `requestAnimationFrame`,
+   *           so the event fires exactly when the user has actually
+   *           seen the first paint of the JSON tree on a cold-boot
+   *           deep-link to `/s/:slug`. The idempotent guard ensures
+   *           in-app `/` -> `/s/:slug` navigations (which mount a
+   *           fresh `HomeComponent` and re-fire the hook) do NOT
+   *           emit -- `renderPending` is only set on the first
+   *           cold-boot blob nav.
+   *
+   *           One-shot per session (cold-boot blob deep-link is the
+   *           only path that sets `renderPending=true`, and the
+   *           `firstNavComplete` latch prevents subsequent navs from
+   *           re-triggering it).
+   * Props: none.
+   * Measurements: { durationMs: number }
+   *   - elapsed wallclock time in ms from the cold-boot blob nav's
+   *     `NavigationEnd` (when the splash entered the render-pending
+   *     stage) to the moment the double-rAF callback fires
+   *     `markBlobRenderComplete` (i.e., the frame after first paint).
+   *     Raw value; use `percentile(durationMs, 50)` /
+   *     `percentile(durationMs, 95)` in KQL to track the
+   *     post-fetch render-time distribution and inform whether
+   *     virtualized tree rendering becomes a priority.
+   */
+  'blob.coldBoot.firstPaint',
+
   // Blobs
 
   /**

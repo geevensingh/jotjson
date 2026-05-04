@@ -8,33 +8,41 @@ import {
   NavigationStart,
   Router,
 } from '@angular/router';
+import { LoggerService } from '../telemetry/logger.service';
 
 /**
  * Drives the Angular-side loading splash that bridges the gap between the
  * static cold-boot splash in `src/index.html` and the first rendered
  * route. The user-visible goal: a cold-boot deep-link to `/s/:slug`
- * shows the same logo + bar + layout from the moment the page loads,
- * with the label saying "Loading JSON..." while the resolver fetches
- * the blob - no blank screen, no progress-bar-only window.
+ * shows the same logo + label + (optional) progress bar from the moment
+ * the page loads, with the label transitioning through three discrete
+ * lifecycle stages instead of pinning at "Loading JSON..." while the
+ * tree silently mounts.
  *
- * **Three kinds of splash state**:
- * - `'jotjson'` - generic "Loading JotJSON..." splash matching the
- *   static splash in index.html. Shown during the first navigation
- *   when the target is not a share blob.
- * - `'blob'` - "Loading JSON..." variant. Shown whenever any
- *   `/s/:slug` navigation is in flight during the first-navigation
- *   window.
- * - `null` - splash is hidden. Reached once the first navigation
- *   terminates (End / Cancel / Error / Skipped); after that, the
- *   in-app route progress bar takes over per Option 2 of M8 -
+ * **Three lifecycle stages**:
+ * - **bootstrap** (`kind === 'jotjson'`, `renderPending === false`):
+ *   "Loading JotJSON..." splash matching the static splash in
+ *   index.html. Shown during the first navigation when the target is
+ *   not a share blob, and as the brief window before the very first
+ *   NavigationStart fires.
+ * - **download** (`kind === 'blob'`, `renderPending === false`):
+ *   "Downloading JSON..." variant. Shown whenever any `/s/:slug`
+ *   navigation is in flight during the first-navigation window.
+ *   Progress bar is determinate when the resolver is reporting
+ *   fractions, indeterminate otherwise.
+ * - **render-pending** (`kind === null`, `renderPending === true`):
+ *   "Rendering tree..." variant. Entered when the first cold-boot
+ *   blob nav settles via `NavigationEnd`; covers the synchronous
+ *   change-detection pass that mounts `HomeComponent` and renders
+ *   the JSON tree. The bar is intentionally HIDDEN during this
+ *   stage - we have no honest progress signal to show, and a
+ *   pinned-at-100% bar reads as "stuck" (the very perception this
+ *   stage exists to fix). Cleared by `HomeComponent` calling
+ *   `markBlobRenderComplete` after first browser paint.
+ * - hidden (`kind === null`, `renderPending === false`): the splash
+ *   is no longer in the DOM. After the first navigation terminates
+ *   the in-app route progress bar takes over per Option 2 of M8 -
  *   in-app navigation never re-shows the splash.
- *
- * **Why peek `window.location.pathname` in the constructor**: the very
- * first NavigationStart fires shortly after Router bootstrap, and we
- * want the Angular splash's first paint to already match the eventual
- * NavigationStart kind. Without this peek, a cold-boot to `/s/:slug`
- * would briefly render "Loading JotJSON..." before flipping to
- * "Loading JSON...".
  *
  * **Why a Set of nav IDs**: same rationale as
  * `NavigationProgressService` - a `/s/:slug` resolver redirect on 404
@@ -42,6 +50,14 @@ import {
  * track in-flight navigations consistently. Once the first nav
  * settles (`firstNavComplete`), the splash latches to `null` and never
  * re-appears for in-app navigations.
+ *
+ * **Render-pending only on NavigationEnd**: NavigationCancel /
+ * NavigationError / NavigationSkipped of a blob nav goes straight to
+ * `kind=null` with `renderPending` unchanged (false). This matters
+ * because `share-blob.resolver.ts` redirects bad slugs to `/404` via
+ * `router.navigateByUrl('/404')` which fires a NavigationCancel for
+ * the original `/s/:slug` nav, not a NavigationError - and there is
+ * no tree to render in that case.
  *
  * **Cancel-redirect blank gap (accepted)**: on a `/s/badSlug -> /404`
  * redirect, NavigationCancel(1) fires with no further in-flight nav
@@ -61,13 +77,33 @@ import {
  * provides Router without `withDisabledInitialNavigation()`, so the
  * very first NavigationStart fires reliably during bootstrap. If a
  * future change disables initial navigation, `firstNavStarted` would
- * never flip and the splash would stick at its constructor-peeked
- * kind until something else terminates a nav.
+ * never flip and the splash would stick on the bootstrap label
+ * forever.
  */
 @Injectable({ providedIn: 'root' })
 export class LoadingSplashService {
   private readonly _kind = signal<'jotjson' | 'blob' | null>('jotjson');
   readonly kind: Signal<'jotjson' | 'blob' | null> = this._kind.asReadonly();
+
+  /**
+   * `true` while the splash is held on the "Rendering tree..." label
+   * after the first cold-boot blob nav has settled via NavigationEnd
+   * but before `HomeComponent` has signalled first browser paint via
+   * `markBlobRenderComplete`. Orthogonal to {@link kind} so the kind
+   * state machine doesn't have to know about render-side events.
+   *
+   * Cleared (false) by:
+   * - `markBlobRenderComplete()` on first paint (the success path);
+   *   emits `blob.coldBoot.firstPaint` telemetry.
+   * - `NavigationStart` while `renderPending === true` (user navigated
+   *   away mid-render); does NOT emit telemetry.
+   *
+   * Never set on subsequent navs because of the `firstNavComplete`
+   * latch - in-app `/` -> `/s/:slug` is covered by the route progress
+   * bar instead.
+   */
+  private readonly _renderPending = signal<boolean>(false);
+  readonly renderPending: Signal<boolean> = this._renderPending.asReadonly();
 
   /**
    * Determinate progress fraction in `[0, 1]` for the in-flight blob
@@ -95,10 +131,19 @@ export class LoadingSplashService {
   private firstNavStarted = false;
   private firstNavComplete = false;
 
+  /**
+   * `performance.now()` timestamp captured at the moment
+   * `_renderPending` flips to `true` (i.e., the NavigationEnd of the
+   * cold-boot blob nav). Used to compute the `durationMs` measurement
+   * on the `blob.coldBoot.firstPaint` telemetry event when
+   * `markBlobRenderComplete` fires. `null` whenever `_renderPending`
+   * is `false`.
+   */
+  private renderPendingStartedAt: number | null = null;
+
+  private readonly logger = inject(LoggerService);
+
   constructor() {
-    if (this.isBlobUrl(this.initialPath())) {
-      this._kind.set('blob');
-    }
     inject(Router).events.subscribe((event) => this.handle(event));
   }
 
@@ -136,15 +181,42 @@ export class LoadingSplashService {
     this._progress.set(fraction);
   }
 
-  private initialPath(): string {
-    if (typeof window === 'undefined' || !window.location) {
-      return '/';
+  /**
+   * Called by `HomeComponent` after the first browser paint of the
+   * blob's tree (deferred via `afterNextRender` + double-rAF, the
+   * established paint-barrier idiom in this repo). Clears
+   * `renderPending` and emits the `blob.coldBoot.firstPaint`
+   * telemetry event with a `durationMs` measurement covering the
+   * NavigationEnd -> first-paint gap.
+   *
+   * Idempotent: a guard short-circuits when `renderPending === false`
+   * so re-renders, `HomeComponent` re-instantiation across in-app
+   * navs, and accidental double-calls never re-trigger telemetry.
+   * The HomeComponent constructor's hook fires for every instance
+   * (including the in-app `/` -> `/s/:slug` case) but the guard
+   * ensures only the cold-boot blob nav actually emits.
+   */
+  markBlobRenderComplete(): void {
+    if (!this._renderPending()) {
+      return;
     }
-    return window.location.pathname;
+    const startedAt = this.renderPendingStartedAt;
+    this._renderPending.set(false);
+    this.renderPendingStartedAt = null;
+    const elapsed = startedAt !== null ? performance.now() - startedAt : 0;
+    const durationMs = Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : 0;
+    this.logger.event('blob.coldBoot.firstPaint', undefined, { durationMs });
   }
 
   private handle(event: RouterEvent): void {
     if (event instanceof NavigationStart) {
+      if (this._renderPending()) {
+        // User navigated away mid-render. Drop the pending state
+        // without emitting telemetry - the abandoned render is not a
+        // useful sample for the first-paint distribution.
+        this._renderPending.set(false);
+        this.renderPendingStartedAt = null;
+      }
       this.firstNavStarted = true;
       this.inFlight.add(event.id);
       if (this.isBlobUrl(event.url)) {
@@ -160,10 +232,23 @@ export class LoadingSplashService {
       event instanceof NavigationError ||
       event instanceof NavigationSkipped
     ) {
+      const previousKind = this._kind();
       this.inFlight.delete(event.id);
       this.inFlightBlob.delete(event.id);
-      if (this.firstNavStarted && this.inFlight.size === 0) {
+      const willLatchFirstNavComplete =
+        this.firstNavStarted && !this.firstNavComplete && this.inFlight.size === 0;
+      if (willLatchFirstNavComplete) {
         this.firstNavComplete = true;
+        if (event instanceof NavigationEnd && previousKind === 'blob') {
+          // Enter render-pending: hide the bar and switch the label
+          // to "Rendering tree..." while HomeComponent mounts and
+          // first paints. Cleared by markBlobRenderComplete.
+          this.renderPendingStartedAt = performance.now();
+          this._renderPending.set(true);
+          this._kind.set(null);
+          this._progress.set(null);
+          return;
+        }
       }
       this.recomputeKind();
     }

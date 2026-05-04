@@ -24,6 +24,7 @@ import { extractFromMixedText as extractFromMixedTextCore } from '../../core/jso
 import type { ParseJsonCandidate } from '../../core/json/json-extractor.core';
 import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { LoggerService } from '../../core/telemetry/logger.service';
+import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
@@ -53,6 +54,12 @@ const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 function setupMinimalMonacoStub(): void {
   beforeEach(() => installMinimalMonacoStub());
   afterEach(() => restoreMonacoStub());
+}
+
+function waitForSingleAnimationFrame(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 }
 
 function waitForDoubleAnimationFrame(): Promise<void> {
@@ -4386,4 +4393,64 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
       candidateNodes: 2,
     });
   }));
+});
+
+describe('HomeComponent splash render-complete hook (Phase C)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+    TestBed.resetTestingModule();
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+  });
+
+  it('invokes LoadingSplashService.markBlobRenderComplete after a DOUBLE rAF, not a single one (paint barrier)', async () => {
+    // The hook must defer past the next paint so the user actually
+    // sees the "Rendering tree..." label before the splash hides.
+    // A single rAF runs BEFORE the next paint and would clear the
+    // splash on the same tick. This test guards against silent
+    // regression to single-rAF.
+    const splash = jasmine.createSpyObj<LoadingSplashService>('LoadingSplashService', [
+      'markBlobRenderComplete',
+    ]);
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: LoadingSplashService, useValue: splash },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.detectChanges();
+
+    // afterNextRender schedules its callback after the render
+    // phases complete; let microtasks drain so the outer rAF
+    // gets queued before we start waiting on rAFs.
+    await Promise.resolve();
+
+    await waitForSingleAnimationFrame();
+    expect(splash.markBlobRenderComplete)
+      .withContext(
+        'a single rAF must NOT trigger the call - that would clear the splash before the next paint',
+      )
+      .not.toHaveBeenCalled();
+
+    await waitForSingleAnimationFrame();
+    expect(splash.markBlobRenderComplete)
+      .withContext(
+        'after the second rAF (paint barrier crossed) the hook must fire so render-pending clears',
+      )
+      .toHaveBeenCalledTimes(1);
+  });
 });

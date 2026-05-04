@@ -12,19 +12,25 @@ import {
   Router,
 } from '@angular/router';
 import { LoadingSplashService } from './loading-splash.service';
+import { LoggerService } from '../telemetry/logger.service';
 
 describe('LoadingSplashService', () => {
   let events: Subject<RouterEvent>;
+  let logger: jasmine.SpyObj<LoggerService>;
 
   function init(initialPath = '/'): LoadingSplashService {
     events = new Subject<RouterEvent>();
+    logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event']);
     const routerStub: Partial<Router> = {
       events: events.asObservable() as unknown as Router['events'],
     };
     history.replaceState(null, '', initialPath);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{ provide: Router, useValue: routerStub }],
+      providers: [
+        { provide: Router, useValue: routerStub },
+        { provide: LoggerService, useValue: logger },
+      ],
     });
     return TestBed.inject(LoadingSplashService);
   }
@@ -52,15 +58,22 @@ describe('LoadingSplashService', () => {
   it('initial kind is "jotjson" for non-blob URLs', () => {
     const service = init('/');
     expect(service.kind()).toBe('jotjson');
+    expect(service.renderPending())
+      .withContext('renderPending only flips on first cold-boot blob NavigationEnd')
+      .toBeFalse();
   });
 
-  it('initial kind is "blob" when bootstrapping on /s/:slug (cold-boot deep-link)', () => {
+  it('initial kind is "jotjson" even when bootstrapping on /s/:slug (no URL preemption)', () => {
+    // Drop the prior pre-emption: we now start in the bootstrap stage
+    // ("Loading JotJSON...") for any URL, and flip to 'blob' on the
+    // first NavigationStart for /s/:slug. The static splash also
+    // shows "Loading JotJSON..." for both URLs, so the static->Angular
+    // handoff is flicker-free; the bootstrap->download flicker on
+    // cold-boot deep-links is accepted as a UX trade for distinct
+    // lifecycle stages.
     const service = init('/s/abc123');
-    expect(service.kind())
-      .withContext(
-        'splash must paint with the blob label immediately so the cold-boot transition is seamless',
-      )
-      .toBe('blob');
+    expect(service.kind()).toBe('jotjson');
+    expect(service.renderPending()).toBeFalse();
   });
 
   it('initial kind is "jotjson" for malformed /s/ URLs (bare prefix or extra segments)', () => {
@@ -72,53 +85,164 @@ describe('LoadingSplashService', () => {
     expect(nestedService.kind()).toBe('jotjson');
   });
 
-  it('first nav to a non-blob URL keeps "jotjson" until End, then null', () => {
+  it('first nav to a non-blob URL keeps "jotjson" until End, then null with renderPending false', () => {
     const service = init('/');
     start(1, '/');
     expect(service.kind()).toBe('jotjson');
     end(1, '/');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending())
+      .withContext('non-blob first nav skips the render-pending stage')
+      .toBeFalse();
+    expect(logger.event).not.toHaveBeenCalled();
   });
 
-  it('first nav to /s/:slug shows "blob" through the resolver, then null on End', () => {
+  it('first nav to /s/:slug shows "blob" through resolver, then null + renderPending=true on End', () => {
     const service = init('/s/abc');
     start(1, '/s/abc');
     expect(service.kind()).toBe('blob');
     end(1, '/s/abc');
-    expect(service.kind()).toBeNull();
+    expect(service.kind())
+      .withContext('kind clears on settle so the bar hides for the render-pending stage')
+      .toBeNull();
+    expect(service.renderPending())
+      .withContext('first cold-boot blob NavigationEnd enters render-pending stage')
+      .toBeTrue();
+    expect(logger.event)
+      .withContext('telemetry only emits on the eventual paint, not on entering the stage')
+      .not.toHaveBeenCalled();
   });
 
-  it('first nav resolver-redirect-to-/404 hides splash once the first nav cancels', () => {
+  it('markBlobRenderComplete clears renderPending and emits blob.coldBoot.firstPaint', () => {
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    end(1, '/s/abc');
+    expect(service.renderPending()).toBeTrue();
+    service.markBlobRenderComplete();
+    expect(service.renderPending()).toBeFalse();
+    expect(logger.event).toHaveBeenCalledTimes(1);
+    const call = logger.event.calls.mostRecent();
+    expect(call.args[0]).toBe('blob.coldBoot.firstPaint');
+    expect(call.args[1]).withContext('event has no closed-enum properties').toBeUndefined();
+    const measurements = call.args[2] ?? {};
+    expect(typeof measurements['durationMs']).toBe('number');
+    expect(Number.isFinite(measurements['durationMs'])).toBeTrue();
+    expect(measurements['durationMs']).toBeGreaterThanOrEqual(0);
+  });
+
+  it('markBlobRenderComplete is a no-op when renderPending is false (idempotent)', () => {
+    const service = init('/');
+    start(1, '/');
+    end(1, '/');
+    expect(service.renderPending()).toBeFalse();
+    service.markBlobRenderComplete();
+    expect(service.renderPending()).toBeFalse();
+    expect(logger.event)
+      .withContext('no telemetry on idempotent no-op call - re-instantiation must not double-count')
+      .not.toHaveBeenCalled();
+  });
+
+  it('two markBlobRenderComplete calls only emit telemetry once', () => {
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    end(1, '/s/abc');
+    service.markBlobRenderComplete();
+    service.markBlobRenderComplete();
+    expect(logger.event).toHaveBeenCalledTimes(1);
+  });
+
+  it('first nav resolver-redirect-to-/404 does NOT enter render-pending stage', () => {
     // shareBlobResolver pattern: GET 404s, resolver navigates to /404
-    // -> Cancel(1) Start(2,/404) End(2,/404). With the current
-    // simpler design we accept a brief blank between Cancel(1) and
-    // /404 mount; firstNavComplete latches on Cancel(1) because
-    // inFlight is empty in that moment.
+    // -> Cancel(1) Start(2,/404) End(2,/404). NavigationCancel of a
+    // blob nav skips the render-pending stage even though previous
+    // kind was 'blob' - there is no tree to render.
     const service = init('/s/abc');
     start(1, '/s/abc');
     expect(service.kind()).toBe('blob');
     cancel(1, '/s/abc');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending())
+      .withContext('cancel of a blob nav does NOT enter render-pending')
+      .toBeFalse();
     start(2, '/404');
+    expect(service.renderPending()).toBeFalse();
     expect(service.kind())
       .withContext('after first nav settles the splash never reappears for in-app nav')
       .toBeNull();
     end(2, '/404');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending()).toBeFalse();
+    expect(logger.event).not.toHaveBeenCalled();
   });
 
-  it('NavigationError on first nav hides splash', () => {
+  it('NavigationError on first blob nav does NOT enter render-pending stage', () => {
     const service = init('/s/abc');
     start(1, '/s/abc');
+    expect(service.kind()).toBe('blob');
     error(1, '/s/abc');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending()).toBeFalse();
+    expect(logger.event).not.toHaveBeenCalled();
   });
 
-  it('NavigationSkipped on first nav hides splash', () => {
+  it('NavigationSkipped on first blob nav does NOT enter render-pending stage', () => {
+    // The router can fire NavigationSkipped (e.g. for an identical
+    // URL) instead of End. Like Cancel/Error, this should skip the
+    // render-pending stage - there is no first-paint signal to wait
+    // for and no tree to render.
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    expect(service.kind()).toBe('blob');
+    skipped(1, '/s/abc');
+    expect(service.kind()).toBeNull();
+    expect(service.renderPending())
+      .withContext('skipped blob nav skips render-pending; same as cancel/error')
+      .toBeFalse();
+    expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  it('NavigationSkipped on first non-blob nav hides splash, no render-pending', () => {
     const service = init('/');
     start(1, '/');
     skipped(1, '/');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending()).toBeFalse();
+  });
+
+  it('NavigationStart while renderPending=true clears it (user navigated away mid-render)', () => {
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    end(1, '/s/abc');
+    expect(service.renderPending()).toBeTrue();
+    // User clicks away before HomeComponent paints (e.g., quickly
+    // navigates to /history). The new nav must clear render-pending
+    // so the splash does not get stuck. No telemetry emits because
+    // the abandoned render is not a useful first-paint sample.
+    start(2, '/history');
+    expect(service.renderPending())
+      .withContext('NavigationStart aborts the render-pending stage')
+      .toBeFalse();
+    expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  it('cancel/replace mid-blob-nav: render-pending fires once for surviving nav', () => {
+    // start(1,/s/foo) -> start(2,/s/bar) -> cancel(1) -> end(2)
+    // The render-pending stage must enter exactly once, on end(2).
+    const service = init('/s/foo');
+    start(1, '/s/foo');
+    expect(service.kind()).toBe('blob');
+    start(2, '/s/bar');
+    expect(service.kind()).toBe('blob');
+    cancel(1, '/s/foo');
+    expect(service.kind())
+      .withContext('blob nav 2 still in flight, splash stays on blob')
+      .toBe('blob');
+    expect(service.renderPending())
+      .withContext('cancel of one of multiple in-flight blob navs does not pre-fire render-pending')
+      .toBeFalse();
+    end(2, '/s/bar');
+    expect(service.kind()).toBeNull();
+    expect(service.renderPending()).toBeTrue();
   });
 
   it('in-app nav to /s/:slug after first nav settles does NOT re-show the splash (Option 2)', () => {
@@ -131,8 +255,17 @@ describe('LoadingSplashService', () => {
     expect(service.kind())
       .withContext('Option 2: in-app blob nav uses the route progress bar, not the splash')
       .toBeNull();
+    expect(service.renderPending())
+      .withContext('render-pending only fires on first cold-boot blob nav')
+      .toBeFalse();
     end(2, '/s/xyz');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending())
+      .withContext('in-app /s/:slug NavigationEnd does NOT enter render-pending')
+      .toBeFalse();
+    expect(logger.event)
+      .withContext('telemetry only fires on cold-boot first-paint, not in-app navs')
+      .not.toHaveBeenCalled();
   });
 
   it('in-app nav to a non-blob route after first nav settles stays null', () => {
@@ -142,6 +275,7 @@ describe('LoadingSplashService', () => {
     start(2, '/history');
     end(2, '/history');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending()).toBeFalse();
   });
 
   it('overlapping start during first nav: any in-flight blob flips kind to blob', () => {
@@ -161,6 +295,9 @@ describe('LoadingSplashService', () => {
       .toBe('blob');
     end(2, '/s/abc');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending())
+      .withContext('previous kind was blob and event was End -> render-pending')
+      .toBeTrue();
   });
 
   it('subscription is established in the constructor (catches first NavigationStart)', () => {
@@ -176,6 +313,7 @@ describe('LoadingSplashService', () => {
     expect(service.kind()).toBe('blob');
     end(1, '/s/abc?foo=bar');
     expect(service.kind()).toBeNull();
+    expect(service.renderPending()).toBeTrue();
   });
 
   describe('progress signal', () => {

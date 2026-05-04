@@ -6,6 +6,7 @@ import {
   HostListener,
   OnDestroy,
   OnInit,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -36,6 +37,7 @@ import type { BlobHighlight, CreateBlobResponse, JsonBlob } from '../../core/api
 import { DraftService } from '../../core/preferences/draft.service';
 import { persistedSignal } from '../../core/preferences/persisted-signal';
 import { LoggerService } from '../../core/telemetry/logger.service';
+import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
 import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
 import { SeoService } from '../../core/seo/seo.service';
@@ -190,6 +192,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly logger = inject(LoggerService);
   private readonly dropController = inject(DocumentDropController);
   private readonly beaconNav = inject(BeaconNavigationService);
+  private readonly loadingSplash = inject(LoadingSplashService);
 
   /** Mirrors the controller's drag-active signal for the drop overlay. */
   readonly dropActive = this.dropController.dropActive;
@@ -576,6 +579,20 @@ export class HomeComponent implements OnInit, OnDestroy {
   } | null = null;
 
   constructor() {
+    // Signal first browser paint of the JSON tree to LoadingSplashService
+    // so the cold-boot "Rendering tree..." splash hides on the frame
+    // *after* paint. Double-rAF mirrors `afterFirstPaint` (line 1256-1264)
+    // and the JsonTreeComponent paint barrier - a single rAF runs before
+    // the next paint and can clear the splash on the same tick the
+    // user would have seen the label. The service guards re-entry, so
+    // this is a safe no-op for in-app `/` -> `/s/:slug` navigations
+    // where renderPending was never set.
+    afterNextRender(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => this.loadingSplash.markBlobRenderComplete());
+      });
+    });
+
     // Persist anonymous draft edits only while no saved blob is loaded.
     effect(() => {
       if (this.loadedBlob() === null) {

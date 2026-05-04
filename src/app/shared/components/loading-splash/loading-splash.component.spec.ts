@@ -7,13 +7,16 @@ describe('LoadingSplashComponent', () => {
   let fixture: ComponentFixture<LoadingSplashComponent>;
   const kindSignal = signal<'jotjson' | 'blob' | null>(null);
   const progressSignal = signal<number | null>(null);
+  const renderPendingSignal = signal<boolean>(false);
 
   beforeEach(() => {
     kindSignal.set(null);
     progressSignal.set(null);
+    renderPendingSignal.set(false);
     const stub: Partial<LoadingSplashService> = {
       kind: kindSignal.asReadonly(),
       progress: progressSignal.asReadonly(),
+      renderPending: renderPendingSignal.asReadonly(),
     };
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -37,7 +40,7 @@ describe('LoadingSplashComponent', () => {
     return node?.textContent?.trim() ?? '';
   }
 
-  it('renders nothing when kind is null', () => {
+  it('renders nothing when kind is null and renderPending is false', () => {
     expect(splash()).toBeNull();
   });
 
@@ -46,22 +49,67 @@ describe('LoadingSplashComponent', () => {
     fixture.detectChanges();
     expect(splash()).not.toBeNull();
     expect(labelText()).toBe('Loading JotJSON...');
+    expect(bar()).withContext('bar is visible during the bootstrap stage').not.toBeNull();
   });
 
-  it('renders the blob splash with the "Loading JSON..." label when kind is "blob"', () => {
+  it('renders the blob splash with the "Downloading JSON..." label when kind is "blob"', () => {
     kindSignal.set('blob');
     fixture.detectChanges();
     expect(splash()).not.toBeNull();
-    expect(labelText()).toBe('Loading JSON...');
+    expect(labelText())
+      .withContext(
+        'label updated from "Loading JSON..." to "Downloading JSON..." for clearer phase semantic',
+      )
+      .toBe('Downloading JSON...');
+    expect(bar()).withContext('bar is visible during the download stage').not.toBeNull();
   });
 
-  it('hides the splash when kind transitions back to null', () => {
+  it('renders the "Rendering tree..." label and HIDES the bar when renderPending is true', () => {
+    kindSignal.set(null);
+    renderPendingSignal.set(true);
+    fixture.detectChanges();
+    expect(splash())
+      .withContext('splash stays visible during the render-pending stage')
+      .not.toBeNull();
+    expect(labelText()).toBe('Rendering tree...');
+    expect(bar())
+      .withContext(
+        'bar is intentionally hidden during render-pending - no honest progress signal to show, and a pinned-at-100% bar reads as stuck',
+      )
+      .toBeNull();
+  });
+
+  it('renderPending takes precedence over kind for label selection', () => {
+    // Defensive: even if kind is somehow non-null while renderPending
+    // is true (a state the service should never produce), the label
+    // derives from renderPending first.
+    kindSignal.set('blob');
+    renderPendingSignal.set(true);
+    fixture.detectChanges();
+    expect(labelText()).toBe('Rendering tree...');
+    expect(bar())
+      .withContext('barVisible = visible && !renderPending; renderPending takes precedence')
+      .toBeNull();
+  });
+
+  it('hides the splash when both kind transitions back to null and renderPending stays false', () => {
     kindSignal.set('jotjson');
     fixture.detectChanges();
     expect(splash()).not.toBeNull();
     kindSignal.set(null);
     fixture.detectChanges();
     expect(splash()).toBeNull();
+  });
+
+  it('hides the splash when renderPending transitions from true to false (final hide)', () => {
+    renderPendingSignal.set(true);
+    fixture.detectChanges();
+    expect(splash()).not.toBeNull();
+    renderPendingSignal.set(false);
+    fixture.detectChanges();
+    expect(splash())
+      .withContext('after markBlobRenderComplete the splash should be removed from the DOM')
+      .toBeNull();
   });
 
   it('exposes role="status" and aria-live="polite" for assistive tech', () => {
@@ -86,6 +134,14 @@ describe('LoadingSplashComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.jot-splash__bar')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.jot-splash__logo')).not.toBeNull();
+  });
+
+  it('keeps the logo present during the render-pending stage even though the bar is hidden', () => {
+    renderPendingSignal.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.jot-splash__logo'))
+      .withContext('logo is the visual anchor during the render-pending stage')
+      .not.toBeNull();
   });
 
   describe('progress binding', () => {
