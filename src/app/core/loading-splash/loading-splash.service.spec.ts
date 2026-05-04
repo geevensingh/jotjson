@@ -97,26 +97,118 @@ describe('LoadingSplashService', () => {
     expect(logger.event).not.toHaveBeenCalled();
   });
 
-  it('first nav to /s/:slug shows "blob" through resolver, then null + renderPending=true on End', () => {
+  it('first nav to /s/:slug shows "blob" through resolver; bytesComplete enters render-pending', () => {
     const service = init('/s/abc');
     start(1, '/s/abc');
     expect(service.kind()).toBe('blob');
-    end(1, '/s/abc');
-    expect(service.kind())
-      .withContext('kind clears on settle so the bar hides for the render-pending stage')
-      .toBeNull();
     expect(service.renderPending())
-      .withContext('first cold-boot blob NavigationEnd enters render-pending stage')
+      .withContext('render-pending only enters on markBlobBytesComplete, not on NavigationStart')
+      .toBeFalse();
+    // Resolver receives bytesComplete from BlobService BEFORE the
+    // synchronous JSON.parse runs. This is the canonical entry
+    // trigger for the render-pending stage.
+    service.markBlobBytesComplete();
+    expect(service.kind())
+      .withContext('kind clears so the bar hides for the render-pending stage')
+      .toBeNull();
+    expect(service.renderPending()).toBeTrue();
+    // NavigationEnd then preserves render-pending and lets the
+    // first-nav-complete latch fire normally.
+    end(1, '/s/abc');
+    expect(service.kind()).toBeNull();
+    expect(service.renderPending())
+      .withContext('NavigationEnd preserves render-pending so HomeComponent can paint')
       .toBeTrue();
     expect(logger.event)
       .withContext('telemetry only emits on the eventual paint, not on entering the stage')
       .not.toHaveBeenCalled();
   });
 
+  it('NavigationEnd of a blob nav without preceding bytesComplete does NOT enter render-pending', () => {
+    // Defensive: with the v0.10.7 fix, render-pending is only entered
+    // by markBlobBytesComplete. If a future code path ever lands a
+    // NavigationEnd for /s/:slug without bytesComplete firing first,
+    // the splash should hide cleanly rather than stick on "Rendering
+    // tree..." indefinitely.
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    expect(service.kind()).toBe('blob');
+    end(1, '/s/abc');
+    expect(service.kind()).toBeNull();
+    expect(service.renderPending()).toBeFalse();
+    expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  it('markBlobBytesComplete from kind=blob enters render-pending and clears progress', () => {
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    service.reportBlobProgress(750, 1000);
+    expect(service.kind()).toBe('blob');
+    expect(service.progress()).toBe(0.75);
+    service.markBlobBytesComplete();
+    expect(service.kind())
+      .withContext('kind clears so the splash bar hides during render-pending')
+      .toBeNull();
+    expect(service.renderPending()).toBeTrue();
+    expect(service.progress())
+      .withContext('progress clears so a stale fraction does not leak into a future bar')
+      .toBeNull();
+    expect(logger.event)
+      .withContext('telemetry fires on first paint, not on bytesComplete')
+      .not.toHaveBeenCalled();
+  });
+
+  it('markBlobBytesComplete is a no-op when kind is "jotjson" (bootstrap stage)', () => {
+    const service = init('/');
+    expect(service.kind()).toBe('jotjson');
+    service.markBlobBytesComplete();
+    expect(service.kind())
+      .withContext('bootstrap-stage call ignored - bytesComplete only meaningful for blob fetch')
+      .toBe('jotjson');
+    expect(service.renderPending()).toBeFalse();
+  });
+
+  it('markBlobBytesComplete is a no-op when kind is null (post-firstNavComplete)', () => {
+    const service = init('/');
+    start(1, '/');
+    end(1, '/');
+    expect(service.kind()).toBeNull();
+    // In-app navs land here: kind is null, route progress bar handles
+    // any subsequent /s/:slug nav. bytesComplete must NOT re-show the
+    // splash.
+    service.markBlobBytesComplete();
+    expect(service.kind()).toBeNull();
+    expect(service.renderPending())
+      .withContext('in-app blob fetch must not re-show the splash')
+      .toBeFalse();
+  });
+
+  it('markBlobBytesComplete is idempotent: second call is a no-op', () => {
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    service.markBlobBytesComplete();
+    expect(service.renderPending()).toBeTrue();
+    const startedAtBefore = (service as unknown as { renderPendingStartedAt: number | null })
+      .renderPendingStartedAt;
+    expect(startedAtBefore).not.toBeNull();
+    service.markBlobBytesComplete();
+    expect(service.renderPending())
+      .withContext('still pending - second call does not re-arm')
+      .toBeTrue();
+    const startedAtAfter = (service as unknown as { renderPendingStartedAt: number | null })
+      .renderPendingStartedAt;
+    expect(startedAtAfter)
+      .withContext('renderPendingStartedAt is preserved - durationMs starts from the first call')
+      .toBe(startedAtBefore);
+    expect(logger.event)
+      .withContext('no telemetry on the no-op second call')
+      .not.toHaveBeenCalled();
+  });
+
   it('markBlobRenderComplete clears renderPending and emits blob.coldBoot.firstPaint', () => {
     const service = init('/s/abc');
     start(1, '/s/abc');
-    end(1, '/s/abc');
+    service.markBlobBytesComplete();
     expect(service.renderPending()).toBeTrue();
     service.markBlobRenderComplete();
     expect(service.renderPending()).toBeFalse();
@@ -127,7 +219,11 @@ describe('LoadingSplashService', () => {
     const measurements = call.args[2] ?? {};
     expect(typeof measurements['durationMs']).toBe('number');
     expect(Number.isFinite(measurements['durationMs'])).toBeTrue();
-    expect(measurements['durationMs']).toBeGreaterThanOrEqual(0);
+    expect(measurements['durationMs'])
+      .withContext(
+        'durationMs covers bytesComplete -> first paint, including the JSON.parse window',
+      )
+      .toBeGreaterThanOrEqual(0);
   });
 
   it('markBlobRenderComplete is a no-op when renderPending is false (idempotent)', () => {
@@ -145,7 +241,7 @@ describe('LoadingSplashService', () => {
   it('two markBlobRenderComplete calls only emit telemetry once', () => {
     const service = init('/s/abc');
     start(1, '/s/abc');
-    end(1, '/s/abc');
+    service.markBlobBytesComplete();
     service.markBlobRenderComplete();
     service.markBlobRenderComplete();
     expect(logger.event).toHaveBeenCalledTimes(1);
@@ -153,16 +249,15 @@ describe('LoadingSplashService', () => {
 
   it('first nav resolver-redirect-to-/404 does NOT enter render-pending stage', () => {
     // shareBlobResolver pattern: GET 404s, resolver navigates to /404
-    // -> Cancel(1) Start(2,/404) End(2,/404). NavigationCancel of a
-    // blob nav skips the render-pending stage even though previous
-    // kind was 'blob' - there is no tree to render.
+    // -> Cancel(1) Start(2,/404) End(2,/404). No bytesComplete fired
+    // (the GET errored), so render-pending is never entered.
     const service = init('/s/abc');
     start(1, '/s/abc');
     expect(service.kind()).toBe('blob');
     cancel(1, '/s/abc');
     expect(service.kind()).toBeNull();
     expect(service.renderPending())
-      .withContext('cancel of a blob nav does NOT enter render-pending')
+      .withContext('cancel of a blob nav with no bytesComplete does NOT enter render-pending')
       .toBeFalse();
     start(2, '/404');
     expect(service.renderPending()).toBeFalse();
@@ -175,7 +270,45 @@ describe('LoadingSplashService', () => {
     expect(logger.event).not.toHaveBeenCalled();
   });
 
-  it('NavigationError on first blob nav does NOT enter render-pending stage', () => {
+  it('NavigationCancel after bytesComplete clears render-pending without telemetry', () => {
+    // Edge case: a parse error AFTER bytesComplete fires (e.g.,
+    // body bytes received but invalid JSON) causes the resolver to
+    // redirect to /404. The cancel of the original /s/:slug nav
+    // must clean up render-pending defensively.
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    service.markBlobBytesComplete();
+    expect(service.renderPending()).toBeTrue();
+    cancel(1, '/s/abc');
+    expect(service.renderPending())
+      .withContext('non-End terminal must clear render-pending if it was entered early')
+      .toBeFalse();
+    expect(logger.event)
+      .withContext('abandoned render is not a useful first-paint sample')
+      .not.toHaveBeenCalled();
+  });
+
+  it('NavigationError after bytesComplete clears render-pending without telemetry', () => {
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    service.markBlobBytesComplete();
+    expect(service.renderPending()).toBeTrue();
+    error(1, '/s/abc');
+    expect(service.renderPending()).toBeFalse();
+    expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  it('NavigationSkipped after bytesComplete clears render-pending without telemetry', () => {
+    const service = init('/s/abc');
+    start(1, '/s/abc');
+    service.markBlobBytesComplete();
+    expect(service.renderPending()).toBeTrue();
+    skipped(1, '/s/abc');
+    expect(service.renderPending()).toBeFalse();
+    expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  it('NavigationError on first blob nav with no bytesComplete does NOT enter render-pending', () => {
     const service = init('/s/abc');
     start(1, '/s/abc');
     expect(service.kind()).toBe('blob');
@@ -185,19 +318,16 @@ describe('LoadingSplashService', () => {
     expect(logger.event).not.toHaveBeenCalled();
   });
 
-  it('NavigationSkipped on first blob nav does NOT enter render-pending stage', () => {
+  it('NavigationSkipped on first blob nav with no bytesComplete does NOT enter render-pending', () => {
     // The router can fire NavigationSkipped (e.g. for an identical
-    // URL) instead of End. Like Cancel/Error, this should skip the
-    // render-pending stage - there is no first-paint signal to wait
-    // for and no tree to render.
+    // URL) instead of End. Without bytesComplete there is no tree to
+    // render, so the splash hides cleanly.
     const service = init('/s/abc');
     start(1, '/s/abc');
     expect(service.kind()).toBe('blob');
     skipped(1, '/s/abc');
     expect(service.kind()).toBeNull();
-    expect(service.renderPending())
-      .withContext('skipped blob nav skips render-pending; same as cancel/error')
-      .toBeFalse();
+    expect(service.renderPending()).toBeFalse();
     expect(logger.event).not.toHaveBeenCalled();
   });
 
@@ -212,7 +342,7 @@ describe('LoadingSplashService', () => {
   it('NavigationStart while renderPending=true clears it (user navigated away mid-render)', () => {
     const service = init('/s/abc');
     start(1, '/s/abc');
-    end(1, '/s/abc');
+    service.markBlobBytesComplete();
     expect(service.renderPending()).toBeTrue();
     // User clicks away before HomeComponent paints (e.g., quickly
     // navigates to /history). The new nav must clear render-pending
@@ -226,8 +356,9 @@ describe('LoadingSplashService', () => {
   });
 
   it('cancel/replace mid-blob-nav: render-pending fires once for surviving nav', () => {
-    // start(1,/s/foo) -> start(2,/s/bar) -> cancel(1) -> end(2)
-    // The render-pending stage must enter exactly once, on end(2).
+    // start(1,/s/foo) -> start(2,/s/bar) -> cancel(1) -> bytesComplete (for nav 2) -> end(2)
+    // The render-pending stage must enter exactly once, on
+    // bytesComplete after the surviving nav's body arrives.
     const service = init('/s/foo');
     start(1, '/s/foo');
     expect(service.kind()).toBe('blob');
@@ -240,9 +371,13 @@ describe('LoadingSplashService', () => {
     expect(service.renderPending())
       .withContext('cancel of one of multiple in-flight blob navs does not pre-fire render-pending')
       .toBeFalse();
+    service.markBlobBytesComplete();
+    expect(service.renderPending()).toBeTrue();
     end(2, '/s/bar');
     expect(service.kind()).toBeNull();
-    expect(service.renderPending()).toBeTrue();
+    expect(service.renderPending())
+      .withContext('NavigationEnd preserves render-pending so HomeComponent can paint')
+      .toBeTrue();
   });
 
   it('in-app nav to /s/:slug after first nav settles does NOT re-show the splash (Option 2)', () => {
@@ -258,11 +393,16 @@ describe('LoadingSplashService', () => {
     expect(service.renderPending())
       .withContext('render-pending only fires on first cold-boot blob nav')
       .toBeFalse();
+    // bytesComplete still fires from BlobService (it does not know
+    // whether this is cold-boot or in-app), but the splash service
+    // gates it out via the kind!=='blob' guard.
+    service.markBlobBytesComplete();
+    expect(service.renderPending())
+      .withContext('in-app bytesComplete is gated out by kind!==blob guard')
+      .toBeFalse();
     end(2, '/s/xyz');
     expect(service.kind()).toBeNull();
-    expect(service.renderPending())
-      .withContext('in-app /s/:slug NavigationEnd does NOT enter render-pending')
-      .toBeFalse();
+    expect(service.renderPending()).toBeFalse();
     expect(logger.event)
       .withContext('telemetry only fires on cold-boot first-paint, not in-app navs')
       .not.toHaveBeenCalled();
@@ -293,10 +433,15 @@ describe('LoadingSplashService', () => {
     expect(service.kind())
       .withContext('blob nav still in flight, splash should stay on blob')
       .toBe('blob');
+    service.markBlobBytesComplete();
+    expect(service.kind()).toBeNull();
+    expect(service.renderPending())
+      .withContext('bytesComplete during the in-flight blob window enters render-pending')
+      .toBeTrue();
     end(2, '/s/abc');
     expect(service.kind()).toBeNull();
     expect(service.renderPending())
-      .withContext('previous kind was blob and event was End -> render-pending')
+      .withContext('NavigationEnd preserves render-pending')
       .toBeTrue();
   });
 
@@ -311,6 +456,8 @@ describe('LoadingSplashService', () => {
     const service = init('/');
     start(1, '/s/abc?foo=bar');
     expect(service.kind()).toBe('blob');
+    service.markBlobBytesComplete();
+    expect(service.renderPending()).toBeTrue();
     end(1, '/s/abc?foo=bar');
     expect(service.kind()).toBeNull();
     expect(service.renderPending()).toBeTrue();

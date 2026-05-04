@@ -31,14 +31,16 @@ import { LoggerService } from '../telemetry/logger.service';
  *   Progress bar is determinate when the resolver is reporting
  *   fractions, indeterminate otherwise.
  * - **render-pending** (`kind === null`, `renderPending === true`):
- *   "Rendering tree..." variant. Entered when the first cold-boot
- *   blob nav settles via `NavigationEnd`; covers the synchronous
- *   change-detection pass that mounts `HomeComponent` and renders
- *   the JSON tree. The bar is intentionally HIDDEN during this
- *   stage - we have no honest progress signal to show, and a
- *   pinned-at-100% bar reads as "stuck" (the very perception this
- *   stage exists to fix). Cleared by `HomeComponent` calling
- *   `markBlobRenderComplete` after first browser paint.
+ *   "Rendering tree..." variant. Entered when `BlobService` signals
+ *   the body bytes are fully received but BEFORE the synchronous
+ *   `JSON.parse` runs (via `markBlobBytesComplete`). Covers parse +
+ *   activate + construct + CD + paint -- the heavy-work window for
+ *   huge blobs, which would otherwise be mislabelled as "Downloading
+ *   JSON..." with the bar pinned at 100%. The bar is intentionally
+ *   HIDDEN during this stage - we have no honest progress signal to
+ *   show, and a pinned-at-100% bar reads as "stuck" (the very
+ *   perception this stage exists to fix). Cleared by `HomeComponent`
+ *   calling `markBlobRenderComplete` after first browser paint.
  * - hidden (`kind === null`, `renderPending === false`): the splash
  *   is no longer in the DOM. After the first navigation terminates
  *   the in-app route progress bar takes over per Option 2 of M8 -
@@ -51,13 +53,18 @@ import { LoggerService } from '../telemetry/logger.service';
  * settles (`firstNavComplete`), the splash latches to `null` and never
  * re-appears for in-app navigations.
  *
- * **Render-pending only on NavigationEnd**: NavigationCancel /
- * NavigationError / NavigationSkipped of a blob nav goes straight to
- * `kind=null` with `renderPending` unchanged (false). This matters
- * because `share-blob.resolver.ts` redirects bad slugs to `/404` via
- * `router.navigateByUrl('/404')` which fires a NavigationCancel for
- * the original `/s/:slug` nav, not a NavigationError - and there is
- * no tree to render in that case.
+ * **Render-pending is entered by bytesComplete, not NavigationEnd**:
+ * the canonical entry trigger is `markBlobBytesComplete`, called by
+ * the share resolver when `BlobService` emits its synthetic
+ * `bytesComplete` event. NavigationEnd / Cancel / Error / Skipped
+ * never enter render-pending; they only DRIVE THE FIRST-NAV LATCH.
+ * If `markBlobBytesComplete` was already called (success path),
+ * `_renderPending` stays `true` through NavigationEnd and is cleared
+ * by `markBlobRenderComplete` on first paint. If a non-`End` terminal
+ * fires while `_renderPending === true` (e.g., resolver redirected
+ * to `/404` after parse error), the terminal branch clears
+ * `_renderPending` defensively without emitting telemetry -- an
+ * abandoned render is not a useful sample.
  *
  * **Cancel-redirect blank gap (accepted)**: on a `/s/badSlug -> /404`
  * redirect, NavigationCancel(1) fires with no further in-flight nav
@@ -87,16 +94,25 @@ export class LoadingSplashService {
 
   /**
    * `true` while the splash is held on the "Rendering tree..." label
-   * after the first cold-boot blob nav has settled via NavigationEnd
-   * but before `HomeComponent` has signalled first browser paint via
+   * after the cold-boot blob fetch's body bytes have arrived but
+   * before `HomeComponent` has signalled first browser paint via
    * `markBlobRenderComplete`. Orthogonal to {@link kind} so the kind
    * state machine doesn't have to know about render-side events.
+   *
+   * Set to `true` by `markBlobBytesComplete()` (the canonical entry
+   * trigger, called by the share resolver when `BlobService` emits
+   * `{ kind: 'bytesComplete' }` immediately before its synchronous
+   * `JSON.parse`).
    *
    * Cleared (false) by:
    * - `markBlobRenderComplete()` on first paint (the success path);
    *   emits `blob.coldBoot.firstPaint` telemetry.
    * - `NavigationStart` while `renderPending === true` (user navigated
    *   away mid-render); does NOT emit telemetry.
+   * - `NavigationCancel | NavigationError | NavigationSkipped` while
+   *   `renderPending === true` (e.g., resolver redirected to /404
+   *   after a parse error that occurred AFTER bytesComplete fired);
+   *   does NOT emit telemetry.
    *
    * Never set on subsequent navs because of the `firstNavComplete`
    * latch - in-app `/` -> `/s/:slug` is covered by the route progress
@@ -133,9 +149,10 @@ export class LoadingSplashService {
 
   /**
    * `performance.now()` timestamp captured at the moment
-   * `_renderPending` flips to `true` (i.e., the NavigationEnd of the
-   * cold-boot blob nav). Used to compute the `durationMs` measurement
-   * on the `blob.coldBoot.firstPaint` telemetry event when
+   * `_renderPending` flips to `true` (i.e., when
+   * `markBlobBytesComplete` fires for the cold-boot blob nav). Used
+   * to compute the `durationMs` measurement on the
+   * `blob.coldBoot.firstPaint` telemetry event when
    * `markBlobRenderComplete` fires. `null` whenever `_renderPending`
    * is `false`.
    */
@@ -187,7 +204,10 @@ export class LoadingSplashService {
    * established paint-barrier idiom in this repo). Clears
    * `renderPending` and emits the `blob.coldBoot.firstPaint`
    * telemetry event with a `durationMs` measurement covering the
-   * NavigationEnd -> first-paint gap.
+   * bytesComplete -> first-paint gap (which includes the synchronous
+   * JSON.parse window, the resolver's terminal handler, route
+   * activation, HomeComponent construction + change-detection, and
+   * the browser paint).
    *
    * Idempotent: a guard short-circuits when `renderPending === false`
    * so re-renders, `HomeComponent` re-instantiation across in-app
@@ -206,6 +226,36 @@ export class LoadingSplashService {
     const elapsed = startedAt !== null ? performance.now() - startedAt : 0;
     const durationMs = Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : 0;
     this.logger.event('blob.coldBoot.firstPaint', undefined, { durationMs });
+  }
+
+  /**
+   * Called by the share resolver when `BlobService` emits
+   * `{ kind: 'bytesComplete' }`, i.e., when the body bytes of the
+   * cold-boot blob fetch have fully arrived but BEFORE the
+   * synchronous `JSON.parse` runs. Transitions the splash to the
+   * render-pending stage so the bar hides and the label flips to
+   * "Rendering tree..." while the parse + activate + construct +
+   * CD + paint window proceeds. This is the canonical entry trigger
+   * for `_renderPending`.
+   *
+   * Guarded by `_kind() !== 'blob'`:
+   * - In-app navs are gated out: once `firstNavComplete` is true,
+   *   `_kind` is `null` and the route progress bar handles things.
+   * - A bootstrap-stage call (kind === 'jotjson') is gated out for
+   *   the same reason -- bytesComplete should only ever fire while
+   *   a blob fetch is in flight on the first nav.
+   * - A defensive double-call is a no-op because the first call
+   *   already cleared kind to `null`. The timer is not reset, no
+   *   telemetry is double-emitted.
+   */
+  markBlobBytesComplete(): void {
+    if (this._kind() !== 'blob') {
+      return;
+    }
+    this.renderPendingStartedAt = performance.now();
+    this._renderPending.set(true);
+    this._kind.set(null);
+    this._progress.set(null);
   }
 
   private handle(event: RouterEvent): void {
@@ -232,23 +282,22 @@ export class LoadingSplashService {
       event instanceof NavigationError ||
       event instanceof NavigationSkipped
     ) {
-      const previousKind = this._kind();
       this.inFlight.delete(event.id);
       this.inFlightBlob.delete(event.id);
       const willLatchFirstNavComplete =
         this.firstNavStarted && !this.firstNavComplete && this.inFlight.size === 0;
       if (willLatchFirstNavComplete) {
         this.firstNavComplete = true;
-        if (event instanceof NavigationEnd && previousKind === 'blob') {
-          // Enter render-pending: hide the bar and switch the label
-          // to "Rendering tree..." while HomeComponent mounts and
-          // first paints. Cleared by markBlobRenderComplete.
-          this.renderPendingStartedAt = performance.now();
-          this._renderPending.set(true);
-          this._kind.set(null);
-          this._progress.set(null);
-          return;
-        }
+      }
+      // If render-pending was entered early via markBlobBytesComplete
+      // but the route then cancelled / errored / was skipped (e.g.,
+      // the resolver redirected to /404 after a parse error fired
+      // AFTER bytesComplete), drop the pending state without emitting
+      // telemetry. NavigationEnd preserves render-pending so the
+      // success path can wait for first paint.
+      if (!(event instanceof NavigationEnd) && this._renderPending()) {
+        this._renderPending.set(false);
+        this.renderPendingStartedAt = null;
       }
       this.recomputeKind();
     }

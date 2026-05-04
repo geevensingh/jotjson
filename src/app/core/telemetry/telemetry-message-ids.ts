@@ -598,10 +598,22 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           re-triggering it).
    * Props: none.
    * Measurements: { durationMs: number }
-   *   - elapsed wallclock time in ms from the cold-boot blob nav's
-   *     `NavigationEnd` (when the splash entered the render-pending
-   *     stage) to the moment the double-rAF callback fires
+   *   - elapsed wallclock time in ms from `markBlobBytesComplete`
+   *     (when `BlobService` signals the body bytes have arrived,
+   *     immediately before its synchronous `JSON.parse`) to the
+   *     moment the double-rAF callback fires
    *     `markBlobRenderComplete` (i.e., the frame after first paint).
+   *     Covers the JSON.parse window + resolver finalization +
+   *     route activation + `HomeComponent` construction +
+   *     change-detection + browser paint -- the full heavy-work
+   *     window the user is actually waiting on.
+   *
+   *     Note: prior to v0.10.7 this measured `NavigationEnd` ->
+   *     first paint, which excluded the synchronous JSON.parse
+   *     (the dominant contributor on multi-MB blobs). KQL
+   *     dashboards plotting `durationMs` across the v0.10.6 ->
+   *     v0.10.7 boundary should expect a step increase.
+   *
    *     Raw value; use `percentile(durationMs, 50)` /
    *     `percentile(durationMs, 95)` in KQL to track the
    *     post-fetch render-time distribution and inform whether

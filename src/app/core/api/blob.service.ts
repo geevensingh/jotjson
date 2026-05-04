@@ -7,7 +7,17 @@ import {
   HttpResponse,
   type HttpEvent,
 } from '@angular/common/http';
-import { Observable, Subject, catchError, mergeMap, of, tap, throwError } from 'rxjs';
+import {
+  Observable,
+  Subject,
+  catchError,
+  concat,
+  defer,
+  mergeMap,
+  of,
+  tap,
+  throwError,
+} from 'rxjs';
 import { environment } from '../../../environments/environment';
 import type { BlobHighlight, CreateBlobResponse, JsonBlob } from './models';
 
@@ -22,8 +32,20 @@ export interface BlobSyncEvent {
  * Discriminated union emitted by `BlobService.getWithProgress`.
  *
  * Consumers (the share resolver) use `progress` events to drive the
- * loading splash / route progress bar and treat the terminal `blob`
- * event as the resolved value to forward to the route.
+ * loading splash / route progress bar, the `bytesComplete` event to
+ * transition the splash to "Rendering tree..." before the synchronous
+ * JSON parse runs, and the terminal `blob` event as the resolved value
+ * to forward to the route.
+ *
+ * Event ordering for a successful fetch:
+ *
+ *     progress* -> bytesComplete -> blob
+ *
+ * The `bytesComplete` event is emitted synchronously between the XHR
+ * `load` event and the `JSON.parse` call (see `getWithProgress` for
+ * why this matters for huge blobs). Consumers MUST NOT assume any
+ * specific timing between `bytesComplete` and `blob`; for multi-MB
+ * payloads they may be separated by seconds of main-thread work.
  *
  * `total` is `null` whenever the server did not (or could not) declare
  * an uncompressed body length -- typically when the deployment lacks
@@ -32,6 +54,7 @@ export interface BlobSyncEvent {
  */
 export type BlobFetchEvent =
   | { kind: 'progress'; loaded: number; total: number | null }
+  | { kind: 'bytesComplete' }
   | { kind: 'blob'; blob: JsonBlob };
 
 const BODY_LENGTH_HEADER = 'X-Jotjson-Body-Length';
@@ -79,16 +102,32 @@ export class BlobService {
    * adopts `withFetch()`, this implementation MUST be re-verified --
    * the Fetch backend has different `HttpEvent` semantics and may
    * not surface `ResponseHeader` separately.
+   *
+   * **Why `responseType: 'text'` instead of `'json'`**: with the
+   * default typed `get<JsonBlob>` overload, Angular's XHR backend
+   * calls `JSON.parse` synchronously inside the `onLoad` handler
+   * BEFORE emitting the terminal `Response` event. For a multi-MB
+   * blob the parse can take several seconds on the main thread, and
+   * during that window the consumer has already seen the last
+   * `DownloadProgress` (loaded === total) but no terminal event --
+   * so the loading splash pins at 100% under "Downloading JSON..."
+   * while the user is actually waiting on `JSON.parse`. By taking
+   * the body as text we move the parse out of Angular's emit path
+   * and can fire a synthetic `bytesComplete` event between the XHR
+   * load and our own `JSON.parse`, letting the splash transition to
+   * "Rendering tree..." while the parse runs.
    */
   getWithProgress(idOrSlug: string): Observable<BlobFetchEvent> {
+    const url = `${this.base}/${idOrSlug}`;
     let memoizedTotal: number | null = null;
     return this.http
-      .get<JsonBlob>(`${this.base}/${idOrSlug}`, {
+      .get(url, {
         observe: 'events',
         reportProgress: true,
+        responseType: 'text',
       })
       .pipe(
-        mergeMap((event: HttpEvent<JsonBlob>): Observable<BlobFetchEvent> => {
+        mergeMap((event: HttpEvent<string>): Observable<BlobFetchEvent> => {
           if (event.type === HttpEventType.ResponseHeader) {
             memoizedTotal = parseBodyLengthHeader(event.headers.get(BODY_LENGTH_HEADER));
             return of();
@@ -101,21 +140,51 @@ export class BlobService {
             });
           }
           if (event.type === HttpEventType.Response) {
-            const response = event as HttpResponse<JsonBlob>;
-            const blob = response.body;
-            if (!blob) {
+            const response = event as HttpResponse<string>;
+            const body = response.body;
+            if (!body) {
               return throwError(
                 () =>
                   new HttpErrorResponse({
                     status: response.status,
                     statusText: response.statusText,
-                    url: response.url ?? `${this.base}/${idOrSlug}`,
+                    url: response.url ?? url,
                     error: 'empty blob response body',
                   }),
               );
             }
-            this.rememberBlob(blob);
-            return of({ kind: 'blob', blob });
+            // Emit `bytesComplete` synchronously BEFORE running the
+            // parse so the loading splash can switch to the
+            // "Rendering tree..." stage and hide the bar before the
+            // main-thread JSON.parse runs. `defer` ensures the parse
+            // only runs when the downstream observer subscribes
+            // through to the second emission, which happens
+            // synchronously in the same microtask.
+            return concat(
+              of<BlobFetchEvent>({ kind: 'bytesComplete' }),
+              defer((): Observable<BlobFetchEvent> => {
+                let parsed: JsonBlob;
+                try {
+                  parsed = JSON.parse(body) as JsonBlob;
+                } catch (parseError) {
+                  const message =
+                    parseError instanceof Error
+                      ? `JSON parse failed: ${parseError.message}`
+                      : 'JSON parse failed';
+                  return throwError(
+                    () =>
+                      new HttpErrorResponse({
+                        status: response.status,
+                        statusText: response.statusText,
+                        url: response.url ?? url,
+                        error: message,
+                      }),
+                  );
+                }
+                this.rememberBlob(parsed);
+                return of({ kind: 'blob', blob: parsed });
+              }),
+            );
           }
           return of();
         }),
