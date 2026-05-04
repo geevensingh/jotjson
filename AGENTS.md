@@ -491,6 +491,21 @@ the full DoD cycle to avoid Karma port collisions.
 - All API routes that mutate or read user data require a valid Entra External ID
   token except
   the explicitly-public blob read path.
+- **Content Security Policy** - shipping as Report-Only during a production
+  observation window (see `DESIGN_SPEC.md` -> Security), then flipped to
+  enforced. Two practical rules for contributors:
+  - **Touching `src/index.html` inline `<script>` or `<style>` blocks**
+    requires running `npm run lint:csp-hashes` (also runs in `npm run lint`)
+    and pasting the new SHA-256 hash into `script-src` in
+    `staticwebapp.config.json`. The post-build `--dist` mode catches the
+    same drift against the served bytes.
+  - **Adding any new external origin** the SPA talks to (analytics
+    pipeline, identity provider, CDN, font host, image host, iframe,
+    websocket) requires updating the corresponding CSP directive
+    (`connect-src`, `frame-src`, `font-src`, `img-src`, etc.) in the
+    same change. CI's `--ci-origins` mode validates the secret-baked
+    auth and App Insights origins, but other directives are
+    contributor-enforced.
 
 ## 7. Definition of Done
 

@@ -60,6 +60,10 @@ jobs:
         id: lint-prod-patterns
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:prod-patterns
+      - name: Lint - CSP hashes (source)
+        id: lint-csp-hashes
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:csp-hashes
       - name: Lint - Prettier formatting
         id: lint-format
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
@@ -76,6 +80,7 @@ jobs:
           OUTCOME_ASCII: ${{ steps.lint-ascii.outcome }}
           OUTCOME_SPEC: ${{ steps.lint-spec-patterns.outcome }}
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
+          OUTCOME_CSP: ${{ steps.lint-csp-hashes.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
         run: |
           fail=0
@@ -99,12 +104,13 @@ jobs:
             emit "ASCII allowlist"         "$OUTCOME_ASCII"  "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
             emit "Spec patterns"           "$OUTCOME_SPEC"   "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
             emit "Production patterns"     "$OUTCOME_PROD"   "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
+            emit "CSP hashes (source)"     "$OUTCOME_CSP"    "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
             emit "Prettier formatting"     "$OUTCOME_FORMAT" "npm run format"
             echo ""
             if [ "$fail" -eq 1 ]; then
               echo "One or more lint gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 5 lint gates passed."
+              echo "All 6 lint gates passed."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts
@@ -158,6 +164,23 @@ jobs:
             exit 1
           fi
       - run: npm run build -- --configuration=production
+      - name: CSP - verify hashes against built bundle
+        # Authoritative CSP hash gate. `npm run lint:csp-hashes` only sees
+        # the source index.html; this re-runs against the bytes that will
+        # actually be served (Angular's prod builder + Beasties may mutate
+        # the inline script). Runs on every web build (push and PR) so the
+        # gate catches build-time mutations even on PRs.
+        run: node scripts/check-csp-hashes.mjs --dist
+      - name: CSP - verify origins against baked secrets
+        # Catches drift where ENTRA_AUTHORITY or
+        # APP_INSIGHTS_CONNECTION_STRING moves to a host that the CSP
+        # allowlist no longer covers. Only runs on push-to-main because
+        # the secrets are only injected then.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
+          APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.APP_INSIGHTS_CONNECTION_STRING }}
+        run: node scripts/check-csp-hashes.mjs --ci-origins
       - name: Verify build counter populated
         # The production bundle ships BUILD_INFO baked in by
         # scripts/write-build-info.mjs (a `pre*` hook on every npm
