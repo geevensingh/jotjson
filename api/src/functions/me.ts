@@ -41,10 +41,6 @@ export async function getMe(
   try {
     const doc = await readUser(principal.id);
     if (!doc) return { status: 404, jsonBody: { error: 'User not seeded' } };
-    // Coerce any legacy `historyTrackingMode` field into the new
-    // `recentlyViewedEnabled` boolean so clients never see the old
-    // shape. TODO(remove next release): no longer needed once all
-    // stored docs have been re-saved.
     const normalized: UserDocument = {
       ...doc,
       preferences: normalizeStoredPreferences(doc.preferences),

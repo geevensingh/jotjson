@@ -75,13 +75,16 @@ describe('GET /api/me', () => {
     expect(res.jsonBody).toEqual(doc);
   });
 
-  it('folds legacy defaultRuleSetIds into activeRuleSetIds on read', async () => {
+  it('defaults activeRuleSetIds to [] and strips legacy defaultRuleSetIds on read', async () => {
+    // Stale-shape stored doc carries the legacy `defaultRuleSetIds`
+    // key without canonical `activeRuleSetIds`. The wire response
+    // must default to [] and strip the legacy key. See
+    // DESIGN_SPEC.md -> Versioning -> Schema evolution.
     const stored = {
       id: 'u-1',
       preferences: {
         ...DEFAULT_PREFERENCES,
         defaultRuleSetIds: ['rs-x'],
-        activeRuleSetIds: undefined,
       },
       createdAt: 'x',
       updatedAt: 'y',
@@ -91,7 +94,7 @@ describe('GET /api/me', () => {
     const res = await getMe(makeRequest(), ctx);
     expect(res.status).toBe(200);
     const body = res.jsonBody as { preferences: Record<string, unknown> };
-    expect(body.preferences['activeRuleSetIds']).toEqual(['rs-x']);
+    expect(body.preferences['activeRuleSetIds']).toEqual([]);
     expect(body.preferences['defaultRuleSetIds']).toBeUndefined();
   });
 });

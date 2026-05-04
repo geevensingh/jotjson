@@ -44,11 +44,11 @@ export interface UserPreferences {
    *
    * Naming history: was `activeRuleSetIds` originally, renamed to
    * `defaultRuleSetIds` in M6f-5, then renamed back to
-   * `activeRuleSetIds` (issue #83). The wire surface accepts the
-   * legacy `defaultRuleSetIds` and ancient singular
-   * `defaultRuleSetId` and folds both into this array on read by
-   * `normalizeStoredPreferences`. New writes only emit
-   * `activeRuleSetIds`.
+   * `activeRuleSetIds` (issue #83). The wire surface emits only the
+   * canonical key; `normalizeStoredPreferences` strips any legacy
+   * `defaultRuleSetIds` / `defaultRuleSetId` left on stored docs and
+   * defaults to `[]` when the canonical key is missing. See
+   * DESIGN_SPEC.md -> Versioning -> Schema evolution.
    */
   activeRuleSetIds: string[];
   editorWordWrap: boolean;
@@ -74,10 +74,10 @@ export interface UserPreferences {
    *
    * Replaces the legacy `historyTrackingMode: 'save_only' | 'all_actions'`
    * preference. The wire surface no longer accepts the legacy field;
-   * stored docs that still carry `historyTrackingMode` are coerced to
-   * `recentlyViewedEnabled: true` by `normalizeStoredPreferences`
-   * (both legacy values map to true since the narrowed feature is
-   * strictly less invasive than either old mode).
+   * `normalizeStoredPreferences` strips any `historyTrackingMode` left
+   * on stored docs and defaults `recentlyViewedEnabled` to true when
+   * missing (the narrowed feature is strictly less invasive than
+   * either legacy mode, so true is the safest default).
    */
   recentlyViewedEnabled: boolean;
   /**
@@ -265,9 +265,10 @@ const ANNOTATION_UNIT_KEYS: readonly (keyof TreeDateAnnotationUnits)[] = [
 /**
  * Whitelist of accepted preference keys on the wire. Stored docs may
  * still contain legacy keys (`historyTrackingMode`, `defaultRuleSetIds`,
- * `defaultRuleSetId`) from before M5a v1-narrowing / issue #83; those
- * are folded into the new shape by `normalizeStoredPreferences` on
- * read and never round-trip through this validator.
+ * `defaultRuleSetId`) from before M5a v1-narrowing / issue #83;
+ * `normalizeStoredPreferences` strips them on read so they never
+ * round-trip through this validator. See DESIGN_SPEC.md -> Versioning
+ * -> Schema evolution.
  */
 const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'theme',
@@ -312,16 +313,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Lenient read-side coercion for stored user docs. Accepts a possibly
- * legacy `preferences` blob (one with `historyTrackingMode` instead of
- * `recentlyViewedEnabled`, or `defaultRuleSetIds` / `defaultRuleSetId`
- * instead of `activeRuleSetIds`) and returns a normalized copy with
- * only the new fields.
+ * Lenient read-side coercion for stored user docs. Strips legacy keys
+ * (`historyTrackingMode`, `defaultRuleSetIds`, `defaultRuleSetId`) so
+ * they never reach the wire, and applies defensive defaults for fields
+ * that may be missing on docs written before the field existed.
  *
  * Unlike `normalizePreferences`, this does NOT throw on unknown keys or
  * out-of-range values - stored docs were validated when written, and a
  * read-time validation failure must never break `GET /api/me`. We only
- * patch the fields that changed shape.
+ * patch the fields that need a default and strip the legacy keys.
+ *
+ * See DESIGN_SPEC.md -> Versioning -> Schema evolution for the playbook.
  */
 export function normalizeStoredPreferences(prefs: UserPreferences): UserPreferences {
   // Stored docs may include a legacy `historyTrackingMode` key that's
@@ -352,31 +354,19 @@ export function normalizeStoredPreferences(prefs: UserPreferences): UserPreferen
   view.treeDateAnnotationUnits = normalizeStoredAnnotationUnits(view.treeDateAnnotationUnits);
   view.treeHighlightColors = normalizeStoredHighlightColors(view.treeHighlightColors);
   delete view.historyTrackingMode;
-  // Stored docs written before issue #83 had `defaultRuleSetIds` (the
-  // M6f-5 name) or, even earlier, the singular `defaultRuleSetId`.
-  // Fold both legacy shapes into `activeRuleSetIds` while preserving
-  // the canonical key if it is already present (a doc that already
-  // has `activeRuleSetIds` should not be clobbered).
+  // Stored docs written before issue #83 may carry `defaultRuleSetIds`
+  // (the M6f-5 name) or, even earlier, the singular `defaultRuleSetId`.
+  // We no longer synthesize `activeRuleSetIds` from those - stale shapes
+  // default to `[]` and the user re-selects rule sets on next visit.
+  // The legacy keys are still stripped so they cannot round-trip back
+  // into a PUT.
   const legacyView = view as UserPreferences & {
     defaultRuleSetIds?: unknown;
     defaultRuleSetId?: unknown;
   };
   if (!Array.isArray(legacyView.activeRuleSetIds)) {
-    const fromLegacyArray = Array.isArray(legacyView.defaultRuleSetIds)
-      ? (legacyView.defaultRuleSetIds.filter((x) => typeof x === 'string') as string[])
-      : [];
-    const next = [...fromLegacyArray];
-    if (
-      typeof legacyView.defaultRuleSetId === 'string' &&
-      legacyView.defaultRuleSetId.length > 0 &&
-      !next.includes(legacyView.defaultRuleSetId)
-    ) {
-      next.unshift(legacyView.defaultRuleSetId);
-    }
-    legacyView.activeRuleSetIds = next;
+    legacyView.activeRuleSetIds = [];
   }
-  // Always strip the legacy keys so they cannot round-trip back into
-  // a PUT. `activeRuleSetIds` is canonical and is preserved.
   delete legacyView.defaultRuleSetIds;
   delete legacyView.defaultRuleSetId;
   return view;
@@ -607,8 +597,10 @@ export function normalizePreferences(raw: unknown): UserPreferences {
  *
  * On the wire we accept only `activeRuleSetIds`. Stored docs with
  * the legacy `defaultRuleSetIds` (post-M6f-5, pre-issue #83) or
- * the ancient singular `defaultRuleSetId` shape are folded into
- * `activeRuleSetIds` by `normalizeStoredPreferences` on read.
+ * the ancient singular `defaultRuleSetId` shape are stripped on
+ * read by `normalizeStoredPreferences`; stale stored docs missing
+ * the canonical key default to `[]`. See DESIGN_SPEC.md ->
+ * Versioning -> Schema evolution.
  */
 function normalizeActiveRuleSetIds(raw: Record<string, unknown>): string[] {
   const source = raw['activeRuleSetIds'] ?? [];

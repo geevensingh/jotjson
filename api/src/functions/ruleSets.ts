@@ -304,50 +304,25 @@ export async function deleteRuleSet(
  * changes - we don't churn `updatedAt` for users who never
  * referenced the set.
  *
- * Source-detection precedence: canonical `activeRuleSetIds`, else
- * legacy `defaultRuleSetIds` (post-M6f-5, pre-issue #83), else the
- * ancient singular `defaultRuleSetId` wrapped into a single-element
- * array. Wrapping the singular shape is the fix for an old bug
- * where docs that only carried the singular key were silently
- * skipped on delete and left dangling references.
- *
- * Writes always go to the canonical `activeRuleSetIds` key, and the
- * legacy keys are stripped so they cannot round-trip back into a
- * future read.
+ * Stale-shape stored docs (those still carrying the legacy
+ * `defaultRuleSetIds` / `defaultRuleSetId` keys) are not migrated
+ * here; the read-side strip in `normalizeStoredPreferences` handles
+ * wire hygiene, and the user's first canonical PUT will fully heal
+ * the stored doc. See DESIGN_SPEC.md -> Versioning -> Schema
+ * evolution.
  */
 async function cleanupUserReferences(userId: string, deletedSetId: string): Promise<void> {
   const user = await readUser(userId);
   if (!user) return;
-  const prefs = user.preferences as
-    | (typeof user.preferences & {
-        activeRuleSetIds?: string[];
-        // Legacy keys may still appear on stored docs that haven't
-        // been re-saved since issue #83 (and earlier shapes from
-        // before M6f-5). Mirror the migration logic from
-        // normalizeStoredPreferences here so cleanup can run before
-        // the next read-then-write cycle.
-        defaultRuleSetIds?: string[];
-        defaultRuleSetId?: string;
-      })
-    | undefined;
+  const prefs = user.preferences;
   if (!prefs) return;
-
-  let sourceArray: string[];
-  if (Array.isArray(prefs.activeRuleSetIds)) {
-    sourceArray = prefs.activeRuleSetIds;
-  } else if (Array.isArray(prefs.defaultRuleSetIds)) {
-    sourceArray = prefs.defaultRuleSetIds;
-  } else if (typeof prefs.defaultRuleSetId === 'string' && prefs.defaultRuleSetId.length > 0) {
-    sourceArray = [prefs.defaultRuleSetId];
-  } else {
-    sourceArray = [];
-  }
+  const sourceArray = Array.isArray(prefs.activeRuleSetIds) ? prefs.activeRuleSetIds : [];
   if (!sourceArray.includes(deletedSetId)) return;
 
-  const nextPrefs = { ...prefs };
-  nextPrefs.activeRuleSetIds = sourceArray.filter((id) => id !== deletedSetId);
-  delete (nextPrefs as { defaultRuleSetIds?: string[] }).defaultRuleSetIds;
-  delete (nextPrefs as { defaultRuleSetId?: string }).defaultRuleSetId;
+  const nextPrefs = {
+    ...prefs,
+    activeRuleSetIds: sourceArray.filter((id) => id !== deletedSetId),
+  };
 
   await upsertUser({
     ...user,

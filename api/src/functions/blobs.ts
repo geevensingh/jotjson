@@ -136,12 +136,6 @@ function parseIfMatch(headerValue: string | null | undefined): number | null {
  *
  * - Missing user doc / missing field -> default `true` (new-user
  *   default; the feature is on unless explicitly turned off).
- * - Legacy `historyTrackingMode` field (any value) -> coerced to
- *   `true`. Both old modes (`save_only` / `all_actions`) map to the
- *   new default; the narrowed feature is strictly less invasive than
- *   either old mode.
- *   TODO(remove next release): drop legacy handling once all stored
- *   docs have been re-saved.
  * - Read failure -> `false` (fail closed). A transient Cosmos hiccup
  *   must never silently turn tracking on for a user who opted out.
  */
@@ -156,10 +150,6 @@ async function readRecentlyViewedEnabled(
       | undefined;
     if (typeof prefs?.recentlyViewedEnabled === 'boolean') {
       return prefs.recentlyViewedEnabled;
-    }
-    if (typeof prefs?.['historyTrackingMode'] === 'string') {
-      // Both legacy values coerce to true.
-      return true;
     }
     return true;
   } catch (error) {

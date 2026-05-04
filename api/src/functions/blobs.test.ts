@@ -694,22 +694,6 @@ describe('history recording hooks (v1: viewed only)', () => {
       expect(recordEntry).not.toHaveBeenCalled();
     });
 
-    it('coerces legacy historyTrackingMode "save_only" to enabled (records)', async () => {
-      findBlob.mockResolvedValueOnce(otherOwnersBlob);
-      tryAuth.mockResolvedValueOnce({ id: 'u-1' });
-      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'save_only' } });
-      await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
-      expect(recordEntry).toHaveBeenCalledWith(expect.objectContaining({ action: 'viewed' }));
-    });
-
-    it('coerces legacy historyTrackingMode "all_actions" to enabled (records)', async () => {
-      findBlob.mockResolvedValueOnce(otherOwnersBlob);
-      tryAuth.mockResolvedValueOnce({ id: 'u-1' });
-      readUser.mockResolvedValue({ preferences: { historyTrackingMode: 'all_actions' } });
-      await getBlob(makeRequest({ params: { idOrSlug: 'abc123' } }), ctx);
-      expect(recordEntry).toHaveBeenCalledWith(expect.objectContaining({ action: 'viewed' }));
-    });
-
     it('fails closed: when readUser throws, no record is written', async () => {
       findBlob.mockResolvedValueOnce(otherOwnersBlob);
       tryAuth.mockResolvedValueOnce({ id: 'u-1' });

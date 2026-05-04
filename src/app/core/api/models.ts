@@ -74,9 +74,9 @@ export interface UserPreferences {
    * renamed to `defaultRuleSetIds` in M6f-5, then renamed back to
    * `activeRuleSetIds` (issue #83) because the toggle is plain
    * enabled/disabled - there is no separate per-document override.
-   * The wire surface accepts the legacy `defaultRuleSetIds` and
-   * ancient singular `defaultRuleSetId` and folds both into this
-   * array on read; new writes only emit `activeRuleSetIds`.
+   * The wire surface emits only this canonical key; stale stored
+   * docs default to `[]` server-side. See DESIGN_SPEC.md ->
+   * Versioning -> Schema evolution.
    */
   activeRuleSetIds: string[];
   editorWordWrap: boolean;

@@ -943,11 +943,12 @@ servers.
   deleted, the `DELETE /api/rule-sets/:id` handler strips the deleted ID
   from `activeRuleSetIds` on the user document in the same request.
   Clients refresh local prefs after a successful delete. The wire surface
-  accepts only `activeRuleSetIds`; stored user documents that still carry
-  the legacy `defaultRuleSetIds` (post-M6f-5, pre-issue #83) or
-  `defaultRuleSetId` (pre-M6f-5) fields are folded into
-  `activeRuleSetIds` on read by `normalizeStoredPreferences` and dropped
-  on next save.
+  emits only canonical `activeRuleSetIds`; `normalizeStoredPreferences`
+  strips the legacy `defaultRuleSetIds` (post-M6f-5, pre-issue #83) and
+  `defaultRuleSetId` (pre-M6f-5) keys on read so they never reach the
+  wire, and stale stored docs missing the canonical key default to `[]`.
+  See -> Versioning -> Schema evolution for the playbook used by future
+  renames.
 
 - **Engine output / `target` projection:** the formatting-rules engine
   is a pure function `evaluate(activeSets, node) -> RuleEngineResult`
@@ -1698,6 +1699,59 @@ Feedback / Planning) for the gate. Use these rules:
 The build counter and the SHA already give per-deploy resolution, so
 there is no need to bump SemVer just to mark a deploy.
 
+### Schema evolution
+
+Cosmos containers are schema-less; documents written under one code
+rev coexist with newer-shape documents in the same container. JotJSON
+handles schema changes per the rules below rather than running an
+automated migration on deploy.
+
+Three change shapes:
+
+- **Additive** (new optional field with a default). Add the default
+  on the read path (`normalizeStoredPreferences` for user prefs, the
+  equivalent normalizer for other docs). No migration needed. Old
+  docs read as the default until the next write.
+
+- **Rename or reshape**. Default playbook:
+  1. Land the rename on the wire and in storage; new writes emit
+     only the canonical shape.
+  2. Add a *read-side fold* in the appropriate normalizer that
+     translates the legacy shape into the canonical shape. Tag the
+     fold with a JSDoc note pointing back to this section and the
+     issue/milestone that introduced it.
+  3. Make the fold *self-healing on next write* where convenient
+     (e.g., the rule-set delete path already re-saves the user
+     doc; opportunistic write-back on read is acceptable but not
+     required by default - new writes naturally emit the canonical
+     shape).
+  4. Add a one-shot operator script under
+     `api/scripts/migrate-<topic>.mjs` (template:
+     `api/scripts/migrate-example.mjs`) that reads every affected
+     doc and re-saves any straggler in the legacy shape. The
+     operator runs it once after the deploy that lands the rename.
+     Optional for low-impact renames where the fold + lazy heal is
+     sufficient and the worst-case user impact is acceptable.
+  5. Track the read-side fold as a deferred item in the milestone
+     where it landed. Remove it in a follow-up once stored data is
+     verified clean (or once the impact of any remaining stragglers
+     is judged acceptable). Removing the fold means dropping any
+     synthesis of canonical-from-legacy; the *strip* of legacy keys
+     stays so they never round-trip into wire validation.
+
+- **Removal**. Treat as a rename to nothing: ship a read-side strip
+  that drops the field, optionally a one-shot script, then remove
+  the strip once Cosmos is clean.
+
+Out of scope (for v1):
+
+- **`schemaVersion` field on stored docs.** Useful when multiple
+  developers ship migrations independently and at a scale where
+  ad-hoc handling becomes error-prone. Not yet.
+- **Automated cloud-migration runner on deploy.** SWA managed
+  Functions have no clean pre-traffic hook and Cosmos serverless
+  RU spikes during a backfill can throttle live traffic. Not yet.
+
 ### History
 
 - **Initial**: `0.5.0` (set when M7n landed, acknowledging substantial
@@ -1889,15 +1943,17 @@ there is no need to bump SemVer just to mark a deploy.
      FIFO. The editor's `pasteOccurred` output and the
      `HistoryService.recordPaste` method are removed; the
      native-paste auto-unescape behavior is preserved.~~ (done)
-   - **Read-side legacy folds (deferred)**: `normalizeStoredPreferences`
+   - ~~**Read-side legacy folds**: `normalizeStoredPreferences`
      (`api/src/shared/preferences.ts`), `readRecentlyViewedEnabled`
      (`api/src/functions/blobs.ts`), and `cleanupUserReferences`
-     (`api/src/functions/ruleSets.ts`) still tolerate the pre-narrowing
-     `historyTrackingMode`, `activeRuleSetIds`, and `defaultRuleSetId`
-     shapes on stored user/blob documents and fold them into the
-     current shape on read (and drop them on next save). These can be
-     removed in a follow-up commit once stored Cosmos data is verified
-     clean.
+     (`api/src/functions/ruleSets.ts`) used to tolerate the
+     pre-narrowing `historyTrackingMode`, `defaultRuleSetIds`, and
+     `defaultRuleSetId` shapes on stored user/blob documents and fold
+     them into the current shape on read. The folds have been removed;
+     the API now strips the legacy keys for wire hygiene and defaults
+     stale-shape `activeRuleSetIds` to `[]`. The schema-evolution
+     playbook used by future renames is in -> Versioning -> Schema
+     evolution.~~ (done)
 6. **Formatting rules** - Rule set CRUD API, rule builder UI, tree view integration, built-in presets. Broken into nine sub-milestones:
    - ~~**M6a**: Spec finalization (round 1). Close the first batch of
      cross-cutting design questions (storage shape, limits config,

@@ -634,6 +634,13 @@ Before finishing a task:
   casual user override** (e.g., "just do it", "skip the plan", "no
   need to plan"). The only bypass is the narrow direct-command
   carve-out below.
+- **Plans that change the shape of a Cosmos document must specify a
+  schema-evolution approach.** Renames, removals, reshapes, and
+  additions of stored fields each have a defined playbook in
+  `DESIGN_SPEC.md` -> Versioning -> Schema evolution. The plan must
+  state which shape the change is and which playbook step it lands at
+  (e.g., "rename, step 1 + step 2: land canonical shape and add
+  read-side fold").
 - **Plans involving meaningful UI changes must include a mockup.**
   Any plan that proposes new components, new visual elements,
   modified layouts, modified interaction patterns, or new

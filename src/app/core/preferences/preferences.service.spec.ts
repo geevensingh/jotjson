@@ -169,10 +169,14 @@ describe('PreferencesService', () => {
     expect(prefs['historyTrackingMode']).toBeUndefined();
     expect(prefs['defaultRuleSetIds']).toBeUndefined();
     expect(prefs['defaultRuleSetId']).toBeUndefined();
-    // recentlyViewedEnabled defaults to true rather than being coerced
-    // from the legacy key (the API normalizes stored docs on read).
+    // recentlyViewedEnabled defaults to true; the API strips
+    // `historyTrackingMode` on read but does not synthesize a value
+    // from it - the boolean default comes from DEFAULT_PREFERENCES.
     expect(prefs.recentlyViewedEnabled).toBe(DEFAULT_PREFERENCES.recentlyViewedEnabled);
-    // The legacy array shape is folded into the canonical key.
+    // The legacy array shape is folded by the frontend
+    // `mergeWithDefaults` (defense-in-depth for stale localStorage);
+    // the API itself no longer folds rule-set IDs - it strips legacy
+    // keys and defaults `activeRuleSetIds` to [].
     expect(prefs.activeRuleSetIds).toEqual(['rs-stale-array']);
   });
 

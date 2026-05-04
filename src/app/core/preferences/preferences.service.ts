@@ -93,10 +93,13 @@ function resolveEffectiveTheme(pref: UserPreferences['theme']): 'dark' | 'light'
  *    `defaultRuleSetIds`, `defaultRuleSetId`) that would otherwise leak
  *    back to the API on the next PUT and get rejected as unknown.
  *
- * Migrates the legacy `defaultRuleSetIds` (array) and ancient
- * `defaultRuleSetId` (single string) into the canonical
- * `activeRuleSetIds`. Canonical wins if both are present, so users who
- * already have the new shape in localStorage are not clobbered.
+ * The legacy rule-set fold (`defaultRuleSetIds` / `defaultRuleSetId` ->
+ * `activeRuleSetIds`) is retained here as defense-in-depth for stale
+ * `localStorage` shapes cached by anonymous users before the renames.
+ * The API itself no longer folds; it strips and defaults to `[]`. A
+ * full removal of the localStorage fold would need a separate audit
+ * of cached anon shapes (out of scope for the API-side cleanup). See
+ * DESIGN_SPEC.md -> Versioning -> Schema evolution.
  */
 function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
   const remoteColors: PartialTreeHighlightColors = remote.treeHighlightColors ?? {};

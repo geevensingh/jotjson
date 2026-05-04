@@ -409,24 +409,13 @@ describe('normalizeStoredPreferences', () => {
     return base;
   }
 
-  it('coerces legacy historyTrackingMode="save_only" to recentlyViewedEnabled=true', () => {
+  it('strips legacy historyTrackingMode and defaults missing recentlyViewedEnabled to true', () => {
+    // Stale-shape stored docs may carry the pre-narrowing
+    // historyTrackingMode key. We strip it for wire hygiene; the
+    // missing recentlyViewedEnabled defaults to the new-feature
+    // default of true via the existing missing-field fallback.
     const stored = storedWithoutRecentlyViewed();
     stored['historyTrackingMode'] = 'save_only';
-    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
-    expect(result.recentlyViewedEnabled).toBe(true);
-    expect((result as { historyTrackingMode?: unknown }).historyTrackingMode).toBeUndefined();
-  });
-
-  it('coerces legacy historyTrackingMode="all_actions" to recentlyViewedEnabled=true', () => {
-    const stored = storedWithoutRecentlyViewed();
-    stored['historyTrackingMode'] = 'all_actions';
-    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
-    expect(result.recentlyViewedEnabled).toBe(true);
-  });
-
-  it('defaults malformed legacy historyTrackingMode strings to recentlyViewedEnabled=true', () => {
-    const stored = storedWithoutRecentlyViewed();
-    stored['historyTrackingMode'] = 'garbage';
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
     expect(result.recentlyViewedEnabled).toBe(true);
     expect((result as { historyTrackingMode?: unknown }).historyTrackingMode).toBeUndefined();
@@ -562,36 +551,7 @@ describe('normalizeStoredPreferences', () => {
     expect(result.treeDateAnnotationFriendlyForms).toBe(false);
   });
 
-  it('folds legacy defaultRuleSetIds (array) into activeRuleSetIds', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
-    delete stored['activeRuleSetIds'];
-    stored['defaultRuleSetIds'] = ['rs-1', 'rs-2'];
-    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
-    expect(result.activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
-    expect((result as { defaultRuleSetIds?: unknown }).defaultRuleSetIds).toBeUndefined();
-  });
-
-  it('folds ancient defaultRuleSetId (singular) into activeRuleSetIds', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
-    delete stored['activeRuleSetIds'];
-    stored['defaultRuleSetId'] = 'rs-1';
-    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
-    expect(result.activeRuleSetIds).toEqual(['rs-1']);
-    expect((result as { defaultRuleSetId?: unknown }).defaultRuleSetId).toBeUndefined();
-  });
-
-  it('canonical activeRuleSetIds wins over legacy defaultRuleSetIds when both are present', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
-    stored['activeRuleSetIds'] = ['canonical-1'];
-    stored['defaultRuleSetIds'] = ['legacy-1', 'legacy-2'];
-    stored['defaultRuleSetId'] = 'ancient-1';
-    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
-    expect(result.activeRuleSetIds).toEqual(['canonical-1']);
-    expect((result as { defaultRuleSetIds?: unknown }).defaultRuleSetIds).toBeUndefined();
-    expect((result as { defaultRuleSetId?: unknown }).defaultRuleSetId).toBeUndefined();
-  });
-
-  it('strips legacy keys even when activeRuleSetIds is canonical', () => {
+  it('strips legacy keys when activeRuleSetIds is canonical', () => {
     const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     stored['activeRuleSetIds'] = ['rs-1'];
     stored['defaultRuleSetIds'] = ['stale'];
@@ -602,21 +562,21 @@ describe('normalizeStoredPreferences', () => {
     expect((result as { defaultRuleSetId?: unknown }).defaultRuleSetId).toBeUndefined();
   });
 
-  it('combines both legacy shapes when canonical is missing (singular leads, then array)', () => {
-    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
-    delete stored['activeRuleSetIds'];
-    stored['defaultRuleSetIds'] = ['rs-2'];
-    stored['defaultRuleSetId'] = 'rs-1';
-    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
-    expect(result.activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
-  });
-
-  it('does not duplicate when singular legacy id already appears in legacy array', () => {
+  it('defaults activeRuleSetIds to [] and strips legacy keys when canonical is missing', () => {
+    // Stale-shape stored docs that pre-date issue #83 may carry the
+    // legacy `defaultRuleSetIds` (M6f-5 name) or `defaultRuleSetId`
+    // (pre-M6f-5 singular) keys without the canonical
+    // `activeRuleSetIds`. We default to [] (the user re-selects on
+    // next visit) and strip the legacy keys for wire hygiene rather
+    // than synthesizing the canonical key from them. See
+    // DESIGN_SPEC.md -> Versioning -> Schema evolution.
     const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
     delete stored['activeRuleSetIds'];
     stored['defaultRuleSetIds'] = ['rs-1', 'rs-2'];
-    stored['defaultRuleSetId'] = 'rs-1';
+    stored['defaultRuleSetId'] = 'rs-3';
     const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
-    expect(result.activeRuleSetIds).toEqual(['rs-1', 'rs-2']);
+    expect(result.activeRuleSetIds).toEqual([]);
+    expect((result as { defaultRuleSetIds?: unknown }).defaultRuleSetIds).toBeUndefined();
+    expect((result as { defaultRuleSetId?: unknown }).defaultRuleSetId).toBeUndefined();
   });
 });
