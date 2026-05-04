@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, Injector } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { PreferencesNotificationService } from './core/preferences/preferences-notification.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import { LoadingSplashService } from './core/loading-splash/loading-splash.service';
 import { NavigationProgressService } from './core/navigation/navigation-progress.service';
@@ -38,6 +39,14 @@ export class AppComponent implements OnInit {
   // URL peek already set it), keeps it through the resolver wait, and
   // latches kind=null once the first nav settles.
   private readonly loadingSplash = inject(LoadingSplashService);
+
+  // Eagerly inject so the conflict-toast subscription is alive before
+  // the user can possibly trigger a 412 from PreferencesService. The
+  // service subscribes to PreferencesService.events$ in its
+  // constructor; if it were lazy, conflict events fired during
+  // bootstrap (e.g. cross-tab race during initial sign-in seed) would
+  // be missed because Subjects don't replay.
+  private readonly preferencesNotifications = inject(PreferencesNotificationService);
 
   ngOnInit(): void {
     // Note: returning-redirect handling and `AuthService.userSignal`

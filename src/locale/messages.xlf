@@ -9,6 +9,10 @@
           <context context-type="linenumber">57</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/preferences/preferences-notification.service.ts</context>
+          <context context-type="linenumber">47</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
           <context context-type="linenumber">30</context>
         </context-group>
@@ -147,6 +151,13 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/rule-sets-toolbar.component.ts</context>
           <context context-type="linenumber">119</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="preferences.changedElsewhere" datatype="html">
+        <source>Preferences were changed in another window. Reverted to the latest version.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/preferences/preferences-notification.service.ts</context>
+          <context context-type="linenumber">46</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.autoDeleted.toast" datatype="html">

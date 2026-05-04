@@ -1098,9 +1098,9 @@ for setup. The bypass cannot engage in any Azure-hosted environment.
 | GET | `/api/blobs/:id` | Optional | Get a blob by UUID or slug. Public / unlisted blobs do not require auth; owner-only blobs (post-v1) will. |
 | PUT | `/api/blobs/:id` | Required (owner) | Update a blob's content, title, `isPublic` flag, or manual highlights |
 | DELETE | `/api/blobs/:id` | Required (owner) | Delete a blob |
-| GET | `/api/me` | Required | Read the current user document. Returns 404 if not yet seeded. |
-| POST | `/api/me` | Required | First-time seed: create the user document from the request body (typically the anon user's local preferences). Idempotent; 409 if already seeded. |
-| PUT | `/api/me/preferences` | Required | Replace the preferences object with a validated + normalized copy. Returns the normalized preferences. |
+| GET | `/api/me` | Required | Read the current user document. Returns 404 if not yet seeded. Response carries `ETag: "<version>"`. |
+| POST | `/api/me` | Required | First-time seed: create the user document from the request body (typically the anon user's local preferences). Idempotent; 409 if already seeded. Response carries `ETag: "<version>"`. |
+| PUT | `/api/me/preferences` | Required | Replace the preferences object with a validated + normalized copy. Requires `If-Match: "<version>"` (400 if missing/malformed, 404 if user not seeded, 412 on stale). Returns the normalized preferences and a fresh `ETag`. |
 
 ### Planned endpoints (later milestones / post-v1)
 
@@ -1138,11 +1138,19 @@ every blob PUT as `If-Match: "<version>"`. Missing or malformed
 Failed**. On 412, the client refetches, surfaces the conflict, and rebases
 or prompts before retrying rather than silently clobbering another tab.
 
-RuleSets use the same client-facing numeric `version` / strong `ETag` /
-`If-Match` contract (see Formatting Rules Page -> Concurrency). Blob
-writes also pass Cosmos DB's `_etag` as a server-internal `IfMatch`
-precondition on replace so the update is atomically guarded even if two
-writers race after reading the same version.
+RuleSets and the user document use the same client-facing numeric
+`version` / strong `ETag` / `If-Match` contract (see Formatting Rules
+Page -> Concurrency, and `PUT /api/me/preferences`). Every Cosmos
+`replace` in the API workspace goes through the
+`replaceWithIfMatch` helper in `api/src/shared/cosmos.ts`, which
+combines the client-facing version bump with Cosmos's internal
+`_etag` `IfMatch` precondition so the update is atomically guarded
+even if two writers race after reading the same version.
+`scripts/check-prod-patterns.mjs` enforces this structurally: direct
+`.item(...).replace(...)` calls are banned outside the helper, and
+`.upsert(...)` is banned in `api/src/`. The helper plus the lint
+tripwires together make IfMatch protection the default for every
+`VersionedDocument`.
 
 ### Validation Rules
 - Max raw blob content size: **1,000,000 UTF-8 bytes** (free tier).
@@ -1691,6 +1699,13 @@ Feedback / Planning) for the gate. Use these rules:
   compatible. Edit `package.json` in the same commit.
 - **Major** (`X+1.0.0`): breaking change, or the v1.0.0 cutover.
   This is a user call - surface to the user before bumping.
+
+  **Pre-1.0 carve-out**: while the project is pre-1.0, follow
+  standard SemVer convention and apply breaking changes as **minor**
+  bumps instead. The major-on-breaking rule kicks in only once we
+  cut 1.0. Pre-1.0 breaking changes still require an explicit
+  history entry calling out the wire-level change so deploys can be
+  tracked.
 - **No bump**: refactors, tests, docs, deps, build/CI infrastructure,
   telemetry plumbing, dev-only changes - anything that doesn't alter
   user-visible behavior. State "no bump" in the response so the
@@ -1826,6 +1841,29 @@ Out of scope (for v1):
   counted twice in the toolbar pill count chip. Inline icons and
   ancestor badges were unaffected (the descendant Set already
   deduped); only pill counts over-reported.
+- **0.11.0**: Cosmos etag-by-default - every Cosmos `replace` in the
+  API workspace now goes through the shared
+  `replaceWithIfMatch` helper in `api/src/shared/cosmos.ts`, which
+  combines a client-facing `version` bump with Cosmos's internal
+  `_etag` `IfMatch` precondition. `lint:prod-patterns` enforces this
+  structurally: `.item(...).replace(...)` outside the helper and
+  `.upsert(...)` anywhere in `api/src/` are now lint failures.
+  `UserDocument` becomes a `VersionedDocument` (additive `version`
+  field, defaulted to `1` on read for legacy docs). The
+  `upsertUser` shared helper is replaced with
+  `createUser` / `replaceUser`. `POST /api/me` now honors the 409
+  contract for racing first-seed POSTs by relying on Cosmos
+  `items.create()` instead of upsert. **Breaking wire change**:
+  `PUT /api/me/preferences` now requires `If-Match: "<version>"`;
+  missing/malformed -> 400, no user doc seeded -> 404, stale
+  version -> 412. `GET /api/me`, `POST /api/me`, and successful
+  `PUT /api/me/preferences` responses carry a strong `ETag` header.
+  The frontend `PreferencesService` threads etags end-to-end,
+  serializes in-flight writes (at most one PUT in flight; queued
+  tail re-fires with the fresh etag on response), and surfaces a
+  "Preferences were changed in another window" snackbar via a new
+  `PreferencesNotificationService` on 412. Pre-1.0 carve-out
+  applies (breaking change shipped as minor; see Versioning).
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

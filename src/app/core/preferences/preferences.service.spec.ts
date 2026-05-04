@@ -1,9 +1,14 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError, Subject } from 'rxjs';
 import { signal } from '@angular/core';
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { PreferencesService, DEFAULT_PREFERENCES } from './preferences.service';
 import { AuthService } from '../auth/auth.service';
-import { UserApiService } from '../api/user-api.service';
+import {
+  UserApiService,
+  type PreferencesWithEtag,
+  type UserWithEtag,
+} from '../api/user-api.service';
 import { LoggerService } from '../telemetry/logger.service';
 import type { User, UserPreferences } from '../api/models';
 
@@ -21,20 +26,25 @@ class AuthServiceStub {
 }
 
 class UserApiServiceStub {
-  getMe = jasmine.createSpy('getMe').and.returnValue(of<User | null>(null));
+  getMe = jasmine.createSpy('getMe').and.returnValue(of<UserWithEtag | null>(null));
   seed = jasmine.createSpy('seed').and.callFake((prefs: UserPreferences) =>
-    of<User>({
-      id: 'u-1',
-      displayName: 'Test',
-      email: 'x@y.z',
-      createdAt: 't',
-      plan: 'free',
-      preferences: prefs,
+    of<UserWithEtag>({
+      user: {
+        id: 'u-1',
+        displayName: 'Test',
+        email: 'x@y.z',
+        createdAt: 't',
+        plan: 'free',
+        preferences: prefs,
+      },
+      etag: '"1"',
     }),
   );
   putPreferences = jasmine
     .createSpy('putPreferences')
-    .and.callFake((p: UserPreferences) => of<UserPreferences>(p));
+    .and.callFake((p: UserPreferences, _ifMatch: string) =>
+      of<PreferencesWithEtag>({ preferences: p, etag: '"2"' }),
+    );
 }
 
 function makeUser(overrides: Partial<UserPreferences> = {}): User {
@@ -46,6 +56,13 @@ function makeUser(overrides: Partial<UserPreferences> = {}): User {
     plan: 'free',
     preferences: { ...DEFAULT_PREFERENCES, ...overrides },
   };
+}
+
+function makeUserResponse(
+  overrides: Partial<UserPreferences> = {},
+  etag: string | null = '"1"',
+): UserWithEtag {
+  return { user: makeUser(overrides), etag };
 }
 
 type PartialTreeHighlightColors = {
@@ -199,7 +216,7 @@ describe('PreferencesService', () => {
       preferences: remoteRaw as unknown as UserPreferences,
     };
     const svc = TestBed.inject(PreferencesService);
-    api.getMe.and.returnValue(of(user));
+    api.getMe.and.returnValue(of({ user, etag: '"1"' }));
     auth.signInAs('u-1');
     TestBed.flushEffects();
     await svc.__waitForSync();
@@ -264,7 +281,7 @@ describe('PreferencesService', () => {
       } as UserPreferences['treeHighlightColors'],
     };
     const svc = TestBed.inject(PreferencesService);
-    api.getMe.and.returnValue(of(makeUser(partial)));
+    api.getMe.and.returnValue(of(makeUserResponse(partial)));
     auth.signInAs('u-1');
     TestBed.flushEffects();
     await svc.__waitForSync();
@@ -309,7 +326,7 @@ describe('PreferencesService', () => {
       } as UserPreferences['treeDateAnnotationUnits'],
     };
     const svc = TestBed.inject(PreferencesService);
-    api.getMe.and.returnValue(of(makeUser(partial)));
+    api.getMe.and.returnValue(of(makeUserResponse(partial)));
     auth.signInAs('u-1');
     TestBed.flushEffects();
     await svc.__waitForSync();
@@ -518,7 +535,7 @@ describe('PreferencesService', () => {
 
     it('sign-in hydration emits init-sourced events for remote preference diffs', async () => {
       const svc = TestBed.inject(PreferencesService);
-      api.getMe.and.returnValue(of(makeUser({ theme: 'dark', editorFontSize: 18 })));
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'dark', editorFontSize: 18 })));
 
       auth.signInAs('u-1');
       TestBed.flushEffects();
@@ -539,7 +556,7 @@ describe('PreferencesService', () => {
 
     it('sign-out reset emits init-sourced events for non-default current prefs', async () => {
       const svc = TestBed.inject(PreferencesService);
-      api.getMe.and.returnValue(of(makeUser({ theme: 'dark', editorFontSize: 18 })));
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'dark', editorFontSize: 18 })));
       auth.signInAs('u-1');
       TestBed.flushEffects();
       await svc.__waitForSync();
@@ -740,7 +757,7 @@ describe('PreferencesService', () => {
           },
         },
       };
-      api.getMe.and.returnValue(of(makeUser(customized)));
+      api.getMe.and.returnValue(of(makeUserResponse(customized)));
       auth.signInAs('u-1');
       TestBed.flushEffects();
       await svc.__waitForSync();
@@ -759,7 +776,7 @@ describe('PreferencesService', () => {
       jasmine.clock().install();
       try {
         const svc = TestBed.inject(PreferencesService);
-        api.getMe.and.returnValue(of(makeUser()));
+        api.getMe.and.returnValue(of(makeUserResponse()));
         auth.signInAs('u-1');
         TestBed.flushEffects();
         await svc.__waitForSync();
@@ -794,7 +811,7 @@ describe('PreferencesService', () => {
       const svc = TestBed.inject(PreferencesService);
       svc.update({ theme: 'dark', editorFontSize: 20 });
       TestBed.flushEffects();
-      api.getMe.and.returnValue(of(makeUser({ theme: 'light', editorFontSize: 16 })));
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'light', editorFontSize: 16 })));
       auth.signInAs('u-1');
       TestBed.flushEffects();
       const end = await svc.__waitForSync();
@@ -829,7 +846,7 @@ describe('PreferencesService', () => {
 
     it('clears previous user prefs from localStorage and resets on sign-out', async () => {
       const svc = TestBed.inject(PreferencesService);
-      api.getMe.and.returnValue(of(makeUser({ theme: 'light', editorFontSize: 22 })));
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'light', editorFontSize: 22 })));
       auth.signInAs('u-1');
       TestBed.flushEffects();
       await svc.__waitForSync();
@@ -851,7 +868,7 @@ describe('PreferencesService', () => {
       jasmine.clock().install();
       try {
         const svc = TestBed.inject(PreferencesService);
-        api.getMe.and.returnValue(of(makeUser()));
+        api.getMe.and.returnValue(of(makeUserResponse()));
         auth.signInAs('u-1');
         TestBed.flushEffects();
         await svc.__waitForSync();
@@ -869,7 +886,7 @@ describe('PreferencesService', () => {
 
     it('ignores in-flight hydration results when the user changes', async () => {
       const svc = TestBed.inject(PreferencesService);
-      const slow = new Subject<User | null>();
+      const slow = new Subject<UserWithEtag | null>();
       api.getMe.and.returnValue(slow.asObservable());
       auth.signInAs('u-1');
       TestBed.flushEffects();
@@ -877,10 +894,159 @@ describe('PreferencesService', () => {
       auth.signOut();
       TestBed.flushEffects();
       // Late response for user u-1 must be ignored.
-      slow.next(makeUser({ theme: 'light' }));
+      slow.next(makeUserResponse({ theme: 'light' }));
       slow.complete();
       expect(svc.syncState()).toBe('anon');
       expect(svc.prefs()).toEqual(DEFAULT_PREFERENCES);
+    });
+
+    it('threads the latest etag from getMe -> putPreferences', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUserResponse({}, '"7"')));
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences).toHaveBeenCalledTimes(1);
+        const ifMatch = api.putPreferences.calls.mostRecent().args[1];
+        expect(ifMatch).toBe('"7"');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('threads the latest etag from a successful PUT into the next PUT', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUserResponse({}, '"1"')));
+        // Each successive PUT returns an incrementing etag.
+        let nextEtag = 2;
+        api.putPreferences.and.callFake((p: UserPreferences) =>
+          of<PreferencesWithEtag>({ preferences: p, etag: `"${nextEtag++}"` }),
+        );
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(1);
+        expect(api.putPreferences.calls.argsFor(0)[1]).toBe('"1"');
+        // After the response handler ran synchronously, lastKnownEtag
+        // should be '"2"'. The next user edit should send "2".
+        svc.update({ editorFontSize: 18 });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(2);
+        expect(api.putPreferences.calls.argsFor(1)[1]).toBe('"2"');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('serializes in-flight writes (no second PUT until first completes)', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUserResponse({}, '"1"')));
+        // First PUT is held open via a Subject; second update arrives
+        // while the first is still in flight.
+        const firstPut = new Subject<PreferencesWithEtag>();
+        api.putPreferences.and.returnValue(firstPut.asObservable());
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(1);
+        // While the first PUT is still pending, the user makes another
+        // change. We must NOT fire a second PUT yet (would be stale
+        // IfMatch).
+        svc.update({ editorFontSize: 18 });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(1);
+        // Now the first PUT resolves with a fresh etag. The pending
+        // dirty flag should re-fire the debounce; switch the spy back
+        // to the default success behavior so the follow-up PUT can
+        // complete.
+        api.putPreferences.and.callFake((p: UserPreferences) =>
+          of<PreferencesWithEtag>({ preferences: p, etag: '"3"' }),
+        );
+        firstPut.next({ preferences: svc.prefs(), etag: '"2"' });
+        firstPut.complete();
+        await Promise.resolve();
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(2);
+        // The second PUT must use the FRESH etag from the first
+        // response, not the original "1".
+        expect(api.putPreferences.calls.argsFor(1)[1]).toBe('"2"');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('on 412 conflict refetches, replaces local, and emits a conflict event', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUserResponse({ theme: 'system' }, '"1"')));
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        // Subscribe to events$ before we trigger the conflict.
+        const events: Array<{ kind: string }> = [];
+        svc.events$.subscribe((event) => events.push(event));
+        // The user changes prefs; the server returns 412.
+        api.putPreferences.and.returnValue(
+          throwError(() => new HttpErrorResponse({ status: 412, statusText: 'PF' })),
+        );
+        // Next getMe (post-conflict refetch) returns server prefs that
+        // differ from the user's local copy.
+        api.getMe.and.returnValue(of(makeUserResponse({ theme: 'light' }, '"5"')));
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(api.putPreferences.calls.count()).toBe(1);
+        // Local prefs replaced with server's "light".
+        expect(svc.prefs().theme).toBe('light');
+        expect(events.length).toBe(1);
+        expect(events[0]?.kind).toBe('conflict');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('on seed 409 silently refetches via getMe and adopts server state', async () => {
+      const svc = TestBed.inject(PreferencesService);
+      // First getMe says no doc; seed races and gets 409; the recovery
+      // getMe returns the winning tab's user state.
+      api.getMe.and.returnValues(
+        of(null),
+        of(makeUserResponse({ theme: 'light', editorFontSize: 22 }, '"1"')),
+      );
+      api.seed.and.returnValue(
+        throwError(() => new HttpErrorResponse({ status: 409, statusText: 'C' })),
+      );
+      const events: Array<{ kind: string }> = [];
+      svc.events$.subscribe((event) => events.push(event));
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      const end = await svc.__waitForSync();
+      expect(end).toBe('synced');
+      expect(svc.prefs().theme).toBe('light');
+      expect(svc.prefs().editorFontSize).toBe(22);
+      // Per plan, this recovery is silent (no toast / event).
+      expect(events.length).toBe(0);
     });
   });
 

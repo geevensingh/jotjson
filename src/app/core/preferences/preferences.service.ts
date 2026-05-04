@@ -1,6 +1,7 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import type { ThemeColorSet, TreeHighlightColors, UserPreferences } from '../api/models';
 import { UserApiService } from '../api/user-api.service';
 import { AuthService } from '../auth/auth.service';
@@ -10,6 +11,14 @@ import { bucketColorHex, bucketDepth, bucketFontSize, bucketTabSize } from './pr
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const FLUSH_DEBOUNCE_MS = 500;
+
+/**
+ * Events emitted by PreferencesService for the consuming UI shell to
+ * react to (e.g., show a snackbar). Mirrors the `events$` pattern in
+ * `RuleSetsService` - core/api services do not inject `MatSnackBar`;
+ * the toast layer is the consumer's responsibility.
+ */
+export type PreferencesEvent = { kind: 'conflict' };
 
 /**
  * Preference sync lifecycle against the server:
@@ -289,8 +298,48 @@ export class PreferencesService {
   private syncGen = 0;
   private pendingFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSyncedSnapshot: string | null = null;
+  /**
+   * Strong ETag (already wrapped in quotes per RFC 7232) returned by
+   * the most recent successful GET / POST / PUT against /api/me. The
+   * next PUT threads it back as `If-Match` so the server can detect
+   * concurrent edits and return 412.
+   */
+  private lastKnownEtag: string | null = null;
+  /**
+   * In-flight write tracking. With the existing 500ms debounce, two
+   * rapid edits could otherwise produce a stale-If-Match 412:
+   *
+   *   t=0:    edit A -> debounce starts
+   *   t=500:  PUT(A, IfMatch=E1) starts; etag will become E2 on response
+   *   t=600:  edit B -> debounce restarts
+   *   t=1100: debounce fires; if PUT(A) hasn't returned, we'd PUT
+   *           again with stale IfMatch=E1 -> 412
+   *
+   * We hold at most one PUT in flight; if the user keeps editing while
+   * one is pending, set `pendingDirty = true` and re-fire the debounce
+   * once the in-flight resolves. This eliminates same-tab self-induced
+   * 412s while leaving cross-tab races to surface as real conflicts.
+   */
   private pendingWrite: Subscription | null = null;
+  /**
+   * Whether a PUT is genuinely in flight. Tracked separately from
+   * `pendingWrite` because synchronous-completion observables (the
+   * test stub uses `of(...)`) finish their `next` handler BEFORE the
+   * `.subscribe(...)` call returns the Subscription, so the order of
+   * `this.pendingWrite = ...` vs. the handler clearing it is
+   * dependent on RxJS internals. A dedicated flag is unambiguous.
+   */
+  private writeInFlight = false;
+  private pendingDirty = false;
   private lastUserId: string | null = null;
+
+  private readonly events = new Subject<PreferencesEvent>();
+  /**
+   * Emits when a write is rejected with 412 because preferences were
+   * changed in another window. Subscribers (typically the app shell)
+   * should show the user a "preferences were changed elsewhere" toast.
+   */
+  readonly events$ = this.events.asObservable();
 
   constructor() {
     effect(() => {
@@ -608,45 +657,85 @@ export class PreferencesService {
       this.applyPrefs(DEFAULT_PREFERENCES, 'init');
       this._syncState.set('anon');
       this.lastSyncedSnapshot = null;
+      this.lastKnownEtag = null;
       return;
     }
     this._syncState.set('hydrating');
     this.lastSyncedSnapshot = null;
+    this.lastKnownEtag = null;
     const localAtSignIn = structuredClone(this._prefs());
     this.api
       .getMe()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (user) => {
+        next: (response) => {
           if (gen !== this.syncGen) return;
-          if (user) {
+          if (response) {
             // Remote wins: replace local state with server copy (merged with
             // defaults so pre-existing docs missing newer fields still
             // normalize round-trip on the next write).
-            const merged = mergeWithDefaults(user.preferences);
+            const merged = mergeWithDefaults(response.user.preferences);
             this.applyPrefs(merged, 'init');
             this.lastSyncedSnapshot = JSON.stringify(merged);
+            this.lastKnownEtag = response.etag;
             this._syncState.set('synced');
           } else {
-            // First ever sign-in: seed the server with the anon user's
-            // customizations so they are not lost.
-            this.api
-              .seed(localAtSignIn)
-              .pipe(takeUntilDestroyed(this.destroyRef))
-              .subscribe({
-                next: (seeded) => {
-                  if (gen !== this.syncGen) return;
-                  const merged = mergeWithDefaults(seeded.preferences);
-                  this.applyPrefs(merged, 'init');
-                  this.lastSyncedSnapshot = JSON.stringify(merged);
-                  this._syncState.set('synced');
-                },
-                error: () => {
-                  if (gen !== this.syncGen) return;
-                  this._syncState.set('error');
-                },
-              });
+            this.seedAfterSignIn(localAtSignIn, gen);
           }
+        },
+        error: () => {
+          if (gen !== this.syncGen) return;
+          this._syncState.set('error');
+        },
+      });
+  }
+
+  private seedAfterSignIn(localPrefs: UserPreferences, gen: number): void {
+    // First ever sign-in: seed the server with the anon user's
+    // customizations so they are not lost. A 409 here means another
+    // tab raced us; we recover by re-reading and adopting the winning
+    // server state. Documented as accepted data loss for the rare
+    // two-tab simultaneous first-seed race - see the plan.
+    this.api
+      .seed(localPrefs)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          if (gen !== this.syncGen) return;
+          const merged = mergeWithDefaults(response.user.preferences);
+          this.applyPrefs(merged, 'init');
+          this.lastSyncedSnapshot = JSON.stringify(merged);
+          this.lastKnownEtag = response.etag;
+          this._syncState.set('synced');
+        },
+        error: (error: unknown) => {
+          if (gen !== this.syncGen) return;
+          if (error instanceof HttpErrorResponse && error.status === 409) {
+            this.recoverFromSeedConflict(gen);
+            return;
+          }
+          this._syncState.set('error');
+        },
+      });
+  }
+
+  private recoverFromSeedConflict(gen: number): void {
+    this.api
+      .getMe()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          if (gen !== this.syncGen) return;
+          if (!response) {
+            // Should not happen: 409 implied a doc exists. Treat as error.
+            this._syncState.set('error');
+            return;
+          }
+          const merged = mergeWithDefaults(response.user.preferences);
+          this.applyPrefs(merged, 'init');
+          this.lastSyncedSnapshot = JSON.stringify(merged);
+          this.lastKnownEtag = response.etag;
+          this._syncState.set('synced');
         },
         error: () => {
           if (gen !== this.syncGen) return;
@@ -677,14 +766,89 @@ export class PreferencesService {
 
   private sendWrite(value: UserPreferences, snapshot: string, gen: number): void {
     if (gen !== this.syncGen) return;
-    this.pendingWrite?.unsubscribe();
+    if (this.writeInFlight) {
+      // Already a PUT in flight. Mark the new state dirty; we'll fire
+      // a follow-up PUT once the in-flight resolves (with a fresh
+      // etag from that response). Prevents same-tab stale-IfMatch
+      // self-induced 412s.
+      this.pendingDirty = true;
+      return;
+    }
+    const ifMatch = this.lastKnownEtag;
+    if (ifMatch === null) {
+      // No etag yet (e.g., still hydrating, or 404-not-seeded). Skip.
+      // The hydrate path will seed and stamp lastKnownEtag.
+      return;
+    }
+    this.writeInFlight = true;
     this.pendingWrite = this.api
-      .putPreferences(value)
+      .putPreferences(value, ifMatch)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
+        next: (response) => {
+          this.writeInFlight = false;
           if (gen !== this.syncGen) return;
           this.lastSyncedSnapshot = snapshot;
+          this.lastKnownEtag = response.etag;
+          this.drainDirty(gen);
+        },
+        error: (error: unknown) => {
+          this.writeInFlight = false;
+          if (gen !== this.syncGen) return;
+          if (error instanceof HttpErrorResponse && error.status === 412) {
+            this.handleVersionConflict(gen);
+            return;
+          }
+          if (error instanceof HttpErrorResponse && error.status === 404) {
+            // Not seeded yet (e.g., hydrate->error path left no doc).
+            // Recover by re-running the hydrate flow.
+            this._syncState.set('error');
+            return;
+          }
+          this.pendingDirty = false;
+          this._syncState.set('error');
+        },
+      });
+  }
+
+  private drainDirty(gen: number): void {
+    if (!this.pendingDirty) return;
+    this.pendingDirty = false;
+    // Re-fire after a tick so a burst of edits naturally coalesces
+    // through the existing debounce path rather than firing back to
+    // back. The current prefs may differ from `value` we just sent;
+    // pull from the signal.
+    this.scheduleWrite(this._prefs());
+  }
+
+  private handleVersionConflict(gen: number): void {
+    // Cancel any pending debounce: the local copy is about to be
+    // replaced with the server's, so the queued write is moot.
+    if (this.pendingFlushTimer !== null) {
+      clearTimeout(this.pendingFlushTimer);
+      this.pendingFlushTimer = null;
+    }
+    this.pendingDirty = false;
+    this.api
+      .getMe()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          if (gen !== this.syncGen) return;
+          if (!response) {
+            // The doc disappeared between our PUT and this GET. Surface
+            // as an error rather than silently re-seeding - the user
+            // signed out elsewhere or the row was deleted. Hydrate
+            // will retry on next auth tick.
+            this.lastKnownEtag = null;
+            this._syncState.set('error');
+            return;
+          }
+          const merged = mergeWithDefaults(response.user.preferences);
+          this.applyPrefs(merged, 'sync');
+          this.lastSyncedSnapshot = JSON.stringify(merged);
+          this.lastKnownEtag = response.etag;
+          this.events.next({ kind: 'conflict' });
         },
         error: () => {
           if (gen !== this.syncGen) return;
@@ -700,6 +864,8 @@ export class PreferencesService {
     }
     this.pendingWrite?.unsubscribe();
     this.pendingWrite = null;
+    this.writeInFlight = false;
+    this.pendingDirty = false;
   }
 
   /** Test-only: awaits any in-flight hydration. */

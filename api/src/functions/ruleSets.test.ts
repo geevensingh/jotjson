@@ -25,12 +25,6 @@ class _RuleSetValidationError extends Error {
     this.name = 'RuleSetValidationError';
   }
 }
-class _RuleSetVersionConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'RuleSetVersionConflictError';
-  }
-}
 
 jest.mock('../shared/ruleSets', () => ({
   createRuleSet: jest.fn(),
@@ -58,12 +52,11 @@ jest.mock('../shared/ruleSets', () => ({
   MAX_RULE_SET_NAME_LENGTH: 80,
   MAX_RULE_MATCH_VALUE_LENGTH: 200,
   RuleSetValidationError: _RuleSetValidationError,
-  RuleSetVersionConflictError: _RuleSetVersionConflictError,
 }));
 
 jest.mock('../shared/users', () => ({
   readUser: jest.fn(),
-  upsertUser: jest.fn(),
+  replaceUser: jest.fn(),
 }));
 
 import { AuthError, requireAuth as requireAuthMock } from '../shared/auth';
@@ -76,9 +69,9 @@ import {
   readRuleSet as readRuleSetMock,
   replaceRuleSet as replaceRuleSetMock,
   RuleSetValidationError,
-  RuleSetVersionConflictError,
 } from '../shared/ruleSets';
-import { readUser as readUserMock, upsertUser as upsertUserMock } from '../shared/users';
+import { VersionConflictError } from '../shared/cosmos';
+import { readUser as readUserMock, replaceUser as replaceUserMock } from '../shared/users';
 import {
   deleteRuleSet,
   clonePreset,
@@ -108,7 +101,7 @@ const listRuleSetsByOwner = listRuleSetsByOwnerMock as unknown as jest.Mock;
 const readRuleSet = readRuleSetMock as unknown as jest.Mock;
 const replaceRuleSet = replaceRuleSetMock as unknown as jest.Mock;
 const readUser = readUserMock as unknown as jest.Mock;
-const upsertUser = upsertUserMock as unknown as jest.Mock;
+const replaceUser = replaceUserMock as unknown as jest.Mock;
 
 function makeRequest(
   opts: {
@@ -276,9 +269,9 @@ describe('PUT /api/rule-sets/:id', () => {
     expect(replaceRuleSet).not.toHaveBeenCalled();
   });
 
-  it('returns 412 when replaceRuleSet throws RuleSetVersionConflictError', async () => {
+  it('returns 412 when replaceRuleSet throws VersionConflictError', async () => {
     findRuleSetById.mockResolvedValueOnce(sampleSet);
-    replaceRuleSet.mockRejectedValueOnce(new RuleSetVersionConflictError('race'));
+    replaceRuleSet.mockRejectedValueOnce(new VersionConflictError('race'));
     const res = await putRuleSet(
       makeRequest({
         params: { id: 'rs-1' },
@@ -378,16 +371,17 @@ describe('DELETE /api/rule-sets/:id', () => {
     readUser.mockResolvedValueOnce({
       id: 'u-1',
       preferences: { activeRuleSetIds: ['rs-other'] },
+      version: 1,
       createdAt: 't',
       updatedAt: 't',
     });
     const res = await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
     expect(res.status).toBe(204);
     expect(deleteRuleSetById).toHaveBeenCalledWith('rs-1', 'u-1');
-    expect(upsertUser).not.toHaveBeenCalled();
+    expect(replaceUser).not.toHaveBeenCalled();
   });
 
-  it('strips the deleted ID from activeRuleSetIds', async () => {
+  it('strips the deleted ID from activeRuleSetIds via replaceUser', async () => {
     readRuleSet.mockResolvedValueOnce(sampleSet);
     deleteRuleSetById.mockResolvedValueOnce(true);
     readUser.mockResolvedValueOnce({
@@ -395,13 +389,52 @@ describe('DELETE /api/rule-sets/:id', () => {
       preferences: {
         activeRuleSetIds: ['rs-other', 'rs-1', 'rs-also'],
       },
+      version: 1,
       createdAt: 't',
       updatedAt: 't',
     });
-    upsertUser.mockResolvedValueOnce({});
+    replaceUser.mockImplementationOnce(async (existing, mutate) => {
+      const draft = { ...existing };
+      mutate(draft);
+      return { ...draft, version: existing.version + 1 };
+    });
     await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
-    const upserted = upsertUser.mock.calls[0]?.[0];
-    expect(upserted.preferences.activeRuleSetIds).toEqual(['rs-other', 'rs-also']);
+    expect(replaceUser).toHaveBeenCalledTimes(1);
+    const mutator = replaceUser.mock.calls[0]?.[1] as (draft: Record<string, unknown>) => void;
+    const draft = {
+      preferences: { activeRuleSetIds: ['rs-other', 'rs-1', 'rs-also'] as string[] },
+      updatedAt: 't',
+    };
+    mutator(draft as unknown as Record<string, unknown>);
+    expect((draft.preferences as { activeRuleSetIds: string[] }).activeRuleSetIds).toEqual([
+      'rs-other',
+      'rs-also',
+    ]);
+  });
+
+  it('retries cleanup when replaceUser hits a VersionConflictError', async () => {
+    readRuleSet.mockResolvedValueOnce(sampleSet);
+    deleteRuleSetById.mockResolvedValueOnce(true);
+    const userV1 = {
+      id: 'u-1',
+      preferences: { activeRuleSetIds: ['rs-1'] },
+      version: 1,
+      createdAt: 't',
+      updatedAt: 't',
+    };
+    const userV2 = { ...userV1, version: 2 };
+    readUser.mockResolvedValueOnce(userV1);
+    replaceUser.mockRejectedValueOnce(new VersionConflictError('race'));
+    readUser.mockResolvedValueOnce(userV2);
+    replaceUser.mockImplementationOnce(async (existing, mutate) => {
+      const draft = { ...existing };
+      mutate(draft);
+      return { ...draft, version: existing.version + 1 };
+    });
+    const res = await deleteRuleSet(makeRequest({ params: { id: 'rs-1' } }), ctx);
+    expect(res.status).toBe(204);
+    expect(readUser).toHaveBeenCalledTimes(2);
+    expect(replaceUser).toHaveBeenCalledTimes(2);
   });
 
   it('still returns 204 when preference cleanup throws', async () => {
