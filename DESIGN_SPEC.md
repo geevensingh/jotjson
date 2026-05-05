@@ -1759,6 +1759,20 @@ Feedback / Planning) for the gate. Use these rules:
   cut 1.0. Pre-1.0 breaking changes still require an explicit
   history entry calling out the wire-level change so deploys can be
   tracked.
+- **Multi-wave milestones**: when a milestone lands as a series of
+  waves in separate commits (e.g., M7g shipped via 3a, 3b, 3c, 3d,
+  3e, 3f, then M7g-final), each individual wave bumps **patch**
+  regardless of whether its content would, in isolation, warrant a
+  minor bump. Reserve a single SemVer bump (typically minor, or
+  whatever the aggregate close-out content warrants) for the
+  milestone-completion commit. This keeps mid-milestone commits
+  versioning-cheap while still emitting one user-visible "this
+  milestone shipped" signal at the end. The milestone must be
+  defined in advance (in this spec's milestone list or a session
+  plan) for the rule to apply - ad-hoc retroactive grouping does
+  not qualify. Example: M7g shipped via 3c -> 0.14.1, 3d -> 0.14.2,
+  3e -> 0.14.3, 3f -> 0.14.4 (all patches), then M7g-final -> 0.15.0
+  (minor).
 - **No bump**: refactors, tests, docs, deps, build/CI infrastructure,
   telemetry plumbing, dev-only changes - anything that doesn't alter
   user-visible behavior. State "no bump" in the response so the
