@@ -1253,6 +1253,12 @@ export class JsonTreeComponent {
    *  - Shift+F10 / ContextMenu: open the row context menu via the
    *    existing `openContextMenuAt` path, anchored at the row's
    *    bounding rect.
+   *  - Ctrl+C / Cmd+C: copy the focused row's value via
+   *    `copyValue(node, 'keyboard')`. Works on leaves, containers,
+   *    and empty containers ({} / []) alike; never alters expansion
+   *    state. Strict modifier match -- Ctrl+Shift+C, Ctrl+Alt+C, and
+   *    plain 'c' are intentionally no-ops so we don't fight devtools
+   *    or AltGr layouts.
    *
    * Printable characters are intentionally NOT handled; type-ahead
    * (D9 in plan.md / issue #108) is deferred to a follow-up wave so
@@ -1342,6 +1348,21 @@ export class JsonTreeComponent {
       case 'ContextMenu': {
         event.preventDefault();
         this.openRowContextMenuFromKeyboard(node);
+        return;
+      }
+      case 'c':
+      case 'C': {
+        // Ctrl+C / Cmd+C copies the focused row's value. Strict
+        // modifier match: Ctrl+Shift+C (devtools) and Ctrl+Alt+C
+        // (AltGr on international layouts) are intentionally NOT
+        // honored. The currentTarget !== target guard at the top of
+        // this handler already ensures `node` is the focused row,
+        // and that the search input / interactive descendants
+        // (twisty, kebab, beacon, extract pill) do not route here.
+        if (!(event.ctrlKey || event.metaKey)) return;
+        if (event.altKey || event.shiftKey) return;
+        event.preventDefault();
+        this.copyValue(node, 'keyboard');
         return;
       }
       default:
@@ -2086,17 +2107,25 @@ export class JsonTreeComponent {
    * text (no enclosing quotes for strings); for objects/arrays,
    * `JSON.stringify(value, null, 2)` (pretty, per Q1 decision).
    *
-   * `source` distinguishes menu-driven from double-click-driven invocations
-   * for telemetry; both paths use identical copy semantics.
+   * `source` distinguishes menu-driven, double-click-driven, and
+   * keyboard-driven invocations for telemetry; all paths use identical
+   * copy semantics.
    *
    * When `escaped` is true, the serialized text is wrapped with
    * `JSON.stringify(...)` -- the JSON-string-literal variant matching the
    * toolbar Copy button's Alt+click affordance (DESIGN_SPEC.md §443). This
    * lets users embed the row's value as a string in another JSON document.
+   * The Ctrl+C / Cmd+C keyboard shortcut intentionally does not honor Alt
+   * (Alt+Ctrl+C is a no-op at the keydown level), so `source === 'keyboard'`
+   * always pairs with `escaped === false`.
    */
-  copyValue(node: TreeNode, source: 'menu' | 'dblclick', escaped = false): void {
+  copyValue(node: TreeNode, source: 'menu' | 'dblclick' | 'keyboard', escaped = false): void {
     const messageId =
-      source === 'menu' ? 'tree.contextMenu.copyValue' : 'tree.row.doubleClickCopyValue';
+      source === 'menu'
+        ? 'tree.contextMenu.copyValue'
+        : source === 'dblclick'
+          ? 'tree.row.doubleClickCopyValue'
+          : 'tree.keyboard.copyValue';
     this.logger.info(messageId, { escaped });
     const raw = this.serializeNodeValueForCopy(node);
     const text = escaped ? this.jsonParser.escapeAsJsonString(raw) : raw;

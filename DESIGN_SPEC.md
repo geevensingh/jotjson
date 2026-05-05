@@ -574,6 +574,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Container rows with children** (`object` / `array`): toggle the row's expansion state (expand if collapsed, collapse if expanded). Alt is ignored on container dblclick; right-click "Copy value" remains the way to copy a container's pretty-printed JSON. Emits the `tree.row.doubleClickToggle` telemetry event with `{ action: 'expand' | 'collapse' }` (post-toggle state).
     - **Empty containers** (`{}` / `[]`): no-op (no copy, no toggle, no telemetry). They render via the leaf template since `hasChild` is false, but the dblclick handler short-circuits before reaching the copy branch so the issue #109 wording ("objects and arrays should expand/collapse instead of copying") still holds.
     - In all cases the dblclick path excludes the kebab pill and twisty toggle the same way single-click selection does, so clicking those buttons twice never triggers the row dblclick handler.
+  - **Keyboard copy (Ctrl+C / Cmd+C with tree focus)**: when a tree row has DOM focus, pressing `Ctrl+C` (Windows / Linux) or `Cmd+C` (macOS) copies that row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text for primitives, pretty-printed JSON for containers). Unlike dblclick, the keyboard shortcut works on **every row, including empty containers** (`{}` / `[]`) - the user explicitly asked for "parent or leaf" parity, and keyboard copy has no expand/collapse alternative meaning to disambiguate. Expansion state is never altered. Modifier matching is strict: `Ctrl+Shift+C` (devtools) and `Ctrl+Alt+C` (AltGr on international layouts) are intentional no-ops; Alt is not honored, so this path always emits the raw (un-escaped) variant. Emits the `tree.keyboard.copyValue` telemetry event with `{ escaped: false }`.
   - **Search highlight** - a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
     - Any row whose key or value contains the search text (case-insensitive by default) is highlighted in the **search highlight color** (theme-aware default defined in `TreeHighlightColors`).
@@ -2022,6 +2023,16 @@ Out of scope (for v1):
   existing `tree.row.doubleClickCopyValue` event now fires only for
   primitive rows. The chevron-button toggle path is intentionally
   uninstrumented for parity with pre-issue-#109 behavior.
+- **0.14.6**: Keyboard copy shortcut for the tree view. Ctrl+C / Cmd+C
+  with a tree row focused copies the focused row's value to the
+  clipboard with the same extraction semantics as the right-click
+  Copy value action (raw text for primitives, pretty-printed JSON for
+  containers). Works on leaves, containers, and empty containers
+  (`{}` / `[]`) alike - "parent or leaf" parity per the user's
+  request. Expansion state is never altered by the shortcut. Strict
+  modifier gate: Ctrl+Shift+C (devtools) and Ctrl+Alt+C (AltGr
+  layouts) are intentional no-ops. New `tree.keyboard.copyValue`
+  telemetry event with `{ escaped: false }`.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

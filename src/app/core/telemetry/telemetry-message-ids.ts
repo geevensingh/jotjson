@@ -1158,6 +1158,26 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: info
+   * Fired by: `JsonTreeComponent.copyValue` (`source === 'keyboard'`
+   *           branch), invoked from `onTreeKeydown`'s Ctrl+C / Cmd+C
+   *           case (`shared/components/json-tree/json-tree.component.ts`).
+   *           See also `tree.contextMenu.copyValue` and
+   *           `tree.row.doubleClickCopyValue`; all three share copy
+   *           semantics (raw text for primitives, pretty JSON for
+   *           containers; toast on success/failure).
+   * Props: { escaped: boolean }. Always `false` on this path -- the
+   * Ctrl+C / Cmd+C shortcut intentionally does not honor Alt for the
+   * JSON-string-literal escape variant. The prop is kept for shape
+   * parity with the other two copy events so analytics queries that
+   * group across all copy entry points stay uniform.
+   * Volume control: bounded-frequency (one user keypress per emit).
+   * Fires for any focused tree row -- leaf, container with children,
+   * or empty container ({} / []) alike. No path or content data.
+   */
+  'tree.keyboard.copyValue',
+
+  /**
+   * Severity: info
    * Fired by: `JsonTreeComponent.onBreadcrumbClick`
    *           (`shared/components/json-tree/json-tree.component.ts`)
    * Props: { depth: number; selectionUpDistance: number }. `depth`

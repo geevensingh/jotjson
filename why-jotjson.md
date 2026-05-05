@@ -160,6 +160,7 @@ strings are read as UTC or local.
   (`$`, lodash-style, `root.`, `Data.`, or none)
 - Per-row context menu: copy key / value / path, search by key / value, expand-from-here
 - Double-click a leaf row to copy its value; double-click a container to expand or collapse it
+- Press `Ctrl+C` / `Cmd+C` with a tree row focused to copy the focused row's value (works on leaves, containers, and empty containers alike)
 - Inferred type badges on every row: `uuid`, `url`, `email`, `path`, `ipv4`,
   `ipv6`, `date`, plus container item / key counts
 - Status bar: byte size, line count, cursor position, total node count, max

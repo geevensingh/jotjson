@@ -6214,4 +6214,366 @@ describe('JsonTreeComponent', () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Keyboard copy: Ctrl+C / Cmd+C with a focused tree row copies the row's
+  // value to the clipboard. Works on leaves, containers, and empty containers
+  // alike (the rubber-duck "parent or leaf" requirement). Strict modifier
+  // gate: Ctrl+Shift+C and Ctrl+Alt+C are intentional no-ops so we don't
+  // fight devtools or AltGr layouts. The `currentTarget !== target` guard
+  // at the top of `onTreeKeydown` already shields any descendant element
+  // (twisty, kebab, beacon, extract pill) and the search input (which is
+  // outside the mat-nested-tree-node anyway). Companion to the row context
+  // menu copy and the leaf-row dblclick copy paths; all three share copy
+  // semantics.
+  // ---------------------------------------------------------------------------
+  describe('keyboard copy (Ctrl+C / Cmd+C, focused tree row)', () => {
+    function withClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
+      const original = (navigator as { clipboard?: Clipboard }).clipboard;
+      const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
+      try {
+        return run();
+      } finally {
+        if (hadOwn && original) {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: original,
+          });
+        } else {
+          delete (navigator as { clipboard?: unknown }).clipboard;
+        }
+      }
+    }
+
+    type Cn = ReturnType<JsonTreeComponent['root']>;
+    function nodeAt(path: string): NonNullable<Cn> {
+      const stack: Array<NonNullable<Cn>> = [];
+      const root = cmp.root();
+      if (root) stack.push(root);
+      while (stack.length > 0) {
+        const n = stack.pop() as NonNullable<Cn>;
+        if (n.pathString === path) return n;
+        for (const c of n.children ?? []) stack.push(c);
+      }
+      throw new Error(`No node at path ${path}`);
+    }
+
+    function rowNodeEl(pathString: string): HTMLElement {
+      const el = (fixture.nativeElement as HTMLElement).querySelector(
+        `mat-nested-tree-node[data-tree-node-path="${pathString.replace(/"/g, '\\"')}"]`,
+      ) as HTMLElement | null;
+      if (!el) {
+        throw new Error(`No mat-nested-tree-node rendered for path ${pathString}`);
+      }
+      return el;
+    }
+
+    /** Dispatch a real KeyboardEvent('keydown') on the row element. */
+    function dispatchOnRow(target: HTMLElement, init: KeyboardEventInit): void {
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'c',
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        }),
+      );
+    }
+
+    it('Ctrl+C on a focused leaf row copies the raw value', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.note'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('hi');
+    });
+
+    it('Ctrl+C on a focused container row copies pretty JSON without changing expansion', async () => {
+      await createWith({ obj: { a: 1, b: 2 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      const node = nodeAt('$.obj');
+      const wasExpanded = cmp.treeControl.isExpanded(node);
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.obj'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const expected = JSON.stringify({ a: 1, b: 2 }, null, 2);
+      expect(writeText).toHaveBeenCalledWith(expected);
+      expect(cmp.treeControl.isExpanded(node))
+        .withContext('expansion state unchanged by keyboard copy')
+        .toBe(wasExpanded);
+    });
+
+    it('Ctrl+C on a focused expanded container row also copies pretty JSON without collapsing', async () => {
+      await createWith({ obj: { a: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+      const node = nodeAt('$.obj');
+      expect(cmp.treeControl.isExpanded(node)).withContext('starts expanded').toBe(true);
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.obj'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(writeText).toHaveBeenCalledWith(JSON.stringify({ a: 1 }, null, 2));
+      expect(cmp.treeControl.isExpanded(node))
+        .withContext('still expanded after keyboard copy')
+        .toBe(true);
+    });
+
+    it('Ctrl+C on the focused root container copies the whole document', async () => {
+      await createWith({ a: 1, b: 'two' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith(JSON.stringify({ a: 1, b: 'two' }, null, 2));
+    });
+
+    it('Ctrl+C on a focused empty object row copies "{}"', async () => {
+      await createWith({ empty: {} });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.empty');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.empty'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('{}');
+    });
+
+    it('Ctrl+C on a focused empty array row copies "[]"', async () => {
+      await createWith({ empty: [] });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.empty');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.empty'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('[]');
+    });
+
+    it('Cmd+C (metaKey) also copies on a focused row (macOS parity)', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.note'), { metaKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('hi');
+    });
+
+    it('Ctrl+Shift+C is a no-op (does not steal devtools shortcut)', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      let prevented = false;
+      withClipboard({ writeText }, () => {
+        const ev = new KeyboardEvent('keydown', {
+          key: 'C',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        rowNodeEl('$.note').dispatchEvent(ev);
+        prevented = ev.defaultPrevented;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(prevented).withContext('Ctrl+Shift+C must not be preventDefaulted').toBe(false);
+    });
+
+    it('Ctrl+Alt+C is a no-op (does not steal AltGr layouts)', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      let prevented = false;
+      withClipboard({ writeText }, () => {
+        const ev = new KeyboardEvent('keydown', {
+          key: 'c',
+          ctrlKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        rowNodeEl('$.note').dispatchEvent(ev);
+        prevented = ev.defaultPrevented;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(prevented).withContext('Ctrl+Alt+C must not be preventDefaulted').toBe(false);
+    });
+
+    it('plain "c" with no modifier is a no-op', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.note'), {});
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).not.toHaveBeenCalled();
+    });
+
+    it('emits tree.keyboard.copyValue with escaped: false', async () => {
+      const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.obj'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(logger.info).toHaveBeenCalledWith('tree.keyboard.copyValue', { escaped: false });
+      // No dblclick / contextMenu sibling event leaked.
+      expect(logger.info).not.toHaveBeenCalledWith(
+        'tree.row.doubleClickCopyValue',
+        jasmine.anything(),
+      );
+      expect(logger.info).not.toHaveBeenCalledWith(
+        'tree.contextMenu.copyValue',
+        jasmine.anything(),
+      );
+    });
+
+    it('does not fire when the keydown originates from a descendant of the row', async () => {
+      await createWith({ obj: { a: 1 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      // Pick the chevron toggle button: a real descendant of the
+      // mat-nested-tree-node. A Ctrl+C dispatched from the chevron
+      // bubbles up to the row, where currentTarget !== target causes
+      // the handler to short-circuit before our switch case runs.
+      const chevron = (fixture.nativeElement as HTMLElement).querySelector(
+        'mat-nested-tree-node[data-tree-node-path="$.obj"] button[mattreenodetoggle]',
+      ) as HTMLButtonElement | null;
+      expect(chevron).withContext('found the $.obj chevron button').toBeTruthy();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      let prevented = false;
+      withClipboard({ writeText }, () => {
+        const ev = new KeyboardEvent('keydown', {
+          key: 'c',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        chevron!.dispatchEvent(ev);
+        prevented = ev.defaultPrevented;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText)
+        .withContext('descendant bubble must not trigger row-level copy')
+        .not.toHaveBeenCalled();
+      expect(prevented).withContext('descendant bubble must not be preventDefaulted').toBe(false);
+    });
+
+    it('Ctrl+C on a real focused container row copies its value (DOM-level)', async () => {
+      await createWith({ obj: { a: 1, b: 2, c: 3 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      // Mount fixture so Angular's (keydown) binding sees a real DOM
+      // tree. We do NOT assert document.activeElement here -- elements
+      // with tabindex="-1" don't always accept programmatic focus in
+      // headless Chromium. The keydown binding fires regardless of
+      // activeElement; the test's value is proving the real DOM
+      // wiring (Angular template -> handler -> clipboard) works
+      // end-to-end.
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const row = rowNodeEl('$.obj');
+
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        let prevented = false;
+        withClipboard({ writeText }, () => {
+          const ev = new KeyboardEvent('keydown', {
+            key: 'c',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          });
+          row.dispatchEvent(ev);
+          prevented = ev.defaultPrevented;
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(writeText).toHaveBeenCalledWith(JSON.stringify({ a: 1, b: 2, c: 3 }, null, 2));
+        expect(prevented).withContext('Ctrl+C should be preventDefaulted').toBe(true);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+  });
 });
