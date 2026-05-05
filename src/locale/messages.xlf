@@ -14,15 +14,15 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">30</context>
+          <context context-type="linenumber">32</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">130</context>
+          <context context-type="linenumber">137</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">138</context>
+          <context context-type="linenumber">145</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
@@ -102,51 +102,51 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">232</context>
+          <context context-type="linenumber">235</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">344</context>
+          <context context-type="linenumber">348</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">352</context>
+          <context context-type="linenumber">356</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">906</context>
+          <context context-type="linenumber">908</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1566</context>
+          <context context-type="linenumber">1568</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1576</context>
+          <context context-type="linenumber">1578</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1584</context>
+          <context context-type="linenumber">1586</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1594</context>
+          <context context-type="linenumber">1596</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1891</context>
+          <context context-type="linenumber">1893</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1901</context>
+          <context context-type="linenumber">1903</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1937</context>
+          <context context-type="linenumber">1939</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1946</context>
+          <context context-type="linenumber">1949</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/rule-sets-toolbar.component.ts</context>
@@ -164,70 +164,70 @@
         <source>Deleted oldest blob &quot;<x id="name" equiv-text="name"/>&quot; to stay within your 100-blob limit.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">29</context>
+          <context context-type="linenumber">31</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.firstTime.title" datatype="html">
         <source>You&apos;ve hit the 100-blob limit</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">68,70</context>
+          <context context-type="linenumber">84,86</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.firstTime.body1" datatype="html">
         <source> JotJSON free accounts keep up to 100 saved blobs. To make room, we automatically deleted your oldest saved blob and will keep doing that each time you hit the limit. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">71,74</context>
+          <context context-type="linenumber">87,90</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.firstTime.body2" datatype="html">
         <source> Prefer to manage the list yourself? Switch to manual mode - saves past the limit will fail until you delete something from your saved blobs. You can change this later in Settings. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">75,78</context>
+          <context context-type="linenumber">91,94</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.firstTime.manual" datatype="html">
         <source>Let me manage manually</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">81,84</context>
+          <context context-type="linenumber">97,100</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.firstTime.ok" datatype="html">
         <source>OK, got it</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">89,91</context>
+          <context context-type="linenumber">105,107</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.manualFull.title" datatype="html">
         <source>Blob limit reached</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">111,113</context>
+          <context context-type="linenumber">127,129</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.manualFull.body" datatype="html">
         <source> You&apos;ve hit the 100-blob limit and manual quota management is on. Delete a blob from your saved blobs to make room, or switch back to automatic cleanup of the oldest blob. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">114,117</context>
+          <context context-type="linenumber">130,133</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.manualFull.switchAuto" datatype="html">
         <source>Switch to automatic</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">120,123</context>
+          <context context-type="linenumber">136,139</context>
         </context-group>
       </trans-unit>
       <trans-unit id="quota.manualFull.dismiss" datatype="html">
         <source>OK</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/quota/quota-notification.service.ts</context>
-          <context context-type="linenumber">128,130</context>
+          <context context-type="linenumber">144,146</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.titleSuggestion.shape.armTemplate" datatype="html">
@@ -458,84 +458,84 @@
         <source>Failed to load your saved blobs.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">70</context>
+          <context context-type="linenumber">75</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.untitled" datatype="html">
         <source>Untitled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">77</context>
+          <context context-type="linenumber">82</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.justNow" datatype="html">
         <source>just now</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">85</context>
+          <context context-type="linenumber">90</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.minutesAgo" datatype="html">
         <source><x id="count" equiv-text="minutes"/> min ago</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">86</context>
+          <context context-type="linenumber">91</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.hoursAgo" datatype="html">
         <source><x id="count" equiv-text="hours"/> h ago</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">88</context>
+          <context context-type="linenumber">93</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.daysAgo" datatype="html">
         <source><x id="count" equiv-text="days"/> d ago</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">90</context>
+          <context context-type="linenumber">95</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.copyLink.success" datatype="html">
         <source>Link copied to clipboard</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">101</context>
+          <context context-type="linenumber">106</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.copyLink.failed" datatype="html">
         <source>Failed to copy link</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">102</context>
+          <context context-type="linenumber">107</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.copyLink.unsupported" datatype="html">
         <source>Copy is not supported in this browser.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">103</context>
+          <context context-type="linenumber">108</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.delete.title" datatype="html">
         <source>Delete this blob?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">113</context>
+          <context context-type="linenumber">118</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.delete.message" datatype="html">
         <source>&quot;<x id="name" equiv-text="label"/>&quot; will be permanently deleted. This cannot be undone.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">114</context>
+          <context context-type="linenumber">119</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.confirm" datatype="html">
         <source>Delete</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">115</context>
+          <context context-type="linenumber">120</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
@@ -543,14 +543,14 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1917</context>
+          <context context-type="linenumber">1919</context>
         </context-group>
       </trans-unit>
       <trans-unit id="common.cancel" datatype="html">
         <source>Cancel</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">116</context>
+          <context context-type="linenumber">121</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/formatting-rules.component.ts</context>
@@ -558,11 +558,11 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">328</context>
+          <context context-type="linenumber">331</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1918</context>
+          <context context-type="linenumber">1920</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/rule-sets-toolbar/clone-preset-dialog.component.ts</context>
@@ -573,22 +573,22 @@
         <source>Blob deleted.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">129</context>
+          <context context-type="linenumber">136</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1936</context>
+          <context context-type="linenumber">1938</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.failed" datatype="html">
         <source>Failed to delete blob.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/blobs/blobs.component.ts</context>
-          <context context-type="linenumber">137</context>
+          <context context-type="linenumber">144</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1945</context>
+          <context context-type="linenumber">1948</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.title" datatype="html">
@@ -949,396 +949,396 @@
         <source>Reloading...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">71,73</context>
+          <context context-type="linenumber">72,74</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pill.invalid" datatype="html">
         <source>Invalid - fix to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">78,81</context>
+          <context context-type="linenumber">79,81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pill.saving" datatype="html">
         <source>Saving...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">82,84</context>
+          <context context-type="linenumber">83,85</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pill.retry" datatype="html">
         <source> Save failed - retry </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">93,94</context>
+          <context context-type="linenumber">94,95</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pill.saved" datatype="html">
         <source>Saved</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">97,99</context>
+          <context context-type="linenumber">98,100</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pill.savedOffline.tooltip" datatype="html">
         <source>Will sync when back online</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">102,103</context>
+          <context context-type="linenumber">103,104</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pill.savedOffline" datatype="html">
         <source>Saved offline</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">105,108</context>
+          <context context-type="linenumber">106,109</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pill.editing" datatype="html">
         <source>Editing</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">109,111</context>
+          <context context-type="linenumber">110,112</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pill.idle" datatype="html">
         <source>All saved</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">112,115</context>
+          <context context-type="linenumber">113,115</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.rulesHeading" datatype="html">
         <source> Rules </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">120,122</context>
+          <context context-type="linenumber">122,124</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.addRule" datatype="html">
         <source>+ Add rule</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">129,131</context>
+          <context context-type="linenumber">131,133</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.emptyRules" datatype="html">
         <source> No rules yet. Click &quot;+ Add rule&quot; to create one. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">135,138</context>
+          <context context-type="linenumber">137,140</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.moveUp" datatype="html">
         <source>Move up</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">150,151</context>
+          <context context-type="linenumber">152,153</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.moveDown" datatype="html">
         <source>Move down</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">162,163</context>
+          <context context-type="linenumber">164,165</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.removeRule" datatype="html">
         <source>Remove rule</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">174,175</context>
+          <context context-type="linenumber">176,177</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.targetLabel" datatype="html">
         <source>Target</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">187,189</context>
+          <context context-type="linenumber">189,191</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.target.key" datatype="html">
         <source>Key only</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">198,199</context>
+          <context context-type="linenumber">200,201</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.target.value" datatype="html">
         <source>Value only</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">201,202</context>
+          <context context-type="linenumber">203,204</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.target.both" datatype="html">
         <source>Key or value (either)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">204,205</context>
+          <context context-type="linenumber">206,207</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.target.pair" datatype="html">
         <source>Key + value (both must match)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">207,208</context>
+          <context context-type="linenumber">209,210</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchTypeLabel" datatype="html">
         <source>Match type</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">215,217</context>
+          <context context-type="linenumber">217,219</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchType.exact" datatype="html">
         <source>Exact</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">225,226</context>
+          <context context-type="linenumber">227,228</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">285,286</context>
+          <context context-type="linenumber">287,288</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">374,375</context>
+          <context context-type="linenumber">376,377</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchType.contains" datatype="html">
         <source>Contains</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">228,230</context>
+          <context context-type="linenumber">230,232</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">288,289</context>
+          <context context-type="linenumber">290,291</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">377,378</context>
+          <context context-type="linenumber">379,380</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchType.startsWith" datatype="html">
         <source>Starts with</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">231,233</context>
+          <context context-type="linenumber">233,235</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">293,294</context>
+          <context context-type="linenumber">295,296</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">382,383</context>
+          <context context-type="linenumber">384,385</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchType.endsWith" datatype="html">
         <source>Ends with</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">234,236</context>
+          <context context-type="linenumber">236,238</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">296,297</context>
+          <context context-type="linenumber">298,299</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">387,388</context>
+          <context context-type="linenumber">389,390</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.matchValueLabel" datatype="html">
         <source>Match value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">241,243</context>
+          <context context-type="linenumber">243,245</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.caseSensitiveLabel" datatype="html">
         <source>Case sensitive</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">264,266</context>
+          <context context-type="linenumber">266,268</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.keyHeading" datatype="html">
         <source>Key match</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">270,271</context>
+          <context context-type="linenumber">272,273</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.keyMatchTypeLabel" datatype="html">
         <source>Key match type</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">275,277</context>
+          <context context-type="linenumber">277,279</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.keyMatchValueLabel" datatype="html">
         <source>Key match value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">305,307</context>
+          <context context-type="linenumber">307,309</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.keyCaseSensitiveLabel" datatype="html">
         <source>Key case sensitive</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">328,330</context>
+          <context context-type="linenumber">330,332</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.valueHeading" datatype="html">
         <source>Value match</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">334,335</context>
+          <context context-type="linenumber">336,337</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.valueModeLabel" datatype="html">
         <source>Value match mode</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">339,341</context>
+          <context context-type="linenumber">341,343</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.valueMatch.text" datatype="html">
         <source>Text</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">349,350</context>
+          <context context-type="linenumber">351,352</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.valueMatch.predicate" datatype="html">
         <source>Predicate</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">354,355</context>
+          <context context-type="linenumber">356,357</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.valueMatchTypeLabel" datatype="html">
         <source>Value match type</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">364,366</context>
+          <context context-type="linenumber">366,368</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.valueMatchValueLabel" datatype="html">
         <source>Value match value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">396,398</context>
+          <context context-type="linenumber">398,400</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.pair.valueCaseSensitiveLabel" datatype="html">
         <source>Value case sensitive</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">423,425</context>
+          <context context-type="linenumber">425,427</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.predicate.label" datatype="html">
         <source>Value predicate</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">428,429</context>
+          <context context-type="linenumber">430,431</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.predicate.ariaLabel" datatype="html">
         <source>Value predicate</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">433,434</context>
+          <context context-type="linenumber">435,436</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.predicate.helper" datatype="html">
         <source> Number and Integer are mutually exclusive. Combine both rules to match any numeric. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">441,442</context>
+          <context context-type="linenumber">443,444</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.unknownRule.message" datatype="html">
         <source> Unknown rule format from a newer version. This rule is skipped until you remove it or convert it. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">450,452</context>
+          <context context-type="linenumber">452,454</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.styleHeading" datatype="html">
         <source>Style</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">458,460</context>
+          <context context-type="linenumber">460,462</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.background" datatype="html">
         <source>Background</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">465,467</context>
+          <context context-type="linenumber">467,469</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.textColor" datatype="html">
         <source>Text</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">489,491</context>
+          <context context-type="linenumber">491,493</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.borderColor" datatype="html">
         <source>Border</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">513,515</context>
+          <context context-type="linenumber">515,517</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.bold" datatype="html">
         <source>Bold</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">542,543</context>
+          <context context-type="linenumber">544,545</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.italic" datatype="html">
         <source>Italic</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">553,555</context>
+          <context context-type="linenumber">555,557</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.underline" datatype="html">
         <source>Underline</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">564,566</context>
+          <context context-type="linenumber">566,568</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.icon" datatype="html">
         <source>Icon</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">573,575</context>
+          <context context-type="linenumber">575,577</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.style.icon.none" datatype="html">
         <source> (none) </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">582,583</context>
+          <context context-type="linenumber">584,585</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.icon.beaconHint" datatype="html">
         <source>Picking an icon turns this rule into a beacon: matches surface as toolbar pills and as badges on collapsed ancestor rows in the tree.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/formatting-rules/rule-editor/rule-editor.component.html</context>
-          <context context-type="linenumber">591,593</context>
+          <context context-type="linenumber">593,595</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ruleEditor.predicate.isNull" datatype="html">
@@ -1834,77 +1834,77 @@
         <source>Today</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">136</context>
+          <context context-type="linenumber">139</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.day.yesterday" datatype="html">
         <source>Yesterday</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">138</context>
+          <context context-type="linenumber">141</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.load.failed" datatype="html">
         <source>Failed to load your history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">207</context>
+          <context context-type="linenumber">210</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.loadMore.failed" datatype="html">
         <source>Failed to load more history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">231</context>
+          <context context-type="linenumber">234</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.filter.date.invalid" datatype="html">
         <source>From date must be on or before To date.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">315</context>
+          <context context-type="linenumber">318</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.title" datatype="html">
         <source>Clear all history?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">325</context>
+          <context context-type="linenumber">328</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.message" datatype="html">
         <source>Every entry in your activity history will be permanently removed. The blobs themselves are not affected.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">326</context>
+          <context context-type="linenumber">329</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.confirm" datatype="html">
         <source>Clear history</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">327</context>
+          <context context-type="linenumber">330</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.success" datatype="html">
         <source>History cleared.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">343</context>
+          <context context-type="linenumber">347</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.clear.failed" datatype="html">
         <source>Failed to clear history.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">351</context>
+          <context context-type="linenumber">355</context>
         </context-group>
       </trans-unit>
       <trans-unit id="history.deletedBlob" datatype="html">
         <source>(deleted blob)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/history/history.component.ts</context>
-          <context context-type="linenumber">389</context>
+          <context context-type="linenumber">397</context>
         </context-group>
       </trans-unit>
       <trans-unit id="clipboard.banner.body" datatype="html">
@@ -2030,154 +2030,154 @@
         <source>Untitled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">681</context>
+          <context context-type="linenumber">683</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.toast" datatype="html">
         <source>Reloaded - this blob was changed in another tab</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">905</context>
+          <context context-type="linenumber">907</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.title" datatype="html">
         <source>Blob changed in another tab</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">988</context>
+          <context context-type="linenumber">990</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.message" datatype="html">
         <source>Your local changes conflict with the latest version. Discard your changes or replace the remote version on your next save?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">989</context>
+          <context context-type="linenumber">991</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.replaceRemote" datatype="html">
         <source>Replace remote</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">990</context>
+          <context context-type="linenumber">992</context>
         </context-group>
       </trans-unit>
       <trans-unit id="blobs.conflict.discardMine" datatype="html">
         <source>Discard my changes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">991</context>
+          <context context-type="linenumber">993</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.tooMany" datatype="html">
         <source>Please drop one file at a time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1565</context>
+          <context context-type="linenumber">1567</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.tooLarge" datatype="html">
         <source>File too large - max 5 MB</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1575</context>
+          <context context-type="linenumber">1577</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.binary" datatype="html">
         <source>File does not appear to be a text file - upload was ignored.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1583</context>
+          <context context-type="linenumber">1585</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.error.readFailed" datatype="html">
         <source>Could not read file</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1593</context>
+          <context context-type="linenumber">1595</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.quotaExceeded" datatype="html">
         <source>Blob limit reached - delete one from your saved blobs to save a new blob.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1766</context>
+          <context context-type="linenumber">1768</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.signIn" datatype="html">
         <source>Please sign in to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1784</context>
+          <context context-type="linenumber">1786</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.forbidden" datatype="html">
         <source>You do not own this blob</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1787</context>
+          <context context-type="linenumber">1789</context>
         </context-group>
       </trans-unit>
       <trans-unit id="save.error.generic" datatype="html">
         <source>Could not save - please try again</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1789</context>
+          <context context-type="linenumber">1791</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.success" datatype="html">
         <source>Share link copied to clipboard.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1866</context>
+          <context context-type="linenumber">1868</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.failed" datatype="html">
         <source>Failed to copy share link.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1867</context>
+          <context context-type="linenumber">1869</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.copyLink.unsupported" datatype="html">
         <source>Copy is not supported in this browser.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1868</context>
+          <context context-type="linenumber">1870</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.public" datatype="html">
         <source>Blob is now public.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1889</context>
+          <context context-type="linenumber">1891</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.private" datatype="html">
         <source>Blob is now private.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1890</context>
+          <context context-type="linenumber">1892</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.visibility.failed" datatype="html">
         <source>Failed to update visibility.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1900</context>
+          <context context-type="linenumber">1902</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.title" datatype="html">
         <source>Delete this blob?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1915</context>
+          <context context-type="linenumber">1917</context>
         </context-group>
       </trans-unit>
       <trans-unit id="share.delete.message" datatype="html">
         <source>&quot;<x id="name" equiv-text="label"/>&quot; will be permanently deleted. This cannot be undone.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
-          <context context-type="linenumber">1916</context>
+          <context context-type="linenumber">1918</context>
         </context-group>
       </trans-unit>
       <trans-unit id="formattingRules.clone.title" datatype="html">

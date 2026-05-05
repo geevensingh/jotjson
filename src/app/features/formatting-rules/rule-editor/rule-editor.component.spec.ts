@@ -181,6 +181,25 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     expect(ctx.service.update).not.toHaveBeenCalled();
   });
 
+  it('announces status pill changes through a persistent polite status region', () => {
+    const ctx = loaded();
+    ctx.fixture.detectChanges();
+    const root = ctx.fixture.nativeElement as HTMLElement;
+    const liveRegion = root.querySelector('.status-pill-live');
+
+    expect(liveRegion).not.toBeNull();
+    expect(liveRegion?.getAttribute('role')).toBe('status');
+    expect(liveRegion?.getAttribute('aria-live')).toBe('polite');
+    expect(liveRegion?.textContent).toContain('All saved');
+
+    ctx.fixture.componentInstance.savedFlash.set(true);
+    ctx.service.setPendingIds(['rs-1']);
+    ctx.fixture.detectChanges();
+
+    expect(root.querySelector('.status-pill-live')).toBe(liveRegion);
+    expect(liveRegion?.textContent).toContain('Saved offline');
+  });
+
   it('falls back to get() when cache misses', fakeAsync(() => {
     const ctx = setup({ initialCache: [] });
     ctx.fixture.detectChanges();

@@ -1,6 +1,6 @@
 <jj-app-header />
 
-<main id="main-content" class="blobs" tabindex="-1">
+<main id="main-content" class="blobs" tabindex="-1" #blobFocusFallback>
   <header class="blobs-header">
     <h1 i18n="@@blobs.title">Blobs</h1>
     <p class="subtitle" i18n="@@blobs.subtitle">
@@ -34,9 +34,9 @@
       <a mat-flat-button color="primary" routerLink="/" i18n="@@blobs.empty.cta">Open the editor</a>
     </div>
   } @else {
-    <ul class="blob-list">
+    <ul class="blob-list" tabindex="-1" #blobListHost>
       @for (blob of blobList(); track blob.id) {
-        <li class="blob-row">
+        <li class="blob-row" tabindex="-1" [attr.data-blob-id]="blob.id">
           <div class="blob-main">
             <a
               class="blob-title"

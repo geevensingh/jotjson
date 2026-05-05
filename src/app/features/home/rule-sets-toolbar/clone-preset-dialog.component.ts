@@ -85,7 +85,7 @@ type DialogState = 'loading' | 'ready' | 'error' | 'cloning';
     `
       .lead {
         margin: 0 0 12px;
-        color: var(--fg-muted, rgba(127, 127, 127, 0.85));
+        color: var(--mat-sys-on-surface-variant, #aeb6c2);
       }
       .preset-list {
         list-style: none;
@@ -125,11 +125,11 @@ type DialogState = 'loading' | 'ready' | 'error' | 'cloning';
       }
       .preset-meta {
         font-size: 12px;
-        color: var(--fg-muted, rgba(127, 127, 127, 0.85));
+        color: var(--mat-sys-on-surface-variant, #aeb6c2);
       }
       .status {
         margin: 0;
-        color: var(--fg-muted, rgba(127, 127, 127, 0.85));
+        color: var(--mat-sys-on-surface-variant, #aeb6c2);
       }
       .status--error {
         color: var(--error-fg, #d32f2f);

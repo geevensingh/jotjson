@@ -580,6 +580,8 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private readonly splitHost = viewChild<ElementRef<HTMLElement>>('splitHost');
 
+  private readonly homeFocusFallback = viewChild<ElementRef<HTMLElement>>('homeFocusFallback');
+
   private readonly treeHost = viewChild<ElementRef<HTMLElement>>('treeHost');
 
   private readonly tree = viewChild(JsonTreeComponent);
@@ -1937,7 +1939,8 @@ export class HomeComponent implements OnInit, OnDestroy {
         $localize`:@@common.dismiss:Dismiss`,
         { duration: 3000 },
       );
-      void this.router.navigate(['/']);
+      await this.router.navigate(['/']);
+      this.scheduleFocusAfterDelete();
     } catch (error) {
       this.logger.warn('share.delete.failed');
       void error;
@@ -1947,6 +1950,10 @@ export class HomeComponent implements OnInit, OnDestroy {
         { duration: 4000 },
       );
     }
+  }
+
+  private scheduleFocusAfterDelete(): void {
+    setTimeout(() => this.homeFocusFallback()?.nativeElement.focus(), 0);
   }
 
   focusTreeSearch(): void {

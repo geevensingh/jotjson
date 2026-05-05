@@ -39,7 +39,7 @@
     ></jj-toolbar>
   </jj-app-header>
 
-  <main id="main-content" class="home-main" tabindex="-1">
+  <main id="main-content" class="home-main" tabindex="-1" #homeFocusFallback>
     @if (isBrowser) {
       <h1 class="sr-only" i18n="@@home.h1">JSON editor</h1>
     }

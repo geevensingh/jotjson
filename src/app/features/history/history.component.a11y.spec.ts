@@ -2,12 +2,18 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HistoryComponent } from './history.component';
 import { HistoryService, HistoryPage } from '../../core/api/history.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import { LoggerService } from '../../core/telemetry/logger.service';
+import type { HistoryEntry } from '../../core/api/models';
+import {
+  attachFixtureToBody,
+  expectNoStrictA11yViolations,
+  getOverlayContainerElement,
+} from '../../../testing/a11y';
 
 /**
  * Wave 3a (M7g-3a) shell-landmark spec for the /history route. Asserts
@@ -15,10 +21,30 @@ import { LoggerService } from '../../core/telemetry/logger.service';
  * `<main id="main-content">` so the app-header skip-link is functional
  * everywhere.
  *
- * Full axe scan deferred to the contrast / forms fix wave per the plan's
- * "specs go strict route-by-route as they are remediated" rule.
+ * Route-level axe coverage remains deferred to the contrast / forms fix
+ * waves. Wave 3e adds a strict overlay scan for the clear-history dialog.
  */
 describe('HistoryComponent (a11y shell landmarks)', () => {
+  let teardown: (() => void) | undefined;
+
+  afterEach(() => {
+    teardown?.();
+    teardown = undefined;
+  });
+
+  function entry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
+    return {
+      id: 'entry-1',
+      userId: 'user-1',
+      blobId: 'blob-1',
+      slug: 'abc123',
+      title: 'Saved config',
+      accessedAt: '2024-01-01T00:00:00Z',
+      action: 'viewed',
+      ...overrides,
+    };
+  }
+
   function configure(listResult: HistoryPage | Error): void {
     const stub = {
       list: jasmine
@@ -51,6 +77,28 @@ describe('HistoryComponent (a11y shell landmarks)', () => {
     });
   }
 
+  function configureOverlay(listResult: HistoryPage): void {
+    const stub = {
+      list: jasmine.createSpy('list').and.returnValue(of(listResult)),
+      clear: jasmine.createSpy('clear').and.returnValue(of(undefined)),
+    };
+    const snack = { open: jasmine.createSpy('open') };
+    const logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'warn']);
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HistoryComponent, MatDialogModule],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        provideNoopAnimations(),
+        { provide: HistoryService, useValue: stub },
+        { provide: MatSnackBar, useValue: snack },
+        { provide: LoggerService, useValue: logger },
+      ],
+    });
+  }
+
   it('renders <main id="main-content"> with tabindex="-1" so the skip-link can focus it', () => {
     configure({ entries: [] });
     const fixture = TestBed.createComponent(HistoryComponent);
@@ -77,5 +125,25 @@ describe('HistoryComponent (a11y shell landmarks)', () => {
     expect(heading?.textContent?.trim().length)
       .withContext('the <h1> must have non-empty content')
       .toBeGreaterThan(0);
+  });
+
+  it('has no critical or serious violations with the clear-history confirmation open', async () => {
+    configureOverlay({ entries: [entry()] });
+    const fixture = TestBed.createComponent(HistoryComponent);
+    teardown = attachFixtureToBody(fixture);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const clearButton = fixture.nativeElement.querySelector('.clear-button') as HTMLButtonElement;
+    clearButton.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await expectNoStrictA11yViolations(fixture, {
+      target: getOverlayContainerElement(),
+    });
+
+    TestBed.inject(MatDialog).closeAll();
   });
 });

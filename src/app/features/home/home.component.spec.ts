@@ -1,4 +1,4 @@
-import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { Title, By } from '@angular/platform-browser';
 import { EMPTY, Subject, of, throwError } from 'rxjs';
@@ -100,6 +100,13 @@ function waitForTaskQueue(): Promise<void> {
   return new Promise<void>((resolve) => {
     setTimeout(() => resolve(), 0);
   });
+}
+
+function attachToBody(fixture: ComponentFixture<unknown>): () => void {
+  document.body.appendChild(fixture.nativeElement);
+  return () => {
+    fixture.nativeElement.remove();
+  };
 }
 
 function clearHomeStorage(): void {
@@ -2933,6 +2940,28 @@ describe('HomeComponent blob actions (M4b)', () => {
     await fixture.componentInstance.onDeleteBlob();
     expect(stub.delete).not.toHaveBeenCalled();
     expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
+  });
+
+  it('onDeleteBlob focuses the home main fallback after confirming delete', async () => {
+    const { fixture } = setup({
+      userId: 'owner-me',
+      loaded: blob(),
+      confirm: true,
+    });
+    const router = TestBed.inject(Router);
+    spyOn(router, 'navigate').and.resolveTo(true);
+    const teardown = attachToBody(fixture);
+    try {
+      fixture.detectChanges();
+      await fixture.componentInstance.onDeleteBlob();
+      fixture.detectChanges();
+      await waitForTaskQueue();
+
+      const main = fixture.nativeElement.querySelector('main.home-main') as HTMLElement;
+      expect(document.activeElement).toBe(main);
+    } finally {
+      teardown();
+    }
   });
 
   it('onDeleteBlob toasts an error when delete fails and preserves local state', async () => {

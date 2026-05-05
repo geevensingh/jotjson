@@ -129,6 +129,15 @@ export const OVERLAY_EXCLUDES: ReadonlyArray<string> = [
   'div[id^="karma"]',
 ];
 
+export function getOverlayContainerElement(): HTMLElement {
+  const overlayContainer = document.querySelector<HTMLElement>('.cdk-overlay-container');
+  expect(overlayContainer).withContext('expected CDK overlay container').not.toBeNull();
+  if (!overlayContainer) {
+    throw new Error('Expected CDK overlay container.');
+  }
+  return overlayContainer;
+}
+
 /**
  * Run axe-core against an attached DOM with WCAG 2.1 A/AA tags.
  *

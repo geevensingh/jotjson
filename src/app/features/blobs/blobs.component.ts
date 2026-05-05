@@ -1,10 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   OnInit,
   computed,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 
 import { Router, RouterLink } from '@angular/router';
@@ -47,6 +49,9 @@ export class BlobsComponent implements OnInit {
   readonly state = signal<LoadState>('loading');
   readonly blobList = signal<JsonBlob[]>([]);
   readonly errorMessage = signal<string | null>(null);
+
+  private readonly focusFallback = viewChild<ElementRef<HTMLElement>>('blobFocusFallback');
+  private readonly blobListHost = viewChild<ElementRef<HTMLElement>>('blobListHost');
 
   readonly isEmpty = computed(() => this.state() === 'ready' && this.blobList().length === 0);
 
@@ -122,9 +127,11 @@ export class BlobsComponent implements OnInit {
     );
     const confirmed = await firstValueFrom(ref.afterClosed());
     if (!confirmed) return;
+    const deletedIndex = this.blobList().findIndex((candidate) => candidate.id === blob.id);
     try {
       await firstValueFrom(this.blobs.delete(blob.id));
-      this.blobList.update((list) => list.filter((b) => b.id !== blob.id));
+      this.blobList.update((list) => list.filter((candidate) => candidate.id !== blob.id));
+      this.scheduleFocusAfterDelete(deletedIndex);
       this.snack.open(
         $localize`:@@share.delete.success:Blob deleted.`,
         $localize`:@@common.dismiss:Dismiss`,
@@ -139,5 +146,26 @@ export class BlobsComponent implements OnInit {
         { duration: 4000 },
       );
     }
+  }
+
+  private scheduleFocusAfterDelete(deletedIndex: number): void {
+    setTimeout(() => this.focusAfterDelete(deletedIndex), 0);
+  }
+
+  private focusAfterDelete(deletedIndex: number): void {
+    const listHost = this.blobListHost()?.nativeElement;
+    if (!listHost) {
+      this.focusFallback()?.nativeElement.focus();
+      return;
+    }
+
+    const rows = Array.from(listHost.querySelectorAll<HTMLElement>('.blob-row'));
+    if (rows.length === 0) {
+      this.focusFallback()?.nativeElement.focus();
+      return;
+    }
+
+    const targetIndex = deletedIndex >= 0 ? Math.min(deletedIndex, rows.length - 1) : 0;
+    rows[targetIndex]?.focus();
   }
 }

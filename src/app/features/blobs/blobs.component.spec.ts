@@ -1,7 +1,8 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { BlobsComponent } from './blobs.component';
 import { BlobService } from '../../core/api/blob.service';
@@ -67,6 +68,55 @@ function setup(opts: SetupOpts = {}) {
 
   const fixture = TestBed.createComponent(BlobsComponent);
   return { fixture, stub, dialog, snack };
+}
+
+function setupWithRealDialog(listResult: JsonBlob[]) {
+  TestBed.resetTestingModule();
+
+  const stub = {
+    list: jasmine.createSpy('list').and.returnValue(of(listResult)),
+    delete: jasmine.createSpy('delete').and.returnValue(of(undefined)),
+    get: jasmine.createSpy('get'),
+    create: jasmine.createSpy('create'),
+    update: jasmine.createSpy('update'),
+  };
+  const snack = { open: jasmine.createSpy('open') };
+
+  TestBed.configureTestingModule({
+    imports: [BlobsComponent, MatDialogModule],
+    providers: [
+      ...provideFakeAuth(),
+      provideRouter([]),
+      provideNoopAnimations(),
+      { provide: BlobService, useValue: stub },
+      { provide: MatSnackBar, useValue: snack },
+    ],
+  });
+
+  const fixture = TestBed.createComponent(BlobsComponent);
+  return { fixture, stub };
+}
+
+function attachToBody(fixture: ComponentFixture<unknown>): () => void {
+  document.body.appendChild(fixture.nativeElement);
+  return () => {
+    fixture.nativeElement.remove();
+  };
+}
+
+function waitForTaskQueue(): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+}
+
+function findDialogButton(label: string): HTMLButtonElement {
+  const button = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.mat-mdc-dialog-container button'),
+  ).find((candidate) => candidate.textContent?.trim() === label);
+  expect(button).not.toBeNull();
+  if (!button) {
+    throw new Error(`Expected dialog button "${label}".`);
+  }
+  return button;
 }
 
 describe('BlobsComponent', () => {
@@ -140,6 +190,136 @@ describe('BlobsComponent', () => {
     await fixture.componentInstance.deleteBlob(fixture.componentInstance.blobList()[0]);
     expect(stub.delete).not.toHaveBeenCalled();
     expect(fixture.componentInstance.blobList().length).toBe(1);
+  });
+
+  it('focuses the next blob row after confirming a delete', async () => {
+    const { fixture } = setup({
+      listResult: [
+        blob({ id: 'b1', slug: 'slug1' }),
+        blob({ id: 'b2', slug: 'slug2' }),
+        blob({ id: 'b3', slug: 'slug3' }),
+      ],
+      confirm: true,
+    });
+    const teardown = attachToBody(fixture);
+    try {
+      await fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      await fixture.componentInstance.deleteBlob(fixture.componentInstance.blobList()[0]);
+      fixture.detectChanges();
+      await waitForTaskQueue();
+      fixture.detectChanges();
+
+      const focusedRow = fixture.nativeElement.querySelector(
+        '.blob-row[data-blob-id="b2"]',
+      ) as HTMLElement;
+      expect(document.activeElement).toBe(focusedRow);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('focuses the previous blob row after confirming deletion of the last row', async () => {
+    const { fixture } = setup({
+      listResult: [
+        blob({ id: 'b1', slug: 'slug1' }),
+        blob({ id: 'b2', slug: 'slug2' }),
+        blob({ id: 'b3', slug: 'slug3' }),
+      ],
+      confirm: true,
+    });
+    const teardown = attachToBody(fixture);
+    try {
+      await fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      await fixture.componentInstance.deleteBlob(fixture.componentInstance.blobList()[2]);
+      fixture.detectChanges();
+      await waitForTaskQueue();
+      fixture.detectChanges();
+
+      const focusedRow = fixture.nativeElement.querySelector(
+        '.blob-row[data-blob-id="b2"]',
+      ) as HTMLElement;
+      expect(document.activeElement).toBe(focusedRow);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('focuses the page fallback after confirming the final blob delete', async () => {
+    const { fixture } = setup({
+      listResult: [blob({ id: 'b1', slug: 'slug1' })],
+      confirm: true,
+    });
+    const teardown = attachToBody(fixture);
+    try {
+      await fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      await fixture.componentInstance.deleteBlob(fixture.componentInstance.blobList()[0]);
+      fixture.detectChanges();
+      await waitForTaskQueue();
+      fixture.detectChanges();
+
+      const main = fixture.nativeElement.querySelector('main.blobs') as HTMLElement;
+      expect(document.activeElement).toBe(main);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('returns focus to the delete trigger when the dialog cancel button closes', async () => {
+    const { fixture, stub } = setupWithRealDialog([blob({ id: 'b1', slug: 'slug1' })]);
+    const teardown = attachToBody(fixture);
+    try {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const trigger = fixture.nativeElement.querySelector('.blob-delete') as HTMLButtonElement;
+      trigger.focus();
+      trigger.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      findDialogButton('Cancel').click();
+      await fixture.whenStable();
+      await waitForTaskQueue();
+
+      expect(stub.delete).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      TestBed.inject(MatDialog).closeAll();
+      teardown();
+    }
+  });
+
+  it('returns focus to the delete trigger when the dialog backdrop closes', async () => {
+    const { fixture, stub } = setupWithRealDialog([blob({ id: 'b1', slug: 'slug1' })]);
+    const teardown = attachToBody(fixture);
+    try {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const trigger = fixture.nativeElement.querySelector('.blob-delete') as HTMLButtonElement;
+      trigger.focus();
+      trigger.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const backdrop = document.querySelector('.cdk-overlay-backdrop') as HTMLElement;
+      expect(backdrop).not.toBeNull();
+      backdrop.click();
+      await fixture.whenStable();
+      await waitForTaskQueue();
+
+      expect(stub.delete).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      TestBed.inject(MatDialog).closeAll();
+      teardown();
+    }
   });
 
   it('deleteBlob toasts an error and keeps the row when delete fails', async () => {

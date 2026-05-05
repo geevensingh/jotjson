@@ -2,25 +2,34 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { BlobsComponent } from './blobs.component';
 import { BlobService } from '../../core/api/blob.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import type { JsonBlob } from '../../core/api/models';
+import {
+  attachFixtureToBody,
+  expectNoStrictA11yViolations,
+  getOverlayContainerElement,
+} from '../../../testing/a11y';
 
 /**
  * Wave 3a (M7g-3a) shell-landmark spec for the /blobs route. Asserts the
  * skip-link contract: every route must expose `<main id="main-content">`
  * so the app-header skip-link is functional everywhere.
  *
- * **Full axe scan deferred** to the contrast / forms fix wave (M7g-3d /
- * M7g-3e). The route currently has pre-existing colour-contrast
- * violations on disabled-text shades that fail strict WCAG 2.1 AA; those
- * land with their own remediation per the plan's "specs go strict
- * route-by-route as they are remediated" rule.
+ * Route-level axe coverage remains deferred to the contrast / forms fix
+ * waves. Wave 3e adds a strict overlay scan for the delete-confirm dialog.
  */
 describe('BlobsComponent (a11y shell landmarks)', () => {
+  let teardown: (() => void) | undefined;
+
+  afterEach(() => {
+    teardown?.();
+    teardown = undefined;
+  });
+
   function blob(overrides: Partial<JsonBlob> = {}): JsonBlob {
     return {
       id: 'b1',
@@ -66,6 +75,29 @@ describe('BlobsComponent (a11y shell landmarks)', () => {
     });
   }
 
+  function configureOverlay(listResult: JsonBlob[]): void {
+    const stub = {
+      list: jasmine.createSpy('list').and.returnValue(of(listResult)),
+      delete: jasmine.createSpy('delete').and.returnValue(of(undefined)),
+      get: jasmine.createSpy('get'),
+      create: jasmine.createSpy('create'),
+      update: jasmine.createSpy('update'),
+    };
+    const snack = { open: jasmine.createSpy('open') };
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [BlobsComponent, MatDialogModule],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        provideNoopAnimations(),
+        { provide: BlobService, useValue: stub },
+        { provide: MatSnackBar, useValue: snack },
+      ],
+    });
+  }
+
   it('renders <main id="main-content"> with tabindex="-1" so the skip-link can focus it', () => {
     configure([blob()]);
     const fixture = TestBed.createComponent(BlobsComponent);
@@ -92,5 +124,25 @@ describe('BlobsComponent (a11y shell landmarks)', () => {
     expect(heading?.textContent?.trim().length)
       .withContext('the <h1> must have non-empty content')
       .toBeGreaterThan(0);
+  });
+
+  it('has no critical or serious violations with the delete confirmation open', async () => {
+    configureOverlay([blob({ title: 'Saved config' })]);
+    const fixture = TestBed.createComponent(BlobsComponent);
+    teardown = attachFixtureToBody(fixture);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const deleteButton = fixture.nativeElement.querySelector('.blob-delete') as HTMLButtonElement;
+    deleteButton.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await expectNoStrictA11yViolations(fixture, {
+      target: getOverlayContainerElement(),
+    });
+
+    TestBed.inject(MatDialog).closeAll();
   });
 });
