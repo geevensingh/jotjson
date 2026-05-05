@@ -140,4 +140,117 @@ describe('JsonEditorComponent (browser integration)', () => {
       hostEl.remove();
     }
   });
+
+  // --------------------------------------------------------------------
+  // M7g-3c: explicit a11y options on monaco.editor.create()
+  // --------------------------------------------------------------------
+  // These specs verify the explicit a11y options we set on
+  // `monaco.editor.create(...)` in JsonEditorComponent:
+  //   - `accessibilitySupport: 'auto'`  - Monaco re-detects when an SR
+  //     becomes active rather than probing once at boot,
+  //   - `ariaLabel: 'JSON editor'`      - gives the editor a meaningful
+  //     accessible name (Monaco threads this through
+  //     `ariaLabelForScreenReaderContent` onto the screen-reader content
+  //     element: in modern Chrome that is a <div class="native-edit-context"
+  //     role="textbox">; in older browsers it is a <textarea
+  //     class="inputarea">).
+  //
+  // Out of scope at this layer (deliberately): a strict axe scan of the
+  // Monaco-rendered DOM. Monaco's internal markup is upstream-tracked and
+  // we do not own its WCAG conformance. See DESIGN_SPEC.md > Accessibility
+  // for the M7g audit decisions.
+  //
+  // Also out of scope: asserting a registered
+  // `editor.action.accessibilityHelp` action. The accessibility-help
+  // dialog (Ctrl+F1 / Cmd+F1) is contributed via vscode-workbench code
+  // that is NOT shipped in standalone monaco-editor; within standalone
+  // monaco the id is referenced only by the diff editor's keybinding
+  // lookup. We therefore cannot verify a registered action with that id
+  // from this layer.
+  describe('a11y options (M7g-3c)', () => {
+    it('passes ariaLabel="JSON editor" to monaco.editor.create()', async () => {
+      const { fixture, hostEl, component } = await mountSizedFixture('{"a":1}');
+      try {
+        const editor = probe(component).editor;
+        expect(editor).toBeDefined();
+        // Construction-time assertion: what we passed to editor.create().
+        const rawOptions = editor!.getRawOptions();
+        expect(rawOptions.ariaLabel).toBe('JSON editor');
+      } finally {
+        fixture.destroy();
+        hostEl.remove();
+      }
+    });
+
+    it('passes accessibilitySupport="auto" and the resolved option is a valid enum value', async () => {
+      const { fixture, hostEl, component } = await mountSizedFixture('{"a":1}');
+      try {
+        const editor = probe(component).editor;
+        expect(editor).toBeDefined();
+        // Construction-time: assert the literal we passed in.
+        expect(editor!.getRawOptions().accessibilitySupport).toBe('auto');
+        // Resolved-runtime: 'auto' becomes one of the AccessibilitySupport
+        // enum values (Unknown=0, Disabled=1, Enabled=2). The exact value
+        // depends on Monaco's environment probe; we only assert it is one
+        // of those.
+        const resolved = editor!.getOption(monaco.editor.EditorOption.accessibilitySupport);
+        expect([0, 1, 2]).toContain(resolved);
+      } finally {
+        fixture.destroy();
+        hostEl.remove();
+      }
+    });
+
+    it("threads our ariaLabel through to Monaco's screen-reader content element", async () => {
+      const { fixture, hostEl, component } = await mountSizedFixture('{"a":1}');
+      try {
+        const editor = probe(component).editor;
+        expect(editor).toBeDefined();
+
+        // Monaco has TWO screen-reader content paths and which one runs
+        // depends on whether the browser supports the EditContext API:
+        //
+        //   1. Legacy path (no EditContext): a <textarea class="inputarea">
+        //      carries the aria-label. Set in TextAreaHandler via
+        //      `this.textArea.setAttribute("aria-label", ...)`.
+        //
+        //   2. Modern path (Chrome >= 121, current Chrome Headless): a
+        //      <div class="native-edit-context"> with role="textbox",
+        //      aria-multiline="true", aria-roledescription="editor"
+        //      carries the aria-label. The NativeEditContext also creates
+        //      a hidden <textarea class="ime-text-area" aria-hidden="true">
+        //      for IME composition - this textarea has NO aria-label and
+        //      must NOT be the target of this assertion.
+        //
+        // Both paths route the option through `ariaLabelForScreenReaderContent`,
+        // which returns our `ariaLabel` verbatim when accessibilitySupport
+        // is Unknown (0) or Enabled (2), and a localized "editor is not
+        // accessible" message when it is Disabled (1).
+        //
+        // Robust selector: prefer the modern <div role="textbox">, then the
+        // legacy <textarea.inputarea>. We focus the editor first because
+        // some renders defer screen-reader-content writes until first focus.
+        editor!.focus();
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+        const screenReaderEl =
+          hostEl.querySelector<HTMLElement>('.monaco-editor .native-edit-context') ??
+          hostEl.querySelector<HTMLElement>('.monaco-editor [role="textbox"]') ??
+          hostEl.querySelector<HTMLTextAreaElement>('.monaco-editor textarea.inputarea');
+        expect(screenReaderEl).not.toBeNull();
+        const ariaLabel = screenReaderEl!.getAttribute('aria-label');
+        expect(ariaLabel).toBeTruthy();
+
+        const resolvedSupport = editor!.getOption(monaco.editor.EditorOption.accessibilitySupport);
+        const DISABLED = 1;
+        if (resolvedSupport !== DISABLED) {
+          expect(ariaLabel).toBe('JSON editor');
+        }
+      } finally {
+        fixture.destroy();
+        hostEl.remove();
+      }
+    });
+  });
 });

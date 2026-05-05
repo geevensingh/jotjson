@@ -3174,6 +3174,13 @@
           <context context-type="linenumber">12,13</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="editor.aria" datatype="html">
+        <source>JSON editor</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/json-editor/json-editor.component.ts</context>
+          <context context-type="linenumber">144</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="tree.highlight.swatch.yellow" datatype="html">
         <source>Yellow</source>
         <context-group purpose="location">
@@ -3383,21 +3390,21 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">568,570</context>
+          <context context-type="linenumber">572,574</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.empty" datatype="html">
         <source> Paste or type JSON on the left to see the tree view. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">577,580</context>
+          <context context-type="linenumber">581,584</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.extract.menu.label" datatype="html">
         <source>Extract embedded JSON</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/json-tree.component.html</context>
-          <context context-type="linenumber">620,623</context>
+          <context context-type="linenumber">624,627</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.type.date" datatype="html">

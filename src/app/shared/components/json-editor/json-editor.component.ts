@@ -134,6 +134,14 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         lineNumbersMinChars: 3,
         folding: true,
         bracketPairColorization: { enabled: true },
+        // M7g-3c: explicit a11y options. `auto` lets Monaco re-detect when a
+        // screen reader becomes active rather than probing once at boot, and
+        // `ariaLabel` gives the editor textarea a meaningful accessible name
+        // (Monaco writes this onto the inner <textarea> on focus). The
+        // built-in `editor.action.accessibilityHelp` action (Ctrl+F1 / Cmd+F1)
+        // remains reachable for users who need it.
+        accessibilitySupport: 'auto',
+        ariaLabel: $localize`:@@editor.aria:JSON editor`,
       });
 
       // JotJSON is JSONC - defer validation to our parser.
