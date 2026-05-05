@@ -98,7 +98,6 @@
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
-  animation: state-pill-spin 0.8s linear infinite;
 }
 
 .state-pill--signInToSave {
@@ -216,9 +215,15 @@
   }
 }
 
-@keyframes state-pill-spin {
-  to {
-    transform: rotate(360deg);
+@media (prefers-reduced-motion: no-preference) {
+  .state-pill--saving::before {
+    animation: state-pill-spin 0.8s linear infinite;
+  }
+
+  @keyframes state-pill-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 }
 

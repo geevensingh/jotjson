@@ -22,20 +22,11 @@
   will-change: left, right;
 }
 
-.route-progress-bar__stripe--primary {
-  animation: route-progress-bar-indeterminate-1 2s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
-}
-
-.route-progress-bar__stripe--secondary {
-  animation: route-progress-bar-indeterminate-2 2s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
-  animation-delay: 1.15s;
-}
-
 // Determinate fill: hidden by default, only painted when the
 // LoadingSplashService streams a real progress fraction (currently
 // only the share-blob resolver does this). The 200ms transition
-// smooths the steps between progress events; under reduced motion we
-// snap without transition.
+// smooths the steps between progress events only when motion is allowed;
+// under reduced motion we snap without transition.
 .route-progress-bar__fill {
   display: none;
   position: absolute;
@@ -43,7 +34,6 @@
   background: v.$color-primary;
   transform-origin: left center;
   transform: scaleX(var(--jot-progress, 0));
-  transition: transform 200ms ease-out;
   will-change: transform;
 }
 
@@ -55,39 +45,55 @@
   display: block;
 }
 
-@keyframes route-progress-bar-indeterminate-1 {
-  0% {
-    left: -35%;
-    right: 100%;
+@media (prefers-reduced-motion: no-preference) {
+  .route-progress-bar__stripe--primary {
+    animation: route-progress-bar-indeterminate-1 2s cubic-bezier(0.65, 0.815, 0.735, 0.395)
+      infinite;
   }
-  60% {
-    left: 100%;
-    right: -90%;
-  }
-  100% {
-    left: 100%;
-    right: -90%;
-  }
-}
 
-@keyframes route-progress-bar-indeterminate-2 {
-  0% {
-    left: -200%;
-    right: 100%;
+  .route-progress-bar__stripe--secondary {
+    animation: route-progress-bar-indeterminate-2 2s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
+    animation-delay: 1.15s;
   }
-  60% {
-    left: 107%;
-    right: -8%;
+
+  .route-progress-bar__fill {
+    transition: transform 200ms ease-out;
   }
-  100% {
-    left: 107%;
-    right: -8%;
+
+  @keyframes route-progress-bar-indeterminate-1 {
+    0% {
+      left: -35%;
+      right: 100%;
+    }
+    60% {
+      left: 100%;
+      right: -90%;
+    }
+    100% {
+      left: 100%;
+      right: -90%;
+    }
+  }
+
+  @keyframes route-progress-bar-indeterminate-2 {
+    0% {
+      left: -200%;
+      right: 100%;
+    }
+    60% {
+      left: 107%;
+      right: -8%;
+    }
+    100% {
+      left: 107%;
+      right: -8%;
+    }
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .route-progress-bar__stripe--primary {
-    animation: route-progress-bar-pulse 1.4s ease-in-out infinite;
+    animation: route-progress-bar-pulse 1.4s ease-in-out infinite; // allow:reduced-motion opacity pulse conveys progress without positional motion.
     left: 0;
     right: 0;
   }
@@ -97,20 +103,20 @@
   .route-progress-bar--determinate .route-progress-bar__fill {
     transition: none;
   }
-}
 
-// Reduced-motion fallback: pulse the bar's opacity instead of holding
-// it at a fixed mid-screen position. Remote Desktop and the Windows
-// "animation effects: off" toggle both trigger prefers-reduced-motion,
-// and a static stripe under that fallback is indistinguishable from a
-// frozen page. Pulsing keeps the "work in progress" cue without any
-// positional motion (which is what reduced-motion is meant to avoid).
-@keyframes route-progress-bar-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
+  // Reduced-motion fallback: pulse the bar's opacity instead of holding
+  // it at a fixed mid-screen position. Remote Desktop and the Windows
+  // "animation effects: off" toggle both trigger prefers-reduced-motion,
+  // and a static stripe under that fallback is indistinguishable from a
+  // frozen page. Pulsing keeps the "work in progress" cue without any
+  // positional motion (which is what reduced-motion is meant to avoid).
+  @keyframes route-progress-bar-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 }

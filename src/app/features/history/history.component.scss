@@ -67,7 +67,10 @@
   color: inherit;
   font-size: 0.85rem;
   cursor: pointer;
-  transition: background-color 120ms ease;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: background-color 120ms ease;
+  }
 
   jj-icon {
     width: 1rem;
@@ -145,9 +148,12 @@
   border-radius: 8px;
   background: rgba(127, 127, 127, 0.08);
   border: 1px solid rgba(127, 127, 127, 0.2);
-  transition:
-    border-color 120ms ease,
-    background 120ms ease;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      border-color 120ms ease,
+      background 120ms ease;
+  }
 
   &:focus-within {
     border-color: var(--mat-sys-primary, #1976d2);
@@ -247,7 +253,10 @@
   padding: 10px 12px;
   border-radius: 6px;
   background: rgba(127, 127, 127, 0.06);
-  transition: background 120ms ease;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: background 120ms ease;
+  }
 
   &.entry-clickable:hover {
     background: rgba(127, 127, 127, 0.12);
@@ -360,7 +369,6 @@
     );
     background-size: 200% 100%;
     border-radius: 4px;
-    animation: jj-skeleton-pulse 1.4s ease-in-out infinite;
   }
 
   .skeleton-icon {
@@ -380,12 +388,18 @@
   }
 }
 
-@keyframes jj-skeleton-pulse {
-  0% {
-    background-position: 200% 0;
+@media (prefers-reduced-motion: no-preference) {
+  .entry-row.skeleton .skeleton-bar {
+    animation: jj-skeleton-pulse 1.4s ease-in-out infinite;
   }
-  100% {
-    background-position: -200% 0;
+
+  @keyframes jj-skeleton-pulse {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
   }
 }
 

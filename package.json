@@ -1,6 +1,6 @@
 {
   "name": "jotjson",
-  "version": "0.14.3",
+  "version": "0.14.4",
   "description": "JotJSON - input, store, and display JSON (Angular SPA).",
   "private": true,
   "repository": {
@@ -26,10 +26,11 @@
     "lint:ascii": "node scripts/check-ascii.mjs",
     "lint:spec-patterns": "node scripts/check-spec-patterns.mjs",
     "lint:prod-patterns": "node scripts/check-prod-patterns.mjs",
+    "lint:reduced-motion": "node scripts/check-reduced-motion.mjs",
     "lint:csp-hashes": "node scripts/check-csp-hashes.mjs",
     "lint:lockfile": "node scripts/check-lockfile.mjs",
     "lint:format": "node scripts/check-format.mjs",
-    "lint:all": "npm run lint && npm --prefix api run lint",
+    "lint:all": "npm run lint && npm run lint:reduced-motion && npm --prefix api run lint",
     "check:ascii": "node scripts/check-ascii.mjs",
     "check:spec-patterns": "node scripts/check-spec-patterns.mjs",
     "check:prod-patterns": "node scripts/check-prod-patterns.mjs",

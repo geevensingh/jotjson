@@ -77,7 +77,10 @@
   opacity: 0.6;
   font-size: 11px;
   cursor: pointer;
-  transition: opacity 120ms ease;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: opacity 120ms ease;
+  }
 
   &:hover,
   &:focus-visible {
@@ -103,9 +106,12 @@
   opacity: 0.5;
   cursor: pointer;
   border-radius: 2px;
-  transition:
-    opacity 120ms ease,
-    background 120ms ease;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      opacity 120ms ease,
+      background 120ms ease;
+  }
 
   &:hover,
   &:focus-visible {
