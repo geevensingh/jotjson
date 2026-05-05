@@ -17,7 +17,16 @@ declare global {
       (modules: string[], onReady: () => void): void;
     };
     monaco?: typeof MonacoNS;
-    MonacoEnvironment?: { getWorkerUrl: (workerId: string, label: string) => string };
+    MonacoEnvironment?: {
+      getWorkerUrl?: (workerId: string, label: string) => string;
+      // `getWorker` is part of Monaco's documented Environment interface
+      // and takes precedence over `getWorkerUrl` when set. We do not use
+      // it from the production loader (see `getWorkerUrl` above), but the
+      // integration spec stubs it to avoid fetching
+      // `vs/assets/editor.worker-*.js`. Declared here so the test-side
+      // assignment is type-safe without widening to `any`.
+      getWorker?: (workerId: string, label: string) => Worker | Promise<Worker>;
+    };
   }
 }
 
