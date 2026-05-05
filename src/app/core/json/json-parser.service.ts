@@ -60,6 +60,17 @@ export interface JsonParseResult {
   errors: JsonParseError[];
   empty: boolean;
   commentsByPath: ReadonlyMap<string, CommentBundle>;
+  /**
+   * Total number of individual comments seen during the harvest pass.
+   * Counted before stacked comments are joined into the `commentsByPath`
+   * strings, so a single multi-line block comment (e.g. `/* a\nb *\/`)
+   * counts as 1 while two stacked line comments (`// a` + `// b`) count
+   * as 2 -- a distinction that cannot be recovered from the joined
+   * post-harvest strings. Empty comments (`//\n` alone, `/**\/` alone)
+   * are skipped, matching `harvestComments`. 0 for empty input and the
+   * no-comment fast path.
+   */
+  commentCount: number;
 }
 
 /**
@@ -78,6 +89,7 @@ export class JsonParserService {
         errors: [],
         empty: true,
         commentsByPath: EMPTY_COMMENT_MAP,
+        commentCount: 0,
       };
     }
 
@@ -97,7 +109,7 @@ export class JsonParserService {
 
     const errors = rawErrors.map((parseError) => this.toError(parseError, stripped));
     const value = ast ? this.nodeToValue(ast) : undefined;
-    const commentsByPath = this.harvestComments(stripped);
+    const { commentsByPath, commentCount } = this.harvestComments(stripped);
 
     const result: JsonParseResult = {
       value,
@@ -105,6 +117,7 @@ export class JsonParserService {
       errors,
       empty: false,
       commentsByPath,
+      commentCount,
     };
     const timeMs = performance.now() - start;
     if (timeMs > 50) {
@@ -359,12 +372,16 @@ export class JsonParserService {
    * substrings appearing inside string literals) still cost only one
    * extra visit pass with no comment callbacks.
    */
-  private harvestComments(text: string): ReadonlyMap<string, CommentBundle> {
-    if (!/\/\/|\/\*/.test(text)) return EMPTY_COMMENT_MAP;
+  private harvestComments(text: string): {
+    commentsByPath: ReadonlyMap<string, CommentBundle>;
+    commentCount: number;
+  } {
+    if (!/\/\/|\/\*/.test(text)) return { commentsByPath: EMPTY_COMMENT_MAP, commentCount: 0 };
 
     const map = new Map<string, CommentBundle>();
     const containerPathStack: string[] = [];
     const pendingLeading: string[] = [];
+    let commentCount = 0;
 
     let lastValuePath: string | null = null;
     let lastValueEndOffset = -1;
@@ -508,6 +525,7 @@ export class JsonParserService {
           const raw = text.slice(offset, offset + length);
           const body = extractCommentBody(raw);
           if (body.length === 0) return;
+          commentCount++;
 
           // Rule 2: trailing on close brace -- comment is on the same
           // line as the most recently closed container's close token,
@@ -552,7 +570,7 @@ export class JsonParserService {
       { disallowComments: false, allowTrailingComma: true },
     );
 
-    return map;
+    return { commentsByPath: map, commentCount };
   }
 }
 

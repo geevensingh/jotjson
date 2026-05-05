@@ -342,6 +342,63 @@ describe('JsonParserService', () => {
     });
   });
 
+  describe('parse - commentCount', () => {
+    it('reports 0 for empty input', () => {
+      expect(svc.parse('').commentCount).toBe(0);
+    });
+
+    it('reports 0 for whitespace-only input', () => {
+      expect(svc.parse('   \n\t  ').commentCount).toBe(0);
+    });
+
+    it('reports 0 on the no-comment fast path', () => {
+      // Sanity: input without any `//` or `/*` substring must take the
+      // fast-path bail in harvestComments and not increment the counter.
+      expect(svc.parse('{"a":1,"b":[2,3]}').commentCount).toBe(0);
+    });
+
+    it('reports 0 when delimiter substrings appear only inside string literals', () => {
+      expect(svc.parse('{"path":"a/b/c"}').commentCount).toBe(0);
+      expect(svc.parse('{"x":"// not a comment"}').commentCount).toBe(0);
+    });
+
+    it('counts a single line comment as 1', () => {
+      expect(svc.parse('// top\n{"a":1}').commentCount).toBe(1);
+    });
+
+    it('counts stacked line comments as N', () => {
+      expect(svc.parse('{\n  // line 1\n  // line 2\n  "x": 1\n}').commentCount).toBe(2);
+    });
+
+    it('counts a single multi-line block comment as 1 (not split on internal newlines)', () => {
+      // The harvest stores block-comment bodies with internal `\n`
+      // intact (extractCommentBody only `.trim()`s), so naive
+      // `split('\n').length` on the joined CommentBundle string would
+      // mis-count this as 2. The parser-side counter is the source of
+      // truth and must report 1.
+      expect(svc.parse('{"x": 1 /* multi\n  line */}').commentCount).toBe(1);
+    });
+
+    it('counts mixed multi-line block + stacked line comments correctly', () => {
+      const input = '/* multi\n  line */\n' + '{\n  // a\n  // b\n  "x": 1 /* inline */\n}';
+      // 1 (multi-line block) + 2 (stacked) + 1 (inline trailing) = 4
+      expect(svc.parse(input).commentCount).toBe(4);
+    });
+
+    it('skips empty comments (// alone and /**/ alone)', () => {
+      expect(svc.parse('{\n  //\n  "x": 1, /**/\n  "y": 2\n}').commentCount).toBe(0);
+    });
+
+    it('still counts comments on a parse-failed input', () => {
+      // Display-side gating (status bar) suppresses the count when
+      // errors.length > 0; the parser's job is to honestly report the
+      // comments visit() saw, regardless of structural validity.
+      const r = svc.parse('// header\n{"a":}');
+      expect(r.errors.length).toBeGreaterThan(0);
+      expect(r.commentCount).toBe(1);
+    });
+  });
+
   describe('parse - error reporting', () => {
     it('reports structured errors with line/column', () => {
       const r = svc.parse('{"a":}');

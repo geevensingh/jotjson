@@ -37,6 +37,23 @@ export class StatusBarComponent {
     return computeTreeStats(pr.ast);
   });
 
+  /**
+   * The Comments stat mirrors `treeStats()` gating (hidden when the
+   * document is empty or parse-failed) AND requires `commentCount > 0`
+   * so the chip never appears as "Comments 0" on commentless docs.
+   * Visibility is content-driven, not mode-driven: the parser allows
+   * comments regardless of the editor `mode` (`disallowComments: false`
+   * in JsonParserService), so a JSON-mode document with pasted comments
+   * still surfaces the count.
+   */
+  readonly showComments = computed(() => {
+    const pr = this.parseResult();
+    if (!pr || pr.empty || pr.errors.length > 0) return false;
+    return pr.commentCount > 0;
+  });
+
+  readonly commentCount = computed(() => this.parseResult()?.commentCount ?? 0);
+
   readonly cursorLabel = computed(() => {
     const position = this.cursor();
     const line = position?.line ?? 1;

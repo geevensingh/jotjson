@@ -86,25 +86,89 @@ describe('StatusBarComponent', () => {
     const text = '{"a":[1,2,{"b":true}]}';
     const f = create({ text, parseResult: svc.parse(text) });
     const right = textOf(f, '.right');
-    expect(right).toContain('Nodes6');
-    expect(right).toContain('Depth3');
-    expect(right).toContain('Obj2');
-    expect(right).toContain('Arr1');
+    expect(right).toContain('Total Nodes6');
+    expect(right).toContain('Max Depth3');
+    expect(right).toContain('Objects2');
+    expect(right).toContain('Arrays1');
   });
 
   it('hides tree stats when parse errors exist', () => {
     const broken = '{"a":}';
     const f = create({ text: broken, parseResult: svc.parse(broken) });
     const right = textOf(f, '.right');
-    expect(right).toContain('Nodes-');
-    expect(right).toContain('Depth-');
-    expect(right).toContain('Obj-');
-    expect(right).toContain('Arr-');
+    expect(right).toContain('Total Nodes-');
+    expect(right).toContain('Max Depth-');
+    expect(right).toContain('Objects-');
+    expect(right).toContain('Arrays-');
   });
 
   it('hides tree stats when text is empty', () => {
     const f = create({ text: '', parseResult: svc.parse('') });
-    expect(textOf(f, '.right')).toContain('Nodes-');
+    expect(textOf(f, '.right')).toContain('Total Nodes-');
+  });
+
+  it('renders explanatory tooltips on each tree-stat span', () => {
+    const text = '{"a":1}';
+    const f = create({ text, parseResult: svc.parse(text) });
+    const titleOf = (selector: string): string =>
+      (f.nativeElement.querySelector(selector) as HTMLElement | null)?.getAttribute('title') ?? '';
+    expect(titleOf('.stat-nodes')).toBe(
+      'Total values in the tree, including objects, arrays, and primitives.',
+    );
+    expect(titleOf('.stat-depth')).toBe(
+      'Maximum nesting depth. The root counts as depth 0; a direct child is depth 1.',
+    );
+    expect(titleOf('.stat-obj')).toBe('Number of object nodes in the tree.');
+    expect(titleOf('.stat-arr')).toBe('Number of array nodes in the tree.');
+  });
+
+  describe('Comments stat', () => {
+    it('is not rendered when parseResult is undefined', () => {
+      const f = create();
+      expect(f.nativeElement.querySelector('.stat-comments')).toBeNull();
+    });
+
+    it('is not rendered when text is empty', () => {
+      const f = create({ text: '', parseResult: svc.parse('') });
+      expect(f.nativeElement.querySelector('.stat-comments')).toBeNull();
+    });
+
+    it('is not rendered when the document has parse errors, even with comments', () => {
+      const broken = '// header\n{"a":}';
+      const result = svc.parse(broken);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.commentCount).toBeGreaterThan(0);
+      const f = create({ text: broken, parseResult: result });
+      expect(f.nativeElement.querySelector('.stat-comments')).toBeNull();
+    });
+
+    it('is not rendered when the document parses cleanly but has no comments', () => {
+      const text = '{"a":1}';
+      const f = create({ text, parseResult: svc.parse(text) });
+      expect(f.nativeElement.querySelector('.stat-comments')).toBeNull();
+    });
+
+    it('is rendered in JSON mode when comments are present (content-driven, not mode-driven)', () => {
+      const text = '// header\n{"a":1}';
+      const f = create({ text, parseResult: svc.parse(text), mode: 'json' });
+      const el = f.nativeElement.querySelector('.stat-comments') as HTMLElement | null;
+      expect(el).not.toBeNull();
+      expect(textOf(f, '.stat-comments')).toContain('Comments1');
+    });
+
+    it('renders the correct count for mixed multi-line block + stacked line comments', () => {
+      // 1 multi-line block + 2 stacked + 1 inline trailing = 4 comments
+      const text = '/* multi\n  line */\n' + '{\n  // a\n  // b\n  "x": 1 /* inline */\n}';
+      const f = create({ text, parseResult: svc.parse(text), mode: 'jsonc' });
+      expect(textOf(f, '.stat-comments')).toContain('Comments4');
+    });
+
+    it('renders the explanatory tooltip', () => {
+      const text = '// c\n{"a":1}';
+      const f = create({ text, parseResult: svc.parse(text), mode: 'jsonc' });
+      const el = f.nativeElement.querySelector('.stat-comments') as HTMLElement | null;
+      expect(el?.getAttribute('title')).toBe('Number of JSONC comments preserved during parsing.');
+    });
   });
 
   it('shows JSONC badge when mode is jsonc', () => {
@@ -263,6 +327,22 @@ describe('StatusBarComponent', () => {
       expect(displayOf(f, '.stat-obj')).toBe('none');
       expect(displayOf(f, '.stat-arr')).toBe('none');
       expect(displayOf(f, '.stat-build')).toBe('none');
+    });
+
+    it('hides Comments at narrow widths when present', () => {
+      if (!isNarrow()) {
+        pending(
+          `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+            'cannot exercise narrow SCSS media query. Skipping.',
+        );
+        return;
+      }
+      // .stat-comments is conditionally rendered (showComments must be
+      // true), so a separate fixture with a JSONC document is needed
+      // to put the element in the DOM under SCSS scrutiny.
+      const text = '// c\n{"a":1}';
+      const f = create({ text, parseResult: svc.parse(text), mode: 'jsonc' });
+      expect(displayOf(f, '.stat-comments')).toBe('none');
     });
 
     it('keeps Lines/Size/Mode visible at narrow widths', () => {

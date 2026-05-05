@@ -29,22 +29,58 @@
   </div>
 
   <div class="right">
-    <span class="stat stat-nodes" aria-label="Total nodes" i18n-aria-label="@@status.nodes.aria">
-      <span class="label" i18n="@@status.nodes.label">Nodes</span>
+    <span
+      class="stat stat-nodes"
+      aria-label="Total nodes"
+      i18n-aria-label="@@status.nodes.aria"
+      title="Total values in the tree, including objects, arrays, and primitives."
+      i18n-title="@@status.nodes.title"
+    >
+      <span class="label" i18n="@@status.nodes.label">Total Nodes</span>
       <span class="value">{{ treeStats()?.nodes ?? placeholder }}</span>
     </span>
-    <span class="stat stat-depth" aria-label="Maximum depth" i18n-aria-label="@@status.depth.aria">
-      <span class="label" i18n="@@status.depth.label">Depth</span>
+    <span
+      class="stat stat-depth"
+      aria-label="Maximum depth"
+      i18n-aria-label="@@status.depth.aria"
+      title="Maximum nesting depth. The root counts as depth 0; a direct child is depth 1."
+      i18n-title="@@status.depth.title"
+    >
+      <span class="label" i18n="@@status.depth.label">Max Depth</span>
       <span class="value">{{ treeStats()?.depth ?? placeholder }}</span>
     </span>
-    <span class="stat stat-obj" aria-label="Object count" i18n-aria-label="@@status.objects.aria">
-      <span class="label" i18n="@@status.objects.label">Obj</span>
+    <span
+      class="stat stat-obj"
+      aria-label="Object count"
+      i18n-aria-label="@@status.objects.aria"
+      title="Number of object nodes in the tree."
+      i18n-title="@@status.objects.title"
+    >
+      <span class="label" i18n="@@status.objects.label">Objects</span>
       <span class="value">{{ treeStats()?.objects ?? placeholder }}</span>
     </span>
-    <span class="stat stat-arr" aria-label="Array count" i18n-aria-label="@@status.arrays.aria">
-      <span class="label" i18n="@@status.arrays.label">Arr</span>
+    <span
+      class="stat stat-arr"
+      aria-label="Array count"
+      i18n-aria-label="@@status.arrays.aria"
+      title="Number of array nodes in the tree."
+      i18n-title="@@status.arrays.title"
+    >
+      <span class="label" i18n="@@status.arrays.label">Arrays</span>
       <span class="value">{{ treeStats()?.arrays ?? placeholder }}</span>
     </span>
+    @if (showComments()) {
+      <span
+        class="stat stat-comments"
+        aria-label="Comment count"
+        i18n-aria-label="@@status.comments.aria"
+        title="Number of JSONC comments preserved during parsing."
+        i18n-title="@@status.comments.title"
+      >
+        <span class="label" i18n="@@status.comments.label">Comments</span>
+        <span class="value">{{ commentCount() }}</span>
+      </span>
+    }
     <span class="stat stat-mode" [class.mode-jsonc]="mode() === 'jsonc'">
       <span class="value mode">{{ modeLabel() }}</span>
     </span>
