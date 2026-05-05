@@ -6,6 +6,7 @@ import { LoggerService } from './core/telemetry/logger.service';
 import { RouteTracker } from './core/telemetry/route-tracker';
 import { AppUpdateService } from './core/update/app-update.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
+import { attachFixtureToBody, expectNoStrictA11yViolations } from '../testing/a11y';
 import { provideFakeAuth } from '../testing/auth.testing';
 
 function waitForSingleAnimationFrame(): Promise<void> {
@@ -26,6 +27,7 @@ describe('AppComponent', () => {
   let loggerServiceSpy: jasmine.SpyObj<LoggerService>;
   let routeTrackerSpy: jasmine.SpyObj<RouteTracker>;
   let appUpdateServiceSpy: jasmine.SpyObj<AppUpdateService>;
+  let teardown: (() => void) | undefined;
 
   beforeEach(async () => {
     loggerServiceSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'connect']);
@@ -59,6 +61,8 @@ describe('AppComponent', () => {
   });
 
   afterEach(() => {
+    teardown?.();
+    teardown = undefined;
     // Clean up any static-splash element a test left behind so it
     // does not bleed into subsequent specs.
     document.getElementById('jot-static-splash')?.remove();
@@ -72,6 +76,20 @@ describe('AppComponent', () => {
   it('has the JotJSON title', () => {
     const fixture = TestBed.createComponent(AppComponent);
     expect(fixture.componentInstance.title).toBe('JotJSON');
+  });
+
+  it('has no critical or serious WCAG 2.1 AA violations in the shell (dark theme)', async () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    teardown = attachFixtureToBody(fixture, 'dark');
+
+    await expectNoStrictA11yViolations(fixture);
+  });
+
+  it('has no critical or serious WCAG 2.1 AA violations in the shell (light theme)', async () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    teardown = attachFixtureToBody(fixture, 'light');
+
+    await expectNoStrictA11yViolations(fixture);
   });
 
   it('eagerly instantiates DocumentDropController so drag-drop listeners attach at app start', () => {

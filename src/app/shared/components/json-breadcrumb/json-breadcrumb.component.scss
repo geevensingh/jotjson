@@ -1,5 +1,14 @@
 :host {
   display: block;
+  --jj-breadcrumb-muted-color: #a0a0a0;
+  --jj-breadcrumb-current-bg: #264f78;
+  --jj-breadcrumb-current-color: #ffffff;
+}
+
+:host-context(.theme-light) {
+  --jj-breadcrumb-muted-color: #5c5c5c;
+  --jj-breadcrumb-current-bg: #cce4f7;
+  --jj-breadcrumb-current-color: #1a1a1a;
 }
 
 .jj-breadcrumb-bar {
@@ -8,7 +17,7 @@
   gap: 8px;
   font-size: 12px;
   line-height: 1.4;
-  color: rgba(127, 127, 127, 0.85);
+  color: var(--jj-breadcrumb-muted-color);
   font-family: inherit;
   padding: 4px 8px;
   min-height: 24px;
@@ -24,7 +33,7 @@
 }
 
 .jj-breadcrumb--empty {
-  color: rgba(127, 127, 127, 0.6);
+  color: var(--jj-breadcrumb-muted-color);
   font-style: italic;
 }
 
@@ -104,8 +113,8 @@
   }
 
   &[aria-current='location'] {
-    background: var(--highlight-selection);
-    color: inherit;
+    background: var(--jj-breadcrumb-current-bg);
+    color: var(--jj-breadcrumb-current-color);
     cursor: pointer;
   }
 }
@@ -117,7 +126,7 @@
 }
 
 .jj-breadcrumb__sep {
-  color: rgba(127, 127, 127, 0.5);
+  color: var(--jj-breadcrumb-muted-color);
   margin: 0 2px;
   flex-shrink: 0;
 }
@@ -126,7 +135,7 @@
   border: 0;
   background: transparent;
   cursor: pointer;
-  color: rgba(127, 127, 127, 0.7);
+  color: var(--jj-breadcrumb-muted-color);
   width: 24px;
   height: 24px;
   display: inline-flex;

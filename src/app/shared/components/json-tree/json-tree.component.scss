@@ -8,6 +8,17 @@
   background: var(--bg);
   color: var(--fg);
   font-family: v.$font-ui;
+  --tree-string-color: #7fa164;
+  --tree-number-color: #ff9b30;
+  --tree-boolean-color: #3fa1f3;
+  --tree-muted-color: #a0a0a0;
+}
+
+:host-context(.theme-light) {
+  --tree-string-color: #3f6a25;
+  --tree-number-color: #8a4b00;
+  --tree-boolean-color: #005ea8;
+  --tree-muted-color: #5c5c5c;
 }
 
 .tree-controls {
@@ -64,7 +75,7 @@
 .tree-search-count {
   display: inline-grid;
   font-size: 12px;
-  color: rgba(127, 127, 127, 0.9);
+  color: var(--tree-muted-color);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -106,7 +117,7 @@
 }
 
 .tree-empty {
-  color: rgba(127, 127, 127, 0.7);
+  color: var(--tree-muted-color);
   padding: 20px;
   text-align: center;
   font-family: v.$font-ui;
@@ -298,23 +309,24 @@ mat-nested-tree-node:focus-visible {
 
   &::after {
     content: ': ';
-    color: rgba(127, 127, 127, 0.8);
+    color: var(--tree-muted-color);
     font-weight: normal;
   }
 }
 
 .tree-index {
-  color: rgba(127, 127, 127, 0.8);
+  color: var(--tree-muted-color);
   font-weight: normal;
   margin-right: 6px;
 }
 
 .tree-value-string {
-  // CSS-var seam (M6a.75): default preserves the legacy string color.
+  // CSS-var seam (M6a.75): default keeps string tokens green while
+  // clearing WCAG 2.1 AA contrast in both supported themes.
   // The engine sets `--tree-value-color` etc. on the row when a
   // value-target rule matches. Bold/italic/underline get their own
   // vars so a rule can flip them per node without specificity wars.
-  color: var(--tree-value-color, #6a8759);
+  color: var(--tree-value-color, var(--tree-string-color));
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
@@ -343,26 +355,26 @@ mat-nested-tree-node:focus-visible {
 }
 
 .tree-value-number {
-  color: var(--tree-value-color, #ff9b30);
+  color: var(--tree-value-color, var(--tree-number-color));
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
 }
 
 .tree-value-boolean {
-  color: var(--tree-value-color, #3fa1f3);
+  color: var(--tree-value-color, var(--tree-boolean-color));
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
 }
 
 .tree-value-null {
-  color: rgba(127, 127, 127, 0.75);
+  color: var(--tree-muted-color);
   font-style: italic;
 }
 
 .tree-value-container {
-  color: rgba(127, 127, 127, 0.9);
+  color: var(--tree-muted-color);
 
   .tree-value-brace {
     color: inherit;
@@ -384,7 +396,7 @@ mat-nested-tree-node:focus-visible {
   flex-shrink: 0;
 
   .tree-count {
-    color: rgba(127, 127, 127, 0.7);
+    color: var(--tree-muted-color);
     font-style: italic;
     // Decoration -> sans (DESIGN_SPEC.md tree font philosophy).
     font-family: var(--font-ui);
@@ -457,7 +469,7 @@ mat-nested-tree-node:focus-visible {
   margin-left: 8px;
   border-radius: 9px;
   background: rgba(127, 127, 127, 0.15);
-  color: rgba(127, 127, 127, 0.85);
+  color: var(--tree-muted-color);
   text-transform: lowercase;
   letter-spacing: 0.3px;
   font-family: v.$font-ui;
@@ -497,7 +509,7 @@ mat-nested-tree-node:focus-visible {
   justify-content: center;
   width: 20px;
   height: 20px;
-  color: rgba(127, 127, 127, 0.6);
+  color: var(--tree-muted-color);
   border: 0;
   background: none;
   cursor: pointer;

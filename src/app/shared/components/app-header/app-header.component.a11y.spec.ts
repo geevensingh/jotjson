@@ -102,4 +102,10 @@ describe('AppHeaderComponent (a11y)', () => {
     teardown = attachFixtureToBody(fixture, 'dark');
     await expectNoStrictA11yViolations(fixture);
   });
+
+  it('has no critical or serious WCAG 2.1 AA violations (light theme)', async () => {
+    const fixture = TestBed.createComponent(AppHeaderComponent);
+    teardown = attachFixtureToBody(fixture, 'light');
+    await expectNoStrictA11yViolations(fixture);
+  });
 });

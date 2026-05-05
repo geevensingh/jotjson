@@ -3,7 +3,7 @@ import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { JsonTreeComponent } from './json-tree.component';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
-import { attachFixtureToBody } from '../../../../testing/a11y';
+import { attachFixtureToBody, expectNoStrictA11yViolations } from '../../../../testing/a11y';
 
 /**
  * M7g-3b structural accessibility spec for the JSON tree component.
@@ -19,21 +19,15 @@ import { attachFixtureToBody } from '../../../../testing/a11y';
  *   - role="group" on `.tree-children`;
  *   - roving tabindex (exactly one node tabindex="0").
  *
- * NOTE on the strict axe scan: Wave 3b deliberately does NOT run
- * `expectNoStrictA11yViolations` against the rendered tree yet. The
- * audit surfaced ~14 dark-theme and ~18 light-theme color-contrast
- * violations on tree elements (e.g., `.tree-count`, `.tree-type-badge`,
- * `.tree-value-string` at 4.14:1 just under WCAG 4.5:1) plus app-shell
- * bleed (`.jj-breadcrumb`). Those are the focus of M7g-3d (Light-theme
- * + disabled-text contrast); folding them into 3b would balloon scope
- * past F2.1-F2.3. The structural assertions below confirm the WAI-ARIA
- * Tree pattern landed; the strict axe gate joins the file in Wave 3d.
+ * Wave 3d re-enables the strict axe gate in both themes after the tree
+ * token palette and embedded breadcrumb contrast fixes landed.
  */
 describe('JsonTreeComponent (a11y)', () => {
   const REPRESENTATIVE_VALUE = {
     name: 'Alice',
     age: 30,
     active: true,
+    missing: null,
     tags: ['ops', 'oncall'],
     profile: { id: 'a-1', verified: true },
   };
@@ -107,5 +101,25 @@ describe('JsonTreeComponent (a11y)', () => {
       'mat-nested-tree-node[tabindex="0"]',
     );
     expect(focused.length).toBe(1);
+  });
+
+  it('has no critical or serious WCAG 2.1 AA violations (dark theme)', async () => {
+    const fixture = await configure();
+    teardown = attachFixtureToBody(fixture, 'dark');
+    fixture.detectChanges();
+    fixture.componentInstance.expandAll();
+    fixture.detectChanges();
+
+    await expectNoStrictA11yViolations(fixture, { skipWhenStable: true });
+  });
+
+  it('has no critical or serious WCAG 2.1 AA violations (light theme)', async () => {
+    const fixture = await configure();
+    teardown = attachFixtureToBody(fixture, 'light');
+    fixture.detectChanges();
+    fixture.componentInstance.expandAll();
+    fixture.detectChanges();
+
+    await expectNoStrictA11yViolations(fixture, { skipWhenStable: true });
   });
 });

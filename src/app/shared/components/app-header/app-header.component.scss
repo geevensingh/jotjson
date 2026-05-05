@@ -118,5 +118,5 @@
 }
 
 .brand-name {
-  color: v.$color-primary;
+  color: var(--brand-color-on-surface, #{v.$color-primary});
 }

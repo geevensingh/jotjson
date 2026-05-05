@@ -10,6 +10,7 @@
 :root {
   --bg: #{$color-bg-dark};
   --fg: #{$color-fg-dark};
+  --brand-color-on-surface: #{$color-primary};
 
   --highlight-selection: #{$highlight-selection-dark};
   --highlight-matching: #{$highlight-matching-dark};
@@ -21,6 +22,7 @@
 .theme-light {
   --bg: #{$color-bg-light};
   --fg: #{$color-fg-light};
+  --brand-color-on-surface: #006978;
 
   --highlight-selection: #{$highlight-selection-light};
   --highlight-matching: #{$highlight-matching-light};
@@ -33,6 +35,7 @@
   .theme-system {
     --bg: #{$color-bg-light};
     --fg: #{$color-fg-light};
+    --brand-color-on-surface: #006978;
 
     --highlight-selection: #{$highlight-selection-light};
     --highlight-matching: #{$highlight-matching-light};
