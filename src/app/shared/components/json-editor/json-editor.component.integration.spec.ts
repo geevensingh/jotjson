@@ -38,6 +38,41 @@ const HOST_HEIGHT_PX = 600;
 const READY_POLL_MS = 25;
 const READY_TIMEOUT_MS = 3000;
 
+// Shared predicate: does this ErrorEvent look like Monaco's known-benign
+// disposal-time worker `importScripts` NetworkError? Match against
+// multiple shape candidates because browsers vary in which field carries
+// the message for worker-origin errors.
+function isMonacoWorkerImportScriptsError(event: ErrorEvent): boolean {
+  const messageCandidate =
+    event.message ||
+    (event.error instanceof Error ? event.error.message : '') ||
+    event.filename ||
+    '';
+  return (
+    messageCandidate.includes('NetworkError') &&
+    messageCandidate.includes('importScripts') &&
+    messageCandidate.includes('editor.worker')
+  );
+}
+
+// File-level: register once for the entire karma run. This intentionally
+// outlives the suite's afterAll because the worker NetworkError is thrown
+// by Monaco's internal disposal *after* afterAll returns: the worker boot
+// races Karma's iframe reap, fails to load
+// `vs/assets/editor.worker-*.js`, and surfaces as an unhandled
+// `error` event on `window`. A listener removed in afterAll would let
+// Karma see the unhandled error and disconnect the browser slot
+// (30 s message-timeout -> DISCONNECTED). The match predicate is precise
+// enough (NetworkError + importScripts + editor.worker, all three) that
+// other specs cannot trigger a false-positive match.
+const monacoWorkerErrorFilter = (event: ErrorEvent): void => {
+  if (isMonacoWorkerImportScriptsError(event)) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+};
+window.addEventListener('error', monacoWorkerErrorFilter, true);
+
 interface ComponentTestProbe {
   ready: () => boolean;
   editor?: MonacoNS.editor.IStandaloneCodeEditor;
@@ -108,6 +143,40 @@ describe('JsonEditorComponent (browser integration)', () => {
     expect(typeof monaco.editor.create).toBe('function');
     expect(typeof monaco.editor.defineTheme).toBe('function');
     expect(monaco.MarkerSeverity.Error).toBeGreaterThan(0);
+  });
+
+  it('worker startup succeeds: no editor.worker NetworkError before editor becomes ready', async () => {
+    // Positive smoke check: the file-level monacoWorkerErrorFilter
+    // suppresses the known-benign post-teardown NetworkError, which
+    // could in theory mask a real regression that breaks worker boot
+    // *during* startup. This spec guards against that by capturing
+    // any matching error fired between mount and ready and asserting
+    // none occurred. The local listener is registered at capture
+    // phase before the file-level filter has a chance to call
+    // stopImmediatePropagation, so it sees errors regardless of the
+    // suppression behavior of the file-level filter.
+    const startupErrors: string[] = [];
+    const localListener = (event: ErrorEvent): void => {
+      if (isMonacoWorkerImportScriptsError(event)) {
+        startupErrors.push(event.message || String(event.error) || event.filename || '');
+      }
+    };
+    window.addEventListener('error', localListener, true);
+    try {
+      const { fixture, hostEl } = await mountSizedFixture('{"a":1}');
+      try {
+        // mountSizedFixture already polled for ready(); if a worker
+        // error fired during startup, we would have captured it here.
+        expect(startupErrors)
+          .withContext('no editor.worker NetworkError should fire during editor startup')
+          .toEqual([]);
+      } finally {
+        fixture.destroy();
+        hostEl.remove();
+      }
+    } finally {
+      window.removeEventListener('error', localListener, true);
+    }
   });
 
   it('mounts a real editor whose getValue matches the value input', async () => {
