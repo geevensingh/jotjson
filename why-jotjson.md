@@ -159,7 +159,7 @@ strings are read as UTC or local.
 - Selection breadcrumb with **Copy JSON path** and a configurable root prefix
   (`$`, lodash-style, `root.`, `Data.`, or none)
 - Per-row context menu: copy key / value / path, search by key / value, expand-from-here
-- Double-click any row to copy its value
+- Double-click a leaf row to copy its value; double-click a container to expand or collapse it
 - Inferred type badges on every row: `uuid`, `url`, `email`, `path`, `ipv4`,
   `ipv6`, `date`, plus container item / key counts
 - Status bar: byte size, line count, cursor position, total node count, max

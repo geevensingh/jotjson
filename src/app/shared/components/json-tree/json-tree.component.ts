@@ -1909,11 +1909,31 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Double-click handler for `.tree-row`. Copies the row's value (raw
-   * text for primitives, pretty-printed JSON for containers) per Q5
-   * decision in plan.md. The browser also fires two `click` events
-   * before the `dblclick`; the existing `onSelect` runs for each but
-   * is idempotent on identical paths, so no debounce is needed.
+   * Double-click handler for `.tree-row`. Behavior splits by node
+   * type (issue #109):
+   *
+   *   - **Containers with children** (`type === 'object' | 'array'`
+   *     and `children.length > 0`): toggle the row's expansion state
+   *     and emit `tree.row.doubleClickToggle` with the post-toggle
+   *     `action`. Alt is intentionally ignored on containers; the
+   *     right-click context menu still offers "Copy value" for users
+   *     who want the pretty-printed JSON.
+   *   - **Empty containers** (`{}` / `[]`): no-op. They render via
+   *     the leaf template (`hasChild` returns false), but copying an
+   *     empty container would contradict issue #109's
+   *     "objects and arrays should expand/collapse instead of
+   *     copying" wording, so we short-circuit before reaching the
+   *     copy branch and emit no telemetry.
+   *   - **Primitive leaves**: copy the row's value to the clipboard
+   *     (raw text for primitives; Alt wraps as a JSON string literal
+   *     per DESIGN_SPEC.md §443).
+   *
+   * The browser also fires two `click` events before the `dblclick`;
+   * the existing `onSelect` runs for each but is idempotent on
+   * identical paths, so no debounce is needed. The interactive
+   * descendant guard (kebab pill, chevron, etc.) short-circuits the
+   * handler entirely so a dblclick on those buttons never falls into
+   * the type-based branching here.
    */
   onRowDblClick(event: MouseEvent, node: TreeNode): void {
     const target = event.target;
@@ -1921,6 +1941,17 @@ export class JsonTreeComponent {
       target instanceof Element &&
       target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')
     ) {
+      return;
+    }
+    if (node.type === 'object' || node.type === 'array') {
+      if (!node.children || node.children.length === 0) {
+        return;
+      }
+      const wasExpanded = this.treeControl.isExpanded(node);
+      this.treeControl.toggle(node);
+      this.logger.info('tree.row.doubleClickToggle', {
+        action: wasExpanded ? 'collapse' : 'expand',
+      });
       return;
     }
     this.copyValue(node, 'dblclick', event.altKey);

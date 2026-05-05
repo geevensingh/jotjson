@@ -440,7 +440,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Fallback for restricted browsers:** if the browser denies clipboard polling (some require a user gesture), the button remains always visible in an "unknown" state. Clicking it triggers a user-gesture clipboard read - if the content is valid JSON, it pastes immediately; if not, a brief tooltip says "Clipboard does not contain JSON". This ensures the feature works even without polling permission.
     - **Privacy note:** clipboard contents are never sent to the server - the check is entirely client-side.
     - **Auto-unescape on paste** (toolbar Paste button and native Ctrl+V): if the pasted text is not already valid JSON/JSONC at the top level (object or array), the app attempts a best-effort unescape to recover JSON that was stringified or copied out of a log/debugger - e.g. `{\"a\":1}` becomes `{"a":1}`. A recovered payload is accepted only when it parses cleanly and yields an object or array; ordinary prose containing `\n` or stray backslashes is left alone. For toolbar paste the recovered payload is also auto-formatted. For native paste inside the Monaco editor, the unescape is applied only when the hypothetical post-paste buffer also parses cleanly, to avoid mangling a legitimate escaped string value being pasted into an existing document. Undo (Ctrl+Z) reverts to the raw paste.
-    - **Copy as escaped JSON string**: holding Alt while invoking a copy action writes `JSON.stringify(textBeingCopied)` to the clipboard - the JSON-string-literal variant of the same content - so the value can be embedded as a string in another JSON document. This is the inverse of auto-unescape on paste. Supported entry points: the toolbar Copy button (Alt+click), double-clicking a tree row (Alt+double-click copies the row's value escaped), and the row's right-click "Copy value" context-menu item (Alt+click on the menu item). All other copy actions (Copy key, Copy path, breadcrumb copy-path, share link, blob URL, build SHA) do not honor Alt.
+    - **Copy as escaped JSON string**: holding Alt while invoking a copy action writes `JSON.stringify(textBeingCopied)` to the clipboard - the JSON-string-literal variant of the same content - so the value can be embedded as a string in another JSON document. This is the inverse of auto-unescape on paste. Supported entry points: the toolbar Copy button (Alt+click), double-clicking a primitive tree row (Alt+double-click copies the row's value escaped; Alt is ignored on container rows since their dblclick toggles expansion - see issue #109), and the row's right-click "Copy value" context-menu item (Alt+click on the menu item; this remains the way to copy a container's serialized form). All other copy actions (Copy key, Copy path, breadcrumb copy-path, share link, blob URL, build SHA) do not honor Alt.
     - **Extract JSON from mixed text** (toolbar Paste and native Ctrl+V): if a paste does not parse as JSON/JSONC even after auto-unescape, the app scans the pasted text for embedded object/array literals (e.g., a `curl -v` transcript, a log line, or prose wrapping a payload). When one or more candidates are found, a non-destructive banner appears above the editor offering `[Extract JSON]` / `[Dismiss]`; the editor still contains the raw paste so users can decline. A single embedded block is extracted via `jsonc-parser` `format()` so comments are preserved; multiple blocks are wrapped as a JSON array via `JSON.stringify` (comments are lost across the array boundary - the banner says so). Primitives (numbers, strings, booleans, null) are not extracted. Inputs above 1 MB are skipped for performance. The banner auto-clears as soon as the editor content changes again (typing or another paste).
   - **File Upload** - two ways to load a JSON file:
     - **Toolbar button** ("Upload File"): opens a native file picker filtered to `.json`, `.jsonc`, `.jsonl`, `.geojson`, and `.txt` extensions. Reads the selected file client-side via the `FileReader` API and loads its contents into the editor.
@@ -569,7 +569,11 @@ The primary page. Available to **all users** (anonymous + registered).
       keyboard-reachable through standard menu navigation, and every new
       user-facing string is extractable. Keyboard navigation inside the
       swatch grid is deferred beyond v1.
-  - **Double-click a row** copies the row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text for primitives, pretty-printed JSON for containers). The dblclick path excludes the kebab pill and twisty toggle the same way single-click selection does, so clicking those buttons twice never triggers an unintended value copy. Emits the `tree.row.doubleClickCopyValue` telemetry event.
+  - **Double-click a row** behavior splits by row type (issue #109):
+    - **Primitive (leaf) rows** (string / number / boolean / null): copy the row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text). Alt+double-click wraps the value as a JSON-string literal (DESIGN_SPEC.md §443). Emits the `tree.row.doubleClickCopyValue` telemetry event with `{ escaped: boolean }`.
+    - **Container rows with children** (`object` / `array`): toggle the row's expansion state (expand if collapsed, collapse if expanded). Alt is ignored on container dblclick; right-click "Copy value" remains the way to copy a container's pretty-printed JSON. Emits the `tree.row.doubleClickToggle` telemetry event with `{ action: 'expand' | 'collapse' }` (post-toggle state).
+    - **Empty containers** (`{}` / `[]`): no-op (no copy, no toggle, no telemetry). They render via the leaf template since `hasChild` is false, but the dblclick handler short-circuits before reaching the copy branch so the issue #109 wording ("objects and arrays should expand/collapse instead of copying") still holds.
+    - In all cases the dblclick path excludes the kebab pill and twisty toggle the same way single-click selection does, so clicking those buttons twice never triggers the row dblclick handler.
   - **Search highlight** - a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
     - Any row whose key or value contains the search text (case-insensitive by default) is highlighted in the **search highlight color** (theme-aware default defined in `TreeHighlightColors`).
@@ -2005,6 +2009,19 @@ Out of scope (for v1):
   the tree (role chain + roving-tabindex assertions); the strict axe
   scan is deferred to M7g-3d alongside the broader contrast
   remediation.
+- **0.14.5**: Issue #109 - tree-row double-click semantics split by
+  node type. Container rows (`object` / `array` with children) now
+  toggle expansion on dblclick instead of copying their pretty-printed
+  JSON; primitive (leaf) rows still copy. Empty `{}` / `[]` are a
+  no-op. Alt is ignored on container dblclick (Alt+dblclick on a
+  primitive still emits the JSON-string-literal variant). The
+  right-click "Copy value" context-menu item remains the canonical way
+  to copy a container's serialized form. New
+  `tree.row.doubleClickToggle` telemetry event with
+  `{ action: 'expand' | 'collapse' }` (post-toggle state); the
+  existing `tree.row.doubleClickCopyValue` event now fires only for
+  primitive rows. The chevron-button toggle path is intentionally
+  uninstrumented for parity with pre-issue-#109 behavior.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

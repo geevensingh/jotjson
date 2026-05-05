@@ -5392,18 +5392,103 @@ describe('JsonTreeComponent', () => {
         expect(writeText).toHaveBeenCalledWith('hi');
       });
 
-      it('copies pretty JSON for a container row', async () => {
+      it('expands a collapsed container on dblclick', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.obj');
+        expect(cmp.treeControl.isExpanded(node)).withContext('starts collapsed').toBe(false);
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(cmp.treeControl.isExpanded(node)).withContext('expanded after dblclick').toBe(true);
+        expect(writeText).not.toHaveBeenCalled();
+      });
+
+      it('collapses an expanded container on dblclick', async () => {
         await createWith({ obj: { a: 1 } });
         cmp.expandAll();
         fixture.detectChanges();
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.obj');
+        expect(cmp.treeControl.isExpanded(node)).withContext('starts expanded').toBe(true);
         withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
         await Promise.resolve();
         await Promise.resolve();
-        const arg = writeText.calls.mostRecent().args[0] as string;
-        expect(arg).toContain('\n');
-        expect(arg).toContain('"a": 1');
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('collapsed after dblclick')
+          .toBe(false);
+        expect(writeText).not.toHaveBeenCalled();
+      });
+
+      it('toggles container on dblclick even when Alt is held (no copy)', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.obj');
+        withCtxClipboard({ writeText }, () =>
+          cmp.onRowDblClick(new MouseEvent('dblclick', { altKey: true }), node),
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('Alt does not suppress toggle')
+          .toBe(true);
+        expect(writeText).not.toHaveBeenCalled();
+      });
+
+      it('emits tree.row.doubleClickToggle with the post-toggle action', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+
+        cmp.onRowDblClick(new MouseEvent('dblclick'), node);
+        expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickToggle', {
+          action: 'expand',
+        });
+
+        logger.info.calls.reset();
+        cmp.onRowDblClick(new MouseEvent('dblclick'), node);
+        expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickToggle', {
+          action: 'collapse',
+        });
+      });
+
+      it('is a no-op on an empty container row (no copy, no toggle, no telemetry)', async () => {
+        const logger = await createWithLoggerSpy({ empty: {} });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.empty');
+        const wasExpanded = cmp.treeControl.isExpanded(node);
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(writeText).not.toHaveBeenCalled();
+        expect(cmp.treeControl.isExpanded(node)).toBe(wasExpanded);
+        expect(logger.info).not.toHaveBeenCalledWith(
+          'tree.row.doubleClickToggle',
+          jasmine.anything(),
+        );
+        expect(logger.info).not.toHaveBeenCalledWith(
+          'tree.row.doubleClickCopyValue',
+          jasmine.anything(),
+        );
+      });
+
+      it('is a no-op on an empty array row (no copy, no toggle, no telemetry)', async () => {
+        const logger = await createWithLoggerSpy({ empty: [] });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.empty');
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(writeText).not.toHaveBeenCalled();
+        expect(logger.info).not.toHaveBeenCalledWith(
+          'tree.row.doubleClickToggle',
+          jasmine.anything(),
+        );
       });
 
       it('skips when the dblclick target is an interactive descendant (kebab pill)', async () => {
@@ -5421,6 +5506,31 @@ describe('JsonTreeComponent', () => {
         await Promise.resolve();
         await Promise.resolve();
         expect(writeText).not.toHaveBeenCalled();
+      });
+
+      it('skips when the dblclick target is the chevron toggle button (regression for issue #109)', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        const wasExpanded = cmp.treeControl.isExpanded(node);
+        const chevron = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-row[data-path="$.obj"] .tree-twisty[mattreenodetoggle], .tree-row[data-path="$.obj"] button[mattreenodetoggle]',
+        ) as HTMLButtonElement | null;
+        expect(chevron).withContext('found the chevron toggle button on $.obj').toBeTruthy();
+        const ev = new MouseEvent('dblclick', { bubbles: true });
+        Object.defineProperty(ev, 'target', { value: chevron });
+        cmp.onRowDblClick(ev, node);
+        // The interactive-descendant guard should short-circuit before
+        // any toggle / telemetry happens here. The chevron's own
+        // matTreeNodeToggle click handler is what flips state on click;
+        // this guard ensures dblclick on the chevron does not _also_
+        // toggle from the row handler.
+        expect(cmp.treeControl.isExpanded(node)).toBe(wasExpanded);
+        expect(logger.info).not.toHaveBeenCalledWith(
+          'tree.row.doubleClickToggle',
+          jasmine.anything(),
+        );
       });
     });
 
@@ -5493,6 +5603,121 @@ describe('JsonTreeComponent', () => {
           .forEach((b) => (b as HTMLElement).click());
         fixture.detectChanges();
       });
+    });
+  });
+
+  describe('dblclick container toggle (issue #109, DOM-level)', () => {
+    function withClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
+      const original = (navigator as { clipboard?: Clipboard }).clipboard;
+      const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
+      try {
+        return run();
+      } finally {
+        if (hadOwn && original) {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: original,
+          });
+        } else {
+          delete (navigator as { clipboard?: unknown }).clipboard;
+        }
+      }
+    }
+
+    function objRow(): HTMLElement {
+      const row = (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-row[data-path="$.obj"]',
+      ) as HTMLElement | null;
+      expect(row).withContext('found the $.obj container row').toBeTruthy();
+      return row!;
+    }
+
+    function objChevron(): HTMLButtonElement {
+      const chevron = (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-row[data-path="$.obj"] button[mattreenodetoggle]',
+      ) as HTMLButtonElement | null;
+      expect(chevron).withContext('found the $.obj chevron toggle').toBeTruthy();
+      return chevron!;
+    }
+
+    it('real dblclick on container row toggles expansion and does not copy', async () => {
+      const logger = await createWithLoggerSpy({ obj: { a: 1, b: 2 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      const node = (() => {
+        const stack = [cmp.root()!];
+        while (stack.length > 0) {
+          const n = stack.pop()!;
+          if (n.pathString === '$.obj') return n;
+          for (const c of n.children ?? []) stack.push(c);
+        }
+        throw new Error('no $.obj node');
+      })();
+      expect(cmp.treeControl.isExpanded(node)).withContext('starts collapsed').toBe(false);
+
+      withClipboard({ writeText }, () => {
+        objRow().dispatchEvent(
+          new MouseEvent('dblclick', { bubbles: true, cancelable: true, altKey: false }),
+        );
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(cmp.treeControl.isExpanded(node))
+        .withContext('expanded after real dblclick')
+        .toBe(true);
+      expect(writeText).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickToggle', {
+        action: 'expand',
+      });
+
+      // Second real dblclick collapses.
+      logger.info.calls.reset();
+      withClipboard({ writeText }, () => {
+        objRow().dispatchEvent(
+          new MouseEvent('dblclick', { bubbles: true, cancelable: true, altKey: false }),
+        );
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(cmp.treeControl.isExpanded(node))
+        .withContext('collapsed after second real dblclick')
+        .toBe(false);
+      expect(writeText).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickToggle', {
+        action: 'collapse',
+      });
+    });
+
+    it('dblclick on the chevron does not invoke row dblclick behavior', async () => {
+      const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+
+      // The chevron button's own click handler (matTreeNodeToggle) runs
+      // on each click. A real `dblclick` issued on the chevron is two
+      // clicks plus a synthetic dblclick: click 1 expands, click 2
+      // collapses, dblclick is short-circuited by the
+      // interactive-descendant guard. Net state: matches starting state,
+      // and crucially no `tree.row.doubleClickToggle` event fired from
+      // the row handler. (The chevron path is intentionally
+      // uninstrumented.)
+      const chevron = objChevron();
+      chevron.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true, altKey: false }),
+      );
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(logger.info).not.toHaveBeenCalledWith(
+        'tree.row.doubleClickToggle',
+        jasmine.anything(),
+      );
     });
   });
 

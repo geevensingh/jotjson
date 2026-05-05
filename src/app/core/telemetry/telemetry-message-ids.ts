@@ -1133,8 +1133,28 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Props: { escaped: boolean }. `true` when Alt was held during the
    * row double-click; emits the JSON-string-literal variant of the
    * value (DESIGN_SPEC.md §443).
+   *
+   * Since issue #109, this event fires only for primitive (leaf)
+   * rows. Container rows (`type === 'object' | 'array'`) emit
+   * `tree.row.doubleClickToggle` instead; empty containers no-op.
    */
   'tree.row.doubleClickCopyValue',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onRowDblClick` container branch
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Issue #109 split dblclick semantics: container rows
+   *           toggle their expansion state instead of copying.
+   * Props: { action: 'expand' | 'collapse' }. The post-toggle state
+   * (i.e., what the row became after the double-click), so analytics
+   * directly answer "how often did dblclick expand vs collapse".
+   * Volume control: bounded-frequency (one user double-click per
+   * emit). No path or content data. Empty containers are a no-op
+   * and do not emit this event; the chevron-button toggle path
+   * remains uninstrumented for parity with pre-issue-#109 behavior.
+   */
+  'tree.row.doubleClickToggle',
 
   /**
    * Severity: info
