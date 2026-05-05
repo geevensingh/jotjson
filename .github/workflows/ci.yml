@@ -292,27 +292,7 @@ jobs:
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
       - name: Run tests with coverage
-        # Defense-in-depth retry for the Karma + Jasmine test job. Two
-        # known flake patterns (Monaco worker NetworkError + splash
-        # rAF race) are addressed in test code; this retry catches any
-        # residual Heisenflake without masking deterministic
-        # regressions because:
-        #   - Only this step is retried; lint, build, type-check and
-        #     api tests still fail loudly on the first attempt.
-        #   - max_attempts: 2 means at most ONE retry.
-        #   - retry_on: error skips cancelled-job retries.
-        #   - on_retry_command cleans coverage/jotjson and
-        #     test-results/web so attempt 2 cannot inherit stale
-        #     outputs from attempt 1.
-        # Pinned to a commit SHA per AGENTS.md security guidance for
-        # third-party actions; tag is the v3 head as of 2025-02-25.
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3
-        with:
-          max_attempts: 2
-          timeout_minutes: 10
-          retry_on: error
-          on_retry_command: rm -rf coverage/jotjson test-results/web
-          command: npm run test:ci
+        run: npm run test:ci
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
