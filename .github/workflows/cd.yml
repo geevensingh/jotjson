@@ -202,6 +202,37 @@ jobs:
           fi
 
       # ------------------------------------------------------------------
+      # Sourcemap upload to Azure Blob Storage (manual deploy path).
+      # Mirrors ci.yml's sourcemap-upload steps so workflow_dispatch
+      # emergency deploys keep the AI-connected Storage container in
+      # sync with deployed JS. Without this, a manual redeploy would
+      # leave the portal symbolicating against stale maps. See
+      # DESIGN_SPEC.md "Sourcemaps" section.
+      # ------------------------------------------------------------------
+      - name: Azure login (sourcemap upload, manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Upload sourcemaps to Azure Blob Storage (manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        env:
+          STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+        run: |
+          az storage blob upload-batch \
+            --source dist/jotjson/browser \
+            --destination sourcemaps \
+            --account-name "$STORAGE_ACCOUNT" \
+            --pattern '*.map' \
+            --auth-mode login \
+            --overwrite true
+      - name: Azure logout (sourcemap upload, manual deploy)
+        if: ${{ always() && steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch' }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
+
+      # ------------------------------------------------------------------
       # Shared: api install (Oryx still builds the api inside the SWA
       # container) and SWA upload.
       # ------------------------------------------------------------------

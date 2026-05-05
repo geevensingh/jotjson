@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
   "navigationFallback": {
     "rewrite": "/shell.html",
-    "exclude": ["/api/*", "/*.{js,css,svg,ico,png,jpg,webp,woff,woff2,webmanifest}"]
+    "exclude": ["/api/*", "/*.{js,css,map,svg,ico,png,jpg,webp,woff,woff2,webmanifest}"]
   },
   "routes": [
     {
@@ -36,7 +36,8 @@
   ],
   "mimeTypes": {
     ".webmanifest": "application/manifest+json",
-    ".json": "application/json"
+    ".json": "application/json",
+    ".map": "application/json"
   },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",

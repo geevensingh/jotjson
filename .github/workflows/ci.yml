@@ -10,6 +10,10 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  # Required for federated OIDC login (azure/login@v3) in the
+  # sourcemap-upload step. Only the web job uses it; other jobs
+  # do not call out to Azure.
+  id-token: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -225,6 +229,40 @@ jobs:
           path: dist/jotjson
           if-no-files-found: error
           retention-days: 30
+      # ------------------------------------------------------------------
+      # Sourcemap upload to Azure Blob Storage for App Insights
+      # symbolication. Runs AFTER the artifact upload so a transient
+      # storage hiccup doesn't block CD's input artifact (artifact
+      # already preserved); but we DO fail loudly so CD's
+      # workflow_run-on-success trigger doesn't fire and ship a deploy
+      # whose AI traces silently lack symbolication. The maps remain
+      # in the web-dist artifact and are deployed to SWA unchanged -
+      # this step only mirrors them into the AI-connected Storage
+      # container so the portal can de-symbolicate exception details.
+      # See DESIGN_SPEC.md "Sourcemaps" section.
+      # ------------------------------------------------------------------
+      - name: Azure login (sourcemap upload)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Upload sourcemaps to Azure Blob Storage
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+        run: |
+          az storage blob upload-batch \
+            --source dist/jotjson/browser \
+            --destination sourcemaps \
+            --account-name "$STORAGE_ACCOUNT" \
+            --pattern '*.map' \
+            --auth-mode login \
+            --overwrite true
+      - name: Azure logout (sourcemap upload)
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
 
   api:
     name: API build

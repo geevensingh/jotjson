@@ -1474,7 +1474,6 @@ Items to revisit before declaring v1 complete (deliberately deferred so they do 
 
 - **PR-by-default for code changes.** Today, code changes can land directly on `main`. Decide whether v1 should require code changes to land via a PR with green CI before merging, with CD/workflow hotfixes remaining as the only sanctioned direct-to-`main` path. Rationale for deferring now: keeps iteration velocity high; CI on `push: main` still runs, just after merge.
 - **Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.
-- **Production sourcemap upload to App Insights.** Currently no sourcemaps in production. Decide whether to wire symbol upload. The build topology now runs the SPA build in CI's `web` job and passes the artifact to CD with `skip_app_build: true`, so the CI job already controls the artifacts; adding a sourcemap-upload step there is unblocked.
 - **Testing-layer strategy.** The current test suite covers static analysis + unit (frontend) + unit (api) + browser integration. See the [Testing strategy](#testing-strategy) section below for the full layer model. Decide before v1 whether any of the tracked layers (api integration, smoke e2e, cross-browser, accessibility, visual regression) should be required v1 gates rather than post-v1 follow-ups.
 
 ---
@@ -1659,14 +1658,61 @@ forwarded; PII messages are dropped at the source by MSAL.
 
 ### Sourcemaps
 
-Production builds do **not** emit sourcemaps today (Angular default
-for the `production` configuration). Production stack traces in App
-Insights are therefore minified. Out-of-band symbol upload to App
-Insights is a planned follow-up; the build topology already supports
-it (CI builds the SPA on the runner and uploads the bundle as a
-`web-dist` artifact; CD downloads it with `skip_app_build: true`),
-so a sourcemap-upload step can be inserted in CI's `web` job between
-the build and the artifact upload.
+Production builds emit visible sourcemaps for both scripts and
+styles (`"sourceMap": true` on the production configuration in
+`angular.json`, equivalent to
+`{ scripts: true, styles: true, vendor: false, hidden: false }`).
+JotJSON-authored TypeScript and SCSS map cleanly back to source;
+Angular framework / `node_modules` internals are skipped to keep
+artifact size in check. Each emitted JS chunk ends with a
+`//# sourceMappingURL=...` URL comment and each CSS bundle ends
+with the equivalent `/*# sourceMappingURL=... */`.
+
+Maps reach two destinations on every push-to-main:
+
+1. **Static Web Apps** - `.js.map` / `.css.map` files are part of
+   the `web-dist` artifact CI hands to CD, so they ship to SWA
+   alongside their `.js` / `.css` siblings. DevTools picks them up
+   automatically on any browser session against
+   `https://jotjson.com/`. JotJSON is open source on GitHub;
+   shipping public maps adds no new disclosure.
+2. **Azure Blob Storage container `sourcemaps`** - CI uploads
+   every `*.map` file to a dedicated container in the existing
+   environment storage account, using the existing federated
+   workload identity (`secrets.AZURE_CLIENT_ID` /
+   `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID`) plus a new
+   `secrets.AZURE_STORAGE_ACCOUNT`. The container is wired into
+   the Application Insights resource via the **Source Map** blade
+   in the Azure portal (`Application Insights -> Settings ->
+   Source Map -> Add new storage account configuration`); the
+   portal then de-symbolicates frames in the Failures blade. The
+   manual-deploy path in `cd.yml` mirrors the same upload step so
+   `workflow_dispatch` emergency redeploys keep the container in
+   sync.
+
+The AI source-map binding is **not Bicep-modeled** today: the
+`Microsoft.Insights/components` schema does not expose the JS
+source-map storage configuration. It is a one-time portal step
+per environment. If the Application Insights component is ever
+torn down and recreated, re-run the portal step; until that
+happens, AI traces temporarily go back to minified - recoverable,
+no data loss.
+
+The sourcemap upload step in CI runs **after** `Upload web bundle`
+(so an upload failure does not block the artifact upload itself
+and CD can be re-run from a saved artifact) but is **not**
+`continue-on-error: true` - failures fail the run loudly, which
+prevents CD's `workflow_run`-on-success trigger from firing and
+shipping a deploy with broken AI symbolication. `--overwrite true`
+on `az storage blob upload-batch` accommodates Angular's
+`outputHashing: all` (vendor chunks reuse hashes across builds).
+
+The Angular service worker glob list does not over-match `.map`
+files: `globToRegex` in
+`@angular/service-worker/fesm2022/config.mjs` wraps every pattern
+as `'^' + ... + '$'` (lines 178/183), so `/*.js` becomes
+`^/[^/]*\.js$` and excludes `main.js.map`. No `ngsw-config.json`
+change is needed.
 
 ### Local development
 

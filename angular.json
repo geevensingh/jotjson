@@ -59,6 +59,7 @@
                 }
               ],
               "outputHashing": "all",
+              "sourceMap": true,
               "serviceWorker": "ngsw-config.json",
               "fileReplacements": [
                 {
