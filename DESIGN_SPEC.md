@@ -1187,10 +1187,10 @@ tripwires together make IfMatch protection the default for every
 - Same-origin deployment: the SPA and `/api/*` share `jotjson.com`, so there is no cross-origin CORS preflight at the edge. If/when a separate API origin is added, CORS will be restricted to `jotjson.com` origins.
 - **Global response headers** (set in `staticwebapp.config.json` `globalHeaders`):
   - `X-Content-Type-Options: nosniff`
-  - `X-Frame-Options: DENY`
+  - `X-Frame-Options: SAMEORIGIN` - blocks third-party iframing (clickjacking) but permits same-origin iframing, which is required by MSAL silent token refresh: MSAL loads a hidden iframe at the IdP's `/authorize` endpoint with `prompt=none`, and the IdP's 302 response navigates that iframe back to `https://jotjson.com/#code=...` so MSAL can read the auth code from the fragment. `DENY` blocks that final navigation and forces every silent refresh into an `InteractionRequiredAuthError`, which the auth interceptor maps to an unauthenticated request and a 401. `SAMEORIGIN` is the standard configuration for any site using MSAL silent refresh.
   - `Referrer-Policy: strict-origin-when-cross-origin`
   - `Permissions-Policy: clipboard-read=(self), clipboard-write=(self)` - scopes the Clipboard API to the site's own origin so the Smart Paste polling (Home page §1) can read the clipboard without cross-origin leakage.
-  - **Content Security Policy** - shipping as Report-Only during a production observation window, then flipped to enforced. The full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader and a SHA-256 hash for the inline splash script), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights ingestion (`*.in.applicationinsights.azure.com`, `*.livediagnostics.monitor.azure.com`), plus `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights ingestion hosts are still covered by the policy). See "CSP allowlist" further down for the App Insights origin rationale.
+  - **Content Security Policy** - shipping as Report-Only during a production observation window, then flipped to enforced. The full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader and a SHA-256 hash for the inline splash script), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights ingestion (`*.in.applicationinsights.azure.com`, `*.livediagnostics.monitor.azure.com`), plus `frame-ancestors 'self'` (matches `X-Frame-Options: SAMEORIGIN` so MSAL silent refresh continues to work once CSP enforces), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights ingestion hosts are still covered by the policy). See "CSP allowlist" further down for the App Insights origin rationale.
 
 ### Scalability
 - Cosmos DB serverless scales automatically.
@@ -2079,6 +2079,24 @@ Out of scope (for v1):
   modifier gate: Ctrl+Shift+C (devtools) and Ctrl+Alt+C (AltGr
   layouts) are intentional no-ops. New `tree.keyboard.copyValue`
   telemetry event with `{ escaped: false }`.
+- **0.14.7**: MSAL silent token refresh fix - relax `X-Frame-Options`
+  from `DENY` to `SAMEORIGIN` and the report-only CSP `frame-ancestors`
+  from `'none'` to `'self'`. MSAL's silent-refresh flow loads a hidden
+  iframe at the IdP's `/authorize?prompt=none`, which 302s back to
+  `https://jotjson.com/#code=...` so MSAL can read the auth code from
+  the fragment and exchange it for a fresh access token. `DENY` blocks
+  that final same-origin iframe navigation, MSAL throws
+  `InteractionRequiredAuthError`, the auth interceptor maps it to an
+  unauthenticated request, and the caller gets a 401 once the cached
+  access token expires (~1h). Symptom: signed-in users intermittently
+  see 401s on `/api/me`, `/api/blobs`, `/api/history` etc. on hard
+  refresh while still seeing their profile pill in the toolbar (which
+  is hydrated from the MSAL account cache, separate from the access
+  token). `SAMEORIGIN` / `'self'` still block third-party clickjacking
+  (the actual threat model `X-Frame-Options` addresses); the only
+  protection removed is "jotjson.com iframing itself," which is
+  exactly what MSAL silent refresh legitimately does. No client code
+  change; pure SWA-config edit.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

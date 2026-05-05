@@ -41,9 +41,9 @@
   },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
+    "X-Frame-Options": "SAMEORIGIN",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "clipboard-read=(self), clipboard-write=(self)",
-    "Content-Security-Policy-Report-Only": "default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' https://*.in.applicationinsights.azure.com https://*.livediagnostics.monitor.azure.com https://*.ciamlogin.com https://login.microsoftonline.com; frame-src https://*.ciamlogin.com https://login.microsoftonline.com; img-src 'self' data: blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+    "Content-Security-Policy-Report-Only": "default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' https://*.in.applicationinsights.azure.com https://*.livediagnostics.monitor.azure.com https://*.ciamlogin.com https://login.microsoftonline.com; frame-src https://*.ciamlogin.com https://login.microsoftonline.com; img-src 'self' data: blob:; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests"
   }
 }
