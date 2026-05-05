@@ -1987,7 +1987,7 @@ Out of scope (for v1):
   JSON re-parse. Pointer clicks update both signals. Search-input
   Enter / Shift+Enter handoff updates `focusedPath` silently so
   repeated cycling stays in the search input. Type-ahead deferred to
-  issue #108. Wave 3b also drops a structural `*.a11y.spec.ts` for
+  post-v1 (issue #108). Wave 3b also drops a structural `*.a11y.spec.ts` for
   the tree (role chain + roving-tabindex assertions); the strict axe
   scan is deferred to M7g-3d alongside the broader contrast
   remediation.
