@@ -1,6 +1,6 @@
 {
   "name": "jotjson",
-  "version": "0.16.4",
+  "version": "0.16.5",
   "description": "JotJSON - input, store, and display JSON (Angular SPA).",
   "private": true,
   "repository": {

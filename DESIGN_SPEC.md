@@ -2203,6 +2203,20 @@ Out of scope (for v1):
   are explicitly deferred and tracked separately. Deferred-finding
   GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
   cross-browser pass, axe best-practice rules) are post-V1.
+- **0.16.5**: M7f milestone close-out (M7f-4b no-op + spec
+  flip). The M7f-4b "native-control sweep after `color-scheme`"
+  wave ships nothing concrete: with the M7f-1 `color-scheme: dark | light`
+  declarations on `.theme-dark` / `.theme-light` / `.theme-system`
+  (under the `prefers-color-scheme: light` media query), native
+  UA-painted controls - scrollbars, autofill chrome, native form
+  fields, `<input type="color">` swatches - follow the active
+  theme automatically. Audit confirmed zero pre-existing
+  `scrollbar-color` or `:-webkit-autofill` rules in tracked SCSS,
+  so nothing conflicts with the new `color-scheme` declarations.
+  Deferred from M7f as out of scope for v1: theme-aware OG image
+  / favicon, empty-state illustrations, Monaco diff editor
+  styling. The Polish & launch milestone marker for M7f flips to
+  done; all five sub-waves (1, 2, 3, 4a, 4b) are landed.
 - **0.16.4**: M7f-4a hardcoded semantic-pill colors moved to
   Material 21 tokens. The three previously hardcoded "light-only"
   semantic-color pills now reference Material 21 semantic tokens so
@@ -2560,7 +2574,35 @@ Out of scope (for v1):
    - ~~**M7c**: Smart date/time detection + relative-time annotations in the tree view (Home page §1).~~ (done)
    - ~~**M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).~~ (done)
    - ~~**M7e**: Custom domain (`jotjson.com`).~~ (done)
-   - **M7f**: Dark/light theme polish.
+   - ~~**M7f**: Dark/light theme polish.~~ (done)
+     - Five sub-waves shipping incrementally as patch
+       releases. M7f-1: theme propagation infrastructure
+       (dual `<meta name="theme-color">` tags + browser-only
+       effect that strips `media` on explicit overrides;
+       `color-scheme: dark | light` declarations in
+       `_theme.scss`; first inline-script CSP hash for the
+       cold-boot splash flicker fix). M7f-2: predictive
+       3-state tooltip + aria-label on the toolbar theme
+       toggle, replacing the static "Toggle theme" copy.
+       M7f-3: Monaco JSON syntax token theming via per-theme
+       `rules` arrays mapping `string.value.json`,
+       `number.json`, `keyword.json` to the tree palette;
+       removal of unused `$json-*` SCSS tokens. M7f-4a:
+       three hardcoded "light-only" semantic-color pills
+       (`.state-pill--modified`, `.pill-warn`, `.pill-ok`)
+       moved to Material 21 `--mat-sys-secondary-container`
+       / `--mat-sys-tertiary-container` tokens. M7f-4b:
+       no-op close-out. With the M7f-1 `color-scheme`
+       declaration in place, native UA-painted controls
+       (scrollbars, autofill, color-input swatches) follow
+       the active theme automatically with no further
+       overrides; an audit confirmed zero pre-existing
+       `scrollbar-color` / `:-webkit-autofill` rules in the
+       tracked SCSS, so nothing was at risk of conflicting
+       with the new declaration. The deferred M7f-4b
+       follow-ups (theme-aware OG image / favicon, empty-
+       state illustrations, Monaco diff editor styling) are
+       out of scope for v1.
    - ~~**M7g**: Accessibility audit.~~ (done)
      - Seven fix waves (3a-3g) closing audit findings F1.1
        through F6.1. Highlights: app-shell focus order +
