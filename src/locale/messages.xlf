@@ -4245,7 +4245,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">412</context>
+          <context context-type="linenumber">435</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.signInToSaveCompact" datatype="html">
@@ -4256,7 +4256,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">411</context>
+          <context context-type="linenumber">434</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.overflow.tooltip" datatype="html">
@@ -4287,200 +4287,207 @@
           <context context-type="linenumber">198,200</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="toolbar.theme.tooltip" datatype="html">
-        <source>Toggle theme</source>
+      <trans-unit id="toolbar.theme.tooltip.toDark" datatype="html">
+        <source>Switch to dark theme</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
-          <context context-type="linenumber">261,262</context>
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
+          <context context-type="linenumber">195</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="toolbar.theme.aria" datatype="html">
-        <source>Toggle theme</source>
+      <trans-unit id="toolbar.theme.tooltip.toSystem" datatype="html">
+        <source>Match system theme</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.html</context>
-          <context context-type="linenumber">263,264</context>
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
+          <context context-type="linenumber">198</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.theme.tooltip.toLight" datatype="html">
+        <source>Switch to light theme</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
+          <context context-type="linenumber">200</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.syncSelection.tooltip.on" datatype="html">
         <source>Disable tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">193</context>
+          <context context-type="linenumber">216</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.syncSelection.tooltip.off" datatype="html">
         <source>Enable tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">194</context>
+          <context context-type="linenumber">217</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.syncSelection.aria" datatype="html">
         <source>Toggle tree-editor selection sync</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">196</context>
+          <context context-type="linenumber">219</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.aria" datatype="html">
         <source>Pane layout</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">205</context>
+          <context context-type="linenumber">228</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.editorOnly" datatype="html">
         <source>Show editor only</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">206</context>
+          <context context-type="linenumber">229</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.bothHorizontal" datatype="html">
         <source>Editor and tree side-by-side</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">207</context>
+          <context context-type="linenumber">230</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.bothVertical" datatype="html">
         <source>Editor above tree</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">208</context>
+          <context context-type="linenumber">231</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paneLayout.treeOnly" datatype="html">
         <source>Show tree only</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">209</context>
+          <context context-type="linenumber">232</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.asCopy" datatype="html">
         <source>Save as copy</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">226</context>
+          <context context-type="linenumber">249</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.label" datatype="html">
         <source>Save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">227</context>
+          <context context-type="linenumber">250</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.title.untitled" datatype="html">
         <source>Untitled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">230</context>
+          <context context-type="linenumber">253</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.titleSuggestion.action.aria" datatype="html">
         <source>Suggest a title</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">232</context>
+          <context context-type="linenumber">255</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.titleSuggestion.action.tooltip" datatype="html">
         <source>Suggest a title</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">233</context>
+          <context context-type="linenumber">256</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.overflow.makePrivate" datatype="html">
         <source>Make private</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">245</context>
+          <context context-type="linenumber">268</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.overflow.makePublic" datatype="html">
         <source>Make public</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">246</context>
+          <context context-type="linenumber">269</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.disabledTooltip" datatype="html">
         <source>No changes to save</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">251</context>
+          <context context-type="linenumber">274</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.save.asCopyTooltip" datatype="html">
         <source>Save your changes as a new blob</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">254</context>
+          <context context-type="linenumber">277</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.ready" datatype="html">
         <source>Paste: <x id="PREVIEW" equiv-text="preview"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">269</context>
+          <context context-type="linenumber">292</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.readyNoPreview" datatype="html">
         <source>Paste from clipboard</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">270</context>
+          <context context-type="linenumber">293</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.empty" datatype="html">
         <source>Clipboard does not contain JSON</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">273</context>
+          <context context-type="linenumber">296</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip.denied" datatype="html">
         <source>Clipboard access blocked - enable it in your browser settings. Ctrl+V still works.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">275</context>
+          <context context-type="linenumber">298</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.paste.tooltip" datatype="html">
         <source>Paste from clipboard</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">277</context>
+          <context context-type="linenumber">300</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.draft" datatype="html">
         <source>Draft</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">402</context>
+          <context context-type="linenumber">425</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.saved" datatype="html">
         <source>Saved</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">404</context>
+          <context context-type="linenumber">427</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.modified" datatype="html">
         <source>Modified</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">406</context>
+          <context context-type="linenumber">429</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.state.saving" datatype="html">
         <source>Saving...</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/toolbar/toolbar.component.ts</context>
-          <context context-type="linenumber">408</context>
+          <context context-type="linenumber">431</context>
         </context-group>
       </trans-unit>
     </body>

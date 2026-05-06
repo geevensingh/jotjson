@@ -2195,6 +2195,23 @@ Out of scope (for v1):
   are explicitly deferred and tracked separately. Deferred-finding
   GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
   cross-browser pass, axe best-practice rules) are post-V1.
+- **0.16.2**: M7f-2 theme toggle UX. Replaces the static
+  `matTooltip="Toggle theme"` and `aria-label="Toggle theme"` on the
+  toolbar theme-toggle button with a predictive 3-state computed
+  label that names the next state in the `light -> dark -> system`
+  cycle: `light` -> "Switch to dark theme", `dark` -> "Match system
+  theme" (matches the Profile dropdown's "Match system" copy),
+  `system` -> "Switch to light theme". The aria-label binds to the
+  same computed value so screen readers get the same affordance.
+  Three new i18n message IDs (`@@toolbar.theme.tooltip.toLight`,
+  `@@toolbar.theme.tooltip.toDark`, `@@toolbar.theme.tooltip.toSystem`)
+  replace the legacy `@@toolbar.theme.tooltip` and
+  `@@toolbar.theme.aria` entries; rename is justified because one
+  static concept becomes three semantically distinct messages. Three
+  new toolbar-component specs assert the tooltip + aria-label across
+  all three current-state values; the existing
+  `triggerThemeToggleButtonClick` helper is updated to find the
+  button by any of the three valid dynamic aria-labels.
 - **0.16.1**: M7f-1 theme propagation infrastructure. Three
   related changes ship together so the **active** theme - including
   explicit overrides that disagree with `prefers-color-scheme` - is

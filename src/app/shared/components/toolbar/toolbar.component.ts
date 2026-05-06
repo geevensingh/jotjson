@@ -178,6 +178,29 @@ export class ToolbarComponent {
   });
 
   /**
+   * Predictive tooltip for the 3-state theme toggle (M7f-2). The
+   * cycle is `light -> dark -> system -> light`, so each state
+   * advertises the next:
+   *   - light  -> "Switch to dark theme"
+   *   - dark   -> "Match system theme" (matches Profile dropdown's
+   *               "Match system" copy)
+   *   - system -> "Switch to light theme"
+   *
+   * The aria-label binds to the same computed value so screen readers
+   * get the same affordance.
+   */
+  readonly themeToggleLabel = computed(() => {
+    const theme = this.prefs.prefs().theme;
+    if (theme === 'light') {
+      return $localize`:@@toolbar.theme.tooltip.toDark:Switch to dark theme`;
+    }
+    if (theme === 'dark') {
+      return $localize`:@@toolbar.theme.tooltip.toSystem:Match system theme`;
+    }
+    return $localize`:@@toolbar.theme.tooltip.toLight:Switch to light theme`;
+  });
+
+  /**
    * Tree<->editor selection sync (issue #42). Default-on user
    * preference; both this toolbar button and the matching toggle on
    * the profile page write through to the same `treeEditorSelectionSync`

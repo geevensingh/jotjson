@@ -163,6 +163,49 @@ describe('ToolbarComponent', () => {
     });
   });
 
+  describe('themeToggleLabel (predictive 3-state tooltip + aria-label, M7f-2)', () => {
+    function findThemeButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement {
+      const themeLabels = new Set([
+        'Switch to light theme',
+        'Switch to dark theme',
+        'Match system theme',
+      ]);
+      const button = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+      ).find((candidateButton) =>
+        themeLabels.has(candidateButton.getAttribute('aria-label') ?? ''),
+      );
+      if (!button) {
+        throw new Error('theme toggle button not found');
+      }
+      return button;
+    }
+
+    it('shows "Switch to dark theme" when current theme is light', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ theme: 'light' });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.themeToggleLabel()).toBe('Switch to dark theme');
+      expect(findThemeButton(fixture).getAttribute('aria-label')).toBe('Switch to dark theme');
+    });
+
+    it('shows "Match system theme" when current theme is dark (matches Profile dropdown copy)', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ theme: 'dark' });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.themeToggleLabel()).toBe('Match system theme');
+      expect(findThemeButton(fixture).getAttribute('aria-label')).toBe('Match system theme');
+    });
+
+    it('shows "Switch to light theme" when current theme is system', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ theme: 'system' });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.themeToggleLabel()).toBe('Switch to light theme');
+      expect(findThemeButton(fixture).getAttribute('aria-label')).toBe('Switch to light theme');
+    });
+  });
+
   describe('selection sync toggle (issue #42)', () => {
     function findSyncButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement {
       const button = (fixture.nativeElement as HTMLElement).querySelector(
@@ -998,7 +1041,22 @@ describe('ToolbarComponent', () => {
     }
 
     function triggerThemeToggleButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
-      findButtonByAriaLabel(fixture, 'Toggle theme').click();
+      // Aria-label is dynamic per theme state (M7f-2). Match any of the
+      // three valid values rather than the static legacy "Toggle theme".
+      const themeLabels = new Set([
+        'Switch to light theme',
+        'Switch to dark theme',
+        'Match system theme',
+      ]);
+      const button = Array.from(
+        hostElement(fixture).querySelectorAll<HTMLButtonElement>('button'),
+      ).find((candidateButton) =>
+        themeLabels.has(candidateButton.getAttribute('aria-label') ?? ''),
+      );
+      if (!button) {
+        throw new Error('theme toggle button not found');
+      }
+      button.click();
       fixture.detectChanges();
     }
 
