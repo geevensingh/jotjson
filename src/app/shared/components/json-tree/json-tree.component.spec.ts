@@ -190,6 +190,114 @@ describe('JsonTreeComponent', () => {
     }
   });
 
+  describe('row density (em-based icon chrome)', () => {
+    // CSS-contract tests: assert computed font-size / width / height on
+    // the icon chrome at small and large tree font sizes. These are
+    // deterministic and don't depend on real browser line-box metrics
+    // the way a row-pixel-height assertion would. Pixel arithmetic:
+    //   pill (1.25em) at 8px font  =>  10px
+    //   pill (1.25em) at 24px font =>  30px
+    //   twisty (1.1em) at 8px font =>  8.8px
+    //   twisty (1.1em) at 24px font => 26.4px
+
+    async function setupAttachedAtFont(value: unknown, treeFontSize: number) {
+      await createWith(value);
+      prefs.update({ treeFontSize });
+      fixture.detectChanges();
+      document.body.appendChild(fixture.nativeElement);
+    }
+
+    it('inherits tree font-size into the kebab pill via font: inherit', async () => {
+      await setupAttachedAtFont({ a: 1 }, 8);
+      try {
+        const pill = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-kebab-pill',
+        ) as HTMLElement;
+        expect(pill).withContext('expected a .tree-kebab-pill to be rendered').toBeTruthy();
+        const cs = getComputedStyle(pill);
+        // font: inherit must beat the UA default ~13.33px on <button>
+        expect(Number.parseFloat(cs.fontSize)).toBe(8);
+        // 1.25em of 8px = 10px
+        expect(Number.parseFloat(cs.width)).toBe(10);
+        expect(Number.parseFloat(cs.height)).toBe(10);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('scales the kebab pill proportionally at large tree font sizes', async () => {
+      await setupAttachedAtFont({ a: 1 }, 24);
+      try {
+        const pill = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-kebab-pill',
+        ) as HTMLElement;
+        const cs = getComputedStyle(pill);
+        expect(Number.parseFloat(cs.fontSize)).toBe(24);
+        // 1.25em of 24px = 30px
+        expect(Number.parseFloat(cs.width)).toBe(30);
+        expect(Number.parseFloat(cs.height)).toBe(30);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('scales the twisty button (1.1em) with tree font size', async () => {
+      await setupAttachedAtFont({ a: 1 }, 8);
+      try {
+        // Skip spacer twisties (.tree-spacer) - those are invisible
+        // placeholders on leaf rows; we want to assert against the
+        // actual interactive chevron button on the root container.
+        const twisty = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-twisty:not(.tree-spacer)',
+        ) as HTMLElement;
+        expect(twisty)
+          .withContext('expected an active .tree-twisty (non-spacer) to be rendered')
+          .toBeTruthy();
+        const cs = getComputedStyle(twisty);
+        expect(Number.parseFloat(cs.fontSize)).toBe(8);
+        // 1.1em of 8px = 8.8px (with browser sub-pixel rounding tolerance)
+        expect(Number.parseFloat(cs.width)).toBeCloseTo(8.8, 1);
+        expect(Number.parseFloat(cs.height)).toBeCloseTo(8.8, 1);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('applies the tightened line-height to .tree-body', async () => {
+      await setupAttachedAtFont({ a: 1 }, 8);
+      try {
+        const body = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-body',
+        ) as HTMLElement;
+        const cs = getComputedStyle(body);
+        expect(Number.parseFloat(cs.fontSize)).toBe(8);
+        // line-height: 1.4 of 8px = 11.2px (browsers may round)
+        expect(Number.parseFloat(cs.lineHeight)).toBeCloseTo(11.2, 1);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('keeps the probe row content height at or below 18px at the smallest font', async () => {
+      // Generous integration guard. The probe row contains the same chrome as
+      // a real row (twisty + key + value). At 8px tree font the chrome is
+      // dominated by the 1.25em-equivalent kebab/pill family (~10px) plus
+      // padding (~2px) plus baseline descender. <=18px gives margin for
+      // browser line-box rounding without being sloppy.
+      await setupAttachedAtFont({ a: 1 }, 8);
+      try {
+        const probe = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-row--probe',
+        ) as HTMLElement;
+        expect(probe).withContext('expected a .tree-row--probe to be rendered').toBeTruthy();
+        const rect = probe.getBoundingClientRect();
+        expect(rect.height).toBeLessThanOrEqual(18);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+  });
+
   describe('root() and path formatting', () => {
     function collectPathStrings(node: BuiltNode | undefined): string[] {
       if (!node) {

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 /**
  * Icon set for the JotJSON toolbar and UI chrome. Inline SVGs at a 24x24
@@ -53,15 +53,20 @@ export type JjIconName =
   | 'decoded'
   | 'wand';
 
+export type JjIconSize = number | 'auto';
+
 @Component({
   selector: 'jj-icon',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '[class.jj-icon--auto]': "size() === 'auto'",
+  },
   template: `
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      [attr.width]="size()"
-      [attr.height]="size()"
+      [attr.width]="svgSize()"
+      [attr.height]="svgSize()"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -155,10 +160,20 @@ export type JjIconName =
           <path d="M14 10a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" />
         }
         @case ('chevron-right') {
-          <path d="M9 6l6 6-6 6" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M9 6l6 6-6 6" />
+          </g>
         }
         @case ('chevron-down') {
-          <path d="M6 9l6 6 6-6" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </g>
         }
         @case ('sign-in') {
           <circle cx="16" cy="9" r="3" />
@@ -180,9 +195,14 @@ export type JjIconName =
           <rect x="8" y="13" width="8" height="6" rx="0.5" />
         }
         @case ('more-vert') {
-          <circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none" />
-          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
-          <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none" />
+          </g>
         }
         @case ('more-horiz') {
           <circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
@@ -314,47 +334,92 @@ export type JjIconName =
           <path d="M16 16l4 4" />
         }
         @case ('warning') {
-          <path d="M12 4l9.5 16.5h-19z" />
-          <path d="M12 10v5" />
-          <circle cx="12" cy="17.6" r="0.9" fill="currentColor" stroke="none" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M12 4l9.5 16.5h-19z" />
+            <path d="M12 10v5" />
+            <circle cx="12" cy="17.6" r="0.9" fill="currentColor" stroke="none" />
+          </g>
         }
         @case ('check') {
-          <path d="M5 12.5l4 4 10-10" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M5 12.5l4 4 10-10" />
+          </g>
         }
         @case ('star') {
-          <path d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2L12 17.6l-5.4 2.9 1-6.2L3.2 10l6.1-.9z" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2L12 17.6l-5.4 2.9 1-6.2L3.2 10l6.1-.9z" />
+          </g>
         }
         @case ('info') {
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M12 11v5.5" />
-          <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M12 11v5.5" />
+            <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none" />
+          </g>
         }
         @case ('error') {
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" />
+          </g>
         }
         @case ('flag') {
-          <path d="M5 21V4" />
-          <path d="M5 4h11l-2 4 2 4H5" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M5 21V4" />
+            <path d="M5 4h11l-2 4 2 4H5" />
+          </g>
         }
         @case ('bookmark') {
-          <path d="M6 4h12v17l-6-4-6 4z" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M6 4h12v17l-6-4-6 4z" />
+          </g>
         }
         @case ('extract') {
-          <path d="M5 4v3M5 4h3" />
-          <path d="M19 4v3M19 4h-3" />
-          <path d="M5 20v-3M5 20h3" />
-          <path d="M19 20v-3M19 20h-3" />
-          <path d="M10 9.5c-.7 0-1 .3-1 1v.5c0 .5-.5 1-1 1 .5 0 1 .3 1 1v.5c0 .7.3 1 1 1" />
-          <path d="M14 9.5c.7 0 1 .3 1 1v.5c0 .5.5 1 1 1-.5 0-1 .3-1 1v.5c0 .7-.3 1-1 1" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M5 4v3M5 4h3" />
+            <path d="M19 4v3M19 4h-3" />
+            <path d="M5 20v-3M5 20h3" />
+            <path d="M19 20v-3M19 20h-3" />
+            <path d="M10 9.5c-.7 0-1 .3-1 1v.5c0 .5-.5 1-1 1 .5 0 1 .3 1 1v.5c0 .7.3 1 1 1" />
+            <path d="M14 9.5c.7 0 1 .3 1 1v.5c0 .5.5 1 1 1-.5 0-1 .3-1 1v.5c0 .7-.3 1-1 1" />
+          </g>
         }
         @case ('decoded') {
-          <path d="M5 4v3M5 4h3" />
-          <path d="M19 4v3M19 4h-3" />
-          <path d="M5 20v-3M5 20h3" />
-          <path d="M19 20v-3M19 20h-3" />
-          <path d="M9 9.5h6" />
-          <path d="M12 9.5v5" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M5 4v3M5 4h3" />
+            <path d="M19 4v3M19 4h-3" />
+            <path d="M5 20v-3M5 20h3" />
+            <path d="M19 20v-3M19 20h-3" />
+            <path d="M9 9.5h6" />
+            <path d="M12 9.5v5" />
+          </g>
         }
         @case ('wand') {
           <path d="M5 19 L13 11" />
@@ -376,6 +441,14 @@ export type JjIconName =
         justify-content: center;
         line-height: 0;
       }
+      :host(.jj-icon--auto) {
+        width: 1em;
+        height: 1em;
+      }
+      :host(.jj-icon--auto) .jj-icon {
+        width: 100%;
+        height: 100%;
+      }
       .jj-icon {
         display: block;
       }
@@ -384,5 +457,10 @@ export type JjIconName =
 })
 export class IconComponent {
   readonly name = input.required<JjIconName>();
-  readonly size = input<number>(20);
+  readonly size = input<JjIconSize>(20);
+
+  protected readonly svgSize = computed(() => {
+    const size = this.size();
+    return size === 'auto' ? null : size;
+  });
 }

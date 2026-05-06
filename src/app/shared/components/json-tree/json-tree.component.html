@@ -247,7 +247,7 @@
           }
 
           @for (ki of keyIcons(node); track ki) {
-            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="13" />
+            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="'auto'" />
           }
           @if (node.segment !== undefined) {
             @if (segmentIsIndex(node)) {
@@ -258,7 +258,7 @@
           }
 
           @for (vi of valueIcons(node); track vi) {
-            <jj-icon class="tree-rule-icon tree-rule-icon--value" [name]="vi" [size]="13" />
+            <jj-icon class="tree-rule-icon tree-rule-icon--value" [name]="vi" [size]="'auto'" />
           }
           @switch (node.type) {
             @case ('string') {
@@ -332,7 +332,7 @@
                   i18n-aria-label="@@tree.extract.button.aria"
                   aria-label="Extract embedded JSON from this string"
                 >
-                  <jj-icon name="extract" [size]="15" />
+                  <jj-icon name="extract" [size]="'auto'" />
                 </button>
               }
               @if (decodedCandidate(node)) {
@@ -344,7 +344,7 @@
                   [attr.aria-label]="isDecoded(node) ? decodedHideAriaLabel : decodedShowAriaLabel"
                   (click)="onDecodedButtonClick(node, $event)"
                 >
-                  <jj-icon name="decoded" [size]="15" />
+                  <jj-icon name="decoded" [size]="'auto'" />
                 </button>
               }
               <button
@@ -355,7 +355,7 @@
                 [attr.aria-label]="kebabAriaLabel"
                 [attr.title]="kebabTitleLabel"
               >
-                <jj-icon name="more-vert" [size]="15" />
+                <jj-icon name="more-vert" [size]="'auto'" />
               </button>
             </span>
           } @else {
@@ -381,7 +381,7 @@
                   i18n-aria-label="@@tree.extract.button.aria"
                   aria-label="Extract embedded JSON from this string"
                 >
-                  <jj-icon name="extract" [size]="15" />
+                  <jj-icon name="extract" [size]="'auto'" />
                 </button>
               }
               @if (decodedCandidate(node)) {
@@ -393,7 +393,7 @@
                   [attr.aria-label]="isDecoded(node) ? decodedHideAriaLabel : decodedShowAriaLabel"
                   (click)="onDecodedButtonClick(node, $event)"
                 >
-                  <jj-icon name="decoded" [size]="15" />
+                  <jj-icon name="decoded" [size]="'auto'" />
                 </button>
               }
               <button
@@ -404,7 +404,7 @@
                 [attr.aria-label]="kebabAriaLabel"
                 [attr.title]="kebabTitleLabel"
               >
-                <jj-icon name="more-vert" [size]="15" />
+                <jj-icon name="more-vert" [size]="'auto'" />
               </button>
             </span>
           }
@@ -452,7 +452,7 @@
           >
             <jj-icon
               [name]="treeControl.isExpanded(node) ? 'chevron-down' : 'chevron-right'"
-              [size]="14"
+              [size]="'auto'"
             />
           </button>
 
@@ -465,7 +465,7 @@
               matTooltipShowDelay="500"
               (click)="onAncestorBadgeClick(node, ai, $event)"
             >
-              <jj-icon [name]="ai" [size]="12" />
+              <jj-icon [name]="ai" [size]="'auto'" />
             </button>
           }
 
@@ -480,7 +480,7 @@
           }
 
           @for (ki of keyIcons(node); track ki) {
-            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="13" />
+            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="'auto'" />
           }
           @if (node.segment !== undefined) {
             @if (segmentIsIndex(node)) {
@@ -525,7 +525,7 @@
               [attr.aria-label]="kebabAriaLabel"
               [attr.title]="kebabTitleLabel"
             >
-              <jj-icon name="more-vert" [size]="15" />
+              <jj-icon name="more-vert" [size]="'auto'" />
             </button>
           </span>
           @if (manualHighlight) {

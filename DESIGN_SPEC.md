@@ -2203,6 +2203,51 @@ Out of scope (for v1):
   are explicitly deferred and tracked separately. Deferred-finding
   GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
   cross-browser pass, axe best-practice rules) are post-V1.
+- **0.17.0**: Tree row density + scalable icon sizing. The tree
+  body's `line-height` tightens from `1.55` to `1.4`, and tree
+  icon chrome (kebab pill, extract pill, decoded pill, twisty,
+  beacon badge, formatting-rule key/value icons) now scales with
+  the user's `treeFontSize` preference instead of pinning at
+  fixed pixel sizes. Three coordinated changes: (1) the
+  `<jj-icon>` shared component gains a new `size: 'auto'` mode
+  (alongside the existing `size: number`) that omits the SVG's
+  intrinsic `width`/`height` HTML attributes and lets the host
+  element default to `1em x 1em` via a `:host(.jj-icon--auto)`
+  rule, so consumers can size icons with CSS instead of fighting
+  the component's emitted attrs; (2) the tree's button wrappers
+  use `em`-relative sizes (`.tree-kebab-pill` / `.tree-decoded-
+  pill` / `.tree-extract-pill` at `1.25em`, `.tree-beacon-badge`
+  at `1.25em`, `.tree-twisty` at `1.1em`) plus `font: inherit`
+  to cancel the browser-default `<button>` font-size of
+  `~13.33px` (`-webkit-small-control`) that would otherwise make
+  `1.25em` compute against the wrong base; (3) the 12 tree-
+  internal icons (`more-vert`, `extract`, `decoded`, `chevron-
+  right`, `chevron-down`, plus the 7 `FormattingIcon` values
+  `warning`/`check`/`star`/`info`/`error`/`flag`/`bookmark`) are
+  redesigned with a uniform `1.288x` scale around their center
+  using an SVG `<g transform>` group with `vector-effect:
+  non-scaling-stroke`, so the visible glyph fills more of the
+  24x24 viewBox while strokes stay at the original 1.75 user-
+  unit thickness. Net effect: at the default 13px tree font,
+  rows go from `~22px` to `~18-19px` (~14% denser); at the
+  minimum 8px tree font, rows go from `~28px` to `~12-13px`
+  (>2x denser, finally making the small-font option useful).
+  Row alignment also flips from `align-items: baseline` to
+  `center` on `.tree-row` and `.tree-row-right` because
+  baseline alignment with replaced inline-flex content (the
+  icon SVGs) synthesizes baselines at the bottom of the button
+  box and inflated rows even with em-sized buttons. Hit-target
+  trade-off: at 8px tree font, the kebab pill is ~10px square -
+  sub-WCAG-2.1 24x24 minimum. Acceptable because (a) JotJSON is
+  desktop-first, (b) the user explicitly opts into the small
+  font, and (c) the row menu remains reachable via right-click
+  anywhere on the row and via keyboard. The 7 `FormattingIcon`
+  values are also rendered in the toolbar beacon-pills surface,
+  which gets the redesigned icons "for free" - a consistency
+  win, not a regression. Out of scope: redesigning the
+  remaining ~28 icons used by other surfaces (toolbar, sidebar,
+  etc.); those keep their original viewBox padding pending a
+  future cleanup pass.
 - **0.16.5**: M7f milestone close-out (M7f-4b no-op + spec
   flip). The M7f-4b "native-control sweep after `color-scheme`"
   wave ships nothing concrete: with the M7f-1 `color-scheme: dark | light`
