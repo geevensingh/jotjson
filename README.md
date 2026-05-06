@@ -224,3 +224,10 @@ AI-assisted commits include:
 ```
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ```
+
+## Security
+
+To report a security vulnerability, please use GitHub's Private
+Vulnerability Reporting rather than a public issue. See
+[`SECURITY.md`](./SECURITY.md) for the policy, scope, and
+response-time expectations.
