@@ -1482,7 +1482,6 @@ Items to revisit before declaring v1 complete (deliberately deferred so they do 
 
 - **PR-by-default for code changes.** Today, code changes can land directly on `main`. Decide whether v1 should require code changes to land via a PR with green CI before merging, with CD/workflow hotfixes remaining as the only sanctioned direct-to-`main` path. Rationale for deferring now: keeps iteration velocity high; CI on `push: main` still runs, just after merge.
 - **Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.
-- **Testing-layer strategy.** The current test suite covers static analysis + unit (frontend) + unit (api) + browser integration. See the [Testing strategy](#testing-strategy) section below for the full layer model. Decide before v1 whether any of the tracked layers (api integration, smoke e2e, cross-browser, accessibility, visual regression) should be required v1 gates rather than post-v1 follow-ups.
 
 ---
 
@@ -1492,9 +1491,13 @@ JotJSON is layered: a static-analysis pass, two unit suites (frontend + Azure
 Functions), and an in-browser integration layer for components whose real
 runtime behavior cannot be faked cheaply (Monaco today; the same pattern
 applies to anything else that depends on browser globals or external scripts).
-Higher layers - api-integration against the Cosmos emulator, end-to-end smoke
-flows in a real browser, cross-browser, accessibility, and visual regression -
-are tracked as separate work items and are deliberately not gating v1.
+Three additional layers are planned v1 gates: API integration against a
+CI-only real Cosmos DB free-tier account (issue #63), anonymous Chromium
+smoke e2e (issue #64), and accessibility smoke blocking on serious/critical
+axe violations (issue #66). Cross-browser smoke (issue #65) and visual
+regression (issue #67) are tracked as post-v1 follow-ups. Signed-in smoke
+e2e (issue #68) is deferred indefinitely pending a dedicated Entra External
+ID test tenant.
 
 | Layer | In place? | Purpose |
 |---|---|---|
@@ -1502,16 +1505,17 @@ are tracked as separate work items and are deliberately not gating v1.
 | Unit (frontend) | yes | Component / service / pipe / pure logic; Monaco and other browser globals are stubbed. Co-located `*.spec.ts`. |
 | Unit (api) | yes | Azure Functions handlers and shared modules; Cosmos and Blob clients are mocked. |
 | Browser integration | yes | Real Monaco loaded once per suite via the project's loader. Verifies the loader, the asset path, and the editor's mount + value roundtrip with a real DOM. Lives alongside frontend unit specs but is named `*.integration.spec.ts`. |
-| API integration | tracked as issue | Functions + shared modules against the Microsoft Cosmos emulator container. Catches partition-key, query-shape, and continuation-token mistakes that mocks cannot. |
-| Smoke e2e | tracked as issue | Playwright on critical user flows in Chromium. Catches MSAL redirect, router lazy-load, service-worker, and CSP regressions that unit + browser-integration cannot. |
-| Cross-browser smoke | tracked as issue | Playwright matrix on Firefox + WebKit, run nightly. Catches engine-specific issues. (WebKit on Linux is not Safari; iOS-Safari still needs manual verification.) |
-| Accessibility smoke | tracked as issue | `@axe-core/playwright` invoked from each smoke flow. Backs the WCAG 2.1 AA commitment in the Accessibility section. |
-| Visual regression | tracked as issue | Pixel-diff of representative screens against a baseline. Post-v1 unless visual bugs become recurring. |
+| API integration | v1 gate (planned) | Functions + shared modules against a CI-only real Cosmos DB free-tier account (1000 RU/s + 25 GB free forever; per-run unique database name; secret-presence check skips fork PRs). Catches partition-key, query-shape, and continuation-token mistakes that mocks cannot. The `vnext-preview` Linux emulator is rejected as a harness due to acknowledged flakiness. Tracked in issue #63. |
+| Smoke e2e (anonymous) | v1 gate (planned) | Playwright on critical anonymous user flows in Chromium, per-PR. Catches MSAL redirect, router lazy-load, service-worker, and CSP regressions that unit + browser-integration cannot. Tracked in issue #64. |
+| Smoke e2e (signed-in) | deferred | Same harness as anonymous smoke, but covers blob CRUD, share lifecycle, profile round-trip, and MSAL silent-token refresh. Requires an Entra External ID test tenant + ROPC users in CI; tenant setup is currently out of scope. Tracked in issue #68. |
+| Cross-browser smoke | post-v1 | Playwright matrix on Firefox + WebKit, run nightly. Catches engine-specific issues. (WebKit on Linux is not Safari; iOS-Safari still needs manual verification.) Deferred post-v1 due to engine-flake risk and zero historical engine-specific shipped bugs. Tracked in issue #65. |
+| Accessibility smoke | v1 gate (planned) | `@axe-core/playwright` invoked from each smoke flow, blocking on `serious` + `critical` impact only; pre-existing violations are allow-listed with dated review-by comments. Backs the WCAG 2.1 AA commitment in the Accessibility section (axe-green is necessary but not sufficient for WCAG-green - keyboard-only nav, screen-reader announcements, and dynamic focus order remain manual concerns). Tracked in issue #66. |
+| Visual regression | post-v1 | Pixel-diff of representative screens against a baseline. Post-v1 unless visual bugs become recurring. Tracked in issue #67. |
 
 What this layer model deliberately does *not* claim:
 
-- The **browser integration** layer does not prove worker correctness. The Monaco JSON worker spawns from a runtime-built blob URL; verifying that requires worker-specific assertions whose value at this layer is bounded. Worker-shaped bugs are expected to surface at the smoke-e2e layer once that exists.
-- **Unit (api)** uses mocked Cosmos / Blob clients. Partition-key bugs, indexing-policy issues, and continuation-token correctness are all uncovered by today's CI; that is the gap the API integration layer closes.
+- The **browser integration** layer does not prove worker correctness. The Monaco JSON worker spawns from a runtime-built blob URL; verifying that requires worker-specific assertions whose value at this layer is bounded. Worker-shaped bugs are expected to surface at the smoke-e2e layer once that lands as a v1 gate.
+- **Unit (api)** uses mocked Cosmos / Blob clients. Until the API integration layer lands as a v1 gate, partition-key bugs, indexing-policy issues, and continuation-token correctness are not covered by CI.
 
 Layer names above are runner-neutral so this model survives runner migrations
 (see issue #47 - test-runner migration).
