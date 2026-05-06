@@ -2056,6 +2056,54 @@ Out of scope (for v1):
   the tree (role chain + roving-tabindex assertions); the strict axe
   scan is deferred to M7g-3d alongside the broader contrast
   remediation.
+- **0.14.1**: M7g-3c Monaco editor accessibility options (audit
+  finding F3.1). `JsonEditorComponent.ngAfterViewInit` now passes
+  explicit `accessibilitySupport: 'auto'` and `ariaLabel: 'JSON
+  editor'` (i18n message `@@editor.aria`) to
+  `monaco.editor.create()`, threading the label through to
+  Monaco's screen-reader-content element. Three new specs in
+  `json-editor.component.integration.spec.ts` cover the raw
+  options + the label rendered on the screen-reader-content
+  element + the `aria-label` on the editor textarea. Out of
+  scope (deferred): an in-Monaco axe scan of the editor's
+  internal DOM, and the `accessibilityHelp` action registration.
+- **0.14.2**: M7g-3d light-theme contrast remediation (audit
+  findings F4.1, F4.2). Adds the `--brand-color-on-surface` token
+  so the brand mark uses cyan in dark mode and `#006978` on light
+  without changing the primary palette token. Theme-aware tree
+  palette (`--tree-string`, `--tree-number`, `--tree-boolean`,
+  `--tree-muted`) clearing AA on both themes including the count
+  badge and type badge. Breadcrumb muted text + icons raised to
+  AA; matched / current chip pairs added. New strict breadcrumb
+  axe spec; re-enabled the strict tree axe scan in dark and
+  light; added app-shell strict gates in dark and light; added a
+  header light-theme strict gate.
+- **0.14.3**: M7g-3e focus polish + offline-pill announcement
+  (audit finding F5.2). Rule-editor `pillState()` switch wrapped
+  in a persistent `role="status" aria-live="polite"` region so
+  saved / saved-offline / queued / error transitions are
+  announced to screen readers. Delete-confirm focus-fallback
+  pattern (next-row, fallback to parent with `tabindex="-1"`)
+  wired into the `MatDialogRef.afterClosed()` handlers in
+  blobs/history/home. Quota-notification dialogs return focus to
+  `#main-content`. The `CloseMatMenuOnWindowBlurDirective`
+  blur-close path got automated focus-return spec coverage
+  (manual route-level verification of focus restoration is
+  deferred to the manual-checks plan). Five new strict overlay
+  axe specs co-located per dialog host.
+- **0.14.4**: M7g-3f reduced-motion sweep + lint gate (audit
+  finding F6.1). Per-file `prefers-reduced-motion: reduce` motion
+  guards across eight SCSS files (`formatting-rules`,
+  `rule-sets-toolbar`, `status-bar`, `rule-preview`, `blobs`,
+  `history`, `toolbar`, `route-progress-bar`). One allow-pragma
+  on `.route-progress-bar__stripe--primary`'s opacity pulse
+  (RDP / OS animation-off forces `prefers-reduced-motion: reduce`
+  and a static bar would look frozen; full reasoning recorded in
+  the accessibility memory cited from this commit). New
+  `scripts/check-reduced-motion.mjs` lint gate (nesting-aware,
+  pragma-aware, scans `transition:` / `animation:` / `@keyframes`
+  in tracked + untracked SCSS files), wired into `npm run
+  lint:all` via the new `npm run lint:reduced-motion` script.
 - **0.14.5**: Issue #109 - tree-row double-click semantics split by
   node type. Container rows (`object` / `array` with children) now
   toggle expansion on dblclick instead of copying their pretty-printed
@@ -2097,6 +2145,56 @@ Out of scope (for v1):
   protection removed is "jotjson.com iframing itself," which is
   exactly what MSAL silent refresh legitimately does. No client code
   change; pure SWA-config edit.
+- **0.15.0**: Status-bar tree-stat clarity + new Comments stat
+  (issue + PR #104). Tree-stat span labels rename to the literal
+  user suggestions - Total Nodes, Max Depth, Objects, Arrays - and
+  every span gets a `title=` tooltip explaining the metric (the
+  build-info badge precedent). A new content-aware Comments stat
+  surfaces comment count whenever the document parsed
+  successfully and contains `//` or `/* */` comments, regardless
+  of editor mode. Counting moves into `harvestComments` at parse
+  time (extractCommentBody only trims whitespace, so the joined
+  CommentBundle string cannot reliably be counted) and is exposed
+  as `commentCount` on `JsonParseResult`. Visibility mirrors
+  `treeStats()` gating exactly so a parse-failed document does
+  not render Comments alongside placeholder dashes. i18n message
+  IDs stay stable per AGENTS.md S4 - only source text changes.
+- **0.15.1**: Status-bar Chars stat made meaningful (issue + PR
+  #103). Before the change Chars (UTF-16 source length) and Size
+  (UTF-8 source bytes) told the user essentially the same thing;
+  the gap between formatted and minified content was invisible.
+  Chars is redefined to count source characters with whitespace
+  and comments stripped, computed lexically via the
+  `jsonc-parser` scanner (not via `JSON.stringify`, which would
+  normalize lexemes - `1e3` -> `1000`, `1.0` -> `1`, `"\u0041"` ->
+  `"A"` - and break the Min == Size invariant on already-minified
+  input). Label stays `Chars`; the meaning is documented via an
+  updated `aria-label` plus a new `title=` tooltip, and a
+  matching tooltip is added to Size. Known limitation documented
+  in DESIGN_SPEC.md: trailing commas in JSONC are still counted
+  (the scanner emits `CommaToken` whether or not the AST keeps
+  the comma).
+- **0.15.2**: M7g-3g `.user-name` focus-visible 3:1 indicator
+  (audit finding F5.1). The link in
+  `src/app/shared/components/app-header/app-header.component.scss`
+  now matches the `.brand` selector's existing
+  `box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.6)` focus-visible
+  treatment, satisfying WCAG 2.4.7 / 1.4.11. New focus-visible
+  regression spec in `app-header.component.a11y.spec.ts` uses
+  stylesheet-rule introspection (programmatic `.focus()` does
+  not reliably trigger `:focus-visible` in headless Chrome - the
+  same reason the sibling `.skip-link` opts into bare `:focus`).
+  Last open M7g audit finding before milestone close-out.
+- **0.16.0**: M7g milestone close-out. All seven fix waves (3a -
+  3g) have shipped; finding-level audit issues F1.1 through F6.1
+  are addressed. The milestone marker in the Milestones list is
+  flipped to done. Manual TBD checks from the M7g audit checklist
+  (200% zoom verification at 1280x800, Windows Narrator route
+  walkthrough, tab-order pass on each route, manual focus-
+  restoration verification for `CloseMatMenuOnWindowBlurDirective`)
+  are explicitly deferred and tracked separately. Deferred-finding
+  GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
+  cross-browser pass, axe best-practice rules) are post-V1.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
@@ -2370,7 +2468,21 @@ Out of scope (for v1):
    - ~~**M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).~~ (done)
    - ~~**M7e**: Custom domain (`jotjson.com`).~~ (done)
    - **M7f**: Dark/light theme polish.
-   - **M7g**: Accessibility audit.
+   - ~~**M7g**: Accessibility audit.~~ (done)
+     - Seven fix waves (3a-3g) closing audit findings F1.1
+       through F6.1. Highlights: app-shell focus order +
+       skip-link + landmarks (3a); WAI-ARIA Tree pattern with
+       roving tabindex on the json-tree (3b); explicit Monaco
+       editor a11y options + i18n label (3c); light-theme
+       contrast remediation including theme-aware tree palette
+       and breadcrumb chips (3d); focus polish + offline-pill
+       aria-live + delete-confirm focus fallback (3e);
+       reduced-motion sweep + new lint gate (3f); user-name
+       focus-visible 3:1 indicator (3g). Manual TBD checks
+       (200% zoom, Narrator, tab-order, focus-restoration)
+       deferred; deferred-finding GH issues (target-size 24px,
+       iOS VoiceOver, cross-browser, axe best-practice) are
+       post-V1.
    - ~~**M7h**: SEO (pre-rendering + OG tags).~~ (done)
      - `@angular/ssr` static prerender of `/` and `/404`; `shell.html`
        fallback for everything else via `scripts/postbuild-seo.mjs`.
