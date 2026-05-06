@@ -2195,6 +2195,37 @@ Out of scope (for v1):
   are explicitly deferred and tracked separately. Deferred-finding
   GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
   cross-browser pass, axe best-practice rules) are post-V1.
+- **0.16.1**: M7f-1 theme propagation infrastructure. Three
+  related changes ship together so the **active** theme - including
+  explicit overrides that disagree with `prefers-color-scheme` - is
+  honored by browser chrome, native UA-painted controls, and the
+  cold-boot splash. (1) `<meta name="theme-color">` is now a pair
+  of `media`-scoped tags (one for each scheme) plus a
+  `PreferencesService` effect that strips `media` and forces both
+  `content` values to the resolved color when the user picks an
+  explicit override. The effect is gated on a new
+  `isPlatformBrowser(inject(PLATFORM_ID))` field so prerender ships
+  the unmodified media-scoped pair. (2) `src/styles/_theme.scss`
+  declares `color-scheme: dark | light` on the corresponding theme
+  classes (and inside the `prefers-color-scheme: light` media query
+  for `.theme-system`) so native scrollbars, autofill, and color
+  inputs follow the active palette. (3) An inline classic
+  `<script>` immediately after `<body>` reads
+  `localStorage['jotjson.preferences.v1']` and applies an explicit
+  `theme-dark` / `theme-light` body class before the static splash
+  is parsed, eliminating the wrong-palette flash on cold boot when
+  the stored preference disagrees with the OS. The splash CSS gains
+  matching `.theme-dark .jot-splash` / `.theme-light .jot-splash`
+  variants so the class-based override beats the existing
+  `prefers-color-scheme` media query. Supporting infrastructure:
+  the inline-script bytes are mirrored by a pure helper at
+  `src/app/core/boot/resolve-boot-theme.ts` (unit tested), the
+  first inline-script SHA-256 hash is added to
+  `staticwebapp.config.json` `script-src`, and both source-mode and
+  dist-mode CSP-hash checks pass. New specs cover the meta-tag
+  effect across the four `system`+OS / `dark` / `light` permutations,
+  the `color-scheme` rules via stylesheet introspection, and the
+  boot-theme helper.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

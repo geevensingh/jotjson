@@ -806,6 +806,93 @@ describe('PreferencesService', () => {
     });
   });
 
+  describe('theme-color meta tags', () => {
+    function installThemeColorMetas(): {
+      darkMeta: HTMLMetaElement;
+      lightMeta: HTMLMetaElement;
+    } {
+      const darkMeta = document.createElement('meta');
+      darkMeta.id = 'meta-theme-color-dark';
+      darkMeta.name = 'theme-color';
+      darkMeta.content = '#1e1e1e';
+      darkMeta.setAttribute('media', '(prefers-color-scheme: dark)');
+      document.head.appendChild(darkMeta);
+
+      const lightMeta = document.createElement('meta');
+      lightMeta.id = 'meta-theme-color-light';
+      lightMeta.name = 'theme-color';
+      lightMeta.content = '#fafafa';
+      lightMeta.setAttribute('media', '(prefers-color-scheme: light)');
+      document.head.appendChild(lightMeta);
+
+      return { darkMeta, lightMeta };
+    }
+
+    function removeThemeColorMetas(): void {
+      document.getElementById('meta-theme-color-dark')?.remove();
+      document.getElementById('meta-theme-color-light')?.remove();
+    }
+
+    afterEach(() => {
+      removeThemeColorMetas();
+    });
+
+    it('keeps both tags media-scoped when theme is "system"', () => {
+      const { darkMeta, lightMeta } = installThemeColorMetas();
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'system' });
+      TestBed.flushEffects();
+      expect(darkMeta.getAttribute('media')).toBe('(prefers-color-scheme: dark)');
+      expect(darkMeta.content).toBe('#1e1e1e');
+      expect(lightMeta.getAttribute('media')).toBe('(prefers-color-scheme: light)');
+      expect(lightMeta.content).toBe('#fafafa');
+    });
+
+    it('strips media and forces dark color on both tags when theme is "dark"', () => {
+      const { darkMeta, lightMeta } = installThemeColorMetas();
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark' });
+      TestBed.flushEffects();
+      expect(darkMeta.hasAttribute('media')).toBe(false);
+      expect(darkMeta.content).toBe('#1e1e1e');
+      expect(lightMeta.hasAttribute('media')).toBe(false);
+      expect(lightMeta.content).toBe('#1e1e1e');
+    });
+
+    it('strips media and forces light color on both tags when theme is "light"', () => {
+      const { darkMeta, lightMeta } = installThemeColorMetas();
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'light' });
+      TestBed.flushEffects();
+      expect(darkMeta.hasAttribute('media')).toBe(false);
+      expect(darkMeta.content).toBe('#fafafa');
+      expect(lightMeta.hasAttribute('media')).toBe(false);
+      expect(lightMeta.content).toBe('#fafafa');
+    });
+
+    it('restores both media-scoped tags on transition from explicit to system', () => {
+      const { darkMeta, lightMeta } = installThemeColorMetas();
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark' });
+      TestBed.flushEffects();
+      expect(darkMeta.hasAttribute('media')).toBe(false);
+      svc.update({ theme: 'system' });
+      TestBed.flushEffects();
+      expect(darkMeta.getAttribute('media')).toBe('(prefers-color-scheme: dark)');
+      expect(darkMeta.content).toBe('#1e1e1e');
+      expect(lightMeta.getAttribute('media')).toBe('(prefers-color-scheme: light)');
+      expect(lightMeta.content).toBe('#fafafa');
+    });
+
+    it('is a no-op when the meta tags are absent (defensive)', () => {
+      const svc = TestBed.inject(PreferencesService);
+      expect(() => {
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+      }).not.toThrow();
+    });
+  });
+
   describe('sync lifecycle', () => {
     it('replaces local prefs with the server copy when the user doc exists (remote wins)', async () => {
       const svc = TestBed.inject(PreferencesService);

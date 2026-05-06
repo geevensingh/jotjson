@@ -1,5 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import {
+  DestroyRef,
+  Injectable,
+  PLATFORM_ID,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, Subscription } from 'rxjs';
 import type { ThemeColorSet, TreeHighlightColors, UserPreferences } from '../api/models';
@@ -11,6 +20,16 @@ import { bucketColorHex, bucketDepth, bucketFontSize, bucketTabSize } from './pr
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const FLUSH_DEBOUNCE_MS = 500;
+
+/**
+ * Hex color values for the two `<meta name="theme-color">` tags in
+ * `src/index.html`. Mirrors `$color-bg-dark` / `$color-bg-light` in
+ * `src/styles/_variables.scss`. Used by `applyThemeColorMeta()` to
+ * sync browser chrome (mobile address bar, PWA splash) with explicit
+ * theme overrides.
+ */
+const THEME_COLOR_DARK = '#1e1e1e';
+const THEME_COLOR_LIGHT = '#fafafa';
 
 /**
  * Events emitted by PreferencesService for the consuming UI shell to
@@ -281,6 +300,15 @@ export class PreferencesService {
   private readonly api = inject(UserApiService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly loggerService = inject(LoggerService);
+  /**
+   * Canonical browser-platform guard per AGENTS.md
+   * "Server-platform safety (prerender)". Field initializer (injection
+   * context) so it can be referenced from constructor effects.
+   * Existing effects below predate this convention and use ad-hoc
+   * `typeof document === 'undefined'` checks; new effects (the
+   * theme-color meta mutator) use this flag.
+   */
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   private readonly _prefs = signal<UserPreferences>(this.loadLocal());
   readonly prefs = this._prefs.asReadonly();
@@ -369,6 +397,24 @@ export class PreferencesService {
       style.setProperty('--highlight-ancestor', colors.ancestorColor);
       style.setProperty('--highlight-search', colors.searchHighlightColor);
       style.setProperty('--highlight-manual', colors.manualHighlightColor);
+    });
+
+    /*
+     * Browser-chrome theme-color tracking. Two static <meta name="theme-color">
+     * tags ship in `src/index.html` scoped via `media="(prefers-color-scheme: ...)"`,
+     * which handles `theme: 'system'` natively. For explicit overrides
+     * (`theme: 'dark'` on a light-mode OS, or vice versa), the media-scoped
+     * pair is wrong - we strip `media` from both tags and force both
+     * `content` values to the resolved color so browser chrome (mobile
+     * address bar, PWA splash) follows the user's explicit choice.
+     *
+     * Browser-only via `isBrowser`; prerender ships the unmodified
+     * media-scoped pair which is correct for `system` mode.
+     */
+    effect(() => {
+      const pref = this._prefs().theme;
+      if (!this.isBrowser) return;
+      this.applyThemeColorMeta(pref);
     });
 
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -640,6 +686,40 @@ export class PreferencesService {
     } catch {
       return structuredClone(DEFAULT_PREFERENCES);
     }
+  }
+
+  /**
+   * Rewrites the two `<meta name="theme-color">` tags in `index.html`
+   * to reflect the user's `theme` preference.
+   *
+   * - `system`: restore both tags to their original media-scoped pair
+   *   so the browser picks the right tag based on `prefers-color-scheme`.
+   * - `dark` / `light`: strip `media` from both tags and set both
+   *   `content` values to the resolved color so neither tag is
+   *   conditional. Browsers honor the last unconditional `theme-color`
+   *   entry; setting both keeps behavior deterministic regardless of
+   *   document order.
+   *
+   * Caller already verified `this.isBrowser`.
+   */
+  private applyThemeColorMeta(pref: UserPreferences['theme']): void {
+    const darkMeta = document.getElementById('meta-theme-color-dark');
+    const lightMeta = document.getElementById('meta-theme-color-light');
+    if (!(darkMeta instanceof HTMLMetaElement) || !(lightMeta instanceof HTMLMetaElement)) {
+      return;
+    }
+    if (pref === 'dark' || pref === 'light') {
+      const color = pref === 'dark' ? THEME_COLOR_DARK : THEME_COLOR_LIGHT;
+      darkMeta.removeAttribute('media');
+      darkMeta.content = color;
+      lightMeta.removeAttribute('media');
+      lightMeta.content = color;
+      return;
+    }
+    darkMeta.setAttribute('media', '(prefers-color-scheme: dark)');
+    darkMeta.content = THEME_COLOR_DARK;
+    lightMeta.setAttribute('media', '(prefers-color-scheme: light)');
+    lightMeta.content = THEME_COLOR_LIGHT;
   }
 
   private handleAuthTransition(newUserId: string | null): void {

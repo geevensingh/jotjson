@@ -9,7 +9,18 @@
       name="description"
       content="A fast JSON and JSONC viewer. Paste raw JSON to format, search, and browse it as a tree - anonymously, or signed in for history and shareable links."
     />
-    <meta name="theme-color" content="#1e1e1e" />
+    <meta
+      id="meta-theme-color-dark"
+      name="theme-color"
+      content="#1e1e1e"
+      media="(prefers-color-scheme: dark)"
+    />
+    <meta
+      id="meta-theme-color-light"
+      name="theme-color"
+      content="#fafafa"
+      media="(prefers-color-scheme: light)"
+    />
     <link rel="canonical" href="https://jotjson.com/" />
 
     <meta property="og:type" content="website" />
@@ -96,6 +107,26 @@
           --jot-fg-dim: #5a5a5a;
           --jot-track: rgba(0, 188, 212, 0.22);
         }
+      }
+      /*
+       * Class-based theme overrides for explicit user preference.
+       * Higher specificity than the media query above means an explicit
+       * `theme-dark` / `theme-light` body class (set by the inline boot
+       * script below when localStorage has an explicit override) wins
+       * over the OS preference. With `theme-system` (default markup),
+       * neither rule matches and the media query handles it.
+       */
+      .theme-dark .jot-splash {
+        --jot-bg: #1e1e1e;
+        --jot-fg: #e4e4e4;
+        --jot-fg-dim: #a0a0a0;
+        --jot-track: rgba(0, 188, 212, 0.18);
+      }
+      .theme-light .jot-splash {
+        --jot-bg: #fafafa;
+        --jot-fg: #1a1a1a;
+        --jot-fg-dim: #5a5a5a;
+        --jot-track: rgba(0, 188, 212, 0.22);
       }
       .jot-splash__bar {
         position: fixed;
@@ -222,6 +253,37 @@
     </style>
   </head>
   <body class="theme-system">
+    <script>
+      /*
+       * Cold-boot theme correctness. Reads the user's persisted
+       * preference and applies an explicit `theme-dark` / `theme-light`
+       * class to <body> BEFORE the splash element below is parsed,
+       * eliminating the wrong-palette flash when the stored preference
+       * disagrees with `prefers-color-scheme`. With no override (key
+       * missing, malformed JSON, `system`), the media query above
+       * stays authoritative.
+       *
+       * Mirror of `src/app/core/boot/resolve-boot-theme.ts`. Keep the
+       * two in sync. Tests on the helper cover the decision logic;
+       * this inline copy is covered by the CSP-hash lint gates
+       * (source mode + dist mode) and a manual smoke check.
+       *
+       * Wrapped in try/catch defensively - a broken splash is worse
+       * than a wrong-palette flash.
+       */
+      (function () {
+        try {
+          var raw = localStorage.getItem('jotjson.preferences.v1');
+          if (!raw) return;
+          var pref = JSON.parse(raw).theme;
+          if (pref !== 'dark' && pref !== 'light') return;
+          document.body.classList.remove('theme-system');
+          document.body.classList.add('theme-' + pref);
+        } catch (e) {
+          /* never break boot */
+        }
+      })();
+    </script>
     <div id="jot-static-splash" class="jot-splash" role="status" aria-live="polite">
       <div class="jot-splash__bar" aria-hidden="true"></div>
       <svg
