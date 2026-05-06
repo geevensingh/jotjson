@@ -206,6 +206,68 @@ describe('ToolbarComponent', () => {
     });
   });
 
+  describe('M7f-4a state-pill--modified uses Material 21 semantic token', () => {
+    it('references --mat-sys-secondary-container so it auto-flips between dark and light themes', async () => {
+      // Mount a fixture so Angular emits the toolbar component's
+      // scoped SCSS into document.styleSheets. Then iterate the
+      // stylesheet rules and assert that the rule for
+      // .state-pill--modified references the Material 21
+      // secondary-container token. Previous hardcoded
+      // #ffecb3 / #4a3000 washed out in dark mode.
+      const { fixture } = await create();
+      fixture.detectChanges();
+
+      const matches: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (!(rule instanceof CSSStyleRule)) continue;
+          const text = rule.cssText;
+          if (
+            text.includes('state-pill--modified') &&
+            text.includes('--mat-sys-secondary-container')
+          ) {
+            matches.push(text);
+          }
+        }
+      }
+      expect(matches.length)
+        .withContext(
+          'M7f-4a: .state-pill--modified must reference --mat-sys-secondary-container so it auto-flips between dark and light themes (was hardcoded #ffecb3 / #4a3000 - washed out in dark)',
+        )
+        .toBeGreaterThan(0);
+
+      // Negative regression: no bare hardcoded hex without the
+      // semantic-token fallback.
+      const offenders: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (!(rule instanceof CSSStyleRule)) continue;
+          const text = rule.cssText;
+          if (text.includes('state-pill--modified') && text.includes('background: #ffecb3;')) {
+            offenders.push(text);
+          }
+        }
+      }
+      expect(offenders.length)
+        .withContext(
+          'M7f-4a regression guard: .state-pill--modified must not have a bare hardcoded #ffecb3 without --mat-sys-secondary-container fallback',
+        )
+        .toBe(0);
+    });
+  });
+
   describe('selection sync toggle (issue #42)', () => {
     function findSyncButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement {
       const button = (fixture.nativeElement as HTMLElement).querySelector(

@@ -86,8 +86,12 @@
 }
 
 .state-pill--modified {
-  background: #ffecb3;
-  color: #4a3000;
+  // Material 21 secondary-container token (M7f-4a). Auto-flips between
+  // dark and light themes via mat.all-component-colors emission in
+  // src/styles/_material.scss; previous hardcoded #ffecb3 / #4a3000
+  // were tuned for light only and washed out in dark.
+  background: var(--mat-sys-secondary-container, #ffecb3);
+  color: var(--mat-sys-on-secondary-container, #4a3000);
 }
 
 .state-pill--saving::before {

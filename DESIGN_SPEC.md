@@ -2203,6 +2203,25 @@ Out of scope (for v1):
   are explicitly deferred and tracked separately. Deferred-finding
   GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
   cross-browser pass, axe best-practice rules) are post-V1.
+- **0.16.4**: M7f-4a hardcoded semantic-pill colors moved to
+  Material 21 tokens. The three previously hardcoded "light-only"
+  semantic-color pills now reference Material 21 semantic tokens so
+  they auto-flip between dark and light themes via the
+  `mat.all-component-colors` emission in `src/styles/_material.scss`:
+  `.state-pill--modified` (toolbar) -> `--mat-sys-secondary-container`
+  / `--mat-sys-on-secondary-container` (was `#ffecb3` / `#4a3000`);
+  `.pill-warn` (rule-editor) -> `--mat-sys-secondary-container` /
+  `--mat-sys-on-secondary-container` (was `#fef3c7` / `#78350f`);
+  `.pill-ok` (rule-editor) -> `--mat-sys-tertiary-container` /
+  `--mat-sys-on-tertiary-container` (was `#dcfce7` / `#14532d`).
+  Material 21 has no dedicated "warning" semantic role distinct from
+  secondary, so the warn pill uses secondary-container as the
+  closest neutral-attention match; if the visual signal proves
+  insufficient the per-theme override fallback noted in the rule
+  block can be wired in. New stylesheet-introspection specs in
+  `toolbar.component.spec.ts` (one) and `rule-editor.component.spec.ts`
+  (three) assert each rule references the expected token and guard
+  against regressions to bare hardcoded hex.
 - **0.16.3**: M7f-3 Monaco JSON syntax theming + dead `$json-*`
   token cleanup. The `defineThemes()` calls on `JsonEditorComponent`
   now register `rules` arrays mapping JSON tokenizer scopes
