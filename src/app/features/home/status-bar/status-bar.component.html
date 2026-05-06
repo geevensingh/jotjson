@@ -1,8 +1,14 @@
 <div class="status-bar jj-no-select" role="status" aria-live="polite">
   <div class="left">
-    <span class="stat stat-chars" aria-label="Characters" i18n-aria-label="@@status.chars.aria">
+    <span
+      class="stat stat-chars"
+      aria-label="Meaningful characters (whitespace and comments excluded)"
+      i18n-aria-label="@@status.chars.aria"
+      title="Meaningful characters (no whitespace or comments)"
+      i18n-title="@@status.chars.title"
+    >
       <span class="label" i18n="@@status.chars.label">Chars</span>
-      <span class="value">{{ textStats().chars }}</span>
+      <span class="value">{{ meaningfulChars() }}</span>
     </span>
     <span class="stat stat-lines" aria-label="Lines" i18n-aria-label="@@status.lines.aria">
       <span class="label" i18n="@@status.lines.label">Lines</span>
@@ -12,6 +18,8 @@
       class="stat stat-bytes"
       aria-label="Size in UTF-8 bytes"
       i18n-aria-label="@@status.bytes.aria"
+      title="Bytes if the document was downloaded as-is (UTF-8)"
+      i18n-title="@@status.bytes.title"
     >
       <span class="label" i18n="@@status.bytes.label">Size</span>
       <span class="value">{{ bytesLabel() }}</span>

@@ -4,7 +4,7 @@ import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.ser
 import { JsonParseResult } from '../../../core/json/json-parser.service';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { EditorMode } from '../editor-mode';
-import { computeTextStats, computeTreeStats, formatBytes } from './stats';
+import { computeMinifiedChars, computeTextStats, computeTreeStats, formatBytes } from './stats';
 
 /**
  * Home page status bar (M7m). Purely informational row showing text and tree
@@ -27,6 +27,14 @@ export class StatusBarComponent {
   readonly cursor = input<{ line: number; column: number } | undefined>(undefined);
 
   readonly textStats = computed(() => computeTextStats(this.text()));
+
+  /**
+   * "Meaningful character" count surfaced as the Chars stat (issue #103):
+   * the source character count after whitespace and comments are stripped.
+   * Driven off `text()` (lexical, not semantic) so the count is computable
+   * for any input, including partial / parse-error documents.
+   */
+  readonly meaningfulChars = computed(() => computeMinifiedChars(this.text()));
 
   readonly bytesLabel = computed(() => formatBytes(this.textStats().bytes));
 

@@ -77,9 +77,64 @@ describe('StatusBarComponent', () => {
     const text = '{\n  "a": 1\n}';
     const f = create({ text, parseResult: svc.parse(text) });
     const left = textOf(f, '.left');
-    expect(left).toContain(`Chars${text.length}`);
+    // Chars now counts MEANINGFUL characters (whitespace + comments stripped).
+    // The minified form of `{\n  "a": 1\n}` is `{"a":1}` = 7 chars.
+    expect(left).toContain('Chars7');
     expect(left).toContain('Lines3');
     expect(left).toMatch(/Size\d+ B/);
+  });
+
+  describe('meaningful Chars stat', () => {
+    it('renders 0 on an empty editor', () => {
+      const f = create({ text: '', parseResult: svc.parse('') });
+      expect(textOf(f, '.stat-chars')).toContain('Chars0');
+    });
+
+    it('shows Chars < Size for pretty-printed JSON', () => {
+      const text = '{\n  "a": 1,\n  "b": 2\n}';
+      const f = create({ text, parseResult: svc.parse(text) });
+      const charsValue = Number(
+        f.nativeElement.querySelector('.stat-chars .value')!.textContent!.trim(),
+      );
+      const bytesValue = Number(
+        f.nativeElement.querySelector('.stat-bytes .value')!.textContent!.replace(/[^\d]/g, ''),
+      );
+      expect(charsValue).toBeLessThan(bytesValue);
+    });
+
+    it('shows Chars equal to source length on already-minified ASCII JSON', () => {
+      const text = '{"a":1,"b":2}';
+      const f = create({ text, parseResult: svc.parse(text) });
+      expect(textOf(f, '.stat-chars')).toContain(`Chars${text.length}`);
+    });
+
+    it('strips JSONC comments from the Chars count', () => {
+      const text = '// header\n{"a":1}';
+      const f = create({ text, parseResult: svc.parse(text), mode: 'jsonc' });
+      // Stripped form is `{"a":1}` = 7 chars.
+      expect(textOf(f, '.stat-chars')).toContain('Chars7');
+    });
+
+    it('still renders a numeric Chars count when the document fails to parse', () => {
+      const broken = '{"a":}';
+      const f = create({ text: broken, parseResult: svc.parse(broken) });
+      // Scanner still emits tokens; concrete count is implementation-defined,
+      // but it must be a number, not "-".
+      const value = f.nativeElement.querySelector('.stat-chars .value')!.textContent!.trim();
+      expect(value).toMatch(/^\d+$/);
+    });
+
+    it('renders the explanatory tooltip on the Chars span', () => {
+      const f = create({ text: '{}', parseResult: svc.parse('{}') });
+      const el = f.nativeElement.querySelector('.stat-chars') as HTMLElement | null;
+      expect(el?.getAttribute('title')).toBe('Meaningful characters (no whitespace or comments)');
+    });
+
+    it('renders the explanatory tooltip on the Size span', () => {
+      const f = create({ text: '{}', parseResult: svc.parse('{}') });
+      const el = f.nativeElement.querySelector('.stat-bytes') as HTMLElement | null;
+      expect(el?.getAttribute('title')).toBe('Bytes if the document was downloaded as-is (UTF-8)');
+    });
   });
 
   it('shows tree stats for a valid document', () => {

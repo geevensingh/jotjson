@@ -163,8 +163,9 @@ strings are read as UTC or local.
 - Press `Ctrl+C` / `Cmd+C` with a tree row focused to copy the focused row's value (works on leaves, containers, and empty containers alike)
 - Inferred type badges on every row: `uuid`, `url`, `email`, `path`, `ipv4`,
   `ipv6`, `date`, plus container item / key counts
-- Status bar: byte size, line count, cursor position, total node count, max
-  depth, array vs. object counts
+- Status bar: meaningful character count (whitespace and comments
+  excluded), byte size, line count, cursor position, total node count,
+  max depth, array vs. object counts
 - Themes: dark / light / match-system, with per-theme color customization for
   every highlight slot
 - 4-way layout: editor only, side-by-side, stacked, tree only - resizable split

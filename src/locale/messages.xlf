@@ -2265,206 +2265,220 @@
         </context-group>
       </trans-unit>
       <trans-unit id="status.chars.aria" datatype="html">
-        <source>Characters</source>
+        <source>Meaningful characters (whitespace and comments excluded)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">3</context>
+          <context context-type="linenumber">5,6</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.chars.title" datatype="html">
+        <source>Meaningful characters (no whitespace or comments)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">7,8</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.chars.label" datatype="html">
         <source>Chars</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">4,5</context>
+          <context context-type="linenumber">10,11</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.lines.aria" datatype="html">
         <source>Lines</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">7</context>
+          <context context-type="linenumber">13</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.lines.label" datatype="html">
         <source>Lines</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">8,9</context>
+          <context context-type="linenumber">14,15</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.bytes.aria" datatype="html">
         <source>Size in UTF-8 bytes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">13,14</context>
+          <context context-type="linenumber">19,20</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="status.bytes.title" datatype="html">
+        <source>Bytes if the document was downloaded as-is (UTF-8)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
+          <context context-type="linenumber">21,22</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.bytes.label" datatype="html">
         <source>Size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">16,17</context>
+          <context context-type="linenumber">24,25</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.cursor.aria" datatype="html">
         <source>Cursor position</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">21,22</context>
+          <context context-type="linenumber">29,30</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.cursor.label" datatype="html">
         <source>Ln</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">24,25</context>
+          <context context-type="linenumber">32,33</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.col.label" datatype="html">
         <source>Col</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">26,27</context>
+          <context context-type="linenumber">34,35</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.nodes.aria" datatype="html">
         <source>Total nodes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">34,35</context>
+          <context context-type="linenumber">42,43</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.nodes.title" datatype="html">
         <source>Total values in the tree, including objects, arrays, and primitives.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">36,37</context>
+          <context context-type="linenumber">44,45</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.nodes.label" datatype="html">
         <source>Total Nodes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">39,40</context>
+          <context context-type="linenumber">47,48</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.depth.aria" datatype="html">
         <source>Maximum depth</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">44,45</context>
+          <context context-type="linenumber">52,53</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.depth.title" datatype="html">
         <source>Maximum nesting depth. The root counts as depth 0; a direct child is depth 1.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">46,47</context>
+          <context context-type="linenumber">54,55</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.depth.label" datatype="html">
         <source>Max Depth</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">49,50</context>
+          <context context-type="linenumber">57,58</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.objects.aria" datatype="html">
         <source>Object count</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">54,55</context>
+          <context context-type="linenumber">62,63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.objects.title" datatype="html">
         <source>Number of object nodes in the tree.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">56,57</context>
+          <context context-type="linenumber">64,65</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.objects.label" datatype="html">
         <source>Objects</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">59,60</context>
+          <context context-type="linenumber">67,68</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.arrays.aria" datatype="html">
         <source>Array count</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">64,65</context>
+          <context context-type="linenumber">72,73</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.arrays.title" datatype="html">
         <source>Number of array nodes in the tree.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">66,67</context>
+          <context context-type="linenumber">74,75</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.arrays.label" datatype="html">
         <source>Arrays</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">69,70</context>
+          <context context-type="linenumber">77,78</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.comments.aria" datatype="html">
         <source>Comment count</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">75,76</context>
+          <context context-type="linenumber">83,84</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.comments.title" datatype="html">
         <source>Number of JSONC comments preserved during parsing.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">77,78</context>
+          <context context-type="linenumber">85,86</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.comments.label" datatype="html">
         <source>Comments</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">80,81</context>
+          <context context-type="linenumber">88,89</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.copy.aria" datatype="html">
         <source>Copy commit SHA</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.html</context>
-          <context context-type="linenumber">102,103</context>
+          <context context-type="linenumber">110,111</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.link.aria" datatype="html">
         <source>Open commit <x id="shortSha" equiv-text="this.shortSha"/> on GitHub</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.ts</context>
-          <context context-type="linenumber">91,93</context>
+          <context context-type="linenumber">99,101</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.copy.success" datatype="html">
         <source>Copied commit SHA</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.ts</context>
-          <context context-type="linenumber">97</context>
+          <context context-type="linenumber">105</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.copy.failed" datatype="html">
         <source>Failed to copy commit SHA</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.ts</context>
-          <context context-type="linenumber">98</context>
+          <context context-type="linenumber">106</context>
         </context-group>
       </trans-unit>
       <trans-unit id="status.build.copy.unsupported" datatype="html">
         <source>Clipboard unavailable</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/status-bar/status-bar.component.ts</context>
-          <context context-type="linenumber">99</context>
+          <context context-type="linenumber">107</context>
         </context-group>
       </trans-unit>
       <trans-unit id="home.upload.invalid" datatype="html">
