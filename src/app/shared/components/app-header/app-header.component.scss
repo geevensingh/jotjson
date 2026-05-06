@@ -91,6 +91,15 @@
     text-decoration: underline;
     outline: none;
   }
+
+  // F5.1: the merged hover/focus-visible block above resets `outline: none`,
+  // so :focus-visible needs a replacement non-text indicator to satisfy
+  // WCAG 2.4.7 / 1.4.11 (3:1 contrast on the focus boundary). Mirror the
+  // sibling `.brand` selector below to keep the brand-mark + user-name
+  // focus ring visually consistent.
+  &:focus-visible {
+    box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.6);
+  }
 }
 
 .brand {

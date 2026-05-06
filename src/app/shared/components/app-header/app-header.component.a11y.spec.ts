@@ -14,9 +14,10 @@ import { attachFixtureToBody, expectNoStrictA11yViolations } from '../../../../t
  *  - F1.5: a `<nav aria-label="Primary">` landmark wrapping the auth-side
  *    route links.
  *
- * Plus a clean axe scan against the rendered component in both themes.
- * The header is shared by every route, so a regression here would
- * surface on every page.
+ * Plus the M7g-3g focus-indicator regression for the user-name link
+ * (F5.1) and a clean axe scan against the rendered component in both
+ * themes. The header is shared by every route, so a regression here
+ * would surface on every page.
  */
 describe('AppHeaderComponent (a11y)', () => {
   let teardown: (() => void) | undefined;
@@ -95,6 +96,45 @@ describe('AppHeaderComponent (a11y)', () => {
     expect(nav?.getAttribute('aria-label'))
       .withContext('the primary nav landmark needs an explicit accessible name')
       .toBe('Primary');
+  });
+
+  it('user-name link declares a non-text focus indicator on :focus-visible (F5.1)', () => {
+    const fixture = TestBed.createComponent(AppHeaderComponent);
+    teardown = attachFixtureToBody(fixture);
+    fixture.detectChanges();
+
+    // The merged `&:hover, &:focus-visible` block on `.user-name` resets
+    // `outline: none`, so the focus boundary depends on a separate
+    // `&:focus-visible { box-shadow: ... }` rule. Probe the cascaded
+    // stylesheets directly rather than relying on `:focus-visible`
+    // matching from a programmatic `.focus()` call - that path is
+    // gated too aggressively in headless Chrome to be reliable, per the
+    // existing `.skip-link` comment in this component's SCSS.
+    const matchingRules: string[] = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRuleList;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (const rule of Array.from(rules)) {
+        if (!(rule instanceof CSSStyleRule)) continue;
+        const text = rule.cssText;
+        if (
+          text.includes('.user-name') &&
+          text.includes(':focus-visible') &&
+          text.includes('box-shadow')
+        ) {
+          matchingRules.push(text);
+        }
+      }
+    }
+    expect(matchingRules.length)
+      .withContext(
+        '`.user-name:focus-visible` must declare a `box-shadow` indicator so the focus boundary meets WCAG 2.4.7 / 1.4.11 (F5.1)',
+      )
+      .toBeGreaterThan(0);
   });
 
   it('has no critical or serious WCAG 2.1 AA violations (dark theme)', async () => {
