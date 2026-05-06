@@ -509,7 +509,12 @@ Definition of Done cycle (§7) on every iteration:
 
 - **`npm run verify:fast`** runs `lint` + `ng test` in one shot,
   **without** the production build or i18n extraction. Use this as
-  the default check during iteration.
+  the default check during iteration. **Smoke e2e** (`npm run test:e2e`)
+  is intentionally NOT part of `verify:fast` - it builds a production
+  bundle and starts a real browser, which takes much longer than the
+  fast inner loop. Run e2e only when you've changed code under `e2e/`,
+  or when you want to verify a flow before committing. CI runs e2e
+  on every PR regardless.
 - For focused iteration, pass `--include` through to `ng test`:
   ```
   npm run verify:fast -- --include='**/extract-json-banner/**'

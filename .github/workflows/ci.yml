@@ -356,3 +356,71 @@ jobs:
           reporter: java-junit
           fail-on-error: false
 
+  e2e:
+    name: Smoke e2e (anonymous, Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Materialize environment.ts
+        # Anonymous bundle: uses the example environment (no real MSAL secrets).
+        # Mirrors the pattern in the `web-tests` job.
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
+      - name: Generate build-info.ts
+        run: npm run build:info
+      - name: Build production bundle
+        run: npm run build
+      - name: Resolve Playwright version
+        id: pw-version
+        # Cache key needs an exact version. Read it from the installed package
+        # so OS + version uniquely identify the browser binary set.
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run smoke e2e
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload e2e JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-junit
+          path: test-results/e2e/junit.xml
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Publish e2e test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: Smoke e2e results
+          path: test-results/e2e/junit.xml
+          reporter: java-junit
+          fail-on-error: false
+

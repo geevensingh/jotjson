@@ -20,6 +20,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "verify:fast": "npm run lint && ng test --watch=false --browsers=ChromeHeadless",
     "lint": "tsc --noEmit -p tsconfig.app.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs && node scripts/check-prod-patterns.mjs && node scripts/check-csp-hashes.mjs && node scripts/check-lockfile.mjs && prettier --check .",
     "lint:tsc": "tsc --pretty false --noEmit -p tsconfig.app.json",
@@ -77,6 +79,7 @@
     "@angular/cli": "^21.2.8",
     "@angular/compiler-cli": "^21.2.10",
     "@angular/localize": "^21.2.10",
+    "@playwright/test": "^1.59.1",
     "@types/jasmine": "~5.1.0",
     "@types/node": "^24.0.0",
     "axe-core": "^4.11.4",
@@ -91,6 +94,7 @@
     "karma-spec-reporter": "^0.0.36",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",
+    "serve": "^14.2.6",
     "typescript": "~5.9.3"
   },
   "lint-staged": {
