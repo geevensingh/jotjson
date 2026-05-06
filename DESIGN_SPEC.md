@@ -1298,7 +1298,15 @@ tripwires together make IfMatch protection the default for every
 - **Color Palette:**
   - Primary: Teal/Cyan accent (#00BCD4 family).
   - Background: Dark (#1E1E1E) / Light (#FAFAFA).
-  - JSON types color-coded: strings=green (`#6a8759`), numbers=orange (`#ff9800`), booleans=blue (`#2196f3`), null=gray (`#9e9e9e`), arrays=purple (`#9c27b0`), objects=teal (`#009688`). Exact values live in `src/styles/_variables.scss`.
+  - JSON types color-coded. Per-theme palettes live with the surfaces
+    that use them: tree value colors in
+    `src/app/shared/components/json-tree/json-tree.component.scss`
+    (the `--tree-string-color` / `--tree-number-color` / `--tree-boolean-color`
+    / `--tree-muted-color` CSS variables, set in dark and light blocks),
+    Monaco editor syntax tokens in `src/app/shared/components/json-editor/json-editor.component.ts`
+    (`defineThemes()` `rules` arrays for `jotjson-dark` and
+    `jotjson-light`), and user-customizable highlight colors in
+    `TreeHighlightColors` (defaults in this document).
 - **Logo:** "JotJSON" wordmark - "Jot" in regular weight, "JSON" in bold, with a `{ }` icon element.
 - **Responsive breakpoints:** Mobile (< 768px), Tablet (768-1024px), Desktop (> 1024px).
 
@@ -2195,6 +2203,24 @@ Out of scope (for v1):
   are explicitly deferred and tracked separately. Deferred-finding
   GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
   cross-browser pass, axe best-practice rules) are post-V1.
+- **0.16.3**: M7f-3 Monaco JSON syntax theming + dead `$json-*`
+  token cleanup. The `defineThemes()` calls on `JsonEditorComponent`
+  now register `rules` arrays mapping JSON tokenizer scopes
+  (`string.value.json`, `number.json`, `keyword.json` - verified
+  against `monaco-editor/esm/vs/language/json/tokenization.js` in
+  Monaco 0.55.1) to per-theme palette colors that mirror the tree's
+  `--tree-string-color` / `--tree-number-color` / `--tree-boolean-color`
+  values, so the editor and the tree feel like one surface in both
+  themes. Property keys (`string.key.json`) inherit from the base
+  `vs` / `vs-dark` palette unchanged. Three new integration specs
+  spy on `monaco.editor.defineTheme` and assert the registered rule
+  shape for each theme. The unused `$json-string` / `$json-number` /
+  `$json-boolean` / `$json-null` / `$json-array` / `$json-object`
+  SCSS tokens (zero refs in tracked SCSS) are removed from
+  `src/styles/_variables.scss`; `DESIGN_SPEC.md` UI/UX Color Palette
+  bullet now points at the three canonical sources (tree CSS
+  variables, Monaco theme rules, `TreeHighlightColors`) instead of
+  the deleted variables file.
 - **0.16.2**: M7f-2 theme toggle UX. Replaces the static
   `matTooltip="Toggle theme"` and `aria-label="Toggle theme"` on the
   toolbar theme-toggle button with a predictive 3-state computed

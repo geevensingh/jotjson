@@ -302,4 +302,94 @@ describe('JsonEditorComponent (browser integration)', () => {
       }
     });
   });
+
+  // --------------------------------------------------------------------
+  // M7f-3a: Monaco JSON syntax token theming
+  // --------------------------------------------------------------------
+  // The component's `defineThemes()` registers `jotjson-dark` and
+  // `jotjson-light` with `rules` arrays mapping JSON token scopes to
+  // per-theme palette colors. Exact token names are pinned to Monaco
+  // 0.55.1's JSON tokenizer (`monaco-editor/esm/vs/language/json/
+  // tokenization.js`):
+  //   - string.value.json  -> JSON string values
+  //   - number.json        -> JSON numbers (NOT plain "number")
+  //   - keyword.json       -> true / false / null
+  //
+  // Strategy: spy on `monaco.editor.defineTheme` BEFORE mounting the
+  // fixture, then read the captured arguments. Direct introspection of
+  // a registered theme is not exposed by Monaco's public standalone API.
+  describe('JSON syntax token theming (M7f-3a)', () => {
+    function findThemeData(
+      spy: jasmine.Spy,
+      name: string,
+    ): MonacoNS.editor.IStandaloneThemeData | undefined {
+      for (const call of spy.calls.allArgs()) {
+        const [registeredName, data] = call as [string, MonacoNS.editor.IStandaloneThemeData];
+        if (registeredName === name) {
+          return data;
+        }
+      }
+      return undefined;
+    }
+
+    function rulesByToken(data: MonacoNS.editor.IStandaloneThemeData): Map<string, string> {
+      const map = new Map<string, string>();
+      for (const rule of data.rules) {
+        if (rule.foreground) map.set(rule.token, rule.foreground.toLowerCase());
+      }
+      return map;
+    }
+
+    it('registers per-theme rules for the JSON tokenizer scopes (jotjson-dark)', async () => {
+      const defineThemeSpy = spyOn(monaco.editor, 'defineTheme').and.callThrough();
+      const { fixture, hostEl } = await mountSizedFixture('{"a":1}');
+      try {
+        const data = findThemeData(defineThemeSpy, 'jotjson-dark');
+        expect(data)
+          .withContext('jotjson-dark theme must be registered via monaco.editor.defineTheme')
+          .toBeDefined();
+        const rules = rulesByToken(data!);
+        expect(rules.get('string.value.json')).toBe('7fa164');
+        expect(rules.get('number.json')).toBe('ff9b30');
+        expect(rules.get('keyword.json')).toBe('3fa1f3');
+      } finally {
+        fixture.destroy();
+        hostEl.remove();
+      }
+    });
+
+    it('registers per-theme rules for the JSON tokenizer scopes (jotjson-light)', async () => {
+      const defineThemeSpy = spyOn(monaco.editor, 'defineTheme').and.callThrough();
+      const { fixture, hostEl } = await mountSizedFixture('{"a":1}');
+      try {
+        const data = findThemeData(defineThemeSpy, 'jotjson-light');
+        expect(data)
+          .withContext('jotjson-light theme must be registered via monaco.editor.defineTheme')
+          .toBeDefined();
+        const rules = rulesByToken(data!);
+        expect(rules.get('string.value.json')).toBe('3f6a25');
+        expect(rules.get('number.json')).toBe('8a4b00');
+        expect(rules.get('keyword.json')).toBe('005ea8');
+      } finally {
+        fixture.destroy();
+        hostEl.remove();
+      }
+    });
+
+    it('inherits the vs / vs-dark base theme so non-rule tokens fall through to Monaco defaults', async () => {
+      const defineThemeSpy = spyOn(monaco.editor, 'defineTheme').and.callThrough();
+      const { fixture, hostEl } = await mountSizedFixture('{"a":1}');
+      try {
+        const dark = findThemeData(defineThemeSpy, 'jotjson-dark');
+        const light = findThemeData(defineThemeSpy, 'jotjson-light');
+        expect(dark!.base).toBe('vs-dark');
+        expect(dark!.inherit).toBe(true);
+        expect(light!.base).toBe('vs');
+        expect(light!.inherit).toBe(true);
+      } finally {
+        fixture.destroy();
+        hostEl.remove();
+      }
+    });
+  });
 });

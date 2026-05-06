@@ -298,10 +298,28 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   private defineThemes(monaco: typeof MonacoNS): void {
+    /*
+     * Per-theme JSON syntax token rules (M7f-3a). Token names verified
+     * from Monaco's JSON tokenizer source (monaco-editor 0.55.1):
+     *   string.value.json - JSON string values
+     *   string.key.json   - JSON property names
+     *   number.json       - JSON numbers (NOT plain "number")
+     *   keyword.json      - true / false / null
+     *
+     * Colors mirror the tree palette
+     * (`json-tree.component.scss:11-21`) so the editor and the tree
+     * feel like one surface in both themes. AA contrast against the
+     * editor background is verified by the contrast helper used in
+     * existing tree specs.
+     */
     monaco.editor.defineTheme('jotjson-dark', {
       base: 'vs-dark',
       inherit: true,
-      rules: [],
+      rules: [
+        { token: 'string.value.json', foreground: '7fa164' },
+        { token: 'number.json', foreground: 'ff9b30' },
+        { token: 'keyword.json', foreground: '3fa1f3' },
+      ],
       colors: {
         'editor.background': '#1e1e1e',
         'editor.foreground': '#e4e4e4',
@@ -310,7 +328,11 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     monaco.editor.defineTheme('jotjson-light', {
       base: 'vs',
       inherit: true,
-      rules: [],
+      rules: [
+        { token: 'string.value.json', foreground: '3f6a25' },
+        { token: 'number.json', foreground: '8a4b00' },
+        { token: 'keyword.json', foreground: '005ea8' },
+      ],
       colors: {
         'editor.background': '#fafafa',
         'editor.foreground': '#1a1a1a',
