@@ -1190,8 +1190,9 @@ describe('JsonTreeComponent', () => {
           closeTrailing?: string;
         }
       >,
+      beforeDetectChanges?: () => void,
     ): Promise<void> {
-      await createWith(value);
+      await createWith(value, beforeDetectChanges);
       fixture.componentRef.setInput('commentsByPath', comments);
       fixture.detectChanges();
     }
@@ -1241,10 +1242,12 @@ describe('JsonTreeComponent', () => {
     });
 
     it('renders the trailing comment AFTER the value and BEFORE tree-row-right on leaf rows', async () => {
-      prefs.update({ treeShowTypeLabels: true });
       await createWithComments(
         { id: 42 },
         makeMap([['$.id', makeBundle(undefined, 'inline note')]]),
+        () => {
+          prefs.update({ treeShowTypeLabels: true });
+        },
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
@@ -1262,10 +1265,12 @@ describe('JsonTreeComponent', () => {
     });
 
     it('renders the trailing comment AFTER the date annotation on string rows', async () => {
-      prefs.update({ treeShowDateAnnotations: true });
       await createWithComments(
         { when: '2024-01-15T00:00:00Z' },
         makeMap([['$.when', makeBundle(undefined, 'logged at noon')]]),
+        () => {
+          prefs.update({ treeShowDateAnnotations: true });
+        },
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.when"]') as HTMLElement;
@@ -1625,8 +1630,9 @@ describe('JsonTreeComponent', () => {
     });
 
     it('renders .tree-date-annotation in the UI sans-serif font (decoration)', async () => {
-      prefs.update({ treeShowDateAnnotations: true });
-      await createWith({ when: '2024-01-15T00:00:00Z' });
+      await createWith({ when: '2024-01-15T00:00:00Z' }, () => {
+        prefs.update({ treeShowDateAnnotations: true });
+      });
       const family = attachAndComputeFontFamily('.tree-date-annotation');
       expect(family).toMatch(SANS_PATTERN);
       expect(family).not.toMatch(MONO_PATTERN);

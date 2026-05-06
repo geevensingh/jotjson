@@ -31,8 +31,10 @@ declare global {
 }
 
 let monacoPromise: Promise<typeof MonacoNS> | undefined;
+let monacoPromiseOverride: Promise<typeof MonacoNS> | undefined;
 
 export function loadMonaco(): Promise<typeof MonacoNS> {
+  if (monacoPromiseOverride) return monacoPromiseOverride;
   if (typeof window === 'undefined') {
     return Promise.reject(new Error('Monaco is not available during SSR'));
   }
@@ -98,10 +100,26 @@ function bootstrap(resolve: (m: typeof MonacoNS) => void, reject: (error: unknow
  */
 export function __resetMonacoLoaderForTesting(): void {
   monacoPromise = undefined;
+  monacoPromiseOverride = undefined;
   if (typeof window === 'undefined') return;
   const winRef = window as unknown as Record<string, unknown>;
   delete winRef['require'];
   delete winRef['MonacoEnvironment'];
   delete winRef['monaco'];
   document.querySelector('script[data-monaco-loader="true"]')?.remove();
+}
+
+/**
+ * Test-only seam: pin `loadMonaco()` to a caller-supplied promise so a
+ * spec can suspend the load between the await and the post-await body
+ * (e.g., to verify destroy-before-load behavior in
+ * `JsonEditorComponent`). Takes precedence over both the
+ * `window.monaco` shortcut and the cached `monacoPromise`. Pass
+ * `undefined` to clear. Production callers must never reference this.
+ * See AGENTS.md `__<verb>ForTesting` convention.
+ */
+export function __setMonacoLoaderPromiseForTesting(
+  promise: Promise<typeof MonacoNS> | undefined,
+): void {
+  monacoPromiseOverride = promise;
 }

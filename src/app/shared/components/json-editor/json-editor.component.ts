@@ -110,6 +110,12 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       this.logger.error('monaco.loadFailed', error);
       return;
     }
+    // The await above can resolve after the component's view has
+    // already been destroyed (e.g., user navigates away mid-load, or a
+    // test fixture is torn down between it() blocks). If we proceed,
+    // we'd allocate a Monaco instance + ResizeObserver that
+    // ngOnDestroy() has already run past, leaking them as zombies.
+    if (this.destroyRef.destroyed) return;
     this.monaco = monaco;
 
     this.defineThemes(monaco);
@@ -234,7 +240,6 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     this.applyMarkers(this.errors());
 
     this.ready.set(true);
-    this.destroyRef.onDestroy(() => this.dispose());
   }
 
   ngOnDestroy(): void {

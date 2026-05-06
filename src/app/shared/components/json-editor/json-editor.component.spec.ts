@@ -4,7 +4,8 @@ import { LoggerService } from '../../../core/telemetry/logger.service';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { installMinimalMonacoStub, restoreMonacoStub } from '../../../../testing/monaco.testing';
 import { JsonEditorComponent } from './json-editor.component';
-import { __resetMonacoLoaderForTesting } from './monaco-loader';
+import { __resetMonacoLoaderForTesting, __setMonacoLoaderPromiseForTesting } from './monaco-loader';
+import type * as MonacoNS from 'monaco-editor';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 
@@ -357,6 +358,39 @@ describe('JsonEditorComponent', () => {
     expect(resizeObserver.disconnect).not.toHaveBeenCalled();
     fixture.destroy();
     expect(resizeObserver.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression for issue #98: if the fixture is destroyed while
+  // ngAfterViewInit is suspended on `await loadMonaco()`, the
+  // post-await body must not allocate Monaco or a ResizeObserver -
+  // ngOnDestroy has already run past `editor`/`resizeObs` (still
+  // undefined), so any creation here would leak as a zombie.
+  it('does not create Monaco when fixture is destroyed before loadMonaco resolves', async () => {
+    delete (window as unknown as { monaco?: unknown }).monaco;
+    __resetMonacoLoaderForTesting();
+    let resolveLoader!: (value: typeof MonacoNS) => void;
+    const deferred = new Promise<typeof MonacoNS>((resolve) => {
+      resolveLoader = resolve;
+    });
+    __setMonacoLoaderPromiseForTesting(deferred);
+
+    fixture = await createFixtureWithoutSettling();
+    const component = fixture.componentInstance;
+    // ngAfterViewInit is now suspended on `await loadMonaco()`. Tear
+    // the view down before resolving.
+    fixture.destroy();
+
+    // Resolve the loader so the post-await continuation runs.
+    resolveLoader(monaco as unknown as typeof MonacoNS);
+    await deferred;
+    // Yield once more so the post-`if (destroyed) return` queued
+    // microtasks (logger.event, runOutsideAngular setup, etc.) settle.
+    await Promise.resolve();
+
+    expect(monaco.editor.create).not.toHaveBeenCalled();
+    expect(resizeObserver.observe).not.toHaveBeenCalled();
+    expect(component.ready()).toBeFalse();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('pushes external value changes into the editor via setValue', async () => {
