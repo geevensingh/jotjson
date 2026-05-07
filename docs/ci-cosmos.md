@@ -42,11 +42,22 @@ fall back to a regular serverless or provisioned-throughput account
 for CI.
 
 ```bash
-az cosmosdb list --query '[?enableFreeTier==`true`].{name:name, rg:resourceGroup}' -o table
+az cosmosdb list \
+  --query "[?enableFreeTier==\`true\`].[name, resourceGroup]" \
+  -o table
 ```
 
-If the output is empty, your subscription's free-tier slot is
-available - proceed with the steps below.
+Sample output if a free-tier account already exists in this
+subscription:
+
+```
+Column1               Column2
+--------------------  ----------------
+existing-cosmos-acct  some-resource-grp
+```
+
+If the output is empty (no rows), your subscription's free-tier slot
+is available - proceed with the steps below.
 
 If the output shows an existing free-tier account that you don't
 want to reuse for CI, you have two paths:
