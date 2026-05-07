@@ -2206,7 +2206,10 @@ Out of scope (for v1):
   restoration verification for `CloseMatMenuOnWindowBlurDirective`)
   are explicitly deferred and tracked separately. Deferred-finding
   GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
-  cross-browser pass, axe best-practice rules) are post-V1.
+  cross-browser pass, axe best-practice rules) plus splitter
+  aria-valuenow + arrow-key resize (issue #125) are post-V1; the
+  toolbar pane-toggle provides the practical keyboard alternative
+  for switching between panes.
 - **0.17.0**: Tree row density + scalable icon sizing. The tree
   body's `line-height` tightens from `1.55` to `1.4`, and tree
   icon chrome (kebab pill, extract pill, decoded pill, twisty,
@@ -2665,8 +2668,9 @@ Out of scope (for v1):
        focus-visible 3:1 indicator (3g). Manual TBD checks
        (200% zoom, Narrator, tab-order, focus-restoration)
        deferred; deferred-finding GH issues (target-size 24px,
-       iOS VoiceOver, cross-browser, axe best-practice) are
-       post-V1.
+       iOS VoiceOver, cross-browser, axe best-practice) plus
+       splitter aria-valuenow + arrow-key resize (issue #125)
+       are post-V1.
    - ~~**M7h**: SEO (pre-rendering + OG tags).~~ (done)
      - `@angular/ssr` static prerender of `/` and `/404`; `shell.html`
        fallback for everything else via `scripts/postbuild-seo.mjs`.
