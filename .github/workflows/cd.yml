@@ -119,6 +119,33 @@ jobs:
           # app_location: 'dist/jotjson/browser'.
           path: dist/jotjson
 
+      - name: Sanity-check downloaded bundle (auto deploy)
+        # Defense-in-depth against artifact poisoning. The
+        # workflow_run.event == 'push' filter on this job (see the
+        # job-level `if:` above) already excludes PR-triggered CI
+        # runs, which is the standard documented mitigation for
+        # the artifact-poisoning attack class
+        # (https://securitylab.github.com/research/github-actions-preventing-pwn-requests/).
+        # This step adds explicit content verification so a CI bug
+        # or hypothetical malicious push cannot deploy a broken or
+        # placeholder-leaking bundle without the deploy step
+        # failing first. Mirrors the manual-deploy sanity check
+        # below for symmetry between the two deploy paths.
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
+        run: |
+          if [ ! -f dist/jotjson/browser/index.html ]; then
+            echo "::error::dist/jotjson/browser/index.html missing in downloaded artifact"
+            exit 1
+          fi
+          if [ ! -f dist/jotjson/browser/staticwebapp.config.json ]; then
+            echo "::error::dist/jotjson/browser/staticwebapp.config.json missing in downloaded artifact"
+            exit 1
+          fi
+          if grep -r --include='*.js' '__ENTRA_' dist/jotjson/browser/; then
+            echo "::error::Downloaded bundle contains __ENTRA_ placeholder - upstream secret bake failed"
+            exit 1
+          fi
+
       # ------------------------------------------------------------------
       # Path 2: workflow_dispatch - build inline on the runner.
       # The api install below is shared between both paths.
