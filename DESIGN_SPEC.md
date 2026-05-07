@@ -127,6 +127,7 @@ are not 6-digit hex.
   seenBlobQuotaModal: boolean (default: false - flipped to true after the first-time quota explainer modal has been dismissed; synced server-side so the modal doesn't reappear on other devices),
   seenClipboardBanner: boolean (default: false - flipped to true after the first-time paste-permission banner has been dismissed; synced server-side so the banner doesn't reappear on other devices),
   treePathRoot: "jsonpath" | "none" | "root" | "data" (default: "jsonpath" - display prefix used when copying a tree row's path to the clipboard. Internal/canonical pathString always starts with `$`; only the clipboard text is rewritten. `jsonpath` -> `$.foo[0]`; `none` -> `foo[0]` (lodash-style, leading dot stripped); `root` -> `root.foo[0]`; `data` -> `Data.foo[0]` with capital D),
+  coldBootClipboardAutoPaste: "ask" | "always" | "never" (default: "ask" - controls cold-boot clipboard auto-paste behavior on `/` when the clipboard contains valid object/array JSON and clipboard-read permission is already granted. `ask` shows a one-shot non-blocking banner offering Always / Just this time / Never; `always` silently loads the clipboard JSON instead of the saved draft, with an Undo snackbar that restores the prior draft if clicked; `never` disables the feature entirely. Roams server-side, but clipboard permission is per-device/per-origin, so a roamed `always` only activates after each browser independently grants clipboard-read),
   treeEditorSelectionSync: boolean (default: true - bidirectional tree<->editor selection sync. When on, selecting a tree row reveals the matching range in the editor and moving the editor cursor selects the matching tree row; when off, both panes operate independently. Toggleable from the main toolbar and Profile),
   treeHighlightColors: TreeHighlightColors
 }
@@ -442,6 +443,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Auto-unescape on paste** (toolbar Paste button and native Ctrl+V): if the pasted text is not already valid JSON/JSONC at the top level (object or array), the app attempts a best-effort unescape to recover JSON that was stringified or copied out of a log/debugger - e.g. `{\"a\":1}` becomes `{"a":1}`. A recovered payload is accepted only when it parses cleanly and yields an object or array; ordinary prose containing `\n` or stray backslashes is left alone. For toolbar paste the recovered payload is also auto-formatted. For native paste inside the Monaco editor, the unescape is applied only when the hypothetical post-paste buffer also parses cleanly, to avoid mangling a legitimate escaped string value being pasted into an existing document. Undo (Ctrl+Z) reverts to the raw paste.
     - **Copy as escaped JSON string**: holding Alt while invoking a copy action writes `JSON.stringify(textBeingCopied)` to the clipboard - the JSON-string-literal variant of the same content - so the value can be embedded as a string in another JSON document. This is the inverse of auto-unescape on paste. Supported entry points: the toolbar Copy button (Alt+click), double-clicking a primitive tree row (Alt+double-click copies the row's value escaped; Alt is ignored on container rows since their dblclick toggles expansion - see issue #109), and the row's right-click "Copy value" context-menu item (Alt+click on the menu item; this remains the way to copy a container's serialized form). All other copy actions (Copy key, Copy path, breadcrumb copy-path, share link, blob URL, build SHA) do not honor Alt.
     - **Extract JSON from mixed text** (toolbar Paste and native Ctrl+V): if a paste does not parse as JSON/JSONC even after auto-unescape, the app scans the pasted text for embedded object/array literals (e.g., a `curl -v` transcript, a log line, or prose wrapping a payload). When one or more candidates are found, a non-destructive banner appears above the editor offering `[Extract JSON]` / `[Dismiss]`; the editor still contains the raw paste so users can decline. A single embedded block is extracted via `jsonc-parser` `format()` so comments are preserved; multiple blocks are wrapped as a JSON array via `JSON.stringify` (comments are lost across the array boundary - the banner says so). Primitives (numbers, strings, booleans, null) are not extracted. Inputs above 1 MB are skipped for performance. The banner auto-clears as soon as the editor content changes again (typing or another paste).
+    - **Cold-boot clipboard auto-paste** (home page only): on a fresh page load of `/`, JotJSON can offer to load JSON from the clipboard instead of the saved anonymous draft. Behavior is gated on the `coldBootClipboardAutoPaste` preference (default `ask`) and only fires when ALL of the following are true: route is `/` (never `/s/:slug` deep-links), this is the initial application navigation (a one-shot guard prevents re-firing on later in-app navigation back to home), clipboard-read permission is already `granted` (the feature never triggers a permission prompt on cold boot), the clipboard text parses cleanly as JSON or JSONC AND yields a top-level object or array (primitives are ignored), the clipboard text is below 1 MB, and the editor is in anonymous draft mode (`loadedBlob` is null at evaluator start AND at apply time). When all gates pass, the preference branches three ways: `ask` shows a non-blocking banner above the editor with `[Always]` / `[Just this time]` / `[Never]` actions plus an X dismiss, layered alongside the existing M7p extract banner; `always` silently replaces the editor content with the clipboard JSON and shows a snackbar "Pasted from clipboard. Undo." that restores the prior draft if clicked; `never` is a no-op. The silent `always` path holds the cold-boot loading splash for up to 150ms while racing the clipboard read, so the swap happens before first paint and there is no draft-then-clipboard flash; if the read times out or returns no usable JSON, the splash releases, the draft hydrates as today, and a stale-result guard prevents a late-resolving read from re-applying. Snackbar Undo is the only undo affordance for the silent path: because clipboard hydration happens before Monaco mounts (to avoid the flash), there is no prior-draft state in the editor's undo stack to revert to via Ctrl+Z. Non-Chromium browsers (Safari, Firefox) and any user who has not granted clipboard-read permission see exactly today's experience - the feature degrades silently.
   - **File Upload** - two ways to load a JSON file:
     - **Toolbar button** ("Upload File"): opens a native file picker filtered to `.json`, `.jsonc`, `.jsonl`, `.geojson`, and `.txt` extensions. Reads the selected file client-side via the `FileReader` API and loads its contents into the editor.
     - **Drag & drop**: users can drag a file from their desktop onto **any part of the page**. A full-page drop zone overlay appears with a visual cue (dashed border + "Drop JSON file here" message) when a file is dragged over the window. On drop, the file is read and loaded into the editor. If the user drops **multiple files**, the drop is rejected entirely with an error toast: "Please drop one file at a time."
@@ -2210,6 +2212,35 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.18.0**: Cold-boot clipboard auto-paste. New
+  `coldBootClipboardAutoPaste: 'ask' | 'always' | 'never'`
+  preference (default `ask`) controls whether the home page reads
+  the clipboard on cold boot and offers to load JSON from it
+  instead of the saved draft. `ask` shows a one-shot non-blocking
+  banner with `[Always]` / `[Just this time]` / `[Never]` actions
+  plus an X dismiss; `always` silently replaces the draft with
+  clipboard JSON and shows an Undo snackbar; `never` disables the
+  feature. Strict gates: home route only (never on `/s/:slug`),
+  initial-nav one-shot guard, permission must be already granted
+  (no cold-boot permission prompt), clipboard text must parse
+  cleanly as JSON/JSONC AND yield a top-level object or array
+  (primitives ignored), clipboard size <= 1 MB, anonymous-draft
+  mode only (`loadedBlob` null at start AND at apply time). To
+  enable a flash-free silent path, two new infrastructure APIs
+  ship in this release: `LoadingSplashService.beginBootstrapHold(
+  reason, maxMs)` (a narrow bootstrap-only splash hold that does
+  not affect the blob render-pending lifecycle) and
+  `ClipboardPollingService.permissionReady` +
+  `readGrantedClipboardOnce(reason)` (a coalesced cold-boot read
+  that awaits async permission discovery and never promotes the
+  state to `denied` on background failure - matches `checkOnce`
+  semantics, not `readForPaste` semantics). The preference roams
+  server-side for signed-in users, but clipboard-read permission
+  remains per-device/per-origin: a roamed `always` only activates
+  after each browser independently grants clipboard access. The
+  silent path supports Undo via the snackbar action only, not via
+  Ctrl+Z (clipboard hydrates before Monaco mounts, so there is
+  no prior-draft state in the editor's undo stack to revert to).
 - **0.17.0**: Tree row density + scalable icon sizing. The tree
   body's `line-height` tightens from `1.55` to `1.4`, and tree
   icon chrome (kebab pill, extract pill, decoded pill, twisty,

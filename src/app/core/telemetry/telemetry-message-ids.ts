@@ -514,6 +514,76 @@ export const TELEMETRY_MESSAGE_IDS = [
   'home.extract.banner.dismiss',
 
   /**
+   * Kind: event
+   * Fired by: `HomeComponent` cold-boot evaluator
+   *           (`features/home/home.component.ts`) when the
+   *           cold-boot clipboard banner becomes visible -
+   *           preference is `'ask'`, the route is `/`, clipboard
+   *           permission is `'granted'`, and the clipboard text
+   *           parses as a top-level JSON object/array below the
+   *           1MB cap. One-shot per cold boot.
+   * Props: none. Cold-boot context is implied by the message id.
+   * Measurements: none.
+   */
+  'home.clipboard.coldBoot.prompt.shown',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` cold-boot evaluator
+   *           (`features/home/home.component.ts`) when the user
+   *           interacts with the cold-boot clipboard banner.
+   *           Always paired with a preceding
+   *           `home.clipboard.coldBoot.prompt.shown` in the same
+   *           cold boot.
+   * Props: { choice: 'always' | 'just-this-time' | 'never'
+   *   | 'dismiss' }. `'always'` and `'never'` set the persisted
+   *   `coldBootClipboardAutoPaste` preference; `'just-this-time'`
+   *   pastes once without changing the preference; `'dismiss'`
+   *   covers the X icon, Esc, and click-outside paths (no paste,
+   *   no preference change, ask again next cold boot).
+   * Measurements: none.
+   */
+  'home.clipboard.coldBoot.prompt.choice',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` cold-boot evaluator
+   *           (`features/home/home.component.ts`) when the silent
+   *           auto-paste path fires - preference is `'always'`,
+   *           clipboard permission is `'granted'`, and the
+   *           clipboard text parses as a top-level JSON
+   *           object/array below the 1MB cap. The bootstrap
+   *           splash is held briefly (max 150ms) so the swap
+   *           happens before first paint; a successful fire here
+   *           means the read won the race and the snackbar
+   *           "Pasted from clipboard. Undo." is shown. One-shot
+   *           per cold boot; bounded by user gesture (one cold
+   *           boot per process) so volume is naturally limited.
+   * Props: { sizeBytesBucket: ReturnType<typeof bucketBytes> }.
+   *   Closed-enum size bucket of the clipboard payload (e.g.
+   *   `'<1KB'`, `'1-10KB'`, ...). Bucket goes in props; the raw
+   *   numeric value is in measurements.
+   * Measurements: { sizeBytes: number }. Raw UTF-8 byte count of
+   *   the clipboard text we applied. Mirrors the `paste.handle`
+   *   shape so KQL can `avg(sizeBytes)` across both paths.
+   */
+  'home.clipboard.coldBoot.autoPaste',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` snackbar Undo handler
+   *           (`features/home/home.component.ts`) when the user
+   *           clicks Undo on the cold-boot auto-paste snackbar.
+   *           Bounded by user gesture (one click per
+   *           auto-paste). Always paired with a preceding
+   *           `home.clipboard.coldBoot.autoPaste` in the same
+   *           cold boot.
+   * Props: none.
+   * Measurements: none.
+   */
+  'home.clipboard.coldBoot.autoPaste.undo',
+
+  /**
    * Severity: warn
    * Fired by: `HomeComponent.onToggleVisibility`
    *           (`features/home/home.component.ts`)

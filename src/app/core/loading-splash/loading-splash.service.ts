@@ -187,6 +187,7 @@ export class LoadingSplashService {
 
   private readonly inFlight = new Set<number>();
   private readonly inFlightBlob = new Set<number>();
+  private readonly activeBootstrapHolds = new Set<symbol>();
   private firstNavStarted = false;
   /**
    * Latches once the first navigation has reached a terminal Router
@@ -203,6 +204,8 @@ export class LoadingSplashService {
    */
   private firstNavComplete = this._prerenderedBoot;
 
+  private readonly isBrowser = !this._prerenderedBoot;
+
   /**
    * `performance.now()` timestamp captured at the moment
    * `_renderPending` flips to `true` (i.e., when
@@ -218,6 +221,35 @@ export class LoadingSplashService {
 
   constructor() {
     inject(Router).events.subscribe((event) => this.handle(event));
+  }
+
+  beginBootstrapHold(reason: 'coldBootClipboard', maxMs: number): () => void {
+    if (!this.isBrowser || this.firstNavComplete) {
+      return () => {};
+    }
+
+    const token = Symbol(reason);
+    this.activeBootstrapHolds.add(token);
+
+    let timeoutId: number | null = null;
+    const release = (): void => {
+      if (!this.activeBootstrapHolds.delete(token)) {
+        return;
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      this.recomputeKind();
+    };
+
+    timeoutId = window.setTimeout(() => {
+      timeoutId = null;
+      release();
+    }, maxMs);
+
+    this.recomputeKind();
+    return release;
   }
 
   /**
@@ -360,7 +392,12 @@ export class LoadingSplashService {
   }
 
   private recomputeKind(): void {
-    if (this.firstNavComplete) {
+    if (this._renderPending()) {
+      this._kind.set(null);
+      this._progress.set(null);
+      return;
+    }
+    if (this.firstNavComplete && this.activeBootstrapHolds.size === 0) {
       this._kind.set(null);
       this._progress.set(null);
       return;

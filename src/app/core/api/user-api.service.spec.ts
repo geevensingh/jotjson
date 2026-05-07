@@ -40,6 +40,7 @@ function fakePreferences(): UserPreferences {
     seenBlobQuotaModal: false,
     seenClipboardBanner: false,
     treePathRoot: 'jsonpath',
+    coldBootClipboardAutoPaste: 'ask',
     treeHighlightColors: {
       dark: {
         selectionColor: '#000000',

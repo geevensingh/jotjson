@@ -86,6 +86,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   seenBlobQuotaModal: false,
   seenClipboardBanner: false,
   treePathRoot: 'jsonpath',
+  coldBootClipboardAutoPaste: 'ask',
   treeHighlightColors: {
     dark: {
       selectionColor: '#264f78',
@@ -219,6 +220,7 @@ const PREFERENCE_KEYS = [
   'seenBlobQuotaModal',
   'seenClipboardBanner',
   'treePathRoot',
+  'coldBootClipboardAutoPaste',
   'treeHighlightColors',
 ] as const satisfies readonly (keyof UserPreferences)[];
 
@@ -626,6 +628,9 @@ export class PreferencesService {
         return;
       case 'treePathRoot':
         this.emitStringPreferenceChange(key, preferences.treePathRoot, source);
+        return;
+      case 'coldBootClipboardAutoPaste':
+        this.emitStringPreferenceChange(key, preferences.coldBootClipboardAutoPaste, source);
         return;
     }
     const unhandledKey: never = key;

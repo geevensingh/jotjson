@@ -151,6 +151,8 @@ strings are read as UTC or local.
 
 - Format / minify, with a comment-preserving formatter (`jsonc-parser`)
 - One-click smart-paste button that lights up when the clipboard contains JSON
+- Cold-boot auto-paste: opt in once and JotJSON quietly loads JSON from the
+  clipboard on every fresh launch, with one-click Undo
 - Drag-and-drop file upload (up to 5 MB) with binary-file rejection
 - Download as `.json` / `.jsonc` (extension auto-picked from content)
 - Live validation with line + column on parse errors

@@ -15,6 +15,8 @@ import { DestroyRef, Injectable, OnDestroy, Signal, computed, inject, signal } f
  */
 export type ClipboardPermissionState = 'unsupported' | 'unknown' | 'prompt' | 'granted' | 'denied';
 
+export type ClipboardGrantedReadResult = { ok: true; text: string } | { ok: false };
+
 const POLL_INTERVAL_MS = 2000;
 const PREVIEW_MAX_LENGTH = 80;
 
@@ -42,13 +44,28 @@ export class ClipboardPollingService implements OnDestroy {
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly permissionStateSignal = signal<ClipboardPermissionState>(this.initialState());
+  private readonly permissionReadySignal = signal<boolean>(!this.isSupported());
   private readonly hasJsonSignal = signal<boolean>(false);
   private readonly previewSignal = signal<string>('');
 
   readonly permissionState: Signal<ClipboardPermissionState> =
     this.permissionStateSignal.asReadonly();
+  readonly permissionReady: Signal<boolean> = this.permissionReadySignal.asReadonly();
   readonly hasJson: Signal<boolean> = this.hasJsonSignal.asReadonly();
   readonly preview: Signal<string> = this.previewSignal.asReadonly();
+
+  /**
+   * Awaitable form of `permissionReady`. Resolves when the constructor's
+   * async `queryPermission()` has settled (or synchronously when the
+   * platform is unsupported). Callers that need to gate behavior on the
+   * resolved permission state - for example, a cold-boot evaluator that
+   * skips a splash hold when permission isn't `'granted'` - should await
+   * this before reading `permissionState()`. Resolves once and is cheap
+   * to await again afterwards.
+   */
+  awaitPermissionReady(): Promise<void> {
+    return this.permissionDiscoveryPromise;
+  }
 
   /**
    * Convenience: is the Paste button in its "has JSON" enabled state?
@@ -61,10 +78,12 @@ export class ClipboardPollingService implements OnDestroy {
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
   private permissionStatus: PermissionStatus | null = null;
+  private permissionDiscoveryPromise: Promise<void>;
+  private inFlightGrantedReadPromise: Promise<ClipboardGrantedReadResult> | null = null;
 
   constructor() {
     this.destroyRef.onDestroy(() => this.ngOnDestroy());
-    void this.queryPermission();
+    this.permissionDiscoveryPromise = this.queryPermission();
   }
 
   ngOnDestroy(): void {
@@ -134,6 +153,24 @@ export class ClipboardPollingService implements OnDestroy {
   }
 
   /**
+   * Cold-boot read path used only after the initial permission discovery has
+   * settled. Unlike user-gesture reads, background failures do not mark the
+   * permission as denied.
+   */
+  readGrantedClipboardOnce(reason: 'coldBootAutoPaste'): Promise<ClipboardGrantedReadResult> {
+    void reason;
+    if (this.inFlightGrantedReadPromise) return this.inFlightGrantedReadPromise;
+
+    const readPromise = this.readGrantedClipboardOnceInternal().finally(() => {
+      if (this.inFlightGrantedReadPromise === readPromise) {
+        this.inFlightGrantedReadPromise = null;
+      }
+    });
+    this.inFlightGrantedReadPromise = readPromise;
+    return readPromise;
+  }
+
+  /**
    * Idempotent. Does nothing when state !== granted or the tab is hidden.
    * Multiple calls coalesce into a single interval.
    */
@@ -197,14 +234,26 @@ export class ClipboardPollingService implements OnDestroy {
     return name === 'NotAllowedError' || name === 'SecurityError';
   }
 
-  private async queryPermission(): Promise<void> {
-    if (!this.isSupported()) return;
-    const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
-    if (!perms || typeof perms.query !== 'function') {
-      this.permissionStateSignal.set('unknown');
-      return;
-    }
+  private async readGrantedClipboardOnceInternal(): Promise<ClipboardGrantedReadResult> {
+    await this.permissionDiscoveryPromise;
+    if (this.permissionStateSignal() !== 'granted') return { ok: false };
     try {
+      const text = await navigator.clipboard.readText();
+      this.applyText(text);
+      return { ok: true, text };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  private async queryPermission(): Promise<void> {
+    try {
+      if (!this.isSupported()) return;
+      const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
+      if (!perms || typeof perms.query !== 'function') {
+        this.permissionStateSignal.set('unknown');
+        return;
+      }
       const status = await perms.query({
         name: 'clipboard-read' as PermissionName,
       });
@@ -214,6 +263,8 @@ export class ClipboardPollingService implements OnDestroy {
     } catch {
       // Firefox throws for unknown permission names.
       this.permissionStateSignal.set('unknown');
+    } finally {
+      this.permissionReadySignal.set(true);
     }
   }
 

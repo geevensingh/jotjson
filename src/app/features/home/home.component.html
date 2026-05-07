@@ -57,6 +57,10 @@
           i18n-aria-label="@@home.editorPane.aria"
         >
           <jj-clipboard-banner></jj-clipboard-banner>
+          <jj-cold-boot-clipboard-banner
+            [visible]="coldBootClipboardBannerVisible()"
+            (choice)="onColdBootClipboardChoice($event)"
+          ></jj-cold-boot-clipboard-banner>
           <jotjson-extract-json-banner
             [visible]="extractBannerVisible()"
             [blockCount]="extractedCandidate()?.data?.blockCount ?? 0"

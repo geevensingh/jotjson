@@ -1,0 +1,51 @@
+@if (visible()) {
+  <mat-card
+    class="banner"
+    role="status"
+    aria-live="polite"
+    appearance="outlined"
+    tabindex="-1"
+    (keydown.escape)="onDismiss()"
+  >
+    <span class="banner-text" i18n="@@home.coldBootClipboard.banner.title"
+      >Clipboard contains JSON. Use it instead of your saved draft?</span
+    >
+    <span class="banner-actions">
+      <button
+        type="button"
+        mat-button
+        color="primary"
+        (click)="onAlways()"
+        i18n="@@home.coldBootClipboard.banner.always"
+      >
+        Always
+      </button>
+      <button
+        type="button"
+        mat-button
+        (click)="onJustThisTime()"
+        i18n="@@home.coldBootClipboard.banner.justThisTime"
+      >
+        Just this time
+      </button>
+      <button
+        type="button"
+        mat-button
+        (click)="onNever()"
+        i18n="@@home.coldBootClipboard.banner.never"
+      >
+        Never
+      </button>
+      <button
+        type="button"
+        mat-icon-button
+        class="dismiss-icon"
+        (click)="onDismiss()"
+        aria-label="Dismiss"
+        i18n-aria-label="@@home.coldBootClipboard.banner.dismissAria"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    </span>
+  </mat-card>
+}

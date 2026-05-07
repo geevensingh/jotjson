@@ -17,7 +17,7 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import {
   format as jsoncFormat,
@@ -50,7 +50,7 @@ import {
   type BeaconJumpRequest,
 } from '../../core/beacons/beacon-navigation.service';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import { debounceTime, firstValueFrom } from 'rxjs';
 import {
   ConfirmDialogComponent,
@@ -78,8 +78,15 @@ import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/to
 import { EditorMode } from './editor-mode';
 import { StatusBarComponent } from './status-bar/status-bar.component';
 import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
-import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
+import {
+  ClipboardPollingService,
+  type ClipboardGrantedReadResult,
+} from '../../core/clipboard/clipboard-polling.service';
 import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.component';
+import {
+  ColdBootClipboardBannerComponent,
+  type ColdBootClipboardChoice,
+} from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
@@ -98,6 +105,15 @@ import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
  */
 type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
 type UploadSource = 'drag' | 'pick';
+
+type ColdBootClipboardCandidate = {
+  text: string;
+  sizeBytes: number;
+};
+
+type ColdBootClipboardReadRaceResult =
+  | { kind: 'read'; result: ClipboardGrantedReadResult }
+  | { kind: 'timeout' };
 
 /**
  * Origin path that surfaced the current M7p extract candidate. Used as a
@@ -123,6 +139,8 @@ type LoadedSnapshot = {
 const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 
 const TREE_EXTRACT_SCAN_DEBOUNCE_MS = 1000;
+const COLD_BOOT_CLIPBOARD_TIMEOUT_MS = 150;
+const COLD_BOOT_CLIPBOARD_MAX_BYTES = 1 * 1024 * 1024;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -165,6 +183,7 @@ function sameHighlightEntry(
     ToolbarComponent,
     StatusBarComponent,
     ClipboardBannerComponent,
+    ColdBootClipboardBannerComponent,
     RuleSetsToolbarComponent,
     DropOverlayComponent,
     ExtractJsonBannerComponent,
@@ -185,6 +204,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly blobs = inject(BlobService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly titleService = inject(Title);
   private readonly seo = inject(SeoService);
   private readonly quota = inject(QuotaNotificationService);
@@ -202,6 +222,16 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly dropActive = this.dropController.dropActive;
 
   private disposeDropHandler?: () => void;
+  private destroyed = false;
+  private coldBootClipboardEvaluated = false;
+  private coldBootClipboardCandidate: ColdBootClipboardCandidate | null = null;
+  /**
+   * Retained reference to the snackbar opened by the cold-boot auto-paste
+   * silent / banner-paste paths. Held so an unrelated snackbar opening
+   * later cannot squelch the only undo affordance for the silent path.
+   * Cleared on dismiss.
+   */
+  private coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -234,6 +264,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     const cand = this.extractedCandidate();
     return cand !== null && cand.sourceVersion === this.contentVersion();
   });
+  private readonly coldBootBannerVisibleSignal = signal(false);
+  readonly coldBootClipboardBannerVisible = this.coldBootBannerVisibleSignal.asReadonly();
 
   /**
    * Persistent in-pane banner state for upload-source validation errors
@@ -742,6 +774,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     // re-attaches naturally once the browser bootstrap reaches this same
     // constructor.
     if (this.isBrowser) {
+      this.evaluateColdBootClipboard();
       this.clipboard.checkOnce();
       const onVisibility = (): void => {
         if (document.visibilityState === 'visible') {
@@ -770,6 +803,208 @@ export class HomeComponent implements OnInit, OnDestroy {
         }
       });
     }
+  }
+
+  private evaluateColdBootClipboard(): void {
+    if (!this.shouldStartColdBootClipboardEvaluation()) {
+      return;
+    }
+    this.coldBootClipboardEvaluated = true;
+
+    const preference = this.prefs.prefs().coldBootClipboardAutoPaste;
+    if (preference === 'always') {
+      void this.evaluateAlwaysColdBootClipboard();
+      return;
+    }
+    void this.evaluateAskColdBootClipboard();
+  }
+
+  private shouldStartColdBootClipboardEvaluation(): boolean {
+    return (
+      this.isBrowser &&
+      !this.router.navigated &&
+      !this.coldBootClipboardEvaluated &&
+      this.isHomeRouteForColdBootClipboard() &&
+      this.loadedBlob() === null &&
+      this.prefs.prefs().coldBootClipboardAutoPaste !== 'never'
+    );
+  }
+
+  private isHomeRouteForColdBootClipboard(): boolean {
+    const pathBeforeQuery = this.router.url.split('?')[0] ?? this.router.url;
+    const normalizedPath = pathBeforeQuery.split('#')[0] ?? pathBeforeQuery;
+    return (
+      !this.destroyed &&
+      this.route.routeConfig?.path === '' &&
+      (normalizedPath === '/' || normalizedPath === '') &&
+      this.initialBlob() == null
+    );
+  }
+
+  private canApplyColdBootClipboard(): boolean {
+    return this.isHomeRouteForColdBootClipboard() && this.loadedBlob() === null;
+  }
+
+  private async evaluateAlwaysColdBootClipboard(): Promise<void> {
+    // Permission gate: the silent path commits to a 150ms splash hold, so
+    // we must avoid acquiring it for users who don't have clipboard-read
+    // permission granted (Safari, Firefox, anyone who has not opted in
+    // via the existing M7a clipboard banner). The roamed `'always'`
+    // preference can land on any browser, including those where the
+    // local clipboard permission is still `prompt` or `denied`. Wait
+    // for permission discovery to settle before deciding - the service
+    // kicks off discovery during DI so this typically resolves within a
+    // microtask. Non-granted users skip immediately, paying zero added
+    // cold-boot latency.
+    await this.clipboard.awaitPermissionReady();
+    if (this.clipboard.permissionState() !== 'granted') {
+      return;
+    }
+    if (!this.canApplyColdBootClipboard()) {
+      // Route or document state changed while we awaited permission.
+      return;
+    }
+    const release = this.loadingSplash.beginBootstrapHold(
+      'coldBootClipboard',
+      COLD_BOOT_CLIPBOARD_TIMEOUT_MS,
+    );
+    try {
+      const raceResult = await this.raceColdBootClipboardRead(
+        this.clipboard.readGrantedClipboardOnce('coldBootAutoPaste'),
+      );
+      if (raceResult.kind === 'timeout' || !raceResult.result.ok) {
+        return;
+      }
+      const candidate = this.toColdBootClipboardCandidate(raceResult.result.text);
+      if (candidate === null || !this.canApplyColdBootClipboard()) {
+        return;
+      }
+      this.applyColdBootClipboardCandidate(candidate, true);
+    } finally {
+      release();
+    }
+  }
+
+  private async evaluateAskColdBootClipboard(): Promise<void> {
+    const result = await this.clipboard.readGrantedClipboardOnce('coldBootAutoPaste');
+    if (!result.ok || !this.canApplyColdBootClipboard()) {
+      return;
+    }
+    const candidate = this.toColdBootClipboardCandidate(result.text);
+    if (candidate === null || !this.canApplyColdBootClipboard()) {
+      return;
+    }
+    this.coldBootClipboardCandidate = candidate;
+    this.coldBootBannerVisibleSignal.set(true);
+    this.logger.event('home.clipboard.coldBoot.prompt.shown');
+  }
+
+  private raceColdBootClipboardRead(
+    readPromise: Promise<ClipboardGrantedReadResult>,
+  ): Promise<ColdBootClipboardReadRaceResult> {
+    let timeoutId: number | null = null;
+    const timeoutPromise = new Promise<ColdBootClipboardReadRaceResult>((resolve) => {
+      timeoutId = window.setTimeout(
+        () => resolve({ kind: 'timeout' }),
+        COLD_BOOT_CLIPBOARD_TIMEOUT_MS,
+      );
+    });
+    const taggedReadPromise = readPromise.then<ColdBootClipboardReadRaceResult>((result) => ({
+      kind: 'read',
+      result,
+    }));
+    return Promise.race([taggedReadPromise, timeoutPromise]).finally(() => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    });
+  }
+
+  private toColdBootClipboardCandidate(text: string): ColdBootClipboardCandidate | null {
+    const sizeBytes = new TextEncoder().encode(text).length;
+    if (sizeBytes > COLD_BOOT_CLIPBOARD_MAX_BYTES) {
+      return null;
+    }
+    const parsed = this.parser.parse(text);
+    if (parsed.errors.length > 0 || !this.isTopLevelObjectOrArray(parsed.value)) {
+      return null;
+    }
+    return { text, sizeBytes };
+  }
+
+  private isTopLevelObjectOrArray(value: unknown): boolean {
+    return Array.isArray(value) || (typeof value === 'object' && value !== null);
+  }
+
+  onColdBootClipboardChoice(choice: ColdBootClipboardChoice): void {
+    this.coldBootBannerVisibleSignal.set(false);
+    this.logger.event('home.clipboard.coldBoot.prompt.choice', { choice });
+
+    if (choice === 'never') {
+      this.prefs.update({ coldBootClipboardAutoPaste: 'never' });
+      this.coldBootClipboardCandidate = null;
+      return;
+    }
+    if (choice === 'dismiss') {
+      this.coldBootClipboardCandidate = null;
+      return;
+    }
+
+    const candidate = this.coldBootClipboardCandidate;
+    this.coldBootClipboardCandidate = null;
+    if (choice === 'always') {
+      this.prefs.update({ coldBootClipboardAutoPaste: 'always' });
+    }
+    if (candidate === null || !this.canApplyColdBootClipboard()) {
+      return;
+    }
+    this.applyColdBootClipboardCandidate(candidate, choice === 'always');
+  }
+
+  private applyColdBootClipboardCandidate(
+    candidate: ColdBootClipboardCandidate,
+    emitAutoPasteTelemetry: boolean,
+  ): void {
+    const priorDraft = this.content();
+    this.replaceDocument(candidate.text);
+    this.resetHighlightsForDocumentReplacement();
+    this.lastFilename.set(null);
+    this.suggestedTitlesForMenu.set([]);
+    if (emitAutoPasteTelemetry) {
+      this.logger.event(
+        'home.clipboard.coldBoot.autoPaste',
+        { sizeBytesBucket: bucketBytes(candidate.sizeBytes) },
+        { sizeBytes: candidate.sizeBytes },
+      );
+    }
+    this.openColdBootClipboardUndoSnack(priorDraft);
+  }
+
+  private openColdBootClipboardUndoSnack(priorDraft: string): void {
+    // Retain the SnackBarRef so other snackbars opening later cannot
+    // squelch the only undo affordance for the silent / banner-paste
+    // path. Cleared on dismiss.
+    const snackRef: MatSnackBarRef<TextOnlySnackBar> = this.snack.open(
+      $localize`:@@home.coldBootClipboard.snackbar.pasted:Pasted from clipboard.`,
+      $localize`:@@home.coldBootClipboard.snackbar.undo:Undo`,
+      { duration: 8000 },
+    );
+    this.coldBootClipboardSnackRef = snackRef;
+    snackRef
+      .onAction()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.replaceDocument(priorDraft);
+        this.logger.event('home.clipboard.coldBoot.autoPaste.undo');
+      });
+    snackRef
+      .afterDismissed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.coldBootClipboardSnackRef === snackRef) {
+          this.coldBootClipboardSnackRef = null;
+        }
+      });
   }
 
   private applyLoadedBlob(blob: JsonBlob): void {
@@ -1498,6 +1733,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.disposeDropHandler?.();
     this.disposeDropHandler = undefined;
   }

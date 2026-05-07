@@ -388,6 +388,23 @@ describe('PreferencesService', () => {
       );
     });
 
+    it('emits a string event for a changed coldBootClipboardAutoPaste', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ coldBootClipboardAutoPaste: 'always' });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'coldBootClipboardAutoPaste',
+          source: 'user',
+          kind: 'string',
+          value: 'always',
+        },
+        undefined,
+      );
+    });
+
     it('emits a number event with bucket and measurement for editorFontSize', () => {
       const svc = TestBed.inject(PreferencesService);
 

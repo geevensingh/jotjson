@@ -144,6 +144,22 @@ export interface UserPreferences {
    * - `data`:     `Data.foo[0]` (capital D)
    */
   treePathRoot: 'jsonpath' | 'none' | 'root' | 'data';
+  /**
+   * Cold-boot clipboard auto-paste behavior. When the home page (`/`)
+   * is loaded with valid object/array JSON in the clipboard (and
+   * clipboard permission is granted), this controls what happens:
+   *
+   * - `ask`:    show a one-shot non-blocking banner offering Always /
+   *             Just this time / Never (default).
+   * - `always`: silently load the clipboard JSON instead of the saved
+   *             draft, with an Undo snackbar.
+   * - `never`:  feature dormant; never read the clipboard on cold boot.
+   *
+   * Roams server-side, but clipboard permission remains
+   * per-device/per-origin: a roamed `'always'` only activates after
+   * each browser independently grants clipboard-read.
+   */
+  coldBootClipboardAutoPaste: 'ask' | 'always' | 'never';
   treeHighlightColors: TreeHighlightColors;
 }
 
@@ -187,6 +203,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   seenBlobQuotaModal: false,
   seenClipboardBanner: false,
   treePathRoot: 'jsonpath',
+  coldBootClipboardAutoPaste: 'ask',
   treeHighlightColors: {
     dark: {
       selectionColor: '#264f78',
@@ -253,6 +270,8 @@ const TREE_PATH_ROOTS: readonly UserPreferences['treePathRoot'][] = [
   'root',
   'data',
 ] as const;
+const COLD_BOOT_CLIPBOARD_AUTO_PASTE_VALUES: readonly UserPreferences['coldBootClipboardAutoPaste'][] =
+  ['ask', 'always', 'never'] as const;
 const ANNOTATION_UNIT_KEYS: readonly (keyof TreeDateAnnotationUnits)[] = [
   'year',
   'month',
@@ -297,6 +316,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'seenBlobQuotaModal',
   'seenClipboardBanner',
   'treePathRoot',
+  'coldBootClipboardAutoPaste',
   'treeHighlightColors',
 ] as const;
 
@@ -350,6 +370,17 @@ export function normalizeStoredPreferences(prefs: UserPreferences): UserPreferen
     // introduction default to true (the named feature ships visible) -
     // matches DEFAULT_PREFERENCES.
     view.treeShowComments = true;
+  }
+  if (
+    typeof view.coldBootClipboardAutoPaste !== 'string' ||
+    !(['ask', 'always', 'never'] as readonly string[]).includes(view.coldBootClipboardAutoPaste)
+  ) {
+    // `coldBootClipboardAutoPaste` was added in 0.x for the cold-boot
+    // clipboard auto-paste feature. Stored docs from before its
+    // introduction (or with an invalid value) default to 'ask' - the
+    // safest fallback matches DEFAULT_PREFERENCES, surfaces the
+    // banner once, and lets the user pick.
+    view.coldBootClipboardAutoPaste = 'ask';
   }
   view.treeDateAnnotationUnits = normalizeStoredAnnotationUnits(view.treeDateAnnotationUnits);
   view.treeHighlightColors = normalizeStoredHighlightColors(view.treeHighlightColors);
@@ -570,6 +601,14 @@ export function normalizePreferences(raw: unknown): UserPreferences {
     seenBlobQuotaModal: assertBool(raw['seenBlobQuotaModal'], 'seenBlobQuotaModal'),
     seenClipboardBanner: assertBool(raw['seenClipboardBanner'], 'seenClipboardBanner'),
     treePathRoot: assertEnum(raw['treePathRoot'], TREE_PATH_ROOTS, 'treePathRoot'),
+    coldBootClipboardAutoPaste:
+      raw['coldBootClipboardAutoPaste'] !== undefined
+        ? assertEnum(
+            raw['coldBootClipboardAutoPaste'],
+            COLD_BOOT_CLIPBOARD_AUTO_PASTE_VALUES,
+            'coldBootClipboardAutoPaste',
+          )
+        : DEFAULT_PREFERENCES.coldBootClipboardAutoPaste,
     treeHighlightColors: {
       dark: normalizeColorSet(
         colors['dark'],

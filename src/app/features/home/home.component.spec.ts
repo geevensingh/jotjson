@@ -1,4 +1,4 @@
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, flushMicrotasks, TestBed, tick } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { Title, By } from '@angular/platform-browser';
 import { EMPTY, Subject, of, throwError } from 'rxjs';
@@ -8,12 +8,12 @@ import { HomeComponent } from './home.component';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { DraftService } from '../../core/preferences/draft.service';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
-import { provideRouter, Router } from '@angular/router';
+import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { BlobService, type BlobSyncEvent } from '../../core/api/blob.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import type { BlobHighlight, JsonBlob } from '../../core/api/models';
 import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
@@ -27,7 +27,15 @@ import { LoggerService } from '../../core/telemetry/logger.service';
 import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
-import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
+import {
+  ClipboardPollingService,
+  type ClipboardGrantedReadResult,
+  type ClipboardPermissionState,
+} from '../../core/clipboard/clipboard-polling.service';
+import {
+  ColdBootClipboardBannerComponent,
+  type ColdBootClipboardChoice,
+} from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
 import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
 import {
   JsonTreeComponent,
@@ -1103,6 +1111,576 @@ describe('HomeComponent narrow-viewport responsive layout (M7l)', () => {
 
     moveHandler!({ clientX: 200, clientY: 500 } as PointerEvent);
     expect(c.splitRatio()).toBeCloseTo(0.7, 3);
+  });
+});
+
+describe('cold-boot clipboard auto-paste', () => {
+  setupMinimalMonacoStub();
+
+  type HomeFixture = ComponentFixture<HomeComponent>;
+  type ReadResult = ClipboardGrantedReadResult;
+  type Preference = 'ask' | 'always' | 'never';
+
+  interface DeferredPromise<T> {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (reason?: unknown) => void;
+  }
+
+  interface SnackBarStub {
+    open: jasmine.Spy<
+      (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
+    >;
+  }
+
+  interface LoadingSplashStub {
+    beginBootstrapHold: jasmine.Spy<(reason: 'coldBootClipboard', maxMs: number) => () => void>;
+    markBlobRenderComplete: jasmine.Spy<() => void>;
+  }
+
+  interface ColdBootHarness {
+    fixture: HomeFixture;
+    component: HomeComponent;
+    preferences: PreferencesService;
+    clipboard: Partial<ClipboardPollingService> & {
+      readGrantedClipboardOnce: jasmine.Spy<(reason: 'coldBootAutoPaste') => Promise<ReadResult>>;
+      awaitPermissionReady: jasmine.Spy<() => Promise<void>>;
+      permissionReadySignal: ReturnType<typeof signal<boolean>>;
+      permissionStateSignal: ReturnType<typeof signal<ClipboardPermissionState>>;
+    };
+    snack: SnackBarStub;
+    snackAction: Subject<void>;
+    snackRef: MatSnackBarRef<TextOnlySnackBar>;
+    loadingSplash: LoadingSplashStub;
+    releaseSpies: jasmine.Spy<() => void>[];
+    eventSpy: jasmine.Spy<LoggerService['event']>;
+  }
+
+  function createDeferredPromise<T>(): DeferredPromise<T> {
+    let resolvePromise: ((value: T) => void) | undefined;
+    let rejectPromise: ((reason?: unknown) => void) | undefined;
+    const promise = new Promise<T>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    if (!resolvePromise || !rejectPromise) {
+      throw new Error('Deferred promise callbacks were not initialized');
+    }
+    return { promise, resolve: resolvePromise, reject: rejectPromise };
+  }
+
+  function makeSnackBarRef(actionSubject: Subject<void>): MatSnackBarRef<TextOnlySnackBar> {
+    const dismissed = new Subject<unknown>();
+    const snackRef: Partial<MatSnackBarRef<TextOnlySnackBar>> & {
+      __dismissedSubject: Subject<unknown>;
+    } = {
+      onAction: () => actionSubject.asObservable(),
+      afterDismissed: () =>
+        dismissed.asObservable() as unknown as ReturnType<
+          MatSnackBarRef<TextOnlySnackBar>['afterDismissed']
+        >,
+      dismiss: jasmine.createSpy('dismiss'),
+      __dismissedSubject: dismissed,
+    };
+    return snackRef as unknown as MatSnackBarRef<TextOnlySnackBar>;
+  }
+
+  function createColdBootHarness(
+    options: {
+      preference?: Preference;
+      permissionState?: ClipboardPermissionState;
+      permissionReady?: boolean;
+      permissionReadyPromise?: Promise<void>;
+      readResult?: ReadResult;
+      readPromise?: Promise<ReadResult>;
+      draft?: string;
+      routePath?: string;
+      routerUrl?: string;
+      initialBlob?: JsonBlob;
+    } = {},
+  ): ColdBootHarness {
+    clearHomeStorage();
+    if (options.draft !== undefined) {
+      localStorage.setItem(DRAFT_KEY, options.draft);
+    }
+
+    TestBed.resetTestingModule();
+    const permissionStateSignal = signal<ClipboardPermissionState>(
+      options.permissionState ?? 'granted',
+    );
+    const permissionReadySignal = signal(options.permissionReady ?? true);
+    const readResult = options.readResult ?? { ok: true, text: '{"clipboard":true}' };
+    const clipboard = {
+      permissionStateSignal,
+      permissionReadySignal,
+      permissionState: permissionStateSignal.asReadonly(),
+      permissionReady: permissionReadySignal.asReadonly(),
+      hasJson: signal(false).asReadonly(),
+      preview: signal('').asReadonly(),
+      readGrantedClipboardOnce: jasmine
+        .createSpy('readGrantedClipboardOnce')
+        .and.callFake(() => options.readPromise ?? Promise.resolve(readResult)),
+      awaitPermissionReady: jasmine
+        .createSpy('awaitPermissionReady')
+        .and.callFake(() => options.permissionReadyPromise ?? Promise.resolve()),
+      checkOnce: jasmine.createSpy('checkOnce').and.returnValue(Promise.resolve()),
+      startPolling: jasmine.createSpy('startPolling'),
+      stopPolling: jasmine.createSpy('stopPolling'),
+    } satisfies Partial<ClipboardPollingService> & {
+      permissionStateSignal: ReturnType<typeof signal<ClipboardPermissionState>>;
+      permissionReadySignal: ReturnType<typeof signal<boolean>>;
+      readGrantedClipboardOnce: jasmine.Spy<(reason: 'coldBootAutoPaste') => Promise<ReadResult>>;
+      awaitPermissionReady: jasmine.Spy<() => Promise<void>>;
+    };
+
+    const releaseSpies: jasmine.Spy<() => void>[] = [];
+    const loadingSplash: LoadingSplashStub = {
+      beginBootstrapHold: jasmine.createSpy('beginBootstrapHold').and.callFake(() => {
+        const release = jasmine.createSpy('releaseColdBootClipboardHold');
+        releaseSpies.push(release);
+        return release;
+      }),
+      markBlobRenderComplete: jasmine.createSpy('markBlobRenderComplete'),
+    };
+    const snackAction = new Subject<void>();
+    const snackRef = makeSnackBarRef(snackAction);
+    const snack: SnackBarStub = {
+      open: jasmine.createSpy('open').and.returnValue(snackRef),
+    };
+    const activatedRoute = {
+      routeConfig: { path: options.routePath ?? '' },
+    } satisfies Partial<ActivatedRoute>;
+
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: activatedRoute },
+        { provide: ClipboardPollingService, useValue: clipboard },
+        { provide: LoadingSplashService, useValue: loadingSplash },
+        { provide: MatSnackBar, useValue: snack },
+      ],
+    });
+
+    const preferences = TestBed.inject(PreferencesService);
+    preferences.update({ coldBootClipboardAutoPaste: options.preference ?? 'ask' });
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const router = TestBed.inject(Router);
+    Object.defineProperty(router, 'url', {
+      configurable: true,
+      get: () => options.routerUrl ?? '/',
+    });
+    Object.defineProperty(router, 'navigated', {
+      configurable: true,
+      get: () => false,
+    });
+
+    const fixture = TestBed.createComponent(HomeComponent);
+    if (options.initialBlob !== undefined) {
+      fixture.componentRef.setInput('initialBlob', options.initialBlob);
+      fixture.componentRef.changeDetectorRef.detectChanges();
+      TestBed.flushEffects();
+    }
+
+    return {
+      fixture,
+      component: fixture.componentInstance,
+      preferences,
+      clipboard,
+      snack,
+      snackAction,
+      snackRef,
+      loadingSplash,
+      releaseSpies,
+      eventSpy,
+    };
+  }
+
+  async function flushColdBootEvaluation(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  async function createAskBannerHarness(text = '{"clipboard":true}'): Promise<ColdBootHarness> {
+    const harness = createColdBootHarness({
+      preference: 'ask',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text },
+    });
+    await flushColdBootEvaluation();
+    harness.fixture.detectChanges();
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeTrue();
+    expectBannerCard(harness.fixture, true);
+    return harness;
+  }
+
+  function expectBannerCard(fixture: HomeFixture, visible: boolean): void {
+    fixture.detectChanges();
+    const bannerCard = fixture.nativeElement.querySelector(
+      'jj-cold-boot-clipboard-banner mat-card',
+    ) as HTMLElement | null;
+    if (visible) {
+      expect(bannerCard).withContext('cold-boot banner card should be visible').not.toBeNull();
+    } else {
+      expect(bannerCard).withContext('cold-boot banner card should be hidden').toBeNull();
+    }
+  }
+
+  function emitColdBootChoice(fixture: HomeFixture, choice: ColdBootClipboardChoice): void {
+    fixture.detectChanges();
+    const bannerDebugElement = fixture.debugElement.query(
+      By.directive(ColdBootClipboardBannerComponent),
+    );
+    expect(bannerDebugElement).withContext('cold-boot banner host should exist').not.toBeNull();
+    const banner = bannerDebugElement.componentInstance as ColdBootClipboardBannerComponent;
+    banner.choice.emit(choice);
+    fixture.detectChanges();
+  }
+
+  function sizeBytes(text: string): number {
+    return new TextEncoder().encode(text).length;
+  }
+
+  function expectColdBootSnack(snack: SnackBarStub): void {
+    expect(snack.open).toHaveBeenCalledOnceWith('Pasted from clipboard.', 'Undo', {
+      duration: 8000,
+    });
+  }
+
+  function coldBootTelemetryArgs(eventSpy: jasmine.Spy<LoggerService['event']>): unknown[][] {
+    return eventSpy.calls
+      .allArgs()
+      .filter(([messageId]) => String(messageId).startsWith('home.clipboard.coldBoot.'));
+  }
+
+  it('permission ungranted -> evaluator does nothing (no banner, no read, no hold)', async () => {
+    const harness = createColdBootHarness({
+      preference: 'always',
+      permissionState: 'denied',
+      permissionReady: true,
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.clipboard.awaitPermissionReady).toHaveBeenCalled();
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expect(harness.snack.open).not.toHaveBeenCalled();
+  });
+
+  it('permission query slow -> evaluator awaits permissionReady before deciding', async () => {
+    const permissionDeferred = createDeferredPromise<void>();
+    const harness = createColdBootHarness({
+      preference: 'always',
+      permissionReady: false,
+      permissionReadyPromise: permissionDeferred.promise,
+    });
+
+    await flushColdBootEvaluation();
+    // Before permission is ready, the silent path must not have started.
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+
+    // Resolve the permission discovery as 'granted'.
+    harness.clipboard.permissionReadySignal.set(true);
+    permissionDeferred.resolve();
+    await flushColdBootEvaluation();
+
+    // Now the silent path proceeds.
+    expect(harness.loadingSplash.beginBootstrapHold).toHaveBeenCalledOnceWith(
+      'coldBootClipboard',
+      150,
+    );
+    expect(harness.clipboard.readGrantedClipboardOnce).toHaveBeenCalledOnceWith(
+      'coldBootAutoPaste',
+    );
+  });
+
+  it('on /s/:slug (initialBlob input is non-null) -> evaluator never fires', async () => {
+    const harness = createColdBootHarness({
+      preference: 'ask',
+      routePath: 's/:slug',
+      routerUrl: '/s/abc123',
+      initialBlob: makeIdentityBlob(),
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectBannerCard(harness.fixture, false);
+  });
+
+  it('editing a saved blob (loadedBlob is non-null at evaluator start) -> never fires', async () => {
+    // Delay permission readiness so we have a window to seed loadedBlob
+    // before the cold-boot evaluator clears its first await.
+    const permissionDeferred = createDeferredPromise<void>();
+    const harness = createColdBootHarness({
+      preference: 'always',
+      permissionReadyPromise: permissionDeferred.promise,
+    });
+
+    harness.component.__loadBlobForTesting(makeIdentityBlob({ content: '{"saved":true}' }));
+    permissionDeferred.resolve();
+    await flushColdBootEvaluation();
+
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+    expect(harness.component.content()).toBe('{"saved":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+  });
+
+  it('editing a saved blob mid-evaluation (loadedBlob becomes non-null between read start and apply) -> apply is aborted', async () => {
+    const deferredRead = createDeferredPromise<ReadResult>();
+    const harness = createColdBootHarness({
+      preference: 'ask',
+      draft: '{"draft":true}',
+      readPromise: deferredRead.promise,
+    });
+
+    harness.component.__loadBlobForTesting(makeIdentityBlob({ content: '{"saved":true}' }));
+    deferredRead.resolve({ ok: true, text: '{"clipboard":true}' });
+    await flushColdBootEvaluation();
+
+    expect(harness.clipboard.readGrantedClipboardOnce).toHaveBeenCalledOnceWith(
+      'coldBootAutoPaste',
+    );
+    expect(harness.component.content()).toBe('{"saved":true}');
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalledWith('home.clipboard.coldBoot.prompt.shown');
+  });
+
+  it("preference 'never' -> never fires; no read", async () => {
+    const harness = createColdBootHarness({ preference: 'never' });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectBannerCard(harness.fixture, false);
+  });
+
+  it("preference 'ask' + valid object/array JSON -> banner visible; home.clipboard.coldBoot.prompt.shown emitted", async () => {
+    const harness = await createAskBannerHarness('[{"clipboard":true}]');
+
+    expect(harness.clipboard.readGrantedClipboardOnce).toHaveBeenCalledOnceWith(
+      'coldBootAutoPaste',
+    );
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.eventSpy.calls.allArgs()).toEqual([['home.clipboard.coldBoot.prompt.shown']]);
+  });
+
+  it("banner Always click -> sets preference to 'always', replaces document, opens Undo snackbar, emits prompt.choice and autoPaste", async () => {
+    const clipboardText = '{"clipboard":true}';
+    const harness = await createAskBannerHarness(clipboardText);
+    harness.eventSpy.calls.reset();
+
+    emitColdBootChoice(harness.fixture, 'always');
+
+    const bytes = sizeBytes(clipboardText);
+    expect(harness.preferences.prefs().coldBootClipboardAutoPaste).toBe('always');
+    expect(harness.component.content()).toBe(clipboardText);
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectColdBootSnack(harness.snack);
+    expect(coldBootTelemetryArgs(harness.eventSpy)).toEqual([
+      ['home.clipboard.coldBoot.prompt.choice', { choice: 'always' }],
+      [
+        'home.clipboard.coldBoot.autoPaste',
+        { sizeBytesBucket: bucketBytes(bytes) },
+        { sizeBytes: bytes },
+      ],
+    ]);
+  });
+
+  it('banner Just this time click -> replaces document, opens snackbar, emits prompt.choice, does NOT change preference', async () => {
+    const clipboardText = '{"clipboard":true}';
+    const harness = await createAskBannerHarness(clipboardText);
+    harness.eventSpy.calls.reset();
+
+    emitColdBootChoice(harness.fixture, 'just-this-time');
+
+    expect(harness.preferences.prefs().coldBootClipboardAutoPaste).toBe('ask');
+    expect(harness.component.content()).toBe(clipboardText);
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectColdBootSnack(harness.snack);
+    expect(harness.eventSpy.calls.allArgs()).toEqual([
+      ['home.clipboard.coldBoot.prompt.choice', { choice: 'just-this-time' }],
+    ]);
+  });
+
+  it("banner Never click -> sets preference to 'never', no paste, emits prompt.choice", async () => {
+    const harness = await createAskBannerHarness();
+    harness.eventSpy.calls.reset();
+
+    emitColdBootChoice(harness.fixture, 'never');
+
+    expect(harness.preferences.prefs().coldBootClipboardAutoPaste).toBe('never');
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(coldBootTelemetryArgs(harness.eventSpy)).toEqual([
+      ['home.clipboard.coldBoot.prompt.choice', { choice: 'never' }],
+    ]);
+  });
+
+  it('banner dismiss (X / Esc) -> hides, no preference change, no paste, emits prompt.choice', async () => {
+    const harness = await createAskBannerHarness();
+    harness.eventSpy.calls.reset();
+
+    emitColdBootChoice(harness.fixture, 'dismiss');
+
+    expect(harness.preferences.prefs().coldBootClipboardAutoPaste).toBe('ask');
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy.calls.allArgs()).toEqual([
+      ['home.clipboard.coldBoot.prompt.choice', { choice: 'dismiss' }],
+    ]);
+  });
+
+  it("preference 'always' + fast read (<150ms) with valid JSON -> silent paste, snackbar, telemetry, splash hold released", async () => {
+    const clipboardText = '{"clipboard":true}';
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: clipboardText },
+    });
+
+    await flushColdBootEvaluation();
+
+    const bytes = sizeBytes(clipboardText);
+    expect(harness.loadingSplash.beginBootstrapHold).toHaveBeenCalledOnceWith(
+      'coldBootClipboard',
+      150,
+    );
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe(clipboardText);
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectColdBootSnack(harness.snack);
+    expect(harness.eventSpy.calls.allArgs()).toEqual([
+      [
+        'home.clipboard.coldBoot.autoPaste',
+        { sizeBytesBucket: bucketBytes(bytes) },
+        { sizeBytes: bytes },
+      ],
+    ]);
+  });
+
+  it("preference 'always' + slow read (>150ms) -> draft hydrates, splash hold released; late-resolving read does not apply", fakeAsync(() => {
+    const deferredRead = createDeferredPromise<ReadResult>();
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readPromise: deferredRead.promise,
+    });
+
+    expect(harness.component.content()).toBe('{"draft":true}');
+    tick(150);
+    flushMicrotasks();
+
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+
+    deferredRead.resolve({ ok: true, text: '{"clipboard":true}' });
+    flushMicrotasks();
+
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+  }));
+
+  it('preference \'always\' + clipboard primitive (e.g. "hi" or 123) -> no paste; JSON-shape gate', async () => {
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: '"hi"' },
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+  });
+
+  it("preference 'always' + clipboard >1MB -> no paste; size gate", async () => {
+    const oversizedText = `{"value":"${'x'.repeat(1024 * 1024)}"}`;
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: oversizedText },
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(sizeBytes(oversizedText)).toBeGreaterThan(1024 * 1024);
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+  });
+
+  it("preference 'always' + clipboard non-JSON -> no paste", async () => {
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: 'not json' },
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+  });
+
+  it('snackbar Undo -> restores prior draft via document replacement; emits autoPaste.undo', async () => {
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: '{"clipboard":true}' },
+    });
+    await flushColdBootEvaluation();
+    harness.eventSpy.calls.reset();
+
+    harness.snackAction.next();
+
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.eventSpy.calls.allArgs()).toEqual([['home.clipboard.coldBoot.autoPaste.undo']]);
+  });
+
+  it("snackbar reference retained -> verify the cold-boot snackbar's MatSnackBarRef is captured and reachable", async () => {
+    const harness = await createAskBannerHarness();
+    expect(
+      (
+        harness.component as unknown as {
+          coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null;
+        }
+      ).coldBootClipboardSnackRef,
+    ).toBeNull();
+
+    emitColdBootChoice(harness.fixture, 'just-this-time');
+    await flushColdBootEvaluation();
+    harness.fixture.detectChanges();
+
+    const retainedRef = (
+      harness.component as unknown as {
+        coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null;
+      }
+    ).coldBootClipboardSnackRef;
+    expect(retainedRef).withContext('SnackBarRef should be retained after paste').not.toBeNull();
+    expect(retainedRef).toBe(harness.snackRef);
   });
 });
 

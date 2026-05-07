@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { PLATFORM_ID } from '@angular/core';
 import { Subject } from 'rxjs';
 import {
@@ -118,6 +118,122 @@ describe('LoadingSplashService', () => {
       .withContext('non-blob first nav skips the render-pending stage')
       .toBeFalse();
     expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  describe('bootstrap holds', () => {
+    it('keeps kind non-null past NavigationEnd until release is called', fakeAsync(() => {
+      const service = init('/');
+      const release = service.beginBootstrapHold('coldBootClipboard', 100);
+
+      start(1, '/');
+      end(1, '/');
+
+      expect(service.kind())
+        .withContext('active bootstrap hold keeps the splash on the bootstrap kind')
+        .toBe('jotjson');
+      release();
+      expect(service.kind()).toBeNull();
+      tick(100);
+      expect(service.kind()).toBeNull();
+    }));
+
+    it('auto-timeout releases the hold after maxMs', fakeAsync(() => {
+      const service = init('/');
+      service.beginBootstrapHold('coldBootClipboard', 50);
+
+      start(1, '/');
+      end(1, '/');
+
+      expect(service.kind()).toBe('jotjson');
+      tick(49);
+      expect(service.kind())
+        .withContext('hold remains active before maxMs elapses')
+        .toBe('jotjson');
+      tick(1);
+      expect(service.kind()).toBeNull();
+    }));
+
+    it('release is idempotent when called twice', fakeAsync(() => {
+      const service = init('/');
+      const release = service.beginBootstrapHold('coldBootClipboard', 100);
+
+      start(1, '/');
+      end(1, '/');
+
+      release();
+      release();
+      expect(service.kind()).toBeNull();
+      tick(100);
+      expect(service.kind()).toBeNull();
+    }));
+
+    it('release is safe after the auto-timeout fires', fakeAsync(() => {
+      const service = init('/');
+      const release = service.beginBootstrapHold('coldBootClipboard', 25);
+
+      start(1, '/');
+      end(1, '/');
+
+      tick(25);
+      expect(service.kind()).toBeNull();
+      release();
+      expect(service.kind()).toBeNull();
+    }));
+
+    it('stacked holds keep the splash visible until the last release', fakeAsync(() => {
+      const service = init('/');
+      const releaseFirst = service.beginBootstrapHold('coldBootClipboard', 100);
+      const releaseSecond = service.beginBootstrapHold('coldBootClipboard', 100);
+
+      start(1, '/');
+      end(1, '/');
+
+      expect(service.kind()).toBe('jotjson');
+      releaseFirst();
+      expect(service.kind())
+        .withContext('second hold still keeps the bootstrap splash visible')
+        .toBe('jotjson');
+      releaseSecond();
+      expect(service.kind()).toBeNull();
+      tick(100);
+      expect(service.kind()).toBeNull();
+    }));
+
+    it('does not affect the blob render-pending lifecycle', () => {
+      const service = init('/s/abc');
+
+      start(1, '/s/abc');
+      service.markBlobBytesComplete();
+      expect(service.kind())
+        .withContext('bytesComplete still clears kind for the render-pending stage')
+        .toBeNull();
+      expect(service.renderPending()).toBeTrue();
+      end(1, '/s/abc');
+      expect(service.kind()).toBeNull();
+      expect(service.renderPending())
+        .withContext('NavigationEnd still preserves render-pending until paint')
+        .toBeTrue();
+      service.markBlobRenderComplete();
+      expect(service.kind()).toBeNull();
+      expect(service.renderPending()).toBeFalse();
+      expect(logger.event).toHaveBeenCalledTimes(1);
+    });
+
+    it('is a no-op after firstNavComplete has latched', fakeAsync(() => {
+      const service = init('/');
+      start(1, '/');
+      end(1, '/');
+      expect(service.kind()).toBeNull();
+      const setTimeoutSpy = spyOn(window, 'setTimeout').and.callThrough();
+
+      const release = service.beginBootstrapHold('coldBootClipboard', 50);
+
+      expect(setTimeoutSpy).not.toHaveBeenCalled();
+      expect(service.kind()).toBeNull();
+      release();
+      tick(50);
+      expect(service.kind()).toBeNull();
+    }));
   });
 
   it('first nav to /s/:slug shows "blob" through resolver; bytesComplete enters render-pending', () => {
@@ -674,6 +790,21 @@ describe('LoadingSplashService', () => {
       end(1, '/');
       expect(service.kind()).toBeNull();
       expect(service.renderPending()).toBeFalse();
+    });
+
+    it('server platform: beginBootstrapHold is a no-op and does not schedule a timer', () => {
+      const setTimeoutSpy = spyOn(window, 'setTimeout').and.callThrough();
+      const service = initOnServerPlatform('/');
+
+      const release = service.beginBootstrapHold('coldBootClipboard', 50);
+
+      expect(setTimeoutSpy).not.toHaveBeenCalled();
+      expect(service.kind()).toBeNull();
+      release();
+      expect(service.kind()).toBeNull();
+      start(1, '/');
+      end(1, '/');
+      expect(service.kind()).toBeNull();
     });
   });
 });
