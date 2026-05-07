@@ -30,7 +30,11 @@
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  color: rgba(127, 127, 127, 1);
+  // Theme-aware foreground so .label (opacity 0.75) and .value
+  // (opacity 0.95) both meet WCAG 2.1 AA 4.5:1 contrast against
+  // --bg in both light and dark themes (was hard-coded mid-gray
+  // rgba(127,127,127,1) which failed light-theme contrast).
+  color: var(--fg);
   white-space: nowrap;
 }
 
@@ -67,14 +71,14 @@
 }
 
 .stat-build .sha {
-  opacity: 0.6;
+  opacity: 0.8;
   font-size: 11px;
 }
 
 .build-link {
   color: inherit;
   text-decoration: none;
-  opacity: 0.6;
+  opacity: 0.8;
   font-size: 11px;
   cursor: pointer;
 

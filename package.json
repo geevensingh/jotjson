@@ -79,6 +79,7 @@
     "@angular/cli": "^21.2.8",
     "@angular/compiler-cli": "^21.2.10",
     "@angular/localize": "^21.2.10",
+    "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.59.1",
     "@types/jasmine": "~5.1.0",
     "@types/node": "^24.0.0",

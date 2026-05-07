@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+import { assertNoSeriousA11yViolations } from '../util/a11y';
+
+// Force light color scheme so the end-of-spec a11y scan runs against a
+// deterministic theme. theme-cycle.spec.ts covers the dark-theme case;
+// keeping these two specs on different themes broadens contrast coverage
+// without duplicating the user flow.
+test.use({ colorScheme: 'light' });
+
 /**
  * Anonymous flow: insert JSON into the Monaco editor, see it render in the
  * tree pane, reload the page, and confirm the draft persists.
@@ -8,6 +16,8 @@ import { expect, test } from '@playwright/test';
  *  - Production bundle boots and Monaco loads in a real browser.
  *  - Editor input -> tree render pipeline.
  *  - localStorage-backed draft persistence across page reload.
+ *  - No serious/critical axe-core violations on the final loaded state
+ *    in light theme.
  *
  * Does NOT use the toolbar Paste button, which depends on
  * navigator.clipboard.readText() (a known browser-permission flake source).
@@ -41,4 +51,6 @@ test('paste-and-reload persists draft via localStorage', async ({ page }) => {
   await expect(page.getByRole('textbox', { name: 'JSON editor' })).toBeVisible();
   await expect(treePane).toContainText('hello');
   await expect(treePane).toContainText('world');
+
+  await assertNoSeriousA11yViolations(page);
 });

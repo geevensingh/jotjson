@@ -113,7 +113,10 @@ npx playwright show-trace test-results/<spec-name>/trace.zip
 5. Note that Monaco's role="textbox" sits below an overlay that
    intercepts pointer events; prefer `.focus()` over `.click()` when
    targeting the editor.
-6. If a selector requires a non-trivial CSS path, consider whether
+6. **Call `assertNoSeriousA11yViolations(page)`** (from
+   `e2e/util/a11y.ts`) at the END of the spec, after the user-flow
+   assertions and after the DOM has settled.
+7. If a selector requires a non-trivial CSS path, consider whether
    the underlying component is missing an accessible name - that may
    be a pre-existing a11y bug worth fixing instead of papering over.
 
@@ -131,6 +134,42 @@ PR and on push-to-`main`. It:
 6. On failure, uploads `playwright-report/` and `test-results/`.
 
 Realistic CI runtime: 4-5 min cold, 2-3 min warm (with browser cache).
+
+## Accessibility coverage
+
+The smoke suite runs `@axe-core/playwright` at the end of each spec via
+`assertNoSeriousA11yViolations(page)` (in `e2e/util/a11y.ts`). The gate:
+
+- Restricts to **WCAG 2 / 2.1 Level A and AA** rule tags (no
+  `best-practice`).
+- **Blocks merge** on `serious` or `critical` violations.
+- Supports a **dated allow-list** (`ALLOW_LISTED_RULES`) for known
+  framework limitations. Every entry has a `reviewBy` ISO date; the
+  helper fails the gate as soon as any entry's date passes, forcing
+  review rather than letting the allow-list rot.
+
+Coverage in the current smoke set:
+
+- `paste-and-reload.spec.ts` scans the loaded home page (editor +
+  populated tree) in **`theme-light`** (`test.use({ colorScheme: 'light' })`).
+- `theme-cycle.spec.ts` scans the loaded home page in **`theme-dark`**
+  as its natural end state.
+- Empty home, `/s/:slug` (read-only share view), and `/404` are NOT
+  scanned. File a follow-up issue if violations are suspected there.
+
+The gate is **necessary but not sufficient** for the WCAG 2.1 AA
+commitment. It does NOT catch:
+
+- **`:focus-visible` contrast** or any focus-state bug (axe doesn't
+  drive keyboard/focus state unless the spec deliberately does). The
+  M7g focus-visible regression `e1669e4` would NOT have been caught
+  by this gate.
+- **Screen-reader announcement** issues.
+- **Keyboard-only navigation** defects.
+- **Dynamic focus order** problems.
+
+These remain manual M7g audit concerns. Don't mistake a green axe run
+for full WCAG-AA conformance.
 
 ## Related issues
 
