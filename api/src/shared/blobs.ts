@@ -120,7 +120,13 @@ let cached: Container | undefined;
 
 export function getBlobsContainer(): Container {
   if (!cached) {
-    cached = getCosmos().database.container('blobs');
+    // Container name is overridable via env var so the api-integration
+    // test harness can point at a per-run isolated container in the
+    // CI Cosmos free-tier account. Production deploys leave this unset
+    // and use the canonical 'blobs' container name from
+    // infra/modules/cosmosDb.bicep.
+    const containerName = process.env['COSMOS_BLOBS_CONTAINER'] ?? 'blobs';
+    cached = getCosmos().database.container(containerName);
   }
   return cached;
 }

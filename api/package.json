@@ -13,6 +13,8 @@
     "prestart": "npm run build",
     "start": "func start",
     "test": "jest",
+    "test:integration": "jest --config jest.config.integration.js",
+    "cleanup:cosmos-ci": "node scripts/cleanup-orphan-cosmos-containers.mjs",
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {

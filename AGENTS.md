@@ -387,6 +387,14 @@ Events catalog.
   workspace currently uses `*.test.ts` (Jest convention). New api/
   test files should still use `*.test.ts` until the workspace is
   migrated. Do not mix conventions within a workspace.
+  - Within `api/`, **integration tests** (real-Cosmos-backed; #63)
+    use `*.integration.test.ts` and live under `api/integration/`,
+    NOT under `api/src/`. This keeps integration helpers out of
+    the production build (`api/tsconfig.json` includes `src/**/*.ts`)
+    and out of production-pattern lint scope. Integration tests
+    are CI-only by default; run locally via
+    `npm --prefix api run test:integration` after setting
+    `COSMOS_CI_*` env vars (see `docs/ci-cosmos.md`).
 
 ### ASCII-only repository
 - Tracked source files **must be ASCII** unless the codepoint is explicitly
@@ -514,7 +522,11 @@ Definition of Done cycle (§7) on every iteration:
   bundle and starts a real browser, which takes much longer than the
   fast inner loop. Run e2e only when you've changed code under `e2e/`,
   or when you want to verify a flow before committing. CI runs e2e
-  on every PR regardless.
+  on every PR regardless. **API integration** tests
+  (`npm --prefix api run test:integration`, #63) are also NOT part of
+  `verify:fast` - they require a real Cosmos DB account (`COSMOS_CI_*`
+  env vars) and are CI-only by default. Run locally only when you've
+  changed code under `api/integration/` or `api/src/shared/blobs.ts`.
 - For focused iteration, pass `--include` through to `ng test`:
   ```
   npm run verify:fast -- --include='**/extract-json-banner/**'

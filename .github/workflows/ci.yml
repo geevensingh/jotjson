@@ -303,6 +303,98 @@ jobs:
           reporter: java-junit
           fail-on-error: false
 
+  api-integration:
+    name: Smoke api integration (real Cosmos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - name: Cosmos secret preflight
+        id: cosmos-preflight
+        # GitHub Actions does not support `secrets.* != ''` in `if:`
+        # conditions on jobs/steps. Instead we read the secrets into
+        # env (which DOES work) and write a non-secret enabled flag.
+        # Partial config (one secret set, the other not) fails loud.
+        env:
+          COSMOS_CI_ENDPOINT: ${{ secrets.COSMOS_CI_ENDPOINT }}
+          COSMOS_CI_KEY: ${{ secrets.COSMOS_CI_KEY }}
+        run: |
+          if [ -z "$COSMOS_CI_ENDPOINT" ] && [ -z "$COSMOS_CI_KEY" ]; then
+            echo "Both COSMOS_CI_* secrets unset - skipping integration tests."
+            echo "See docs/ci-cosmos.md for provisioning instructions."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$COSMOS_CI_ENDPOINT" ] || [ -z "$COSMOS_CI_KEY" ]; then
+            echo "::error::Partial Cosmos CI secret config (one of {COSMOS_CI_ENDPOINT, COSMOS_CI_KEY} unset). Configure both or neither."
+            exit 1
+          else
+            echo "Cosmos CI secrets present; integration job active."
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run integration tests
+        if: steps.cosmos-preflight.outputs.enabled == 'true'
+        env:
+          COSMOS_ENDPOINT: ${{ secrets.COSMOS_CI_ENDPOINT }}
+          COSMOS_KEY: ${{ secrets.COSMOS_CI_KEY }}
+          COSMOS_DATABASE: jotjson-ci
+          # run_id + run_attempt avoids stale-state collisions on
+          # workflow rerun (run_id is reused; run_attempt increments).
+          COSMOS_BLOBS_CONTAINER: blobs-${{ github.run_id }}-${{ github.run_attempt }}
+        run: npm run test:integration
+      - name: Cleanup integration container (backstop)
+        # `if: always()` covers Jest hard-crashes that bypass
+        # globalTeardown. Setup-time orphan cleanup at the next run
+        # covers runner cancellation that bypasses both layers.
+        if: always() && steps.cosmos-preflight.outputs.enabled == 'true'
+        env:
+          COSMOS_CI_ENDPOINT: ${{ secrets.COSMOS_CI_ENDPOINT }}
+          COSMOS_CI_KEY: ${{ secrets.COSMOS_CI_KEY }}
+          COSMOS_DATABASE: jotjson-ci
+          CONTAINER_TO_DROP: blobs-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          node -e "
+          const { CosmosClient } = require('@azure/cosmos');
+          const client = new CosmosClient({
+            endpoint: process.env.COSMOS_CI_ENDPOINT,
+            key: process.env.COSMOS_CI_KEY,
+          });
+          (async () => {
+            try {
+              await client
+                .database(process.env.COSMOS_DATABASE)
+                .container(process.env.CONTAINER_TO_DROP)
+                .delete();
+              console.log('Backstop cleanup: dropped ' + process.env.CONTAINER_TO_DROP);
+            } catch (error) {
+              console.warn('Backstop cleanup: ' + (error.message || error));
+            }
+          })();
+          "
+      - name: Upload api integration JUnit
+        if: always() && steps.cosmos-preflight.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-integration-junit
+          path: api/test-results/api-integration/junit.xml
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Publish api integration test results
+        if: always() && steps.cosmos-preflight.outputs.enabled == 'true'
+        uses: dorny/test-reporter@v2
+        with:
+          name: API integration test results
+          path: api/test-results/api-integration/junit.xml
+          reporter: java-junit
+          fail-on-error: false
+
   workflows-lint:
     name: Workflows lint (actionlint)
     runs-on: ubuntu-latest
