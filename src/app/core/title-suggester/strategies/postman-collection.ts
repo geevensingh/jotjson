@@ -8,7 +8,7 @@ import { isPlainObject, readString } from './helpers';
  * `_postman_id` (Postman v2.x) or `schema` matching Postman's URI.
  * Output: `info.name` if present.
  */
-const POSTMAN_SCHEMA_RE = /schema.getpostman.com/i;
+const POSTMAN_SCHEMA_RE = /^https?:\/\/schema\.getpostman\.com\//i;
 
 export const postmanCollectionStrategy: SuggestionStrategy = (input) => {
   if (!isPlainObject(input.parsed)) return null;
