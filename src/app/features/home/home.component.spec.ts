@@ -3955,6 +3955,138 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     expect(component.extractBannerVisible()).toBe(false);
     expect(component.extractedCandidate()).toBeNull();
   });
+
+  // M7u: prose-preserving paste extraction (formerly only on tree path).
+  // The extractor service runs unmocked so these tests cover the full
+  // pipeline end-to-end.
+
+  it('M7u: editor paste of one block with no surrounding prose extracts to the bare value', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    component.onEditorPaste({
+      pastedText: '{"a":1}',
+      postPasteContent: '{"a":1}',
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.blockCount).toBe(1);
+    expect(candidate?.data.proseSegments ?? 0).toBe(0);
+    const parsed = JSON.parse(candidate!.data.text) as unknown;
+    expect(parsed).toEqual({ a: 1 });
+  });
+
+  it('M7u: editor paste of one block with surrounding prose extracts to a wrapper', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    component.onEditorPaste({
+      pastedText: 'INFO: log line {"a":1} trailing words',
+      postPasteContent: 'INFO: log line {"a":1} trailing words',
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.blockCount).toBe(1);
+    expect(candidate?.data.proseSegments ?? 0).toBe(2);
+    const parsed = JSON.parse(candidate!.data.text) as Record<string, unknown>;
+    expect(parsed['prefix']).toBe('INFO: log line ');
+    expect(parsed['json']).toEqual({ a: 1 });
+    expect(parsed['suffix']).toBe(' trailing words');
+  });
+
+  it('M7u: editor paste of multiple blocks with no prose extracts to the bare array', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    component.onEditorPaste({
+      pastedText: '{"a":1}{"b":2}',
+      postPasteContent: '{"a":1}{"b":2}',
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.blockCount).toBe(2);
+    expect(candidate?.data.proseSegments ?? 0).toBe(0);
+    const parsed = JSON.parse(candidate!.data.text) as unknown;
+    expect(parsed).toEqual([{ a: 1 }, { b: 2 }]);
+  });
+
+  it('M7u: editor paste of multiple blocks with prose extracts to a prose-preserving wrapper (real-world HTTP transcript)', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    // The user-reported real-world sample: HTTP request details with two
+    // JSON payloads (x-ms-test header and request body) wrapped in
+    // request-line, header, and operation-name prose.
+    const pasted =
+      'Dependent service request details: POST /v1.0/events api-version: 2019-09-30 ' +
+      'x-ms-test: {"scenarios":"PurchaseRunner,skip-provisioning,auto-patch:completed",' +
+      '"contact":"compur","retention":"2026-05-08T22:12:21.6474607Z"} ' +
+      'x-ms-correlation-id: ea49bede-d5da-4998-9f6a-f86dc20c5174 MS-CV: XqqPdwxcOUqvxyi3.1.2 ' +
+      'Content-Type: application/json ' +
+      '{"eventId":"5366e945-262e-42dc-8cdf-8969adcdea65_2019-05-31","fetchPayload":true,' +
+      '"queryParameters":{"eventType":"BusinessLocationSummary",' +
+      '"eventSource":"account-organization-2019-05-31","version":1,' +
+      '"accountId":"257c0731-7897-5830-7c4e-708dae0a712b",' +
+      '"organizationId":"5366e945-262e-42dc-8cdf-8969adcdea65_2019-05-31",' +
+      '"businessLocationId":"eea4cdb9-166e-5e35-3afb-502f12a5aea5"},"continuationToken":null}. ' +
+      'OperationName: RequestDetails_Collector_SearchEvents_BusinessLocationSummary.';
+
+    component.onEditorPaste({
+      pastedText: pasted,
+      postPasteContent: pasted,
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.blockCount).toBe(2);
+    expect((candidate?.data.proseSegments ?? 0) >= 1).toBeTrue();
+
+    const parsed = JSON.parse(candidate!.data.text) as Record<string, unknown>;
+    const keys = Object.keys(parsed);
+    expect(keys).toContain('json1');
+    expect(keys).toContain('json2');
+    expect(keys).toContain('prefix');
+    expect(keys).toContain('suffix');
+    expect(keys.some((k) => k.startsWith('between_'))).toBeTrue();
+
+    expect(parsed['prefix'] as string).toContain('Dependent service request details');
+    expect(parsed['json1']).toEqual({
+      scenarios: 'PurchaseRunner,skip-provisioning,auto-patch:completed',
+      contact: 'compur',
+      retention: '2026-05-08T22:12:21.6474607Z',
+    });
+    const body = parsed['json2'] as Record<string, unknown>;
+    expect(body['eventId']).toBe('5366e945-262e-42dc-8cdf-8969adcdea65_2019-05-31');
+    expect(body['fetchPayload']).toBe(true);
+    expect(parsed['suffix'] as string).toContain(
+      'OperationName: RequestDetails_Collector_SearchEvents_BusinessLocationSummary.',
+    );
+  });
+
+  it('M7u: leading BOM with prose is preserved in the prefix', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    component.onEditorPaste({
+      pastedText: '\uFEFFhello {"a":1}',
+      postPasteContent: '\uFEFFhello {"a":1}',
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.proseSegments).toBe(1);
+    const parsed = JSON.parse(candidate!.data.text) as Record<string, unknown>;
+    expect(parsed['prefix']).toBe('\uFEFFhello ');
+    expect(parsed['json']).toEqual({ a: 1 });
+  });
 });
 
 describe('HomeComponent extract-banner telemetry', () => {
@@ -4027,7 +4159,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     );
   });
 
@@ -4043,7 +4175,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     );
   });
 
@@ -4063,7 +4195,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.pick' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     ]);
   });
 
@@ -4086,7 +4218,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.drag' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     ]);
   });
 
@@ -4105,7 +4237,12 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls.length).toBe(1);
     expect(calls[0][0]).toBe('home.extract.banner.accept');
     expect(calls[0][1]).toEqual({ source: 'editor.paste' });
-    expect(calls[0][2]).toEqual({ blockCount: 2, preservesComments: 0, hasComments: 0 });
+    expect(calls[0][2]).toEqual({
+      blockCount: 2,
+      preservesComments: 0,
+      hasComments: 0,
+      proseSegments: 0,
+    });
   });
 
   it('shown event reports hasComments:1 when source had JSONC comments', () => {
@@ -4126,7 +4263,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 1 },
+      { blockCount: 2, preservesComments: 0, hasComments: 1, proseSegments: 0 },
     );
   });
 
@@ -4152,7 +4289,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.accept',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 1 },
+      { blockCount: 2, preservesComments: 0, hasComments: 1, proseSegments: 0 },
     ]);
   });
 
@@ -4172,7 +4309,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'editor.paste', reason: 'user.click' },
-      { blockCount: 2 },
+      { blockCount: 2, proseSegments: 0 },
     ]);
   });
 
@@ -4194,7 +4331,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'editor.paste', reason: 'content.changed' },
-      { blockCount: 2 },
+      { blockCount: 2, proseSegments: 0 },
     ]);
   });
 
@@ -4223,12 +4360,12 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'paste', reason: 'content.changed' },
-      { blockCount: 2 },
+      { blockCount: 2, proseSegments: 0 },
     ]);
     expect(calls[1]).toEqual([
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 1, preservesComments: 1, hasComments: 0 },
+      { blockCount: 1, preservesComments: 1, hasComments: 0, proseSegments: 0 },
     ]);
   });
 
@@ -5041,9 +5178,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     if (typeof rawParameterValue !== 'string') {
       throw new Error('Expected fixture Parameters[0].Value to be a string');
     }
-    const replacement = extractFromMixedTextCore(rawParameterValue, parseJsonCandidate, {
-      mode: 'preserveProse',
-    });
+    const replacement = extractFromMixedTextCore(rawParameterValue, parseJsonCandidate);
     if (replacement === null) {
       throw new Error('Expected fixture Parameters[0].Value to be extractable');
     }

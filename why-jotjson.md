@@ -33,9 +33,11 @@ background worker - not just the top-level paste.
 
 Pasted a `curl -v` output? A log line with a payload glued to it? A stack
 trace with a JSON body? JotJSON scans the buffer for embedded `{...}` and
-`[...]` blocks and shows a non-destructive banner: **[Extract JSON]** /
-**[Dismiss]**. Your raw paste stays in the editor either way. Single block
-extracted with comments preserved; multiple blocks combined into an array.
+`[...]` blocks and shows a non-destructive banner: **[Extract embedded
+JSON]** / **[Dismiss]**. Your raw paste stays in the editor either way.
+A bare block extracts to the block; surrounding prose is preserved
+under `prefix` / `suffix` / `between_<i>_and_<j>` keys so log headers,
+HTTP request lines, and trailing operation names don't get lost.
 
 ### Auto-unescape on paste (and copy back)
 

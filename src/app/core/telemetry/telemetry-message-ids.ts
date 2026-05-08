@@ -463,15 +463,20 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   editor; `'upload.pick'` = toolbar Upload button; `'upload.drag'`
    *   = files dropped onto the document.
    * Measurements: { blockCount: number; preservesComments: 0 | 1;
-   *   hasComments: 0 | 1 }. `blockCount` is the number of JSON blocks
-   *   the extractor recovered from the mixed text. `preservesComments`
-   *   is 1 when the extractor's output FORMAT retains comments (always
-   *   1 for single-block, always 0 for multi-block) and 0 otherwise.
-   *   `hasComments` is 1 when at least one accepted candidate's source
-   *   slice contained a JSONC comment and 0 otherwise. The product
-   *   `hasComments && !preservesComments` (i.e., `hasComments=1 &&
-   *   preservesComments=0`) is exactly when the banner shows the
-   *   "Comments will be dropped" warning. Numeric so AI can `avg()` /
+   *   hasComments: 0 | 1; proseSegments: number }. `blockCount` is the
+   *   number of JSON blocks the extractor recovered from the mixed
+   *   text. `preservesComments` is 1 when the extractor's output
+   *   FORMAT retains comments (single-block always 1; multi-block
+   *   always 0) and 0 otherwise. `hasComments` is 1 when at least one
+   *   accepted candidate's source slice contained a JSONC comment and
+   *   0 otherwise. The product `hasComments && !preservesComments`
+   *   (i.e., `hasComments=1 && preservesComments=0`) is exactly when
+   *   the banner shows the "Comments will be dropped" warning.
+   *   `proseSegments` is the count of non-whitespace prose segments
+   *   preserved in the wrapper output (0 when the input has no
+   *   surrounding prose, in which case the result is the bare value
+   *   or bare array; >0 when the wrapper carries `prefix`/`suffix`/
+   *   `between_<i>_and_<j>` keys). Numeric so AI can `avg()` /
    *   `sum()` them.
    */
   'home.extract.banner.shown',
@@ -488,9 +493,10 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
    *   | 'upload.drag' } - mirrors `home.extract.banner.shown`.
    * Measurements: { blockCount: number; preservesComments: 0 | 1;
-   *   hasComments: 0 | 1 } - mirrors `home.extract.banner.shown` so
-   *   accept-rate by block-count, comments-preservation, and
-   *   warning-exposure can be computed by a join.
+   *   hasComments: 0 | 1; proseSegments: number } - mirrors
+   *   `home.extract.banner.shown` so accept-rate by block-count,
+   *   comments-preservation, warning-exposure, and prose presence
+   *   can be computed by a join.
    */
   'home.extract.banner.accept',
 
@@ -511,11 +517,12 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   | 'upload.drag'; reason: 'user.click' | 'content.changed' }.
    *   `source` is whatever path produced the candidate that is now
    *   being dismissed (carried on the `extractedCandidate` signal).
-   * Measurements: { blockCount: number }. Accept-vs-dismiss skew
-   *   by block-count; `preservesComments` is intentionally not
-   *   replicated here since it is queryable via the matching
-   *   `home.extract.banner.shown` event for the same source/session
-   *   (one-to-one prior to dismiss).
+   * Measurements: { blockCount: number; proseSegments: number }.
+   *   Accept-vs-dismiss skew by block-count and prose presence.
+   *   `preservesComments` is intentionally not replicated here since
+   *   it is queryable via the matching `home.extract.banner.shown`
+   *   event for the same source/session (one-to-one prior to
+   *   dismiss).
    */
   'home.extract.banner.dismiss',
 

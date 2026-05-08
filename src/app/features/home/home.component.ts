@@ -301,7 +301,10 @@ export class HomeComponent implements OnInit, OnDestroy {
           source: previousCandidate.source,
           reason: 'content.changed',
         },
-        { blockCount: previousCandidate.data.blockCount },
+        {
+          blockCount: previousCandidate.data.blockCount,
+          proseSegments: previousCandidate.data.proseSegments ?? 0,
+        },
       );
       this.extractedCandidate.set(null);
     }
@@ -362,7 +365,10 @@ export class HomeComponent implements OnInit, OnDestroy {
           source: previousCandidate.source,
           reason: 'content.changed',
         },
-        { blockCount: previousCandidate.data.blockCount },
+        {
+          blockCount: previousCandidate.data.blockCount,
+          proseSegments: previousCandidate.data.proseSegments ?? 0,
+        },
       );
     }
     if (data === null || source === null) {
@@ -381,6 +387,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         blockCount: data.blockCount,
         preservesComments: data.preservesComments ? 1 : 0,
         hasComments: data.hasComments ? 1 : 0,
+        proseSegments: data.proseSegments ?? 0,
       },
     );
     // Conditional auto-focus: only when the user clicked the toolbar
@@ -1673,6 +1680,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         blockCount: candidate.data.blockCount,
         preservesComments: candidate.data.preservesComments ? 1 : 0,
         hasComments: candidate.data.hasComments ? 1 : 0,
+        proseSegments: candidate.data.proseSegments ?? 0,
       },
     );
     // Clear the candidate FIRST so `setContent`'s banner-replace guard
@@ -1689,7 +1697,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.logger.event(
         'home.extract.banner.dismiss',
         { source: candidate.source, reason: 'user.click' },
-        { blockCount: candidate.data.blockCount },
+        {
+          blockCount: candidate.data.blockCount,
+          proseSegments: candidate.data.proseSegments ?? 0,
+        },
       );
     }
     this.extractedCandidate.set(null);

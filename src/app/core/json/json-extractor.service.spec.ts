@@ -46,7 +46,10 @@ describe('JsonExtractorService', () => {
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
       expect(r!.preservesComments).toBeTrue();
-      expect(JSON.parse(r!.text)).toEqual({ a: 1 });
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['prefix']).toBe('before ');
+      expect(wrapper['json']).toEqual({ a: 1 });
+      expect(wrapper['suffix']).toBe(' after');
     });
 
     it('extracts a single array surrounded by prose', () => {
@@ -54,20 +57,25 @@ describe('JsonExtractorService', () => {
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
       expect(r!.preservesComments).toBeTrue();
-      expect(JSON.parse(r!.text)).toEqual([1, 2, 3]);
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['prefix']).toBe('prefix ');
+      expect(wrapper['json']).toEqual([1, 2, 3]);
+      expect(wrapper['suffix']).toBe(' suffix');
     });
 
     it('respects brace-balance when string contains a closing brace', () => {
       const r = svc.extractFromMixedText('prose {"a": "}"} prose');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
-      expect(JSON.parse(r!.text)).toEqual({ a: '}' });
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['json']).toEqual({ a: '}' });
     });
 
     it('respects backslash-escaped quotes inside strings', () => {
       const r = svc.extractFromMixedText('{"a": "\\""}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
+      // No surrounding prose -> bare value
       expect(JSON.parse(r!.text)).toEqual({ a: '"' });
     });
 
@@ -75,6 +83,7 @@ describe('JsonExtractorService', () => {
       const r = svc.extractFromMixedText('{"url":"http://example.test/a//b"}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
+      // No surrounding prose -> bare value
       expect(JSON.parse(r!.text)).toEqual({
         url: 'http://example.test/a//b',
       });
@@ -84,6 +93,7 @@ describe('JsonExtractorService', () => {
       const r = svc.extractFromMixedText('{"pattern":"/* not a comment */"}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
+      // No surrounding prose -> bare value
       expect(JSON.parse(r!.text)).toEqual({
         pattern: '/* not a comment */',
       });
@@ -93,6 +103,7 @@ describe('JsonExtractorService', () => {
       const r = svc.extractFromMixedText('{"s":"{nested:1}"}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
+      // No surrounding prose -> bare value
       expect(JSON.parse(r!.text)).toEqual({ s: '{nested:1}' });
     });
 
@@ -100,14 +111,19 @@ describe('JsonExtractorService', () => {
       const r = svc.extractFromMixedText('GET http://x.test {"ok":true}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
-      expect(JSON.parse(r!.text)).toEqual({ ok: true });
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['prefix']).toBe('GET http://x.test ');
+      expect(wrapper['json']).toEqual({ ok: true });
     });
 
-    it('strips a leading BOM before scanning', () => {
+    it('preserves a leading BOM in the prose prefix', () => {
       const r = svc.extractFromMixedText('\uFEFFprefix {"a":1} suffix');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
-      expect(JSON.parse(r!.text)).toEqual({ a: 1 });
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['prefix']).toBe('\uFEFFprefix ');
+      expect(wrapper['json']).toEqual({ a: 1 });
+      expect(wrapper['suffix']).toBe(' suffix');
     });
   });
 
@@ -130,19 +146,24 @@ describe('JsonExtractorService', () => {
   });
 
   describe('multi-block extraction', () => {
-    it('wraps two objects as an array, in source order', () => {
+    it('wraps two objects with surrounding prose into a prose-preserving object', () => {
       const r = svc.extractFromMixedText('request {"a":1} response {"b":2}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(2);
       expect(r!.preservesComments).toBeFalse();
-      expect(JSON.parse(r!.text)).toEqual([{ a: 1 }, { b: 2 }]);
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['prefix']).toBe('request ');
+      expect(wrapper['json1']).toEqual({ a: 1 });
+      expect(wrapper['between_1_and_2']).toBe(' response ');
+      expect(wrapper['json2']).toEqual({ b: 2 });
     });
 
-    it('wraps three blocks of mixed shapes as an array', () => {
+    it('wraps three blocks of mixed shapes as a bare array when no prose surrounds them', () => {
       const r = svc.extractFromMixedText('{"a":1} [1,2] {"c":3}');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(3);
       expect(r!.preservesComments).toBeFalse();
+      // Whitespace-only separators -> proseSegments === 0 -> bare array.
       expect(JSON.parse(r!.text)).toEqual([{ a: 1 }, [1, 2], { c: 3 }]);
     });
 
@@ -151,7 +172,9 @@ describe('JsonExtractorService', () => {
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
       expect(r!.preservesComments).toBeTrue();
-      expect(JSON.parse(r!.text)).toEqual({ a: 1 });
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['json']).toEqual({ a: 1 });
+      expect(wrapper['suffix']).toBe(' prose {"b": ');
     });
   });
 
@@ -159,12 +182,16 @@ describe('JsonExtractorService', () => {
     it('recovers a valid inner block from an invalid outer wrapper', () => {
       // The outer { notJson: ... } has an unquoted key and is invalid JSONC,
       // so the parser rejects it. The scanner must resume at start+1 (not
-      // end+1) so the inner {"real":1} is still found.
+      // end+1) so the inner {"real":1} is still found. The rejected outer
+      // text becomes prefix/suffix prose around the accepted inner block.
       const r = svc.extractFromMixedText('debug { notJson: {"real":1} } end');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
       expect(r!.preservesComments).toBeTrue();
-      expect(JSON.parse(r!.text)).toEqual({ real: 1 });
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['json']).toEqual({ real: 1 });
+      expect(wrapper['prefix']).toBe('debug { notJson: ');
+      expect(wrapper['suffix']).toBe(' } end');
     });
   });
 
@@ -221,10 +248,14 @@ describe('JsonExtractorService', () => {
       // rejected by the parser (unquoted key). The scanner resumes at
       // start+1 and accepts the inner `{"real":1}`, which has no comments.
       // The rejected outer's comment must NOT propagate into the result.
+      // The rejected outer text becomes the prose prefix/suffix.
       const r = svc.extractFromMixedText('log { /* nope */ notJson: {"real":1} } end');
       expect(r).not.toBeNull();
       expect(r!.blockCount).toBe(1);
-      expect(JSON.parse(r!.text)).toEqual({ real: 1 });
+      const wrapper = JSON.parse(r!.text) as Record<string, unknown>;
+      expect(wrapper['json']).toEqual({ real: 1 });
+      expect(wrapper['prefix']).toBe('log { /* nope */ notJson: ');
+      expect(wrapper['suffix']).toBe(' } end');
       expect(r!.hasComments)
         .withContext('rejected outer wrapper must not leak its comment flag')
         .toBeFalse();

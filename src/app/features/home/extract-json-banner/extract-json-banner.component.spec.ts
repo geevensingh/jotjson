@@ -35,7 +35,7 @@ describe('ExtractJsonBannerComponent', () => {
     expect(host.querySelector('mat-card')).toBeNull();
   });
 
-  it('shows single-block message and Extract JSON action when blockCount is 1', () => {
+  it('shows single-block message and Extract embedded JSON action when blockCount is 1', () => {
     const fixture = create({
       visible: true,
       blockCount: 1,
@@ -43,17 +43,18 @@ describe('ExtractJsonBannerComponent', () => {
     });
     const host = fixture.nativeElement as HTMLElement;
     const text = host.querySelector('.banner-text')?.textContent ?? '';
-    expect(text).toContain('Found JSON inside your paste.');
+    expect(text).toContain('Found embedded JSON in your paste.');
 
     const actionButtons = Array.from(
       host.querySelectorAll('.banner-actions button'),
     ) as HTMLButtonElement[];
     const labels = actionButtons.map((b) => (b.textContent ?? '').trim());
-    expect(labels.some((label) => label.includes('Extract JSON'))).toBe(true);
+    expect(labels.some((label) => label.includes('Extract embedded JSON'))).toBe(true);
     expect(labels.some((label) => label.includes('Extract blocks as array'))).toBe(false);
+    expect(labels.some((label) => label === 'Extract JSON')).toBe(false);
   });
 
-  it('shows multi-block message and Extract blocks as array action when blockCount >= 2', () => {
+  it('shows multi-block message and the same Extract embedded JSON action when blockCount >= 2', () => {
     const fixture = create({
       visible: true,
       blockCount: 3,
@@ -61,14 +62,15 @@ describe('ExtractJsonBannerComponent', () => {
     });
     const host = fixture.nativeElement as HTMLElement;
     const text = host.querySelector('.banner-text')?.textContent ?? '';
-    expect(text).toContain('Found 3 JSON blocks');
+    expect(text).toContain('Found 3 embedded JSON blocks in your paste.');
+    expect(text).not.toContain('combined into an array');
 
     const actionButtons = Array.from(
       host.querySelectorAll('.banner-actions button'),
     ) as HTMLButtonElement[];
     const labels = actionButtons.map((b) => (b.textContent ?? '').trim());
-    expect(labels.some((label) => label.includes('Extract blocks as array'))).toBe(true);
-    expect(labels.some((label) => label === 'Extract JSON')).toBe(false);
+    expect(labels.some((label) => label.includes('Extract embedded JSON'))).toBe(true);
+    expect(labels.some((label) => label.includes('Extract blocks as array'))).toBe(false);
   });
 
   it('multi-block message no longer contains "Comments will be removed."', () => {
@@ -221,7 +223,7 @@ describe('ExtractJsonBannerComponent', () => {
     try {
       const extractBtn = host.querySelector('.extract-button') as HTMLButtonElement | null;
       expect(extractBtn).withContext('extract button rendered').not.toBeNull();
-      expect((extractBtn?.textContent ?? '').trim()).toContain('Extract blocks as array');
+      expect((extractBtn?.textContent ?? '').trim()).toContain('Extract embedded JSON');
 
       fixture.componentInstance.focusExtractButton();
 

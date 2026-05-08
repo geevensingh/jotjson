@@ -6,7 +6,8 @@ export interface ExtractedJson {
   preservesComments: boolean;
   /**
    * Number of non-whitespace prose segments preserved in wrapper output.
-   * Default unwrap mode reports 0.
+   * 0 when the input has no surrounding prose, in which case the result
+   * is the bare value (single block) or bare array (multi block).
    */
   proseSegments?: number;
   /**
@@ -19,8 +20,6 @@ export interface ExtractedJson {
    */
   hasComments: boolean;
 }
-
-export type ExtractMode = 'unwrap' | 'preserveProse';
 
 export interface JsonExtractorParseResult {
   value: unknown;
@@ -53,7 +52,6 @@ const CHARACTER_BACKSLASH = 0x5c; // \
 const CHARACTER_SLASH = 0x2f; // /
 const CHARACTER_STAR = 0x2a; // *
 const CHARACTER_LINE_FEED = 0x0a; // \n
-const CHARACTER_BYTE_ORDER_MARK = 0xfeff;
 
 /**
  * Extracts JSON/JSONC blocks from prose-and-JSON mixed text (chat logs,
@@ -74,13 +72,21 @@ const CHARACTER_BYTE_ORDER_MARK = 0xfeff;
  * the inner `{"real":1}`). Each failure advances at least one byte, so
  * scanning is bounded.
  *
- * Outputs:
+ * Outputs (always prose-preserving; falls back to bare value/array when
+ * `proseSegments === 0`):
  * - 0 candidates: `null`.
- * - 1 candidate:  `text` is the slice formatted via `jsonc-parser.format`,
- *                 which preserves comments. `preservesComments = true`.
- * - >=2: `text` is `JSON.stringify` of the array of parsed values in source
- *         order. `preservesComments = false` because comments cannot
- *         survive `JSON.stringify`.
+ * - 1 candidate, no prose:  `text` is the slice formatted via
+ *                           `jsonc-parser.format`, which preserves
+ *                           comments. `preservesComments = true`.
+ * - 1 candidate, with prose: `text` is `{prefix?, json, suffix?}` wrapper
+ *                           preserving comments inside `json`.
+ *                           `preservesComments = true`.
+ * - >=2, no prose:          `text` is `JSON.stringify` of the array of
+ *                           parsed values in source order.
+ *                           `preservesComments = false`.
+ * - >=2, with prose:        `text` is a wrapper with `prefix?`,
+ *                           `json1`/`json2`/..., `between_<i>_and_<j>?`,
+ *                           and `suffix?` keys. `preservesComments = false`.
  *
  * `hasComments` is true when at least one accepted candidate's slice
  * contained a JSONC comment. It is independent of `preservesComments`: it
@@ -90,26 +96,53 @@ const CHARACTER_BYTE_ORDER_MARK = 0xfeff;
 export function extractFromMixedText(
   input: string,
   parseJsonCandidate: ParseJsonCandidate,
-  options?: { mode?: ExtractMode },
 ): ExtractedJson | null {
   if (!input) return null;
+  if (input.length > MAX_INPUT_LENGTH) return null;
 
-  const mode = options?.mode ?? 'unwrap';
-  const scanInput =
-    mode === 'unwrap' && input.charCodeAt(0) === CHARACTER_BYTE_ORDER_MARK ? input.slice(1) : input;
-  if (scanInput.length > MAX_INPUT_LENGTH) return null;
-
-  const candidates = scan(scanInput, parseJsonCandidate);
+  const candidates = scan(input, parseJsonCandidate);
   if (candidates.length === 0) return null;
 
-  if (mode === 'preserveProse') {
-    return buildPreserveProseResult(scanInput, candidates);
-  }
-
-  return buildUnwrapResult(candidates);
+  return buildResult(input, candidates);
 }
 
-function buildUnwrapResult(candidates: readonly JsonExtractorCandidate[]): ExtractedJson | null {
+function buildResult(
+  input: string,
+  candidates: readonly JsonExtractorCandidate[],
+): ExtractedJson | null {
+  if (candidates.length === 1) {
+    const candidate = candidates[0];
+    if (candidate === undefined) return null;
+
+    const proseSegments = countSingleBlockProseSegments(input, candidate);
+    if (proseSegments === 0) {
+      return buildBareResult(candidates);
+    }
+
+    return {
+      text: buildSingleBlockProseWrapper(input, candidate),
+      blockCount: 1,
+      preservesComments: true,
+      proseSegments,
+      hasComments: candidate.hasComments,
+    };
+  }
+
+  const proseSegments = countMultiBlockProseSegments(input, candidates);
+  if (proseSegments === 0) {
+    return buildBareResult(candidates);
+  }
+
+  return {
+    text: buildMultiBlockProseWrapper(input, candidates),
+    blockCount: candidates.length,
+    preservesComments: false,
+    proseSegments,
+    hasComments: candidates.some((candidate) => candidate.hasComments),
+  };
+}
+
+function buildBareResult(candidates: readonly JsonExtractorCandidate[]): ExtractedJson | null {
   if (candidates.length === 1) {
     const candidate = candidates[0];
     if (candidate === undefined) return null;
@@ -132,42 +165,6 @@ function buildUnwrapResult(candidates: readonly JsonExtractorCandidate[]): Extra
     blockCount: candidates.length,
     preservesComments: false,
     proseSegments: 0,
-    hasComments: candidates.some((candidate) => candidate.hasComments),
-  };
-}
-
-function buildPreserveProseResult(
-  input: string,
-  candidates: readonly JsonExtractorCandidate[],
-): ExtractedJson | null {
-  if (candidates.length === 1) {
-    const candidate = candidates[0];
-    if (candidate === undefined) return null;
-
-    const proseSegments = countSingleBlockProseSegments(input, candidate);
-    if (proseSegments === 0) {
-      return buildUnwrapResult(candidates);
-    }
-
-    return {
-      text: buildSingleBlockProseWrapper(input, candidate),
-      blockCount: 1,
-      preservesComments: true,
-      proseSegments,
-      hasComments: candidate.hasComments,
-    };
-  }
-
-  const proseSegments = countMultiBlockProseSegments(input, candidates);
-  if (proseSegments === 0) {
-    return buildUnwrapResult(candidates);
-  }
-
-  return {
-    text: buildMultiBlockProseWrapper(input, candidates),
-    blockCount: candidates.length,
-    preservesComments: false,
-    proseSegments,
     hasComments: candidates.some((candidate) => candidate.hasComments),
   };
 }

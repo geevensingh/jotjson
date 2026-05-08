@@ -113,7 +113,10 @@ describe('fixture files', () => {
  * `MultiPartMixedText.json` is a real-world example: an HTTP request and
  * response capture (two JSON bodies separated by HTTP framing/headers
  * and a trailing free-form sentence). Both bodies parse cleanly so the
- * extractor returns blockCount === 2 and wraps them as an array.
+ * extractor returns blockCount === 2; per M7u the surrounding prose is
+ * preserved by wrapping the bodies under `json1` / `json2` keys with
+ * `prefix` / `between_1_and_2` / `suffix` carrying the request line,
+ * inter-body framing, and trailing sentence.
  */
 describe('extractor on mixed-text fixtures', () => {
   let mixedText: string;
@@ -149,24 +152,31 @@ describe('extractor on mixed-text fixtures', () => {
       .toBeGreaterThan(0);
   });
 
-  it('extractFromMixedText finds the two HTTP bodies and wraps them as an array', () => {
+  it('extractFromMixedText finds the two HTTP bodies and wraps them with their surrounding prose', () => {
     const extractor = TestBed.inject(JsonExtractorService);
     const extracted = extractor.extractFromMixedText(mixedText);
 
     expect(extracted).withContext('extractor must return non-null on this fixture').not.toBeNull();
     expect(extracted!.blockCount).withContext('two HTTP bodies in this capture').toBe(2);
-    // Multi-block uses JSON.stringify array wrap; comments cannot survive.
+    // Multi-block uses JSON.stringify; comments cannot survive the wrapper.
     expect(extracted!.preservesComments).toBe(false);
     // The HTTP-capture fixture has no JSONC comments in either body, so
     // the source-side comment flag should also be false.
     expect(extracted!.hasComments).toBe(false);
+    // Surrounding HTTP framing / headers / trailing sentence -> at least
+    // one prose segment must survive.
+    expect((extracted!.proseSegments ?? 0) >= 1).toBeTrue();
 
-    // The wrapped output is a JSON array; parse and inspect each element to
-    // avoid coupling the assertion to whitespace formatting.
-    const value = JSON.parse(extracted!.text) as Array<Record<string, unknown>>;
-    expect(Array.isArray(value)).toBe(true);
-    expect(value.length).toBe(2);
-    expect(value[0]).toEqual(jasmine.objectContaining({ authentication_data: null }));
-    expect(value[1]).toEqual(jasmine.objectContaining({ buyer_info: jasmine.any(Object) }));
+    // The wrapped output is a prose-preserving object; parse and inspect
+    // the json1 / json2 entries to avoid coupling the assertion to
+    // whitespace formatting.
+    const wrapper = JSON.parse(extracted!.text) as Record<string, unknown>;
+    expect(wrapper['json1']).toEqual(jasmine.objectContaining({ authentication_data: null }));
+    expect(wrapper['json2']).toEqual(jasmine.objectContaining({ buyer_info: jasmine.any(Object) }));
+    // At least one of prefix / between / suffix must be present.
+    const proseKeys = Object.keys(wrapper).filter(
+      (k) => k === 'prefix' || k === 'suffix' || k.startsWith('between_'),
+    );
+    expect(proseKeys.length).toBeGreaterThan(0);
   });
 });
