@@ -16,16 +16,23 @@ name: Deploy (SWA)
 #    the source tree, so we point `app_location` at
 #    `dist/jotjson/browser`.
 #
-#    The API is still built by Oryx inside the SWA action's container
-#    (api source code is checked out on the runner; SWA copies it into
-#    Oryx). To stop double-building the API too, we'd have to upload an
-#    api-dist artifact from CI - deferred as v1 tech debt; the api
-#    build is ~5s and not worth the extra plumbing.
+#    The API is also prebuilt by CI's `api` job and uploaded as the
+#    `api-dist` artifact (host.json, package.json, package-lock.json,
+#    and the compiled `dist/`). This job downloads it into `api/`,
+#    runs `npm ci` to populate production node_modules on the runner,
+#    and passes `skip_api_build: true` to the SWA action. With both
+#    `skip_app_build` and `skip_api_build` set, the SWA action is a
+#    pure uploader - Oryx never runs in the deploy path. This was
+#    introduced to eliminate the Oryx SDK-detect flake (oryx-cdn
+#    XPath null-node) that periodically failed CD with no recourse
+#    other than re-run.
 #
 # 2. workflow_dispatch (manual redeploy)
 #    The web bundle is BUILT INLINE on the runner host (npm ci + bake +
 #    npm run build + copy staticwebapp.config.json), then SWA action
-#    gets `skip_app_build: true`. This duplicates the secret-bake
+#    gets `skip_app_build: true`. The api is built inline too
+#    (npm ci + npm run build under api/) so the prebuilt-tree shape
+#    matches the workflow_run path. This duplicates the secret-bake
 #    logic from ci.yml's `web` job; the duplication (~25 lines) is
 #    intentional v1 tech debt - making workflow_dispatch consume an
 #    artifact would require a `ci_run_id` input and complicate the
@@ -118,6 +125,21 @@ jobs:
           # extracts to cwd, breaking the SWA action's
           # app_location: 'dist/jotjson/browser'.
           path: dist/jotjson
+
+      - name: Download CI api bundle
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: api-dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Lands host.json, package.json, package-lock.json, and the
+          # compiled dist/ on top of the api/ source tree from
+          # actions/checkout. The subsequent "Install API deps" step
+          # populates api/node_modules so the SWA action (with
+          # skip_api_build: true) uploads a fully-runnable Functions
+          # tree.
+          path: api
 
       - name: Sanity-check downloaded bundle (auto deploy)
         # Defense-in-depth against artifact poisoning. The
@@ -260,13 +282,27 @@ jobs:
         run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
 
       # ------------------------------------------------------------------
-      # Shared: api install (Oryx still builds the api inside the SWA
-      # container) and SWA upload.
+      # Shared: install api production deps on the runner so the SWA
+      # upload (with skip_api_build: true) sees a fully-runnable
+      # Functions tree at api_location. The TS->JS compile is done in
+      # CI's `api` job (workflow_run path -> downloaded as api-dist) or
+      # by the "Build API (manual deploy)" step below (workflow_dispatch
+      # path); Oryx is no longer in the deploy pipeline.
       # ------------------------------------------------------------------
       - name: Install API deps
         if: steps.check.outputs.have_token == 'true'
         working-directory: api
         run: npm ci
+
+      - name: Build API (manual deploy)
+        # workflow_run path downloads compiled dist/ from the api-dist
+        # artifact; workflow_dispatch path has only source TS at this
+        # point and needs an explicit compile so the SWA upload (with
+        # skip_api_build: true) sees the JS files referenced by
+        # api/package.json's `main` glob.
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        working-directory: api
+        run: npm run build
 
       - name: Deploy to Azure Static Web Apps
         if: steps.check.outputs.have_token == 'true'
@@ -277,9 +313,11 @@ jobs:
           action: upload
           # With skip_app_build: true the SWA action treats app_location
           # as the prebuilt SPA output directory (per Microsoft docs).
-          # output_location is therefore unused. The api is still built
-          # by Oryx at api_location.
+          # With skip_api_build: true it likewise treats api_location as
+          # a prebuilt Functions tree and uploads it as-is - no Oryx.
+          # output_location is therefore unused.
           app_location: 'dist/jotjson/browser'
           api_location: 'api'
           skip_app_build: true
+          skip_api_build: true
 

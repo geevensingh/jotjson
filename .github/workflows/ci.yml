@@ -302,6 +302,33 @@ jobs:
           path: api/test-results/api/junit.xml
           reporter: java-junit
           fail-on-error: false
+      # ------------------------------------------------------------------
+      # Build the API and upload it as the api-dist artifact for cd.yml's
+      # workflow_run path. With cd.yml passing skip_api_build: true to the
+      # SWA action, Oryx is bypassed entirely; the deploy is just an
+      # upload of the prebuilt tree. This eliminates the Oryx SDK-detect
+      # flake (CDN XPath null-node) that periodically fails CD. Gated on
+      # push-to-main only, mirroring the web-dist gate.
+      # ------------------------------------------------------------------
+      - name: Build API
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npm run build
+      - name: Upload api bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-dist
+          # Pack only the files SWA Functions needs at runtime: host.json,
+          # package manifest + lockfile (so cd.yml can `npm ci` prod deps),
+          # and the compiled JS under dist/. Omits node_modules (cd.yml
+          # reinstalls), source TypeScript, tests, and tsconfig.
+          path: |
+            api/host.json
+            api/package.json
+            api/package-lock.json
+            api/dist
+          if-no-files-found: error
+          retention-days: 30
 
   api-integration:
     name: Smoke api integration (real Cosmos)
