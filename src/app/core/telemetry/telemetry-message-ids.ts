@@ -328,7 +328,13 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           between the event and the reload so the envelope
    *           dispatches before the navigation tears down the
    *           document.
-   * Props: none.
+   * Props:
+   *   - `trigger`: closed-enum `'snackbar' | 'autoApply'`. Distinguishes
+   *     a user-clicked Reload on the version-available snackbar from a
+   *     cold-launch silent auto-apply (no user interaction yet, no
+   *     prior silent-apply this session). The two paths converge in
+   *     `activateAndReload()`; the trigger argument is propagated from
+   *     the caller.
    * Measurements: none.
    */
   'update.applied',

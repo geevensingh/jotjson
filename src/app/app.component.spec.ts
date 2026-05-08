@@ -148,6 +148,18 @@ describe('AppComponent', () => {
     expect(controller.dropActive()).toBe(false);
   });
 
+  it('eagerly initializes AppUpdateService during ngOnInit so SW listeners wire up before any user-visible work', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    expect(appUpdateServiceSpy.initialize).not.toHaveBeenCalled();
+    // detectChanges drives the component lifecycle including ngOnInit,
+    // which is browser-only and calls appUpdate.initialize() directly
+    // (no lazy import) so the SwUpdate subscriptions in the service's
+    // constructor have already been wired by the time the first
+    // VERSION_READY postMessage from the SW could possibly arrive.
+    fixture.detectChanges();
+    expect(appUpdateServiceSpy.initialize).toHaveBeenCalledTimes(1);
+  });
+
   it('emits app.boot before telemetry connects during lazy initialization', async () => {
     const callOrder: string[] = [];
     loggerServiceSpy.event.and.callFake((messageId) => {

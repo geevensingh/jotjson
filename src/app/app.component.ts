@@ -6,6 +6,7 @@ import { DocumentDropController } from './core/upload/document-drop-controller.s
 import { LoadingSplashService } from './core/loading-splash/loading-splash.service';
 import { NavigationProgressService } from './core/navigation/navigation-progress.service';
 import { RouteFocusService } from './core/navigation/route-focus.service';
+import { AppUpdateService } from './core/update/app-update.service';
 import { LoadingSplashComponent } from './shared/components/loading-splash/loading-splash.component';
 import { RouteProgressBarComponent } from './shared/components/route-progress-bar/route-progress-bar.component';
 
@@ -56,6 +57,16 @@ export class AppComponent implements OnInit {
   // be missed because Subjects don't replay.
   private readonly preferencesNotifications = inject(PreferencesNotificationService);
 
+  // Eagerly inject so SwUpdate.versionUpdates / .unrecoverable
+  // subscriptions wire up in the service's constructor, before any
+  // postMessage from the SW can arrive. versionUpdates is not a
+  // ReplaySubject; a lazy import would let early VERSION_READY events
+  // slip past unobserved on installed PWAs where the SW process
+  // survived the previous launch. The constructor is server-platform
+  // safe (no window/document access); browser-only side effects are
+  // attached lazily inside `initialize()`, called below.
+  private readonly appUpdate = inject(AppUpdateService);
+
   // Captured at construction time (an injection context) so `ngOnInit`
   // can branch on platform without calling `inject()` inside a
   // lifecycle hook (which would throw NG0203).
@@ -99,10 +110,13 @@ export class AppComponent implements OnInit {
     // so the router waits for MSAL before activating routes (otherwise
     // resolvers race the bearer token).
     //
-    // Lazy-load telemetry + SW update listener so the App Insights SDK
-    // and Material snackbar stay out of the initial bundle. There is
-    // no user-visible work happening in the first few seconds of a
-    // page load, so a deferred load is fine.
+    // Lazy-load telemetry so the App Insights SDK stays out of the
+    // initial bundle. There is no user-visible work happening in the
+    // first few seconds of a page load, so a deferred load is fine.
+    // The SW update listener (`AppUpdateService`) is NOT lazy -- it is
+    // injected as a normal field above so its `versionUpdates`
+    // subscription wires up in the constructor and can't miss an early
+    // `VERSION_READY` postMessage from the SW.
     void Promise.all([
       import('./core/telemetry/logger.service'),
       import('./core/telemetry/route-tracker'),
@@ -135,8 +149,6 @@ export class AppComponent implements OnInit {
         );
       });
     });
-    void import('./core/update/app-update.service').then(({ AppUpdateService }) => {
-      this.injector.get(AppUpdateService).initialize();
-    });
+    this.appUpdate.initialize();
   }
 }

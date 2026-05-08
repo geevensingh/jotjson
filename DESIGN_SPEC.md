@@ -1282,7 +1282,7 @@ tripwires together make IfMatch protection the default for every
     - `categories`: `["developer-tools", "utilities"]`
   - **Service Worker** via Angular's `@angular/service-worker`, registered in `app.config.ts` with `registerWhenStable:30000` and disabled in dev mode. Configured via `ngsw-config.json` with cache-first for app-shell assets (HTML, CSS, JS, fonts, icons) so the editor/tree view load offline once the app has been visited.
   - **Network-first cache for `/api/**`** via `ngsw-config.json` `dataGroups`: strategy `freshness`, 5-second network timeout, 1-hour `maxAge`, 100-entry `maxSize` - the SW serves fresh responses when the network is available and transparently falls back to the cached copy otherwise.
-  - **Update prompt**: `AppUpdateService` (in `core/update/`) subscribes to `SwUpdate.versionUpdates` and surfaces a non-dismissing Material snackbar ("A new version of JotJSON is available.") with a Reload action when a new build is deployed. Also subscribes to `SwUpdate.unrecoverable` and hard-reloads with a cache-busting query so a mid-deploy CDN race on a force-refresh cannot leave the user on a stalled page.
+  - **Update prompt**: `AppUpdateService` (in `core/update/`) is eagerly constructed at app bootstrap (injected as a normal field on `AppComponent`, not lazy-imported) so its `SwUpdate.versionUpdates` and `SwUpdate.unrecoverable` subscriptions are wired before any postMessage from the SW can arrive - `versionUpdates` is not a `ReplaySubject`, so a late subscriber would lose early `VERSION_READY` events. The service proactively calls `swUpdate.checkForUpdate()` from a single `maybeCheck(reason)` funnel (entry-gated 30-second debounce) on three triggers: once at the end of `initialize()`, on `document.visibilitychange` -> visible, and on `window.focus`. The visibility / focus triggers are the key signal for installed PWAs, where the SW process can survive across launches and Angular's built-in registration-time check therefore doesn't re-fire. On `VERSION_READY` the service distinguishes *cold launch* (no user input yet, no prior silent-apply this session) from *mid-session*: cold launch silently calls `activateUpdate()` + reload (no UX), mid-session surfaces a non-dismissing Material snackbar ("A new version of JotJSON is available.") with a Reload action. The cold-launch silent path is gated on a `userInteracted` flag (flipped on first `pointerdown` / `keydown` / `touchstart` via `{ once: true, passive: true }` listeners) and a per-session `sessionStorage` loop guard (`jotjson.update.autoApplied`) so at most one silent auto-apply happens per browser session - any subsequent `VERSION_READY` falls through to the snackbar regardless of activity state. `update.applied` carries a `trigger: 'snackbar' | 'autoApply'` closed-enum dimension so the two paths are queryable separately. Also subscribes to `SwUpdate.unrecoverable` and hard-reloads with a cache-busting query so a mid-deploy CDN race on a force-refresh cannot leave the user on a stalled page.
   - **Deployment cache headers**: `staticwebapp.config.json` sets `Cache-Control: no-cache, must-revalidate` on `/index.html` and `/ngsw.json` so browsers revalidate the shell + SW manifest on every load, shrinking the window where stale references can collide with a new build.
 - **Planned polish (post-v1):**
   - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed.
@@ -2212,6 +2212,31 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.18.1**: Installed-PWA update detection fix. `AppUpdateService`
+  is now eagerly injected on `AppComponent` (replacing the previous
+  lazy `import().then(injector.get(...).initialize())` chain) so its
+  `SwUpdate.versionUpdates` and `SwUpdate.unrecoverable`
+  subscriptions wire up in the constructor, before any `VERSION_READY`
+  postMessage from the SW can arrive. The service also calls
+  `swUpdate.checkForUpdate()` proactively from a single
+  `maybeCheck(reason)` funnel with a 30-second entry-gated debounce
+  on three triggers: once at `initialize()`, on
+  `document.visibilitychange` -> visible, and on `window.focus`. The
+  visibility / focus triggers are the key signal for installed PWAs,
+  where the SW process can survive across launches and Angular's
+  built-in registration-time check therefore doesn't re-fire. On
+  `VERSION_READY` before any user interaction (`pointerdown` /
+  `keydown` / `touchstart`) and with the per-session `sessionStorage`
+  loop guard (`jotjson.update.autoApplied`) clear, the service
+  silently calls `activateUpdate()` + reload - so a freshly relaunched
+  installed PWA always boots into the latest deployed version without
+  requiring a snackbar click or `Ctrl+F5`. Mid-session updates still
+  surface the existing "A new version of JotJSON is available.
+  Reload" snackbar; the cold-launch and mid-session paths are
+  distinguished in telemetry by a new closed-enum `trigger: 'snackbar'
+  | 'autoApply'` dimension on the existing `update.applied` event.
+  The fix is patch-only: no new public API, no schema change, no
+  service-worker config change, no CDN cache-header change.
 - **0.18.0**: Cold-boot clipboard auto-paste. New
   `coldBootClipboardAutoPaste: 'ask' | 'always' | 'never'`
   preference (default `ask`) controls whether the home page reads
