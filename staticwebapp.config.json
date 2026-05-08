@@ -1,5 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
+  "platform": {
+    "apiRuntime": "node:22"
+  },
   "navigationFallback": {
     "rewrite": "/shell.html",
     "exclude": ["/api/*", "/*.{js,css,map,svg,ico,png,jpg,webp,woff,woff2,webmanifest}"]
