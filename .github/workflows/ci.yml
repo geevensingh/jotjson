@@ -265,7 +265,7 @@ jobs:
         run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
 
   api:
-    name: API build
+    name: API build & test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
