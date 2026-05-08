@@ -814,6 +814,35 @@ Before finishing a task:
   does not qualify even when the user's intent to eventually fix it
   is obvious. The user reporting a problem is delegating diagnosis
   and planning to you, not authorization.
+- **CI failures are plan-triggers, not retry-triggers.** Never
+  re-run a failed CI job, "Re-run all jobs", or push a
+  speculative fix on the agent's own judgment when CI is red,
+  even when the changeset on the run looks obviously unrelated
+  to the failing test. **On `main`, this is zero-tolerance**:
+  never autonomously retry a red CI run, full stop. On PR and
+  feature branches the same no-autoretry rule applies, but you
+  may at least propose a retry as part of a plan -- still
+  subject to user authorization before acting. The default
+  response to any CI failure is: tell the user the job failed,
+  summarize what broke (which job, which test or step, the
+  assertion or exit code, what the changeset on the run
+  actually touched), and ask what to do. When the failure
+  looks like a flake, propose filing a `flaky-test` issue so
+  it can be hardened rather than re-running silently -- silent
+  retries hide both genuine flakes (so they never get fixed)
+  and genuine regressions (so they ship anyway, with a green
+  second attempt covering for the red first attempt). The
+  direct-command carve-out applies only when the user has
+  issued an explicit retry instruction in the same or a recent
+  turn (e.g., "re-run that job", "rerun the failed attempt",
+  and similarly explicit retry instructions); the agent's own
+  judgment that "this is probably a flake" is not such a
+  command. This rule is distinct from the fix-and-push rule
+  for agent-caused breakage: when the agent's own change broke
+  CI on `main`, the agent must still push the fix and watch
+  the re-run go green before declaring the task done. That
+  rule is about *fixing* known breakage caused by the agent;
+  this one is about not *retrying* unknown failures on a hunch.
 - **Rubber-duck every plan before presenting it.** Once you have a
   candidate plan, run it through a rubber-duck / critic sub-agent
   for an independent critique (correctness, missed edge cases,
