@@ -5986,9 +5986,12 @@ describe('JsonTreeComponent', () => {
      * `expandAll()` first when the row sits below the auto-fit depth).
      */
     function nodeEl(pathString: string): HTMLElement {
-      const el = (fixture.nativeElement as HTMLElement).querySelector(
-        `mat-nested-tree-node[data-tree-node-path="${pathString.replace(/"/g, '\\"')}"]`,
-      ) as HTMLElement | null;
+      const candidates = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        'mat-nested-tree-node[data-tree-node-path]',
+      );
+      const el =
+        Array.from(candidates).find((n) => n.getAttribute('data-tree-node-path') === pathString) ??
+        null;
       if (!el) {
         throw new Error(`No mat-nested-tree-node rendered for path ${pathString}`);
       }
@@ -6374,9 +6377,12 @@ describe('JsonTreeComponent', () => {
     }
 
     function rowNodeEl(pathString: string): HTMLElement {
-      const el = (fixture.nativeElement as HTMLElement).querySelector(
-        `mat-nested-tree-node[data-tree-node-path="${pathString.replace(/"/g, '\\"')}"]`,
-      ) as HTMLElement | null;
+      const candidates = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        'mat-nested-tree-node[data-tree-node-path]',
+      );
+      const el =
+        Array.from(candidates).find((n) => n.getAttribute('data-tree-node-path') === pathString) ??
+        null;
       if (!el) {
         throw new Error(`No mat-nested-tree-node rendered for path ${pathString}`);
       }
