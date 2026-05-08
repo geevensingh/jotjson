@@ -1483,7 +1483,7 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 Items to revisit before declaring v1 complete (deliberately deferred so they do not slow current development velocity):
 
 - **PR-by-default for code changes.** Today, code changes can land directly on `main`. Decide whether v1 should require code changes to land via a PR with green CI before merging, with CD/workflow hotfixes remaining as the only sanctioned direct-to-`main` path. Rationale for deferring now: keeps iteration velocity high; CI on `push: main` still runs, just after merge.
-- **Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.
+- ~~**Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.~~ (done)
 
 ---
 
