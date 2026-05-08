@@ -1516,8 +1516,8 @@ ID test tenant.
 
 What this layer model deliberately does *not* claim:
 
-- The **browser integration** layer does not prove worker correctness. The Monaco JSON worker spawns from a runtime-built blob URL; verifying that requires worker-specific assertions whose value at this layer is bounded. Worker-shaped bugs are expected to surface at the smoke-e2e layer once that lands as a v1 gate.
-- **Unit (api)** uses mocked Cosmos / Blob clients. Until the API integration layer lands as a v1 gate, partition-key bugs, indexing-policy issues, and continuation-token correctness are not covered by CI.
+- The **browser integration** layer does not prove Monaco worker correctness. The JSON worker spawns from a runtime-built blob URL; this layer verifies editor mount + value behavior, not worker-specific diagnostics or branch behavior. Anonymous smoke e2e (#64, active) catches user-visible worker-load regressions on covered flows, but worker-specific correctness remains intentionally unasserted.
+- **Unit (api)** still uses mocked Cosmos / Blob clients. API integration (#63, active) covers the first real-Cosmos `BlobsService.createBlob` / `findBlobByIdOrSlug` happy path, including partition-key correctness and document-shape preservation against the production indexing policy. It does NOT yet claim full BlobsService CRUD coverage, integration coverage of other services (`MeService`, `HistoryService`, `RuleSets`), exhaustive indexing-policy validation, or continuation-token pagination correctness; those are tracked as follow-ups.
 
 Layer names above are runner-neutral so this model survives runner migrations
 (see issue #47 - test-runner migration).
