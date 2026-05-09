@@ -62,6 +62,9 @@ describe('IconComponent', () => {
     'expand-subtree',
     'isolate',
     'subtree',
+    'find-by-key',
+    'find-by-value',
+    'collapse-siblings',
   ] as const satisfies readonly JjIconName[];
 
   async function createWith(name: JjIconName): Promise<ComponentFixture<IconComponent>> {

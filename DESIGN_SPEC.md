@@ -2212,6 +2212,25 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.19.1**: Tree row context-menu polish. Three fixes to v0.19.0:
+  (1) `Collapse siblings` in the Subtree submenu now has a leading
+  icon (`collapse-siblings`) so its label aligns with the iconified
+  rows above and below; previously the missing icon left the text
+  flush with the icon-gutter and the row read as "left-flush text
+  among iconified peers" (the variant we'd rejected during the A2
+  icon-strategy round). (2) `Find by key` and `Find by value` now
+  use distinct icons (`find-by-key` -- a key in front of a magnifying
+  glass with the lens masked behind the key, handle to lower-right;
+  and `find-by-value` -- the lens with two short horizontal "content"
+  bars inside) instead of both rendering the generic `search` icon.
+  (3) The `matTooltip` ("Same as double-click") on the bolded
+  surfaced default-shortcut row and on the bolded primitive Copy
+  value row was dropped: Material's tooltip overlay rendered
+  `position: below` and obscured the next menu item, making
+  adjacent rows hard to click. Bold styling alone is the signal for
+  the dblclick-equivalent action; the `defaultActionTooltip` field
+  and `@@tree.contextMenu.defaultActionTooltip` i18n string were
+  removed in the same change.
 - **0.19.0**: Tree row context-menu overhaul (Path Y). The right-click
   menu rewires into five sections (Copy / Transform / Mark / Find /
   Reshape) with a state-dependent surfaced default-shortcut row above

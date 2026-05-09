@@ -56,7 +56,10 @@ export type JjIconName =
   | 'collapse-subtree'
   | 'expand-subtree'
   | 'isolate'
-  | 'subtree';
+  | 'subtree'
+  | 'find-by-key'
+  | 'find-by-value'
+  | 'collapse-siblings';
 
 export type JjIconSize = number | 'auto';
 
@@ -82,6 +85,29 @@ export type JjIconSize = number | 'auto';
       focusable="false"
       class="jj-icon"
     >
+      @if (name() === 'find-by-key') {
+        <!-- Mask for the find-by-key glyph: punches the key shape
+             out of the lens so the lens visually sits behind the
+             key. Multiple instances on the same page produce
+             duplicate IDs but reference identical defs, so URL
+             lookups resolve to identical mask data. -->
+        <defs>
+          <mask
+            id="jj-icon-mask-find-by-key"
+            maskUnits="userSpaceOnUse"
+            x="0"
+            y="0"
+            width="24"
+            height="24"
+          >
+            <rect x="0" y="0" width="24" height="24" fill="white" />
+            <circle cx="6" cy="10" r="2.8" stroke="black" stroke-width="3" fill="black" />
+            <path d="M8.8 10h9.5" stroke="black" stroke-width="3" />
+            <path d="M14 10v2.5" stroke="black" stroke-width="3" />
+            <path d="M16.5 10v2" stroke="black" stroke-width="3" />
+          </mask>
+        </defs>
+      }
       @switch (name()) {
         @case ('paste') {
           <rect x="8" y="3" width="8" height="4" rx="1" />
@@ -473,6 +499,40 @@ export type JjIconSize = number | 'auto';
           <circle cx="18" cy="20" r="1.6" />
           <path d="M6 7.6V18a1.5 1.5 0 0 0 1.5 1.5H16.4" />
           <path d="M7.5 13.5h8.9" />
+        }
+        @case ('find-by-key') {
+          <!-- Key in front, magnifying glass behind/overlapping with
+               handle to lower-right corner. The lens has a "bite
+               taken out" via mask where the key crosses, giving the
+               key visual prominence per design round 3 (N4). -->
+          <g mask="url(#jj-icon-mask-find-by-key)">
+            <circle cx="11" cy="11" r="6" />
+          </g>
+          <path d="M15.3 15.3l4.7 4.7" />
+          <circle cx="6" cy="10" r="2.8" />
+          <path d="M8.8 10h9.5" />
+          <path d="M14 10v2.5" />
+          <path d="M16.5 10v2" />
+        }
+        @case ('find-by-value') {
+          <!-- Magnifying glass with two horizontal "content" bars
+               inside the lens (V2 from design round 3). The bars
+               read as "value text" without the visual crowding of
+               the three-bar variant at 18px. -->
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="M16 16l4 4" />
+          <path d="M8 10h6" stroke-width="1.4" />
+          <path d="M8 12.5h4.5" stroke-width="1.4" />
+        }
+        @case ('collapse-siblings') {
+          <!-- Highlighted middle row (clicked) flanked by short bars
+               above and below (representing immediate peer rows
+               being compressed). Distinct from isolate (faded
+               full-width lines for the wider-scope action) by using
+               shorter peer bars to suggest narrower scope. -->
+          <path d="M9 5h6" stroke-opacity="0.55" />
+          <rect x="3" y="9" width="18" height="6" rx="1.5" />
+          <path d="M9 19h6" stroke-opacity="0.55" />
         }
       }
     </svg>

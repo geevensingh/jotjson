@@ -387,9 +387,10 @@ export class JsonTreeComponent {
   // already carries the scope.
   readonly ctxCollapseFromHereLabel = $localize`:@@tree.contextMenu.collapse:Collapse from here`;
   readonly ctxExpand1LevelLabel = $localize`:@@tree.contextMenu.expand1Level:Expand 1 level`;
-  // Surfaced row tooltip. Hover/focus announces the dblclick-parity
-  // affordance for users who don't immediately read bold as "primary".
-  readonly defaultActionTooltip = $localize`:@@tree.contextMenu.defaultActionTooltip:Same as double-click`;
+  // Surfaced row tooltip removed in v0.19.1 polish: the matTooltip
+  // overlay was rendering below the bolded item and obscuring the
+  // next menu row, making clicks on adjacent items difficult. Bold
+  // styling alone is the signal for the dblclick-equivalent action.
   // Subtree submenu (Path Y). Trigger label and items inside drop the
   // "from here" / "subtree" suffix because the submenu name carries
   // the scope.

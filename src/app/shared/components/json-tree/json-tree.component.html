@@ -607,7 +607,6 @@
       mat-menu-item
       type="button"
       [class.ctx-default-action]="defaultActionKind() === 'copyValue'"
-      [matTooltip]="defaultActionKind() === 'copyValue' ? defaultActionTooltip : ''"
       (click)="copyValue(cn, 'menu', $event.altKey)"
     >
       <jj-icon name="copy" [size]="18" />
@@ -669,13 +668,13 @@
     }
     @if (showFindByKey(cn)) {
       <button mat-menu-item type="button" (click)="findByKey(cn)">
-        <jj-icon name="search" [size]="18" />
+        <jj-icon name="find-by-key" [size]="18" />
         <span>{{ ctxFindByKeyLabel }}</span>
       </button>
     }
     @if (showFindByValue(cn)) {
       <button mat-menu-item type="button" (click)="findByValue(cn)">
-        <jj-icon name="search" [size]="18" />
+        <jj-icon name="find-by-value" [size]="18" />
         <span>{{ ctxFindByValueLabel }}</span>
       </button>
     }
@@ -692,7 +691,6 @@
         mat-menu-item
         type="button"
         class="ctx-default-action"
-        [matTooltip]="defaultActionTooltip"
         (click)="onSurfacedShortcutClick(cn)"
       >
         @if (surfacedShortcutIconName(); as iconName) {
@@ -766,6 +764,7 @@
     }
     @if (showIsolatePair(cn)) {
       <button mat-menu-item type="button" (click)="collapseSiblings(cn)">
+        <jj-icon name="collapse-siblings" [size]="18" />
         <span>{{ ctxCollapseSiblingsLabel }}</span>
       </button>
       <button mat-menu-item type="button" (click)="isolateRow(cn, 'wide')">
