@@ -65,6 +65,18 @@ body.theme-light {
   .mat-mdc-menu-item {
     min-height: 32px;
   }
+
+  // Leading-icon spacing for items rendered with `<jj-icon>` (as
+  // opposed to Material's native `<mat-icon>` which has its own
+  // `.mat-mdc-menu-item-icon` slot styling). Material doesn't
+  // recognize `<jj-icon>` as an icon, so its default gap doesn't
+  // apply and labels render tight against the icon. Add a trailing
+  // margin so the icon-gutter and label have roughly equal
+  // breathing room either side of the icon. Matches the gap used
+  // in the design mockups.
+  .mat-mdc-menu-item jj-icon {
+    margin-inline-end: 12px;
+  }
 }
 
 // Tree-row context menu (json-tree.component): bold "default

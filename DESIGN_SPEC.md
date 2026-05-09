@@ -2212,6 +2212,23 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.19.2**: Tree menu icon-spacing fix. The shipping menu was
+  rendering `<jj-icon>` leading icons too tight against the label
+  text because Material's default menu-item layout only adds a gap
+  between Material's native `<mat-icon>` (which has the recognized
+  `.mat-mdc-menu-item-icon` slot class) and the label, not arbitrary
+  custom-component children. The mockups had used an explicit
+  `gap: 12px` on the flex parent, so they read with breathing room
+  on both sides of the icon -- but the real menu's icon-to-label
+  spacing collapsed to whatever Material defaulted children to. Add
+  a `margin-inline-end: 12px` on `<jj-icon>` inside `.jj-menu`
+  menu-items in `_material.scss` so labels align with the
+  icon-gutter pattern from the mockups (roughly equal whitespace
+  on the menu-edge side and the label side of each icon).
+  Affects every `<jj-icon>` rendered inside any `.jj-menu`-styled
+  menu (the row context menu, the Subtree submenu, and any other
+  `<mat-menu class="jj-menu">` that uses `<jj-icon>` leading
+  glyphs).
 - **0.19.1**: Tree row context-menu polish. Three fixes to v0.19.0:
   (1) `Collapse siblings` in the Subtree submenu now has a leading
   icon (`collapse-siblings`) so its label aligns with the iconified
