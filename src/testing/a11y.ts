@@ -64,7 +64,19 @@ function mountFixtureHost(
 
   const wrapper = document.createElement('div');
   wrapper.setAttribute('data-jj-a11y-fixture', '');
-  wrapper.style.cssText = 'position: relative; width: 100%; min-height: 100vh;';
+  // Wrapper inline-style is load-bearing for axe-core color-contrast (issue #142).
+  // - background-color terminates axe's bg-walk at the wrapper instead of letting
+  //   axe sort body to the end of the stack (axe.js sortPageBackground) and
+  //   resolve to a sibling like .jasmine_html-reporter (#eee from jasmine.css).
+  //   Use var(--bg) so the wrapper paints what body would in production; #1e1e1e
+  //   fallback defends against future cascade refactors that might break the --bg
+  //   cascade in tests.
+  // - isolation: isolate creates a stacking context so the wrapper's contents are
+  //   visually-sorted independently of body siblings -- defensive against any
+  //   future Karma/Jasmine chrome the runner might inject as a body sibling.
+  wrapper.style.cssText =
+    'position: relative; width: 100%; min-height: 100vh; ' +
+    'background-color: var(--bg, #1e1e1e); isolation: isolate;';
   wrapper.appendChild(fixture.nativeElement);
   document.body.appendChild(wrapper);
 
