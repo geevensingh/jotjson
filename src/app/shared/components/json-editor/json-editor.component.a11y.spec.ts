@@ -77,30 +77,30 @@ function flattenOver(foreground: Rgba, background: Rgba): Rgba {
 }
 
 describe('JsonEditorComponent .editor-loading placeholder contrast (#145)', () => {
-  let originalThemeClasses: string[];
+  // Full body-state snapshot. PreferencesService writes both classes
+  // (`theme-{dark|light|system}`) and inline `--highlight-*` properties
+  // on `body.style`. If we don't restore both, downstream specs that scan
+  // for contrast (e.g. `JsonBreadcrumbComponent (a11y)`) get confused
+  // about the page background and axe-core walks up to the Karma /
+  // Jasmine reporter chrome (`.jasmine_html-reporter { background: #eee }`)
+  // for its background fallback, producing false-positive
+  // `color-contrast` violations whose colors are NEITHER theme's tokens.
+  let originalClassName: string;
+  let originalStyleCssText: string;
   let originalStorageValue: string | null;
+  let testWrapper: HTMLDivElement | null = null;
   let suspended: Promise<typeof MonacoNS>;
   let suspendedReject!: (reason: Error) => void;
 
   const STORAGE_KEY = 'jotjson.preferences.v1';
 
-  beforeEach(async () => {
-    // Snapshot whatever theme classes were on body so we can restore them.
-    // Other specs (notably PreferencesService specs and any spec that
-    // mounts a fixture via `attachFixtureToBody`) leave stray classes
-    // that would couple this spec to suite ordering.
-    originalThemeClasses = Array.from(document.body.classList).filter((cls) =>
-      cls.startsWith('theme-'),
-    );
-    document.body.classList.remove('theme-dark', 'theme-light', 'theme-system');
-
-    // PreferencesService runs an `effect()` that writes the body class
-    // based on its own theme signal. If we just `classList.add('theme-X')`,
-    // the service's effect overwrites it on the next change-detection
-    // cycle (default theme is 'system', which resolves to 'light' on
-    // CI Linux Chromium). Seed the persisted preference so the service
-    // initializes to the theme we want; the per-test `it` block sets
-    // the matching `theme.value` below before mounting the fixture.
+  beforeEach(() => {
+    // Snapshot whatever body state was there. Other specs (notably
+    // PreferencesService specs and any spec that mounts a fixture via
+    // `attachFixtureToBody`) leave stray classes / inline custom
+    // properties; we restore exactly what was there on the way out.
+    originalClassName = document.body.className;
+    originalStyleCssText = document.body.style.cssText;
     originalStorageValue = localStorage.getItem(STORAGE_KEY);
 
     // Pin loadMonaco to a never-resolving promise so `ready()` stays
@@ -117,17 +117,34 @@ describe('JsonEditorComponent .editor-loading placeholder contrast (#145)', () =
   });
 
   afterEach(() => {
+    // Reset the test module FIRST so PreferencesService is destroyed
+    // before we restore body state. Otherwise its body-class effect can
+    // fire one more time during teardown and re-mutate body.
+    TestBed.resetTestingModule();
+
+    // Remove our wrapper (and the fixture host inside it). Use the
+    // marked wrapper so we never accidentally remove someone else's
+    // fixture if specs interleave.
+    if (testWrapper && testWrapper.parentNode) {
+      testWrapper.parentNode.removeChild(testWrapper);
+    }
+    testWrapper = null;
+
     suspendedReject(new Error('test ended; suspended Monaco loader cleaned up'));
     __resetMonacoLoaderForTesting();
+
     if (originalStorageValue === null) {
       localStorage.removeItem(STORAGE_KEY);
     } else {
       localStorage.setItem(STORAGE_KEY, originalStorageValue);
     }
-    document.body.classList.remove('theme-dark', 'theme-light', 'theme-system');
-    if (originalThemeClasses.length > 0) {
-      document.body.classList.add(...originalThemeClasses);
-    }
+
+    // Restore both body className and inline style. PreferencesService's
+    // effect sets `body.style['--highlight-*']` properties; if we only
+    // restore the className, those custom properties bleed into
+    // subsequent specs.
+    document.body.className = originalClassName;
+    document.body.style.cssText = originalStyleCssText;
   });
 
   for (const { theme, prefValue } of [
@@ -154,10 +171,16 @@ describe('JsonEditorComponent .editor-loading placeholder contrast (#145)', () =
 
       const fixture = TestBed.createComponent(JsonEditorComponent);
       fixture.componentRef.setInput('value', '{"a":1}');
-      // Mount in the live document so `getComputedStyle` resolves global
-      // tokens (`--bg`, `--mat-sys-on-surface-variant`) inherited from
-      // `<html>` / `body`.
-      document.body.appendChild(fixture.nativeElement);
+
+      // Mount in a marked wrapper so afterEach can find and remove it
+      // even if `fixture.destroy()` runs first (or fails). Mounting in
+      // the live document is required so `getComputedStyle` resolves
+      // global tokens (`--bg`, `--mat-sys-on-surface-variant`) inherited
+      // from `<html>` / `body`.
+      testWrapper = document.createElement('div');
+      testWrapper.setAttribute('data-jj-145-fixture', '');
+      testWrapper.appendChild(fixture.nativeElement);
+      document.body.appendChild(testWrapper);
       fixture.detectChanges();
 
       // Sanity-check that the body-class effect ran. The expected class
