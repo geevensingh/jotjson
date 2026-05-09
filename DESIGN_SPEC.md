@@ -2212,6 +2212,35 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.19.5**: Tree row context-menu single-option elevation
+  (v0.19.4 follow-up to the v0.19.0 Path Y overhaul). Two fixes:
+  (1) `maxDescendantDepth` now counts only **container** descendants
+  (not primitive leaves), eliminating the redundancy where a
+  collapsed container with only primitive children would offer
+  Expand all + +1 (both producing the same end state). Containers
+  whose only descendants are leaves now show only Expand all;
+  containers with N levels of nested containers show Expand all
+  plus +1..+N where +N actually reaches a collapsed container.
+  (2) Single-option flyout elevation (UX rule: never present a
+  flyout with only one option). When the `Expand >` sub-submenu
+  would have one visible item, that item renders inline within
+  Subtree with the elevated label form (e.g. "Expand all from
+  here") instead of behind another flyout. When the `Subtree >`
+  submenu would have one visible item (treating the whole Expand
+  contribution as 1), that item elevates to row level. New
+  elevated labels (`@@tree.contextMenu.highlightTree.elevated`,
+  `@@tree.contextMenu.removeTreeHighlight.elevated`,
+  `@@tree.contextMenu.expandFromHere.elevatedMenu`,
+  `@@tree.contextMenu.expandAllFromHere.elevated`,
+  `@@tree.contextMenu.expandToDepth.{1..5}.elevated`) restore the
+  scope qualifier dropped inside Subtree. When the lone elevated
+  Subtree item would duplicate the surfaced default-shortcut row
+  (e.g. only Collapse available with the surfaced row already
+  showing "Collapse from here", or only `+1` available with the
+  surfaced row showing "Expand 1 level"), the Subtree contribution
+  suppresses entirely via `'collapseSame'` / `'expandSame'`
+  sentinels in `subtreeElevatedAction`. Spec terms (Isolate,
+  Collapse siblings) preserved per DESIGN_SPEC.md S514.
 - **0.19.3**: Three small follow-ups to the v0.19.0-v0.19.2 row
   context-menu work. (1) Accessibility for the bolded default
   action: a `.sr-only` span suffix announces "; same as

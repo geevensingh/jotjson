@@ -713,6 +713,69 @@
         <jj-icon name="subtree" [size]="18" />
         <span>{{ ctxSubtreeMenuLabel }}</span>
       </button>
+    } @else if (subtreeElevatedAction(cn); as elevated) {
+      <!--
+        Single-item Subtree elevation (v0.19.4): when the Subtree
+        submenu would only contain one visible action, that action
+        is rendered directly in the row menu instead of nested
+        behind a `Subtree >` flyout. Eliminates the "open submenu
+        with only one option" UX. `'collapseSame'` and `'expandSame'`
+        sentinels suppress entirely (the action is already on the
+        surfaced default-shortcut row).
+      -->
+      @switch (elevated.kind) {
+        @case ('highlightTree') {
+          <button
+            mat-menu-item
+            type="button"
+            [matMenuTriggerFor]="highlightTreeMenu"
+            (click)="onHighlightItemClick($event, cn, true)"
+            (menuOpened)="onSwatchMenuOpened('cascade')"
+          >
+            <jj-icon name="bookmark" [size]="18" />
+            <span>{{ ctxHighlightTreeElevatedLabel }}</span>
+          </button>
+        }
+        @case ('removeTreeHighlight') {
+          <button
+            mat-menu-item
+            type="button"
+            [attr.aria-label]="removeTreeHighlightAriaLabel(cn)"
+            (click)="removeManualTreeHighlight(cn)"
+          >
+            <jj-icon name="trash" [size]="18" />
+            <span>{{ ctxRemoveTreeHighlightElevatedLabel }}</span>
+          </button>
+        }
+        @case ('collapse') {
+          <button mat-menu-item type="button" (click)="collapseFromHere(cn)">
+            <jj-icon name="collapse-subtree" [size]="18" />
+            <span>{{ ctxCollapseFromHereLabel }}</span>
+          </button>
+        }
+        @case ('isolate') {
+          <button mat-menu-item type="button" (click)="isolateRow(cn, 'single')">
+            <jj-icon name="isolate" [size]="18" />
+            <span>{{ ctxIsolateLabel }}</span>
+          </button>
+        }
+        @case ('expandSingle') {
+          <button
+            mat-menu-item
+            type="button"
+            (click)="onExpandSingleElevatedClick(cn, elevated.single)"
+          >
+            <jj-icon name="expand-subtree" [size]="18" />
+            <span>{{ expandSingleElevatedLabel(elevated.single) }}</span>
+          </button>
+        }
+        @case ('expandSubmenu') {
+          <button mat-menu-item type="button" [matMenuTriggerFor]="expandFromHereMenu">
+            <jj-icon name="expand-subtree" [size]="18" />
+            <span>{{ ctxExpandFromHereElevatedMenuLabel }}</span>
+          </button>
+        }
+      }
     }
   }
 </mat-menu>
@@ -782,10 +845,23 @@
     ) {
       <mat-divider />
     }
-    @if (showExpandFromHereMenu(cn)) {
+    @if (showExpandFromHereSubmenu(cn)) {
       <button mat-menu-item type="button" [matMenuTriggerFor]="expandFromHereMenu">
         <jj-icon name="expand-subtree" [size]="18" />
         <span>{{ ctxSubtreeExpandMenuLabel }}</span>
+      </button>
+    } @else if (expandFromHereSingleAction(cn); as single) {
+      <!--
+        Single-item Expand elevation inside Subtree (v0.19.4):
+        when the Expand sub-submenu would only contain one item,
+        that item renders inline within Subtree instead of nested
+        behind another `Expand >` flyout. Label uses the elevated
+        form (e.g. "Expand all from here") because the submenu's
+        scope is no longer carried by an "Expand" name.
+      -->
+      <button mat-menu-item type="button" (click)="onExpandSingleElevatedClick(cn, single)">
+        <jj-icon name="expand-subtree" [size]="18" />
+        <span>{{ expandSingleElevatedLabel(single) }}</span>
       </button>
     }
   }

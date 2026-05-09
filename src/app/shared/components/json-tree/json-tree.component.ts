@@ -134,6 +134,51 @@ interface ManualHighlightRows {
 }
 
 /**
+ * Discriminated metadata for the single-item elevation logic on the
+ * Subtree submenu (v0.19.4). When the Subtree submenu would only
+ * contain one visible item, the row context menu elevates that item
+ * to the row level instead of nesting it behind a `Subtree >` flyout.
+ *
+ * - `'highlightTree'`: only Highlight subtree visible. Elevated as
+ *   `Highlight subtree >` (label restored to carry the scope outside
+ *   of the Subtree submenu's name context).
+ * - `'removeTreeHighlight'`: only Remove subtree highlight.
+ * - `'collapse'`: only Collapse from here (and the surfaced row is
+ *   not already showing the same action).
+ * - `'collapseSame'`: would-be Collapse, but the surfaced shortcut
+ *   row already shows it. Suppress everything; no Subtree contribution.
+ * - `'isolate'`: only single-mode Isolate. Pair mode (showIsolatePair)
+ *   contributes 2 items so it never elevates singly.
+ * - `'expandSingle'`: the only Subtree contribution is the Expand
+ *   section, AND that section has exactly one visible item, AND that
+ *   item is not already on the surfaced shortcut. The single Expand
+ *   action also elevates past the (would-be) Expand flyout.
+ * - `'expandSame'`: same as `'collapseSame'` for the Expand-1-level
+ *   case. Suppress.
+ * - `'expandSubmenu'`: the only Subtree contribution is the Expand
+ *   section with 2+ items. The Expand flyout itself is elevated
+ *   (renders directly off the row menu instead of nested inside
+ *   Subtree).
+ */
+type SubtreeElevatedAction =
+  | { kind: 'highlightTree' }
+  | { kind: 'removeTreeHighlight' }
+  | { kind: 'collapse' }
+  | { kind: 'collapseSame' }
+  | { kind: 'isolate'; mode: 'single' }
+  | { kind: 'expandSingle'; single: ExpandSingleAction }
+  | { kind: 'expandSame' }
+  | { kind: 'expandSubmenu' };
+
+/**
+ * Discriminated metadata for the single-item elevation logic on the
+ * Expand sub-submenu (v0.19.4). When the Expand sub-submenu would
+ * only contain one visible item, that item elevates one level up
+ * (into the Subtree submenu, or further if Subtree itself elevates).
+ */
+export type ExpandSingleAction = { kind: 'expandAll' } | { kind: 'expandToDepth'; depth: number };
+
+/**
  * Escapes a value for use in a CSS attribute selector. Falls back to
  * a manual escape when the platform `CSS.escape` is unavailable
  * (older browsers / SSR).
@@ -420,6 +465,20 @@ export class JsonTreeComponent {
   readonly ctxHighlightTreeLabel = $localize`:@@tree.contextMenu.highlightTree:Highlight`;
   readonly ctxRemoveHighlightLabel = $localize`:@@tree.contextMenu.removeHighlight:Remove highlight`;
   readonly ctxRemoveTreeHighlightLabel = $localize`:@@tree.contextMenu.removeTreeHighlight:Remove highlight`;
+  // Elevated labels (v0.19.4): when a Subtree-scoped item is the
+  // sole Subtree child, it elevates to row level. The submenu's
+  // scope is no longer carried by the menu name, so the label
+  // restores the "subtree" / "from here" qualifier explicitly.
+  // Each i18n ID is new (these strings did not exist pre-v0.19.4).
+  readonly ctxHighlightTreeElevatedLabel = $localize`:@@tree.contextMenu.highlightTree.elevated:Highlight subtree`;
+  readonly ctxRemoveTreeHighlightElevatedLabel = $localize`:@@tree.contextMenu.removeTreeHighlight.elevated:Remove subtree highlight`;
+  readonly ctxExpandFromHereElevatedMenuLabel = $localize`:@@tree.contextMenu.expandFromHere.elevatedMenu:Expand from here`;
+  readonly ctxExpandAllFromHereElevatedLabel = $localize`:@@tree.contextMenu.expandAllFromHere.elevated:Expand all from here`;
+  readonly ctxExpandToDepth1ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.1.elevated:Expand 1 level from here`;
+  readonly ctxExpandToDepth2ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.2.elevated:Expand 2 levels from here`;
+  readonly ctxExpandToDepth3ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.3.elevated:Expand 3 levels from here`;
+  readonly ctxExpandToDepth4ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.4.elevated:Expand 4 levels from here`;
+  readonly ctxExpandToDepth5ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.5.elevated:Expand 5 levels from here`;
   readonly preferredHighlightLabel = $localize`:@@tree.highlight.swatch.preferred:Preferred`;
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
@@ -2465,37 +2524,204 @@ export class JsonTreeComponent {
   }
 
   /**
-   * True iff the `Subtree >` submenu should render in the row menu.
-   * Path Y groups all subtree-affecting actions (highlight subtree,
-   * collapse from here, isolate variants, expand from here >) under
-   * one named submenu. The trigger renders when at least one child
-   * predicate is true.
+   * True iff the `Subtree >` submenu trigger should render in the
+   * row menu. Path Y groups all subtree-affecting actions
+   * (highlight subtree, collapse from here, isolate variants,
+   * expand from here >) under one named submenu. The trigger
+   * renders when the submenu would have **2 or more** visible
+   * items; a single-item Subtree elevates the lone item directly
+   * into the row menu (`subtreeElevatedAction`). Zero items hide
+   * everything.
+   *
+   * Edge case (v0.19.4): when the only Subtree item would be the
+   * same action as the surfaced default-shortcut row (e.g. an
+   * expanded container has no isolate / highlight conditions met
+   * and Subtree would only contain `Collapse`, while the surfaced
+   * row already shows `Collapse from here`), elevation would
+   * produce two adjacent identical items. We suppress in that
+   * case via `subtreeElevatedAction()` returning `'collapseSame'`,
+   * and `showSubtreeMenu` returns false.
    */
   showSubtreeMenu(node: TreeNode): boolean {
-    return (
-      this.showHighlightTree(node) ||
-      this.showRemoveTreeHighlight(node) ||
-      this.showCollapse(node) ||
-      this.showIsolateSingle(node) ||
-      this.showIsolatePair(node) ||
-      this.showExpandFromHereMenu(node)
-    );
+    return this.subtreeItemCount(node) >= 2;
   }
 
   /**
-   * True iff the `Expand from here >` sub-submenu (inside Subtree >)
-   * should render. Rolls up the existing per-depth predicates plus
-   * `Expand all from here`.
+   * When the Subtree submenu would have exactly one visible item,
+   * returns metadata for elevating that item to the row menu;
+   * otherwise null. The row template uses this signal to render
+   * the elevated action flat (no Subtree > trigger).
+   *
+   * Returns `'collapseSame'` as a sentinel when the lone Subtree
+   * action is `Collapse` AND the surfaced default-shortcut row is
+   * already `Collapse from here` -- in that case the row menu
+   * shouldn't render anything (the action is already accessible
+   * via the surfaced row), so the template hides Subtree entirely.
+   */
+  subtreeElevatedAction(node: TreeNode): SubtreeElevatedAction | null {
+    if (this.subtreeItemCount(node) !== 1) return null;
+    if (this.showHighlightTree(node)) {
+      return { kind: 'highlightTree' };
+    }
+    if (this.showRemoveTreeHighlight(node)) {
+      return { kind: 'removeTreeHighlight' };
+    }
+    if (this.showIsolateSingle(node)) {
+      return { kind: 'isolate', mode: 'single' };
+    }
+    if (this.showCollapse(node)) {
+      // Suppress when the surfaced shortcut already exposes the
+      // same Collapse action (avoids duplicate adjacent items).
+      if (this.defaultActionKind() === 'collapseRow') {
+        return { kind: 'collapseSame' };
+      }
+      return { kind: 'collapse' };
+    }
+    if (this.showExpandFromHereMenu(node)) {
+      // The whole Expand contribution is the single Subtree item.
+      // It either elevates (single Expand action) or stays a
+      // flyout (multiple Expand actions), but either way it is
+      // the lone Subtree item.
+      const expandSingle = this.expandFromHereSingleAction(node);
+      if (expandSingle) {
+        // Suppress when the elevated single Expand action is the
+        // same as the surfaced shortcut (e.g. only `+1` available
+        // on a collapsed container, and surfaced row is `Expand
+        // 1 level`).
+        if (
+          expandSingle.kind === 'expandToDepth' &&
+          expandSingle.depth === 1 &&
+          this.defaultActionKind() === 'expandRow'
+        ) {
+          return { kind: 'expandSame' };
+        }
+        return { kind: 'expandSingle', single: expandSingle };
+      }
+      // Multiple Expand options -- elevate the whole Expand
+      // submenu trigger to row level.
+      return { kind: 'expandSubmenu' };
+    }
+    return null;
+  }
+
+  /**
+   * Number of visible items in the `Subtree >` submenu. Each
+   * top-level submenu child counts as 1 item, including the
+   * `Expand >` sub-submenu (which counts as 1 regardless of how
+   * many depths it contains).
+   *
+   * `showIsolatePair` contributes 2 items (Isolate + Collapse
+   * siblings); the others are 1 each. Used to drive
+   * single-option elevation in v0.19.4.
+   */
+  private subtreeItemCount(node: TreeNode): number {
+    let count = 0;
+    if (this.showHighlightTree(node)) count += 1;
+    if (this.showRemoveTreeHighlight(node)) count += 1;
+    if (this.showCollapse(node)) count += 1;
+    if (this.showIsolateSingle(node)) count += 1;
+    if (this.showIsolatePair(node)) count += 2; // Isolate + Collapse siblings
+    if (this.showExpandFromHereMenu(node)) count += 1;
+    return count;
+  }
+
+  /**
+   * True iff the `Expand >` sub-submenu (inside Subtree >)
+   * should render as a flyout. Renders when there are 2 or more
+   * visible Expand items; a single Expand item elevates to the
+   * Subtree level via `expandFromHereSingleAction`. Zero items
+   * means no Expand contribution at all.
+   */
+  showExpandFromHereSubmenu(node: TreeNode): boolean {
+    return this.expandFromHereItemCount(node) >= 2;
+  }
+
+  /**
+   * True iff there is any Expand contribution (>= 1 visible item).
+   * The Expand "section" exists in the menu hierarchy; whether it
+   * renders as a flyout, an elevated-single, or contributes to a
+   * higher elevation is decided by `subtreeElevatedAction` and the
+   * template.
    */
   showExpandFromHereMenu(node: TreeNode): boolean {
-    return (
-      this.showExpandAllFromHere(node) ||
-      this.showExpandToDepth(node, 1) ||
-      this.showExpandToDepth(node, 2) ||
-      this.showExpandToDepth(node, 3) ||
-      this.showExpandToDepth(node, 4) ||
-      this.showExpandToDepth(node, 5)
-    );
+    return this.expandFromHereItemCount(node) >= 1;
+  }
+
+  /**
+   * When the Expand sub-submenu would have exactly one visible
+   * item, returns metadata for elevating that item; otherwise
+   * null. Cases:
+   *
+   *   - `{ kind: 'expandAll' }`: only Expand all is visible (e.g.
+   *     fully-shallow subtree with all leaves; depth +N entries
+   *     hide because `maxDescendantDepth === 0`, but the clicked
+   *     container itself is collapsed so Expand all is meaningful).
+   *   - `{ kind: 'expandToDepth', depth: N }`: only one specific
+   *     depth +N is visible (e.g. partial-expand state where
+   *     +1 is hidden because top-level is expanded, only +2 has
+   *     a collapsed container reachable, and +3..+5 exceed
+   *     subtree depth).
+   *
+   * Returns null when 0 or >= 2 items are visible.
+   */
+  expandFromHereSingleAction(node: TreeNode): ExpandSingleAction | null {
+    if (this.expandFromHereItemCount(node) !== 1) return null;
+    if (this.showExpandAllFromHere(node)) {
+      return { kind: 'expandAll' };
+    }
+    for (let depth = 1; depth <= 5; depth++) {
+      if (this.showExpandToDepth(node, depth)) {
+        return { kind: 'expandToDepth', depth };
+      }
+    }
+    return null;
+  }
+
+  private expandFromHereItemCount(node: TreeNode): number {
+    let count = 0;
+    if (this.showExpandAllFromHere(node)) count += 1;
+    for (let depth = 1; depth <= 5; depth++) {
+      if (this.showExpandToDepth(node, depth)) count += 1;
+    }
+    return count;
+  }
+
+  /**
+   * Maps an `ExpandSingleAction` to its elevated label (the
+   * row-level form, where the menu name no longer carries the
+   * "from here" scope and the label has to restore it).
+   */
+  expandSingleElevatedLabel(action: ExpandSingleAction): string {
+    if (action.kind === 'expandAll') {
+      return this.ctxExpandAllFromHereElevatedLabel;
+    }
+    switch (action.depth) {
+      case 1:
+        return this.ctxExpandToDepth1ElevatedLabel;
+      case 2:
+        return this.ctxExpandToDepth2ElevatedLabel;
+      case 3:
+        return this.ctxExpandToDepth3ElevatedLabel;
+      case 4:
+        return this.ctxExpandToDepth4ElevatedLabel;
+      case 5:
+        return this.ctxExpandToDepth5ElevatedLabel;
+      default:
+        return this.ctxExpandAllFromHereElevatedLabel;
+    }
+  }
+
+  /**
+   * Click handler for an elevated Expand single action (when the
+   * Expand sub-submenu would have only one item, that item renders
+   * directly at the Subtree or row level).
+   */
+  onExpandSingleElevatedClick(node: TreeNode, action: ExpandSingleAction): void {
+    if (action.kind === 'expandAll') {
+      this.expandAllFromHere(node);
+      return;
+    }
+    this.expandToDepthFromHere(node, action.depth);
   }
 
   /**
@@ -2863,23 +3089,31 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Length of the longest path from `node` down to any descendant,
-   * counting edges. Drives the cap on visible "Expand to depth +N"
-   * entries so we never offer an `+N` deeper than the subtree
-   * actually goes.
+   * Length of the longest path from `node` down to any descendant
+   * **container** (not counting primitive leaves). Drives the cap on
+   * visible "Expand to depth +N" entries so we never offer an `+N`
+   * deeper than the subtree actually has containers to expand.
    *
-   * Counts every descendant -- containers AND primitive leaves --
-   * because the deepest revealed thing might be a primitive under
-   * the deepest container, and `+(maxContainerDepth + 1)` is needed
-   * to actually reveal it.
+   * Counts only containers because primitives render as soon as
+   * their parent container is expanded -- you never need an extra
+   * `+1` to "reveal" a leaf, so its depth doesn't extend the
+   * expand-actionable subtree depth. Earlier this method counted
+   * all descendants, which produced a redundant `+N` entry on
+   * containers whose only descendants were leaves
+   * (e.g. `{ a: 1 }` clicked on `outer` showed Expand all + +1
+   * + +N up to leaf depth, with multiple entries doing the same
+   * thing as Expand all). Fixed in v0.19.4.
    *
-   * Returns 0 when `node` has no children.
+   * Returns 0 when `node` has no container descendants (i.e. all
+   * children are primitive leaves).
    */
   private maxDescendantDepth(node: TreeNode): number {
     let max = 0;
     const walk = (c: TreeNode, d: number): void => {
-      if (d > max) max = d;
       if (!c.children?.length) return;
+      // c is a container; record its depth (relative to the original
+      // `node`, which is at depth 0).
+      if (d > max) max = d;
       for (const child of c.children) walk(child, d + 1);
     };
     walk(node, 0);
