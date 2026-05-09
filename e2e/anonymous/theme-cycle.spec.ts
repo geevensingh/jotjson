@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { assertNoSeriousA11yViolations } from '../util/a11y';
 
 /**
- * Anonymous flow: cycle the theme via the toolbar button on the home page
+ * Anonymous flow: change the theme via the toolbar button on the home page
  * and confirm the selection persists across reload.
  *
  * The /profile page is behind authGuard, so it is not reachable for
@@ -19,12 +19,30 @@ import { assertNoSeriousA11yViolations } from '../util/a11y';
  *  - No serious/critical axe-core violations on the final loaded state
  *    in dark theme. paste-and-reload.spec.ts covers the light-theme case.
  *
- * The spec lands on `theme-dark` deterministically by clicking the cycle
- * button up to three times, regardless of starting state - this avoids
- * coupling to the default-theme assumption (which can drift over time
- * with preference-default changes).
+ * Determinism (per #143): the spec seeds `theme: 'light'` into
+ * localStorage via `addInitScript` so the starting state is fully
+ * controlled, then clicks the toggle once (light -> dark) and uses
+ * Playwright's auto-retrying `toHaveClass` matcher to wait for the
+ * Angular `effect()` in PreferencesService to write the body class.
+ *
+ * The previous version's read-then-click loop raced against the
+ * body-class effect, causing rare CI failures where stale class reads
+ * cycled the test past `theme-dark` to a final `theme-light` body. The
+ * full `light -> dark -> system -> light` cycle remains covered by
+ * `home.component.spec.ts` ("onToggleTheme cycles light -> dark ->
+ * system -> light"), so the e2e doesn't need to validate the cycle.
  */
-test('theme cycle persists selection across reload', async ({ page }) => {
+test('theme toggle persists selection across reload', async ({ page }) => {
+  // Seed an explicit 'light' theme on first navigation only. The
+  // conditional guard ensures `page.reload()` doesn't clobber the
+  // user's mid-test 'dark' choice (localStorage already holds the new
+  // value at reload time).
+  await page.addInitScript(() => {
+    if (!window.localStorage.getItem('jotjson.preferences.v1')) {
+      window.localStorage.setItem('jotjson.preferences.v1', JSON.stringify({ theme: 'light' }));
+    }
+  });
+
   await page.goto('/');
 
   const themeButton = page.getByRole('button', {
@@ -32,17 +50,28 @@ test('theme cycle persists selection across reload', async ({ page }) => {
   });
   await expect(themeButton).toBeVisible();
 
-  const body = page.locator('body');
+  // Body should start in light theme (from seeded localStorage).
+  await expect(page.locator('body')).toHaveClass(/\btheme-light\b/);
 
-  for (let i = 0; i < 3; i++) {
-    const cls = (await body.getAttribute('class')) ?? '';
-    if (cls.includes('theme-dark')) break;
-    await themeButton.click();
-  }
-  await expect(body).toHaveClass(/\btheme-dark\b/);
+  // Single click: light -> dark. The auto-retrying `toHaveClass`
+  // matcher waits up to expect.timeout (10s) for the Angular effect
+  // to flush the body class.
+  await themeButton.click();
+  await expect(page.locator('body')).toHaveClass(/\btheme-dark\b/);
 
+  // Reload should preserve the dark selection from localStorage.
   await page.reload();
   await expect(page.locator('body')).toHaveClass(/\btheme-dark\b/);
+
+  // Wait for Monaco to finish loading before running the a11y gate.
+  // The lazy-loaded `<jj-json-editor>` shows a `.editor-loading`
+  // placeholder until Monaco mounts; axe runs on whatever DOM is
+  // present at the moment of the assertion, so without this wait we
+  // can race against Monaco-loading and surface a known unrelated
+  // contrast violation on the placeholder text in dark mode (#145).
+  // Aligns with `e2e/util/a11y.ts`'s documented usage: "Call ...
+  // after the DOM has settled".
+  await expect(page.locator('.monaco-editor').first()).toBeVisible({ timeout: 30_000 });
 
   await assertNoSeriousA11yViolations(page);
 });
