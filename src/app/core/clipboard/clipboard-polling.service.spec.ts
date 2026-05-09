@@ -142,6 +142,31 @@ describe('ClipboardPollingService', () => {
     restore = () => {};
   });
 
+  // FIX FOR #140: pin document.visibilityState='visible' for every test in
+  // this file. ClipboardPollingService.startPolling() early-returns when
+  // visibility is 'hidden' (intentional production behavior to save CPU when
+  // the tab is backgrounded), so under headless Chrome on CI -- which can
+  // transiently report 'hidden' -- the constructor's startPolling() call
+  // becomes a no-op and pollHandle stays null, leaving the test's
+  // clock.tick() with no interval to fire. Pinning visibility here mirrors
+  // the real-user condition (page is visible while you're using JotJSON)
+  // and isolates the suite from headless Chrome's visibility flakiness.
+  let visibilityDescriptor: PropertyDescriptor | undefined;
+  beforeEach(() => {
+    visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+  });
+  afterEach(() => {
+    if (visibilityDescriptor) {
+      Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+    } else {
+      delete (document as unknown as { visibilityState?: unknown }).visibilityState;
+    }
+  });
+
   function createService(opts: {
     readText?: jasmine.Spy;
     permissionsQuery?: jasmine.Spy | null;
