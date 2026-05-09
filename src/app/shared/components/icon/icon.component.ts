@@ -51,7 +51,12 @@ export type JjIconName =
   | 'bookmark'
   | 'extract'
   | 'decoded'
-  | 'wand';
+  | 'wand'
+  | 'key'
+  | 'collapse-subtree'
+  | 'expand-subtree'
+  | 'isolate'
+  | 'subtree';
 
 export type JjIconSize = number | 'auto';
 
@@ -429,6 +434,45 @@ export type JjIconSize = number | 'auto';
           <path d="M5 6 L7 6" />
           <path d="M19 14 L19 16" />
           <path d="M18 15 L20 15" />
+        }
+        @case ('key') {
+          <!-- Bow circle on the left + horizontal shaft + 2 teeth on the right. -->
+          <circle cx="7" cy="12" r="3.5" />
+          <path d="M10.5 12h10.5" />
+          <path d="M16 12v3" />
+          <path d="M19 12v2.5" />
+        }
+        @case ('collapse-subtree') {
+          <!-- Top bar (the parent row) + 2 upward chevrons (children
+               pulled back into the parent). Pairs visually with
+               expand-subtree (chevrons flipped). -->
+          <path d="M4 6h16" />
+          <path d="M8 14l4-4 4 4" />
+          <path d="M8 20l4-4 4 4" />
+        }
+        @case ('expand-subtree') {
+          <!-- Top bar + 2 downward chevrons (children fanning out
+               from the parent row). -->
+          <path d="M4 6h16" />
+          <path d="M8 10l4 4 4-4" />
+          <path d="M8 16l4 4 4-4" />
+        }
+        @case ('isolate') {
+          <!-- Highlighted middle row, faded surrounding rows: the
+               isolated row stays visible while peers dim. -->
+          <path d="M5 5h14" stroke-opacity="0.35" />
+          <rect x="3" y="9" width="18" height="6" rx="1.5" />
+          <path d="M5 19h14" stroke-opacity="0.35" />
+        }
+        @case ('subtree') {
+          <!-- Parent dot on the left with two child dots on the
+               right, connected by an L-shaped branch. Reads as
+               this node and its descendants. -->
+          <circle cx="6" cy="6" r="1.6" />
+          <circle cx="18" cy="14" r="1.6" />
+          <circle cx="18" cy="20" r="1.6" />
+          <path d="M6 7.6V18a1.5 1.5 0 0 0 1.5 1.5H16.4" />
+          <path d="M7.5 13.5h8.9" />
         }
       }
     </svg>

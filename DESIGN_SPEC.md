@@ -508,8 +508,8 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Copy key** - copies the row's key (object member name or array index). Hidden on the root.
     - **Copy value** - copies the row's value: raw text for `string`, stringified for `number`/`boolean`, the literal `null` for null, and pretty-printed (2-space, multi-line) JSON for objects/arrays.
     - **Copy path** - copies the row's path; respects `treePathRoot`.
-    - **Search by key** - sets the search to the key text, scope to `keys`, regex mode off, and the value-type filter to `all`. The clicked row becomes the active hit when present in the result set.
-    - **Search by value** - same wiring, scope `values`. Hidden on `null` and on container rows. Both search items are also hidden in `embeddedMode` (the rule-editor live preview has no search bar).
+    - **Find by key** - sets the search to the key text, scope to `keys`, regex mode off, and the value-type filter to `all`. The clicked row becomes the active hit when present in the result set.
+    - **Find by value** - same wiring, scope `values`. Hidden on `null` and on container rows. Both find items are also hidden in `embeddedMode` (the rule-editor live preview has no find bar).
     - **Collapse** - hides itself when the row is already collapsed.
     - **Isolate** / **Collapse siblings** - smart-visibility action(s) that fold the tree to focus on the clicked branch. Both leave the ancestor chain (root..clicked row) and the clicked row's own subtree expansion state untouched. Define `narrowSet` = visibly-expanded peers under the clicked row's immediate parent; `widerSet` = visibly-expanded peers at every higher ancestor (grandparent up to root). **Isolate** collapses `narrowSet U widerSet`; **Collapse siblings** collapses `narrowSet` only. Hidden expanded state under newly-collapsed off-chain branches is preserved (standard CDK FlatTree behavior). Visibility (when the clicked row resolves to a current, non-root node): show neither when both sets are empty; show single **Isolate** when `widerSet` is empty (wide and narrow produce identical end states) or when `narrowSet` is empty (narrow would be a no-op and wide is the only meaningful action); show **both Collapse siblings and Isolate** only when both sets are non-empty (the two actions produce distinct end states). Right-clicking the root row never offers Isolate items, and the actions are no-ops if the path no longer resolves in the current model.
     - **Expand all from here** - hides itself when every container in the subtree is already expanded.
@@ -574,7 +574,7 @@ The primary page. Available to **all users** (anonymous + registered).
   - **Double-click a row** behavior splits by row type (issue #109):
     - **Primitive (leaf) rows** (string / number / boolean / null): copy the row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text). Alt+double-click wraps the value as a JSON-string literal (DESIGN_SPEC.md §443). Emits the `tree.row.doubleClickCopyValue` telemetry event with `{ escaped: boolean }`.
     - **Container rows with children** (`object` / `array`): toggle the row's expansion state (expand if collapsed, collapse if expanded). Alt is ignored on container dblclick; right-click "Copy value" remains the way to copy a container's pretty-printed JSON. Emits the `tree.row.doubleClickToggle` telemetry event with `{ action: 'expand' | 'collapse' }` (post-toggle state).
-    - **Empty containers** (`{}` / `[]`): no-op (no copy, no toggle, no telemetry). They render via the leaf template since `hasChild` is false, but the dblclick handler short-circuits before reaching the copy branch so the issue #109 wording ("objects and arrays should expand/collapse instead of copying") still holds.
+    - **Empty containers** (`{}` / `[]`): copy the literal `{}` or `[]` to the clipboard, routing through the same `copyValue` path as primitives (raw text, with Alt wrapping as a JSON-string literal per §443). They render via the leaf template since `hasChild` is false, so they have no expansion to toggle. The tree-menu overhaul relaxed issue #109's "objects and arrays should expand/collapse instead of copying" wording for this edge case, where there is no expand/collapse to do; the surfaced default-shortcut row in the right-click menu also bolds "Copy value" for empty containers to match. Emits the `tree.row.doubleClickCopyValue` telemetry event.
     - In all cases the dblclick path excludes the kebab pill and twisty toggle the same way single-click selection does, so clicking those buttons twice never triggers the row dblclick handler.
   - **Keyboard copy (Ctrl+C / Cmd+C with tree focus)**: when a tree row has DOM focus, pressing `Ctrl+C` (Windows / Linux) or `Cmd+C` (macOS) copies that row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text for primitives, pretty-printed JSON for containers). Unlike dblclick, the keyboard shortcut works on **every row, including empty containers** (`{}` / `[]`) - the user explicitly asked for "parent or leaf" parity, and keyboard copy has no expand/collapse alternative meaning to disambiguate. Expansion state is never altered. Modifier matching is strict: `Ctrl+Shift+C` (devtools) and `Ctrl+Alt+C` (AltGr on international layouts) are intentional no-ops; Alt is not honored, so this path always emits the raw (un-escaped) variant. Emits the `tree.keyboard.copyValue` telemetry event with `{ escaped: false }`.
   - **Search highlight** - a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
@@ -2212,6 +2212,37 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.19.0**: Tree row context-menu overhaul (Path Y). The right-click
+  menu rewires into five sections (Copy / Transform / Mark / Find /
+  Reshape) with a state-dependent surfaced default-shortcut row above
+  a new `Subtree` submenu that contains all subtree-affecting actions
+  (Highlight subtree, Collapse, Isolate, Collapse siblings, and an
+  `Expand` sub-submenu with `+1..+5 levels` and `All`). The bolded
+  default item now matches double-click semantics: primitives bold
+  Copy value, expanded containers surface "Collapse from here",
+  collapsed containers surface "Expand 1 level", and empty containers
+  bold Copy value (issue #109's "expand/collapse instead of copying"
+  wording is relaxed for the empty-container edge case where there
+  is no expand/collapse to do). Vocabulary changes: "Search by ..."
+  -> "Find by ..." (rename propagates to the toolbar tree search
+  bar, history search, and profile preferences "Search" group);
+  "Highlight tree" -> "Highlight" (inside the Subtree submenu, where
+  the submenu name carries the scope); "Collapse" -> "Collapse from
+  here". Spec terms (Isolate, Collapse siblings, Expand to depth +N
+  per S516) preserved verbatim. Non-recursive collapse is now the
+  single collapse action everywhere -- the earlier recursive
+  `collapseFromHere` walk was deleted because the visible outcome
+  matches single-row collapse and CDK FlatTree preserves descendant
+  state across collapse/re-expand cycles. The icon registry gains
+  five new SVGs (`key`, `collapse-subtree`, `expand-subtree`,
+  `isolate`, `subtree`) and every top-level row in the row menu now
+  renders a leading icon. Six new telemetry events ship under
+  `tree.contextMenu.*` (subtreeOpened, highlight, highlightSubtree,
+  extract, decodeShow, decodeHide); existing collapse / expandToDepth
+  / expandAllFromHere events gain a `source: 'top' | 'submenu'`
+  property to disambiguate the surfaced shortcut from the in-Subtree
+  duplicate. i18n message IDs and existing telemetry IDs are
+  preserved verbatim per the stability pledge in AGENTS.md S4.
 - **0.18.2**: M7u prose-preserving paste-banner extraction - the
   toolbar Paste, native Monaco Ctrl+V, and `.txt`/`.log` upload
   paths now produce the same prose-preserving output shape as the

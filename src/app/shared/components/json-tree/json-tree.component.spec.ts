@@ -2065,21 +2065,78 @@ describe('JsonTreeComponent', () => {
       return item;
     }
 
-    async function openHighlightFlyout(path: string, label: string): Promise<HTMLElement> {
+    /**
+     * Find a menu item by label text within a specific overlay panel.
+     * Used to disambiguate items whose label appears in multiple
+     * panels (e.g., "Highlight" appears at top-level AND inside the
+     * Subtree submenu after the Path Y overhaul).
+     */
+    function panelItemContaining(panel: HTMLElement, label: string): HTMLButtonElement {
+      const item = Array.from(
+        panel.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      ).find((menuItem) => (menuItem.textContent ?? '').trim().includes(label));
+      if (!item) {
+        throw new Error(`No menu item found for ${label} in panel`);
+      }
+      return item;
+    }
+
+    /**
+     * Open the Subtree > submenu within the currently-open row menu.
+     * Caller must have already opened the row menu (e.g., via
+     * `openMenuFor`). Returns the just-opened subtree submenu panel.
+     */
+    async function openSubtreeSubmenu(): Promise<HTMLElement> {
+      const trigger = menuItemContaining(cmp.ctxSubtreeMenuLabel);
+      // MatMenu submenu triggers open on hover (mouseenter) per Material
+      // convention. Click would also dismiss the row menu, which we don't
+      // want here.
+      trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+      const panels = Array.from(document.body.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'));
+      if (panels.length < 2) {
+        throw new Error(
+          `Expected at least 2 menu panels after opening Subtree; found ${panels.length}`,
+        );
+      }
+      return panels[panels.length - 1]!;
+    }
+
+    async function openHighlightFlyout(
+      path: string,
+      label: string,
+      scope: 'row' | 'subtree' = 'row',
+    ): Promise<HTMLElement> {
       await openMenuFor(path);
-      const item = menuItemContaining(label);
+      // The "Highlight" label appears in two panels after the Path Y
+      // overhaul: top-level (single-row scope) and inside Subtree >
+      // (subtree scope). Caller must specify which scope to navigate
+      // to so we can pick the right panel before searching for the
+      // trigger item.
+      let parentPanel: HTMLElement;
+      if (scope === 'subtree') {
+        parentPanel = await openSubtreeSubmenu();
+      } else {
+        const panels = Array.from(
+          document.body.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'),
+        );
+        parentPanel = panels[0]!;
+      }
+      const item = panelItemContaining(parentPanel, label);
       // Open the swatch flyout via Material's hover-to-open submenu path.
       // We deliberately avoid `item.click()` here because clicking the
-      // parent "Highlight" / "Highlight tree" item is now a meaningful
-      // user gesture (applies the preferred color) and would skew the
-      // emit-count assertions in tests that exercise the swatch path.
+      // parent "Highlight" item is now a meaningful user gesture
+      // (applies the preferred color) and would skew the emit-count
+      // assertions in tests that exercise the swatch path.
       item.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
       fixture.detectChanges();
       await Promise.resolve();
       fixture.detectChanges();
       const flyouts = Array.from(document.body.querySelectorAll<HTMLElement>('.highlight-flyout'));
       const flyout = flyouts[flyouts.length - 1];
-      expect(flyout).withContext(`opened flyout for ${label}`).toBeTruthy();
+      expect(flyout).withContext(`opened flyout for ${label} (${scope})`).toBeTruthy();
       return flyout as HTMLElement;
     }
 
@@ -2213,7 +2270,7 @@ describe('JsonTreeComponent', () => {
         prefs.update({ theme: 'light' });
         fixture.detectChanges();
         const events = captureHighlightChanges();
-        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel);
+        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel, 'subtree');
 
         flyout.querySelector<HTMLButtonElement>('[aria-label="Cyan #b3e5fc"]')!.click();
         fixture.detectChanges();
@@ -2317,7 +2374,11 @@ describe('JsonTreeComponent', () => {
 
         cmp.applyManualHighlight(node, false, '#ff0000');
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.apply', {
+        // Phase 4: applyManualHighlight now also fires the
+        // counts-only `tree.contextMenu.highlight` /
+        // `highlightSubtree` marker, so we assert tree.highlight.apply
+        // was emitted (with full props) without forcing single-call.
+        expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
           kind: 'single',
           bucket: 'red',
           replacedExisting: 'false',
@@ -2332,7 +2393,7 @@ describe('JsonTreeComponent', () => {
 
         cmp.applyManualHighlight(node, true, '#0000ff');
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.apply', {
+        expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
           kind: 'cascade',
           bucket: 'blue',
           replacedExisting: 'true',
@@ -2452,8 +2513,12 @@ describe('JsonTreeComponent', () => {
         enableHighlightEditing();
         setHighlights([{ path: '$.parent', color: '#7e6500', cascade: true }]);
         await openMenuFor('$.parent.child');
-
-        const item = menuItemContaining(cmp.ctxRemoveTreeHighlightLabel);
+        // After Path Y, the "Remove tree highlight" affordance lives
+        // inside the Subtree > submenu (where it's labeled simply
+        // "Remove highlight" since the submenu name carries the
+        // subtree scope). Navigate there before reading the item.
+        const subtreePanel = await openSubtreeSubmenu();
+        const item = panelItemContaining(subtreePanel, cmp.ctxRemoveTreeHighlightLabel);
 
         expect(item.getAttribute('aria-label')).toContain('$.parent');
       });
@@ -2497,7 +2562,7 @@ describe('JsonTreeComponent', () => {
         enableHighlightEditing();
         prefs.update({ theme: 'light' });
         fixture.detectChanges();
-        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel);
+        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel, 'subtree');
 
         flyout.querySelector<HTMLButtonElement>('[aria-label="Cyan #b3e5fc"]')!.click();
         await flushMenuClose();
@@ -2557,8 +2622,12 @@ describe('JsonTreeComponent', () => {
         setPreferredHighlightColor('#abcdef');
         const events = captureHighlightChanges();
         await openMenuFor('$.parent');
-
-        const item = menuItemContaining(cmp.ctxHighlightTreeLabel);
+        // After Path Y, the subtree-scope Highlight item lives inside
+        // the Subtree > submenu (and is labeled simply "Highlight"
+        // there, identical to the top-level single-row item). Open
+        // the Subtree panel and pick the item from there.
+        const subtreePanel = await openSubtreeSubmenu();
+        const item = panelItemContaining(subtreePanel, cmp.ctxHighlightTreeLabel);
         item.click();
         await flushMenuClose();
 
@@ -4614,6 +4683,34 @@ describe('JsonTreeComponent', () => {
       throw new Error(`No node at path ${path}`);
     }
 
+    /**
+     * Open the row menu for `path` via its kebab button. Inlined in
+     * existing M7q `rendering` tests; lifted here to keep new
+     * Path Y tests below from re-implementing the same kebab-click +
+     * detectChanges + microtask-await dance.
+     */
+    async function openMenuFor(path: string): Promise<void> {
+      const kebab = (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${path}"] .tree-kebab-pill`,
+      ) as HTMLButtonElement | null;
+      expect(kebab).withContext(`found a kebab for ${path}`).toBeTruthy();
+      kebab!.click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    /** Find the FIRST visible menu item by label substring, across all open panels. */
+    function menuItemContaining(label: string): HTMLButtonElement {
+      const item = Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      ).find((menuItem) => (menuItem.textContent ?? '').trim().includes(label));
+      if (!item) {
+        throw new Error(`No menu item found for ${label}`);
+      }
+      return item;
+    }
+
     function withCtxClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
@@ -4987,7 +5084,7 @@ describe('JsonTreeComponent', () => {
       });
     });
 
-    describe('searchByKey', () => {
+    describe('findByKey', () => {
       it('sets scope=keys, regex=false, valueType=all and queries the segment', async () => {
         await createWith({ alpha: 1, beta: 2 });
         prefs.update({
@@ -4998,7 +5095,7 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.alpha');
-        cmp.searchByKey(node);
+        cmp.findByKey(node);
         expect(prefs.prefs().searchScope).toBe('keys');
         expect(prefs.prefs().searchRegexMode).toBe(false);
         expect(prefs.prefs().searchValueType).toBe('all');
@@ -5010,7 +5107,7 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.alphabet');
-        cmp.searchByKey(node);
+        cmp.findByKey(node);
         await Promise.resolve();
         await Promise.resolve();
         const idx = cmp.activeHitIndex();
@@ -5033,7 +5130,7 @@ describe('JsonTreeComponent', () => {
         // want the inverse - just verify by calling searchByKey with a
         // node whose key doesn't match the existing query.
         const node = nodeAt('$.alpha');
-        cmp.searchByKey(node);
+        cmp.findByKey(node);
         await Promise.resolve();
         await Promise.resolve();
         // After searchByKey on $.alpha, paths = [$.alpha]; activeHit = 0.
@@ -5045,19 +5142,19 @@ describe('JsonTreeComponent', () => {
       it('does nothing on the root (no segment)', async () => {
         await createWith({ alpha: 1 });
         prefs.update({ searchScope: 'values' });
-        cmp.searchByKey(nodeAt('$'));
+        cmp.findByKey(nodeAt('$'));
         // unchanged
         expect(prefs.prefs().searchScope).toBe('values');
       });
     });
 
-    describe('searchByValue', () => {
+    describe('findByValue', () => {
       it('sets scope=values, queries the value, and elevates the clicked row', async () => {
         await createWith({ a: 'needle', b: 'haystack', c: 'needle' });
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.c');
-        cmp.searchByValue(node);
+        cmp.findByValue(node);
         await Promise.resolve();
         await Promise.resolve();
         expect(prefs.prefs().searchScope).toBe('values');
@@ -5073,7 +5170,7 @@ describe('JsonTreeComponent', () => {
         await createWith({ a: 'with "quotes"' });
         cmp.expandAll();
         fixture.detectChanges();
-        cmp.searchByValue(nodeAt('$.a'));
+        cmp.findByValue(nodeAt('$.a'));
         expect(cmp.search()).toBe('with "quotes"');
       });
 
@@ -5082,16 +5179,23 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         prefs.update({ searchScope: 'keys' });
-        cmp.searchByValue(nodeAt('$.obj'));
-        cmp.searchByValue(nodeAt('$.arr'));
-        cmp.searchByValue(nodeAt('$.blank'));
+        cmp.findByValue(nodeAt('$.obj'));
+        cmp.findByValue(nodeAt('$.arr'));
+        cmp.findByValue(nodeAt('$.blank'));
         expect(prefs.prefs().searchScope).toBe('keys');
         expect(cmp.search()).toBe('');
       });
     });
 
     describe('collapseFromHere', () => {
-      it('collapses the clicked container and all expanded descendants', async () => {
+      it("collapses the clicked container without clearing descendants' state", async () => {
+        // Path Y: collapseFromHere is now non-recursive (single-row).
+        // CDK FlatTree preserves descendants' expansion state across
+        // a parent collapse/expand cycle, so re-expanding `outer`
+        // restores `mid` to expanded. The recursive walk that the
+        // earlier implementation did was deleted to keep "one way to
+        // collapse" and avoid divergent behavior between dblclick
+        // and the menu.
         await createWith({ outer: { mid: { inner: 1 } } });
         cmp.expandAll();
         fixture.detectChanges();
@@ -5100,8 +5204,13 @@ describe('JsonTreeComponent', () => {
         expect(cmp.treeControl.isExpanded(outer)).toBe(true);
         expect(cmp.treeControl.isExpanded(mid)).toBe(true);
         cmp.collapseFromHere(outer);
-        expect(cmp.treeControl.isExpanded(outer)).toBe(false);
-        expect(cmp.treeControl.isExpanded(mid)).toBe(false);
+        expect(cmp.treeControl.isExpanded(outer)).withContext('clicked row collapses').toBe(false);
+        // mid stays in the expansionModel because we only collapsed
+        // outer; CDK preserves its state. Re-expanding outer would
+        // make mid visible again.
+        expect(cmp.treeControl.isExpanded(mid))
+          .withContext("descendant's expansion state preserved")
+          .toBe(true);
       });
     });
 
@@ -5373,24 +5482,24 @@ describe('JsonTreeComponent', () => {
         expect(cmp.showCopyKey(nodeAt('$.alpha'))).toBe(true);
       });
 
-      it('showSearchByKey: hidden in embeddedMode', async () => {
+      it('showFindByKey: hidden in embeddedMode', async () => {
         await createWith({ alpha: 1 });
         fixture.componentRef.setInput('embeddedMode', true);
         fixture.detectChanges();
-        expect(cmp.showSearchByKey(nodeAt('$.alpha'))).toBe(false);
+        expect(cmp.showFindByKey(nodeAt('$.alpha'))).toBe(false);
       });
 
-      it('showSearchByValue: hidden on object/array/null/undefined and in embeddedMode', async () => {
+      it('showFindByValue: hidden on object/array/null/undefined and in embeddedMode', async () => {
         await createWith({ obj: {}, arr: [], blank: null, str: 'x' });
         cmp.expandAll();
         fixture.detectChanges();
-        expect(cmp.showSearchByValue(nodeAt('$.obj'))).toBe(false);
-        expect(cmp.showSearchByValue(nodeAt('$.arr'))).toBe(false);
-        expect(cmp.showSearchByValue(nodeAt('$.blank'))).toBe(false);
-        expect(cmp.showSearchByValue(nodeAt('$.str'))).toBe(true);
+        expect(cmp.showFindByValue(nodeAt('$.obj'))).toBe(false);
+        expect(cmp.showFindByValue(nodeAt('$.arr'))).toBe(false);
+        expect(cmp.showFindByValue(nodeAt('$.blank'))).toBe(false);
+        expect(cmp.showFindByValue(nodeAt('$.str'))).toBe(true);
         fixture.componentRef.setInput('embeddedMode', true);
         fixture.detectChanges();
-        expect(cmp.showSearchByValue(nodeAt('$.str'))).toBe(false);
+        expect(cmp.showFindByValue(nodeAt('$.str'))).toBe(false);
       });
 
       it('showCollapse: hidden when already collapsed', async () => {
@@ -5571,7 +5680,13 @@ describe('JsonTreeComponent', () => {
         });
       });
 
-      it('is a no-op on an empty container row (no copy, no toggle, no telemetry)', async () => {
+      it('copies the literal `{}` on dblclick of an empty object row', async () => {
+        // Per Q4b: empty containers no longer no-op on dblclick. They
+        // route through the same copyValue path as primitives, copying
+        // the literal `{}` to the clipboard. Issue #109's
+        // "expand/collapse instead of copying" wording is relaxed for
+        // this edge case (no expand/collapse possible). The
+        // `tree.row.doubleClickCopyValue` JSDoc was also updated.
         const logger = await createWithLoggerSpy({ empty: {} });
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.empty');
@@ -5579,26 +5694,30 @@ describe('JsonTreeComponent', () => {
         withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
         await Promise.resolve();
         await Promise.resolve();
-        expect(writeText).not.toHaveBeenCalled();
-        expect(cmp.treeControl.isExpanded(node)).toBe(wasExpanded);
+        expect(writeText).toHaveBeenCalledWith('{}');
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('expansion state unchanged on empty container')
+          .toBe(wasExpanded);
+        expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickCopyValue', {
+          escaped: false,
+        });
         expect(logger.info).not.toHaveBeenCalledWith(
           'tree.row.doubleClickToggle',
           jasmine.anything(),
         );
-        expect(logger.info).not.toHaveBeenCalledWith(
-          'tree.row.doubleClickCopyValue',
-          jasmine.anything(),
-        );
       });
 
-      it('is a no-op on an empty array row (no copy, no toggle, no telemetry)', async () => {
+      it('copies the literal `[]` on dblclick of an empty array row', async () => {
         const logger = await createWithLoggerSpy({ empty: [] });
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.empty');
         withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
         await Promise.resolve();
         await Promise.resolve();
-        expect(writeText).not.toHaveBeenCalled();
+        expect(writeText).toHaveBeenCalledWith('[]');
+        expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickCopyValue', {
+          escaped: false,
+        });
         expect(logger.info).not.toHaveBeenCalledWith(
           'tree.row.doubleClickToggle',
           jasmine.anything(),
@@ -5712,6 +5831,334 @@ describe('JsonTreeComponent', () => {
         const first = items[0];
         expect(first.textContent?.trim()).toBe(cmp.ctxCopyValueLabel);
         expect(first.classList.contains('ctx-default-action')).toBe(true);
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+    });
+
+    describe('surfaced default-shortcut row (Path Y)', () => {
+      it('omits the surfaced row and bolds Copy value for a primitive', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.alpha'));
+        expect(cmp.defaultActionKind()).toBe('copyValue');
+        expect(cmp.surfacedShortcutLabel()).toBeNull();
+      });
+
+      it('surfaces "Expand 1 level" for a collapsed container', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.obj'));
+        expect(cmp.defaultActionKind()).toBe('expandRow');
+        expect(cmp.surfacedShortcutLabel()).toBe(cmp.ctxExpand1LevelLabel);
+      });
+
+      it('surfaces "Collapse from here" for an expanded container', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.obj'));
+        expect(cmp.defaultActionKind()).toBe('collapseRow');
+        expect(cmp.surfacedShortcutLabel()).toBe(cmp.ctxCollapseFromHereLabel);
+      });
+
+      it('omits the surfaced row and bolds Copy value for an empty container', async () => {
+        await createWith({ empty: {} });
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.empty'));
+        // Empty container falls into the copyValue branch because its
+        // children list is empty, even though its type is 'object'.
+        expect(cmp.defaultActionKind()).toBe('copyValue');
+        expect(cmp.surfacedShortcutLabel()).toBeNull();
+      });
+
+      it('clicking the surfaced "Expand 1 level" row expands the clicked container', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        cmp.contextNode.set(node);
+        expect(cmp.treeControl.isExpanded(node)).toBe(false);
+        cmp.onSurfacedShortcutClick(node);
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('expanded after surfaced shortcut click')
+          .toBe(true);
+      });
+
+      it('clicking the surfaced "Collapse from here" row collapses the clicked container', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        cmp.contextNode.set(node);
+        expect(cmp.treeControl.isExpanded(node)).toBe(true);
+        cmp.onSurfacedShortcutClick(node);
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('collapsed after surfaced shortcut click')
+          .toBe(false);
+      });
+    });
+
+    describe('Subtree submenu (Path Y)', () => {
+      it('renders the Subtree > trigger when at least one subtree action applies', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.obj');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const trigger = items.find((m) =>
+          (m.textContent ?? '').trim().includes(cmp.ctxSubtreeMenuLabel),
+        );
+        expect(trigger).withContext('Subtree trigger present').toBeTruthy();
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('hides the Subtree > trigger on a primitive row (no subtree to act on)', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.alpha');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const trigger = items.find((m) =>
+          (m.textContent ?? '').trim().includes(cmp.ctxSubtreeMenuLabel),
+        );
+        expect(trigger).withContext('Subtree trigger absent on primitive').toBeUndefined();
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('Subtree submenu contains Collapse siblings + Isolate when both narrow and wider sets apply', async () => {
+        // For showIsolatePair to be true, both narrowSet (peers under
+        // the clicked row's parent) and widerSet (peers at higher
+        // ancestors) must be non-empty. The fixture has:
+        //   - root has $.outer and $.sibling (widerSet for $.outer.a)
+        //   - $.outer has .a and .b (narrowSet for $.outer.a)
+        await createWith({ outer: { a: { x: 1, y: 2 }, b: { z: 3 } }, sibling: { p: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.outer.a');
+        const trigger = menuItemContaining(cmp.ctxSubtreeMenuLabel);
+        trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+        const panels = Array.from(
+          document.body.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'),
+        );
+        const subtreePanel = panels[panels.length - 1]!;
+        const labels = Array.from(
+          subtreePanel.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        ).map((m) => (m.textContent ?? '').trim());
+        // Spec terms preserved per DESIGN_SPEC.md §514.
+        expect(labels).toContain(cmp.ctxIsolateLabel);
+        expect(labels).toContain(cmp.ctxCollapseSiblingsLabel);
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('renders depth labels with `+N` prefix per DESIGN_SPEC.md §516', async () => {
+        // The +N notation distinguishes per-row relative-additive
+        // depth from the toolbar's absolute snap-to-exact dropdown.
+        expect(cmp.ctxExpandToDepth1Label).toBe('+1 level');
+        expect(cmp.ctxExpandToDepth2Label).toBe('+2 levels');
+        expect(cmp.ctxExpandToDepth3Label).toBe('+3 levels');
+        expect(cmp.ctxExpandToDepth4Label).toBe('+4 levels');
+        expect(cmp.ctxExpandToDepth5Label).toBe('+5 levels');
+      });
+
+      it('Subtree -> Expand submenu trigger renders when any depth predicate applies', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.outer');
+        expect(cmp.showExpandFromHereMenu(node)).toBeTrue();
+      });
+    });
+
+    describe('icons (Phase 3)', () => {
+      it('renders a leading <jj-icon> on every top-level menu item', async () => {
+        // Phase 3 of the tree-menu overhaul applies leading icons to
+        // every top-level row in the row menu (Path Y choice: Option
+        // 1 -- icons everywhere). For a primitive row we expect at
+        // minimum: Copy value, Copy key, Copy path, Find by key,
+        // Find by value -- all five with leading icons.
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.alpha');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        expect(items.length).toBeGreaterThanOrEqual(5);
+        for (const item of items) {
+          expect(item.querySelector('jj-icon'))
+            .withContext(`menu item "${(item.textContent ?? '').trim()}" has a leading jj-icon`)
+            .toBeTruthy();
+        }
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('surfaces an "expand-subtree" icon on the surfaced shortcut for collapsed containers', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.obj'));
+        expect(cmp.surfacedShortcutIconName()).toBe('expand-subtree');
+      });
+
+      it('surfaces a "collapse-subtree" icon on the surfaced shortcut for expanded containers', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.obj'));
+        expect(cmp.surfacedShortcutIconName()).toBe('collapse-subtree');
+      });
+
+      it('surfaces no icon on primitives (Copy value at top is bolded directly)', async () => {
+        await createWith({ alpha: 1 });
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.alpha'));
+        expect(cmp.surfacedShortcutIconName()).toBeNull();
+      });
+    });
+
+    describe('telemetry (Phase 4)', () => {
+      it('emits tree.contextMenu.collapse with source=top from the surfaced shortcut', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        cmp.contextNode.set(node);
+        cmp.onSurfacedShortcutClick(node);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.collapse', { source: 'top' });
+      });
+
+      it('emits tree.contextMenu.collapse with source=submenu from the in-Subtree item', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.collapseFromHere(nodeAt('$.obj'));
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.collapse', {
+          source: 'submenu',
+        });
+      });
+
+      it('emits tree.contextMenu.expandToDepth with source=top relativeDepth=1 from the surfaced shortcut', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        cmp.contextNode.set(node);
+        cmp.onSurfacedShortcutClick(node);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandToDepth', {
+          relativeDepth: 1,
+          source: 'top',
+        });
+      });
+
+      it('emits tree.contextMenu.expandToDepth with source=submenu from the in-Subtree depth item', async () => {
+        const logger = await createWithLoggerSpy({ outer: { a: { x: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.expandToDepthFromHere(nodeAt('$.outer'), 3);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandToDepth', {
+          relativeDepth: 3,
+          source: 'submenu',
+        });
+      });
+
+      it('emits tree.contextMenu.expandAllFromHere with source=submenu', async () => {
+        const logger = await createWithLoggerSpy({ outer: { a: { x: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.expandAllFromHere(nodeAt('$.outer'));
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandAllFromHere', {
+          source: 'submenu',
+        });
+      });
+
+      it('emits tree.contextMenu.subtreeOpened when the Subtree submenu opens', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.onSubtreeMenuOpened();
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.subtreeOpened');
+      });
+
+      it('emits tree.contextMenu.highlight for single-row scope and highlightSubtree for cascade scope', async () => {
+        const logger = await createWithLoggerSpy({ parent: { child: 1 } });
+        cmp.canEditHighlights;
+        // Wire canEditHighlights via the component's input. The
+        // existing test fixtures often set a fake host; here we
+        // hit the predicate directly by mutating the signal.
+        fixture.componentRef.setInput('canEditHighlights', true);
+        fixture.detectChanges();
+        cmp.applyManualHighlight(nodeAt('$.parent'), false, '#fff59d');
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.highlight');
+        logger.info.calls.reset();
+        cmp.applyManualHighlight(nodeAt('$.parent'), true, '#b3e5fc');
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.highlightSubtree');
+      });
+
+      it('emits tree.contextMenu.extract from the menu-driven entry point', async () => {
+        const logger = await createWithLoggerSpy({ payload: '{"k":1}' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        // emitExtract requires extractCandidates input; without it
+        // the early-return path skips the emit. We just need to
+        // verify the menu-click logger fires before the early-out
+        // so spy on the call.
+        cmp.onExtractMenuClick(nodeAt('$.payload'));
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.extract');
+      });
+
+      it('emits tree.contextMenu.decodeShow when toggling on, decodeHide when toggling off', async () => {
+        const logger = await createWithLoggerSpy({ note: 'first\nsecond' });
+        const node = nodeAt('$.note');
+        // First menu click: toggles ON. Pre-toggle state isDecoded=false
+        // so we expect decodeShow.
+        cmp.onDecodedMenuClick(node);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.decodeShow');
+        logger.info.calls.reset();
+        // Second menu click: toggles OFF. Pre-toggle state isDecoded=true
+        // so we expect decodeHide.
+        cmp.onDecodedMenuClick(node);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.decodeHide');
+      });
+    });
+
+    describe('Find labels (rename, i18n IDs stable)', () => {
+      it('renders "Find by key" / "Find by value" for a primitive with a key', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.alpha');
+        const labels = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        ).map((m) => (m.textContent ?? '').trim());
+        expect(labels).toContain(cmp.ctxFindByKeyLabel);
+        expect(labels).toContain(cmp.ctxFindByValueLabel);
+        // Source text changed; values reflect the rename.
+        expect(cmp.ctxFindByKeyLabel).toBe('Find by key');
+        expect(cmp.ctxFindByValueLabel).toBe('Find by value');
         document.body
           .querySelectorAll('.cdk-overlay-backdrop')
           .forEach((b) => (b as HTMLElement).click());

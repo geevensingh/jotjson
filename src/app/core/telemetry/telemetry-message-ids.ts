@@ -1136,7 +1136,7 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: info
-   * Fired by: `JsonTreeComponent.searchByKey`
+   * Fired by: `JsonTreeComponent.findByKey`
    *           (`shared/components/json-tree/json-tree.component.ts`)
    * Props: none
    */
@@ -1144,7 +1144,7 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: info
-   * Fired by: `JsonTreeComponent.searchByValue`
+   * Fired by: `JsonTreeComponent.findByValue`
    *           (`shared/components/json-tree/json-tree.component.ts`)
    * Props: none
    */
@@ -1153,25 +1153,48 @@ export const TELEMETRY_MESSAGE_IDS = [
   /**
    * Severity: info
    * Fired by: `JsonTreeComponent.collapseFromHere`
-   *           (`shared/components/json-tree/json-tree.component.ts`)
-   * Props: none
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Wired to both the surfaced top-level shortcut row (the
+   *           bolded "Collapse from here" item rendered for expanded
+   *           containers) and the in-Subtree submenu's "Collapse"
+   *           item; the `source` prop disambiguates which path the
+   *           user took. Per Path Y the action itself is a single
+   *           non-recursive `treeControl.collapse(node)` regardless
+   *           of which entry point fires it.
+   * Props: { source: 'top' | 'submenu' }. `'top'` for the surfaced
+   * shortcut row, `'submenu'` for the in-Subtree item. Lets analytics
+   * see whether the surfaced default-shortcut affordance pays off
+   * relative to the duplicated in-submenu copy.
    */
   'tree.contextMenu.collapse',
 
   /**
    * Severity: info
    * Fired by: `JsonTreeComponent.expandAllFromHere`
-   *           (`shared/components/json-tree/json-tree.component.ts`)
-   * Props: none
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Reachable only via the in-Subtree submenu's `Expand >
+   *           All` leaf after Path Y; the surfaced top-level shortcut
+   *           never fires this event (it routes through
+   *           `expandToDepth` with `relativeDepth: 1`).
+   * Props: { source: 'top' | 'submenu' }. Always `'submenu'` after
+   * Path Y; the prop is present for symmetry with `collapse` /
+   * `expandToDepth` so KQL filters can apply uniformly.
    */
   'tree.contextMenu.expandAllFromHere',
 
   /**
    * Severity: info
    * Fired by: `JsonTreeComponent.expandToDepthFromHere`
-   *           (`shared/components/json-tree/json-tree.component.ts`)
-   * Props: { relativeDepth: number }. The N in "expand N levels from
-   * here"; lets us see which depths users invoke most often.
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Wired to the surfaced top-level "Expand 1 level"
+   *           shortcut row (which routes here with `relativeDepth: 1`
+   *           and `source: 'top'`) AND to the in-Subtree submenu's
+   *           per-depth items (`+1, +2, +3, +4, +5`).
+   * Props: { relativeDepth: number, source: 'top' | 'submenu' }.
+   * `relativeDepth` is the N in "expand N levels from here"; lets us
+   * see which depths users invoke most often. `source` disambiguates
+   * the surfaced top-level shortcut from the in-Subtree item the
+   * same way as `collapse`.
    */
   'tree.contextMenu.expandToDepth',
 
@@ -1209,6 +1232,89 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: info
+   * Fired by: `(menuOpened)` listener on the `Subtree >` submenu
+   *           trigger inside the row context menu
+   *           (`shared/components/json-tree/json-tree.component.html`).
+   *           Phase 4 of the tree-menu overhaul: tells us whether
+   *           users are discovering the new Subtree submenu (Path Y)
+   *           or sticking with the surfaced top-level shortcut.
+   * Props: none. The trigger renders only when at least one
+   *        subtree-affecting predicate is true; counts-only is
+   *        sufficient to answer the discoverability question.
+   * Volume control: bounded-frequency (one open per user gesture).
+   */
+  'tree.contextMenu.subtreeOpened',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.applyManualHighlight` (`cascade`
+   *           false branch) reached from the top-level row menu's
+   *           single-row "Highlight" item
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Phase 4: distinguishes single-row highlight scope
+   *           from subtree scope so analytics can show which is
+   *           more common.
+   * Props: none. `tree.highlight.apply` already carries the color
+   *        bucket; this event is a counts-only marker for the
+   *        per-row scope's invocation count.
+   */
+  'tree.contextMenu.highlight',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.applyManualHighlight` (`cascade`
+   *           true branch) reached from the in-Subtree submenu's
+   *           "Highlight" item
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Pairs with `tree.contextMenu.highlight`.
+   * Props: none.
+   */
+  'tree.contextMenu.highlightSubtree',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onExtractMenuClick`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           when the conditional "Extract embedded JSON" item is
+   *           triggered from the row context menu. The same row
+   *           also exposes Extract via the inline pill button which
+   *           emits its own `tree.extract.click` event with
+   *           `source: 'rowButton'`; this menu-driven path is
+   *           tracked separately so we can see whether users prefer
+   *           the inline pill or the menu item.
+   * Props: none. `tree.extract.apply` already carries size / kind
+   *        buckets when the extraction succeeds.
+   */
+  'tree.contextMenu.extract',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onDecodedMenuClick` (when the row
+   *           is currently in the JSON-escaped view and the click
+   *           reveals decoded text)
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           The Decode toggle has two states (show / hide) wired
+   *           through `tree.decoded.click` (which carries
+   *           `direction: 'on' | 'off'`); these context-menu events
+   *           are counts-only markers of the menu-driven entry
+   *           point per scope (show vs hide answer different
+   *           questions: discovery vs muscle-memory toggle).
+   * Props: none.
+   */
+  'tree.contextMenu.decodeShow',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onDecodedMenuClick` (when the row
+   *           is currently in the decoded view and the click
+   *           hides it back to the JSON-escaped form)
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   * Props: none.
+   */
+  'tree.contextMenu.decodeHide',
+
+  /**
+   * Severity: info
    * Fired by: `JsonTreeComponent.copyValue` (`source === 'dblclick'`
    *           branch) (`shared/components/json-tree/json-tree.component.ts`).
    *           See also `tree.contextMenu.copyValue` for the
@@ -1217,9 +1323,15 @@ export const TELEMETRY_MESSAGE_IDS = [
    * row double-click; emits the JSON-string-literal variant of the
    * value (DESIGN_SPEC.md §443).
    *
-   * Since issue #109, this event fires only for primitive (leaf)
-   * rows. Container rows (`type === 'object' | 'array'`) emit
-   * `tree.row.doubleClickToggle` instead; empty containers no-op.
+   * Since issue #109, this event fires for primitive (leaf) rows
+   * AND for empty containers (`{}` / `[]`). The tree-menu overhaul
+   * (plan.md decision Q4b) relaxed issue #109's "expand/collapse
+   * instead of copying" wording for the empty-container edge case
+   * where there is no expand/collapse to do -- dblclick on an empty
+   * container now copies the literal `{}` or `[]`. Container rows
+   * with children (`type === 'object' | 'array'` and
+   * `children.length > 0`) still emit `tree.row.doubleClickToggle`
+   * instead of this event.
    */
   'tree.row.doubleClickCopyValue',
 
@@ -1233,8 +1345,10 @@ export const TELEMETRY_MESSAGE_IDS = [
    * (i.e., what the row became after the double-click), so analytics
    * directly answer "how often did dblclick expand vs collapse".
    * Volume control: bounded-frequency (one user double-click per
-   * emit). No path or content data. Empty containers are a no-op
-   * and do not emit this event; the chevron-button toggle path
+   * emit). No path or content data. Empty containers do not emit
+   * this event -- they fall through to `tree.row.doubleClickCopyValue`
+   * since the tree-menu overhaul relaxed issue #109's wording for
+   * containers with no children. The chevron-button toggle path
    * remains uninstrumented for parity with pre-issue-#109 behavior.
    */
   'tree.row.doubleClickToggle',

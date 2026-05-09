@@ -2734,22 +2734,71 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     fixture.detectChanges();
   }
 
-  function openMenuItemLabels(): string[] {
-    return Array.from(document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'))
+  async function expectHighlightActionsVisible(
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,
+    visible: boolean,
+  ): Promise<void> {
+    // Path Y overhaul: subtree-scope highlight items moved into the
+    // Subtree > submenu, where their labels are simply "Highlight" /
+    // "Remove highlight" (the submenu name carries the subtree
+    // scope). The top-level menu still has single-row "Highlight" /
+    // "Remove highlight". So we check both panels -- top-level for
+    // single-row, and inside the Subtree submenu for the cascade
+    // variants.
+    const tree = getTree(fixture);
+    const topPanel = document.body.querySelector<HTMLElement>('.mat-mdc-menu-panel');
+    expect(topPanel).withContext('row menu panel open').toBeTruthy();
+    const topLabels = Array.from(
+      topPanel!.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+    )
       .map((menuItem) => (menuItem.textContent ?? '').trim())
       .filter((text) => text.length > 0);
-  }
 
-  function expectHighlightActionsVisible(visible: boolean): void {
-    const labels = openMenuItemLabels();
-    for (const label of [
-      'Highlight',
-      'Highlight tree',
-      'Remove highlight',
-      'Remove tree highlight',
-    ]) {
-      expect(labels.includes(label)).withContext(`${label} visibility`).toBe(visible);
+    // Top-level: single-row Highlight + Remove highlight. Both
+    // gate on canEditHighlights, so visibility=false -> both absent.
+    expect(topLabels.includes(tree.ctxHighlightLabel))
+      .withContext(`top-level Highlight visibility (visible=${visible})`)
+      .toBe(visible);
+    expect(topLabels.includes(tree.ctxRemoveHighlightLabel))
+      .withContext(`top-level Remove highlight visibility (visible=${visible})`)
+      .toBe(visible);
+
+    if (visible) {
+      // Open the Subtree submenu and check the cascade-scope items.
+      const subtreeTrigger = Array.from(
+        topPanel!.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      ).find((menuItem) => (menuItem.textContent ?? '').trim().includes(tree.ctxSubtreeMenuLabel));
+      expect(subtreeTrigger).withContext('Subtree submenu trigger present').toBeTruthy();
+      subtreeTrigger!.dispatchEvent(
+        new MouseEvent('mouseenter', { bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+      const allPanels = Array.from(
+        document.body.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'),
+      );
+      const subtreePanel = allPanels[allPanels.length - 1];
+      expect(subtreePanel).withContext('Subtree submenu panel open').toBeTruthy();
+      const subtreeLabels = Array.from(
+        subtreePanel!.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      )
+        .map((menuItem) => (menuItem.textContent ?? '').trim())
+        .filter((text) => text.length > 0);
+      expect(subtreeLabels.includes(tree.ctxHighlightTreeLabel))
+        .withContext('subtree-scope Highlight (inside Subtree submenu) visibility')
+        .toBeTrue();
+      expect(subtreeLabels.includes(tree.ctxRemoveTreeHighlightLabel))
+        .withContext('subtree-scope Remove highlight (inside Subtree submenu) visibility')
+        .toBeTrue();
     }
+    // visibility=false case: `canEditHighlights` is false in the
+    // component, so all four highlight-related items are hidden by
+    // their predicates regardless of which panel they live in.
+    // Asserting their absence at the top level (above) is sufficient
+    // -- the Subtree submenu trigger itself may still render due to
+    // other reshape predicates, but its highlight-related contents
+    // would also be hidden.
   }
 
   function highlightedReadOnlyBlob(ownerId: string): JsonBlob {
@@ -2778,7 +2827,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
         '.tree-row[data-path="$.parent.child"].has-manual-highlight',
       ),
     ).toBeTruthy();
-    expectHighlightActionsVisible(false);
+    await expectHighlightActionsVisible(fixture, false);
   });
 
   it('passes canEditHighlights false and hides highlight menu actions for signed-in non-owners', async () => {
@@ -2788,7 +2837,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     await openTreeMenuForPath(fixture, '$.parent.child');
 
     expect(getTree(fixture).canEditHighlights()).toBeFalse();
-    expectHighlightActionsVisible(false);
+    await expectHighlightActionsVisible(fixture, false);
   });
 
   it('passes canEditHighlights true and shows highlight menu actions for the owner', async () => {
@@ -2798,7 +2847,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     await openTreeMenuForPath(fixture, '$.parent.child');
 
     expect(getTree(fixture).canEditHighlights()).toBeTrue();
-    expectHighlightActionsVisible(true);
+    await expectHighlightActionsVisible(fixture, true);
   });
 
   it('passes canEditHighlights true for an unsaved buffer', async () => {
@@ -2813,7 +2862,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     await openTreeMenuForPath(fixture, '$.parent.child');
 
     expect(getTree(fixture).canEditHighlights()).toBeTrue();
-    expectHighlightActionsVisible(true);
+    await expectHighlightActionsVisible(fixture, true);
   });
 
   it('save round-trips highlights and clears dirty from the server response', async () => {

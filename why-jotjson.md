@@ -158,11 +158,11 @@ strings are read as UTC or local.
 - Drag-and-drop file upload (up to 5 MB) with binary-file rejection
 - Download as `.json` / `.jsonc` (extension auto-picked from content)
 - Live validation with line + column on parse errors
-- Search across keys, values, or both, with case-sensitive and regex toggles
+- Find across keys, values, or both, with case-sensitive and regex toggles
 - Collapse all / expand all / expand to level 1-10, with keyboard shortcuts
 - Selection breadcrumb with **Copy JSON path** and a configurable root prefix
   (`$`, lodash-style, `root.`, `Data.`, or none)
-- Per-row context menu: copy key / value / path, search by key / value, expand-from-here
+- Per-row context menu: copy key / value / path, find by key / value, expand-from-here
 - Double-click a leaf row to copy its value; double-click a container to expand or collapse it
 - Press `Ctrl+C` / `Cmd+C` with a tree row focused to copy the focused row's value (works on leaves, containers, and empty containers alike)
 - Inferred type badges on every row: `uuid`, `url`, `email`, `path`, `ipv4`,
@@ -173,8 +173,8 @@ strings are read as UTC or local.
 - Themes: dark / light / match-system, with per-theme color customization for
   every highlight slot
 - 4-way layout: editor only, side-by-side, stacked, tree only - resizable split
-- Editor / tree / search preferences (font size, tab size, word wrap, default
-  expansion depth, default search scope)
+- Editor / tree / find preferences (font size, tab size, word wrap, default
+  expansion depth, default find scope)
 - Keyboard shortcuts: `Ctrl+F` (context-aware between editor and tree),
   `Ctrl+Shift+[` / `]`, `Alt+1` .. `Alt+9`
 - Keyboard-friendly app shell: a "Skip to main content" link as the first
