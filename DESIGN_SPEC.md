@@ -2212,6 +2212,25 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.19.3**: Three small follow-ups to the v0.19.0-v0.19.2 row
+  context-menu work. (1) Accessibility for the bolded default
+  action: a `.sr-only` span suffix announces "; same as
+  double-clicking the row" to screen readers. Applies to the bolded
+  Copy value row (for primitives and empty containers) and to the
+  bolded surfaced shortcut row (for collapsed / expanded
+  containers). Replaces the matTooltip that was dropped in v0.19.1
+  because Material's overlay obscured the next menu item. New i18n
+  string `@@tree.contextMenu.defaultActionA11yHint`. (2) Icon
+  stroke-weight consistency: the inner content bars on the
+  `find-by-value` glyph were tightened from `stroke-width="1.4"` to
+  the registry-default `1.75` so the icon matches the visual weight
+  of its peers. (3) `Subtree > Expand` submenu reorder: "All" now
+  sits at the top of the list (separated by a divider from `+1`,
+  `+2`, `+3`, `+4`, `+5`), since the most-common usage of "expand
+  this subtree" is "show me everything," and the depth options are
+  fall-back precision tools. The change is template-only; the
+  underlying `expandAllFromHere` and `expandToDepthFromHere`
+  predicates and emit-paths are unchanged.
 - **0.19.2**: Tree menu icon-spacing fix. The shipping menu was
   rendering `<jj-icon>` leading icons too tight against the label
   text because Material's default menu-item layout only adds a gap

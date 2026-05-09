@@ -5829,7 +5829,11 @@ describe('JsonTreeComponent', () => {
         ) as NodeListOf<HTMLButtonElement>;
         expect(items.length).toBeGreaterThan(0);
         const first = items[0];
-        expect(first.textContent?.trim()).toBe(cmp.ctxCopyValueLabel);
+        // The bolded Copy value row carries a `.sr-only` a11y hint
+        // span suffix in v0.19.3+, so we assert that the visible
+        // label is still the prefix of textContent (the rest is the
+        // visually-hidden double-click hint).
+        expect(first.textContent?.trim().startsWith(cmp.ctxCopyValueLabel)).toBeTrue();
         expect(first.classList.contains('ctx-default-action')).toBe(true);
         document.body
           .querySelectorAll('.cdk-overlay-backdrop')
@@ -5900,6 +5904,46 @@ describe('JsonTreeComponent', () => {
         expect(cmp.treeControl.isExpanded(node))
           .withContext('collapsed after surfaced shortcut click')
           .toBe(false);
+      });
+
+      it('renders a `.sr-only` a11y hint on the bolded surfaced row (collapsed container)', async () => {
+        // v0.19.3: bolded items announce "; same as double-clicking
+        // the row" to AT users via a visually-hidden span. Replaces
+        // the v0.19.0 matTooltip that was dropped in v0.19.1 because
+        // the overlay obscured the next menu item.
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        await openMenuFor('$.obj');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const surfaced = items.find((m) => m.classList.contains('ctx-default-action'));
+        expect(surfaced).withContext('found surfaced bolded row').toBeTruthy();
+        const hint = surfaced!.querySelector<HTMLElement>('.sr-only');
+        expect(hint?.textContent?.trim()).toBe(cmp.defaultActionA11yHint.trim());
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('renders a `.sr-only` a11y hint on the bolded Copy value for primitives', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.alpha');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const copyValue = items.find((m) => m.classList.contains('ctx-default-action'));
+        expect(copyValue?.textContent?.trim().startsWith(cmp.ctxCopyValueLabel)).toBeTrue();
+        const hint = copyValue!.querySelector<HTMLElement>('.sr-only');
+        expect(hint?.textContent?.trim()).toBe(cmp.defaultActionA11yHint.trim());
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
       });
     });
 

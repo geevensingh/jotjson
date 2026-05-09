@@ -518,11 +518,14 @@ export type JjIconSize = number | 'auto';
           <!-- Magnifying glass with two horizontal "content" bars
                inside the lens (V2 from design round 3). The bars
                read as "value text" without the visual crowding of
-               the three-bar variant at 18px. -->
+               the three-bar variant at 18px. Inner bars use the
+               default 1.75 stroke to match the rest of the icon
+               registry (was 1.4 in v0.19.1 - tightened in v0.19.3
+               for visual consistency with sibling icons). -->
           <circle cx="11" cy="11" r="6.5" />
           <path d="M16 16l4 4" />
-          <path d="M8 10h6" stroke-width="1.4" />
-          <path d="M8 12.5h4.5" stroke-width="1.4" />
+          <path d="M8 10h6" />
+          <path d="M8 12.5h4.5" />
         }
         @case ('collapse-siblings') {
           <!-- Highlighted middle row (clicked) flanked by short bars

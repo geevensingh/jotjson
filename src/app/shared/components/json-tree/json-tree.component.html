@@ -611,6 +611,9 @@
     >
       <jj-icon name="copy" [size]="18" />
       <span>{{ ctxCopyValueLabel }}</span>
+      @if (defaultActionKind() === 'copyValue') {
+        <span class="sr-only">{{ defaultActionA11yHint }}</span>
+      }
     </button>
     @if (showCopyKey(cn)) {
       <button mat-menu-item type="button" (click)="copyKey(cn)">
@@ -697,6 +700,7 @@
           <jj-icon [name]="iconName" [size]="18" />
         }
         <span>{{ label }}</span>
+        <span class="sr-only">{{ defaultActionA11yHint }}</span>
       </button>
     }
     @if (showSubtreeMenu(cn)) {
@@ -797,6 +801,21 @@
 -->
 <mat-menu #expandFromHereMenu="matMenu" class="jj-menu tree-row-menu">
   @if (contextNode(); as cn) {
+    @if (showExpandAllFromHere(cn)) {
+      <button mat-menu-item type="button" (click)="expandAllFromHere(cn)">
+        {{ ctxSubtreeExpandAllLabel }}
+      </button>
+    }
+    @if (
+      showExpandAllFromHere(cn) &&
+      (showExpandToDepth(cn, 1) ||
+        showExpandToDepth(cn, 2) ||
+        showExpandToDepth(cn, 3) ||
+        showExpandToDepth(cn, 4) ||
+        showExpandToDepth(cn, 5))
+    ) {
+      <mat-divider />
+    }
     @if (showExpandToDepth(cn, 1)) {
       <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 1)">
         {{ ctxExpandToDepth1Label }}
@@ -820,21 +839,6 @@
     @if (showExpandToDepth(cn, 5)) {
       <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 5)">
         {{ ctxExpandToDepth5Label }}
-      </button>
-    }
-    @if (
-      (showExpandToDepth(cn, 1) ||
-        showExpandToDepth(cn, 2) ||
-        showExpandToDepth(cn, 3) ||
-        showExpandToDepth(cn, 4) ||
-        showExpandToDepth(cn, 5)) &&
-      showExpandAllFromHere(cn)
-    ) {
-      <mat-divider />
-    }
-    @if (showExpandAllFromHere(cn)) {
-      <button mat-menu-item type="button" (click)="expandAllFromHere(cn)">
-        {{ ctxSubtreeExpandAllLabel }}
       </button>
     }
   }

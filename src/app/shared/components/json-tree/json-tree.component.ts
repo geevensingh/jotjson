@@ -390,7 +390,9 @@ export class JsonTreeComponent {
   // Surfaced row tooltip removed in v0.19.1 polish: the matTooltip
   // overlay was rendering below the bolded item and obscuring the
   // next menu row, making clicks on adjacent items difficult. Bold
-  // styling alone is the signal for the dblclick-equivalent action.
+  // styling alone is the visible signal for the dblclick-equivalent
+  // action; the a11y equivalent is the `.sr-only` hint span below.
+  readonly defaultActionA11yHint = $localize`:@@tree.contextMenu.defaultActionA11yHint:; same as double-clicking the row`;
   // Subtree submenu (Path Y). Trigger label and items inside drop the
   // "from here" / "subtree" suffix because the submenu name carries
   // the scope.
