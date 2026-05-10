@@ -717,7 +717,7 @@ Before finishing a task:
   - When CI is "obviously" green and the only block is an unresolved
     review thread or missing approver.
   - When the user is unavailable and the PR has been sitting.
-  - When you have local user approval to merge — that is not the same
+  - When you have local user approval to merge -- that is not the same
     as approval to **bypass policy**. The policy exists for the human
     workflow gates (review, conversation resolution, required checks);
     user-of-the-moment consent does not waive those gates.
