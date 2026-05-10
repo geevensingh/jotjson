@@ -6,25 +6,31 @@ on:
   pull_request:
     branches: [main]
 
-# Workflow-level permissions are the minimum every job needs:
+# Workflow-level permissions are the absolute minimum every job
+# needs:
 #   - contents: read   -- actions/checkout@v6 (every job)
-#   - checks: write    -- dorny/test-reporter@v2 publishes check runs
-#                         (api, api-integration, web-tests, smoke-e2e)
 #
 # Per-job escalations live in each job's `permissions:` block:
-#   - web        -> id-token: write (azure/login@v3 for sourcemap upload)
+#   - web             -> id-token: write (azure/login@v3 for sourcemap upload)
+#   - api             -> checks: write (dorny/test-reporter@v2)
+#   - api-integration -> checks: write (dorny/test-reporter@v2)
+#   - web-tests       -> checks: write (dorny/test-reporter@v2)
+#   - smoke-e2e       -> checks: write (dorny/test-reporter@v2)
+#   - workflows-lint  -> no escalation (actionlint only)
 #
 # Notable previous over-grants tightened:
 #   - id-token: write was workflow-level (giving every job an OIDC
 #     token they never used). Now scoped to the `web` job only, the
-#     only job that calls out to Azure. Reduces blast radius if a
-#     third-party action used by an unrelated job is compromised.
+#     only job that calls out to Azure.
+#   - checks: write was workflow-level (giving workflows-lint and
+#     other non-publishing jobs the right to mutate check runs they
+#     never create). Now scoped to the four dorny/test-reporter@v2
+#     callers only.
 #   - pull-requests: write was workflow-level but no step actually
 #     posts PR comments. dorny/test-reporter@v2 reports via check
-#     runs (checks: write), not PR comments. Removed.
+#     runs, not PR comments. Removed.
 permissions:
   contents: read
-  checks: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -38,10 +44,11 @@ jobs:
     # The web job calls azure/login@v3 (federated OIDC) for the
     # sourcemap upload step. id-token: write is granted only here so
     # other CI jobs cannot exchange a token for Azure access if a
-    # third-party action they invoke is compromised.
+    # third-party action they invoke is compromised. The web job does
+    # not publish check runs (no dorny/test-reporter usage), so
+    # checks: write is intentionally omitted.
     permissions:
       contents: read
-      checks: write
       id-token: write
     steps:
       - uses: actions/checkout@v6
@@ -287,6 +294,10 @@ jobs:
     name: API build & test
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     defaults:
       run:
         working-directory: api
@@ -353,6 +364,10 @@ jobs:
     name: Smoke api integration (real Cosmos)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     defaults:
       run:
         working-directory: api
@@ -458,6 +473,10 @@ jobs:
     name: Web unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -498,6 +517,10 @@ jobs:
     name: Smoke e2e (anonymous, Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
