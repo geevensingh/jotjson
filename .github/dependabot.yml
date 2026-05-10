@@ -71,8 +71,17 @@ updates:
     # @types/node tracks the Node runtime major. We are pinned to Node 24
     # (.nvmrc, engines.node, setup-node steps in CI/CD), so block major
     # bumps for @types/node. Revisit when we move to the next LTS.
+    #
+    # jwks-rsa v4 upgrades to jose v6, which is ESM-only (no CJS dist).
+    # Jest's vm.Script-based runtime cannot parse `export` syntax, so any
+    # test suite that transitively imports api/src/shared/auth.ts fails to
+    # parse. Block major bumps until either Jest stabilizes require(esm)
+    # without --experimental-vm-modules, or jose republishes a CJS build.
+    # See api/src/shared/auth.ts for the parking-rationale comment.
     ignore:
       - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'jwks-rsa'
         update-types: ['version-update:semver-major']
     groups:
       azure-sdk:
