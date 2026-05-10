@@ -27,19 +27,32 @@ updates:
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
     groups:
+      # Angular runtime + dev tooling are peer-locked: @angular/compiler-cli
+      # and friends must match @angular/* exactly. Bundle every @angular/* and
+      # @angular-devkit/* package (regardless of dependency-type) into one PR
+      # so a single Angular release lands as a single mergeable change.
+      # Material/CDK are released on a separate cadence and stay carved out.
       angular:
         patterns:
           - '@angular/*'
           - '@angular-devkit/*'
+        exclude-patterns:
+          - '@angular/material'
+          - '@angular/cdk'
       material:
         patterns:
           - '@angular/material'
           - '@angular/cdk'
+      # dev-minor catches everything else dev-typed; keep @angular packages
+      # out so they always route to the angular group above.
       dev-minor:
         dependency-type: development
         update-types:
           - minor
           - patch
+        exclude-patterns:
+          - '@angular/*'
+          - '@angular-devkit/*'
 
   - package-ecosystem: npm
     directory: /api
