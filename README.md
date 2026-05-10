@@ -146,7 +146,7 @@ npm start              # ng serve on http://localhost:4200 (proxies /api/*)
 npm run build          # production build to dist/jotjson
 npm run lint           # tsc + ASCII + spec/prod patterns + prettier
 npm run lint:all       # root lint + api workspace lint (CI-equivalent)
-npm run check:ascii    # fail if non-allowlisted non-ASCII sneaks in
+npm run lint:ascii     # fail if non-allowlisted non-ASCII sneaks in
 npm test               # Karma + Jasmine, ChromeHeadless, single run
 npm run test:ci        # Same, with coverage reporter (CI profile)
 ```
@@ -209,9 +209,8 @@ before opening a PR. Key rules:
 
 - Changes must align with `DESIGN_SPEC.md` (update it in the same PR if
   behavior or architecture changes).
-- Tests are required for logic changes. `npm run lint`, `npm test`,
-  `npm run build`, and `npm run check:ascii` must pass before merge
-  (enforced by CI).
+- Tests are required for logic changes. `npm run lint`, `npm test`, and
+  `npm run build` must pass before merge (enforced by CI).
 - Strict TypeScript; no `any`. Standalone Angular components, `OnPush`,
   `inject()`, Signals. Kebab-case filenames.
 - Use `jsonc-parser` - never `JSON.parse` - for user JSON/JSONC input.

@@ -402,7 +402,7 @@ Events catalog.
   ellipsis, `->` for right-arrow, `<=` / `!=` / `x` for math, `[x]` for check
   marks, etc. i18n-extractable strings go through Angular's i18n pipeline,
   not inline Unicode typography.
-- CI runs `npm run check:ascii` on every push and PR. If you genuinely need a
+- CI runs `npm run lint:ascii` on every push and PR. If you genuinely need a
   new non-ASCII codepoint (e.g., a UI glyph), add it to the `ALLOWED` set in
   `scripts/check-ascii.mjs` with an inline comment explaining why.
 
@@ -644,7 +644,7 @@ Before finishing a task:
    tests; runs automatically as part of `npm run verify:fast` and
    the `web` CI job).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
-4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the
+4. `npm run lint:ascii` passes (no new non-ASCII codepoints outside the
    allowlist in `scripts/check-ascii.mjs`).
 5. `npm run format` to reformat changed files (or rely on editor
    format-on-save). `npm run format:check` is a read-only equivalent

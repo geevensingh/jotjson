@@ -10,7 +10,7 @@
 //   human-readable name next to it so future readers understand why.
 //
 // Runs with zero dependencies on Node 24+. Invoke directly or via
-//   npm run check:ascii
+//   npm run lint:ascii
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -47,7 +47,7 @@ function listTrackedFiles() {
   // `--others --exclude-standard` = untracked files not covered by
   //   .gitignore / .git/info/exclude / global excludes.
   // Together: every file git is willing to track. This makes the local
-  // run match CI: a developer who runs `npm run check:ascii` BEFORE
+  //   run match CI: a developer who runs `npm run lint:ascii` BEFORE
   // staging a new file still sees violations from that file, instead
   // of the file being silently skipped because it is untracked.
   const out = execFileSync(

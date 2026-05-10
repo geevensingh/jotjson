@@ -20,7 +20,7 @@
 //   point at the approved alternative.
 //
 // Runs with zero dependencies on Node 24+. Invoke directly or via
-//   npm run check:spec-patterns
+//   npm run lint:spec-patterns
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
