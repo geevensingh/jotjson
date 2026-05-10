@@ -48,6 +48,7 @@ import {
   notFound,
   quotaExceeded,
   unauthorized,
+  withSecurityHeaders,
 } from '../shared/http';
 import { readUser, replaceUser } from '../shared/users';
 
@@ -438,7 +439,7 @@ app.http('rule-sets-post', {
   methods: ['POST'],
   route: 'rule-sets',
   authLevel: 'anonymous',
-  handler: postRuleSet,
+  handler: withSecurityHeaders(postRuleSet),
 });
 
 app.http('rule-sets-presets-list', {
@@ -455,40 +456,40 @@ app.http('rule-sets-presets-list', {
   // any client still hitting the old path.
   route: 'rule-set-presets',
   authLevel: 'anonymous',
-  handler: listPresets,
+  handler: withSecurityHeaders(listPresets),
 });
 
 app.http('rule-sets-presets-clone', {
   methods: ['POST'],
   route: 'rule-set-presets/{id}/clone',
   authLevel: 'anonymous',
-  handler: clonePreset,
+  handler: withSecurityHeaders(clonePreset),
 });
 
 app.http('rule-sets-list', {
   methods: ['GET'],
   route: 'rule-sets',
   authLevel: 'anonymous',
-  handler: listRuleSets,
+  handler: withSecurityHeaders(listRuleSets),
 });
 
 app.http('rule-sets-get', {
   methods: ['GET'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: getRuleSet,
+  handler: withSecurityHeaders(getRuleSet),
 });
 
 app.http('rule-sets-put', {
   methods: ['PUT'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: putRuleSet,
+  handler: withSecurityHeaders(putRuleSet),
 });
 
 app.http('rule-sets-delete', {
   methods: ['DELETE'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: deleteRuleSet,
+  handler: withSecurityHeaders(deleteRuleSet),
 });

@@ -37,6 +37,7 @@ import {
   notFound,
   quotaExceeded,
   unauthorized,
+  withSecurityHeaders,
 } from '../shared/http';
 import { readUser } from '../shared/users';
 
@@ -425,33 +426,33 @@ app.http('blobs-post', {
   methods: ['POST'],
   route: 'blobs',
   authLevel: 'anonymous',
-  handler: postBlob,
+  handler: withSecurityHeaders(postBlob),
 });
 
 app.http('blobs-list', {
   methods: ['GET'],
   route: 'blobs',
   authLevel: 'anonymous',
-  handler: listBlobs,
+  handler: withSecurityHeaders(listBlobs),
 });
 
 app.http('blobs-get', {
   methods: ['GET'],
   route: 'blobs/{idOrSlug}',
   authLevel: 'anonymous',
-  handler: getBlob,
+  handler: withSecurityHeaders(getBlob),
 });
 
 app.http('blobs-put', {
   methods: ['PUT'],
   route: 'blobs/{id}',
   authLevel: 'anonymous',
-  handler: putBlob,
+  handler: withSecurityHeaders(putBlob),
 });
 
 app.http('blobs-delete', {
   methods: ['DELETE'],
   route: 'blobs/{id}',
   authLevel: 'anonymous',
-  handler: deleteBlob,
+  handler: withSecurityHeaders(deleteBlob),
 });
