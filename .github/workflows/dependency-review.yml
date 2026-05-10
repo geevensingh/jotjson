@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           # 'moderate' would have caught most of the Dependabot alerts
           # closed in the audit (several were medium severity).
