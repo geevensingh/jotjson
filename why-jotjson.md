@@ -163,7 +163,7 @@ strings are read as UTC or local.
 - Selection breadcrumb with **Copy JSON path** and a configurable root prefix
   (`$`, lodash-style, `root.`, `Data.`, or none)
 - Per-row context menu: copy key / value / path, find by key / value, expand-from-here
-- Double-click a leaf row to copy its value; double-click a container to expand or collapse it
+- Double-click a leaf row (or an empty `{}` / `[]`) to copy its value; double-click a non-empty container to expand or collapse it
 - Press `Ctrl+C` / `Cmd+C` with a tree row focused to copy the focused row's value (works on leaves, containers, and empty containers alike)
 - Inferred type badges on every row: `uuid`, `url`, `email`, `path`, `ipv4`,
   `ipv6`, `date`, plus container item / key counts
