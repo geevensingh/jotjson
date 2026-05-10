@@ -24,10 +24,10 @@ on:
 #     only job that calls out to Azure.
 #   - checks: write was workflow-level (giving workflows-lint and
 #     other non-publishing jobs the right to mutate check runs they
-#     never create). Now scoped to the four dorny/test-reporter@v2
+#     never create). Now scoped to the four dorny/test-reporter@v3
 #     callers only.
 #   - pull-requests: write was workflow-level but no step actually
-#     posts PR comments. dorny/test-reporter@v2 reports via check
+#     posts PR comments. dorny/test-reporter@v3 reports via check
 #     runs, not PR comments. Removed.
 permissions:
   contents: read
@@ -342,7 +342,7 @@ jobs:
           retention-days: 7
       - name: Publish api test results
         if: always()
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: API test results
           path: api/test-results/api/junit.xml
@@ -465,7 +465,7 @@ jobs:
           retention-days: 7
       - name: Publish api integration test results
         if: always() && steps.cosmos-preflight.outputs.enabled == 'true'
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: API integration test results
           path: api/test-results/api-integration/junit.xml
@@ -522,7 +522,7 @@ jobs:
           retention-days: 7
       - name: Publish web test results
         if: always()
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: Web test results
           path: test-results/web/junit.xml
@@ -594,7 +594,7 @@ jobs:
           retention-days: 7
       - name: Publish e2e test results
         if: always()
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: Smoke e2e results
           path: test-results/e2e/junit.xml
