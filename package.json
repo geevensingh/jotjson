@@ -22,7 +22,8 @@
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "verify:fast": "npm run lint && ng test --watch=false --browsers=ChromeHeadless",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "verify:fast": "npm run lint && npm run test:scripts && ng test --watch=false --browsers=ChromeHeadless",
     "lint": "tsc --noEmit -p tsconfig.app.json && node scripts/check-ascii.mjs && node scripts/check-spec-patterns.mjs && node scripts/check-prod-patterns.mjs && node scripts/check-csp-hashes.mjs && node scripts/check-lockfile.mjs && prettier --check .",
     "lint:tsc": "tsc --pretty false --noEmit -p tsconfig.app.json",
     "lint:ascii": "node scripts/check-ascii.mjs",
@@ -72,7 +73,7 @@
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "web-vitals": "^5.2.0",
-    "zone.js": "~0.15.0"
+    "zone.js": "~0.16.2"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^21.2.10",
