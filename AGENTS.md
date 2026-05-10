@@ -515,7 +515,8 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
 For incremental work, prefer the fast inner loop over the full
 Definition of Done cycle (§7) on every iteration:
 
-- **`npm run verify:fast`** runs `lint` + `ng test` in one shot,
+- **`npm run verify:fast`** runs `lint` + `test:scripts` (Node-built-in
+  unit tests for `scripts/*.mjs`) + `ng test` in one shot,
   **without** the production build or i18n extraction. Use this as
   the default check during iteration. **Smoke e2e** (`npm run test:e2e`)
   is intentionally NOT part of `verify:fast` - it builds a production
@@ -639,7 +640,10 @@ Before finishing a task:
    hand-formatted files) are respected automatically. The hook does not
    run tsc, ASCII, or pattern checks; those still surface only in
    `npm run lint:all` and CI.
-2. `npm test` passes (frontend and `api/`).
+2. `npm test` passes (frontend and `api/`). For changes touching
+   `scripts/*.mjs`, also `npm run test:scripts` (Node-built-in unit
+   tests; runs automatically as part of `npm run verify:fast` and
+   the `web` CI job).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
 4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the
    allowlist in `scripts/check-ascii.mjs`).
