@@ -45,7 +45,7 @@
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
-    "X-XSS-Protection": "",
+    "X-XSS-Protection": "0",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "clipboard-read=(self), clipboard-write=(self)",

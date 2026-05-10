@@ -139,9 +139,11 @@ export function internalError(
  *     Tighter than the static surface (SAMEORIGIN, which exists to
  *     permit MSAL silent-refresh iframes); the API has no analogous
  *     same-origin frame requirement.
- *   - Referrer-Policy: no-referrer -- belt-and-suspenders. An API
- *     response's Referrer-Policy rarely affects the page that fetched
- *     it, but harmless and keeps API/static surfaces consistent.
+ *   - Referrer-Policy: no-referrer -- safer than the static surface's
+ *     `strict-origin-when-cross-origin` for an API: an API response's
+ *     Referrer-Policy rarely affects the page that fetched it, but
+ *     when an API URL is opened directly in a browser the no-referrer
+ *     value avoids leaking the API path to any later navigations.
  *   - Content-Security-Policy: default-src 'none'; frame-ancestors
  *     'none' -- if a response ever returns HTML (error path, debug
  *     page), the browser will not load any embedded resources.
