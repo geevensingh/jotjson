@@ -6,14 +6,31 @@ on:
   pull_request:
     branches: [main]
 
+# Workflow-level permissions are the absolute minimum every job
+# needs:
+#   - contents: read   -- actions/checkout@v6 (every job)
+#
+# Per-job escalations live in each job's `permissions:` block:
+#   - web             -> id-token: write (azure/login@v3 for sourcemap upload)
+#   - api             -> checks: write (dorny/test-reporter@v2)
+#   - api-integration -> checks: write (dorny/test-reporter@v2)
+#   - web-tests       -> checks: write (dorny/test-reporter@v2)
+#   - smoke-e2e       -> checks: write (dorny/test-reporter@v2)
+#   - workflows-lint  -> no escalation (actionlint only)
+#
+# Notable previous over-grants tightened:
+#   - id-token: write was workflow-level (giving every job an OIDC
+#     token they never used). Now scoped to the `web` job only, the
+#     only job that calls out to Azure.
+#   - checks: write was workflow-level (giving workflows-lint and
+#     other non-publishing jobs the right to mutate check runs they
+#     never create). Now scoped to the four dorny/test-reporter@v2
+#     callers only.
+#   - pull-requests: write was workflow-level but no step actually
+#     posts PR comments. dorny/test-reporter@v2 reports via check
+#     runs, not PR comments. Removed.
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
-  # Required for federated OIDC login (azure/login@v3) in the
-  # sourcemap-upload step. Only the web job uses it; other jobs
-  # do not call out to Azure.
-  id-token: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -24,6 +41,15 @@ jobs:
     name: Web build & type-check
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The web job calls azure/login@v3 (federated OIDC) for the
+    # sourcemap upload step. id-token: write is granted only here so
+    # other CI jobs cannot exchange a token for Azure access if a
+    # third-party action they invoke is compromised. The web job does
+    # not publish check runs (no dorny/test-reporter usage), so
+    # checks: write is intentionally omitted.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -72,12 +98,26 @@ jobs:
         id: lint-format
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:format
+      - name: Script tests
+        # Unit tests for scripts/*.mjs (currently: scripts/check-csp-hashes.mjs).
+        # Uses Node's built-in test runner (no extra deps). Runs in the web
+        # job because that is where lint:csp-hashes lives; keeps the
+        # scripts/ scope under one job.
+        id: test-scripts
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run test:scripts
       - name: Lint summary
         # Inspects each gate's outcome and writes a single
         # $GITHUB_STEP_SUMMARY block listing every failing gate and its
         # fix command. Per-gate `if: failure()` would not work here
         # because failure() is job-wide and would fire for every later
         # gate once any earlier gate failed.
+        #
+        # Covers the 6 lint gates plus the Script tests step, which sits
+        # in this same fast-check phase of the web job. Without wiring
+        # test-scripts in here, a Script tests failure would still let
+        # this summary print "all gates passed" because of the custom
+        # `if:` condition above.
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         env:
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
@@ -86,10 +126,11 @@ jobs:
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
           OUTCOME_CSP: ${{ steps.lint-csp-hashes.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
+          OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
         run: |
           fail=0
           {
-            echo "## Lint results"
+            echo "## Lint and script-test results"
             echo ""
             emit() {
               local label="$1"
@@ -104,17 +145,18 @@ jobs:
                 echo "- :grey_question: ${label} (${outcome})"
               fi
             }
-            emit "TypeScript (tsc)"        "$OUTCOME_TSC"    "fix the type error reported above"
-            emit "ASCII allowlist"         "$OUTCOME_ASCII"  "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
-            emit "Spec patterns"           "$OUTCOME_SPEC"   "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
-            emit "Production patterns"     "$OUTCOME_PROD"   "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
-            emit "CSP hashes (source)"     "$OUTCOME_CSP"    "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
-            emit "Prettier formatting"     "$OUTCOME_FORMAT" "npm run format"
+            emit "TypeScript (tsc)"        "$OUTCOME_TSC"          "fix the type error reported above"
+            emit "ASCII allowlist"         "$OUTCOME_ASCII"        "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
+            emit "Spec patterns"           "$OUTCOME_SPEC"         "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
+            emit "Production patterns"     "$OUTCOME_PROD"         "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
+            emit "CSP hashes (source)"     "$OUTCOME_CSP"          "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
+            emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
+            emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
             echo ""
             if [ "$fail" -eq 1 ]; then
-              echo "One or more lint gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
+              echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 6 lint gates passed."
+              echo "All 7 gates passed (6 lint + script tests)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts
@@ -268,6 +310,10 @@ jobs:
     name: API build & test
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     defaults:
       run:
         working-directory: api
@@ -334,6 +380,10 @@ jobs:
     name: Smoke api integration (real Cosmos)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     defaults:
       run:
         working-directory: api
@@ -439,6 +489,10 @@ jobs:
     name: Web unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -479,6 +533,10 @@ jobs:
     name: Smoke e2e (anonymous, Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

@@ -1192,7 +1192,7 @@ tripwires together make IfMatch protection the default for every
   - `X-Frame-Options: SAMEORIGIN` - blocks third-party iframing (clickjacking) but permits same-origin iframing, which is required by MSAL silent token refresh: MSAL loads a hidden iframe at the IdP's `/authorize` endpoint with `prompt=none`, and the IdP's 302 response navigates that iframe back to `https://jotjson.com/#code=...` so MSAL can read the auth code from the fragment. `DENY` blocks that final navigation and forces every silent refresh into an `InteractionRequiredAuthError`, which the auth interceptor maps to an unauthenticated request and a 401. `SAMEORIGIN` is the standard configuration for any site using MSAL silent refresh.
   - `Referrer-Policy: strict-origin-when-cross-origin`
   - `Permissions-Policy: clipboard-read=(self), clipboard-write=(self)` - scopes the Clipboard API to the site's own origin so the Smart Paste polling (Home page §1) can read the clipboard without cross-origin leakage.
-  - **Content Security Policy** - shipping as Report-Only during a production observation window, then flipped to enforced. The full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader and a SHA-256 hash for the inline splash script), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights ingestion (`*.in.applicationinsights.azure.com`, `*.livediagnostics.monitor.azure.com`), plus `frame-ancestors 'self'` (matches `X-Frame-Options: SAMEORIGIN` so MSAL silent refresh continues to work once CSP enforces), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights ingestion hosts are still covered by the policy). See "CSP allowlist" further down for the App Insights origin rationale.
+  - **Content Security Policy** - shipping as Report-Only during a production observation window, then flipped to enforced. The full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader and a SHA-256 hash for the inline splash script), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights (`*.in.applicationinsights.azure.com` ingestion, `*.livediagnostics.monitor.azure.com` live metrics, `js.monitor.azure.com` SDK runtime config CDN), plus `frame-ancestors 'self'` (matches `X-Frame-Options: SAMEORIGIN` so MSAL silent refresh continues to work once CSP enforces), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights hosts - including the SDK config CDN - are still covered by the policy). See "CSP allowlist" further down for the App Insights origin rationale.
 
 ### Scalability
 - Cosmos DB serverless scales automatically.
@@ -1745,8 +1745,11 @@ needs:
 
 - `*.in.applicationinsights.azure.com` (telemetry ingestion)
 - `*.livediagnostics.monitor.azure.com` (live metrics)
-- `js.monitor.azure.com` (CDN, only if we ever switch the SDK to a
-  CDN load - we currently bundle it via npm)
+- `js.monitor.azure.com` (the SDK fetches its dynamic runtime config -
+  sampling, throttling, feature flags - from this CDN at startup, even
+  when the SDK itself is bundled via npm; the host is hardcoded inside
+  `@microsoft/applicationinsights-web` and is NOT carried in the
+  connection string)
 
 ### Data residency
 
