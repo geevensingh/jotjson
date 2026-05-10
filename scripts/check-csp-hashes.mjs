@@ -20,7 +20,7 @@
 //   --ci-origins  (CI-only; runs when ENTRA_AUTHORITY and/or
 //                 APP_INSIGHTS_CONNECTION_STRING are set)
 //                 Asserts that the configured Entra authority host is
-//                 covered by `connect-src` AND `frame-src`, that the
+//                 covered by `connect-src` AND `frame-src`, and that the
 //                 App Insights ingestion host (parsed from the connection
 //                 string's IngestionEndpoint=...) is covered by
 //                 `connect-src`, and that the AI config CDN host
