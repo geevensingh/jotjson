@@ -15,6 +15,12 @@
 import type { HttpRequest } from '@azure/functions';
 import * as jwt from 'jsonwebtoken';
 import type { GetPublicKeyOrSecret, JwtPayload } from 'jsonwebtoken';
+// Pinned to jwks-rsa v3.x. v4 upgrades to jose v6, which is ESM-only
+// (no CJS dist). Jest's vm.Script runtime cannot parse `export` syntax,
+// so any test suite that transitively imports this module fails to
+// parse. Revisit when Jest stabilizes require(esm) without
+// --experimental-vm-modules, or jose republishes a CJS build. The major
+// is blocked from Dependabot in .github/dependabot.yml.
 import jwksClient from 'jwks-rsa';
 import { trackEvent } from './telemetry';
 
