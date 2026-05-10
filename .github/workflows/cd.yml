@@ -282,15 +282,40 @@ jobs:
         run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
 
       # ------------------------------------------------------------------
-      # Shared: install api production deps on the runner so the SWA
-      # upload (with skip_api_build: true) sees a fully-runnable
-      # Functions tree at api_location. The TS->JS compile is done in
-      # CI's `api` job (workflow_run path -> downloaded as api-dist) or
-      # by the "Build API (manual deploy)" step below (workflow_dispatch
+      # Shared: install api deps on the runner so the SWA upload (with
+      # skip_api_build: true) sees a fully-runnable Functions tree at
+      # api_location. The TS->JS compile is done in CI's `api` job
+      # (workflow_run path -> downloaded as api-dist) or by the
+      # "Build API (manual deploy)" step below (workflow_dispatch
       # path); Oryx is no longer in the deploy pipeline.
+      #
+      # The two trigger paths install differently on purpose:
+      #
+      # - workflow_run (auto on push-to-main): the api-dist artifact
+      #   carries the compiled dist/, so no tsc runs on the runner.
+      #   We install with `--omit=dev` to skip ~54 MB of typescript /
+      #   jest / @types/* that the Functions runtime never reads.
+      #
+      # - workflow_dispatch (manual redeploy): no artifact; the runner
+      #   compiles via `npm run build`, which needs typescript (a
+      #   devDep). We do a full `npm ci` and DELIBERATELY do not prune
+      #   devDeps after build. The manual path is the fast-rollback
+      #   hatch - keeping it maximally-permissive means a `gh workflow
+      #   run cd.yml` can recover from any failure mode the slim path
+      #   introduces. The ~80 MB cost on a rare manual deploy buys a
+      #   working recovery option.
+      #
+      # Use a positive `event_name == 'workflow_run'` match (not a
+      # negation): future trigger additions fail safely instead of
+      # silently falling into the slim-install branch.
       # ------------------------------------------------------------------
-      - name: Install API deps
-        if: steps.check.outputs.have_token == 'true'
+      - name: Install API production deps (workflow_run)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
+        working-directory: api
+        run: npm ci --omit=dev
+
+      - name: Install API full deps (workflow_dispatch)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
         working-directory: api
         run: npm ci
 
@@ -303,6 +328,32 @@ jobs:
         if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
         working-directory: api
         run: npm run build
+
+      - name: Verify devDeps were omitted (workflow_run)
+        # Guard against silent regressions: if a future npm release
+        # changes `--omit=dev` semantics, or someone moves a devDep
+        # into `dependencies`, this step fails the deploy with a clear
+        # message instead of letting the artifact balloon back
+        # unnoticed.
+        #
+        # Only check packages that are pure devDeps AND not
+        # transitively pulled by any prod dep. `@types/node` and
+        # `@types/jsonwebtoken` survive `--omit=dev` as transitive
+        # deps of `applicationinsights` and `jwks-rsa` respectively
+        # (verified via `npm ls @types/node`); they are inert .d.ts
+        # files at runtime and not worth blocking the deploy on.
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
+        working-directory: api
+        run: |
+          fail=0
+          for d in typescript jest ts-jest jest-junit; do
+            if [ -d "node_modules/$d" ]; then
+              echo "::error::Expected node_modules/$d to be absent after --omit=dev, but it exists."
+              fail=1
+            fi
+          done
+          if [ "$fail" = "1" ]; then exit 1; fi
+          echo "OK: known devDeps absent from node_modules/."
 
       - name: Deploy to Azure Static Web Apps
         if: steps.check.outputs.have_token == 'true'
