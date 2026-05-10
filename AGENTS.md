@@ -708,6 +708,26 @@ Before finishing a task:
 - Never commit secrets, `.env`, `node_modules`, build output, or editor files
   beyond what `.gitignore` already covers.
 - Do not rewrite or force-push shared branches.
+- **NEVER bypass branch protection.** Do not use `gh pr merge --admin`,
+  `--force`, or any other flag/UI/API path that bypasses required
+  reviews, required status checks, or unresolved review-thread blocks.
+  This rule has zero exceptions, including:
+  - When the user owns the repo and `--admin` would technically work.
+  - When the change "looks trivial" (a comment-only edit, a typo fix).
+  - When CI is "obviously" green and the only block is an unresolved
+    review thread or missing approver.
+  - When the user is unavailable and the PR has been sitting.
+  - When you have local user approval to merge -- that is not the same
+    as approval to **bypass policy**. The policy exists for the human
+    workflow gates (review, conversation resolution, required checks);
+    user-of-the-moment consent does not waive those gates.
+
+  If a PR is blocked, surface the block in plain language (which gate
+  is failing, e.g., "1 unresolved review thread", "review required",
+  "1 of 10 checks pending"), explain how it can be cleared (resolve
+  thread, request review, wait for CI), and stop. Do not propose
+  `--admin` as an option in `ask_user`. The user can clear the block
+  themselves through the GitHub UI; agents do not.
 - When a commit is authored with AI assistance, include:
 
   ```

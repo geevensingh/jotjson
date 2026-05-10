@@ -20,9 +20,15 @@ updates:
     commit-message:
       prefix: deps(web)
       include: scope
-    # @types/node tracks the Node runtime major. We are pinned to Node 24
-    # (.nvmrc, engines.node, setup-node steps in CI/CD), so block major
-    # bumps for @types/node. Revisit when we move to the next LTS.
+    # @types/node tracks the Node major we develop and test against. Local
+    # dev, CI, and Functions Core Tools all use Node 24 (.nvmrc,
+    # engines.node, setup-node steps). The deployed Static Web Apps
+    # managed-Functions runtime is capped at node:22 by the platform
+    # (see staticwebapp.config.json -> platform.apiRuntime), but Node 22's
+    # stdlib is a strict subset of Node 24's for what we consume, so
+    # compiling against the newer @types/node is intentional. Block major
+    # bumps for @types/node so we don't jump ahead of our local Node 24.
+    # Revisit when we move to the next LTS (or SWA raises the ceiling).
     ignore:
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
@@ -68,11 +74,26 @@ updates:
     commit-message:
       prefix: deps(api)
       include: scope
-    # @types/node tracks the Node runtime major. We are pinned to Node 24
-    # (.nvmrc, engines.node, setup-node steps in CI/CD), so block major
-    # bumps for @types/node. Revisit when we move to the next LTS.
+    # @types/node tracks the Node major we develop and test against. Local
+    # dev, CI, and Functions Core Tools all use Node 24 (.nvmrc,
+    # engines.node, setup-node steps). The deployed Static Web Apps
+    # managed-Functions runtime is capped at node:22 by the platform
+    # (see staticwebapp.config.json -> platform.apiRuntime), but Node 22's
+    # stdlib is a strict subset of Node 24's for what we consume, so
+    # compiling against the newer @types/node is intentional. Block major
+    # bumps for @types/node so we don't jump ahead of our local Node 24.
+    # Revisit when we move to the next LTS (or SWA raises the ceiling).
+    #
+    # jwks-rsa v4 upgrades to jose v6, which is ESM-only (no CJS dist).
+    # Jest's vm.Script-based runtime cannot parse `export` syntax, so any
+    # test suite that transitively imports api/src/shared/auth.ts fails to
+    # parse. Block major bumps until either Jest stabilizes require(esm)
+    # without --experimental-vm-modules, or jose republishes a CJS build.
+    # See api/src/shared/auth.ts for the parking-rationale comment.
     ignore:
       - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'jwks-rsa'
         update-types: ['version-update:semver-major']
     groups:
       azure-sdk:
