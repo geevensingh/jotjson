@@ -1,13 +1,4 @@
-import {
-  DestroyRef,
-  Injectable,
-  OnDestroy,
-  Signal,
-  computed,
-  inject,
-  signal
-} from '@angular/core';
-import { JsonParserService } from '../json/json-parser.service';
+import { DestroyRef, Injectable, OnDestroy, Signal, computed, inject, signal } from '@angular/core';
 
 /**
  * Permission state for the clipboard-read capability.
@@ -22,12 +13,9 @@ import { JsonParserService } from '../json/json-parser.service';
  * - `denied` - user denied OR an explicit user-gesture read failed with
  *   `NotAllowedError`. Button is disabled with an informational tooltip.
  */
-export type ClipboardPermissionState =
-  | 'unsupported'
-  | 'unknown'
-  | 'prompt'
-  | 'granted'
-  | 'denied';
+export type ClipboardPermissionState = 'unsupported' | 'unknown' | 'prompt' | 'granted' | 'denied';
+
+export type ClipboardGrantedReadResult = { ok: true; text: string } | { ok: false };
 
 const POLL_INTERVAL_MS = 2000;
 const PREVIEW_MAX_LENGTH = 80;
@@ -53,19 +41,31 @@ const PREVIEW_MAX_LENGTH = 80;
  */
 @Injectable({ providedIn: 'root' })
 export class ClipboardPollingService implements OnDestroy {
-  private readonly parser = inject(JsonParserService);
   private readonly destroyRef = inject(DestroyRef);
 
-  private readonly permissionStateSignal = signal<ClipboardPermissionState>(
-    this.initialState()
-  );
+  private readonly permissionStateSignal = signal<ClipboardPermissionState>(this.initialState());
+  private readonly permissionReadySignal = signal<boolean>(!this.isSupported());
   private readonly hasJsonSignal = signal<boolean>(false);
   private readonly previewSignal = signal<string>('');
 
   readonly permissionState: Signal<ClipboardPermissionState> =
     this.permissionStateSignal.asReadonly();
+  readonly permissionReady: Signal<boolean> = this.permissionReadySignal.asReadonly();
   readonly hasJson: Signal<boolean> = this.hasJsonSignal.asReadonly();
   readonly preview: Signal<string> = this.previewSignal.asReadonly();
+
+  /**
+   * Awaitable form of `permissionReady`. Resolves when the constructor's
+   * async `queryPermission()` has settled (or synchronously when the
+   * platform is unsupported). Callers that need to gate behavior on the
+   * resolved permission state - for example, a cold-boot evaluator that
+   * skips a splash hold when permission isn't `'granted'` - should await
+   * this before reading `permissionState()`. Resolves once and is cheap
+   * to await again afterwards.
+   */
+  awaitPermissionReady(): Promise<void> {
+    return this.permissionDiscoveryPromise;
+  }
 
   /**
    * Convenience: is the Paste button in its "has JSON" enabled state?
@@ -73,15 +73,17 @@ export class ClipboardPollingService implements OnDestroy {
    * JSON-like content.
    */
   readonly isReady = computed(
-    () => this.permissionStateSignal() === 'granted' && this.hasJsonSignal()
+    () => this.permissionStateSignal() === 'granted' && this.hasJsonSignal(),
   );
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
   private permissionStatus: PermissionStatus | null = null;
+  private permissionDiscoveryPromise: Promise<void>;
+  private inFlightGrantedReadPromise: Promise<ClipboardGrantedReadResult> | null = null;
 
   constructor() {
     this.destroyRef.onDestroy(() => this.ngOnDestroy());
-    void this.queryPermission();
+    this.permissionDiscoveryPromise = this.queryPermission();
   }
 
   ngOnDestroy(): void {
@@ -111,8 +113,8 @@ export class ClipboardPollingService implements OnDestroy {
       this.applyText(text);
       this.startPolling();
       return 'granted';
-    } catch (err) {
-      if (this.isNotAllowedError(err)) {
+    } catch (error) {
+      if (this.isNotAllowedError(error)) {
         this.permissionStateSignal.set('denied');
         this.clearClipboardDerived();
       }
@@ -141,13 +143,31 @@ export class ClipboardPollingService implements OnDestroy {
       }
       this.applyText(text);
       return text;
-    } catch (err) {
-      if (this.isNotAllowedError(err)) {
+    } catch (error) {
+      if (this.isNotAllowedError(error)) {
         this.permissionStateSignal.set('denied');
         this.clearClipboardDerived();
       }
       return null;
     }
+  }
+
+  /**
+   * Cold-boot read path used only after the initial permission discovery has
+   * settled. Unlike user-gesture reads, background failures do not mark the
+   * permission as denied.
+   */
+  readGrantedClipboardOnce(reason: 'coldBootAutoPaste'): Promise<ClipboardGrantedReadResult> {
+    void reason;
+    if (this.inFlightGrantedReadPromise) return this.inFlightGrantedReadPromise;
+
+    const readPromise = this.readGrantedClipboardOnceInternal().finally(() => {
+      if (this.inFlightGrantedReadPromise === readPromise) {
+        this.inFlightGrantedReadPromise = null;
+      }
+    });
+    this.inFlightGrantedReadPromise = readPromise;
+    return readPromise;
   }
 
   /**
@@ -208,23 +228,34 @@ export class ClipboardPollingService implements OnDestroy {
     );
   }
 
-  private isNotAllowedError(err: unknown): boolean {
-    if (!err || typeof err !== 'object') return false;
-    const name = (err as { name?: unknown }).name;
+  private isNotAllowedError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const name = (error as { name?: unknown }).name;
     return name === 'NotAllowedError' || name === 'SecurityError';
   }
 
-  private async queryPermission(): Promise<void> {
-    if (!this.isSupported()) return;
-    const perms = (navigator as Navigator & { permissions?: Permissions })
-      .permissions;
-    if (!perms || typeof perms.query !== 'function') {
-      this.permissionStateSignal.set('unknown');
-      return;
-    }
+  private async readGrantedClipboardOnceInternal(): Promise<ClipboardGrantedReadResult> {
+    await this.permissionDiscoveryPromise;
+    if (this.permissionStateSignal() !== 'granted') return { ok: false };
     try {
+      const text = await navigator.clipboard.readText();
+      this.applyText(text);
+      return { ok: true, text };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  private async queryPermission(): Promise<void> {
+    try {
+      if (!this.isSupported()) return;
+      const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
+      if (!perms || typeof perms.query !== 'function') {
+        this.permissionStateSignal.set('unknown');
+        return;
+      }
       const status = await perms.query({
-        name: 'clipboard-read' as PermissionName
+        name: 'clipboard-read' as PermissionName,
       });
       this.applyPermissionStatus(status);
       status.addEventListener?.('change', this.onPermissionChange);
@@ -232,16 +263,18 @@ export class ClipboardPollingService implements OnDestroy {
     } catch {
       // Firefox throws for unknown permission names.
       this.permissionStateSignal.set('unknown');
+    } finally {
+      this.permissionReadySignal.set(true);
     }
   }
 
   private applyPermissionStatus(status: PermissionStatus): void {
-    const s = status.state;
-    if (s === 'granted') {
+    const state = status.state;
+    if (state === 'granted') {
       this.permissionStateSignal.set('granted');
       this.startPolling();
       void this.checkOnce();
-    } else if (s === 'denied') {
+    } else if (state === 'denied') {
       this.permissionStateSignal.set('denied');
       this.clearClipboardDerived();
     } else {
@@ -268,30 +301,15 @@ export class ClipboardPollingService implements OnDestroy {
   }
 
   /**
-   * Matches the effective Paste predicate in `HomeComponent.onPaste`:
-   * accept raw JSON/JSONC, the output of `tryUnescape` parsing to an
-   * object/array, OR a plausibility prefix (`{` or `[`) per the spec.
+   * Plausibility predicate that gates the toolbar Paste button. Widened in
+   * M7p so the button enables for mixed text (prose around JSON), which the
+   * paste pipeline can extract via `JsonExtractorService`. Returns true iff
+   * the trimmed text contains `{` or `[` anywhere.
    */
   private looksLikeJson(text: string): boolean {
     const trimmed = text.trim();
     if (!trimmed) return false;
-
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      // Plausibility fallback from the spec - even a partially typed
-      // `{"a":` should enable the button.
-      return true;
-    }
-
-    try {
-      const { unescaped, changed } = this.parser.tryUnescape(trimmed);
-      if (!changed) return false;
-      const uTrim = unescaped.trim();
-      if (!uTrim.startsWith('{') && !uTrim.startsWith('[')) return false;
-      const result = this.parser.parse(unescaped);
-      return result.errors.length === 0 && result.value !== undefined;
-    } catch {
-      return false;
-    }
+    return trimmed.includes('{') || trimmed.includes('[');
   }
 
   private makePreview(text: string): string {

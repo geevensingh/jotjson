@@ -3,25 +3,43 @@ name: Deploy (SWA)
 # ----------------------------------------------------------------------
 # Build topology (READ BEFORE EDITING)
 #
-# This workflow uses Azure/static-web-apps-deploy@v1 with
-# `app_location: '/'`, which builds the SPA INSIDE the action's Oryx
-# container, not on the GitHub Actions runner host. That means:
+# This workflow has TWO build paths, gated on the trigger:
 #
-#   * The runner host filesystem does NOT contain `dist/` at any point
-#     in this job. Steps cannot `find`, `cp`, `rm`, or `tar` build
-#     artifacts on the host.
-#   * Pre-build host steps (e.g. `sed` on environment.prod.ts) are fine
-#     because they mutate sources before Oryx checks them out.
-#   * Post-build artifact manipulation (sourcemap stripping, asset
-#     hashing, sentry/app-insights symbol upload, etc.) requires
-#     switching the deploy to runner-side build:
-#         with:
-#           skip_app_build: true
-#       and adding an explicit `npm run build` step before the deploy.
+# 1. workflow_run (auto-deploy after CI on push-to-main)
+#    The web bundle is BUILT IN CI's `web` job (with real secrets baked
+#    into environment.prod.ts) and uploaded as the `web-dist` artifact.
+#    `staticwebapp.config.json` is copied into the bundle by CI before
+#    upload so the artifact is self-contained. This job downloads the
+#    artifact into `dist/jotjson` and passes `skip_app_build: true` to
+#    the SWA action; with that flag the action treats `app_location`
+#    as the prebuilt output directory (per Microsoft docs) rather than
+#    the source tree, so we point `app_location` at
+#    `dist/jotjson/browser`.
 #
-# If you add a step that touches `dist/`, switch the build topology in
-# the same change. CI's `workflows-lint` job catches structural issues
-# but NOT this filesystem expectation - a runtime-only failure mode.
+#    The API is also prebuilt by CI's `api` job and uploaded as the
+#    `api-dist` artifact (host.json, package.json, package-lock.json,
+#    and the compiled `dist/`). This job downloads it into `api/`,
+#    runs `npm ci` to populate production node_modules on the runner,
+#    and passes `skip_api_build: true` to the SWA action. With both
+#    `skip_app_build` and `skip_api_build` set, the SWA action is a
+#    pure uploader - Oryx never runs in the deploy path. This was
+#    introduced to eliminate the Oryx SDK-detect flake (oryx-cdn
+#    XPath null-node) that periodically failed CD with no recourse
+#    other than re-run.
+#
+# 2. workflow_dispatch (manual redeploy)
+#    The web bundle is BUILT INLINE on the runner host (npm ci + bake +
+#    npm run build + copy staticwebapp.config.json), then SWA action
+#    gets `skip_app_build: true`. The api is built inline too
+#    (npm ci + npm run build under api/) so the prebuilt-tree shape
+#    matches the workflow_run path. This duplicates the secret-bake
+#    logic from ci.yml's `web` job; the duplication (~25 lines) is
+#    intentional v1 tech debt - making workflow_dispatch consume an
+#    artifact would require a `ci_run_id` input and complicate the
+#    manual-deploy UX.
+#
+# In both paths, `dist/jotjson/browser/` (containing index.html AND
+# staticwebapp.config.json) must exist before the SWA action runs.
 # ----------------------------------------------------------------------
 
 # Title each run with the deployed commit's message so the Actions list is
@@ -47,11 +65,16 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  # Required for actions/download-artifact to fetch artifacts produced by
+  # an upstream workflow_run (cross-workflow artifact access uses the
+  # GITHUB_TOKEN's actions:read scope).
+  actions: read
 
 jobs:
   deploy:
     name: Build and deploy to Azure Static Web Apps
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Only deploy when CI succeeded for a push to main, or when a human
     # triggers a manual redeploy. PR-triggered CI runs (workflow_run.event
     # == 'pull_request') are explicitly excluded so opening a PR never
@@ -82,28 +105,89 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           submodules: true
           lfs: false
+          # Full history so the workflow_dispatch path's inline
+          # `npm run build` produces a real `buildNumber`. The
+          # workflow_run path doesn't rebuild (it downloads CI's
+          # prebuilt bundle) so depth is harmless there.
+          fetch-depth: 0
 
+      # ------------------------------------------------------------------
+      # Path 1: workflow_run - download prebuilt SPA bundle from CI.
+      # ------------------------------------------------------------------
+      - name: Download CI web bundle
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Explicit path is required - without it download-artifact
+          # extracts to cwd, breaking the SWA action's
+          # app_location: 'dist/jotjson/browser'.
+          path: dist/jotjson
+
+      - name: Download CI api bundle
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v8
+        with:
+          name: api-dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Lands host.json, package.json, package-lock.json, and the
+          # compiled dist/ on top of the api/ source tree from
+          # actions/checkout. The subsequent "Install API deps" step
+          # populates api/node_modules so the SWA action (with
+          # skip_api_build: true) uploads a fully-runnable Functions
+          # tree.
+          path: api
+
+      - name: Sanity-check downloaded bundle (auto deploy)
+        # Defense-in-depth against artifact poisoning. The
+        # workflow_run.event == 'push' filter on this job (see the
+        # job-level `if:` above) already excludes PR-triggered CI
+        # runs, which is the standard documented mitigation for
+        # the artifact-poisoning attack class
+        # (https://securitylab.github.com/research/github-actions-preventing-pwn-requests/).
+        # This step adds explicit content verification so a CI bug
+        # or hypothetical malicious push cannot deploy a broken or
+        # placeholder-leaking bundle without the deploy step
+        # failing first. Mirrors the manual-deploy sanity check
+        # below for symmetry between the two deploy paths.
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
+        run: |
+          if [ ! -f dist/jotjson/browser/index.html ]; then
+            echo "::error::dist/jotjson/browser/index.html missing in downloaded artifact"
+            exit 1
+          fi
+          if [ ! -f dist/jotjson/browser/staticwebapp.config.json ]; then
+            echo "::error::dist/jotjson/browser/staticwebapp.config.json missing in downloaded artifact"
+            exit 1
+          fi
+          if grep -r --include='*.js' '__ENTRA_' dist/jotjson/browser/; then
+            echo "::error::Downloaded bundle contains __ENTRA_ placeholder - upstream secret bake failed"
+            exit 1
+          fi
+
+      # ------------------------------------------------------------------
+      # Path 2: workflow_dispatch - build inline on the runner.
+      # The api install below is shared between both paths.
+      # ------------------------------------------------------------------
       - uses: actions/setup-node@v6
         if: steps.check.outputs.have_token == 'true'
         with:
           node-version: 24
           cache: npm
 
-      - name: Install web deps
-        if: steps.check.outputs.have_token == 'true'
+      - name: Install web deps (manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
         run: npm ci
 
-      - name: Install API deps
-        if: steps.check.outputs.have_token == 'true'
-        working-directory: api
-        run: npm ci
-
-      - name: Materialize environment.ts
-        if: steps.check.outputs.have_token == 'true'
+      - name: Materialize environment.ts (manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
         run: cp src/environments/environment.example.ts src/environments/environment.ts
 
-      - name: Bake production auth config into environment.prod.ts
-        if: steps.check.outputs.have_token == 'true'
+      - name: Bake production auth config into environment.prod.ts (manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
         env:
           ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
           ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
@@ -111,9 +195,8 @@ jobs:
           ENTRA_API_SCOPE: ${{ secrets.ENTRA_API_SCOPE }}
           APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.APP_INSIGHTS_CONNECTION_STRING }}
         run: |
-          # SWA-hosted site is reachable at both the SWA default hostname and
-          # the custom domain (jotjson.com) once bound. MSAL only allows one
-          # redirectUri in its config, so we pick the canonical custom domain.
+          # Duplicates ci.yml's bake step. See "Build topology" comment at
+          # the top of this file for why this duplication exists.
           cat > src/environments/environment.prod.ts <<'EOF'
           import { Environment } from './environment.interface';
 
@@ -131,26 +214,95 @@ jobs:
             appInsightsConnectionString: '__APP_INSIGHTS_CONNECTION_STRING__'
           };
           EOF
-          # The heredoc above preserves the indentation we use in YAML, so
-          # strip the 10-space leading indent to produce idiomatic TS. The
-          # emitted file still type-checks either way, but cleaner diffs in
-          # deploy logs help debugging.
           sed -i 's/^          //' src/environments/environment.prod.ts
-          # Substitute secrets. Fail the build if any of the ENTRA_* values
-          # are still empty so we never ship an unconfigured production
-          # bundle. App Insights is intentionally optional - an empty
-          # connection string just disables telemetry for that build.
           sed -i "s|__ENTRA_SPA_CLIENT_ID__|${ENTRA_SPA_CLIENT_ID}|g" src/environments/environment.prod.ts
           sed -i "s|__ENTRA_AUTHORITY__|${ENTRA_AUTHORITY}|g" src/environments/environment.prod.ts
           sed -i "s|__ENTRA_KNOWN_AUTHORITY__|${ENTRA_KNOWN_AUTHORITY}|g" src/environments/environment.prod.ts
           sed -i "s|__ENTRA_API_SCOPE__|${ENTRA_API_SCOPE}|g" src/environments/environment.prod.ts
-          # `|` delimiter for AI because the connection string contains `=`
-          # but no `|`.
           sed -i "s|__APP_INSIGHTS_CONNECTION_STRING__|${APP_INSIGHTS_CONNECTION_STRING}|g" src/environments/environment.prod.ts
           if grep -q "__ENTRA_" src/environments/environment.prod.ts; then
             echo "::error::One or more ENTRA_* secrets are missing - aborting deploy."
             exit 1
           fi
+
+      - name: Build SPA (manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        run: npm run build -- --configuration=production
+
+      - name: Copy SWA config into bundle (manual deploy)
+        # See ci.yml for rationale; mirrors the same step there.
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        run: cp staticwebapp.config.json dist/jotjson/browser/staticwebapp.config.json
+
+      - name: Sanity-check production bundle (manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        run: |
+          if [ ! -f dist/jotjson/browser/index.html ]; then
+            echo "::error::dist/jotjson/browser/index.html missing"
+            exit 1
+          fi
+          if [ ! -f dist/jotjson/browser/staticwebapp.config.json ]; then
+            echo "::error::dist/jotjson/browser/staticwebapp.config.json missing"
+            exit 1
+          fi
+          if grep -r --include='*.js' '__ENTRA_' dist/jotjson/browser/; then
+            echo "::error::Production bundle contains __ENTRA_ placeholder - secret bake failed"
+            exit 1
+          fi
+
+      # ------------------------------------------------------------------
+      # Sourcemap upload to Azure Blob Storage (manual deploy path).
+      # Mirrors ci.yml's sourcemap-upload steps so workflow_dispatch
+      # emergency deploys keep the AI-connected Storage container in
+      # sync with deployed JS. Without this, a manual redeploy would
+      # leave the portal symbolicating against stale maps. See
+      # DESIGN_SPEC.md "Sourcemaps" section.
+      # ------------------------------------------------------------------
+      - name: Azure login (sourcemap upload, manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Upload sourcemaps to Azure Blob Storage (manual deploy)
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        env:
+          STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+        run: |
+          az storage blob upload-batch \
+            --source dist/jotjson/browser \
+            --destination sourcemaps \
+            --account-name "$STORAGE_ACCOUNT" \
+            --pattern '*.map' \
+            --auth-mode login \
+            --overwrite true
+      - name: Azure logout (sourcemap upload, manual deploy)
+        if: ${{ always() && steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch' }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
+
+      # ------------------------------------------------------------------
+      # Shared: install api production deps on the runner so the SWA
+      # upload (with skip_api_build: true) sees a fully-runnable
+      # Functions tree at api_location. The TS->JS compile is done in
+      # CI's `api` job (workflow_run path -> downloaded as api-dist) or
+      # by the "Build API (manual deploy)" step below (workflow_dispatch
+      # path); Oryx is no longer in the deploy pipeline.
+      # ------------------------------------------------------------------
+      - name: Install API deps
+        if: steps.check.outputs.have_token == 'true'
+        working-directory: api
+        run: npm ci
+
+      - name: Build API (manual deploy)
+        # workflow_run path downloads compiled dist/ from the api-dist
+        # artifact; workflow_dispatch path has only source TS at this
+        # point and needs an explicit compile so the SWA upload (with
+        # skip_api_build: true) sees the JS files referenced by
+        # api/package.json's `main` glob.
+        if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_dispatch'
+        working-directory: api
+        run: npm run build
 
       - name: Deploy to Azure Static Web Apps
         if: steps.check.outputs.have_token == 'true'
@@ -159,6 +311,13 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-          app_location: '/'
+          # With skip_app_build: true the SWA action treats app_location
+          # as the prebuilt SPA output directory (per Microsoft docs).
+          # With skip_api_build: true it likewise treats api_location as
+          # a prebuilt Functions tree and uploads it as-is - no Oryx.
+          # output_location is therefore unused.
+          app_location: 'dist/jotjson/browser'
           api_location: 'api'
-          output_location: 'dist/jotjson/browser'
+          skip_app_build: true
+          skip_api_build: true
+

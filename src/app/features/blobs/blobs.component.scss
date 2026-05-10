@@ -56,7 +56,10 @@
   padding: 10px 12px;
   border-radius: 6px;
   background: rgba(127, 127, 127, 0.06);
-  transition: background 120ms ease;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: background 120ms ease;
+  }
 
   &:hover {
     background: rgba(127, 127, 127, 0.12);
@@ -167,7 +170,6 @@
     );
     background-size: 200% 100%;
     border-radius: 4px;
-    animation: jj-skeleton-pulse 1.4s ease-in-out infinite;
   }
 
   .skeleton-title {
@@ -187,12 +189,18 @@
   }
 }
 
-@keyframes jj-skeleton-pulse {
-  0% {
-    background-position: 200% 0;
+@media (prefers-reduced-motion: no-preference) {
+  .blob-row.skeleton .skeleton-bar {
+    animation: jj-skeleton-pulse 1.4s ease-in-out infinite;
   }
-  100% {
-    background-position: -200% 0;
+
+  @keyframes jj-skeleton-pulse {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
   }
 }
 

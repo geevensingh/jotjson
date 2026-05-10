@@ -1,0 +1,80 @@
+<div class="jj-breadcrumb-bar" [class.is-fully-collapsed]="isFullyCollapsed()">
+  @if (crumbs().length === 0) {
+    <div class="jj-breadcrumb jj-breadcrumb--empty" aria-live="polite">
+      {{ emptyPlaceholder() }}
+    </div>
+  } @else {
+    <nav class="jj-breadcrumb" [attr.aria-label]="navAriaLabel()">
+      <ol #list class="jj-breadcrumb__list">
+        @if (leadingCrumb(); as first) {
+          <li class="jj-breadcrumb__item">
+            <button
+              type="button"
+              class="jj-breadcrumb__chip"
+              [class.is-current]="first.current"
+              [attr.aria-current]="first.current ? 'location' : null"
+              [attr.title]="first.label"
+              (click)="onCrumbClick(first)"
+              (contextmenu)="onCrumbContextMenu($event, first)"
+            >
+              {{ first.label }}
+            </button>
+            @if (hasOverflow() || trailingCrumbs().length > 0) {
+              <jj-icon name="chevron-right" class="jj-breadcrumb__sep" [size]="12" />
+            }
+          </li>
+        }
+        @if (hasOverflow()) {
+          <li class="jj-breadcrumb__item jj-breadcrumb__item--overflow">
+            <button
+              type="button"
+              class="jj-breadcrumb__chip jj-breadcrumb__chip--overflow"
+              [attr.aria-label]="overflowAriaLabel()"
+              [matMenuTriggerFor]="overflowMenu"
+            >
+              ...
+            </button>
+            <mat-menu #overflowMenu="matMenu" class="jj-menu jj-breadcrumb__overflow-menu">
+              @for (crumb of hiddenCrumbs(); track crumb.canonicalPath) {
+                <button type="button" mat-menu-item (click)="onCrumbClick(crumb)">
+                  {{ crumb.label }}
+                </button>
+              }
+            </mat-menu>
+            @if (trailingCrumbs().length > 0) {
+              <jj-icon name="chevron-right" class="jj-breadcrumb__sep" [size]="12" />
+            }
+          </li>
+        }
+        @for (crumb of trailingCrumbs(); track crumb.canonicalPath; let last = $last) {
+          <li class="jj-breadcrumb__item">
+            <button
+              type="button"
+              class="jj-breadcrumb__chip"
+              [class.is-current]="crumb.current"
+              [attr.aria-current]="crumb.current ? 'location' : null"
+              [attr.title]="crumb.label"
+              (click)="onCrumbClick(crumb)"
+              (contextmenu)="onCrumbContextMenu($event, crumb)"
+            >
+              {{ crumb.label }}
+            </button>
+            @if (!last) {
+              <jj-icon name="chevron-right" class="jj-breadcrumb__sep" [size]="12" />
+            }
+          </li>
+        }
+      </ol>
+    </nav>
+  }
+  <button
+    type="button"
+    class="jj-breadcrumb__copy"
+    [attr.title]="copyPathTitle()"
+    [attr.aria-label]="copyPathAriaLabel()"
+    [disabled]="copyPathDisabled()"
+    (click)="onCopyClick()"
+  >
+    <jj-icon name="copy-path" [size]="14" />
+  </button>
+</div>

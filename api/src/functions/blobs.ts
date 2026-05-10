@@ -14,12 +14,7 @@
  *     blob and includes `autoDeleted: { id, slug, title? }` on the response.
  *   - "manual" strategy: returns 409 with `code: "quota_exceeded"`.
  */
-import {
-  app,
-  HttpRequest,
-  HttpResponseInit,
-  InvocationContext
-} from '@azure/functions';
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth, tryAuth } from '../shared/auth';
 import {
   BlobValidationError,
@@ -29,35 +24,22 @@ import {
   deleteBlobById,
   findBlobByIdOrSlug,
   listBlobsByOwner,
-  updateBlob
+  updateBlob,
+  type BlobDocument,
+  type BlobHighlight,
 } from '../shared/blobs';
-import { recordEntry, type HistoryAction } from '../shared/history';
+import { stripCosmosMetadata, VersionConflictError, type PublicShape } from '../shared/cosmos';
+import { getRecentViewAt, recordEntry, VIEW_DEBOUNCE_SECONDS } from '../shared/history';
+import {
+  badRequest,
+  forbidden,
+  internalError,
+  notFound,
+  quotaExceeded,
+  unauthorized,
+  withSecurityHeaders,
+} from '../shared/http';
 import { readUser } from '../shared/users';
-
-function unauthorized(message: string): HttpResponseInit {
-  return { status: 401, jsonBody: { error: message } };
-}
-
-function badRequest(message: string): HttpResponseInit {
-  return { status: 400, jsonBody: { error: message } };
-}
-
-function notFound(message: string): HttpResponseInit {
-  return { status: 404, jsonBody: { error: message } };
-}
-
-function forbidden(message: string): HttpResponseInit {
-  return { status: 403, jsonBody: { error: message } };
-}
-
-function internalError(
-  context: InvocationContext,
-  where: string,
-  err: unknown
-): HttpResponseInit {
-  context.error(`${where} error`, err);
-  return { status: 500, jsonBody: { error: 'Internal error' } };
-}
 
 /**
  * Best-effort fire-and-forget history write. History tracking is a
@@ -66,53 +48,125 @@ function internalError(
  * doubles can assert it happened, but every failure is swallowed with a
  * warning.
  */
-async function recordHistorySafely(
+async function recordViewedSafely(
   context: InvocationContext,
   input: {
     userId: string;
-    action: HistoryAction;
-    blobId?: string;
+    blobId: string;
     slug?: string;
     title?: string;
-  }
+  },
 ): Promise<void> {
   try {
-    await recordEntry(input);
-  } catch (err) {
-    context.warn('history record failed', { action: input.action, error: err });
+    await recordEntry({ ...input, action: 'viewed' });
+  } catch (error) {
+    context.warn('history record failed', { action: 'viewed', error });
   }
 }
 
+type PublicBlobDocument = PublicShape<BlobDocument>;
+type BlobResponseBody = PublicBlobDocument & { highlights: BlobHighlight[] };
+
+function publicBlob(blob: BlobDocument): PublicBlobDocument {
+  return stripCosmosMetadata(blob);
+}
+
+function withResponseHighlights(blob: BlobDocument): BlobResponseBody {
+  const doc = publicBlob(blob);
+  return { ...doc, highlights: doc.highlights ?? [] };
+}
+
+function preconditionFailed(message: string): HttpResponseInit {
+  return { status: 412, jsonBody: { error: message } };
+}
+
+function withEtag(status: number, doc: BlobDocument): HttpResponseInit {
+  return {
+    status,
+    headers: { ETag: `"${doc.version}"` },
+    jsonBody: publicBlob(doc),
+  };
+}
+
 /**
- * Look up the caller's `historyTrackingMode` preference. Defaults to
- * `"save_only"` when the user document or preference is missing - matches
- * `DEFAULT_PREFERENCES` in shared/preferences.ts. Errors reading the user
- * doc fall through as `"save_only"` so a transient Cosmos error never
- * accidentally upgrades a user to `"all_actions"` tracking.
+ * GET-only response helper that takes ownership of body serialization so we
+ * can advertise the uncompressed body byte count via X-Jotjson-Body-Length.
+ *
+ * Why a custom header instead of relying on Content-Length? Azure Front Door
+ * (in front of Static Web Apps) compresses application/json on the fly with
+ * gzip/br and switches the response to Transfer-Encoding: chunked, dropping
+ * Content-Length entirely. The frontend needs the uncompressed total to drive
+ * a determinate progress bar for share-link blob loads. AFD passes unknown
+ * custom headers through unchanged, so X-Jotjson-Body-Length survives the
+ * compression pipeline.
+ *
+ * Browsers report decompressed bytes on XHR `progress` events, so dividing
+ * `loaded` by this header value yields a clean 0..1 fraction without clamping.
+ *
+ * Only the GET handler uses this helper; PUT continues with `withEtag` because
+ * its response is consumed as a parsed body, not streamed for progress.
  */
-async function readHistoryMode(
+function withEtagAndBodyLength(status: number, blob: BlobDocument): HttpResponseInit {
+  const responseBody = withResponseHighlights(blob);
+  const body = JSON.stringify(responseBody);
+  return {
+    status,
+    headers: {
+      ETag: `"${blob.version}"`,
+      'Content-Type': 'application/json',
+      'X-Jotjson-Body-Length': String(Buffer.byteLength(body, 'utf8')),
+    },
+    body,
+  };
+}
+
+function parseIfMatch(headerValue: string | null | undefined): number | null {
+  if (typeof headerValue !== 'string') return null;
+  const trimmed = headerValue.trim();
+  if (trimmed.length === 0 || trimmed.startsWith('W/')) return null;
+  const unquoted = trimmed.replace(/^"|"$/g, '');
+  if (!/^\d+$/.test(unquoted)) return null;
+  const value = Number.parseInt(unquoted, 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Read whether the caller has the "Recently viewed" tracking enabled.
+ *
+ * - Missing user doc / missing field -> default `true` (new-user
+ *   default; the feature is on unless explicitly turned off).
+ * - Read failure -> `false` (fail closed). A transient Cosmos hiccup
+ *   must never silently turn tracking on for a user who opted out.
+ */
+async function readRecentlyViewedEnabled(
   context: InvocationContext,
-  userId: string
-): Promise<'save_only' | 'all_actions'> {
+  userId: string,
+): Promise<boolean> {
   try {
     const user = await readUser(userId);
-    return user?.preferences?.historyTrackingMode ?? 'save_only';
-  } catch (err) {
-    context.warn('history pref read failed', err);
-    return 'save_only';
+    const prefs = user?.preferences as
+      | (Record<string, unknown> & { recentlyViewedEnabled?: unknown })
+      | undefined;
+    if (typeof prefs?.recentlyViewedEnabled === 'boolean') {
+      return prefs.recentlyViewedEnabled;
+    }
+    return true;
+  } catch (error) {
+    context.warn('recentlyViewedEnabled read failed; failing closed', error);
+    return false;
   }
 }
 
 export async function postBlob(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'postBlob auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'postBlob auth', error);
   }
 
   let body: unknown;
@@ -125,7 +179,12 @@ export async function postBlob(
   if (!body || typeof body !== 'object') {
     return badRequest('Request body must be an object');
   }
-  const payload = body as { content?: unknown; title?: unknown; isPublic?: unknown };
+  const payload = body as {
+    content?: unknown;
+    title?: unknown;
+    isPublic?: unknown;
+    highlights?: unknown;
+  };
 
   let autoDeleted: { id: string; slug: string; title?: string } | undefined;
   try {
@@ -134,13 +193,15 @@ export async function postBlob(
       const userDoc = await readUser(principal.id);
       const strategy = userDoc?.preferences?.blobQuotaStrategy ?? 'auto_fifo';
       if (strategy === 'manual') {
-        return {
-          status: 409,
-          jsonBody: {
-            error: `Blob quota of ${MAX_BLOBS_PER_USER} reached. Delete an existing blob and try again.`,
-            code: 'quota_exceeded'
-          }
-        };
+        return quotaExceeded(
+          `Blob quota of ${MAX_BLOBS_PER_USER} reached. Delete an existing blob and try again.`,
+          {
+            resource: 'blob',
+            via: 'create',
+            count: existing.length,
+            limit: MAX_BLOBS_PER_USER,
+          },
+        );
       }
       // auto_fifo: drop the oldest blob (by updatedAt, then createdAt as
       // tiebreaker - matches DESIGN_SPEC §Constraints).
@@ -153,47 +214,42 @@ export async function postBlob(
         autoDeleted = {
           id: oldest.id,
           slug: oldest.slug,
-          ...(oldest.title ? { title: oldest.title } : {})
+          ...(oldest.title ? { title: oldest.title } : {}),
         };
       }
     }
-  } catch (err) {
-    return internalError(context, 'postBlob quota', err);
+  } catch (error) {
+    return internalError(context, 'postBlob quota', error);
   }
 
   try {
     const saved = await createBlob(principal.id, {
-      content: payload.content as string,
-      ...(payload.title !== undefined ? { title: payload.title as string } : {}),
-      ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic as boolean } : {})
+      content: payload.content,
+      ...(payload.title !== undefined ? { title: payload.title } : {}),
+      ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic } : {}),
+      ...(payload.highlights !== undefined ? { highlights: payload.highlights } : {}),
     });
-    // "saved" is always recorded regardless of historyTrackingMode - it is
-    // the minimum surface a user needs to find their blobs in M5b. The
-    // auto_fifo eviction above is intentionally NOT recorded as "deleted":
-    // it is system-driven, not user-initiated.
-    await recordHistorySafely(context, {
-      userId: principal.id,
-      action: 'saved',
-      blobId: saved.id,
-      slug: saved.slug,
-      ...(saved.title ? { title: saved.title } : {})
-    });
+    const response = withEtag(201, saved);
+    if (!autoDeleted) return response;
     return {
-      status: 201,
-      jsonBody: autoDeleted ? { ...saved, autoDeleted } : saved
+      ...response,
+      jsonBody: { ...(response.jsonBody as PublicBlobDocument), autoDeleted },
     };
-  } catch (err) {
-    if (err instanceof BlobValidationError) return badRequest(err.message);
-    if (err instanceof SlugGenerationError) {
-      return { status: 503, jsonBody: { error: 'Could not allocate a unique slug - please retry' } };
+  } catch (error) {
+    if (error instanceof BlobValidationError) return badRequest(error.message);
+    if (error instanceof SlugGenerationError) {
+      return {
+        status: 503,
+        jsonBody: { error: 'Could not allocate a unique slug - please retry' },
+      };
     }
-    return internalError(context, 'postBlob write', err);
+    return internalError(context, 'postBlob write', error);
   }
 }
 
 export async function getBlob(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   const idOrSlug = req.params['idOrSlug'] ?? '';
   if (!idOrSlug) return badRequest('Missing idOrSlug path parameter');
@@ -202,65 +258,74 @@ export async function getBlob(
     const blob = await findBlobByIdOrSlug(idOrSlug);
     if (!blob) return notFound('Blob not found');
     // Record a "viewed" entry only when the caller is authenticated, is
-    // NOT the owner, and has opted into all_actions tracking. Anonymous
-    // public-link viewers are never tracked. Owner reads (e.g. opening
-    // their own saved link) are noise. Auth on this route is optional, so
-    // tryAuth never throws on missing/invalid tokens.
+    // NOT the owner, has the "Recently viewed" tracking enabled, and has
+    // not already recorded a view for this same blob within
+    // VIEW_DEBOUNCE_SECONDS. Anonymous public-link viewers are never
+    // tracked. Owner reads (e.g. opening their own saved link) are noise.
+    // Auth on this route is optional, so tryAuth never throws on
+    // missing/invalid tokens.
     try {
       const principal = await tryAuth(req);
       if (principal && principal.id !== blob.ownerId) {
-        const mode = await readHistoryMode(context, principal.id);
-        if (mode === 'all_actions') {
-          await recordHistorySafely(context, {
-            userId: principal.id,
-            action: 'viewed',
-            blobId: blob.id,
-            slug: blob.slug,
-            ...(blob.title ? { title: blob.title } : {})
-          });
+        const enabled = await readRecentlyViewedEnabled(context, principal.id);
+        if (enabled) {
+          const recent = await getRecentViewAt(principal.id, blob.id);
+          let withinDebounce = false;
+          if (recent) {
+            const ageMs = Date.now() - new Date(recent).getTime();
+            withinDebounce = Number.isFinite(ageMs) && ageMs < VIEW_DEBOUNCE_SECONDS * 1000;
+          }
+          if (!withinDebounce) {
+            await recordViewedSafely(context, {
+              userId: principal.id,
+              blobId: blob.id,
+              slug: blob.slug,
+              ...(blob.title ? { title: blob.title } : {}),
+            });
+          }
         }
       }
-    } catch (err) {
+    } catch (error) {
       // tryAuth swallows AuthError; only true infra failures land here.
       // Surface in logs but never fail the read.
-      context.warn('getBlob history hook failed', err);
+      context.warn('getBlob history hook failed', error);
     }
-    return { status: 200, jsonBody: blob };
-  } catch (err) {
-    return internalError(context, 'getBlob read', err);
+    return withEtagAndBodyLength(200, blob);
+  } catch (error) {
+    return internalError(context, 'getBlob read', error);
   }
 }
 
 export async function listBlobs(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'listBlobs auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'listBlobs auth', error);
   }
 
   try {
     const blobs = await listBlobsByOwner(principal.id);
-    return { status: 200, jsonBody: blobs };
-  } catch (err) {
-    return internalError(context, 'listBlobs read', err);
+    return { status: 200, jsonBody: blobs.map(withResponseHighlights) };
+  } catch (error) {
+    return internalError(context, 'listBlobs read', error);
   }
 }
 
 export async function deleteBlob(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'deleteBlob auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'deleteBlob auth', error);
   }
 
   const id = req.params['id'] ?? '';
@@ -275,40 +340,36 @@ export async function deleteBlob(
       return badRequest('DELETE requires the blob UUID id, not the slug');
     }
     if (existing.ownerId !== principal.id) {
-      return forbidden('You do not own this blob');
+      return forbidden('You do not own this blob', 'blob');
     }
 
     const deleted = await deleteBlobById(existing.id, existing.ownerId);
     if (!deleted) return notFound('Blob not found');
-    if ((await readHistoryMode(context, principal.id)) === 'all_actions') {
-      await recordHistorySafely(context, {
-        userId: principal.id,
-        action: 'deleted',
-        blobId: existing.id,
-        slug: existing.slug,
-        ...(existing.title ? { title: existing.title } : {})
-      });
-    }
     return { status: 204 };
-  } catch (err) {
-    return internalError(context, 'deleteBlob write', err);
+  } catch (error) {
+    return internalError(context, 'deleteBlob write', error);
   }
 }
 
 export async function putBlob(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'putBlob auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'putBlob auth', error);
   }
 
   const id = req.params['id'] ?? '';
   if (!id) return badRequest('Missing id path parameter');
+
+  const expectedVersion = parseIfMatch(req.headers.get('If-Match'));
+  if (expectedVersion === null) {
+    return badRequest('PUT requires a valid If-Match header carrying the blob version');
+  }
 
   let body: unknown;
   try {
@@ -319,7 +380,12 @@ export async function putBlob(
   if (!body || typeof body !== 'object') {
     return badRequest('Request body must be an object');
   }
-  const patch = body as { content?: unknown; title?: unknown; isPublic?: unknown };
+  const patch = body as {
+    content?: unknown;
+    title?: unknown;
+    isPublic?: unknown;
+    highlights?: unknown;
+  };
 
   try {
     const existing = await findBlobByIdOrSlug(id);
@@ -330,27 +396,29 @@ export async function putBlob(
       return badRequest('PUT requires the blob UUID id, not the slug');
     }
     if (existing.ownerId !== principal.id) {
-      return forbidden('You do not own this blob');
+      return forbidden('You do not own this blob', 'blob');
+    }
+    if (existing.version !== expectedVersion) {
+      return preconditionFailed(
+        `Blob was modified by another writer (expected version ${expectedVersion}, found ${existing.version})`,
+      );
     }
 
-    const saved = await updateBlob(existing, {
-      ...(patch.content !== undefined ? { content: patch.content as string } : {}),
-      ...(patch.title !== undefined ? { title: patch.title as string } : {}),
-      ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic as boolean } : {})
-    });
-    if ((await readHistoryMode(context, principal.id)) === 'all_actions') {
-      await recordHistorySafely(context, {
-        userId: principal.id,
-        action: 'edited',
-        blobId: saved.id,
-        slug: saved.slug,
-        ...(saved.title ? { title: saved.title } : {})
-      });
-    }
-    return { status: 200, jsonBody: saved };
-  } catch (err) {
-    if (err instanceof BlobValidationError) return badRequest(err.message);
-    return internalError(context, 'putBlob write', err);
+    const saved = await updateBlob(
+      existing,
+      {
+        ...(patch.content !== undefined ? { content: patch.content } : {}),
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic } : {}),
+        ...(patch.highlights !== undefined ? { highlights: patch.highlights } : {}),
+      },
+      expectedVersion,
+    );
+    return withEtag(200, saved);
+  } catch (error) {
+    if (error instanceof BlobValidationError) return badRequest(error.message);
+    if (error instanceof VersionConflictError) return preconditionFailed(error.message);
+    return internalError(context, 'putBlob write', error);
   }
 }
 
@@ -358,33 +426,33 @@ app.http('blobs-post', {
   methods: ['POST'],
   route: 'blobs',
   authLevel: 'anonymous',
-  handler: postBlob
+  handler: withSecurityHeaders(postBlob),
 });
 
 app.http('blobs-list', {
   methods: ['GET'],
   route: 'blobs',
   authLevel: 'anonymous',
-  handler: listBlobs
+  handler: withSecurityHeaders(listBlobs),
 });
 
 app.http('blobs-get', {
   methods: ['GET'],
   route: 'blobs/{idOrSlug}',
   authLevel: 'anonymous',
-  handler: getBlob
+  handler: withSecurityHeaders(getBlob),
 });
 
 app.http('blobs-put', {
   methods: ['PUT'],
   route: 'blobs/{id}',
   authLevel: 'anonymous',
-  handler: putBlob
+  handler: withSecurityHeaders(putBlob),
 });
 
 app.http('blobs-delete', {
   methods: ['DELETE'],
   route: 'blobs/{id}',
   authLevel: 'anonymous',
-  handler: deleteBlob
+  handler: withSecurityHeaders(deleteBlob),
 });

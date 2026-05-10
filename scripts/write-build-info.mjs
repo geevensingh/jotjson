@@ -1,73 +1,131 @@
 #!/usr/bin/env node
-// Short-term build-info generator (spec M7 short-term, pre-M7n).
+// Build-info generator for JotJSON.
 //
-// Reads the current git commit SHA (short form) and working-tree dirty flag,
-// then writes them into src/generated/build-info.ts so the Angular bundle can
-// surface a "what am I running?" indicator in the status bar.
+// Reads package.json version/repository metadata, CI-provided
+// GITHUB_SHA / GITHUB_REF_NAME values, and a git-derived
+// buildNumber (`git rev-list --count HEAD`), then writes them into
+// src/generated/build-info.ts so the Angular bundle can surface a
+// "what am I running?" indicator in the status bar.
 //
-// When M7n lands, this script is superseded by a CI-authoritative injector
-// that uses GITHUB_SHA / GITHUB_REF_NAME instead of local git.
-//
-// Runs with zero dependencies on Node 24+. Invoked automatically via the
-// prestart / prebuild / prelint / pretest npm lifecycle hooks.
+// This script is invoked from npm lifecycle hooks
+// (prebuild/prestart/prelint/pretest/prewatch); it never runs at app runtime.
+// Runs with zero dependencies on Node 24+.
 //
 // Fallbacks:
-//   - No git repo / git missing -> sha: 'dev', dirty: false
+//   - No GITHUB_SHA -> sha: 'dev'
+//   - No GITHUB_REF_NAME -> branch: ''
+//   - No package.json repository.url -> repoUrl: ''
+//   - Shallow git checkout / git unavailable -> buildNumber: 'unknown'
 //   - The generated file is gitignored; each build regenerates it.
 
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(__dirname, '..');
-const outPath = resolve(repoRoot, 'src', 'generated', 'build-info.ts');
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(scriptDirectory, '..');
+const outputPath = resolve(repositoryRoot, 'src', 'generated', 'build-info.ts');
+const packageJsonPath = resolve(repositoryRoot, 'package.json');
 
-function tryGit(args) {
-  try {
-    return execFileSync('git', args, {
-      cwd: repoRoot,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf8'
-    }).trim();
-  } catch {
+function normalizeRepositoryUrl(rawRepositoryUrl) {
+  if (typeof rawRepositoryUrl !== 'string' || rawRepositoryUrl.trim() === '') {
     return '';
+  }
+
+  let repositoryUrl = rawRepositoryUrl.trim();
+
+  if (repositoryUrl.startsWith('git+')) {
+    repositoryUrl = repositoryUrl.slice('git+'.length);
+  }
+
+  repositoryUrl = repositoryUrl.replace(/\.git$/iu, '');
+
+  const sshProtocolMatch = /^ssh:\/\/git@github\.com\/([^/]+\/[^/]+)$/iu.exec(repositoryUrl);
+  if (sshProtocolMatch !== null) {
+    return `https://github.com/${sshProtocolMatch[1]}`;
+  }
+
+  const sshShortcutMatch = /^git@github\.com:([^/]+\/[^/]+)$/iu.exec(repositoryUrl);
+  if (sshShortcutMatch !== null) {
+    return `https://github.com/${sshShortcutMatch[1]}`;
+  }
+
+  return repositoryUrl;
+}
+
+// Computes a monotonically non-decreasing build counter on `main`.
+// Returns 'unknown' (and warns) on shallow checkouts or when git is
+// unavailable -- a fake '0' would silently pollute telemetry. The
+// post-build assertion in ci.yml fails the workflow if a shipped
+// artifact contains 'unknown', surfacing a missing fetch-depth: 0.
+function getBuildNumber() {
+  try {
+    const isShallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (isShallow === 'true') {
+      console.warn(
+        "write-build-info: shallow git checkout detected; buildNumber set to 'unknown'. " +
+          'Set actions/checkout fetch-depth: 0 if this is the build that ships.',
+      );
+      return 'unknown';
+    }
+    const count = execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (count === '' || !/^\d+$/u.test(count)) {
+      console.warn(
+        `write-build-info: unexpected git rev-list output ${JSON.stringify(count)}; ` +
+          "buildNumber set to 'unknown'.",
+      );
+      return 'unknown';
+    }
+    return count;
+  } catch (error) {
+    console.warn(
+      `write-build-info: failed to derive buildNumber from git (${error?.message ?? error}); ` +
+        "buildNumber set to 'unknown'.",
+    );
+    return 'unknown';
   }
 }
 
-const sha = tryGit(['rev-parse', '--short=7', 'HEAD']) || 'dev';
-const branch = tryGit(['rev-parse', '--abbrev-ref', 'HEAD']) || '';
-const dirty = sha !== 'dev' && tryGit(['status', '--porcelain']).length > 0;
-const builtAt = new Date().toISOString();
-
+const packageMetadata = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+const repositoryUrl = normalizeRepositoryUrl(packageMetadata.repository?.url);
 const payload = {
-  sha,
-  branch,
-  dirty,
-  builtAt,
-  version: JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8')).version
+  version: packageMetadata.version,
+  sha: process.env.GITHUB_SHA?.toLowerCase() || 'dev',
+  branch: process.env.GITHUB_REF_NAME || '',
+  builtAt: new Date().toISOString(),
+  repoUrl: repositoryUrl,
+  buildNumber: getBuildNumber(),
 };
 
 const contents =
   '// AUTO-GENERATED by scripts/write-build-info.mjs. Do not edit by hand.\n' +
   '// Regenerated on every build; gitignored.\n' +
   'export interface BuildInfo {\n' +
+  '  readonly version: string;\n' +
   '  readonly sha: string;\n' +
   '  readonly branch: string;\n' +
-  '  readonly dirty: boolean;\n' +
   '  readonly builtAt: string;\n' +
-  '  readonly version: string;\n' +
+  '  readonly repoUrl: string;\n' +
+  '  readonly buildNumber: string;\n' +
   '}\n' +
   '\n' +
   'export const BUILD_INFO: BuildInfo = ' +
   JSON.stringify(payload, null, 2) +
   ';\n';
 
-mkdirSync(dirname(outPath), { recursive: true });
+mkdirSync(dirname(outputPath), { recursive: true });
 
 // Only write when the contents actually changed, so back-to-back `npm start`
 // + `ng build --watch` don't trigger spurious recompiles.
-if (!existsSync(outPath) || readFileSync(outPath, 'utf8') !== contents) {
-  writeFileSync(outPath, contents);
+if (!existsSync(outputPath) || readFileSync(outputPath, 'utf8') !== contents) {
+  writeFileSync(outputPath, contents);
 }

@@ -52,10 +52,22 @@ describe('TelemetryService', () => {
     const svc = make();
     await svc.connect();
     expect(() => svc.trackEvent('app.unhandled')).not.toThrow();
-    expect(() =>
-      svc.trackException(normalizeError(new Error('x')))
-    ).not.toThrow();
+    expect(() => svc.trackException(normalizeError(new Error('x')))).not.toThrow();
     expect(() => svc.trackPageView('Home', '/')).not.toThrow();
+  });
+
+  it('flush() is a no-op promise when disabled (no throw, resolves)', async () => {
+    environment.appInsightsConnectionString = '';
+    const svc = make();
+    await svc.connect();
+    await expectAsync(svc.flush()).toBeResolved();
+  });
+
+  it('flush() resolves before connect() even completes (no buffer)', async () => {
+    environment.appInsightsConnectionString = '';
+    const svc = make();
+    // Pre-connect: appInsights is null so flush is a no-op.
+    await expectAsync(svc.flush()).toBeResolved();
   });
 
   it('caches setUser before connect; applies safely after disabled', async () => {
@@ -73,10 +85,8 @@ describe('TelemetryService', () => {
     await svc.connect();
     const err = new HttpErrorResponse({
       url: '/api/x?secret=yes',
-      status: 500
+      status: 500,
     });
-    expect(() =>
-      svc.trackException(normalizeError(err, { method: 'GET' }))
-    ).not.toThrow();
+    expect(() => svc.trackException(normalizeError(err, { method: 'GET' }))).not.toThrow();
   });
 });

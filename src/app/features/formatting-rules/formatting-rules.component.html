@@ -1,0 +1,193 @@
+<jj-app-header />
+
+<main id="main-content" class="formatting-rules" tabindex="-1">
+  <header class="page-header">
+    <h1 i18n="@@formattingRules.title">Formatting rules</h1>
+    <p class="page-subtitle" i18n="@@formattingRules.subtitle">
+      Highlight matching keys and values when viewing JSON. Pick which sets apply by default in the
+      toolbar above the tree on the home page.
+    </p>
+  </header>
+
+  <div class="actions-row">
+    <button
+      mat-flat-button
+      color="primary"
+      type="button"
+      [disabled]="creating()"
+      (click)="onCreate()"
+      data-testid="new-rule-set"
+    >
+      <span i18n="@@formattingRules.newRuleSet">+ New rule set</span>
+    </button>
+    <button
+      mat-stroked-button
+      type="button"
+      [disabled]="cloning()"
+      (click)="openClonePresetDialog()"
+      data-testid="clone-preset"
+    >
+      <jj-icon name="copy" />
+      <span i18n="@@formattingRules.clonePreset">Clone preset</span>
+    </button>
+  </div>
+
+  @if (loadState() === 'loading') {
+    <p class="status" aria-busy="true" i18n="@@formattingRules.loading"> Loading rule sets... </p>
+  } @else if (loadState() === 'error') {
+    <div class="status status-error">
+      <p i18n="@@formattingRules.loadError"> Could not load your rule sets. </p>
+      <button mat-stroked-button type="button" (click)="reload()">
+        <span i18n="@@common.retry">Retry</span>
+      </button>
+    </div>
+  } @else if (isEmpty()) {
+    <p class="status" i18n="@@formattingRules.empty">
+      You do not have any rule sets yet. Click "+ New rule set" to create one, or clone a preset
+      from the home page toolbar.
+    </p>
+  } @else {
+    <ul class="rule-set-list" role="list">
+      @for (set of ruleSets(); track set.id) {
+        <li class="rule-set-card" [class.is-busy]="isBusy(set.id)">
+          <button
+            mat-icon-button
+            type="button"
+            class="apply-toggle"
+            [attr.aria-pressed]="isActive(set.id)"
+            [attr.aria-label]="isActive(set.id) ? removeActiveLabel : setActiveLabel"
+            [disabled]="isBusy(set.id)"
+            data-testid="apply-toggle"
+            (click)="toggleActive(set)"
+          >
+            <jj-icon [name]="isActive(set.id) ? 'eye' : 'eye-off'" />
+          </button>
+
+          <div class="rule-set-info">
+            @if (editingId() === set.id) {
+              <div class="rename-row">
+                <input
+                  #renameInput
+                  class="rename-input"
+                  type="text"
+                  [value]="editingName()"
+                  [attr.maxlength]="NAME_MAX_FIELD"
+                  (input)="onRenameInput($any($event.target).value)"
+                  (keydown.enter)="commitRename(set); $event.preventDefault()"
+                  (keydown.escape)="cancelRename(); $event.preventDefault()"
+                  (blur)="cancelRename()"
+                  [attr.aria-invalid]="editingError() !== null"
+                  [attr.aria-describedby]="editingError() ? 'rename-error-' + set.id : null"
+                  i18n-aria-label="@@formattingRules.rename.aria"
+                  aria-label="Rule set name"
+                  data-testid="rename-input"
+                />
+                @if (editingError() === 'empty') {
+                  <span
+                    [id]="'rename-error-' + set.id"
+                    class="rename-error"
+                    data-testid="rename-error"
+                    i18n="@@formattingRules.rename.error.empty"
+                  >
+                    Name is required.
+                  </span>
+                } @else if (editingError() === 'tooLong') {
+                  <span
+                    [id]="'rename-error-' + set.id"
+                    class="rename-error"
+                    data-testid="rename-error"
+                    i18n="@@formattingRules.rename.error.tooLong"
+                  >
+                    Name is too long (max 80 characters).
+                  </span>
+                } @else if (editingError() === 'conflict') {
+                  <span
+                    [id]="'rename-error-' + set.id"
+                    class="rename-error"
+                    data-testid="rename-error"
+                    i18n="@@formattingRules.rename.error.conflictReload"
+                  >
+                    Updated elsewhere - try again.
+                  </span>
+                }
+              </div>
+            } @else {
+              <div class="name-row">
+                <h2 class="rule-set-name">{{ set.name }}</h2>
+                <button
+                  mat-icon-button
+                  type="button"
+                  class="rename-pencil"
+                  [disabled]="isBusy(set.id)"
+                  (click)="startRename(set)"
+                  data-testid="rename-pencil"
+                  i18n-aria-label="@@formattingRules.rename.pencilAria"
+                  aria-label="Rename"
+                >
+                  <jj-icon name="edit" />
+                </button>
+              </div>
+            }
+            <p class="rule-set-meta">
+              <span i18n="@@formattingRules.ruleCount">{{ set.rules.length }} rule(s)</span>
+              <span class="meta-dot">&middot;</span>
+              <span class="meta-updated">{{ relativeTime(set.updatedAt) }}</span>
+            </p>
+          </div>
+
+          <a
+            mat-stroked-button
+            [routerLink]="['/formatting-rules', set.id]"
+            [class.disabled-link]="isBusy(set.id)"
+            [attr.aria-disabled]="isBusy(set.id) ? 'true' : null"
+            data-testid="edit-rule-set"
+          >
+            <span i18n="@@formattingRules.edit">Edit</span>
+          </a>
+
+          <button
+            mat-icon-button
+            type="button"
+            [matMenuTriggerFor]="rowMenu"
+            [disabled]="isBusy(set.id)"
+            data-testid="row-menu-trigger"
+            i18n-aria-label="@@formattingRules.menu.aria"
+            aria-label="More actions"
+          >
+            <jj-icon name="more-horiz" />
+          </button>
+          <mat-menu #rowMenu="matMenu" class="jj-menu">
+            <button
+              mat-menu-item
+              type="button"
+              data-testid="menu-rename"
+              (click)="startRename(set)"
+            >
+              <jj-icon name="edit" />
+              <span i18n="@@formattingRules.menu.rename">Rename</span>
+            </button>
+            <button
+              mat-menu-item
+              type="button"
+              data-testid="menu-duplicate"
+              (click)="duplicateSet(set)"
+            >
+              <jj-icon name="copy" />
+              <span i18n="@@formattingRules.menu.duplicate">Duplicate</span>
+            </button>
+            <button
+              mat-menu-item
+              type="button"
+              class="menu-destructive"
+              data-testid="menu-delete"
+              (click)="deleteSet(set)"
+            >
+              <jj-icon name="trash" />
+              <span i18n="@@formattingRules.menu.delete">Delete</span>
+            </button>
+          </mat-menu>
+        </li>
+      }
+    </ul>
+  }
+</main>

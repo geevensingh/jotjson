@@ -1,0 +1,51 @@
+name: "CodeQL"
+
+# CodeQL Advanced Setup: replaces the auto-managed Default Setup so we
+# can use .github/codeql/codeql-config.yml to scope paths and exclude
+# rules with documented justification. See SECURITY.md and
+# .github/codeql/codeql-config.yml for the rationale.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Monday-noon-UTC scan catches drift between PR runs (e.g.,
+    # transitive dependency advisories that land between pushes).
+    - cron: '0 12 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # 'actions' analyzes GitHub Actions workflow files;
+        # 'javascript-typescript' analyzes JS/TS source under
+        # paths not excluded by codeql-config.yml's paths-ignore.
+        language: ['actions', 'javascript-typescript']
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

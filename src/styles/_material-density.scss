@@ -1,0 +1,38 @@
+// Shared mixins for compacting Angular Material 21 controls.
+//
+// Material 21 uses --mat-<component>-* CSS custom properties (NOT the
+// legacy --mdc-* / --mat-standard-* token names from earlier majors).
+// Verify token names against
+// node_modules/@angular/material/<component>/_m3-<component>.scss
+// before adding a new mixin or overriding new properties.
+
+@mixin compact-mat-button-toggle($height, $text-size) {
+  --mat-button-toggle-height: #{$height};
+  --mat-button-toggle-label-text-size: #{$text-size};
+  --mat-button-toggle-label-text-line-height: #{$height};
+
+  // Belt-and-braces: Material's MDC layer ignores --mat-button-toggle-height
+  // on some inner elements, so we also force the visual height via padding
+  // and line-height on the inner button + label.
+  .mat-button-toggle-button {
+    padding: 0;
+  }
+
+  .mat-button-toggle-label-content {
+    padding: 0 14px;
+    line-height: #{$height};
+    font-size: #{$text-size};
+  }
+}
+
+// Compact mat-form-field. $height should be one of the density-scale
+// container heights documented in
+// node_modules/@angular/material/form-field/_m3-form-field.scss
+// (56/52/48/44/40/36 px). $vertical-padding pairs with each height
+// per that table (16/14/12/10/8/6 px).
+@mixin compact-mat-form-field($height: 36px, $vertical-padding: 6px) {
+  --mat-form-field-container-height: #{$height};
+  --mat-form-field-container-vertical-padding: #{$vertical-padding};
+  --mat-form-field-filled-with-label-container-padding-top: #{$vertical-padding * 1.4};
+  --mat-form-field-filled-with-label-container-padding-bottom: #{$vertical-padding * 0.6};
+}

@@ -8,7 +8,7 @@ import { provideFakeAuth } from '../../../testing/auth.testing';
 @Component({
   standalone: true,
   imports: [SignedInDirective],
-  template: `<span *jjSignedIn class="target">yes</span>`
+  template: `<span *jjSignedIn class="target">yes</span>`,
 })
 class HostComponent {}
 
@@ -21,7 +21,7 @@ describe('SignedInDirective', () => {
     function create() {
       TestBed.configureTestingModule({
         imports: [HostComponent],
-        providers: [...provideFakeAuth()]
+        providers: [...provideFakeAuth()],
       });
       const fixture = TestBed.createComponent(HostComponent);
       const auth = TestBed.inject(AuthService);
@@ -44,9 +44,8 @@ describe('SignedInDirective', () => {
         pending('Auth not configured in this environment build.');
         return;
       }
-      const userSignal = (
-        auth as unknown as { userSignal: { set(v: AuthUser | null): void } }
-      ).userSignal;
+      const userSignal = (auth as unknown as { userSignal: { set(v: AuthUser | null): void } })
+        .userSignal;
 
       userSignal.set({ id: 'oid-1', displayName: 'T', email: 't@example.com' });
       fixture.detectChanges();
@@ -63,11 +62,11 @@ describe('SignedInDirective', () => {
       const signedIn = signal(true);
       const stubAuth = {
         isConfigured: false,
-        isSignedIn: () => signedIn()
+        isSignedIn: () => signedIn(),
       };
       TestBed.configureTestingModule({
         imports: [HostComponent],
-        providers: [{ provide: AuthService, useValue: stubAuth }]
+        providers: [{ provide: AuthService, useValue: stubAuth }],
       });
       const fixture = TestBed.createComponent(HostComponent);
       fixture.detectChanges();

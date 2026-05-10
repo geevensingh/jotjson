@@ -54,13 +54,10 @@ export function sanitizePath(rawUrl: string | null | undefined): string | undefi
   return rawUrl.slice(0, end);
 }
 
-export function normalizeError(
-  err: unknown,
-  ctx?: HttpErrorContext
-): NormalizedError {
-  if (err instanceof HttpErrorResponse) {
+export function normalizeError(error: unknown, ctx?: HttpErrorContext): NormalizedError {
+  if (error instanceof HttpErrorResponse) {
     let backendCode: string | undefined;
-    const body = err.error as unknown;
+    const body = error.error as unknown;
     if (
       body !== null &&
       typeof body === 'object' &&
@@ -70,29 +67,28 @@ export function normalizeError(
     }
     return {
       kind: 'http',
-      status: err.status,
-      statusText: err.statusText || undefined,
+      status: error.status,
+      statusText: error.statusText || undefined,
       method: ctx?.method,
-      pathTemplate: ctx?.pathTemplate ?? sanitizePath(err.url ?? undefined),
-      backendCode
+      pathTemplate: ctx?.pathTemplate ?? sanitizePath(error.url ?? undefined),
+      backendCode,
     };
   }
 
-  if (err instanceof Error) {
+  if (error instanceof Error) {
     return {
       kind: 'error',
-      name: err.name || 'Error',
-      message: redactPii(truncate(err.message ?? '', MAX_MESSAGE)),
-      stack: err.stack
-        ? redactPii(truncate(err.stack, MAX_STACK))
-        : undefined
+      name: error.name || 'Error',
+      message: redactPii(truncate(error.message ?? '', MAX_MESSAGE)),
+      stack: error.stack ? redactPii(truncate(error.stack, MAX_STACK)) : undefined,
     };
   }
 
   return {
     kind: 'unknown',
-    repr: typeof err === 'string'
-      ? redactPii(truncate(err, MAX_MESSAGE))
-      : `<non-error thrown: ${typeof err}>`
+    repr:
+      typeof error === 'string'
+        ? redactPii(truncate(error, MAX_MESSAGE))
+        : `<non-error thrown: ${typeof error}>`,
   };
 }

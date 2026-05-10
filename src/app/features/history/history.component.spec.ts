@@ -1,12 +1,14 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HistoryComponent } from './history.component';
 import { HistoryService, HistoryPage } from '../../core/api/history.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import type { HistoryEntry } from '../../core/api/models';
+import { LoggerService } from '../../core/telemetry/logger.service';
 
 function entry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
   return {
@@ -16,8 +18,8 @@ function entry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
     slug: 'slug1',
     title: 'My Blob',
     accessedAt: '2024-01-01T00:00:00Z',
-    action: 'saved',
-    ...overrides
+    action: 'viewed',
+    ...overrides,
   };
 }
 
@@ -35,22 +37,21 @@ function setup(opts: SetupOpts = {}) {
   const stub = {
     list: jasmine.createSpy('list').and.callFake(() => {
       listCalls += 1;
-      const result =
-        listCalls === 1 ? opts.listResult : opts.listSecondResult ?? opts.listResult;
-      return result instanceof Error
-        ? throwError(() => result)
-        : of(result ?? { entries: [] });
+      const result = listCalls === 1 ? opts.listResult : (opts.listSecondResult ?? opts.listResult);
+      return result instanceof Error ? throwError(() => result) : of(result ?? { entries: [] });
     }),
-    clear: jasmine.createSpy('clear').and.callFake(() =>
-      opts.clearResult instanceof Error
-        ? throwError(() => opts.clearResult as Error)
-        : of(undefined)
-    ),
-    recordPaste: jasmine.createSpy('recordPaste').and.returnValue(of(null))
+    clear: jasmine
+      .createSpy('clear')
+      .and.callFake(() =>
+        opts.clearResult instanceof Error
+          ? throwError(() => opts.clearResult as Error)
+          : of(undefined),
+      ),
   };
   const dialogRef = { afterClosed: () => of(!!opts.confirm) };
   const dialog = { open: jasmine.createSpy('open').and.returnValue(dialogRef) };
   const snack = { open: jasmine.createSpy('open') };
+  const logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'warn']);
 
   TestBed.configureTestingModule({
     imports: [HistoryComponent],
@@ -59,18 +60,67 @@ function setup(opts: SetupOpts = {}) {
       provideRouter([]),
       { provide: HistoryService, useValue: stub },
       { provide: MatDialog, useValue: dialog },
-      { provide: MatSnackBar, useValue: snack }
-    ]
+      { provide: MatSnackBar, useValue: snack },
+      { provide: LoggerService, useValue: logger },
+    ],
   });
 
   const fixture = TestBed.createComponent(HistoryComponent);
-  return { fixture, stub, dialog, snack };
+  return { fixture, stub, dialog, snack, logger };
+}
+
+function setupWithRealDialog(listResult: HistoryPage) {
+  TestBed.resetTestingModule();
+
+  const stub = {
+    list: jasmine.createSpy('list').and.returnValue(of(listResult)),
+    clear: jasmine.createSpy('clear').and.returnValue(of(undefined)),
+  };
+  const snack = { open: jasmine.createSpy('open') };
+  const logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'warn']);
+
+  TestBed.configureTestingModule({
+    imports: [HistoryComponent, MatDialogModule],
+    providers: [
+      ...provideFakeAuth(),
+      provideRouter([]),
+      provideNoopAnimations(),
+      { provide: HistoryService, useValue: stub },
+      { provide: MatSnackBar, useValue: snack },
+      { provide: LoggerService, useValue: logger },
+    ],
+  });
+
+  const fixture = TestBed.createComponent(HistoryComponent);
+  return { fixture, stub };
+}
+
+function attachToBody(fixture: ComponentFixture<unknown>): () => void {
+  document.body.appendChild(fixture.nativeElement);
+  return () => {
+    fixture.nativeElement.remove();
+  };
+}
+
+function waitForTaskQueue(): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+}
+
+function findDialogButton(label: string): HTMLButtonElement {
+  const button = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.mat-mdc-dialog-container button'),
+  ).find((candidate) => candidate.textContent?.trim() === label);
+  expect(button).not.toBeNull();
+  if (!button) {
+    throw new Error(`Expected dialog button "${label}".`);
+  }
+  return button;
 }
 
 describe('HistoryComponent', () => {
   it('ngOnInit loads the first page and marks state ready', async () => {
     const { fixture, stub } = setup({
-      listResult: { entries: [entry()] }
+      listResult: { entries: [entry()] },
     });
     await fixture.componentInstance.reload();
     expect(stub.list).toHaveBeenCalledWith({ pageSize: 50 });
@@ -104,9 +154,9 @@ describe('HistoryComponent', () => {
         entries: [
           entry({ id: 'a', accessedAt: now.toISOString() }),
           entry({ id: 'b', accessedAt: yesterday.toISOString() }),
-          entry({ id: 'c', accessedAt: older.toISOString() })
-        ]
-      }
+          entry({ id: 'c', accessedAt: older.toISOString() }),
+        ],
+      },
     });
     await fixture.componentInstance.reload();
     const groups = fixture.componentInstance.dayGroups();
@@ -119,7 +169,7 @@ describe('HistoryComponent', () => {
 
   it('exposes hasMore when the server returns a continuation token', async () => {
     const { fixture } = setup({
-      listResult: { entries: [entry()], continuationToken: 'abc' }
+      listResult: { entries: [entry()], continuationToken: 'abc' },
     });
     await fixture.componentInstance.reload();
     expect(fixture.componentInstance.hasMore()).toBe(true);
@@ -128,13 +178,13 @@ describe('HistoryComponent', () => {
   it('loadMore appends the next page using the continuation token', async () => {
     const { fixture, stub } = setup({
       listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' },
-      listSecondResult: { entries: [entry({ id: 'b' })] }
+      listSecondResult: { entries: [entry({ id: 'b' })] },
     });
     await fixture.componentInstance.reload();
     await fixture.componentInstance.loadMore();
     expect(stub.list).toHaveBeenCalledWith({
       pageSize: 50,
-      continuationToken: 'tok'
+      continuationToken: 'tok',
     });
     expect(fixture.componentInstance.entries().map((e) => e.id)).toEqual(['a', 'b']);
     expect(fixture.componentInstance.hasMore()).toBe(false);
@@ -151,7 +201,7 @@ describe('HistoryComponent', () => {
   it('clearHistory clears entries when confirmed', async () => {
     const { fixture, stub, dialog, snack } = setup({
       listResult: { entries: [entry()] },
-      confirm: true
+      confirm: true,
     });
     await fixture.componentInstance.reload();
     await fixture.componentInstance.clearHistory();
@@ -164,7 +214,7 @@ describe('HistoryComponent', () => {
   it('clearHistory is a no-op when cancelled', async () => {
     const { fixture, stub } = setup({
       listResult: { entries: [entry()] },
-      confirm: false
+      confirm: false,
     });
     await fixture.componentInstance.reload();
     await fixture.componentInstance.clearHistory();
@@ -172,11 +222,58 @@ describe('HistoryComponent', () => {
     expect(fixture.componentInstance.entries().length).toBe(1);
   });
 
+  it('focuses the page fallback after confirming clear history', async () => {
+    const { fixture } = setup({
+      listResult: { entries: [entry()] },
+      confirm: true,
+    });
+    const teardown = attachToBody(fixture);
+    try {
+      await fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      await fixture.componentInstance.clearHistory();
+      fixture.detectChanges();
+      await waitForTaskQueue();
+      fixture.detectChanges();
+
+      const main = fixture.nativeElement.querySelector('main.history') as HTMLElement;
+      expect(document.activeElement).toBe(main);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('returns focus to the clear-history trigger when the dialog cancel button closes', async () => {
+    const { fixture, stub } = setupWithRealDialog({ entries: [entry()] });
+    const teardown = attachToBody(fixture);
+    try {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const trigger = fixture.nativeElement.querySelector('.clear-button') as HTMLButtonElement;
+      trigger.focus();
+      trigger.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      findDialogButton('Cancel').click();
+      await fixture.whenStable();
+      await waitForTaskQueue();
+
+      expect(stub.clear).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      TestBed.inject(MatDialog).closeAll();
+      teardown();
+    }
+  });
+
   it('clearHistory toasts on failure and leaves entries intact', async () => {
     const { fixture, snack } = setup({
       listResult: { entries: [entry()] },
       confirm: true,
-      clearResult: new Error('boom')
+      clearResult: new Error('boom'),
     });
     spyOn(console, 'warn');
     await fixture.componentInstance.reload();
@@ -185,69 +282,57 @@ describe('HistoryComponent', () => {
     expect(snack.open).toHaveBeenCalled();
   });
 
-  it('openEntry navigates to /s/:slug for entries with a slug', async () => {
-    const { fixture } = setup();
+  it('openEntry navigates to /s/:slug and emits telemetry for entries with a slug', async () => {
+    const { fixture, logger } = setup();
     const router = TestBed.inject(Router);
     const spy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.openEntry(entry({ slug: 'abc' }));
+    await fixture.componentInstance.openEntry(entry({ slug: 'abc' }));
     expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
+    expect(logger.event).toHaveBeenCalledOnceWith('history.entry.restored', undefined, undefined);
   });
 
-  it('openEntry is a no-op for deleted entries', () => {
-    const { fixture } = setup();
+  it('openEntry is a no-op when slug is missing', async () => {
+    const { fixture, logger } = setup();
     const router = TestBed.inject(Router);
     const spy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.openEntry(entry({ slug: 'abc', action: 'deleted' }));
+    await fixture.componentInstance.openEntry(entry({ slug: undefined }));
     expect(spy).not.toHaveBeenCalled();
+    expect(logger.event).not.toHaveBeenCalled();
   });
 
-  it('openEntry is a no-op when slug is missing', () => {
-    const { fixture } = setup();
+  it('openEntry does not emit telemetry when navigation is blocked', async () => {
+    const { fixture, logger } = setup();
     const router = TestBed.inject(Router);
-    const spy = spyOn(router, 'navigate').and.resolveTo(true);
-    fixture.componentInstance.openEntry(entry({ slug: undefined, action: 'pasted' }));
-    expect(spy).not.toHaveBeenCalled();
+    const spy = spyOn(router, 'navigate').and.resolveTo(false);
+    await fixture.componentInstance.openEntry(entry({ slug: 'abc' }));
+    expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
+    expect(logger.event).not.toHaveBeenCalled();
   });
 
-  it('hasLink is true only for non-deleted entries with a slug', () => {
+  it('openEntry does not emit telemetry when navigation rejects', async () => {
+    const { fixture, logger } = setup();
+    const router = TestBed.inject(Router);
+    const spy = spyOn(router, 'navigate').and.rejectWith(new Error('blocked'));
+    await expectAsync(
+      fixture.componentInstance.openEntry(entry({ slug: 'abc' })),
+    ).toBeRejectedWithError('blocked');
+    expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
+    expect(logger.event).not.toHaveBeenCalled();
+  });
+
+  it('hasLink is true only for entries with a slug', () => {
     const { fixture } = setup();
     const c = fixture.componentInstance;
-    expect(c.hasLink(entry({ slug: 'abc', action: 'saved' }))).toBe(true);
-    expect(c.hasLink(entry({ slug: 'abc', action: 'deleted' }))).toBe(false);
-    expect(c.hasLink(entry({ slug: undefined, action: 'pasted' }))).toBe(false);
+    expect(c.hasLink(entry({ slug: 'abc' }))).toBe(true);
+    expect(c.hasLink(entry({ slug: undefined }))).toBe(false);
   });
 
-  it('displayLabel prefers title, then slug, then action-specific fallback', () => {
+  it('displayLabel prefers title, then slug, then deleted-blob fallback', () => {
     const { fixture } = setup();
     const c = fixture.componentInstance;
     expect(c.displayLabel(entry({ title: 'Hi' }))).toBe('Hi');
     expect(c.displayLabel(entry({ title: '  ', slug: 'abc' }))).toBe('/s/abc');
-    expect(
-      c.displayLabel(entry({ title: undefined, slug: undefined, action: 'pasted' }))
-    ).toBe('Pasted content');
-    expect(c.displayLabel(entry({ title: undefined, slug: undefined }))).toBe(
-      '(deleted blob)'
-    );
-  });
-
-  it('iconFor maps every action to a JjIconName', () => {
-    const { fixture } = setup();
-    const c = fixture.componentInstance;
-    expect(c.iconFor('saved')).toBe('save');
-    expect(c.iconFor('edited')).toBe('edit');
-    expect(c.iconFor('deleted')).toBe('trash');
-    expect(c.iconFor('viewed')).toBe('eye');
-    expect(c.iconFor('pasted')).toBe('paste');
-  });
-
-  it('actionLabel returns localized copy for every action', () => {
-    const { fixture } = setup();
-    const c = fixture.componentInstance;
-    expect(c.actionLabel('saved')).toBe('Saved');
-    expect(c.actionLabel('edited')).toBe('Edited');
-    expect(c.actionLabel('deleted')).toBe('Deleted');
-    expect(c.actionLabel('viewed')).toBe('Viewed');
-    expect(c.actionLabel('pasted')).toBe('Pasted');
+    expect(c.displayLabel(entry({ title: undefined, slug: undefined }))).toBe('(deleted blob)');
   });
 
   it('applySearchTerm updates the search term and reloads with q', async () => {
@@ -303,7 +388,7 @@ describe('HistoryComponent', () => {
 
   it('loadMore forwards the active search term as q', async () => {
     const { fixture, stub } = setup({
-      listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' }
+      listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' },
     });
     await fixture.componentInstance.reload();
     fixture.componentInstance.applySearchTerm('foo');
@@ -315,79 +400,7 @@ describe('HistoryComponent', () => {
     expect(stub.list).toHaveBeenCalledWith({
       pageSize: 50,
       continuationToken: 'tok',
-      q: 'foo'
-    });
-  });
-
-  it('toggleAction forwards the joined actions filter on reload', async () => {
-    const { fixture, stub } = setup({
-      listResult: { entries: [entry({ id: 'a' })] }
-    });
-    await fixture.componentInstance.reload();
-    stub.list.calls.reset();
-    stub.list.and.returnValue(of({ entries: [] }));
-    fixture.componentInstance.toggleAction('saved');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(stub.list).toHaveBeenCalledWith({
-      pageSize: 50,
-      actions: ['saved']
-    });
-    expect(fixture.componentInstance.isActionSelected('saved')).toBe(true);
-  });
-
-  it('toggleAction combines multiple actions in canonical order', async () => {
-    const { fixture, stub } = setup({ listResult: { entries: [] } });
-    await fixture.componentInstance.reload();
-    fixture.componentInstance.toggleAction('viewed');
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.componentInstance.toggleAction('saved');
-    await Promise.resolve();
-    await Promise.resolve();
-    const lastArgs = stub.list.calls.mostRecent().args[0];
-    expect(lastArgs.actions).toEqual(['saved', 'viewed']);
-  });
-
-  it('toggleAction twice clears the filter for that action', async () => {
-    const { fixture, stub } = setup({ listResult: { entries: [] } });
-    await fixture.componentInstance.reload();
-    fixture.componentInstance.toggleAction('saved');
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.componentInstance.toggleAction('saved');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(fixture.componentInstance.isActionSelected('saved')).toBe(false);
-    const lastArgs = stub.list.calls.mostRecent().args[0];
-    expect(lastArgs.actions).toBeUndefined();
-  });
-
-  it('hasActiveFilters reflects the action filter set', () => {
-    const { fixture } = setup();
-    const c = fixture.componentInstance;
-    expect(c.hasActiveFilters()).toBe(false);
-    c.actionFilter.set(new Set(['viewed']));
-    expect(c.hasActiveFilters()).toBe(true);
-    c.actionFilter.set(new Set());
-    expect(c.hasActiveFilters()).toBe(false);
-  });
-
-  it('loadMore forwards the active actions filter', async () => {
-    const { fixture, stub } = setup({
-      listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' }
-    });
-    await fixture.componentInstance.reload();
-    fixture.componentInstance.toggleAction('pasted');
-    await Promise.resolve();
-    await Promise.resolve();
-    stub.list.calls.reset();
-    stub.list.and.returnValue(of({ entries: [] }));
-    await fixture.componentInstance.loadMore();
-    expect(stub.list).toHaveBeenCalledWith({
-      pageSize: 50,
-      continuationToken: 'tok',
-      actions: ['pasted']
+      q: 'foo',
     });
   });
 
@@ -401,7 +414,7 @@ describe('HistoryComponent', () => {
     await Promise.resolve();
     expect(stub.list).toHaveBeenCalledWith({
       pageSize: 50,
-      from: '2024-02-15T00:00:00Z'
+      from: '2024-02-15T00:00:00Z',
     });
   });
 
@@ -415,7 +428,7 @@ describe('HistoryComponent', () => {
     await Promise.resolve();
     expect(stub.list).toHaveBeenCalledWith({
       pageSize: 50,
-      to: '2024-02-15T23:59:59.999Z'
+      to: '2024-02-15T23:59:59.999Z',
     });
   });
 
@@ -450,11 +463,10 @@ describe('HistoryComponent', () => {
     expect(stub.list).toHaveBeenCalledWith({ pageSize: 50 });
   });
 
-  it('clearAllFilters resets search, actions, and dates', async () => {
+  it('clearAllFilters resets search and dates', async () => {
     const { fixture, stub } = setup({ listResult: { entries: [] } });
     await fixture.componentInstance.reload();
     fixture.componentInstance.applySearchTerm('foo');
-    fixture.componentInstance.toggleAction('saved');
     fixture.componentInstance.onFromDateChange('2024-02-01');
     await Promise.resolve();
     await Promise.resolve();
@@ -482,8 +494,7 @@ describe('HistoryComponent', () => {
     let observerCallback: (entries: { isIntersecting: boolean }[]) => void = () => {};
     const observe = jasmine.createSpy('observe');
     const disconnect = jasmine.createSpy('disconnect');
-    const originalIO = (globalThis as { IntersectionObserver?: unknown })
-      .IntersectionObserver;
+    const originalIO = (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
     class FakeIO {
       constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
         observerCallback = cb;
@@ -501,7 +512,7 @@ describe('HistoryComponent', () => {
     try {
       const { fixture, stub } = setup({
         listResult: { entries: [entry({ id: 'a' })], continuationToken: 'tok' },
-        listSecondResult: { entries: [entry({ id: 'b' })] }
+        listSecondResult: { entries: [entry({ id: 'b' })] },
       });
       fixture.detectChanges();
       await fixture.whenStable();
@@ -516,7 +527,7 @@ describe('HistoryComponent', () => {
       await Promise.resolve();
       expect(stub.list).toHaveBeenCalledWith({
         pageSize: 50,
-        continuationToken: 'tok'
+        continuationToken: 'tok',
       });
       fixture.destroy();
       expect(disconnect).toHaveBeenCalled();
@@ -528,8 +539,7 @@ describe('HistoryComponent', () => {
 
   it('IntersectionObserver does not trigger loadMore when there is no next page', async () => {
     let observerCallback: (entries: { isIntersecting: boolean }[]) => void = () => {};
-    const originalIO = (globalThis as { IntersectionObserver?: unknown })
-      .IntersectionObserver;
+    const originalIO = (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
     class FakeIO {
       constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
         observerCallback = cb;
@@ -546,7 +556,7 @@ describe('HistoryComponent', () => {
       FakeIO as unknown as typeof IntersectionObserver;
     try {
       const { fixture, stub } = setup({
-        listResult: { entries: [entry({ id: 'a' })] }
+        listResult: { entries: [entry({ id: 'a' })] },
       });
       fixture.detectChanges();
       await fixture.whenStable();

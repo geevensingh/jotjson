@@ -1,14 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 import { msalBridge } from './msal-bridge';
-import {
-  HttpErrorContext,
-  NormalizedError,
-  normalizeError
-} from './normalize-error';
+import { HttpErrorContext, NormalizedError, normalizeError } from './normalize-error';
 import {
   TelemetryService,
+  TelemetryMeasurements,
   TelemetryProps,
-  TelemetrySeverity
+  TelemetrySeverity,
 } from './telemetry.service';
 import { TelemetryMessageId } from './telemetry-message-ids';
 
@@ -20,8 +17,16 @@ type Severity = 'info' | 'warn' | 'error';
 interface PendingEntry {
   ts: number;
   severity: Severity;
+  /**
+   * Discriminator for the App Insights sink. When `'event'`, dispatch
+   * routes to `trackEvent` (regardless of `severity`); otherwise the
+   * existing severity + error rules pick `trackTrace` vs
+   * `trackException`.
+   */
+  kind?: 'event';
   messageId: TelemetryMessageId;
   props?: TelemetryProps;
+  measurements?: TelemetryMeasurements;
   error?: NormalizedError;
 }
 
@@ -31,6 +36,16 @@ interface PendingEntry {
  *
  * - `console.*` - always (so DevTools shows everything in dev).
  * - App Insights - once `TelemetryService.connect()` resolves.
+ *
+ * Three App Insights destinations, selected by which method is called:
+ * - `info` / `warn` -> `trackTrace` (`traces` table).
+ * - `error` -> `trackException` (`exceptions` table) when a cause is
+ *   given; falls back to `trackTrace` severity error if cause is
+ *   `null`.
+ * - `event` -> `trackEvent` (`customEvents` table). For
+ *   product-analytics counters and successful-flow signals; supports
+ *   an optional numeric `measurements` map that lands in
+ *   `customMeasurements`.
  *
  * Calls made before telemetry connects are buffered (FIFO, cap 100,
  * oldest dropped on overflow) and replayed on connect. If telemetry
@@ -67,8 +82,8 @@ export class LoggerService {
     this.connected = true;
     this.flushSessionStorage();
     const drained = this.buffer.splice(0, this.buffer.length);
-    for (const e of drained) {
-      this.dispatch(e);
+    for (const entry of drained) {
+      this.dispatch(entry);
     }
   }
 
@@ -84,20 +99,49 @@ export class LoggerService {
 
   error(
     messageId: TelemetryMessageId,
-    err: unknown | null,
+    cause: unknown | null,
     props?: TelemetryProps,
-    httpCtx?: HttpErrorContext
+    httpCtx?: HttpErrorContext,
   ): void {
-    const normalized = err === null || err === undefined
-      ? undefined
-      : normalizeError(err, httpCtx);
+    const normalized =
+      cause === null || cause === undefined ? undefined : normalizeError(cause, httpCtx);
     this.consoleMirror('error', messageId, props, normalized);
     this.handle({
       ts: Date.now(),
       severity: 'error',
       messageId,
       props,
-      error: normalized
+      error: normalized,
+    });
+  }
+
+  /**
+   * Emit a product-analytics event to the `customEvents` table.
+   *
+   * `props` populates `customDimensions` (string-typed, low
+   * cardinality). `measurements` populates `customMeasurements`
+   * (numeric, queryable with `percentile()` / `avg()` / `sum()`).
+   * Don't reuse the same key across both maps - the wire format
+   * collapses them into one name-space.
+   *
+   * Use `event` for successful counters, completed user actions, and
+   * performance samples. For diagnostic / lifecycle log lines aimed at
+   * humans, use `info` / `warn` instead. For failures with a cause,
+   * use `error`.
+   */
+  event(
+    messageId: TelemetryMessageId,
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements,
+  ): void {
+    this.consoleMirrorEvent(messageId, props, measurements);
+    this.handle({
+      ts: Date.now(),
+      severity: 'info',
+      kind: 'event',
+      messageId,
+      props,
+      measurements,
     });
   }
 
@@ -119,27 +163,31 @@ export class LoggerService {
 
   private dispatch(entry: PendingEntry): void {
     try {
+      if (entry.kind === 'event') {
+        this.telemetry.trackEvent(entry.messageId, entry.props, entry.measurements);
+        return;
+      }
       const severity = this.toSdkSeverity(entry.severity);
       if (entry.severity === 'error' && entry.error) {
         this.telemetry.trackException(entry.error, {
           ...entry.props,
-          messageId: entry.messageId
+          messageId: entry.messageId,
         });
       } else {
         this.telemetry.trackTrace(entry.messageId, severity, entry.props);
       }
-    } catch (e) {
+    } catch (error) {
       // Never throw out of the logger.
       // eslint-disable-next-line no-console
-      console.warn('[telemetry] dispatch failed', e);
+      console.warn('[telemetry] dispatch failed', error);
     }
   }
 
-  private toSdkSeverity(s: Severity): TelemetrySeverity {
-    if (s === 'error') {
+  private toSdkSeverity(severity: Severity): TelemetrySeverity {
+    if (severity === 'error') {
       return 'error';
     }
-    if (s === 'warn') {
+    if (severity === 'warn') {
       return 'warn';
     }
     return 'info';
@@ -149,19 +197,25 @@ export class LoggerService {
     severity: Severity,
     messageId: TelemetryMessageId,
     props?: TelemetryProps,
-    err?: NormalizedError
+    error?: NormalizedError,
   ): void {
     // eslint-disable-next-line no-console
-    const fn = severity === 'error'
-      ? console.error
-      : severity === 'warn'
-        ? console.warn
-        : console.info;
-    if (err) {
-      fn(`[${messageId}]`, props ?? {}, err);
+    const fn =
+      severity === 'error' ? console.error : severity === 'warn' ? console.warn : console.info;
+    if (error) {
+      fn(`[${messageId}]`, props ?? {}, error);
     } else {
       fn(`[${messageId}]`, props ?? {});
     }
+  }
+
+  private consoleMirrorEvent(
+    messageId: TelemetryMessageId,
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements,
+  ): void {
+    // eslint-disable-next-line no-console
+    console.info(`[event:${messageId}]`, props ?? {}, measurements ?? {});
   }
 
   private flushSessionStorage(): void {
@@ -176,9 +230,9 @@ export class LoggerService {
         {
           kind: 'error',
           name: parsed.name ?? 'BootError',
-          message: parsed.message ?? '<no message>'
+          message: parsed.message ?? '<no message>',
         },
-        { messageId: 'boot.failed' }
+        { messageId: 'boot.failed' },
       );
     } catch {
       // ignore

@@ -8,33 +8,45 @@
 
 .theme-dark,
 :root {
+  color-scheme: dark;
+
   --bg: #{$color-bg-dark};
   --fg: #{$color-fg-dark};
+  --brand-color-on-surface: #{$color-primary};
 
   --highlight-selection: #{$highlight-selection-dark};
   --highlight-matching: #{$highlight-matching-dark};
   --highlight-ancestor: #{$highlight-ancestor-dark};
   --highlight-search: #{$highlight-search-dark};
+  --highlight-manual: #{$highlight-manual-dark};
 }
 
 .theme-light {
+  color-scheme: light;
+
   --bg: #{$color-bg-light};
   --fg: #{$color-fg-light};
+  --brand-color-on-surface: #006978;
 
   --highlight-selection: #{$highlight-selection-light};
   --highlight-matching: #{$highlight-matching-light};
   --highlight-ancestor: #{$highlight-ancestor-light};
   --highlight-search: #{$highlight-search-light};
+  --highlight-manual: #{$highlight-manual-light};
 }
 
 @media (prefers-color-scheme: light) {
   .theme-system {
+    color-scheme: light;
+
     --bg: #{$color-bg-light};
     --fg: #{$color-fg-light};
+    --brand-color-on-surface: #006978;
 
     --highlight-selection: #{$highlight-selection-light};
     --highlight-matching: #{$highlight-matching-light};
     --highlight-ancestor: #{$highlight-ancestor-light};
     --highlight-search: #{$highlight-search-light};
+    --highlight-manual: #{$highlight-manual-light};
   }
 }

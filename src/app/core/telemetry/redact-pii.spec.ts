@@ -3,19 +3,17 @@ import { extractAadCode, redactPii, truncate } from './redact-pii';
 describe('redactPii', () => {
   it('replaces a plain email', () => {
     expect(redactPii('login failed for alice@example.com today')).toBe(
-      'login failed for <email> today'
+      'login failed for <email> today',
     );
   });
 
   it('replaces multiple emails', () => {
-    expect(redactPii('a@b.co and c.d+tag@e-f.io')).toBe(
-      '<email> and <email>'
-    );
+    expect(redactPii('a@b.co and c.d+tag@e-f.io')).toBe('<email> and <email>');
   });
 
   it('replaces UPN-style identifiers in MSAL prose', () => {
     const out = redactPii(
-      "AADSTS50058: Session info is not sufficient for user 'alice@contoso.onmicrosoft.com'"
+      "AADSTS50058: Session info is not sufficient for user 'alice@contoso.onmicrosoft.com'",
     );
     expect(out).not.toContain('alice@contoso.onmicrosoft.com');
     expect(out).toContain('<email>');
@@ -46,9 +44,7 @@ describe('extractAadCode', () => {
   });
 
   it('returns the first match when multiple present', () => {
-    expect(extractAadCode('AADSTS70011 and later AADSTS50058')).toBe(
-      'AADSTS70011'
-    );
+    expect(extractAadCode('AADSTS70011 and later AADSTS50058')).toBe('AADSTS70011');
   });
 });
 

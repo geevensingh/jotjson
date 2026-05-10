@@ -32,8 +32,8 @@ const RULES = [
       "Use Object.defineProperty(navigator, 'clipboard', { configurable: true, get: () => ... })" +
       ' with a beforeEach/afterEach pair that captures and restores the' +
       ' original descriptor. spyOnProperty requires an accessor property,' +
-      " which Linux headless Chrome does not expose for navigator.clipboard."
-  }
+      ' which Linux headless Chrome does not expose for navigator.clipboard.',
+  },
 ];
 
 function listSpecFiles() {
@@ -42,7 +42,7 @@ function listSpecFiles() {
   const out = execFileSync(
     'git',
     ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
-    { encoding: 'buffer' }
+    { encoding: 'buffer' },
   );
   return out
     .toString('utf8')
@@ -87,4 +87,16 @@ for (const v of allViolations) {
   console.error(`    -> ${v.message}`);
 }
 console.error(`\n${allViolations.length} violation(s) in ${files.length} spec files.`);
+
+if (process.env.GITHUB_ACTIONS === 'true') {
+  for (const v of allViolations) {
+    const file = v.path.replace(/%/g, '%25');
+    const msg = String(`${v.snippet} - ${v.message}`)
+      .replace(/%/g, '%25')
+      .replace(/\r/g, '%0D')
+      .replace(/\n/g, '%0A');
+    console.log(`::error file=${file},line=${v.line},col=${v.col}::${msg}`);
+  }
+}
+
 process.exit(1);

@@ -1,12 +1,10 @@
 <jj-app-header />
-<main class="profile">
+<main id="main-content" class="profile" tabindex="-1">
   <h1 i18n="@@profile.title">Profile</h1>
 
   @if (isSignedIn()) {
-    <section class="card" aria-labelledby="profile-identity">
-      <h2 id="profile-identity" class="card-title" i18n="@@profile.identity.title">
-        Identity
-      </h2>
+    <section class="card" aria-labelledby="profile-account">
+      <h2 id="profile-account" class="card-title" i18n="@@profile.identity.title"> Account </h2>
 
       <dl>
         <dt i18n="@@profile.displayName.label">Display name</dt>
@@ -25,12 +23,7 @@
       </dl>
 
       <div class="actions">
-        <button
-          type="button"
-          mat-stroked-button
-          color="warn"
-          (click)="onSignOut()"
-        >
+        <button type="button" mat-stroked-button color="warn" (click)="onSignOut()">
           <jj-icon name="sign-out" />
           <span i18n="@@profile.signOut">Sign out</span>
         </button>
@@ -38,31 +31,85 @@
     </section>
 
     <section class="card prefs-card" aria-labelledby="profile-prefs">
-      <h2 id="profile-prefs" class="card-title" i18n="@@profile.prefs.title">
-        Preferences
-      </h2>
-      <p class="card-subtitle" i18n="@@profile.prefs.subtitle">
-        Changes save automatically.
-      </p>
+      <h2 id="profile-prefs" class="card-title" i18n="@@profile.prefs.title"> Preferences </h2>
+      <p class="card-subtitle" i18n="@@profile.prefs.subtitle"> Changes save automatically. </p>
 
-      <section class="prefs-group" aria-labelledby="prefs-editor">
-        <h3 id="prefs-editor" class="group-title" i18n="@@profile.prefs.editor.title">
-          Editor
+      <section class="prefs-group" aria-labelledby="prefs-appearance">
+        <h3 id="prefs-appearance" class="group-title" i18n="@@profile.prefs.appearance.title">
+          Appearance
         </h3>
 
         <div class="pref-row">
-          <label for="pref-font-size" i18n="@@profile.prefs.editor.fontSize">Font size</label>
-          <input
-            id="pref-font-size"
-            type="number"
-            class="pref-number"
-            [min]="fontSizeMin"
-            [max]="fontSizeMax"
-            step="1"
-            [ngModel]="editorFontSize()"
-            (ngModelChange)="onEditorFontSizeChange($event)"
-          />
-          <span class="pref-suffix" aria-hidden="true">px</span>
+          <span class="pref-label" id="pref-theme-label" i18n="@@profile.prefs.appearance.theme"
+            >Theme</span
+          >
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-theme"
+              aria-labelledby="pref-theme-label"
+              [value]="theme()"
+              (selectionChange)="onThemeChange($event.value)"
+            >
+              <mat-option value="dark" i18n="@@profile.prefs.appearance.theme.dark"
+                >Dark</mat-option
+              >
+              <mat-option value="light" i18n="@@profile.prefs.appearance.theme.light"
+                >Light</mat-option
+              >
+              <mat-option value="system" i18n="@@profile.prefs.appearance.theme.system">
+                Match system
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="pref-row">
+          <span class="pref-label" id="pref-layout-label" i18n="@@profile.prefs.appearance.layout">
+            Layout orientation
+          </span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-layout"
+              aria-labelledby="pref-layout-label"
+              [value]="layoutOrientation()"
+              (selectionChange)="onLayoutOrientationChange($event.value)"
+            >
+              <mat-option value="horizontal" i18n="@@profile.prefs.appearance.layout.horizontal">
+                Horizontal
+              </mat-option>
+              <mat-option value="vertical" i18n="@@profile.prefs.appearance.layout.vertical">
+                Vertical
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-editor">
+        <h3 id="prefs-editor" class="group-title" i18n="@@profile.prefs.editor.title"> Editor </h3>
+
+        <div class="pref-row">
+          <span class="pref-label" id="pref-font-size-label" i18n="@@profile.prefs.editor.fontSize"
+            >Font size</span
+          >
+          <mat-form-field
+            appearance="outline"
+            subscriptSizing="dynamic"
+            class="pref-form-field pref-form-field--number"
+          >
+            <input
+              matInput
+              id="pref-font-size"
+              type="number"
+              aria-labelledby="pref-font-size-label"
+              [min]="fontSizeMin"
+              [max]="fontSizeMax"
+              step="1"
+              [ngModel]="editorFontSize()"
+              (ngModelChange)="onEditorFontSizeChange($event)"
+            />
+            <span matTextSuffix>px</span>
+          </mat-form-field>
         </div>
 
         <div class="pref-row">
@@ -78,232 +125,354 @@
         </div>
 
         <div class="pref-row">
+          <span class="pref-label" id="pref-word-wrap-label" i18n="@@profile.prefs.editor.wordWrap"
+            >Word wrap</span
+          >
           <mat-slide-toggle
+            aria-labelledby="pref-word-wrap-label"
             [checked]="editorWordWrap()"
             (change)="onEditorWordWrapChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.editor.wordWrap">Word wrap</span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-tree">
-        <h3 id="prefs-tree" class="group-title" i18n="@@profile.prefs.tree.title">
-          Tree
-        </h3>
+        <h3 id="prefs-tree" class="group-title" i18n="@@profile.prefs.tree.title"> Tree </h3>
 
         <div class="pref-row">
-          <label for="pref-tree-font-size" i18n="@@profile.prefs.tree.fontSize">Font size</label>
-          <input
-            id="pref-tree-font-size"
-            type="number"
-            class="pref-number"
-            [min]="fontSizeMin"
-            [max]="fontSizeMax"
-            step="1"
-            [ngModel]="treeFontSize()"
-            (ngModelChange)="onTreeFontSizeChange($event)"
-          />
-          <span class="pref-suffix" aria-hidden="true">px</span>
+          <span
+            class="pref-label"
+            id="pref-tree-font-size-label"
+            i18n="@@profile.prefs.tree.fontSize"
+            >Font size</span
+          >
+          <mat-form-field
+            appearance="outline"
+            subscriptSizing="dynamic"
+            class="pref-form-field pref-form-field--number"
+          >
+            <input
+              matInput
+              id="pref-tree-font-size"
+              type="number"
+              aria-labelledby="pref-tree-font-size-label"
+              [min]="fontSizeMin"
+              [max]="fontSizeMax"
+              step="1"
+              [ngModel]="treeFontSize()"
+              (ngModelChange)="onTreeFontSizeChange($event)"
+            />
+            <span matTextSuffix>px</span>
+          </mat-form-field>
         </div>
 
-        <div class="pref-row">
+        <mat-checkbox
+          data-tree-auto-fit
+          [checked]="treeAutoFitToWindow()"
+          (change)="onTreeAutoFitToWindowChange($event.checked)"
+        >
+          <span i18n="@@profile.tree.autoFit.label">Fit tree to window</span>
+        </mat-checkbox>
+        <p class="pref-help-line" i18n="@@profile.tree.autoFit.hint">
+          When on, the tree opens at a depth that fits your window. Turn off to use a fixed depth.
+        </p>
+
+        <div class="pref-row pref-row--slider">
           <label for="pref-expansion-depth" i18n="@@profile.prefs.tree.expansionDepth">
             Default expansion depth
           </label>
-          <input
-            id="pref-expansion-depth"
-            type="number"
-            class="pref-number"
-            [min]="expansionDepthMin"
-            [max]="expansionDepthMax"
-            step="1"
-            [ngModel]="defaultTreeExpansionDepth()"
-            (ngModelChange)="onDefaultTreeExpansionDepthChange($event)"
-          />
-          <span class="pref-help" i18n="@@profile.prefs.tree.expansionDepth.help">
-            How deep the tree starts expanded when a blob loads.
+          <span class="pref-control-group">
+            <mat-slider
+              class="pref-slider"
+              [min]="expansionDepthMin"
+              [max]="expansionDepthMax"
+              step="1"
+              discrete
+              showTickMarks
+              [disabled]="treeAutoFitToWindow()"
+            >
+              <input
+                matSliderThumb
+                id="pref-expansion-depth"
+                [ngModel]="defaultTreeExpansionDepth()"
+                (ngModelChange)="onDefaultTreeExpansionDepthChange($event)"
+              />
+            </mat-slider>
+            <span class="pref-suffix" aria-hidden="true">{{ defaultTreeExpansionDepth() }}</span>
           </span>
         </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.tree.expansionDepth.help">
+          How deep the tree starts expanded when a blob loads.
+        </p>
 
         <div class="pref-row">
+          <span
+            class="pref-label"
+            id="pref-show-type-labels-label"
+            i18n="@@profile.prefs.tree.showTypeLabels"
+            >Show type labels</span
+          >
           <mat-slide-toggle
+            aria-labelledby="pref-show-type-labels-label"
             [checked]="treeShowTypeLabels()"
             (change)="onTreeShowTypeLabelsChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.tree.showTypeLabels">Show type labels</span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
 
         <div class="pref-row">
+          <span
+            class="pref-label"
+            id="pref-show-date-annotations-label"
+            i18n="@@profile.prefs.tree.showDateAnnotations"
+          >
+            Show date annotations
+          </span>
           <mat-slide-toggle
+            aria-labelledby="pref-show-date-annotations-label"
             [checked]="treeShowDateAnnotations()"
             (change)="onTreeShowDateAnnotationsChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.tree.showDateAnnotations">
-              Show date annotations
-            </span>
-          </mat-slide-toggle>
+          ></mat-slide-toggle>
         </div>
 
-        <div class="pref-row pref-row--indented">
-          <mat-slide-toggle
-            [checked]="treeAssumeUtcForIsoDateTime()"
-            [disabled]="!treeShowDateAnnotations()"
-            (change)="onTreeAssumeUtcForIsoDateTimeChange($event.checked)"
+        <div class="pref-subgroup">
+          <div
+            class="pref-date-annotation-group"
+            aria-labelledby="pref-date-annotation-units-heading"
           >
-            <span i18n="@@profile.prefs.tree.assumeUtcDateTime">
+            <h4
+              id="pref-date-annotation-units-heading"
+              class="pref-subheading"
+              i18n="@@profile.prefs.tree.dateAnnotation.units.heading"
+            >
+              Relative-time units
+            </h4>
+
+            <div class="date-annotation-unit-grid">
+              <mat-checkbox
+                data-date-annotation-unit="year"
+                [checked]="treeDateAnnotationUnits().year"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('year', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.year">Years</span>
+              </mat-checkbox>
+
+              <mat-checkbox
+                data-date-annotation-unit="month"
+                [checked]="treeDateAnnotationUnits().month"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('month', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.month">Months</span>
+              </mat-checkbox>
+
+              <mat-checkbox
+                data-date-annotation-unit="day"
+                [checked]="treeDateAnnotationUnits().day"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('day', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.day">Days</span>
+              </mat-checkbox>
+
+              <mat-checkbox
+                data-date-annotation-unit="hour"
+                [checked]="treeDateAnnotationUnits().hour"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('hour', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.hour">Hours</span>
+              </mat-checkbox>
+
+              <mat-checkbox
+                data-date-annotation-unit="minute"
+                [checked]="treeDateAnnotationUnits().minute"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('minute', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.minute">Minutes</span>
+              </mat-checkbox>
+
+              <mat-checkbox
+                data-date-annotation-unit="second"
+                [checked]="treeDateAnnotationUnits().second"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationUnitChange('second', $event.checked)"
+              >
+                <span i18n="@@profile.prefs.tree.dateAnnotation.units.second">Seconds</span>
+              </mat-checkbox>
+            </div>
+
+            <p
+              class="pref-help-line date-annotation-unit-hint"
+              i18n="@@profile.prefs.tree.dateAnnotation.units.hint"
+            >
+              Smallest enabled unit is shown as a decimal when the delta is smaller (e.g., '0.5
+              minutes ago').
+            </p>
+
+            <div class="pref-row pref-row--indented">
+              <span
+                class="pref-label"
+                id="pref-friendly-forms-label"
+                i18n="@@profile.prefs.tree.dateAnnotation.friendlyForms"
+              >
+                Use friendly phrases (yesterday, tomorrow, last month, ...)
+              </span>
+              <mat-slide-toggle
+                data-date-annotation-friendly-forms
+                aria-labelledby="pref-friendly-forms-label"
+                [checked]="treeDateAnnotationFriendlyForms()"
+                [disabled]="!treeShowDateAnnotations()"
+                (change)="onTreeDateAnnotationFriendlyFormsChange($event.checked)"
+              ></mat-slide-toggle>
+            </div>
+          </div>
+
+          <div class="pref-row pref-row--indented">
+            <span
+              class="pref-label"
+              id="pref-assume-utc-date-time-label"
+              i18n="@@profile.prefs.tree.assumeUtcDateTime"
+            >
               Treat ISO date-time without timezone as UTC
             </span>
-          </mat-slide-toggle>
-        </div>
+            <mat-slide-toggle
+              aria-labelledby="pref-assume-utc-date-time-label"
+              [checked]="treeAssumeUtcForIsoDateTime()"
+              [disabled]="!treeShowDateAnnotations()"
+              (change)="onTreeAssumeUtcForIsoDateTimeChange($event.checked)"
+            ></mat-slide-toggle>
+          </div>
 
-        <div class="pref-row pref-row--indented">
-          <mat-slide-toggle
-            [checked]="treeAssumeUtcForIsoDateOnly()"
-            [disabled]="!treeShowDateAnnotations()"
-            (change)="onTreeAssumeUtcForIsoDateOnlyChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.tree.assumeUtcDateOnly">
+          <div class="pref-row pref-row--indented">
+            <span
+              class="pref-label"
+              id="pref-assume-utc-date-only-label"
+              i18n="@@profile.prefs.tree.assumeUtcDateOnly"
+            >
               Treat ISO date-only as UTC midnight
             </span>
-          </mat-slide-toggle>
+            <mat-slide-toggle
+              aria-labelledby="pref-assume-utc-date-only-label"
+              [checked]="treeAssumeUtcForIsoDateOnly()"
+              [disabled]="!treeShowDateAnnotations()"
+              (change)="onTreeAssumeUtcForIsoDateOnlyChange($event.checked)"
+            ></mat-slide-toggle>
+          </div>
+
+          <p
+            class="pref-help-line pref-help-line--indented"
+            i18n="@@profile.prefs.tree.assumeUtcHint"
+          >
+            Avoids local-timezone shifts for log timestamps and other timezone-less ISO 8601 values.
+          </p>
         </div>
 
-        <div class="pref-row pref-row--indented">
-          <span class="pref-hint" i18n="@@profile.prefs.tree.assumeUtcHint">
-            Avoids local-timezone shifts for log timestamps and other
-            timezone-less ISO 8601 values.
+        <div class="pref-row">
+          <span
+            class="pref-label"
+            id="pref-show-comments-label"
+            i18n="@@profile.prefs.tree.showComments"
+          >
+            Show JSONC comments
           </span>
-        </div>
-      </section>
-
-      <section class="prefs-group" aria-labelledby="prefs-search">
-        <h3 id="prefs-search" class="group-title" i18n="@@profile.prefs.search.title">
-          Search
-        </h3>
-
-        <div class="pref-row">
-          <label for="pref-search-scope" i18n="@@profile.prefs.search.scope">
-            Search scope
-          </label>
-          <select
-            id="pref-search-scope"
-            class="pref-select"
-            [ngModel]="searchScope()"
-            (ngModelChange)="onSearchScopeChange($event)"
-          >
-            <option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</option>
-            <option value="values" i18n="@@profile.prefs.search.scope.values">Values</option>
-            <option value="both" i18n="@@profile.prefs.search.scope.both">Keys and values</option>
-          </select>
-        </div>
-
-        <div class="pref-row">
           <mat-slide-toggle
-            [checked]="searchCaseSensitive()"
-            (change)="onSearchCaseSensitiveChange($event.checked)"
-          >
-            <span i18n="@@profile.prefs.search.caseSensitive">Case sensitive</span>
-          </mat-slide-toggle>
+            aria-labelledby="pref-show-comments-label"
+            [checked]="treeShowComments()"
+            (change)="onTreeShowCommentsChange($event.checked)"
+          ></mat-slide-toggle>
         </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.tree.showComments.help">
+          Surfaces line and block comments from JSONC documents next to their nearest value in the
+          tree view. Comments are still tolerated by the parser when this is off; they're just not
+          rendered.
+        </p>
 
         <div class="pref-row">
-          <mat-slide-toggle
-            [checked]="searchRegexMode()"
-            (change)="onSearchRegexModeChange($event.checked)"
+          <span
+            class="pref-label"
+            id="pref-tree-path-root-label"
+            i18n="@@profile.prefs.tree.pathRoot"
           >
-            <span i18n="@@profile.prefs.search.regexMode">Regular expression mode</span>
-          </mat-slide-toggle>
-        </div>
-      </section>
-
-      <section class="prefs-group" aria-labelledby="prefs-history">
-        <h3 id="prefs-history" class="group-title" i18n="@@profile.prefs.history.title">
-          History &amp; storage
-        </h3>
-
-        <div class="pref-row">
-          <label for="pref-history-mode" i18n="@@profile.prefs.history.trackingMode">
-            History tracking
-          </label>
-          <select
-            id="pref-history-mode"
-            class="pref-select"
-            [ngModel]="historyTrackingMode()"
-            (ngModelChange)="onHistoryTrackingModeChange($event)"
-          >
-            <option value="save_only" i18n="@@profile.prefs.history.trackingMode.saveOnly">
-              Save only
-            </option>
-            <option value="all_actions" i18n="@@profile.prefs.history.trackingMode.allActions">
-              All actions
-            </option>
-          </select>
-          <span class="pref-help" i18n="@@profile.prefs.history.trackingMode.help">
-            Choose whether your history records only saved blobs or every view, edit, and paste.
+            Copied path root
           </span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-tree-path-root"
+              aria-labelledby="pref-tree-path-root-label"
+              [value]="treePathRoot()"
+              (selectionChange)="onTreePathRootChange($event.value)"
+            >
+              <mat-option value="jsonpath" i18n="@@profile.prefs.tree.pathRoot.jsonpath"
+                >JSONPath ($)</mat-option
+              >
+              <mat-option value="none" i18n="@@profile.prefs.tree.pathRoot.none">None</mat-option>
+              <mat-option value="root" i18n="@@profile.prefs.tree.pathRoot.root">root</mat-option>
+              <mat-option value="data" i18n="@@profile.prefs.tree.pathRoot.data">Data</mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.tree.pathRoot.help">
+          Prefix used when copying a tree row's path to the clipboard.
+        </p>
 
         <div class="pref-row">
-          <label for="pref-quota-strategy" i18n="@@profile.prefs.history.quotaStrategy">
-            When you reach the saved blob limit
-          </label>
-          <select
-            id="pref-quota-strategy"
-            class="pref-select"
-            [ngModel]="blobQuotaStrategy()"
-            (ngModelChange)="onBlobQuotaStrategyChange($event)"
+          <span
+            class="pref-label"
+            id="pref-selection-sync-label"
+            i18n="@@profile.prefs.tree.selectionSync"
           >
-            <option value="auto_fifo" i18n="@@profile.prefs.history.quotaStrategy.autoFifo">
-              Automatically delete the oldest
-            </option>
-            <option value="manual" i18n="@@profile.prefs.history.quotaStrategy.manual">
-              Ask me to choose
-            </option>
-          </select>
+            Sync tree and editor selections
+          </span>
+          <mat-slide-toggle
+            aria-labelledby="pref-selection-sync-label"
+            [checked]="treeEditorSelectionSync()"
+            (change)="onTreeEditorSelectionSyncChange($event.checked)"
+          ></mat-slide-toggle>
         </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.tree.selectionSync.help">
+          When on, selecting a tree row reveals the matching range in the editor, and moving the
+          editor cursor selects the matching tree row.
+        </p>
       </section>
 
-      <section class="prefs-group" aria-labelledby="prefs-appearance">
-        <h3 id="prefs-appearance" class="group-title" i18n="@@profile.prefs.appearance.title">
-          Appearance
+      <section class="prefs-group" aria-labelledby="prefs-default-rule-sets">
+        <h3
+          id="prefs-default-rule-sets"
+          class="group-title"
+          i18n="@@profile.prefs.defaultRuleSets.title"
+        >
+          Default rule sets
         </h3>
+        <p class="group-help" i18n="@@profile.prefs.defaultRuleSets.help">
+          Highlight matches from these formatting rule sets when viewing JSON. The same selection
+          appears as chips in the toolbar above the tree on the home page; changes here apply across
+          all your devices.
+        </p>
 
-        <div class="pref-row">
-          <label for="pref-theme" i18n="@@profile.prefs.appearance.theme">Theme</label>
-          <select
-            id="pref-theme"
-            class="pref-select"
-            [ngModel]="theme()"
-            (ngModelChange)="onThemeChange($event)"
-          >
-            <option value="dark" i18n="@@profile.prefs.appearance.theme.dark">Dark</option>
-            <option value="light" i18n="@@profile.prefs.appearance.theme.light">Light</option>
-            <option value="system" i18n="@@profile.prefs.appearance.theme.system">
-              Match system
-            </option>
-          </select>
-        </div>
-
-        <div class="pref-row">
-          <label for="pref-layout" i18n="@@profile.prefs.appearance.layout">
-            Layout orientation
-          </label>
-          <select
-            id="pref-layout"
-            class="pref-select"
-            [ngModel]="layoutOrientation()"
-            (ngModelChange)="onLayoutOrientationChange($event)"
-          >
-            <option value="horizontal" i18n="@@profile.prefs.appearance.layout.horizontal">
-              Horizontal
-            </option>
-            <option value="vertical" i18n="@@profile.prefs.appearance.layout.vertical">
-              Vertical
-            </option>
-          </select>
-        </div>
+        @if (ruleSetsEmpty()) {
+          <p class="pref-help-line" i18n="@@profile.prefs.defaultRuleSets.empty">
+            No rule sets yet. Use "Clone preset" in the toolbar above the tree on the home page to
+            get started.
+          </p>
+        } @else if (ruleSetOptions() === null) {
+          <p class="pref-help-line" i18n="@@profile.prefs.defaultRuleSets.loading">
+            Loading rule sets...
+          </p>
+        } @else {
+          <div class="pref-checkbox-list">
+            @for (set of ruleSetOptions(); track set.id) {
+              <mat-checkbox
+                [checked]="isActiveRuleSet(set.id)"
+                [attr.data-set-id]="set.id"
+                (change)="onActiveRuleSetToggle(set.id, $event.checked)"
+              >
+                {{ set.name }}
+              </mat-checkbox>
+            }
+          </div>
+        }
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-highlight-colors">
@@ -312,12 +481,12 @@
           class="group-title"
           i18n="@@profile.prefs.highlightColors.title"
         >
-          Tree highlight colors
+          Highlights
         </h3>
         <p class="group-help" i18n="@@profile.prefs.highlightColors.help">
-          Pick colors used to highlight selected nodes, ancestors of the
-          selection, matching values, and search hits. Each theme has its
-          own set; only the currently active theme is shown live.
+          Pick colors used to highlight selected nodes, ancestors of the selection, matching values,
+          search hits, and the default color used by the "Highlight" action in the row context menu.
+          Each theme has its own set; only the currently active theme is shown live.
         </p>
 
         @for (theme of highlightThemes; track theme) {
@@ -329,9 +498,7 @@
                 <span i18n="@@profile.prefs.highlightColors.lightTheme">Light theme</span>
               }
               @if (isActiveTheme(theme)) {
-                <span
-                  class="active-tag"
-                  i18n="@@profile.prefs.highlightColors.activeTag"
+                <span class="active-tag" i18n="@@profile.prefs.highlightColors.activeTag"
                   >(active)</span
                 >
               }
@@ -341,49 +508,40 @@
               <div class="pref-row highlight-row">
                 <label [attr.for]="field.inputId(theme)">
                   @switch (field.key) {
+                    @case ('searchHighlightColor') {
+                      <span i18n="@@profile.prefs.highlightColors.search"> Search highlight </span>
+                    }
                     @case ('selectionColor') {
-                      <span i18n="@@profile.prefs.highlightColors.selection">
-                        Selection
-                      </span>
+                      <span i18n="@@profile.prefs.highlightColors.selection"> Selection </span>
                     }
                     @case ('matchingValueColor') {
-                      <span i18n="@@profile.prefs.highlightColors.matching">
-                        Matching values
-                      </span>
+                      <span i18n="@@profile.prefs.highlightColors.matching"> Matching values </span>
                     }
                     @case ('ancestorColor') {
-                      <span i18n="@@profile.prefs.highlightColors.ancestor">
-                        Ancestors
-                      </span>
+                      <span i18n="@@profile.prefs.highlightColors.ancestor"> Ancestors </span>
                     }
-                    @case ('searchHighlightColor') {
-                      <span i18n="@@profile.prefs.highlightColors.search">
-                        Search highlight
+                    @case ('manualHighlightColor') {
+                      <span i18n="@@profile.prefs.highlightColors.manual">
+                        Manual highlight (default)
                       </span>
                     }
                   }
                 </label>
-                <input
-                  type="color"
-                  class="pref-color"
-                  [id]="field.inputId(theme)"
-                  [value]="treeHighlightColors()[theme][field.key]"
-                  (input)="
-                    onHighlightColorChange(
-                      theme,
-                      field.key,
-                      $any($event.target).value
-                    )
-                  "
-                />
-                <span
-                  class="pref-color-swatch"
-                  [style.background]="treeHighlightColors()[theme][field.key]"
-                  aria-hidden="true"
-                ></span>
-                <code class="pref-color-hex">{{
-                  treeHighlightColors()[theme][field.key]
-                }}</code>
+                <span class="pref-control-group">
+                  <input
+                    type="color"
+                    class="pref-color"
+                    [id]="field.inputId(theme)"
+                    [value]="treeHighlightColors()[theme][field.key]"
+                    (input)="onHighlightColorChange(theme, field.key, $any($event.target).value)"
+                  />
+                  <span
+                    class="pref-color-swatch"
+                    [style.background]="treeHighlightColors()[theme][field.key]"
+                    aria-hidden="true"
+                  ></span>
+                  <code class="pref-color-hex">{{ treeHighlightColors()[theme][field.key] }}</code>
+                </span>
               </div>
             }
           </div>
@@ -397,6 +555,111 @@
           </button>
         </div>
       </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-search">
+        <h3 id="prefs-search" class="group-title" i18n="@@profile.prefs.search.title"> Find </h3>
+
+        <div class="pref-row">
+          <span class="pref-label" id="pref-search-scope-label" i18n="@@profile.prefs.search.scope">
+            Find scope
+          </span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-search-scope"
+              aria-labelledby="pref-search-scope-label"
+              [value]="searchScope()"
+              (selectionChange)="onSearchScopeChange($event.value)"
+            >
+              <mat-option value="keys" i18n="@@profile.prefs.search.scope.keys">Keys</mat-option>
+              <mat-option value="values" i18n="@@profile.prefs.search.scope.values"
+                >Values</mat-option
+              >
+              <mat-option value="both" i18n="@@profile.prefs.search.scope.both"
+                >Keys and values</mat-option
+              >
+            </mat-select>
+          </mat-form-field>
+        </div>
+
+        <div class="pref-row">
+          <span
+            class="pref-label"
+            id="pref-search-case-sensitive-label"
+            i18n="@@profile.prefs.search.caseSensitive"
+            >Case sensitive</span
+          >
+          <mat-slide-toggle
+            aria-labelledby="pref-search-case-sensitive-label"
+            [checked]="searchCaseSensitive()"
+            (change)="onSearchCaseSensitiveChange($event.checked)"
+          ></mat-slide-toggle>
+        </div>
+
+        <div class="pref-row">
+          <span
+            class="pref-label"
+            id="pref-search-regex-mode-label"
+            i18n="@@profile.prefs.search.regexMode"
+            >Regular expression mode</span
+          >
+          <mat-slide-toggle
+            aria-labelledby="pref-search-regex-mode-label"
+            [checked]="searchRegexMode()"
+            (change)="onSearchRegexModeChange($event.checked)"
+          ></mat-slide-toggle>
+        </div>
+      </section>
+
+      <section class="prefs-group" aria-labelledby="prefs-history">
+        <h3 id="prefs-history" class="group-title" i18n="@@profile.prefs.history.title">
+          Storage
+        </h3>
+
+        <div class="pref-row">
+          <span
+            class="pref-label"
+            id="pref-recently-viewed-label"
+            i18n="@@profile.prefs.recentlyViewed.label"
+          >
+            Track recently viewed blobs
+          </span>
+          <mat-slide-toggle
+            id="pref-recently-viewed"
+            aria-labelledby="pref-recently-viewed-label"
+            [checked]="recentlyViewedEnabled()"
+            (change)="onRecentlyViewedEnabledChange($event.checked)"
+          ></mat-slide-toggle>
+        </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.recentlyViewed.help">
+          When on, JotJSON remembers which shared blobs you have opened so you can find them again
+          on the Recently viewed page.
+        </p>
+
+        <div class="pref-row">
+          <span
+            class="pref-label"
+            id="pref-quota-strategy-label"
+            i18n="@@profile.prefs.history.quotaStrategy"
+          >
+            When you reach the saved blob limit
+          </span>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-quota-strategy"
+              aria-labelledby="pref-quota-strategy-label"
+              [value]="blobQuotaStrategy()"
+              (selectionChange)="onBlobQuotaStrategyChange($event.value)"
+            >
+              <mat-option value="auto_fifo" i18n="@@profile.prefs.history.quotaStrategy.autoFifo">
+                Automatically delete the oldest
+              </mat-option>
+              <mat-option value="manual" i18n="@@profile.prefs.history.quotaStrategy.manual">
+                Ask me to choose
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </section>
     </section>
   } @else {
     <section class="card" aria-labelledby="profile-signed-out">
@@ -404,8 +667,7 @@
         You are signed out
       </h2>
       <p i18n="@@profile.signedOut.body">
-        Sign in to view your profile, save persistent links, and keep history
-        across devices.
+        Sign in to view your profile, save persistent links, and keep history across devices.
       </p>
       @if (isConfigured) {
         <button type="button" mat-flat-button color="primary" (click)="onSignIn()">

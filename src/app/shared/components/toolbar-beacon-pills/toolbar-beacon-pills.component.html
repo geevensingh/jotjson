@@ -1,0 +1,16 @@
+@for (bucket of buckets(); track bucket.icon) {
+  <button
+    type="button"
+    class="beacon-pill"
+    [attr.aria-label]="pillTooltip(bucket)"
+    [matTooltip]="pillTooltip(bucket)"
+    matTooltipShowDelay="500"
+    matTooltipPosition="below"
+    (click)="onPillClick(bucket, $event)"
+  >
+    <jj-icon class="beacon-pill__icon" [name]="bucket.icon" [size]="14" />
+    @if (bucket.paths.length >= 2) {
+      <span class="beacon-pill__count">{{ bucket.paths.length }}</span>
+    }
+  </button>
+}

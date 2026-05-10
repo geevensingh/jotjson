@@ -31,7 +31,7 @@ class MsalBridge {
     const message = redactPii(truncate(rawMessage ?? '', MAX_MSG));
     const aadCode = extractAadCode(rawMessage ?? '');
     const entry: MsalBridgeEntry = {
-      props: { message, aadCode }
+      props: { message, aadCode },
     };
     if (this.consumer) {
       try {
@@ -50,9 +50,9 @@ class MsalBridge {
   attachConsumer(consumer: Consumer): void {
     this.consumer = consumer;
     const drained = this.buffer.splice(0, this.buffer.length);
-    for (const e of drained) {
+    for (const entry of drained) {
       try {
-        consumer(e);
+        consumer(entry);
       } catch {
         // ignore
       }

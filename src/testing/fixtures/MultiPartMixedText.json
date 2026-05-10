@@ -1,0 +1,70 @@
+POST /c570899d-a39c-4058-ac21-d2a658d1cde3/captures
+Content-Length: 760
+Content-Type: application/json; charset=utf-8
+Accept: application/json
+Authorization: <removed from logging>
+From: PurchaseFD
+Host: billingservice.cp.microsoft.com
+Max-Forwards: 10
+User-Agent: PurchaseFD
+Correlation-Context: v=1,ms.a.user.id=p:985154502546360,ms.a.device.id=x:17582087376077714515,ms.b.tel.partner=xbox,ms.b.tel.scenario=commerce.purchase.order.1,ms.c.ust.xbl.u.p=p:985154502546360,ms.c.ust.xbl.u.x=x:2535433395492903,ms.c.ust.xbl.u.puids=p:985154502546360,ms.c.ust.xbl.u.xuids=x:2535433395492903,ms.c.ust.xbl.d.t=Scarlett,ms.c.ust.xbl.d.id=F4001F508CFDF453,ms.c.ust.xbl.d.s=162399232317,ms.c.ust.xbl.d.v=10.0.26100.7018,ms.c.ust.xbl.d.g=a6676919-fa5d-4d4d-99b9-0c81d15a8785|8b264c6d-4185-420d-b6cb-ef199cda69c7,ms.c.ust.xbl.t.id=6F1E8569,ms.c.ust.xbl.t.g=26a05920-7974-48f0-8af8-d35f0a1b76e4|4602e565-1710-4e9d-995c-2f12096e7ee1|7ae0809c-e4b4-432c-a8cd-403bb8e0b781,ms.c.ust.xbl.sb=RETAIL,ms.c.ust.xbl.sbt=RETAIL,ms.c.tel.operationType=OrderV7
+traceparent: 00-bb4c8ac389a3319ca1d90d224581f54a-ab74fae477df5c34-00
+MS-CorrelationId: 199a5a3d-78bc-4686-a169-19d2426dbb63
+x-ms-correlation-id: 199a5a3d-78bc-4686-a169-19d2426dbb63
+MS-CV: YhqIpj93ZrflA1POFhgsoX.1299.2.6.2533978355.3221388324.13
+MS-Geo-Location: 2049
+api-version: 2019-02-28
+x-ms-tracking-id: 97d87ec1-9694-4477-b50e-d6e4250a7c73
+x-b3-traceid: bb4c8ac389a3319ca1d90d224581f54a
+x-b3-spanid: ab74fae477df5c34
+MS-Scenario: Purchase.XboxUpdateOrder
+X-ARR-LOG-ID: 53160693-8230-4941-bec2-7eeb9001c62f
+CLIENT-IP: 20.54.24.217:21025
+DISGUISED-HOST: billingservice.cp.microsoft.com
+X-SITE-DEPLOYMENT-ID: azapp-billingservice7-prod-centralus__aaaf
+WAS-DEFAULT-HOSTNAME: azapp-billingservice7-prod-centralus.azurewebsites.net
+X-Forwarded-Proto: https
+X-AppService-Proto: https
+X-ARR-SSL: 2048|256|CN=Microsoft Azure RSA TLS Issuing CA 04, O=Microsoft Corporation, C=US|CN=billingservice.cp.microsoft.com, O=Microsoft Corporation, L=Redmond, S=WA, C=US
+X-Forwarded-TlsVersion: 1.2
+X-Forwarded-For: 20.54.24.217:21025
+X-Original-URL: /c570899d-a39c-4058-ac21-d2a658d1cde3/captures
+X-WAWS-Unencoded-URL: /c570899d-a39c-4058-ac21-d2a658d1cde3/captures
+ApplicationInsights-RequestTrackingTelemetryModule-RootRequest-Id: 3c141684-cd56-4d8f-bff5-1ae128d8d82b
+{"authentication_data":null,"authorization_id":null,"line_items":[{"billing_record_id":"1bd926fb-0890-43cf-a5c9-839c248b925d","line_item_ids":[{"high":0,"low":0,"id":"59e21d55-5f35-431a-b98f-8734563eb81c"}]}],"override_capture_instructions":{"payment_instrument_id":{"account_id":"c570899d-a39c-4058-ac21-d2a658d1cde3","id":"6a22f463-a58f-4db3-b169-99c896a2e5da"},"instruction_type":"single_payment_instrument"},"risk_token":"MjGDP9C_FCmSJD9YtIWMHcrDvDkcOUwUsZ2UPm_OkO9P_kci3YDLfjXIFfg7kmAStwFQL8eCID5wLCnFtMYrIVR3BRSQfKryw4_c6xkw-4Vh7ONvk6DTcqIVJNipLIM6eD5ZekAEJ_stBXbDT9znCph9","payment_token":null,"is_recurring":false,"retry_transaction":false,"ip_address":"84.225.99.165","session_id":"Z10148DPNG7M435110ee-2135-4ddf-bb4d-6bf617679d1d","document_id":null}
+POST /c570899d-a39c-4058-ac21-d2a658d1cde3/billing-records
+Content-Length: 2089
+Content-Type: application/json; charset=utf-8
+Accept: application/json
+Authorization: <removed from logging>
+From: PurchaseFD
+Host: billingservice.cp.microsoft.com
+Max-Forwards: 10
+User-Agent: PurchaseFD
+Correlation-Context: v=1,ms.a.user.id=p:985154502546360,ms.a.device.id=x:17582087376077714515,ms.b.tel.partner=xbox,ms.b.tel.scenario=commerce.purchase.order.1,ms.c.ust.xbl.u.p=p:985154502546360,ms.c.ust.xbl.u.x=x:2535433395492903,ms.c.ust.xbl.u.puids=p:985154502546360,ms.c.ust.xbl.u.xuids=x:2535433395492903,ms.c.ust.xbl.d.t=Scarlett,ms.c.ust.xbl.d.id=F4001F508CFDF453,ms.c.ust.xbl.d.s=162399232317,ms.c.ust.xbl.d.v=10.0.26100.7018,ms.c.ust.xbl.d.g=a6676919-fa5d-4d4d-99b9-0c81d15a8785|8b264c6d-4185-420d-b6cb-ef199cda69c7,ms.c.ust.xbl.t.id=6F1E8569,ms.c.ust.xbl.t.g=26a05920-7974-48f0-8af8-d35f0a1b76e4|4602e565-1710-4e9d-995c-2f12096e7ee1|7ae0809c-e4b4-432c-a8cd-403bb8e0b781,ms.c.ust.xbl.sb=RETAIL,ms.c.ust.xbl.sbt=RETAIL,ms.c.tel.operationType=OrderV7
+traceparent: 00-bb4c8ac389a3319ca1d90d224581f54a-ab74fae477df5c34-00
+MS-CorrelationId: 199a5a3d-78bc-4686-a169-19d2426dbb63
+x-ms-correlation-id: 199a5a3d-78bc-4686-a169-19d2426dbb63
+MS-CV: YhqIpj93ZrflA1POFhgsoX.1299.2.6.2533978355.3221388324.12
+MS-Geo-Location: 2049
+api-version: 2019-02-28
+x-ms-tracking-id: e8b89ed4-6898-4ed4-9508-698ae2278930
+x-ms-calculate-only: False
+x-b3-traceid: bb4c8ac389a3319ca1d90d224581f54a
+x-b3-spanid: ab74fae477df5c34
+MS-Scenario: Purchase.XboxUpdateOrder
+X-ARR-LOG-ID: 436cd000-2132-4486-bbb3-9a2cb5d748cb
+CLIENT-IP: 20.54.24.217:21025
+DISGUISED-HOST: billingservice.cp.microsoft.com
+X-SITE-DEPLOYMENT-ID: azapp-billingservice7-prod-centralus__aaaf
+WAS-DEFAULT-HOSTNAME: azapp-billingservice7-prod-centralus.azurewebsites.net
+X-Forwarded-Proto: https
+X-AppService-Proto: https
+X-ARR-SSL: 2048|256|CN=Microsoft Azure RSA TLS Issuing CA 04, O=Microsoft Corporation, C=US|CN=billingservice.cp.microsoft.com, O=Microsoft Corporation, L=Redmond, S=WA, C=US
+X-Forwarded-TlsVersion: 1.2
+X-Forwarded-For: 20.54.24.217:21025
+X-Original-URL: /c570899d-a39c-4058-ac21-d2a658d1cde3/billing-records
+X-WAWS-Unencoded-URL: /c570899d-a39c-4058-ac21-d2a658d1cde3/billing-records
+ApplicationInsights-RequestTrackingTelemetryModule-RootRequest-Id: f5120927-b1a1-47c3-9d03-cc3d1d7ebc72
+{"buyer_info":{"ip_address":"84.225.99.165","sold_to_address_id":{"account_id":"c570899d-a39c-4058-ac21-d2a658d1cde3","id":"38ba784d-3345-5e2b-fab5-07900daed4b9"},"tax_id_account_id":null},"client_context":{"client":"Mercury","marketplace_country":"HU","device_family":"Windows.Xbox"},"currency":"HUF","default_billing_group_instruction":null,"default_capture_instructions":{"payment_instrument_id":{"account_id":"c570899d-a39c-4058-ac21-d2a658d1cde3","id":"6a22f463-a58f-4db3-b169-99c896a2e5da"},"instruction_type":"single_payment_instrument"},"excluded_payment_instrument_types":[],"external_reference":{"id":"67a6824c-7906-4060-86ee-91acf34f0f1f","url":"https://db5eap.purchase.mp.microsoft.com/users/msa:985154502546360/orders/67a6824c-7906-4060-86ee-91acf34f0f1f?env=PROD"},"line_items":[{"bundle_id":null,"catalog_uri":"https://displaycatalog.mp.microsoft.com/products/9N1ZRV767M2C/0010?market=HU&languages=neutral-HU&ResourceId=All","description":"theHunter Call of the Wild(tm) - Assorted Sidearms Pack:theHunter: Call of the Wild(tm)","id":{"high":0,"low":0,"id":"59e21d55-5f35-431a-b98f-8734563eb81c"},"excluded_payment_instrument_types":[],"external_reference":{"id":"9N1ZRV767M2C","url":"https://displaycatalog.mp.microsoft.com/products/9N1ZRV767M2C/0010?market=HU&languages=neutral-HU&ResourceId=All"},"fee_instruction":{"fee_infos":[],"instruction_type":"v1"},"financial_instructions":{"additional_allocation":[],"charge_amount_allocation":[{"category":"revenue","recognition_type":"immediate","liability_instruction":null,"financial_instruction_id":"2f938dfe-41bd-4cf8-8cb4-da51fa0f2e59","sku":"7W3-00102","percentage":1.0}]},"pricing_regular_request_charge_amount":800.0,"publisher_name":"Avalanche Studios.","request_charge_amount":800.0,"content_type":"Durable","ship_from_address_id":null,"ship_to_address_id":null,"service_start_date":"2026-04-10T00:00:00Z","service_end_date":"9999-12-31T23:59:59.9999999Z","tax_instruction":{"product_code":"GAMEDOWNLOAD","is_tax_inclusive":true},"transferred_from_line_items":null}],"profile_id":"581c1a3d-afcc-5033-2c8b-377987e2193d"}
+Rohit, another option is that you can pass the excluded_payment_instrument_types in the REM line items

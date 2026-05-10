@@ -58,10 +58,10 @@ export function __resetLocaleOrderCacheForTesting(): void {
   cachedLocaleOrder = null;
 }
 
-function isInRange(d: Date): boolean {
-  if (Number.isNaN(d.getTime())) return false;
-  const y = d.getFullYear();
-  return y >= MIN_YEAR && y <= MAX_YEAR;
+function isInRange(date: Date): boolean {
+  if (Number.isNaN(date.getTime())) return false;
+  const year = date.getFullYear();
+  return year >= MIN_YEAR && year <= MAX_YEAR;
 }
 
 function tryConstructFromYmd(
@@ -70,38 +70,46 @@ function tryConstructFromYmd(
   day: number,
   hour = 0,
   minute = 0,
-  second = 0
+  second = 0,
 ): Date | null {
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > 31) return null;
   if (hour < 0 || hour > 23) return null;
   if (minute < 0 || minute > 59) return null;
   if (second < 0 || second > 60) return null;
-  const d = new Date(year, month - 1, day, hour, minute, second);
+  const date = new Date(year, month - 1, day, hour, minute, second);
   // Reject calendar overflow (e.g. Feb 30 -> Mar 2).
-  if (
-    d.getFullYear() !== year ||
-    d.getMonth() !== month - 1 ||
-    d.getDate() !== day
-  ) {
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
     return null;
   }
-  return isInRange(d) ? d : null;
+  return isInRange(date) ? date : null;
 }
 
 const MONTH_NAMES: Record<string, number> = {
-  jan: 1, january: 1,
-  feb: 2, february: 2,
-  mar: 3, march: 3,
-  apr: 4, april: 4,
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
   may: 5,
-  jun: 6, june: 6,
-  jul: 7, july: 7,
-  aug: 8, august: 8,
-  sep: 9, sept: 9, september: 9,
-  oct: 10, october: 10,
-  nov: 11, november: 11,
-  dec: 12, december: 12
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
 };
 
 export interface ParsedDate {
@@ -131,32 +139,24 @@ const ISO_TZ_SUFFIX = /(?:Z|[+-]\d{2}:?\d{2})$/i;
  * Returns the parsed date plus a `hasTime` flag, or null if `raw` does not
  * match one of the accepted shapes or falls outside the supported range.
  */
-export function parseAsDate(
-  raw: unknown,
-  locale?: string,
-  opts?: ParseOptions
-): ParsedDate | null {
+export function parseAsDate(raw: unknown, locale?: string, opts?: ParseOptions): ParsedDate | null {
   if (typeof raw !== 'string') return null;
-  const s = raw.trim();
-  if (s.length < 8 || s.length > 40) return null;
+  const trimmed = raw.trim();
+  if (trimmed.length < 8 || trimmed.length > 40) return null;
 
-  if (ISO_WITH_TIME.test(s)) {
-    const hasTz = ISO_TZ_SUFFIX.test(s);
-    const source = !hasTz && opts?.assumeUtcForIsoDateTime ? `${s}Z` : s;
-    const d = new Date(source);
-    return isInRange(d) ? { date: d, hasTime: true } : null;
+  if (ISO_WITH_TIME.test(trimmed)) {
+    const hasTz = ISO_TZ_SUFFIX.test(trimmed);
+    const source = !hasTz && opts?.assumeUtcForIsoDateTime ? `${trimmed}Z` : trimmed;
+    const date = new Date(source);
+    return isInRange(date) ? { date, hasTime: true } : null;
   }
 
-  if (ISO_DATE_ONLY.test(s)) {
-    const [y, m, d] = s.split('-').map((p) => Number(p));
+  if (ISO_DATE_ONLY.test(trimmed)) {
+    const [y, m, d] = trimmed.split('-').map((part) => Number(part));
     if (opts?.assumeUtcForIsoDateOnly) {
       if (m < 1 || m > 12 || d < 1 || d > 31) return null;
       const utc = new Date(Date.UTC(y, m - 1, d));
-      if (
-        utc.getUTCFullYear() !== y ||
-        utc.getUTCMonth() !== m - 1 ||
-        utc.getUTCDate() !== d
-      ) {
+      if (utc.getUTCFullYear() !== y || utc.getUTCMonth() !== m - 1 || utc.getUTCDate() !== d) {
         return null;
       }
       return isInRange(utc) ? { date: utc, hasTime: false } : null;
@@ -165,10 +165,10 @@ export function parseAsDate(
     return built ? { date: built, hasTime: false } : null;
   }
 
-  const slash = SLASH_DATE.exec(s);
+  const slash = SLASH_DATE.exec(trimmed);
   if (slash) {
-    const a = Number(slash[1]);
-    const b = Number(slash[2]);
+    const first = Number(slash[1]);
+    const second = Number(slash[2]);
     const year = Number(slash[3]);
     const hh = slash[4] !== undefined ? Number(slash[4]) : undefined;
     const mm = slash[5] !== undefined ? Number(slash[5]) : undefined;
@@ -177,17 +177,17 @@ export function parseAsDate(
     let month: number;
     let day: number;
     if (order === 'dmy') {
-      day = a;
-      month = b;
+      day = first;
+      month = second;
     } else {
-      month = a;
-      day = b;
+      month = first;
+      day = second;
     }
     const built = tryConstructFromYmd(year, month, day, hh ?? 0, mm ?? 0, ss ?? 0);
     return built ? { date: built, hasTime: hh !== undefined } : null;
   }
 
-  const rfc = RFC2822_ISH.exec(s);
+  const rfc = RFC2822_ISH.exec(trimmed);
   if (rfc) {
     const dayA = rfc[1];
     const monA = rfc[2];
@@ -208,25 +208,100 @@ export function parseAsDate(
   return null;
 }
 
-const REL_UNITS: Array<{ unit: Intl.RelativeTimeFormatUnit; ms: number }> = [
+type RelativeUnit = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second';
+type RelativeUnitSettings = {
+  year: boolean;
+  month: boolean;
+  day: boolean;
+  hour: boolean;
+  minute: boolean;
+  second: boolean;
+};
+type RelativeUnitDefinition = { unit: RelativeUnit; ms: number };
+
+const REL_UNITS: RelativeUnitDefinition[] = [
   { unit: 'year', ms: 365.25 * 24 * 60 * 60 * 1000 },
   { unit: 'month', ms: 30.44 * 24 * 60 * 60 * 1000 },
   { unit: 'day', ms: 24 * 60 * 60 * 1000 },
   { unit: 'hour', ms: 60 * 60 * 1000 },
   { unit: 'minute', ms: 60 * 1000 },
-  { unit: 'second', ms: 1000 }
+  { unit: 'second', ms: 1000 },
 ];
 
-function formatRelative(d: Date, now: Date, locale?: string): string {
-  const deltaMs = d.getTime() - now.getTime();
-  const abs = Math.abs(deltaMs);
+const MAX_ADAPTIVE_FRACTION_DIGITS = 4;
+
+function getEnabledRelativeUnits(enabledUnits?: RelativeUnitSettings): RelativeUnitDefinition[] {
+  return REL_UNITS.filter(({ unit }) => enabledUnits?.[unit] ?? true);
+}
+
+function roundToFractionDigits(value: number, fractionDigits: number): number {
+  const multiplier = 10 ** fractionDigits;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function roundWithAdaptivePrecision(value: number): number {
+  for (
+    let fractionDigits = 1;
+    fractionDigits <= MAX_ADAPTIVE_FRACTION_DIGITS;
+    fractionDigits += 1
+  ) {
+    const roundedValue = roundToFractionDigits(value, fractionDigits);
+    if (roundedValue !== 0 || fractionDigits === MAX_ADAPTIVE_FRACTION_DIGITS) {
+      return roundedValue;
+    }
+  }
+  return 0;
+}
+
+function hasDisabledSmallerUnit(
+  selectedUnit: RelativeUnit,
+  enabledUnits?: RelativeUnitSettings,
+): boolean {
+  if (enabledUnits === undefined) return false;
+  const selectedIndex = REL_UNITS.findIndex(({ unit }) => unit === selectedUnit);
+  if (selectedIndex < 0) return false;
+  return REL_UNITS.slice(selectedIndex + 1).some(({ unit }) => !enabledUnits[unit]);
+}
+
+export function formatRelative(
+  date: Date,
+  now: Date,
+  locale?: string,
+  enabledUnits?: {
+    year: boolean;
+    month: boolean;
+    day: boolean;
+    hour: boolean;
+    minute: boolean;
+    second: boolean;
+  },
+  friendlyForms?: boolean,
+): string | null {
+  const enabledRelativeUnits = getEnabledRelativeUnits(enabledUnits);
+  if (enabledRelativeUnits.length === 0) return null;
+
+  const deltaMs = date.getTime() - now.getTime();
+  const absoluteDeltaMs = Math.abs(deltaMs);
   const sign = deltaMs < 0 ? -1 : 1;
-  const choice = REL_UNITS.find(({ ms }) => abs >= ms) ?? REL_UNITS[REL_UNITS.length - 1];
-  const value = Math.round(abs / choice.ms) * sign;
+  const fittingUnit = enabledRelativeUnits.find(({ ms }) => absoluteDeltaMs >= ms);
+  const selectedUnit = fittingUnit ?? enabledRelativeUnits[enabledRelativeUnits.length - 1];
+  if (selectedUnit === undefined) return null;
+
+  const unitValue = absoluteDeltaMs / selectedUnit.ms;
+  const shouldKeepFractionalValue =
+    fittingUnit !== undefined && hasDisabledSmallerUnit(selectedUnit.unit, enabledUnits);
+  const absoluteValue =
+    fittingUnit === undefined || shouldKeepFractionalValue
+      ? roundWithAdaptivePrecision(unitValue)
+      : Math.round(unitValue);
+  const value = absoluteValue * sign;
+  const numeric: 'auto' | 'always' =
+    (friendlyForms ?? true) && Number.isInteger(value) ? 'auto' : 'always';
+
   try {
-    return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(value, choice.unit);
+    return new Intl.RelativeTimeFormat(locale, { numeric }).format(value, selectedUnit.unit);
   } catch {
-    return value < 0 ? `${-value} ${choice.unit}s ago` : `in ${value} ${choice.unit}s`;
+    return value < 0 ? `${-value} ${selectedUnit.unit}s ago` : `in ${value} ${selectedUnit.unit}s`;
   }
 }
 
@@ -238,8 +313,17 @@ function formatRelative(d: Date, now: Date, locale?: string): string {
 export function formatDateAnnotation(
   parsed: ParsedDate,
   now: Date,
-  locale?: string
-): string {
+  locale?: string,
+  enabledUnits?: {
+    year: boolean;
+    month: boolean;
+    day: boolean;
+    hour: boolean;
+    minute: boolean;
+    second: boolean;
+  },
+  friendlyForms?: boolean,
+): string | null {
   const opts: Intl.DateTimeFormatOptions = parsed.hasTime
     ? { dateStyle: 'medium', timeStyle: 'short' }
     : { dateStyle: 'medium' };
@@ -249,6 +333,7 @@ export function formatDateAnnotation(
   } catch {
     absolute = parsed.date.toString();
   }
-  const relative = formatRelative(parsed.date, now, locale);
+  const relative = formatRelative(parsed.date, now, locale, enabledUnits, friendlyForms);
+  if (relative === null) return null;
   return `${absolute} \u2014 ${relative}`;
 }

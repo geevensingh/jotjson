@@ -1,15 +1,21 @@
 import { Injectable } from '@angular/core';
-import type {
-  ApplicationInsights,
-  ITelemetryItem
-} from '@microsoft/applicationinsights-web';
+import type { ApplicationInsights, ITelemetryItem } from '@microsoft/applicationinsights-web';
 import { environment } from '../../../environments/environment';
 import { NormalizedError, sanitizePath } from './normalize-error';
 import { TelemetryMessageId } from './telemetry-message-ids';
 
-export type TelemetryProps = Readonly<
-  Record<string, string | number | boolean | undefined>
->;
+export type TelemetryProps = Readonly<Record<string, string | number | boolean | undefined>>;
+
+/**
+ * Numeric measurements that land in Application Insights'
+ * `customMeasurements` map (queryable with `percentile()`, `avg()`,
+ * `sum()`). `TelemetryProps` lands in `customDimensions` (string-keyed,
+ * groupable). Use measurements for raw numeric quantities (timing,
+ * sizes, counts) and props for dimensional facets / closed-enum
+ * buckets. Both maps share a single key-space at the wire level - do
+ * not reuse the same key in both.
+ */
+export type TelemetryMeasurements = Readonly<Record<string, number>>;
 
 export type ConnectState = 'idle' | 'connecting' | 'connected' | 'disabled';
 
@@ -70,10 +76,10 @@ export class TelemetryService {
       return this.connectPromise;
     }
     this.state = 'connecting';
-    this.connectPromise = this.loadAndInit(cs).catch((err) => {
+    this.connectPromise = this.loadAndInit(cs).catch((error) => {
       this.state = 'disabled';
       // eslint-disable-next-line no-console
-      console.warn('[telemetry] connect failed; telemetry disabled', err);
+      console.warn('[telemetry] connect failed; telemetry disabled', error);
     });
     return this.connectPromise;
   }
@@ -86,27 +92,31 @@ export class TelemetryService {
     }
   }
 
-  trackEvent(name: TelemetryMessageId, props?: TelemetryProps): void {
+  trackEvent(
+    name: TelemetryMessageId,
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements,
+  ): void {
     if (!this.appInsights) {
       return;
     }
-    this.appInsights.trackEvent({ name }, this.toCustomProps(props));
+    this.appInsights.trackEvent({ name }, this.toCustomProps(props, measurements));
   }
 
   trackTrace(
     name: TelemetryMessageId,
     severity: TelemetrySeverity,
-    props?: TelemetryProps
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements,
   ): void {
     if (!this.appInsights) {
       return;
     }
     // SeverityLevel: Information=1, Warning=2, Error=3.
-    const severityLevel =
-      severity === 'error' ? 3 : severity === 'warn' ? 2 : 1;
+    const severityLevel = severity === 'error' ? 3 : severity === 'warn' ? 2 : 1;
     this.appInsights.trackTrace(
       { message: name, severityLevel },
-      this.toCustomProps(props)
+      this.toCustomProps(props, measurements),
     );
   }
 
@@ -117,7 +127,7 @@ export class TelemetryService {
     const synthetic = this.toSyntheticError(error);
     this.appInsights.trackException(
       { exception: synthetic },
-      this.toCustomProps({ ...props, ...this.errorProps(error) })
+      this.toCustomProps({ ...props, ...this.errorProps(error) }),
     );
   }
 
@@ -129,14 +139,34 @@ export class TelemetryService {
     this.appInsights.trackPageView({ name, uri: sanitized });
   }
 
+  /**
+   * Best-effort flush of any pending telemetry envelopes. Used by
+   * call sites that are about to navigate the document away (sign-out
+   * redirect, post-update hard reload) so that customEvents queued
+   * just before the navigation are not dropped.
+   *
+   * The underlying SDK's `flush()` is synchronous and uses sendBeacon
+   * by default (`async = true`), so the resolved promise here does
+   * NOT mean the network round-trip completed -- only that the
+   * envelopes were handed off to the browser's beacon queue. That is
+   * the strongest guarantee available before a navigation; nothing
+   * more is achievable from page JS.
+   *
+   * No-op when telemetry is disabled or not yet connected.
+   */
+  async flush(): Promise<void> {
+    if (!this.appInsights) {
+      return;
+    }
+    this.appInsights.flush();
+  }
+
   // --- internals ---
 
   private async loadAndInit(connectionString: string): Promise<void> {
     // Dynamic import keeps the SDK in a lazy chunk. Do not statically
     // import `@microsoft/applicationinsights-web` from this file.
-    const { ApplicationInsights: AI } = await import(
-      '@microsoft/applicationinsights-web'
-    );
+    const { ApplicationInsights: AI } = await import('@microsoft/applicationinsights-web');
     const ai = new AI({
       config: {
         connectionString,
@@ -149,8 +179,8 @@ export class TelemetryService {
         disableCookiesUsage: true,
         // Keep correlation between SPA and same-origin Functions.
         enableCorsCorrelation: true,
-        distributedTracingMode: 2 /* W3C */
-      }
+        distributedTracingMode: 2 /* W3C */,
+      },
     });
     ai.loadAppInsights();
     ai.addTelemetryInitializer(this.privacyInitializer);
@@ -168,10 +198,10 @@ export class TelemetryService {
     const data = item.data ?? {};
     // Sanitize any uri-like field that the SDK populates.
     const fields: Array<keyof typeof data> = ['uri', 'refUri', 'url'];
-    for (const f of fields) {
-      const v = data[f];
-      if (typeof v === 'string') {
-        data[f] = sanitizePath(v);
+    for (const field of fields) {
+      const fieldValue = data[field];
+      if (typeof fieldValue === 'string') {
+        data[field] = sanitizePath(fieldValue);
       }
     }
     if (item.baseData) {
@@ -190,9 +220,9 @@ export class TelemetryService {
       // means a query slipped past us. Drop the envelope rather than
       // ship it.
       const dropFields: string[] = ['uri', 'name', 'url'];
-      for (const f of dropFields) {
-        const v = bd[f];
-        if (typeof v === 'string' && v.includes('?')) {
+      for (const field of dropFields) {
+        const fieldValue = bd[field];
+        if (typeof fieldValue === 'string' && fieldValue.includes('?')) {
           return false;
         }
       }
@@ -228,53 +258,69 @@ export class TelemetryService {
     }
   }
 
-  private toCustomProps(props?: TelemetryProps): Record<string, string> | undefined {
-    if (!props) {
+  private toCustomProps(
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements,
+  ): Record<string, string | number> | undefined {
+    if (!props && !measurements) {
       return undefined;
     }
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(props)) {
-      if (v === undefined) {
-        continue;
+    const out: Record<string, string | number> = {};
+    if (props) {
+      for (const [key, value] of Object.entries(props)) {
+        if (value === undefined) {
+          continue;
+        }
+        out[key] = String(value);
       }
-      out[k] = String(v);
+    }
+    if (measurements) {
+      for (const [key, value] of Object.entries(measurements)) {
+        // The AI SDK routes string-typed values to customDimensions and
+        // number-typed values to customMeasurements. Skip non-finite
+        // numbers (NaN, Infinity) - they would be serialized as "null"
+        // or rejected by the wire format.
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          out[key] = value;
+        }
+      }
     }
     return out;
   }
 
-  private toSyntheticError(err: NormalizedError): Error {
-    if (err.kind === 'http') {
-      const e = new Error(
-        `HTTP ${err.status} ${err.method ?? ''} ${err.pathTemplate ?? ''}`.trim()
+  private toSyntheticError(normalized: NormalizedError): Error {
+    if (normalized.kind === 'http') {
+      const error = new Error(
+        `HTTP ${normalized.status} ${normalized.method ?? ''} ${normalized.pathTemplate ?? ''}`.trim(),
       );
-      e.name = 'HttpError';
-      return e;
+      error.name = 'HttpError';
+      return error;
     }
-    if (err.kind === 'error') {
-      const e = new Error(err.message);
-      e.name = err.name;
-      if (err.stack) {
-        e.stack = err.stack;
+    if (normalized.kind === 'error') {
+      const error = new Error(normalized.message);
+      error.name = normalized.name;
+      if (normalized.stack) {
+        error.stack = normalized.stack;
       }
-      return e;
+      return error;
     }
-    const e = new Error(err.repr);
-    e.name = 'UnknownThrow';
-    return e;
+    const error = new Error(normalized.repr);
+    error.name = 'UnknownThrow';
+    return error;
   }
 
-  private errorProps(err: NormalizedError): TelemetryProps {
-    if (err.kind === 'http') {
+  private errorProps(normalized: NormalizedError): TelemetryProps {
+    if (normalized.kind === 'http') {
       return {
         kind: 'http',
-        status: err.status,
-        method: err.method,
-        pathTemplate: err.pathTemplate,
-        backendCode: err.backendCode
+        status: normalized.status,
+        method: normalized.method,
+        pathTemplate: normalized.pathTemplate,
+        backendCode: normalized.backendCode,
       };
     }
-    if (err.kind === 'error') {
-      return { kind: 'error', name: err.name };
+    if (normalized.kind === 'error') {
+      return { kind: 'error', name: normalized.name };
     }
     return { kind: 'unknown' };
   }

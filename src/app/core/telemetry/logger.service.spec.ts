@@ -7,6 +7,7 @@ import { normalizeError } from './normalize-error';
 
 describe('LoggerService', () => {
   let originalCs: string | undefined;
+  let trackEvent: jasmine.Spy;
   let trackException: jasmine.Spy;
   let trackTrace: jasmine.Spy;
 
@@ -32,14 +33,16 @@ describe('LoggerService', () => {
       },
       get isConnected() {
         return !disabled;
-      }
+      },
     };
+    trackEvent = jasmine.createSpy('trackEvent');
     trackException = jasmine.createSpy('trackException');
     trackTrace = jasmine.createSpy('trackTrace');
+    (telemetry as TelemetryService).trackEvent = trackEvent;
     (telemetry as TelemetryService).trackException = trackException;
     (telemetry as TelemetryService).trackTrace = trackTrace;
     TestBed.configureTestingModule({
-      providers: [{ provide: TelemetryService, useValue: telemetry }]
+      providers: [{ provide: TelemetryService, useValue: telemetry }],
     });
     return TestBed.inject(LoggerService);
   }
@@ -137,7 +140,7 @@ describe('LoggerService', () => {
   it('reads and clears sessionStorage boot error on connect', async () => {
     sessionStorage.setItem(
       'jotjson.bootErr',
-      JSON.stringify({ name: 'BootError', message: 'boot failed' })
+      JSON.stringify({ name: 'BootError', message: 'boot failed' }),
     );
     const log = makeWithFakeTelemetry(false);
     await log.connect();
@@ -162,5 +165,88 @@ describe('LoggerService', () => {
     expect(normalized.kind).toBe('http');
     expect(normalized.pathTemplate).toBe('/api/x');
     void normalizeError; // silence unused-import lint if any
+  });
+
+  describe('event()', () => {
+    it('mirrors to console.info with measurements before connect', () => {
+      const log = makeWithFakeTelemetry(false);
+      log.event('app.unhandled', { foo: 'bar' }, { ms: 12 });
+      expect(console.info).toHaveBeenCalledWith(
+        '[event:app.unhandled]',
+        { foo: 'bar' },
+        { ms: 12 },
+      );
+    });
+
+    it('does not dispatch before connect (only buffers)', () => {
+      const log = makeWithFakeTelemetry(false);
+      log.event('app.unhandled', { foo: 'bar' }, { ms: 12 });
+      expect(trackEvent).not.toHaveBeenCalled();
+      expect(trackTrace).not.toHaveBeenCalled();
+      expect(trackException).not.toHaveBeenCalled();
+    });
+
+    it('drains buffered events to trackEvent on connect with props + measurements preserved', async () => {
+      const log = makeWithFakeTelemetry(false);
+      log.event('app.unhandled', { kind: 'a' }, { n: 1 });
+      log.event('api.error', { kind: 'b' }, { n: 2 });
+      await log.connect();
+      expect(trackEvent).toHaveBeenCalledTimes(2);
+      const [name1, props1, meas1] = trackEvent.calls.argsFor(0);
+      const [name2, props2, meas2] = trackEvent.calls.argsFor(1);
+      expect(name1).toBe('app.unhandled');
+      expect(props1).toEqual({ kind: 'a' });
+      expect(meas1).toEqual({ n: 1 });
+      expect(name2).toBe('api.error');
+      expect(props2).toEqual({ kind: 'b' });
+      expect(meas2).toEqual({ n: 2 });
+    });
+
+    it('dispatches immediately when called after connect', async () => {
+      const log = makeWithFakeTelemetry(false);
+      await log.connect();
+      log.event('app.unhandled', { x: 1 }, { y: 2 });
+      expect(trackEvent).toHaveBeenCalledTimes(1);
+      const [name, props, meas] = trackEvent.calls.argsFor(0);
+      expect(name).toBe('app.unhandled');
+      expect(props).toEqual({ x: 1 });
+      expect(meas).toEqual({ y: 2 });
+    });
+
+    it('drops buffered events and never dispatches when disabled', async () => {
+      const log = makeWithFakeTelemetry(true);
+      log.event('app.unhandled', { x: 1 });
+      await log.connect();
+      log.event('app.unhandled', { x: 2 });
+      expect(trackEvent).not.toHaveBeenCalled();
+    });
+
+    it('shares the buffer cap with traces (oldest evicted on overflow)', async () => {
+      const log = makeWithFakeTelemetry(false);
+      // Mix events and traces to confirm they share one FIFO buffer.
+      for (let counter = 0; counter < 60; counter++) {
+        log.event('app.unhandled', { counter });
+      }
+      for (let counter = 0; counter < 60; counter++) {
+        log.info('app.unhandled', { counter });
+      }
+      await log.connect();
+      // 120 entries pushed, cap 100 -> oldest 20 events dropped, 40
+      // events kept + 60 traces = 100 dispatches total.
+      expect(trackEvent).toHaveBeenCalledTimes(40);
+      expect(trackTrace).toHaveBeenCalledTimes(60);
+      const firstEventProps = trackEvent.calls.argsFor(0)[1] as Record<string, unknown>;
+      expect(firstEventProps['counter']).toBe(20);
+    });
+
+    it('does not throw when trackEvent throws', async () => {
+      const log = makeWithFakeTelemetry(false);
+      trackEvent = ((): void => {
+        throw new Error('boom');
+      }) as unknown as jasmine.Spy;
+      (TestBed.inject(TelemetryService) as TelemetryService).trackEvent = trackEvent;
+      log.event('app.unhandled');
+      await expectAsync(log.connect()).toBeResolved();
+    });
   });
 });

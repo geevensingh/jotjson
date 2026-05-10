@@ -1,3 +1,5 @@
+@use '../../../styles/material-density' as md;
+
 :host {
   display: flex;
   flex-direction: column;
@@ -10,7 +12,7 @@
   min-height: 0;
   overflow-y: auto;
   width: 100%;
-  max-width: 720px;
+  max-width: 880px;
   margin: 3rem auto;
   padding: 0 1.5rem;
   box-sizing: border-box;
@@ -89,36 +91,110 @@ dl {
 
 .group-title {
   margin: 0 0 0.75rem;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface, inherit);
 }
 
 .pref-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin: 0.5rem 0;
-  min-height: 2.25rem;
+  column-gap: 1.25rem;
+  row-gap: 0.5rem;
+  padding: 0.4rem 0;
+  min-height: 2.4rem;
 
-  label,
+  > label,
+  > .pref-label,
   > span:first-child {
-    flex: 0 0 auto;
-    min-width: 12rem;
+    min-width: 0;
     color: var(--mat-sys-on-surface, inherit);
+    overflow-wrap: anywhere;
   }
 
   &--indented {
-    padding-left: 1.5rem;
+    padding-left: 0.25rem;
+  }
+
+  &--slider .pref-slider {
+    flex: 1 1 16rem;
+    min-width: 12rem;
+    max-width: 22rem;
   }
 }
 
-.pref-hint {
-  flex: 1 1 100%;
+@media (max-width: 480px) {
+  .pref-row {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+}
+
+.pref-label {
+  font: inherit;
+}
+
+.pref-help-line {
+  margin: -0.15rem 0 0.6rem;
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-size: 0.8125rem;
-  font-style: italic;
+  line-height: 1.4;
+
+  &--indented {
+    padding-left: 0.85rem;
+  }
+}
+
+.pref-subgroup {
+  margin: 0.25rem 0 0.85rem 0.25rem;
+  padding: 0.35rem 0 0.35rem 0.85rem;
+  border-left: 2px solid var(--mat-sys-primary, rgba(108, 142, 255, 0.5));
+
+  > .pref-row:first-child,
+  > .pref-date-annotation-group:first-child {
+    margin-top: 0;
+  }
+}
+
+.pref-control-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pref-date-annotation-group {
+  margin-bottom: 0.5rem;
+}
+
+.pref-subheading {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface, inherit);
+}
+
+.date-annotation-unit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem 1.5rem;
+  margin: 0.25rem 0 0.35rem;
+}
+
+@media (max-width: 480px) {
+  .date-annotation-unit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 320px) {
+  .date-annotation-unit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.date-annotation-unit-hint {
+  margin: 0 0 0.75rem;
 }
 
 .pref-number {
@@ -146,14 +222,66 @@ dl {
   font-size: 0.875rem;
 }
 
-.pref-help {
-  flex: 1 1 100%;
-  margin-left: 12rem;
-  color: var(--mat-sys-on-surface-variant, #9aa0a6);
-  font-size: 0.8125rem;
+.pref-form-field {
+  @include md.compact-mat-form-field(36px, 6px);
 
-  @media (max-width: 540px) {
-    margin-left: 0;
+  // Match the visual width of the previous .pref-select so rows
+  // don't reflow.
+  min-width: 12rem;
+
+  &--number {
+    min-width: 6.5rem;
+    width: auto;
+  }
+}
+
+// ---------------------------------------------------------------
+// Dense, legible Material control overrides for the prefs surface.
+//
+// Material 21 uses --mat-slide-toggle-* and --mat-button-toggle-*
+// tokens (not the legacy --mdc-switch-* / --mat-standard-button-toggle-*
+// names). Scoped to .prefs-card so the rest of the app is unaffected.
+// ---------------------------------------------------------------
+.prefs-card {
+  .mat-mdc-slide-toggle {
+    --mat-slide-toggle-track-width: 34px;
+    --mat-slide-toggle-track-height: 18px;
+    --mat-slide-toggle-state-layer-size: 28px;
+    --mat-slide-toggle-touch-target-size: 28px;
+    --mat-slide-toggle-track-outline-width: 1px;
+
+    --mat-slide-toggle-unselected-handle-size: 12px;
+    --mat-slide-toggle-selected-handle-size: 14px;
+    --mat-slide-toggle-with-icon-handle-size: 14px;
+    --mat-slide-toggle-pressed-handle-size: 14px;
+
+    // Handle margins are tuned for the default 52px track; rescale
+    // for the 34px track or the thumb pops out of the right edge.
+    --mat-slide-toggle-unselected-handle-horizontal-margin: 0 4px;
+    --mat-slide-toggle-selected-handle-horizontal-margin: 0 18px;
+    --mat-slide-toggle-unselected-pressed-handle-horizontal-margin: 0 2px;
+    --mat-slide-toggle-selected-pressed-handle-horizontal-margin: 0 16px;
+    --mat-slide-toggle-unselected-with-icon-handle-horizontal-margin: 0 2px;
+    --mat-slide-toggle-selected-with-icon-handle-horizontal-margin: 0 18px;
+
+    // Off state - filled mid-gray so it doesn't read as disabled.
+    --mat-slide-toggle-unselected-track-color: rgba(127, 127, 127, 0.45);
+    --mat-slide-toggle-unselected-hover-track-color: rgba(127, 127, 127, 0.55);
+    --mat-slide-toggle-unselected-focus-track-color: rgba(127, 127, 127, 0.6);
+    --mat-slide-toggle-unselected-pressed-track-color: rgba(127, 127, 127, 0.6);
+    --mat-slide-toggle-track-outline-color: rgba(127, 127, 127, 0.55);
+    --mat-slide-toggle-unselected-handle-color: #d0d0d0;
+    --mat-slide-toggle-unselected-hover-handle-color: #e0e0e0;
+    --mat-slide-toggle-unselected-focus-handle-color: #ececec;
+    --mat-slide-toggle-unselected-pressed-handle-color: #ececec;
+    --mat-slide-toggle-unselected-icon-color: transparent;
+    --mat-slide-toggle-unselected-focus-state-layer-color: rgba(127, 127, 127, 0.18);
+    --mat-slide-toggle-unselected-hover-state-layer-color: rgba(127, 127, 127, 0.12);
+    --mat-slide-toggle-unselected-pressed-state-layer-color: rgba(127, 127, 127, 0.2);
+  }
+
+  .mat-button-toggle-group {
+    @include md.compact-mat-button-toggle(28px, 13px);
   }
 }
 
@@ -213,10 +341,6 @@ dl {
 
 .highlight-row {
   margin: 0.35rem 0;
-
-  label {
-    min-width: 11rem;
-  }
 }
 
 .pref-color {

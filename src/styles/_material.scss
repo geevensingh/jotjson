@@ -12,9 +12,11 @@ $jotjson-light: mat.define-theme(
     color: (
       theme-type: light,
       primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette
+      tertiary: mat.$blue-palette,
     ),
-    density: (scale: -1)
+    density: (
+      scale: -1,
+    ),
   )
 );
 
@@ -23,9 +25,11 @@ $jotjson-dark: mat.define-theme(
     color: (
       theme-type: dark,
       primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette
+      tertiary: mat.$blue-palette,
     ),
-    density: (scale: -1)
+    density: (
+      scale: -1,
+    ),
   )
 );
 
@@ -39,4 +43,65 @@ html {
 html:has(body.theme-light),
 body.theme-light {
   @include mat.all-component-colors($jotjson-light);
+}
+
+// Shared compact context-menu styling. Apply via the `class`
+// attribute on any `<mat-menu>` that wants the JotJSON house style:
+//
+//   <mat-menu #foo="matMenu" class="jj-menu">
+//
+// What it does:
+//   - 32px min-height on items (vs Material's default ~40px even
+//     at density -1) for a compact, scan-friendly list.
+//   - 6px / 6px divider spacing for tighter visual grouping.
+// Feature-specific affordances (e.g. tree-row's bold default
+// action via `.ctx-default-action`, formatting-rules'
+// destructive red via `.menu-destructive`) layer on top via
+// additional classes on individual items.
+.jj-menu {
+  --mat-menu-divider-top-spacing: 6px;
+  --mat-menu-divider-bottom-spacing: 6px;
+
+  .mat-mdc-menu-item {
+    min-height: 32px;
+  }
+
+  // Leading-icon spacing for items rendered with `<jj-icon>` (as
+  // opposed to Material's native `<mat-icon>` which has its own
+  // `.mat-mdc-menu-item-icon` slot styling). Material doesn't
+  // recognize `<jj-icon>` as an icon, so its default gap doesn't
+  // apply and labels render tight against the icon. Add a trailing
+  // margin so the icon-gutter and label have roughly equal
+  // breathing room either side of the icon. Matches the gap used
+  // in the design mockups.
+  .mat-mdc-menu-item jj-icon {
+    margin-inline-end: 12px;
+  }
+}
+
+// Tree-row context menu (json-tree.component): bold "default
+// action" affordance on the Copy value item (which is also what
+// double-clicking a row triggers). Layered on top of `.jj-menu`,
+// applied via panel class on `<mat-menu class="jj-menu tree-row-menu">`.
+.tree-row-menu .mat-mdc-menu-item.ctx-default-action {
+  // Material applies font-weight on the inner `.mat-mdc-menu-item-text`
+  // span via `var(--mat-menu-item-label-text-weight)`, so a plain
+  // `font-weight: 600` on the button is overridden back to the default
+  // (M3 label-large-weight = 500). Override the variable instead so
+  // CSS-variable inheritance carries the new value to the inner span.
+  --mat-menu-item-label-text-weight: 700;
+}
+
+// Disables text selection on UI chrome where the user click-drags
+// as a control (splitter handle, chip button, status bar) or where
+// the row's own dblclick / mousedown is wired to a copy action and
+// the residual word-select / drag-select highlight is just visual
+// noise. Apply via `class="... jj-no-select"`.
+//
+// This is opt-in only - the codebase's default is browser-standard
+// text-selection. A future task may flip the global default to
+// `user-select: none` with `text` opt-ins where content selection
+// is desired.
+.jj-no-select {
+  user-select: none;
 }

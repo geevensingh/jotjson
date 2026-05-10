@@ -1,12 +1,24 @@
 import { TestBed } from '@angular/core/testing';
+import { bucketBytes } from '../telemetry/buckets';
+import { __resetColdFlagsForTesting } from '../telemetry/cold-flag';
+import { LoggerService } from '../telemetry/logger.service';
 import { JsonParserService } from './json-parser.service';
 
 describe('JsonParserService', () => {
   let svc: JsonParserService;
+  let loggerSpy: jasmine.SpyObj<LoggerService>;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    __resetColdFlagsForTesting();
+    loggerSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['event']);
+    TestBed.configureTestingModule({
+      providers: [{ provide: LoggerService, useValue: loggerSpy }],
+    });
     svc = TestBed.inject(JsonParserService);
+  });
+
+  afterEach(() => {
+    __resetColdFlagsForTesting();
   });
 
   describe('parse - empty inputs', () => {
@@ -39,6 +51,95 @@ describe('JsonParserService', () => {
     });
   });
 
+  describe('parse - slow telemetry', () => {
+    it('does not emit parse.slow for a fast parse', () => {
+      spyOn(performance, 'now').and.returnValues(0, 1);
+
+      svc.parse('{"a":1}');
+
+      expect(loggerSpy.event).not.toHaveBeenCalled();
+    });
+
+    it('emits parse.slow with cold=true on the first slow parse', () => {
+      spyOn(performance, 'now').and.returnValues(0, 51);
+      const text = '{"a":1}';
+      const sizeBytes = new Blob([text]).size;
+
+      svc.parse(text);
+
+      expect(loggerSpy.event).toHaveBeenCalledTimes(1);
+      const [messageId, props, measurements] = loggerSpy.event.calls.mostRecent().args;
+      expect(messageId).toBe('parse.slow');
+      expect(props).toEqual({
+        cold: true,
+        sizeBytesBucket: bucketBytes(sizeBytes),
+      });
+      expect(measurements).toBeDefined();
+      if (!measurements) {
+        fail('Expected parse.slow measurements');
+        return;
+      }
+      expect(measurements['timeMs']).toBeGreaterThan(50);
+      expect(measurements['sizeBytes']).toBe(sizeBytes);
+    });
+
+    it('emits parse.slow with cold=false on the second slow parse', () => {
+      spyOn(performance, 'now').and.returnValues(0, 51, 100, 151);
+      const text = '{"a":1}';
+      const sizeBytes = new Blob([text]).size;
+
+      svc.parse(text);
+      svc.parse(text);
+
+      expect(loggerSpy.event).toHaveBeenCalledTimes(2);
+      const [messageId, props, measurements] = loggerSpy.event.calls.argsFor(1);
+      expect(messageId).toBe('parse.slow');
+      expect(props).toEqual({
+        cold: false,
+        sizeBytesBucket: bucketBytes(sizeBytes),
+      });
+      expect(measurements).toBeDefined();
+      if (!measurements) {
+        fail('Expected parse.slow measurements');
+        return;
+      }
+      expect(measurements['timeMs']).toBeGreaterThan(50);
+      expect(measurements['sizeBytes']).toBe(sizeBytes);
+    });
+
+    it('does not emit parse.slow when elapsed time is exactly 50ms', () => {
+      spyOn(performance, 'now').and.returnValues(0, 50);
+
+      svc.parse('{"a":1}');
+
+      expect(loggerSpy.event).not.toHaveBeenCalled();
+    });
+
+    it('reports UTF-8 byte length instead of UTF-16 character count', () => {
+      spyOn(performance, 'now').and.returnValues(0, 51);
+      const chineseText = String.fromCharCode(0x4e2d, 0x6587);
+      const text = '{"name":"' + chineseText + '"}';
+      const sizeBytes = new Blob([text]).size;
+
+      svc.parse(text);
+
+      expect(sizeBytes).toBeGreaterThan(text.length);
+      expect(loggerSpy.event).toHaveBeenCalledTimes(1);
+      const [, props, measurements] = loggerSpy.event.calls.mostRecent().args;
+      expect(props).toEqual({
+        cold: true,
+        sizeBytesBucket: bucketBytes(sizeBytes),
+      });
+      expect(measurements).toBeDefined();
+      if (!measurements) {
+        fail('Expected parse.slow measurements');
+        return;
+      }
+      expect(measurements['sizeBytes']).toBe(sizeBytes);
+      expect(measurements['sizeBytes']).not.toBe(text.length);
+    });
+  });
+
   describe('parse - JSONC tolerance', () => {
     it('accepts // line comments', () => {
       const r = svc.parse('// top\n{"a":1}');
@@ -56,6 +157,245 @@ describe('JsonParserService', () => {
       const r = svc.parse('{"a":1,}');
       expect(r.value).toEqual({ a: 1 });
       expect(r.errors).toEqual([]);
+    });
+  });
+
+  describe('parse - commentsByPath', () => {
+    it('returns an empty map when input has no comments (fast path)', () => {
+      const r = svc.parse('{"a":1,"b":[2,3]}');
+      expect(r.commentsByPath.size).toBe(0);
+    });
+
+    it('returns an empty map for empty input', () => {
+      const r = svc.parse('');
+      expect(r.commentsByPath.size).toBe(0);
+    });
+
+    it('attaches a same-line trailing line comment to the value path', () => {
+      const r = svc.parse('{\n  "x": 1 // primary\n}');
+      expect(r.commentsByPath.get('$.x')).toEqual({ trailing: 'primary' });
+    });
+
+    it('attaches a same-line trailing block comment to the value path', () => {
+      const r = svc.parse('{"x": 1 /* primary */}');
+      expect(r.commentsByPath.get('$.x')).toEqual({ trailing: 'primary' });
+    });
+
+    it('attaches a leading comment to the next value', () => {
+      const r = svc.parse('{\n  // legal name\n  "name": "Alice"\n}');
+      expect(r.commentsByPath.get('$.name')).toEqual({ leading: 'legal name' });
+    });
+
+    it('handles a top-of-document leading comment on the root', () => {
+      const r = svc.parse('// header\n{"x": 1}');
+      expect(r.commentsByPath.get('$')).toEqual({ leading: 'header' });
+    });
+
+    it('renders a same-line trailing comment after the close as a container close-trailing', () => {
+      const r = svc.parse('{\n  "foo": {\n    "x": 1\n  } // end of foo\n}');
+      expect(r.commentsByPath.get('$.foo')).toEqual({ closeTrailing: 'end of foo' });
+      expect(r.commentsByPath.get('$.foo.x')).toBeUndefined();
+    });
+
+    it('attributes a comment-only container to the close row as closeLeading (rule 4)', () => {
+      const r = svc.parse('{\n  "tags": [\n    // populated at runtime\n  ]\n}');
+      expect(r.commentsByPath.get('$.tags')).toEqual({
+        closeLeading: 'populated at runtime',
+      });
+    });
+
+    it('preserves source order in nested arrays and uses canonical paths', () => {
+      const r = svc.parse('{\n  "foo": [\n    1, // first\n    2  /* second */\n  ]\n}');
+      expect(r.commentsByPath.get('$.foo[0]')).toEqual({ trailing: 'first' });
+      expect(r.commentsByPath.get('$.foo[1]')).toEqual({ trailing: 'second' });
+    });
+
+    it('attaches a comment between two properties to the next property as leading', () => {
+      const r = svc.parse('{\n  "a": 1,\n  // pre-b\n  "b": 2\n}');
+      expect(r.commentsByPath.get('$.b')).toEqual({ leading: 'pre-b' });
+      expect(r.commentsByPath.get('$.a')).toBeUndefined();
+    });
+
+    it('stacks multiple leading comments with newline separator', () => {
+      const r = svc.parse('{\n  // line 1\n  // line 2\n  "x": 1\n}');
+      expect(r.commentsByPath.get('$.x')).toEqual({
+        leading: 'line 1\nline 2',
+      });
+    });
+
+    it('preserves multi-line block comment body and attaches by start line', () => {
+      const r = svc.parse('{"x": 1 /* multi\n  line */}');
+      const bundle = r.commentsByPath.get('$.x');
+      expect(bundle?.trailing).toContain('multi');
+      expect(bundle?.trailing).toContain('line');
+    });
+
+    it('skips empty comments (// alone and /**/ alone)', () => {
+      const r = svc.parse('{\n  //\n  "x": 1, /**/\n  "y": 2\n}');
+      expect(r.commentsByPath.size).toBe(0);
+    });
+
+    it('attaches both a leading and a trailing comment to the same value', () => {
+      const r = svc.parse('{\n  // before x\n  "x": 1 // after x\n}');
+      expect(r.commentsByPath.get('$.x')).toEqual({
+        leading: 'before x',
+        trailing: 'after x',
+      });
+    });
+
+    it('attaches a comment after the root close to the root path as close-trailing', () => {
+      const r = svc.parse('{"x":1} // tail');
+      expect(r.commentsByPath.get('$')).toEqual({ closeTrailing: 'tail' });
+    });
+
+    it('uses canonical paths for keys that need bracket quoting', () => {
+      const r = svc.parse('{"a.b": 1 // dotted\n}');
+      expect(r.commentsByPath.get('$["a.b"]')).toEqual({ trailing: 'dotted' });
+    });
+
+    it('does not invoke the harvest pass when text has no comment delimiters', () => {
+      // Sanity guard for the fast-path bail. A string-literal that
+      // looks like a path (no // or /*) must not trigger the harvest.
+      const r = svc.parse('{"path":"a/b/c"}');
+      expect(r.commentsByPath.size).toBe(0);
+    });
+
+    it('attaches a comment on the same line as a container open brace as the container trailing', () => {
+      const r = svc.parse('{\n  "foo": { // about foo\n    "x": 1\n  }\n}');
+      expect(r.commentsByPath.get('$.foo')).toEqual({ trailing: 'about foo' });
+      expect(r.commentsByPath.get('$.foo.x')).toBeUndefined();
+    });
+
+    it('attaches a block comment on the open-brace line with whitespace tail as container trailing', () => {
+      const r = svc.parse('{\n  "foo": [ /* about foo */\n    1\n  ]\n}');
+      expect(r.commentsByPath.get('$.foo')).toEqual({ trailing: 'about foo' });
+    });
+
+    it('treats a one-line block comment followed by content on the same line as leading on the next value', () => {
+      // The tail after `*/` is `  "bar": 1 }`, NOT whitespace -- so this
+      // falls through to leading-on-next-value, NOT open-row trailing.
+      const r = svc.parse('{ "foo": { /* before bar */ "bar": 1 } }');
+      expect(r.commentsByPath.get('$.foo.bar')).toEqual({ leading: 'before bar' });
+      expect(r.commentsByPath.get('$.foo')?.trailing).toBeUndefined();
+    });
+
+    it('treats a multi-line block comment in an open-brace position as leading on the next value', () => {
+      // The comment itself contains a `\n`, so rule 3a is disqualified
+      // even if the line tail after `*/` is whitespace.
+      const r = svc.parse('{\n  "foo": { /* multi\nline */\n    "bar": 1\n  }\n}');
+      expect(r.commentsByPath.get('$.foo.bar')?.leading).toContain('multi');
+      expect(r.commentsByPath.get('$.foo.bar')?.leading).toContain('line');
+      expect(r.commentsByPath.get('$.foo')?.trailing).toBeUndefined();
+    });
+
+    it('attributes the user-reported foo/bar/section-header case correctly', () => {
+      // Regression for the bug reported 2026-05-01: the open-brace
+      // line comment and a between-siblings comment were both queued
+      // in pendingLeading and merged onto the next sibling's leading
+      // slot, hiding the second comment behind commentFirstLine().
+      const r = svc.parse(
+        '{\n  "foo": { // explaination of foo\n    /*section header for bar*/\n    "bar": {} // value of bar\n  }\n}',
+      );
+      expect(r.commentsByPath.get('$.foo')).toEqual({
+        trailing: 'explaination of foo',
+      });
+      expect(r.commentsByPath.get('$.foo.bar')).toEqual({
+        leading: 'section header for bar',
+        closeTrailing: 'value of bar',
+      });
+    });
+
+    it('separates closeLeading and closeTrailing on the same container when both are present', () => {
+      // Regression for the bug reported 2026-05-01 (second test case):
+      // an orphan comment between the last child and the close brace,
+      // plus a same-line trailing on the close brace, were both being
+      // routed to closeTrailing and merged with `\n`, hiding the
+      // second comment behind commentFirstLine().
+      const r = svc.parse(
+        '{\n  "foo": { // explaination of foo\n    /*section header for bar*/\n    "bar": {} // value of bar\n    /*end of section for bar */\n  } // closing comment of foo\n}',
+      );
+      expect(r.commentsByPath.get('$.foo')).toEqual({
+        trailing: 'explaination of foo',
+        closeLeading: 'end of section for bar',
+        closeTrailing: 'closing comment of foo',
+      });
+      expect(r.commentsByPath.get('$.foo.bar')).toEqual({
+        leading: 'section header for bar',
+        closeTrailing: 'value of bar',
+      });
+    });
+
+    it('stacks multiple pre-close orphan comments under closeLeading with newline separator', () => {
+      const r = svc.parse(
+        '{\n  "foo": [\n    1,\n    /* first orphan */\n    /* second orphan */\n  ]\n}',
+      );
+      expect(r.commentsByPath.get('$.foo')).toEqual({
+        closeLeading: 'first orphan\nsecond orphan',
+      });
+    });
+
+    it('routes a single pre-close orphan comment to closeLeading even when no closeTrailing is present', () => {
+      const r = svc.parse('{\n  "foo": {\n    "x": 1\n    /* trailing orphan */\n  }\n}');
+      expect(r.commentsByPath.get('$.foo')).toEqual({
+        closeLeading: 'trailing orphan',
+      });
+    });
+  });
+
+  describe('parse - commentCount', () => {
+    it('reports 0 for empty input', () => {
+      expect(svc.parse('').commentCount).toBe(0);
+    });
+
+    it('reports 0 for whitespace-only input', () => {
+      expect(svc.parse('   \n\t  ').commentCount).toBe(0);
+    });
+
+    it('reports 0 on the no-comment fast path', () => {
+      // Sanity: input without any `//` or `/*` substring must take the
+      // fast-path bail in harvestComments and not increment the counter.
+      expect(svc.parse('{"a":1,"b":[2,3]}').commentCount).toBe(0);
+    });
+
+    it('reports 0 when delimiter substrings appear only inside string literals', () => {
+      expect(svc.parse('{"path":"a/b/c"}').commentCount).toBe(0);
+      expect(svc.parse('{"x":"// not a comment"}').commentCount).toBe(0);
+    });
+
+    it('counts a single line comment as 1', () => {
+      expect(svc.parse('// top\n{"a":1}').commentCount).toBe(1);
+    });
+
+    it('counts stacked line comments as N', () => {
+      expect(svc.parse('{\n  // line 1\n  // line 2\n  "x": 1\n}').commentCount).toBe(2);
+    });
+
+    it('counts a single multi-line block comment as 1 (not split on internal newlines)', () => {
+      // The harvest stores block-comment bodies with internal `\n`
+      // intact (extractCommentBody only `.trim()`s), so naive
+      // `split('\n').length` on the joined CommentBundle string would
+      // mis-count this as 2. The parser-side counter is the source of
+      // truth and must report 1.
+      expect(svc.parse('{"x": 1 /* multi\n  line */}').commentCount).toBe(1);
+    });
+
+    it('counts mixed multi-line block + stacked line comments correctly', () => {
+      const input = '/* multi\n  line */\n' + '{\n  // a\n  // b\n  "x": 1 /* inline */\n}';
+      // 1 (multi-line block) + 2 (stacked) + 1 (inline trailing) = 4
+      expect(svc.parse(input).commentCount).toBe(4);
+    });
+
+    it('skips empty comments (// alone and /**/ alone)', () => {
+      expect(svc.parse('{\n  //\n  "x": 1, /**/\n  "y": 2\n}').commentCount).toBe(0);
+    });
+
+    it('still counts comments on a parse-failed input', () => {
+      // Display-side gating (status bar) suppresses the count when
+      // errors.length > 0; the parser's job is to honestly report the
+      // comments visit() saw, regardless of structural validity.
+      const r = svc.parse('// header\n{"a":}');
+      expect(r.errors.length).toBeGreaterThan(0);
+      expect(r.commentCount).toBe(1);
     });
   });
 
@@ -98,6 +438,35 @@ describe('JsonParserService', () => {
     });
   });
 
+  describe('formatPathForClipboard', () => {
+    it('returns the canonical form unchanged for jsonpath mode', () => {
+      expect(svc.formatPathForClipboard('$', 'jsonpath')).toBe('$');
+      expect(svc.formatPathForClipboard('$.foo[0].bar', 'jsonpath')).toBe('$.foo[0].bar');
+      expect(svc.formatPathForClipboard('$["a.b"]', 'jsonpath')).toBe('$["a.b"]');
+    });
+
+    it('replaces leading $ with root for root mode', () => {
+      expect(svc.formatPathForClipboard('$', 'root')).toBe('root');
+      expect(svc.formatPathForClipboard('$.foo[0].bar', 'root')).toBe('root.foo[0].bar');
+      expect(svc.formatPathForClipboard('$["a.b"]', 'root')).toBe('root["a.b"]');
+      expect(svc.formatPathForClipboard('$[0]', 'root')).toBe('root[0]');
+    });
+
+    it('replaces leading $ with capitalized Data for data mode', () => {
+      expect(svc.formatPathForClipboard('$', 'data')).toBe('Data');
+      expect(svc.formatPathForClipboard('$.foo[0].bar', 'data')).toBe('Data.foo[0].bar');
+      expect(svc.formatPathForClipboard('$["a.b"]', 'data')).toBe('Data["a.b"]');
+    });
+
+    it('strips $ and following dot for none mode (lodash-style)', () => {
+      expect(svc.formatPathForClipboard('$', 'none')).toBe('');
+      expect(svc.formatPathForClipboard('$.foo', 'none')).toBe('foo');
+      expect(svc.formatPathForClipboard('$.foo[0].bar', 'none')).toBe('foo[0].bar');
+      expect(svc.formatPathForClipboard('$["a.b"]', 'none')).toBe('["a.b"]');
+      expect(svc.formatPathForClipboard('$[0]', 'none')).toBe('[0]');
+    });
+  });
+
   describe('offsetToPosition', () => {
     it('returns 1/1 for offset 0', () => {
       expect(svc.offsetToPosition('abc', 0)).toEqual({ line: 1, column: 1 });
@@ -133,7 +502,7 @@ describe('JsonParserService', () => {
         [1, 2, 3],
         'hello',
         42,
-        null
+        null,
       ];
       for (const s of samples) {
         const r = svc.parse(JSON.stringify(s));
@@ -180,7 +549,7 @@ describe('JsonParserService', () => {
         updated_timestamp: '2026-04-15T22:39:34.828969Z',
         total_request_charge_amount: 200.0,
         total_customer_charge_amount: 200.0,
-        balance_owing: 200.0
+        balance_owing: 200.0,
       });
     });
 

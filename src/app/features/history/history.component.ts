@@ -10,7 +10,8 @@ import {
   computed,
   effect,
   inject,
-  signal
+  signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
@@ -20,25 +21,17 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Subject, debounceTime, distinctUntilChanged, firstValueFrom } from 'rxjs';
 import { HistoryService } from '../../core/api/history.service';
-import type { HistoryAction, HistoryEntry } from '../../core/api/models';
+import type { HistoryEntry } from '../../core/api/models';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { SeoService } from '../../core/seo/seo.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
-import { IconComponent, JjIconName } from '../../shared/components/icon/icon.component';
+import { IconComponent } from '../../shared/components/icon/icon.component';
 import {
   ConfirmDialogComponent,
-  ConfirmDialogData
+  ConfirmDialogData,
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 
 type LoadState = 'loading' | 'ready' | 'error';
-
-const ALL_ACTIONS: readonly HistoryAction[] = [
-  'saved',
-  'edited',
-  'deleted',
-  'viewed',
-  'pasted'
-];
 
 interface DayGroup {
   /** Stable sort key: YYYY-MM-DD in the user's local timezone. */
@@ -51,16 +44,10 @@ interface DayGroup {
 @Component({
   selector: 'app-history',
   standalone: true,
-  imports: [
-    RouterLink,
-    MatButtonModule,
-    MatTooltipModule,
-    AppHeaderComponent,
-    IconComponent
-  ],
+  imports: [RouterLink, MatButtonModule, MatTooltipModule, AppHeaderComponent, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './history.component.html',
-  styleUrl: './history.component.scss'
+  styleUrl: './history.component.scss',
 })
 export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly history = inject(HistoryService);
@@ -78,8 +65,6 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly searchTerm = signal('');
   /** Mirrors the input element's value so the field stays controlled. */
   readonly searchInputValue = signal('');
-  readonly actionFilter = signal<ReadonlySet<HistoryAction>>(new Set());
-  readonly allActions: readonly HistoryAction[] = ALL_ACTIONS;
   /** YYYY-MM-DD strings from the date inputs (or '' when unset). */
   readonly fromDate = signal('');
   readonly toDate = signal('');
@@ -87,28 +72,21 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private readonly searchInput$ = new Subject<string>();
 
-  readonly isEmpty = computed(
-    () => this.state() === 'ready' && this.entries().length === 0
-  );
+  readonly isEmpty = computed(() => this.state() === 'ready' && this.entries().length === 0);
 
   readonly hasMore = computed(() => !!this.continuationToken());
 
   readonly hasActiveFilters = computed(
     () =>
-      this.searchTerm().trim().length > 0 ||
-      this.actionFilter().size > 0 ||
-      this.fromDate().length > 0 ||
-      this.toDate().length > 0
+      this.searchTerm().trim().length > 0 || this.fromDate().length > 0 || this.toDate().length > 0,
   );
+
+  private readonly focusFallback = viewChild<ElementRef<HTMLElement>>('historyFocusFallback');
 
   constructor() {
     inject(DestroyRef);
     this.searchInput$
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        takeUntilDestroyed()
-      )
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
       .subscribe((value) => this.applySearchTerm(value));
     // Re-observe the sentinel whenever the page state changes; the
     // sentinel only renders when there's another page (hasMore()) and its
@@ -152,8 +130,8 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const groups = new Map<string, DayGroup>();
     for (const entry of list) {
-      const d = new Date(entry.accessedAt);
-      const key = this.localDayKey(d);
+      const accessed = new Date(entry.accessedAt);
+      const key = this.localDayKey(accessed);
       let group = groups.get(key);
       if (!group) {
         const label =
@@ -161,7 +139,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
             ? $localize`:@@history.day.today:Today`
             : key === yesterdayKey
               ? $localize`:@@history.day.yesterday:Yesterday`
-              : d.toLocaleDateString();
+              : accessed.toLocaleDateString();
         group = { dayKey: key, label, entries: [] };
         groups.set(key, group);
       }
@@ -196,7 +174,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         }
       },
-      { rootMargin: '200px 0px' }
+      { rootMargin: '200px 0px' },
     );
     this.refreshSentinelObservation();
   }
@@ -222,18 +200,14 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.continuationToken.set(undefined);
     const opts = this.buildListOptions();
     try {
-      const page = await firstValueFrom(
-        this.history.list({ pageSize: 50, ...opts })
-      );
+      const page = await firstValueFrom(this.history.list({ pageSize: 50, ...opts }));
       this.entries.set(page.entries);
       this.continuationToken.set(page.continuationToken);
       this.state.set('ready');
-    } catch (err) {
+    } catch (error) {
       this.logger.warn('history.load.failed');
-      void err;
-      this.errorMessage.set(
-        $localize`:@@history.load.failed:Failed to load your history.`
-      );
+      void error;
+      this.errorMessage.set($localize`:@@history.load.failed:Failed to load your history.`);
       this.state.set('error');
     }
   }
@@ -248,18 +222,18 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
         this.history.list({
           pageSize: 50,
           continuationToken: token,
-          ...opts
-        })
+          ...opts,
+        }),
       );
       this.entries.update((current) => [...current, ...page.entries]);
       this.continuationToken.set(page.continuationToken);
-    } catch (err) {
+    } catch (error) {
       this.logger.warn('history.loadMore.failed');
-      void err;
+      void error;
       this.snack.open(
         $localize`:@@history.loadMore.failed:Failed to load more history.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 }
+        { duration: 4000 },
       );
     } finally {
       this.loadingMore.set(false);
@@ -268,22 +242,16 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private buildListOptions(): {
     q?: string;
-    actions?: HistoryAction[];
     from?: string;
     to?: string;
   } {
     const out: {
       q?: string;
-      actions?: HistoryAction[];
       from?: string;
       to?: string;
     } = {};
-    const q = this.searchTerm();
-    if (q) out.q = q;
-    const actions = this.actionFilter();
-    if (actions.size > 0) {
-      out.actions = ALL_ACTIONS.filter((a) => actions.has(a));
-    }
+    const term = this.searchTerm();
+    if (term) out.q = term;
     const from = this.fromIsoStart();
     if (from) out.from = from;
     const to = this.toIsoEnd();
@@ -297,29 +265,17 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
    * the request still succeeds (validation surfaces via dateRangeError).
    */
   private fromIsoStart(): string | undefined {
-    const v = this.fromDate();
-    if (!v) return undefined;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
-    return `${v}T00:00:00Z`;
+    const fromValue = this.fromDate();
+    if (!fromValue) return undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fromValue)) return undefined;
+    return `${fromValue}T00:00:00Z`;
   }
 
   private toIsoEnd(): string | undefined {
-    const v = this.toDate();
-    if (!v) return undefined;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
-    return `${v}T23:59:59.999Z`;
-  }
-
-  isActionSelected(action: HistoryAction): boolean {
-    return this.actionFilter().has(action);
-  }
-
-  toggleAction(action: HistoryAction): void {
-    const next = new Set(this.actionFilter());
-    if (next.has(action)) next.delete(action);
-    else next.add(action);
-    this.actionFilter.set(next);
-    void this.reload();
+    const toValue = this.toDate();
+    if (!toValue) return undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(toValue)) return undefined;
+    return `${toValue}T23:59:59.999Z`;
   }
 
   onFromDateChange(value: string): void {
@@ -347,7 +303,6 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.searchInputValue.set('');
     this.searchInput$.next('');
     this.searchTerm.set('');
-    this.actionFilter.set(new Set());
     this.fromDate.set('');
     this.toDate.set('');
     this.dateRangeError.set(null);
@@ -360,7 +315,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     const to = this.toDate();
     if (from && to && from > to) {
       this.dateRangeError.set(
-        $localize`:@@history.filter.date.invalid:From date must be on or before To date.`
+        $localize`:@@history.filter.date.invalid:From date must be on or before To date.`,
       );
       return false;
     }
@@ -374,11 +329,11 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       message: $localize`:@@history.clear.message:Every entry in your activity history will be permanently removed. The blobs themselves are not affected.`,
       confirmLabel: $localize`:@@history.clear.confirm:Clear history`,
       cancelLabel: $localize`:@@common.cancel:Cancel`,
-      destructive: true
+      destructive: true,
     };
     const ref = this.dialog.open<ConfirmDialogComponent, ConfirmDialogData, boolean>(
       ConfirmDialogComponent,
-      { data, width: '420px', autoFocus: 'dialog' }
+      { data, width: '420px', autoFocus: 'dialog' },
     );
     const confirmed = await firstValueFrom(ref.afterClosed());
     if (!confirmed) return;
@@ -387,26 +342,34 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.entries.set([]);
       this.continuationToken.set(undefined);
       this.state.set('ready');
+      this.scheduleFocusAfterClear();
       this.snack.open(
         $localize`:@@history.clear.success:History cleared.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 3000 }
+        { duration: 3000 },
       );
-    } catch (err) {
+    } catch (error) {
       this.logger.warn('history.clear.failed');
-      void err;
+      void error;
       this.snack.open(
         $localize`:@@history.clear.failed:Failed to clear history.`,
         $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 }
+        { duration: 4000 },
       );
     }
   }
 
+  private scheduleFocusAfterClear(): void {
+    setTimeout(() => this.focusFallback()?.nativeElement.focus(), 0);
+  }
+
   /** Click on a row - navigates to /s/<slug> when one is available. */
-  openEntry(entry: HistoryEntry): void {
-    if (!entry.slug || entry.action === 'deleted') return;
-    void this.router.navigate(['/s', entry.slug]);
+  async openEntry(entry: HistoryEntry): Promise<void> {
+    if (!entry.slug) return;
+    const restored = await this.router.navigate(['/s', entry.slug]);
+    if (restored) {
+      this.logger.event('history.entry.restored', undefined, undefined);
+    }
   }
 
   onSearchInput(value: string): void {
@@ -423,57 +386,21 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   hasLink(entry: HistoryEntry): boolean {
-    return !!entry.slug && entry.action !== 'deleted';
+    return !!entry.slug;
   }
 
   /** Display label: prefer title, fall back to slug, then "(deleted blob)". */
   displayLabel(entry: HistoryEntry): string {
-    const t = entry.title?.trim();
-    if (t && t.length > 0) return t;
+    const title = entry.title?.trim();
+    if (title && title.length > 0) return title;
     if (entry.slug) return `/s/${entry.slug}`;
-    // Paste events are intentionally blob-less (api/src/shared/history.ts:
-    // "absent for pasted events"), so the generic "(deleted blob)" label
-    // would be misleading. Use a dedicated label for the no-slug paste case.
-    if (entry.action === 'pasted') {
-      return $localize`:@@history.pastedContent:Pasted content`;
-    }
     return $localize`:@@history.deletedBlob:(deleted blob)`;
   }
 
-  iconFor(action: HistoryEntry['action']): JjIconName {
-    switch (action) {
-      case 'saved':
-        return 'save';
-      case 'edited':
-        return 'edit';
-      case 'deleted':
-        return 'trash';
-      case 'viewed':
-        return 'eye';
-      case 'pasted':
-        return 'paste';
-    }
-  }
-
-  actionLabel(action: HistoryEntry['action']): string {
-    switch (action) {
-      case 'saved':
-        return $localize`:@@history.action.saved:Saved`;
-      case 'edited':
-        return $localize`:@@history.action.edited:Edited`;
-      case 'deleted':
-        return $localize`:@@history.action.deleted:Deleted`;
-      case 'viewed':
-        return $localize`:@@history.action.viewed:Viewed`;
-      case 'pasted':
-        return $localize`:@@history.action.pasted:Pasted`;
-    }
-  }
-
   formatTime(iso: string): string {
-    const d = new Date(iso);
-    if (!Number.isFinite(d.getTime())) return '';
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const date = new Date(iso);
+    if (!Number.isFinite(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }
 
   /**
@@ -481,10 +408,10 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
    * use `toISOString().slice(0, 10)` because that's UTC and would put
    * late-evening events into the next day for users west of UTC.
    */
-  private localDayKey(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+  private localDayKey(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

@@ -1,0 +1,49 @@
+@if (visible()) {
+  <mat-card
+    class="banner"
+    role="status"
+    aria-live="polite"
+    appearance="outlined"
+    tabindex="-1"
+    (keydown.escape)="dismiss.emit()"
+  >
+    <span class="banner-text">
+      @if (blockCount() === 1) {
+        <span i18n="@@home.paste.extract.banner.message.single"
+          >Found embedded JSON in your paste.</span
+        >
+      } @else {
+        <span i18n="@@home.paste.extract.banner.message.multi"
+          >Found {{ blockCount() }} embedded JSON blocks in your paste.</span
+        >
+      }
+      @if (commentsWillBeDropped()) {
+        <span class="comment-status" i18n="@@home.paste.extract.banner.commentsDropped"
+          >Comments will be dropped</span
+        >
+      }
+    </span>
+    <span class="banner-actions">
+      <button
+        #extractButton
+        type="button"
+        mat-button
+        color="primary"
+        class="extract-button"
+        (click)="extract.emit()"
+        i18n="@@home.paste.extract.banner.action"
+      >
+        <jj-icon name="extract" />
+        <span>Extract embedded JSON</span>
+      </button>
+      <button
+        type="button"
+        mat-button
+        (click)="dismiss.emit()"
+        i18n="@@home.paste.extract.banner.dismiss"
+      >
+        Dismiss
+      </button>
+    </span>
+  </mat-card>
+}

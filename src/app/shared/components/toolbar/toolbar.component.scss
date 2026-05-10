@@ -1,4 +1,5 @@
 @use '../../../../styles/variables' as v;
+@use '../../../../styles/material-density' as md;
 
 :host {
   display: flex;
@@ -32,53 +33,239 @@
   display: none;
 }
 
-.mode-toggle {
+.pane-layout-group {
   font-family: v.$font-ui;
   font-size: 12px;
   height: 32px;
 
-  // Material's default button-toggle is ~48 px, which made the Home toolbar
-  // row taller than the Profile header. Shrink the internal buttons so the
-  // icon-buttons (~40 px) anchor the row height consistently across routes.
-  ::ng-deep .mat-button-toggle {
-    height: 32px;
+  @include md.compact-mat-button-toggle(32px, 12px);
+
+  // Icon-only segments need tighter horizontal padding than the
+  // mixin default (which assumes a text label).
+  .mat-button-toggle-label-content {
+    padding: 0 8px;
   }
 
-  ::ng-deep .mat-button-toggle-button {
-    height: 32px;
-  }
-
-  ::ng-deep .mat-button-toggle-label-content {
-    line-height: 30px;
-    padding: 0 10px;
+  jj-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 }
 
-.title-field {
+.identity-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 4px;
+}
+
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-family: v.$font-ui;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.state-pill--draft {
+  background: var(--mat-sys-surface-container-highest, rgba(127, 127, 127, 0.16));
+  color: var(--mat-sys-on-surface-variant, currentColor);
+}
+
+.state-pill--saved,
+.state-pill--saving {
+  background: var(--mat-sys-primary-container, rgba(0, 188, 212, 0.16));
+  color: var(--mat-sys-on-primary-container, var(--mat-sys-primary, #{v.$color-primary}));
+}
+
+.state-pill--modified {
+  // Material 21 secondary-container token (M7f-4a). Auto-flips between
+  // dark and light themes via mat.all-component-colors emission in
+  // src/styles/_material.scss; previous hardcoded #ffecb3 / #4a3000
+  // were tuned for light only and washed out in dark.
+  background: var(--mat-sys-secondary-container, #ffecb3);
+  color: var(--mat-sys-on-secondary-container, #4a3000);
+}
+
+.state-pill--saving::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+}
+
+.state-pill--signInToSave {
+  padding: 0;
+  background: transparent;
+  color: var(--mat-sys-on-primary, #fff);
+}
+
+.pill-cta {
+  --mat-button-filled-container-height: 28px;
+  --mat-button-filled-container-shape: 999px;
+  --mat-button-filled-container-color: var(--mat-sys-primary, #{v.$color-primary});
+  --mat-button-filled-label-text-color: var(--mat-sys-on-primary, #fff);
+  --mat-button-filled-label-text-size: 12px;
+
+  min-width: 0;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-family: v.$font-ui;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pill-text-full {
+  display: inline;
+}
+
+.pill-text-compact {
+  display: none;
+}
+
+.title-display {
+  min-width: 12ch;
+  max-width: 32ch;
+  overflow: hidden;
+  color: var(--mat-sys-on-surface, inherit);
   font-family: v.$font-ui;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title-display.untitled {
+  color: var(--mat-sys-on-surface-variant, rgba(127, 127, 127, 0.8));
+  font-style: italic;
+}
+
+.title-input {
+  width: 24ch;
+  min-width: 12ch;
+  max-width: 32ch;
   height: 28px;
   padding: 0 8px;
-  margin: 0 4px;
-  min-width: 140px;
-  max-width: 260px;
   background: transparent;
   color: inherit;
-  border: 1px solid rgba(127, 127, 127, 0.3);
+  border: 1px solid transparent;
   border-radius: 4px;
   outline: none;
+  font: 13px v.$font-ui;
 
   &::placeholder {
     color: currentColor;
     opacity: 0.5;
   }
 
+  &:hover {
+    border-color: var(--mat-sys-outline-variant, rgba(127, 127, 127, 0.3));
+  }
+
   &:focus {
-    border-color: v.$color-primary;
+    border-color: var(--mat-sys-primary, #{v.$color-primary});
+    background: var(--mat-sys-surface-container-lowest, transparent);
+  }
+}
+
+.save-button {
+  --mat-button-filled-container-height: 32px;
+  --mat-button-filled-container-shape: 999px;
+
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-family: v.$font-ui;
+  white-space: nowrap;
+
+  // Material 21 projects all non-mat-icon content into a default-inline
+  // `<span class="mdc-button__label">`. That makes our jj-icon and the
+  // text label inline-level siblings, and an inline-flex element with
+  // line-height: 0 baselines to its bottom edge -- which would drag the
+  // icon's top well above the text top. Force the label wrapper to flex
+  // so jj-icon and the text center vertically inside the button.
+  // ::ng-deep is required because the label span is rendered inside
+  // Material's button template and doesn't carry our component's
+  // _ngcontent attribute.
+  ::ng-deep .mdc-button__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  ::ng-deep jj-icon {
+    flex: 0 0 auto;
+  }
+
+  // Optical alignment nudge: "Save" has no descenders, so its glyphs
+  // sit visually high in the line-box while the icon's drawing is
+  // centered in its viewBox. Without this shift the text reads as
+  // sitting ~2px below the icon's visual center on a 32px button.
+  // Targets the label-text span (not the jj-icon) inside Material's
+  // projected `.mdc-button__label` wrapper.
+  ::ng-deep .mdc-button__label > span {
+    position: relative;
+    top: -2px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .state-pill--saving::before {
+    animation: state-pill-spin 0.8s linear infinite;
+  }
+
+  @keyframes state-pill-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .state-pill--saving::before {
+    animation: none;
+  }
+}
+
+@media (max-width: v.$breakpoint-mobile) {
+  .pill-text-full {
+    display: none;
+  }
+
+  .pill-text-compact {
+    display: inline;
+  }
+
+  .title-display,
+  .title-input,
+  .title-suggest-wand {
+    display: none;
+  }
+
+  // M7l: collapse the pane-layout segmented control to two segments
+  // (`editor-only` | `tree-only`) at narrow widths. The two `both-*`
+  // segments hide because there is not enough room to show both
+  // panes meaningfully on phones / narrow split-screen views; the
+  // app's primary value at this size is viewing the tree (see
+  // AGENTS.md and DESIGN_SPEC.md M7l). `paneLayout` is derived from
+  // the *effective* visibility, so the active segment is always one
+  // of the two visible ones - no hidden-selected state.
+  .pane-layout-group mat-button-toggle[value='both-horizontal'],
+  .pane-layout-group mat-button-toggle[value='both-vertical'] {
+    display: none;
   }
 }
 
 .paste-ready {
   color: var(--mat-sys-primary, #1976d2);
 }
-

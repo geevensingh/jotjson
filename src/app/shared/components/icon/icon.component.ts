@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 /**
  * Icon set for the JotJSON toolbar and UI chrome. Inline SVGs at a 24x24
@@ -25,25 +25,56 @@ export type JjIconName =
   | 'sign-out'
   | 'save'
   | 'more-vert'
+  | 'more-horiz'
   | 'link'
+  | 'arrows-exchange'
+  | 'arrows-exchange-off'
+  | 'pane-both'
+  | 'pane-left-only'
+  | 'pane-right-only'
+  | 'pane-stacked'
   | 'globe'
   | 'lock'
   | 'trash'
   | 'edit'
   | 'eye'
+  | 'eye-off'
   | 'folder'
   | 'history'
-  | 'search';
+  | 'search'
+  | 'warning'
+  | 'check'
+  | 'star'
+  | 'info'
+  | 'error'
+  | 'flag'
+  | 'bookmark'
+  | 'extract'
+  | 'decoded'
+  | 'wand'
+  | 'key'
+  | 'collapse-subtree'
+  | 'expand-subtree'
+  | 'isolate'
+  | 'subtree'
+  | 'find-by-key'
+  | 'find-by-value'
+  | 'collapse-siblings';
+
+export type JjIconSize = number | 'auto';
 
 @Component({
   selector: 'jj-icon',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '[class.jj-icon--auto]': "size() === 'auto'",
+  },
   template: `
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      [attr.width]="size()"
-      [attr.height]="size()"
+      [attr.width]="svgSize()"
+      [attr.height]="svgSize()"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -54,31 +85,66 @@ export type JjIconName =
       focusable="false"
       class="jj-icon"
     >
+      @if (name() === 'find-by-key') {
+        <!-- Mask for the find-by-key glyph: punches the key shape
+             out of the lens so the lens visually sits behind the
+             key. Multiple instances on the same page produce
+             duplicate IDs but reference identical defs, so URL
+             lookups resolve to identical mask data. -->
+        <defs>
+          <mask
+            id="jj-icon-mask-find-by-key"
+            maskUnits="userSpaceOnUse"
+            x="0"
+            y="0"
+            width="24"
+            height="24"
+          >
+            <rect x="0" y="0" width="24" height="24" fill="white" />
+            <circle cx="6" cy="10" r="2.8" stroke="black" stroke-width="3" fill="black" />
+            <path d="M8.8 10h9.5" stroke="black" stroke-width="3" />
+            <path d="M14 10v2.5" stroke="black" stroke-width="3" />
+            <path d="M16.5 10v2" stroke="black" stroke-width="3" />
+          </mask>
+        </defs>
+      }
       @switch (name()) {
         @case ('paste') {
           <rect x="8" y="3" width="8" height="4" rx="1" />
-          <path d="M16 5h2.5A1.5 1.5 0 0 1 20 6.5v13A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5v-13A1.5 1.5 0 0 1 5.5 5H8" />
+          <path
+            d="M16 5h2.5A1.5 1.5 0 0 1 20 6.5v13A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5v-13A1.5 1.5 0 0 1 5.5 5H8"
+          />
           <path d="M8.5 12h7M8.5 15.5h7M8.5 18.5h4" />
         }
         @case ('copy') {
           <rect x="9" y="3" width="12" height="14" rx="2" />
-          <path d="M15 17v2.5A1.5 1.5 0 0 1 13.5 21h-9A1.5 1.5 0 0 1 3 19.5v-12A1.5 1.5 0 0 1 4.5 6H7" />
+          <path
+            d="M15 17v2.5A1.5 1.5 0 0 1 13.5 21h-9A1.5 1.5 0 0 1 3 19.5v-12A1.5 1.5 0 0 1 4.5 6H7"
+          />
         }
         @case ('upload') {
-          <path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8l-5-5z" />
+          <path
+            d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8l-5-5z"
+          />
           <path d="M14 3v5h5" />
           <path d="M12 18v-7" />
           <path d="M9 13.5L12 10.5l3 3" />
         }
         @case ('download') {
-          <path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8l-5-5z" />
+          <path
+            d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8l-5-5z"
+          />
           <path d="M14 3v5h5" />
           <path d="M12 11v7" />
           <path d="M9 15.5L12 18.5l3-3" />
         }
         @case ('format') {
-          <path d="M8 4c-2 0-2.5 1-2.5 2.5v3c0 1.3-.7 2.5-2 2.5 1.3 0 2 1.2 2 2.5v3c0 1.5.5 2.5 2.5 2.5" />
-          <path d="M16 4c2 0 2.5 1 2.5 2.5v3c0 1.3.7 2.5 2 2.5-1.3 0-2 1.2-2 2.5v3c0 1.5-.5 2.5-2.5 2.5" />
+          <path
+            d="M8 4c-2 0-2.5 1-2.5 2.5v3c0 1.3-.7 2.5-2 2.5 1.3 0 2 1.2 2 2.5v3c0 1.5.5 2.5 2.5 2.5"
+          />
+          <path
+            d="M16 4c2 0 2.5 1 2.5 2.5v3c0 1.3.7 2.5 2 2.5-1.3 0-2 1.2-2 2.5v3c0 1.5-.5 2.5-2.5 2.5"
+          />
           <path d="M10 9h4M10 12h6M10 15h4" />
         }
         @case ('minify') {
@@ -107,7 +173,9 @@ export type JjIconName =
         }
         @case ('sun') {
           <circle cx="12" cy="12" r="3.75" />
-          <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+          <path
+            d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"
+          />
         }
         @case ('moon') {
           <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
@@ -123,10 +191,20 @@ export type JjIconName =
           <path d="M14 10a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" />
         }
         @case ('chevron-right') {
-          <path d="M9 6l6 6-6 6" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M9 6l6 6-6 6" />
+          </g>
         }
         @case ('chevron-down') {
-          <path d="M6 9l6 6 6-6" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </g>
         }
         @case ('sign-in') {
           <circle cx="16" cy="9" r="3" />
@@ -141,18 +219,107 @@ export type JjIconName =
           <path d="M18 10l3 3-3 3" />
         }
         @case ('save') {
-          <path d="M5 3h11l4 4v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20V4.5A1.5 1.5 0 0 1 5.5 3" />
+          <path
+            d="M5 3h11l4 4v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20V4.5A1.5 1.5 0 0 1 5.5 3"
+          />
           <path d="M8 3v5h8V3" />
           <rect x="8" y="13" width="8" height="6" rx="0.5" />
         }
         @case ('more-vert') {
-          <circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none" />
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none" />
+          </g>
+        }
+        @case ('more-horiz') {
+          <circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
           <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
-          <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
         }
         @case ('link') {
           <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" />
           <path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" />
+        }
+        @case ('arrows-exchange') {
+          <path d="M5 8h14" />
+          <path d="M16 5l3 3-3 3" />
+          <path d="M19 16H5" />
+          <path d="M8 13l-3 3 3 3" />
+        }
+        @case ('arrows-exchange-off') {
+          <path d="M5 8h14" />
+          <path d="M16 5l3 3-3 3" />
+          <path d="M19 16H5" />
+          <path d="M8 13l-3 3 3 3" />
+          <path d="M4 4l16 16" />
+        }
+        @case ('pane-both') {
+          <rect
+            x="3.5"
+            y="4.5"
+            width="7.5"
+            height="15"
+            rx="1.25"
+            fill="currentColor"
+            fill-opacity="0.4"
+          />
+          <rect
+            x="13"
+            y="4.5"
+            width="7.5"
+            height="15"
+            rx="1.25"
+            fill="currentColor"
+            fill-opacity="0.4"
+          />
+        }
+        @case ('pane-left-only') {
+          <rect
+            x="3.5"
+            y="4.5"
+            width="7.5"
+            height="15"
+            rx="1.25"
+            fill="currentColor"
+            fill-opacity="0.4"
+          />
+          <rect x="13" y="4.5" width="7.5" height="15" rx="1.25" />
+        }
+        @case ('pane-right-only') {
+          <rect x="3.5" y="4.5" width="7.5" height="15" rx="1.25" />
+          <rect
+            x="13"
+            y="4.5"
+            width="7.5"
+            height="15"
+            rx="1.25"
+            fill="currentColor"
+            fill-opacity="0.4"
+          />
+        }
+        @case ('pane-stacked') {
+          <rect
+            x="4.5"
+            y="3.5"
+            width="15"
+            height="7.5"
+            rx="1.25"
+            fill="currentColor"
+            fill-opacity="0.4"
+          />
+          <rect
+            x="4.5"
+            y="13"
+            width="15"
+            height="7.5"
+            rx="1.25"
+            fill="currentColor"
+            fill-opacity="0.4"
+          />
         }
         @case ('globe') {
           <circle cx="12" cy="12" r="8.5" />
@@ -183,12 +350,192 @@ export type JjIconName =
           <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
           <circle cx="12" cy="12" r="3" />
         }
+        @case ('eye-off') {
+          <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="M4 4l16 16" />
+        }
         @case ('folder') {
-          <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+          <path
+            d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"
+          />
         }
         @case ('search') {
           <circle cx="11" cy="11" r="6.5" />
           <path d="M16 16l4 4" />
+        }
+        @case ('warning') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M12 4l9.5 16.5h-19z" />
+            <path d="M12 10v5" />
+            <circle cx="12" cy="17.6" r="0.9" fill="currentColor" stroke="none" />
+          </g>
+        }
+        @case ('check') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M5 12.5l4 4 10-10" />
+          </g>
+        }
+        @case ('star') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M12 3.5l2.7 5.6 6.1.9-4.4 4.3 1 6.2L12 17.6l-5.4 2.9 1-6.2L3.2 10l6.1-.9z" />
+          </g>
+        }
+        @case ('info') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M12 11v5.5" />
+            <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none" />
+          </g>
+        }
+        @case ('error') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" />
+          </g>
+        }
+        @case ('flag') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M5 21V4" />
+            <path d="M5 4h11l-2 4 2 4H5" />
+          </g>
+        }
+        @case ('bookmark') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M6 4h12v17l-6-4-6 4z" />
+          </g>
+        }
+        @case ('extract') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M5 4v3M5 4h3" />
+            <path d="M19 4v3M19 4h-3" />
+            <path d="M5 20v-3M5 20h3" />
+            <path d="M19 20v-3M19 20h-3" />
+            <path d="M10 9.5c-.7 0-1 .3-1 1v.5c0 .5-.5 1-1 1 .5 0 1 .3 1 1v.5c0 .7.3 1 1 1" />
+            <path d="M14 9.5c.7 0 1 .3 1 1v.5c0 .5.5 1 1 1-.5 0-1 .3-1 1v.5c0 .7-.3 1-1 1" />
+          </g>
+        }
+        @case ('decoded') {
+          <g
+            transform="translate(12 12) scale(1.288) translate(-12 -12)"
+            vector-effect="non-scaling-stroke"
+          >
+            <path d="M5 4v3M5 4h3" />
+            <path d="M19 4v3M19 4h-3" />
+            <path d="M5 20v-3M5 20h3" />
+            <path d="M19 20v-3M19 20h-3" />
+            <path d="M9 9.5h6" />
+            <path d="M12 9.5v5" />
+          </g>
+        }
+        @case ('wand') {
+          <path d="M5 19 L13 11" />
+          <path d="M16 5 L16 11" />
+          <path d="M13 8 L19 8" />
+          <path d="M6 5 L6 7" />
+          <path d="M5 6 L7 6" />
+          <path d="M19 14 L19 16" />
+          <path d="M18 15 L20 15" />
+        }
+        @case ('key') {
+          <!-- Bow circle on the left + horizontal shaft + 2 teeth on the right. -->
+          <circle cx="7" cy="12" r="3.5" />
+          <path d="M10.5 12h10.5" />
+          <path d="M16 12v3" />
+          <path d="M19 12v2.5" />
+        }
+        @case ('collapse-subtree') {
+          <!-- Top bar (the parent row) + 2 upward chevrons (children
+               pulled back into the parent). Pairs visually with
+               expand-subtree (chevrons flipped). -->
+          <path d="M4 6h16" />
+          <path d="M8 14l4-4 4 4" />
+          <path d="M8 20l4-4 4 4" />
+        }
+        @case ('expand-subtree') {
+          <!-- Top bar + 2 downward chevrons (children fanning out
+               from the parent row). -->
+          <path d="M4 6h16" />
+          <path d="M8 10l4 4 4-4" />
+          <path d="M8 16l4 4 4-4" />
+        }
+        @case ('isolate') {
+          <!-- Highlighted middle row, faded surrounding rows: the
+               isolated row stays visible while peers dim. -->
+          <path d="M5 5h14" stroke-opacity="0.35" />
+          <rect x="3" y="9" width="18" height="6" rx="1.5" />
+          <path d="M5 19h14" stroke-opacity="0.35" />
+        }
+        @case ('subtree') {
+          <!-- Parent dot on the left with two child dots on the
+               right, connected by an L-shaped branch. Reads as
+               this node and its descendants. -->
+          <circle cx="6" cy="6" r="1.6" />
+          <circle cx="18" cy="14" r="1.6" />
+          <circle cx="18" cy="20" r="1.6" />
+          <path d="M6 7.6V18a1.5 1.5 0 0 0 1.5 1.5H16.4" />
+          <path d="M7.5 13.5h8.9" />
+        }
+        @case ('find-by-key') {
+          <!-- Key in front, magnifying glass behind/overlapping with
+               handle to lower-right corner. The lens has a "bite
+               taken out" via mask where the key crosses, giving the
+               key visual prominence per design round 3 (N4). -->
+          <g mask="url(#jj-icon-mask-find-by-key)">
+            <circle cx="11" cy="11" r="6" />
+          </g>
+          <path d="M15.3 15.3l4.7 4.7" />
+          <circle cx="6" cy="10" r="2.8" />
+          <path d="M8.8 10h9.5" />
+          <path d="M14 10v2.5" />
+          <path d="M16.5 10v2" />
+        }
+        @case ('find-by-value') {
+          <!-- Magnifying glass with two horizontal "content" bars
+               inside the lens (V2 from design round 3). The bars
+               read as "value text" without the visual crowding of
+               the three-bar variant at 18px. Inner bars use the
+               default 1.75 stroke to match the rest of the icon
+               registry (was 1.4 in v0.19.1 - tightened in v0.19.3
+               for visual consistency with sibling icons). -->
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="M16 16l4 4" />
+          <path d="M8 10h6" />
+          <path d="M8 12.5h4.5" />
+        }
+        @case ('collapse-siblings') {
+          <!-- Highlighted middle row (clicked) flanked by short bars
+               above and below (representing immediate peer rows
+               being compressed). Distinct from isolate (faded
+               full-width lines for the wider-scope action) by using
+               shorter peer bars to suggest narrower scope. -->
+          <path d="M9 5h6" stroke-opacity="0.55" />
+          <rect x="3" y="9" width="18" height="6" rx="1.5" />
+          <path d="M9 19h6" stroke-opacity="0.55" />
         }
       }
     </svg>
@@ -201,13 +548,26 @@ export type JjIconName =
         justify-content: center;
         line-height: 0;
       }
+      :host(.jj-icon--auto) {
+        width: 1em;
+        height: 1em;
+      }
+      :host(.jj-icon--auto) .jj-icon {
+        width: 100%;
+        height: 100%;
+      }
       .jj-icon {
         display: block;
       }
-    `
-  ]
+    `,
+  ],
 })
 export class IconComponent {
   readonly name = input.required<JjIconName>();
-  readonly size = input<number>(20);
+  readonly size = input<JjIconSize>(20);
+
+  protected readonly svgSize = computed(() => {
+    const size = this.size();
+    return size === 'auto' ? null : size;
+  });
 }

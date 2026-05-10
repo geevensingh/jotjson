@@ -14,7 +14,18 @@ export const environment: Environment = {
     knownAuthorities: [],
     redirectUri: 'http://localhost:4200/',
     postLogoutRedirectUri: 'http://localhost:4200/',
-    scopes: []
+    scopes: [],
   },
-  appInsightsConnectionString: ''
+  appInsightsConnectionString: '',
+  // Optional: local-only dev-auth bypass. Uncomment to skip MSAL on
+  // localhost and impersonate a fake signed-in user. Pair with
+  // `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json`. See
+  // AGENTS.md "Local-only dev-auth bypass" for details.
+  //
+  // devAuth: {
+  //   enabled: true,
+  //   userId: 'dev-user-1',
+  //   displayName: 'Dev User',
+  //   email: 'dev-user-1@dev.local'
+  // }
 };

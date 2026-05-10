@@ -1,8 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  ClipboardPermissionState,
-  ClipboardPollingService
-} from './clipboard-polling.service';
+import { ClipboardPermissionState, ClipboardPollingService } from './clipboard-polling.service';
 
 type ClipboardLike = Pick<Clipboard, 'readText' | 'writeText'>;
 
@@ -24,7 +21,7 @@ function makeStatus(initial: PermissionState): PermissionStatusStub {
       stub.state = newState;
       const evt = { target: stub } as unknown as Event;
       for (const l of stub.listeners) l(evt);
-    }
+    },
   };
   stub.addEventListener.and.callFake((name: string, cb: (e: Event) => void) => {
     if (name === 'change') stub.listeners.push(cb);
@@ -47,24 +44,24 @@ function installNavigatorStubs(opts: {
   if (opts.clipboard === null) {
     Object.defineProperty(navigator, 'clipboard', {
       value: undefined,
-      configurable: true
+      configurable: true,
     });
   } else if (opts.clipboard) {
     Object.defineProperty(navigator, 'clipboard', {
       value: opts.clipboard,
-      configurable: true
+      configurable: true,
     });
   }
 
   if (opts.permissionsQuery === null) {
     Object.defineProperty(navigator, 'permissions', {
       value: undefined,
-      configurable: true
+      configurable: true,
     });
   } else if (opts.permissionsQuery) {
     Object.defineProperty(navigator, 'permissions', {
       value: { query: opts.permissionsQuery },
-      configurable: true
+      configurable: true,
     });
   }
 
@@ -89,12 +86,85 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve(value: T | PromiseLike<T>): void;
+  reject(reason?: unknown): void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolveDeferred: (value: T | PromiseLike<T>) => void = () => {
+    throw new Error('Deferred resolve called before initialization');
+  };
+  let rejectDeferred: (reason?: unknown) => void = () => {
+    throw new Error('Deferred reject called before initialization');
+  };
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveDeferred = resolve;
+    rejectDeferred = reject;
+  });
+  return { promise, resolve: resolveDeferred, reject: rejectDeferred };
+}
+
 describe('ClipboardPollingService', () => {
   let restore: () => void = () => {};
+
+  // Defensive backstop: snapshot the truly-original navigator.clipboard /
+  // navigator.permissions descriptors once before any test in this suite
+  // can install a stub. If a test (or test helper) ever forgets to restore
+  // - or stacks two installNavigatorStubs() calls in a single spec without
+  // restoring between them - afterAll will still put the originals back so
+  // a stub does not leak into adjacent suites that spyOn(navigator.clipboard,
+  // 'writeText'/'readText') directly. Without this guard, a leaked stub
+  // whose methods are jasmine spies trips Jasmine's "already been spied
+  // upon" guard in later specs (observed in CI on Linux Chrome Headless).
+  let suiteOrigClipboard: PropertyDescriptor | undefined;
+  let suiteOrigPermissions: PropertyDescriptor | undefined;
+  beforeAll(() => {
+    suiteOrigClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    suiteOrigPermissions = Object.getOwnPropertyDescriptor(navigator, 'permissions');
+  });
+  afterAll(() => {
+    if (suiteOrigClipboard) {
+      Object.defineProperty(navigator, 'clipboard', suiteOrigClipboard);
+    } else {
+      delete (navigator as unknown as { clipboard?: Clipboard }).clipboard;
+    }
+    if (suiteOrigPermissions) {
+      Object.defineProperty(navigator, 'permissions', suiteOrigPermissions);
+    } else {
+      delete (navigator as unknown as { permissions?: Permissions }).permissions;
+    }
+  });
 
   afterEach(() => {
     restore();
     restore = () => {};
+  });
+
+  // FIX FOR #140: pin document.visibilityState='visible' for every test in
+  // this file. ClipboardPollingService.startPolling() early-returns when
+  // visibility is 'hidden' (intentional production behavior to save CPU when
+  // the tab is backgrounded), so under headless Chrome on CI -- which can
+  // transiently report 'hidden' -- the constructor's startPolling() call
+  // becomes a no-op and pollHandle stays null, leaving the test's
+  // clock.tick() with no interval to fire. Pinning visibility here mirrors
+  // the real-user condition (page is visible while you're using JotJSON)
+  // and isolates the suite from headless Chrome's visibility flakiness.
+  let visibilityDescriptor: PropertyDescriptor | undefined;
+  beforeEach(() => {
+    visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+  });
+  afterEach(() => {
+    if (visibilityDescriptor) {
+      Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+    } else {
+      delete (document as unknown as { visibilityState?: unknown }).visibilityState;
+    }
   });
 
   function createService(opts: {
@@ -102,23 +172,83 @@ describe('ClipboardPollingService', () => {
     permissionsQuery?: jasmine.Spy | null;
     clipboardMissing?: boolean;
   }): ClipboardPollingService {
+    // Restore any prior stubs first. Without this, back-to-back createService
+    // calls in a single `it` would stack: the second installNavigatorStubs
+    // would capture the first call's STUB as the "original" descriptor, and
+    // afterEach's restore would put the first stub back instead of the real
+    // clipboard - leaking a stubbed navigator.clipboard whose writeText is
+    // already a jasmine spy into adjacent suites.
+    restore();
+    restore = () => {};
+
     const clipboard: ClipboardLike | null = opts.clipboardMissing
       ? null
       : {
           readText: opts.readText ?? jasmine.createSpy('readText').and.resolveTo(''),
-          writeText: jasmine.createSpy('writeText').and.resolveTo(undefined)
+          writeText: jasmine.createSpy('writeText').and.resolveTo(undefined),
         };
     restore = installNavigatorStubs({
       clipboard,
       permissionsQuery:
         opts.permissionsQuery === undefined
           ? jasmine.createSpy('query').and.resolveTo(makeStatus('prompt'))
-          : opts.permissionsQuery
+          : opts.permissionsQuery,
     });
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({});
     return TestBed.inject(ClipboardPollingService);
   }
+
+  it('sets permissionReady after async permission discovery settles', async () => {
+    const permissionCases: Array<{
+      name: string;
+      permissionsQuery: jasmine.Spy;
+      expectedState: ClipboardPermissionState;
+    }> = [
+      {
+        name: 'granted',
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+        expectedState: 'granted',
+      },
+      {
+        name: 'denied',
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('denied')),
+        expectedState: 'denied',
+      },
+      {
+        name: 'prompt',
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('prompt')),
+        expectedState: 'prompt',
+      },
+      {
+        name: 'Firefox throw',
+        permissionsQuery: jasmine.createSpy('query').and.rejectWith(new Error('nope')),
+        expectedState: 'unknown',
+      },
+    ];
+
+    for (const permissionCase of permissionCases) {
+      const svc = createService({ permissionsQuery: permissionCase.permissionsQuery });
+      expect(svc.permissionReady()).withContext(permissionCase.name).toBe(false);
+      await flush();
+      expect(svc.permissionReady()).withContext(permissionCase.name).toBe(true);
+      expect(svc.permissionState())
+        .withContext(permissionCase.name)
+        .toBe(permissionCase.expectedState);
+    }
+  });
+
+  it('sets permissionReady synchronously when navigator.clipboard is missing', () => {
+    const svc = createService({ clipboardMissing: true });
+    expect(svc.permissionReady()).toBe(true);
+    expect(svc.permissionState()).toBe('unsupported');
+  });
+
+  it('sets permissionReady synchronously when navigator.permissions is unavailable', () => {
+    const svc = createService({ permissionsQuery: null });
+    expect(svc.permissionReady()).toBe(true);
+    expect(svc.permissionState()).toBe('unknown');
+  });
 
   it('reports unsupported when navigator.clipboard is missing', async () => {
     const svc = createService({ clipboardMissing: true });
@@ -128,7 +258,7 @@ describe('ClipboardPollingService', () => {
 
   it('reports unknown when permissions.query throws (Firefox)', async () => {
     const svc = createService({
-      permissionsQuery: jasmine.createSpy('query').and.rejectWith(new Error('nope'))
+      permissionsQuery: jasmine.createSpy('query').and.rejectWith(new Error('nope')),
     });
     await flush();
     expect(svc.permissionState()).toBe('unknown');
@@ -185,7 +315,7 @@ describe('ClipboardPollingService', () => {
       .and.callFake(() => Promise.resolve(clipboardText));
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
     });
     await flush();
 
@@ -194,18 +324,19 @@ describe('ClipboardPollingService', () => {
       { text: '[1,2,3]', expected: true, name: 'raw JSON array' },
       { text: '{ // comment\n "a": 1 }', expected: true, name: 'JSONC object' },
       { text: '{"a":', expected: true, name: 'partial-but-plausible' },
+      { text: 'INFO {"a":1}', expected: true, name: 'mixed prose with object' },
+      { text: 'log line with [array, here]', expected: true, name: 'mixed prose with array' },
       { text: 'hello world', expected: false, name: 'plain prose' },
+      { text: '42 dollars', expected: false, name: 'numbers and prose' },
       { text: '', expected: false, name: 'empty' },
       { text: '   \n  \t', expected: false, name: 'whitespace only' },
-      { text: '"{\\"a\\":1}"', expected: true, name: 'escaped JSON (round-trip)' }
+      { text: '"{\\"a\\":1}"', expected: true, name: 'escaped JSON (literal { qualifies)' },
     ];
 
     for (const c of cases) {
       clipboardText = c.text;
       await svc.checkOnce();
-      expect(svc.hasJson())
-        .withContext(`case: ${c.name}`)
-        .toBe(c.expected);
+      expect(svc.hasJson()).withContext(`case: ${c.name}`).toBe(c.expected);
     }
   });
 
@@ -216,7 +347,7 @@ describe('ClipboardPollingService', () => {
       .and.callFake(() => Promise.resolve(clipboardText));
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
     });
     await flush();
     await svc.checkOnce();
@@ -233,7 +364,7 @@ describe('ClipboardPollingService', () => {
     const readText = jasmine.createSpy('readText').and.resolveTo(`{"${longKey}":1}`);
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
     });
     await flush();
     await svc.checkOnce();
@@ -242,11 +373,137 @@ describe('ClipboardPollingService', () => {
     expect(preview.endsWith('...')).toBe(true);
   });
 
+  it('readGrantedClipboardOnce waits for permission readiness before deciding', async () => {
+    const permissionStatus = createDeferred<PermissionStatusStub>();
+    const permissionsQuery = jasmine.createSpy('query').and.returnValue(permissionStatus.promise);
+    const readText = jasmine.createSpy('readText').and.resolveTo('{"slow":true}');
+    const svc = createService({ readText, permissionsQuery });
+
+    const resultPromise = svc.readGrantedClipboardOnce('coldBootAutoPaste');
+    await flush();
+    expect(svc.permissionReady()).toBe(false);
+    expect(readText).not.toHaveBeenCalled();
+
+    permissionStatus.resolve(makeStatus('denied'));
+    const result = await resultPromise;
+
+    expect(svc.permissionReady()).toBe(true);
+    expect(result).toEqual({ ok: false });
+    expect(readText).not.toHaveBeenCalled();
+  });
+
+  it('readGrantedClipboardOnce returns text and updates derived clipboard state when granted', async () => {
+    let clipboardText = 'not json';
+    const readText = jasmine
+      .createSpy('readText')
+      .and.callFake(() => Promise.resolve(clipboardText));
+    const svc = createService({
+      readText,
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+    });
+    await flush();
+    expect(svc.hasJson()).toBe(false);
+    readText.calls.reset();
+
+    clipboardText = '{"cold":true}';
+    const result = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+    expect(result).toEqual({ ok: true, text: '{"cold":true}' });
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(svc.hasJson()).toBe(true);
+    expect(svc.preview()).toContain('"cold"');
+  });
+
+  it('readGrantedClipboardOnce returns false without reading when permission is denied or prompt', async () => {
+    const permissionStates: PermissionState[] = ['denied', 'prompt'];
+
+    for (const permissionState of permissionStates) {
+      const readText = jasmine.createSpy('readText').and.resolveTo('{"blocked":true}');
+      const svc = createService({
+        readText,
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus(permissionState)),
+      });
+      await flush();
+      readText.calls.reset();
+
+      const result = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+      expect(result).withContext(permissionState).toEqual({ ok: false });
+      expect(readText).withContext(permissionState).not.toHaveBeenCalled();
+    }
+  });
+
+  it('readGrantedClipboardOnce keeps granted permission when readText throws NotAllowedError', async () => {
+    const readText = jasmine.createSpy('readText').and.resolveTo('');
+    const svc = createService({
+      readText,
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+    });
+    await flush();
+    readText.calls.reset();
+    readText.and.rejectWith(notAllowedError());
+
+    const result = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+    expect(result).toEqual({ ok: false });
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(svc.permissionState()).toBe('granted');
+  });
+
+  it('readGrantedClipboardOnce coalesces concurrent reads', async () => {
+    const clipboardRead = createDeferred<string>();
+    const readText = jasmine.createSpy('readText').and.returnValue(clipboardRead.promise);
+    const svc = createService({
+      readText,
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+    });
+    await flush();
+    readText.calls.reset();
+
+    const firstRead = svc.readGrantedClipboardOnce('coldBootAutoPaste');
+    const secondRead = svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+    expect(firstRead).toBe(secondRead);
+    // The internal `await permissionDiscoveryPromise` inserts a microtask
+    // boundary even when permission discovery is already settled, so we
+    // need to drain the queue before asserting `readText` was called.
+    await flush();
+    expect(readText).toHaveBeenCalledTimes(1);
+
+    clipboardRead.resolve('{"coalesced":true}');
+    const firstResult = await firstRead;
+    const secondResult = await secondRead;
+
+    expect(firstResult).toEqual({ ok: true, text: '{"coalesced":true}' });
+    expect(secondResult).toBe(firstResult);
+  });
+
+  it('readGrantedClipboardOnce starts a new read after the previous read settles', async () => {
+    let clipboardText = '{"first":true}';
+    const readText = jasmine
+      .createSpy('readText')
+      .and.callFake(() => Promise.resolve(clipboardText));
+    const svc = createService({
+      readText,
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+    });
+    await flush();
+    readText.calls.reset();
+
+    const firstResult = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+    clipboardText = '{"second":true}';
+    const secondResult = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+    expect(readText).toHaveBeenCalledTimes(2);
+    expect(firstResult).toEqual({ ok: true, text: '{"first":true}' });
+    expect(secondResult).toEqual({ ok: true, text: '{"second":true}' });
+  });
+
   it('readForPaste performs exactly one readText call and returns the raw value', async () => {
     const readText = jasmine.createSpy('readText').and.resolveTo('{"a":1}');
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
     });
     await flush();
     readText.calls.reset();
@@ -261,7 +518,7 @@ describe('ClipboardPollingService', () => {
       const readText = jasmine.createSpy('readText').and.resolveTo('{"a":1}');
       const svc = createService({
         readText,
-        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
       });
       await flush();
       readText.calls.reset();
@@ -305,7 +562,7 @@ describe('ClipboardPollingService', () => {
       const readText = jasmine.createSpy('readText').and.resolveTo('{"a":1}');
       const svc = createService({
         readText,
-        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted'))
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
       });
       await flush();
       svc.startPolling();
@@ -325,7 +582,7 @@ describe('ClipboardPollingService', () => {
     const readText = jasmine.createSpy('readText').and.resolveTo('{"a":1}');
     const svc = createService({
       readText,
-      permissionsQuery: jasmine.createSpy('query').and.resolveTo(status)
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(status),
     });
     await flush();
     expect(svc.permissionState()).toBe('granted');
@@ -334,5 +591,47 @@ describe('ClipboardPollingService', () => {
     expect(svc.permissionState()).toBe('denied');
     expect(svc.hasJson()).toBe(false);
     expect(svc.preview()).toBe('');
+  });
+
+  describe('looksLikeJson (M7p widening)', () => {
+    async function classify(text: string): Promise<boolean> {
+      const readText = jasmine.createSpy('readText').and.resolveTo(text);
+      const svc = createService({
+        readText,
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+      });
+      await flush();
+      await svc.checkOnce();
+      return svc.hasJson();
+    }
+
+    it('returns true for prose preceding a JSON object', async () => {
+      expect(await classify('INFO log {"a":1}')).toBe(true);
+    });
+
+    it('returns true for prose surrounding a JSON array', async () => {
+      expect(await classify('see results: [1,2,3] (count=3)')).toBe(true);
+    });
+
+    it('returns true when only a stray brace appears (gate is plausibility-only)', async () => {
+      expect(await classify('value is { somewhere')).toBe(true);
+    });
+
+    it('returns true for escaped JSON literals (the literal { qualifies)', async () => {
+      expect(await classify('"{\\"a\\":1}"')).toBe(true);
+    });
+
+    it('returns false for prose without { or [ anywhere', async () => {
+      expect(await classify('just a normal sentence with no json')).toBe(false);
+    });
+
+    it('returns false for numeric-only prose', async () => {
+      expect(await classify('42 dollars and 99 cents')).toBe(false);
+    });
+
+    it('returns false for empty and whitespace-only text', async () => {
+      expect(await classify('')).toBe(false);
+      expect(await classify('   \n\t  ')).toBe(false);
+    });
   });
 });

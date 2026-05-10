@@ -48,6 +48,15 @@ resource exports 'Microsoft.Storage/storageAccounts/blobServices/containers@2023
   }
 }
 
+resource sourcemaps 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'sourcemaps'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 output accountName string = storage.name
 output avatarsContainer string = avatars.name
 output exportsContainer string = exports.name
+output sourcemapsContainer string = sourcemaps.name

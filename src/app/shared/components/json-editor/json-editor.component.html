@@ -1,5 +1,5 @@
 <div class="editor-host" [class.editor-error]="hasErrors()">
-  <div #host style="height: 100%; width: 100%;"></div>
+  <div #host style="height: 100%; width: 100%"></div>
   @if (!ready()) {
     <div class="editor-loading" i18n="@@editor.loading">Loading editor...</div>
   }
@@ -12,10 +12,10 @@
     aria-label="JSON parse errors"
     i18n-aria-label="@@editor.errors.aria"
   >
-    @for (err of errors(); track err.offset) {
+    @for (error of errors(); track error.offset) {
       <li>
-        <span class="editor-errors-loc">L{{ err.line }}:{{ err.column }}</span>
-        {{ err.message }}
+        <span class="editor-errors-loc">L{{ error.line }}:{{ error.column }}</span>
+        {{ error.message }}
       </li>
     }
   </ul>

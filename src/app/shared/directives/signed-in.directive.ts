@@ -1,10 +1,4 @@
-import {
-  Directive,
-  TemplateRef,
-  ViewContainerRef,
-  effect,
-  inject
-} from '@angular/core';
+import { Directive, TemplateRef, ViewContainerRef, effect, inject } from '@angular/core';
 import { AuthService } from '../../core/auth/auth.service';
 
 /**
@@ -25,7 +19,7 @@ import { AuthService } from '../../core/auth/auth.service';
  */
 @Directive({
   selector: '[jjSignedIn]',
-  standalone: true
+  standalone: true,
 })
 export class SignedInDirective {
   private readonly template = inject(TemplateRef<unknown>);

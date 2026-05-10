@@ -18,7 +18,7 @@ export class SeoService {
     'og:description',
     'og:type',
     'og:url',
-    'og:site_name'
+    'og:site_name',
   ] as const;
 
   private static readonly TWITTER_TAGS = ['twitter:card'] as const;
@@ -29,9 +29,7 @@ export class SeoService {
     const title = (blob.title ?? '').trim();
     const displayTitle = title.length > 0 ? title : 'Untitled JSON';
     const description =
-      title.length > 0
-        ? `${title} - JSON shared on JotJSON`
-        : 'JSON shared on JotJSON';
+      title.length > 0 ? `${title} - JSON shared on JotJSON` : 'JSON shared on JotJSON';
 
     this.upsert('og:title', displayTitle);
     this.upsert('og:description', description);
@@ -61,11 +59,7 @@ export class SeoService {
     this.setNoindex(false);
   }
 
-  private upsert(
-    key: string,
-    content: string,
-    opts: { nameAttr?: boolean } = {}
-  ): void {
+  private upsert(key: string, content: string, opts: { nameAttr?: boolean } = {}): void {
     const selector = opts.nameAttr ? `name="${key}"` : `property="${key}"`;
     const definition: Record<string, string> = opts.nameAttr
       ? { name: key, content }

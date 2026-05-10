@@ -18,6 +18,7 @@ pin. Windows, macOS, and Linux steps are listed where they diverge.
 | Bicep                       | latest  | Authoring + deploying `infra/` |
 | Git                         | 2.30+   | Everything            |
 | A Chromium-based browser    | latest  | `npm test` (Karma `ChromeHeadlessCI`) |
+| Windows Terminal (`wt`)     | latest  | `scripts/dev.ps1` (Windows only) |
 | VS Code (optional)          | latest  | Shipped debug configs in `.vscode/` |
 
 ---
@@ -207,9 +208,24 @@ path-explicit `git add`, required co-author trailer for AI commits).
 
 ---
 
-## 4. Azure CLI + Bicep (only if touching `infra/` or Azure resources)
+## 4. Azure CLI + Bicep (required for local API dev; required for `infra/`)
 
-Skip this section if you're only working on the web or API code.
+The Azure CLI is needed for two things:
+
+1. **Local API development.** Running `func start` needs read/write access
+   to the dev Cosmos DB (`cosmos-jotjson-dev`). The cleanest way is to
+   sign in with `az login` and let the SDK use your AAD principal -- see
+   [Cosmos DB local access](#cosmos-db-local-access) below for the
+   data-plane role assignment you'll also need.
+2. **Touching `infra/` or other Azure resources.** Bicep deployments,
+   resource provisioning, etc.
+
+Skipping this section only works for *purely* client-side changes -
+editor formatting, tree rendering, search, theming, and similar UI work
+that never hits `/api/*`. Anything that exercises sign-in, save/load,
+share URLs (`/s/<slug>`), recently-viewed history, profile pages, or
+rule-set persistence will fail or appear broken until you complete this
+section.
 
 ### Azure CLI
 
@@ -221,7 +237,15 @@ Then sign in:
 
 ```bash
 az login
-az account set --subscription "<your subscription name or id>"
+az account set --subscription "JotJson Subscription"
+```
+
+If `az login` fails with `AADSTS50076` (MFA required) on your default
+tenant, re-run pointing at the tenant that owns the subscription
+hosting `rg-jotjson-dev`:
+
+```bash
+az login --tenant 68fa6d3c-ab3e-4eea-97bb-f0376ea54cba
 ```
 
 ### Bicep
@@ -242,6 +266,64 @@ az bicep version
 
 See [infra/README.md](infra/README.md) for the one-time Azure setup
 walkthrough (resource group, SWA, Cosmos, Entra app registration).
+
+### Cosmos DB local access
+
+Running `func start` against the shared dev Cosmos account
+(`cosmos-jotjson-dev` in `rg-jotjson-dev`) needs **data-plane** access.
+Cosmos data-plane permissions are separate from regular Azure RBAC;
+without them the SDK returns `Request blocked by Auth ... does not
+have required RBAC permissions to perform action
+[Microsoft.DocumentDB/databaseAccounts/readMetadata]`.
+
+Pick one path. Option A is recommended for ongoing dev; Option B is
+the fast unblock if you can't grant yourself the role.
+
+**Option A (recommended): self-assign the Cosmos DB Built-in Data
+Contributor role.**
+
+Leave `COSMOS_KEY` empty in `api/local.settings.json`. The SDK will
+fall through `ChainedTokenCredential` and pick up your `az login`
+token. Then assign the data-plane role to your AAD principal:
+
+```bash
+# Find your principal id (object id in the tenant where Cosmos lives).
+PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv)
+
+# Built-in role: 00000000-0000-0000-0000-000000000002
+#   = Cosmos DB Built-in Data Contributor
+az cosmosdb sql role assignment create `
+  --account-name cosmos-jotjson-dev `
+  --resource-group rg-jotjson-dev `
+  --role-definition-id 00000000-0000-0000-0000-000000000002 `
+  --principal-id $PRINCIPAL_ID `
+  --scope "/"
+```
+
+Pros: no secrets on disk; mirrors how the deployed Function App
+authenticates. Cons: the first run requires someone with
+`Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments/write` on
+the account (typically the account owner / a maintainer) to grant it
+to you -- you can self-grant only if you already have that
+permission.
+
+**Option B (fast fallback): paste the Cosmos primary key into
+`COSMOS_KEY`.**
+
+```bash
+az cosmosdb keys list `
+  --name cosmos-jotjson-dev `
+  --resource-group rg-jotjson-dev `
+  --query primaryMasterKey -o tsv
+```
+
+Or grab it from the Azure Portal: Cosmos DB account ->
+**Settings -> Keys -> PRIMARY KEY**. Paste it into the `COSMOS_KEY`
+slot in `api/local.settings.json` and restart `func start`.
+
+Pros: works in 30 seconds, no role-assignment dance. Cons: a
+full-control account key sits in a (gitignored) file on your laptop;
+rotating it forces every contributor to refresh.
 
 ---
 
@@ -270,7 +352,31 @@ npm test            # web unit tests
 
 ---
 
-## 6. VS Code (optional, but recommended)
+## 6. Windows Terminal (Windows only, for `scripts/dev.ps1`)
+
+`scripts/dev.ps1` opens multiple terminal tabs via `wt.exe` to run the
+web dev server, the Functions host, and the test watchers side by side.
+If you skip the helper script and run things manually, you don't need
+Windows Terminal at all.
+
+Install via winget:
+
+```powershell
+winget install Microsoft.WindowsTerminal
+```
+
+Or grab it from the Microsoft Store. macOS / Linux contributors run the
+manual two-terminal flow documented in [README.md § Running locally](README.md#running-locally).
+
+### Verify
+
+```powershell
+wt --version
+```
+
+---
+
+## 7. VS Code (optional, but recommended)
 
 The repo ships VS Code launch configs in `.vscode/` that Just Work:
 
@@ -289,7 +395,7 @@ extensions:
 
 ---
 
-## 7. Environment files
+## 8. Environment files
 
 These aren't tools, but they're part of first-time setup. See
 [README.md § Setup](README.md#setup) for the exact commands. You'll need

@@ -93,6 +93,11 @@ your env files exist, and opens a Windows Terminal with three tabs:
 `web` (ng serve), `api` (func start), and `tests` (ng test + jest
 --watch split pane). Use `-SkipTests` to skip the tests tab.
 
+If a previous run left zombies on dev ports 4200, 7071, or 9876, run
+`scripts/dev-stop.ps1` to free them. `scripts/dev.ps1` also pre-flight checks
+those ports on launch and tells you to run `dev-stop.ps1` first if any are
+already in use.
+
 **Manual (any OS):**
 
 ```bash
@@ -139,7 +144,8 @@ Node Functions" config.
 ```bash
 npm start              # ng serve on http://localhost:4200 (proxies /api/*)
 npm run build          # production build to dist/jotjson
-npm run lint           # tsc --noEmit type-check
+npm run lint           # tsc + ASCII + spec/prod patterns + prettier
+npm run lint:all       # root lint + api workspace lint (CI-equivalent)
 npm run check:ascii    # fail if non-allowlisted non-ASCII sneaks in
 npm test               # Karma + Jasmine, ChromeHeadless, single run
 npm run test:ci        # Same, with coverage reporter (CI profile)
@@ -176,7 +182,7 @@ one-time Entra app-registration walkthrough.
 
 Three workflows run on push and PR:
 
-- **CI** (`ci.yml`) - Web build + type-check, API build, Bicep validate, web
+- **CI** (`ci.yml`) - Web build + type-check, API build & test, Bicep validate, web
   unit tests with coverage artifact.
 - **CD** (`cd.yml`) - Deploys the web app + managed Functions to Azure Static
   Web Apps. Gated on `AZURE_STATIC_WEB_APPS_API_TOKEN` being configured.
@@ -218,3 +224,10 @@ AI-assisted commits include:
 ```
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ```
+
+## Security
+
+To report a security vulnerability, please use GitHub's Private
+Vulnerability Reporting rather than a public issue. See
+[`SECURITY.md`](./SECURITY.md) for the policy, scope, and
+response-time expectations.

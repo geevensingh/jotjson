@@ -22,10 +22,15 @@ making any non-trivial change. The summary below is for quick reference only;
 
 - Make surgical, fully-correct changes. Don't touch unrelated code.
 - Add/update tests for every logic change.
+- Plans involving meaningful UI changes must include a mockup before
+  approval (see AGENTS.md §11).
 - Before done: `npm run lint`, `npm test`, `npm run build` pass for frontend
   and `api/`. Don't introduce new toolchains to satisfy this.
 - Update `DESIGN_SPEC.md` in the same change when behavior or architecture
   changes.
+- Update [`why-jotjson.md`](why-jotjson.md) in the same change when a
+  user-facing feature is added, removed, or significantly altered. It
+  is the public pitch doc, not engineering documentation.
 
 ## Security & Privacy
 

@@ -5,10 +5,18 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   QuotaFirstTimeDialogComponent,
   QuotaManualFullDialogComponent,
-  QuotaNotificationService
+  QuotaNotificationService,
 } from './quota-notification.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import type { UserPreferences } from '../api/models';
+
+function appendMainFallback(): HTMLElement {
+  const main = document.createElement('main');
+  main.id = 'main-content';
+  main.tabIndex = -1;
+  document.body.appendChild(main);
+  return main;
+}
 
 describe('QuotaNotificationService', () => {
   let service: QuotaNotificationService;
@@ -20,14 +28,16 @@ describe('QuotaNotificationService', () => {
   beforeEach(() => {
     prefsSignal = {
       seenBlobQuotaModal: false,
-      blobQuotaStrategy: 'auto_fifo'
+      blobQuotaStrategy: 'auto_fifo',
     } as unknown as UserPreferences;
 
     snackOpen = jasmine.createSpy('snack.open');
     dialogOpen = jasmine.createSpy('dialog.open');
-    prefsUpdate = jasmine.createSpy('prefs.update').and.callFake((patch: Partial<UserPreferences>) => {
-      Object.assign(prefsSignal, patch);
-    });
+    prefsUpdate = jasmine
+      .createSpy('prefs.update')
+      .and.callFake((patch: Partial<UserPreferences>) => {
+        Object.assign(prefsSignal, patch);
+      });
 
     TestBed.configureTestingModule({
       providers: [
@@ -38,10 +48,10 @@ describe('QuotaNotificationService', () => {
           provide: PreferencesService,
           useValue: {
             prefs: () => prefsSignal,
-            update: prefsUpdate
-          }
-        }
-      ]
+            update: prefsUpdate,
+          },
+        },
+      ],
     });
     service = TestBed.inject(QuotaNotificationService);
   });
@@ -65,10 +75,7 @@ describe('QuotaNotificationService', () => {
     it('opens the first-time modal and flips seenBlobQuotaModal=true', async () => {
       dialogOpen.and.returnValue({ afterClosed: () => of('keep_auto') });
       await service.notifyAutoDeleted({ id: 'x', slug: 's' });
-      expect(dialogOpen).toHaveBeenCalledWith(
-        QuotaFirstTimeDialogComponent,
-        jasmine.any(Object)
-      );
+      expect(dialogOpen).toHaveBeenCalledWith(QuotaFirstTimeDialogComponent, jasmine.any(Object));
       expect(prefsUpdate).toHaveBeenCalledWith({ seenBlobQuotaModal: true });
     });
 
@@ -76,6 +83,18 @@ describe('QuotaNotificationService', () => {
       dialogOpen.and.returnValue({ afterClosed: () => of('switch_to_manual') });
       await service.notifyAutoDeleted({ id: 'x', slug: 's' });
       expect(prefsUpdate).toHaveBeenCalledWith({ blobQuotaStrategy: 'manual' });
+    });
+
+    it('focuses main content after the first-time dialog closes without a trigger', async () => {
+      const main = appendMainFallback();
+      try {
+        dialogOpen.and.returnValue({ afterClosed: () => of('keep_auto') });
+        document.body.focus();
+        await service.notifyAutoDeleted({ id: 'x', slug: 's' });
+        expect(document.activeElement).toBe(main);
+      } finally {
+        main.remove();
+      }
     });
 
     it('skips the modal when the user has already seen it', async () => {
@@ -90,10 +109,7 @@ describe('QuotaNotificationService', () => {
     it('opens the manual-full dialog and does not change prefs on dismiss', async () => {
       dialogOpen.and.returnValue({ afterClosed: () => of('dismiss') });
       await service.notifyQuotaExceededManual();
-      expect(dialogOpen).toHaveBeenCalledWith(
-        QuotaManualFullDialogComponent,
-        jasmine.any(Object)
-      );
+      expect(dialogOpen).toHaveBeenCalledWith(QuotaManualFullDialogComponent, jasmine.any(Object));
       expect(prefsUpdate).not.toHaveBeenCalled();
     });
 
@@ -102,8 +118,20 @@ describe('QuotaNotificationService', () => {
       await service.notifyQuotaExceededManual();
       expect(prefsUpdate).toHaveBeenCalledWith({
         blobQuotaStrategy: 'auto_fifo',
-        seenBlobQuotaModal: true
+        seenBlobQuotaModal: true,
       });
+    });
+
+    it('focuses main content after the manual-full dialog closes without a trigger', async () => {
+      const main = appendMainFallback();
+      try {
+        dialogOpen.and.returnValue({ afterClosed: () => of('dismiss') });
+        document.body.focus();
+        await service.notifyQuotaExceededManual();
+        expect(document.activeElement).toBe(main);
+      } finally {
+        main.remove();
+      }
     });
   });
 });

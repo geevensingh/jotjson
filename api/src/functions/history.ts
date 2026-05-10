@@ -1,46 +1,19 @@
 /**
- * /api/history - signed-in user's blob activity timeline.
+ * /api/history - signed-in user's "Recently viewed" timeline.
  *
- * GET    /api/history?continuationToken=...&pageSize=...
- *   Returns the caller's history entries newest-first.
+ * GET    /api/history?continuationToken=...&pageSize=...&q=...&from=...&to=...
+ *   Returns the caller's `viewed` history entries newest-first.
  *   Response: { entries: HistoryEntry[], continuationToken?: string }
  *
  * DELETE /api/history
  *   Deletes every history entry for the caller. Returns 204.
  *
- * POST   /api/history
- *   Body: { action: "pasted", slug?: string, title?: string }
- *   Records a `"pasted"` entry. Server enforces a per-user
- *   PASTE_DEBOUNCE_SECONDS window: rapid repeats return 204 with no
- *   side effects so clients can fire-and-forget without bookkeeping.
- *   First write returns 201 with the new entry.
- *
  * All routes require auth.
  */
-import {
-  app,
-  HttpRequest,
-  HttpResponseInit,
-  InvocationContext
-} from '@azure/functions';
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
-import {
-  HISTORY_ACTIONS,
-  PASTE_DEBOUNCE_SECONDS,
-  type HistoryAction,
-  clearAll,
-  getRecentPasteAt,
-  listEntries,
-  recordEntry
-} from '../shared/history';
-
-function unauthorized(message: string): HttpResponseInit {
-  return { status: 401, jsonBody: { error: message } };
-}
-
-function badRequest(message: string): HttpResponseInit {
-  return { status: 400, jsonBody: { error: message } };
-}
+import { clearAll, listEntries } from '../shared/history';
+import { badRequest, internalError, unauthorized, withSecurityHeaders } from '../shared/http';
 
 function isIsoTimestamp(value: string): boolean {
   // Require a full ISO 8601 date-time so that we don't silently accept
@@ -54,25 +27,16 @@ function isIsoTimestamp(value: string): boolean {
   return Number.isFinite(t);
 }
 
-function internalError(
-  context: InvocationContext,
-  where: string,
-  err: unknown
-): HttpResponseInit {
-  context.error(`${where} error`, err);
-  return { status: 500, jsonBody: { error: 'Internal error' } };
-}
-
 export async function getHistory(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'getHistory auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'getHistory auth', error);
   }
 
   // pageSize is clamped inside listEntries; we pass the raw integer when
@@ -94,23 +58,6 @@ export async function getHistory(
     } else {
       q = trimmed;
     }
-  }
-  const actionsRaw = req.query.get('actions');
-  let actions: HistoryAction[] | undefined;
-  if (actionsRaw !== null && actionsRaw !== undefined) {
-    const parts = actionsRaw
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    for (const part of parts) {
-      if (!HISTORY_ACTIONS.has(part as HistoryAction)) {
-        return badRequest(
-          `actions contains an unknown value: ${part}`
-        );
-      }
-    }
-    const dedup = Array.from(new Set(parts)) as HistoryAction[];
-    if (dedup.length > 0) actions = dedup;
   }
   const fromRaw = req.query.get('from');
   let from: string | undefined;
@@ -137,91 +84,32 @@ export async function getHistory(
       ...(pageSize !== undefined ? { pageSize } : {}),
       ...(continuationToken ? { continuationToken } : {}),
       ...(q !== undefined ? { q } : {}),
-      ...(actions !== undefined ? { actions } : {}),
       ...(from !== undefined ? { from } : {}),
-      ...(to !== undefined ? { to } : {})
+      ...(to !== undefined ? { to } : {}),
     });
     return { status: 200, jsonBody: result };
-  } catch (err) {
-    return internalError(context, 'getHistory read', err);
+  } catch (error) {
+    return internalError(context, 'getHistory read', error);
   }
 }
 
 export async function deleteHistory(
   req: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   let principal;
   try {
     principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'deleteHistory auth', err);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorized(error.message);
+    return internalError(context, 'deleteHistory auth', error);
   }
 
   try {
     await clearAll(principal.id);
     return { status: 204 };
-  } catch (err) {
-    return internalError(context, 'deleteHistory write', err);
-  }
-}
-
-export async function postHistory(
-  req: HttpRequest,
-  context: InvocationContext
-): Promise<HttpResponseInit> {
-  let principal;
-  try {
-    principal = await requireAuth(req);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(err.message);
-    return internalError(context, 'postHistory auth', err);
-  }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return badRequest('Request body must be JSON');
-  }
-  if (!body || typeof body !== 'object') {
-    return badRequest('Request body must be an object');
-  }
-  const payload = body as { action?: unknown; slug?: unknown; title?: unknown };
-  // For now POST only accepts action="pasted". Other actions are produced
-  // server-side from the blob endpoints; rejecting them here keeps the
-  // surface narrow until M5b/later milestones expand it.
-  if (payload.action !== 'pasted') {
-    return badRequest('action must be "pasted"');
-  }
-  if (payload.slug !== undefined && typeof payload.slug !== 'string') {
-    return badRequest('slug must be a string when provided');
-  }
-  if (payload.title !== undefined && typeof payload.title !== 'string') {
-    return badRequest('title must be a string when provided');
-  }
-
-  try {
-    const recent = await getRecentPasteAt(principal.id);
-    if (recent) {
-      const ageMs = Date.now() - new Date(recent).getTime();
-      if (Number.isFinite(ageMs) && ageMs < PASTE_DEBOUNCE_SECONDS * 1000) {
-        // Silently no-op: clients call this on every paste; debouncing
-        // server-side keeps the timeline clean without forcing every
-        // caller to track its own throttle.
-        return { status: 204 };
-      }
-    }
-    const saved = await recordEntry({
-      userId: principal.id,
-      action: 'pasted',
-      ...(typeof payload.slug === 'string' ? { slug: payload.slug } : {}),
-      ...(typeof payload.title === 'string' ? { title: payload.title } : {})
-    });
-    return { status: 201, jsonBody: saved };
-  } catch (err) {
-    return internalError(context, 'postHistory write', err);
+  } catch (error) {
+    return internalError(context, 'deleteHistory write', error);
   }
 }
 
@@ -229,19 +117,12 @@ app.http('history-get', {
   methods: ['GET'],
   route: 'history',
   authLevel: 'anonymous',
-  handler: getHistory
+  handler: withSecurityHeaders(getHistory),
 });
 
 app.http('history-delete', {
   methods: ['DELETE'],
   route: 'history',
   authLevel: 'anonymous',
-  handler: deleteHistory
-});
-
-app.http('history-post', {
-  methods: ['POST'],
-  route: 'history',
-  authLevel: 'anonymous',
-  handler: postHistory
+  handler: withSecurityHeaders(deleteHistory),
 });

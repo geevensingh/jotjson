@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { JsonParserService } from '../app/core/json/json-parser.service';
+import { JsonExtractorService } from '../app/core/json/json-extractor.service';
 import { JsonTreeComponent } from '../app/shared/components/json-tree/json-tree.component';
 import { PreferencesService } from '../app/core/preferences/preferences.service';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
@@ -29,7 +30,7 @@ const FIXTURE_FILES = [
   'Simple.json',
   'Test.json',
   'TestHeader.json',
-  'Unpretty.json'
+  'Unpretty.json',
 ] as const;
 
 const PREFS_KEY = 'jotjson.preferences.v1';
@@ -43,7 +44,7 @@ describe('fixture files', () => {
       if (!res.ok) {
         throw new Error(
           `Failed to load fixtures/${name}: HTTP ${res.status}. ` +
-            `Ensure src/testing/fixtures is registered in angular.json test assets.`
+            `Ensure src/testing/fixtures is registered in angular.json test assets.`,
         );
       }
       contents.set(name, await res.text());
@@ -55,7 +56,7 @@ describe('fixture files', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [JsonTreeComponent],
-      providers: [provideAnimationsAsync(), ...provideFakeAuth()]
+      providers: [provideAnimationsAsync(), ...provideFakeAuth()],
     });
   });
 
@@ -70,13 +71,9 @@ describe('fixture files', () => {
         const text = contents.get(name);
         expect(text).withContext('fixture loaded').toBeDefined();
         const result = svc.parse(text!);
-        expect(result.errors)
-          .withContext(`parse errors for ${name}`)
-          .toEqual([]);
+        expect(result.errors).withContext(`parse errors for ${name}`).toEqual([]);
         expect(result.ast).withContext(`AST for ${name}`).toBeDefined();
-        expect(result.value)
-          .withContext(`parsed value for ${name}`)
-          .toBeDefined();
+        expect(result.value).withContext(`parsed value for ${name}`).toBeDefined();
       });
 
       it('renders in JsonTreeComponent without throwing', () => {
@@ -97,13 +94,89 @@ describe('fixture files', () => {
         expect(root).withContext(`tree root for ${name}`).toBeDefined();
         // A healthy fixture is an object or array at the top level, so the
         // root should have children.
-        expect(root?.children)
-          .withContext(`tree root children for ${name}`)
-          .toBeDefined();
+        expect(root?.children).withContext(`tree root children for ${name}`).toBeDefined();
         expect(root!.children!.length)
           .withContext(`tree root child count for ${name}`)
           .toBeGreaterThan(0);
       });
     });
   }
+});
+
+/**
+ * Mixed-text fixtures: prose surrounding one or more JSON bodies. These
+ * fixtures intentionally do NOT parse cleanly as a single JSON document
+ * (cf. FIXTURE_FILES above which all do). They exercise
+ * JsonExtractorService, the M7p extract-from-mixed-text path triggered by
+ * paste / native paste / drag-drop / file upload.
+ *
+ * `MultiPartMixedText.json` is a real-world example: an HTTP request and
+ * response capture (two JSON bodies separated by HTTP framing/headers
+ * and a trailing free-form sentence). Both bodies parse cleanly so the
+ * extractor returns blockCount === 2; per M7u the surrounding prose is
+ * preserved by wrapping the bodies under `json1` / `json2` keys with
+ * `prefix` / `between_1_and_2` / `suffix` carrying the request line,
+ * inter-body framing, and trailing sentence.
+ */
+describe('extractor on mixed-text fixtures', () => {
+  let mixedText: string;
+
+  beforeAll(async () => {
+    const res = await fetch('/fixtures/MultiPartMixedText.json');
+    if (!res.ok) {
+      throw new Error(
+        `Failed to load fixtures/MultiPartMixedText.json: HTTP ${res.status}. ` +
+          `Ensure src/testing/fixtures is registered in angular.json test assets.`,
+      );
+    }
+    mixedText = await res.text();
+  });
+
+  beforeEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideAnimationsAsync(), ...provideFakeAuth()],
+    });
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+  });
+
+  it('the raw fixture does not parse cleanly as a single JSON document', () => {
+    const parser = TestBed.inject(JsonParserService);
+    const result = parser.parse(mixedText);
+    expect(result.errors.length)
+      .withContext('mixed-text fixture must produce parse errors')
+      .toBeGreaterThan(0);
+  });
+
+  it('extractFromMixedText finds the two HTTP bodies and wraps them with their surrounding prose', () => {
+    const extractor = TestBed.inject(JsonExtractorService);
+    const extracted = extractor.extractFromMixedText(mixedText);
+
+    expect(extracted).withContext('extractor must return non-null on this fixture').not.toBeNull();
+    expect(extracted!.blockCount).withContext('two HTTP bodies in this capture').toBe(2);
+    // Multi-block uses JSON.stringify; comments cannot survive the wrapper.
+    expect(extracted!.preservesComments).toBe(false);
+    // The HTTP-capture fixture has no JSONC comments in either body, so
+    // the source-side comment flag should also be false.
+    expect(extracted!.hasComments).toBe(false);
+    // Surrounding HTTP framing / headers / trailing sentence -> at least
+    // one prose segment must survive.
+    expect((extracted!.proseSegments ?? 0) >= 1).toBeTrue();
+
+    // The wrapped output is a prose-preserving object; parse and inspect
+    // the json1 / json2 entries to avoid coupling the assertion to
+    // whitespace formatting.
+    const wrapper = JSON.parse(extracted!.text) as Record<string, unknown>;
+    expect(wrapper['json1']).toEqual(jasmine.objectContaining({ authentication_data: null }));
+    expect(wrapper['json2']).toEqual(jasmine.objectContaining({ buyer_info: jasmine.any(Object) }));
+    // At least one of prefix / between / suffix must be present.
+    const proseKeys = Object.keys(wrapper).filter(
+      (k) => k === 'prefix' || k === 'suffix' || k.startsWith('between_'),
+    );
+    expect(proseKeys.length).toBeGreaterThan(0);
+  });
 });

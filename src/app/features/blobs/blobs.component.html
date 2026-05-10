@@ -1,6 +1,6 @@
 <jj-app-header />
 
-<main class="blobs">
+<main id="main-content" class="blobs" tabindex="-1" #blobFocusFallback>
   <header class="blobs-header">
     <h1 i18n="@@blobs.title">Blobs</h1>
     <p class="subtitle" i18n="@@blobs.subtitle">
@@ -30,22 +30,13 @@
   } @else if (isEmpty()) {
     <div class="empty-state">
       <jj-icon name="save" class="empty-icon" />
-      <p
-        class="empty-message"
-        i18n="@@blobs.empty"
-      >You haven't saved any JSON blobs yet.</p>
-      <a
-        mat-flat-button
-        color="primary"
-        routerLink="/"
-        i18n="@@blobs.empty.cta"
-        >Open the editor</a
-      >
+      <p class="empty-message" i18n="@@blobs.empty">You haven't saved any JSON blobs yet.</p>
+      <a mat-flat-button color="primary" routerLink="/" i18n="@@blobs.empty.cta">Open the editor</a>
     </div>
   } @else {
-    <ul class="blob-list">
+    <ul class="blob-list" tabindex="-1" #blobListHost>
       @for (blob of blobList(); track blob.id) {
-        <li class="blob-row">
+        <li class="blob-row" tabindex="-1" [attr.data-blob-id]="blob.id">
           <div class="blob-main">
             <a
               class="blob-title"

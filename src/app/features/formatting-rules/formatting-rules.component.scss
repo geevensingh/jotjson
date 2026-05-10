@@ -1,0 +1,157 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.formatting-rules {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 960px;
+  margin: 2rem auto;
+  padding: 0 1.5rem 4rem;
+  box-sizing: border-box;
+}
+
+.page-header {
+  margin-bottom: 1.5rem;
+
+  h1 {
+    margin: 0 0 0.4rem;
+    font-size: 1.75rem;
+  }
+}
+
+.page-subtitle {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  max-width: 60ch;
+}
+
+.actions-row {
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.status {
+  margin: 2rem 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.status-error {
+  color: var(--mat-sys-error);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+
+  p {
+    margin: 0;
+  }
+}
+
+.rule-set-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rule-set-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--mat-sys-surface-container-low);
+  border-radius: 0.6rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: opacity 150ms ease;
+  }
+}
+
+.rule-set-card.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.apply-toggle[aria-pressed='true'] jj-icon {
+  color: var(--mat-sys-primary, #1976d2);
+}
+
+.rule-set-info {
+  min-width: 0;
+}
+
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.rename-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.rename-input {
+  width: 100%;
+  font: inherit;
+  font-size: 1.1rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--mat-sys-outline, rgba(127, 127, 127, 0.5));
+  border-radius: 4px;
+  background: var(--mat-sys-surface, #fff);
+  color: inherit;
+  box-sizing: border-box;
+}
+
+.rename-input[aria-invalid='true'] {
+  border-color: var(--mat-sys-error, #d32f2f);
+  outline-color: var(--mat-sys-error, #d32f2f);
+}
+
+.rename-error {
+  font-size: 0.8rem;
+  color: var(--mat-sys-error, #d32f2f);
+}
+
+.disabled-link {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.menu-destructive,
+.menu-destructive jj-icon {
+  color: var(--mat-sys-error, #d32f2f);
+}
+
+.rule-set-name {
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+  word-break: break-word;
+}
+
+.rule-set-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.meta-dot {
+  opacity: 0.6;
+}

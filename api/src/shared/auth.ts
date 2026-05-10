@@ -15,7 +15,21 @@
 import type { HttpRequest } from '@azure/functions';
 import * as jwt from 'jsonwebtoken';
 import type { GetPublicKeyOrSecret, JwtPayload } from 'jsonwebtoken';
+// Pinned to jwks-rsa v3.x. v4 upgrades to jose v6, which is ESM-only
+// (no CJS dist). Jest's vm.Script runtime cannot parse `export` syntax,
+// so any test suite that transitively imports this module fails to
+// parse. Revisit when Jest stabilizes require(esm) without
+// --experimental-vm-modules, or jose republishes a CJS build. The major
+// is blocked from Dependabot in .github/dependabot.yml.
 import jwksClient from 'jwks-rsa';
+import { trackEvent } from './telemetry';
+
+export type AuthRejectReason =
+  | 'missing_bearer'
+  | 'malformed'
+  | 'expired'
+  | 'invalid_signature'
+  | 'config_missing';
 
 export interface AuthenticatedPrincipal {
   /** Stable Entra object id - `oid` claim, falling back to `sub`. */
@@ -30,14 +44,99 @@ export interface AuthenticatedPrincipal {
 
 export class AuthError extends Error {
   readonly statusCode = 401;
-  constructor(message: string) {
+  readonly reason: AuthRejectReason | undefined;
+  constructor(message: string, reason?: AuthRejectReason) {
     super(message);
     this.name = 'AuthError';
+    this.reason = reason;
   }
 }
 
 function getAuthority(): string {
   return (process.env['ENTRA_AUTHORITY'] ?? '').trim().replace(/\/+$/, '');
+}
+
+/**
+ * Local-only dev-auth bypass. Engaged only when:
+ *
+ * - `JOTJSON_DEV_AUTH_BYPASS=true` is set in the Functions process env, AND
+ * - `WEBSITE_INSTANCE_ID` is unset (Azure App Service / Functions / Static
+ *   Web Apps always set this; Azure Functions Core Tools never sets it
+ *   locally), AND
+ * - `WEBSITE_HOSTNAME` is either unset or matches `localhost(:<port>)?`.
+ *   Azure Functions Core Tools 4.x sets `WEBSITE_HOSTNAME=localhost:7071`
+ *   on a developer workstation, so the mere presence of this var is not
+ *   an Azure indicator; we only reject Azure-shaped values like
+ *   `<site>.azurewebsites.net` or custom domains.
+ *
+ * The two `WEBSITE_*` guards mean a leaked `JOTJSON_DEV_AUTH_BYPASS=true`
+ * value cannot engage the bypass in any Azure-hosted environment. This is
+ * defense-in-depth: the env var alone should be enough, but the platform
+ * indicators provide a second independent check.
+ *
+ * When engaged, `verifyAccessToken` accepts the synthetic token form
+ * `dev:<userId>` (where `userId` matches `^[a-z0-9_-]{1,64}$`) and
+ * synthesizes an `AuthenticatedPrincipal` for it. Any token that does not
+ * match the dev shape continues through normal Entra JWT validation, so
+ * real tokens are never silently accepted on a misconfigured local box.
+ */
+const LOCALHOST_HOSTNAME_RE = /^localhost(:\d+)?$/i;
+export function isDevAuthBypassEnabled(): boolean {
+  if (process.env['JOTJSON_DEV_AUTH_BYPASS'] !== 'true') return false;
+  if (process.env['WEBSITE_INSTANCE_ID']) return false;
+  const hostname = process.env['WEBSITE_HOSTNAME'];
+  if (hostname && !LOCALHOST_HOSTNAME_RE.test(hostname)) return false;
+  return true;
+}
+
+const DEV_TOKEN_RE = /^dev:([a-z0-9_-]{1,64})$/;
+let devAuthWarnEmitted = false;
+
+function emitDevAuthWarnOnce(): void {
+  if (devAuthWarnEmitted) return;
+  devAuthWarnEmitted = true;
+  console.warn(
+    '[auth] JOTJSON_DEV_AUTH_BYPASS is enabled. ' +
+      'Synthetic dev:<userId> tokens are being accepted on this process. ' +
+      'This must never run in production.',
+  );
+}
+
+/**
+ * Test seam: resets the module-level dedupe so that tests can verify
+ * the one-time warning behavior across multiple cases. Production code
+ * must never call this.
+ */
+export function __resetDevAuthWarnForTesting(): void {
+  devAuthWarnEmitted = false;
+}
+
+/**
+ * Returns a synthesized principal for a `dev:<userId>` token when the
+ * bypass is enabled, or `null` otherwise. Caller is responsible for
+ * dispatching real JWTs to `verifyAccessToken`'s normal path when this
+ * helper returns `null`.
+ */
+export function tryDevAuthToken(token: string): AuthenticatedPrincipal | null {
+  if (!isDevAuthBypassEnabled()) return null;
+  const match = DEV_TOKEN_RE.exec(token);
+  if (!match) return null;
+  emitDevAuthWarnOnce();
+  const userId = match[1];
+  const displayName = `Dev User (${userId})`;
+  const email = `${userId}@dev.local`;
+  return {
+    id: userId,
+    displayName,
+    email,
+    claims: {
+      oid: userId,
+      sub: userId,
+      name: displayName,
+      preferred_username: email,
+      email,
+    } as JwtPayload,
+  };
 }
 
 /**
@@ -107,14 +206,21 @@ function getJwksClient(authority: string): JwksClientLike {
   if (testOverrideClient) return testOverrideClient;
   if (cachedClient && cachedAuthority === authority) return cachedClient;
   cachedAuthority = authority;
-  cachedClient = jwksClient({
+  const lib = jwksClient({
     jwksUri: buildJwksUri(authority),
     cache: true,
     cacheMaxEntries: 5,
     cacheMaxAge: 10 * 60 * 1000,
     rateLimit: true,
-    jwksRequestsPerMinute: 10
-  }) as unknown as JwksClientLike;
+    jwksRequestsPerMinute: 10,
+  });
+  // Wrap the library client in a narrow adapter so callers see only the
+  // single overload of `getSigningKey` that we actually use. The library's
+  // overloaded callback/promise signatures don't structurally match
+  // `JwksClientLike` directly.
+  cachedClient = {
+    getSigningKey: (kid: string) => lib.getSigningKey(kid),
+  };
   return cachedClient;
 }
 
@@ -135,34 +241,36 @@ function getKey(authority: string): GetPublicKeyOrSecret {
     getJwksClient(authority)
       .getSigningKey(header.kid)
       .then((key) => callback(null, key.getPublicKey()))
-      .catch((err: unknown) =>
-        callback(err instanceof Error ? err : new Error('JWKS lookup failed'))
+      .catch((error: unknown) =>
+        callback(error instanceof Error ? error : new Error('JWKS lookup failed')),
       );
   };
 }
 
-function extractBearerToken(req: HttpRequest): string | null {
-  // Prefer the custom header - Azure Static Web Apps strips the standard
-  // `Authorization` header from requests forwarded to managed Functions,
-  // so our SPA sends the bearer token under a custom name. Fall back to
-  // `Authorization` for local development (where requests go through the
-  // dev proxy directly to the Functions host) and for non-SWA hosting.
+type BearerTokenResult =
+  | { kind: 'absent' }
+  | { kind: 'malformed' }
+  | { kind: 'token'; token: string };
+
+function extractBearerToken(req: HttpRequest): BearerTokenResult {
   const custom =
-    req.headers.get('x-jotjson-authorization') ??
-    req.headers.get('X-Jotjson-Authorization');
+    req.headers.get('x-jotjson-authorization') ?? req.headers.get('X-Jotjson-Authorization');
   const fallback = req.headers.get('authorization') ?? req.headers.get('Authorization');
   const header = custom ?? fallback;
-  if (!header) return null;
+  if (!header) return { kind: 'absent' };
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match ? match[1] : null;
+  if (!match) return { kind: 'malformed' };
+  return { kind: 'token', token: match[1] };
 }
 
 export async function verifyAccessToken(token: string): Promise<AuthenticatedPrincipal> {
+  const devPrincipal = tryDevAuthToken(token);
+  if (devPrincipal) return devPrincipal;
   const authority = getAuthority();
   const audiences = getAcceptedAudiences();
   const issuers = getAcceptedIssuers(authority);
   if (!authority || !audiences || !issuers) {
-    throw new AuthError('Auth not configured');
+    throw new AuthError('Auth not configured', 'config_missing');
   }
   const payload = await new Promise<JwtPayload>((resolve, reject) => {
     jwt.verify(
@@ -171,15 +279,22 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
       {
         audience: audiences,
         issuer: issuers,
-        algorithms: ['RS256']
+        algorithms: ['RS256'],
       },
-      (err, decoded) => {
-        if (err) return reject(new AuthError(err.message));
+      (error, decoded) => {
+        if (error) {
+          return reject(
+            new AuthError(
+              error.message,
+              error.name === 'TokenExpiredError' ? 'expired' : 'invalid_signature',
+            ),
+          );
+        }
         if (!decoded || typeof decoded === 'string') {
-          return reject(new AuthError('Invalid token payload'));
+          return reject(new AuthError('Invalid token payload', 'invalid_signature'));
         }
         resolve(decoded as JwtPayload);
-      }
+      },
     );
   });
 
@@ -190,12 +305,12 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
     preferred_username?: string;
   };
   const id = claims.oid || claims.sub;
-  if (!id) throw new AuthError('Token missing subject');
+  if (!id) throw new AuthError('Token missing subject', 'invalid_signature');
   return {
     id,
     displayName: claims.name,
     email: claims.email || claims.preferred_username,
-    claims
+    claims,
   };
 }
 
@@ -206,9 +321,25 @@ export async function verifyAccessToken(token: string): Promise<AuthenticatedPri
  * NOTE: Not wired to any route in M3a - lives ready for M4's blob CRUD.
  */
 export async function requireAuth(req: HttpRequest): Promise<AuthenticatedPrincipal> {
-  const token = extractBearerToken(req);
-  if (!token) throw new AuthError('Missing bearer token');
-  return verifyAccessToken(token);
+  const result = extractBearerToken(req);
+  if (result.kind === 'absent') {
+    trackEvent('auth.tokenRejected', { reason: 'missing_bearer', authMode: 'required' });
+    throw new AuthError('Missing bearer token', 'missing_bearer');
+  }
+  if (result.kind === 'malformed') {
+    trackEvent('auth.tokenRejected', { reason: 'malformed', authMode: 'required' });
+    throw new AuthError('Malformed bearer header', 'malformed');
+  }
+  try {
+    const principal = await verifyAccessToken(result.token);
+    trackEvent('auth.tokenAccepted', { authMode: 'required' });
+    return principal;
+  } catch (error) {
+    if (error instanceof AuthError && error.reason) {
+      trackEvent('auth.tokenRejected', { reason: error.reason, authMode: 'required' });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -221,13 +352,15 @@ export async function requireAuth(req: HttpRequest): Promise<AuthenticatedPrinci
  * infrastructure problems are surfaced.
  */
 export async function tryAuth(req: HttpRequest): Promise<AuthenticatedPrincipal | null> {
-  const token = extractBearerToken(req);
-  if (!token) return null;
+  const result = extractBearerToken(req);
+  if (result.kind !== 'token') return null;
   try {
-    return await verifyAccessToken(token);
-  } catch (err) {
-    if (err instanceof AuthError) return null;
-    throw err;
+    const principal = await verifyAccessToken(result.token);
+    trackEvent('auth.tokenAccepted', { authMode: 'optional' });
+    return principal;
+  } catch (error) {
+    if (error instanceof AuthError) return null;
+    throw error;
   }
 }
 

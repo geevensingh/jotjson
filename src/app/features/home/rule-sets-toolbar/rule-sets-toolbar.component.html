@@ -1,0 +1,41 @@
+@if (visible()) {
+  <div
+    class="rule-sets-toolbar"
+    role="toolbar"
+    aria-label="Formatting rule sets"
+    i18n-aria-label="@@formattingRules.toolbar.aria"
+    data-testid="rule-sets-toolbar"
+  >
+    @if (sortedSets() === null) {
+      <span class="status" i18n="@@formattingRules.toolbar.loading">Loading rule sets...</span>
+    } @else {
+      @for (set of sortedSets(); track trackById($index, set)) {
+        <button
+          type="button"
+          class="chip jj-no-select"
+          [class.chip--active]="isActive(set.id)"
+          [attr.aria-pressed]="isActive(set.id)"
+          [attr.data-set-id]="set.id"
+          (click)="onToggle(set.id)"
+        >
+          <span class="chip__name">{{ set.name }}</span>
+        </button>
+      }
+      @if (empty()) {
+        <span class="status status--empty" i18n="@@formattingRules.toolbar.empty">
+          No formatting rules yet.
+        </span>
+      }
+    }
+
+    <button
+      type="button"
+      class="clone-trigger"
+      data-testid="clone-preset-trigger"
+      (click)="onClonePresetClick()"
+    >
+      <span aria-hidden="true">+</span>
+      <span i18n="@@formattingRules.toolbar.clone">Clone preset</span>
+    </button>
+  </div>
+}

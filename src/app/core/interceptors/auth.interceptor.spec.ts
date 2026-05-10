@@ -4,12 +4,9 @@ import {
   HttpRequest,
   HttpResponse,
   provideHttpClient,
-  withInterceptors
+  withInterceptors,
 } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { authInterceptor } from './auth.interceptor';
 import { AuthService } from '../auth/auth.service';
 
@@ -19,7 +16,7 @@ function fakeAuthService(opts: {
 }): Pick<AuthService, 'isSignedIn' | 'acquireTokenSilent'> {
   return {
     isSignedIn: (() => opts.signedIn) as AuthService['isSignedIn'],
-    acquireTokenSilent: () => Promise.resolve(opts.token)
+    acquireTokenSilent: () => Promise.resolve(opts.token),
   };
 }
 
@@ -33,8 +30,8 @@ describe('authInterceptor', () => {
       providers: [
         provideHttpClient(withInterceptors([authInterceptor])),
         provideHttpClientTesting(),
-        { provide: AuthService, useValue: auth }
-      ]
+        { provide: AuthService, useValue: auth },
+      ],
     });
     http = TestBed.inject(HttpClient);
     httpMock = TestBed.inject(HttpTestingController);
@@ -69,7 +66,7 @@ describe('authInterceptor', () => {
     const spy = jasmine.createSpy('acquireTokenSilent').and.resolveTo(null);
     setup({
       isSignedIn: (() => false) as AuthService['isSignedIn'],
-      acquireTokenSilent: spy
+      acquireTokenSilent: spy,
     });
     http.get('/api/public').subscribe();
     const req = httpMock.expectOne('/api/public');
@@ -90,7 +87,7 @@ describe('authInterceptor', () => {
     setup(fakeAuthService({ signedIn: true, token: null }));
     let caught: unknown = null;
     http.get('/api/protected').subscribe({
-      error: (e) => (caught = e)
+      error: (e) => (caught = e),
     });
     await Promise.resolve();
     const req = httpMock.expectOne('/api/protected');
@@ -98,5 +95,14 @@ describe('authInterceptor', () => {
     expect(req.request.headers.has('X-Jotjson-Authorization')).toBe(false);
     req.flush('unauthorized', { status: 401, statusText: 'Unauthorized' });
     expect(caught).toBeTruthy();
+  });
+
+  it('threads dev:<userId> tokens through to Bearer dev:<userId>', async () => {
+    setup(fakeAuthService({ signedIn: true, token: 'dev:dev-user-1' }));
+    http.get('/api/me').subscribe();
+    await Promise.resolve();
+    const req = httpMock.expectOne('/api/me');
+    expect(req.request.headers.get('X-Jotjson-Authorization')).toBe('Bearer dev:dev-user-1');
+    req.flush({});
   });
 });

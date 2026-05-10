@@ -1,0 +1,49 @@
+name: "Dependency Review"
+
+# Runs the GitHub-official dependency-review-action on every PR
+# targeting main. Diffs the dependency manifests + lockfiles against
+# the base branch and fails the check if any newly-introduced
+# dependency has a known vulnerability at moderate severity or above.
+#
+# Pairs with branch protection on main: when this check is added to
+# required_status_checks (deferred until we have observed clean runs
+# on real PRs), it gates merges on dependency safety, complementing
+# Dependabot's post-merge alerting with pre-merge prevention.
+#
+# Configuration choices documented inline below; see the audit
+# session notes for full rationale.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  # Required so the action can post the failure-summary comment on
+  # the PR. Read-only fall-through for everything else.
+  pull-requests: write
+
+concurrency:
+  group: dependency-review-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v5
+        with:
+          # 'moderate' would have caught most of the Dependabot alerts
+          # closed in the audit (several were medium severity).
+          # 'high' lets mediums through; 'low' is noisy for transitive
+          # deps we cannot always upgrade quickly.
+          fail-on-severity: moderate
+          # Keeps clean PRs uncluttered. On failure, the action posts
+          # an inline summary explaining which dependency was blocked
+          # and why.
+          comment-summary-in-pr: on-failure

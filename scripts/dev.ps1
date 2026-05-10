@@ -6,6 +6,9 @@
   Spins up three Windows Terminal tabs:
     1. "web"   - ng serve on http://localhost:4200 (proxies /api to :7071)
     2. "api"   - func start in api/  on http://localhost:7071
+                 split horizontally with `npm run watch` (tsc -w) so
+                 `dist/` stays in sync with `src/` after the initial
+                 one-shot build below; manual rebuilds aren't needed.
     3. "tests" - ng test (Karma watch) + jest --watch for the API,
                  split vertically in the same tab.
 
@@ -16,6 +19,14 @@
       missing.
     - Checks that the gitignored env files exist and warns (but does not
       create them) if they don't.
+
+  Alternatives:
+    - For a debugger-attach workflow (breakpoints, step-through), prefer
+      VS Code's F5: `.vscode/launch.json` + `.vscode/tasks.json` wire
+      up `ng serve`, `ng test`, and `func: host start` with the right
+      preLaunchTasks. See README.md "Debugging in VS Code".
+    - Non-Windows contributors run the two-terminal manual flow
+      documented in README.md "Running locally".
 
 .PARAMETER SkipTests
   Don't open the tests tab. Useful if you only want to run the app.
@@ -105,19 +116,84 @@ if ($missing.Count -gt 0) {
 
 # --- 3. Install deps if needed ---------------------------------------
 
+# Detect drift: re-install whenever node_modules is missing OR the
+# lockfile has been touched since the last install. node_modules\.package-lock.json
+# is the sentinel npm itself maintains after a successful install, so
+# comparing its mtime to package-lock.json catches: fresh clones, post-pull
+# dependency additions, mid-edit lockfile rewrites, and partial installs
+# whose sentinel was never updated. Honors $SkipInstall as the existing
+# escape hatch.
+function Test-NeedsInstall($projectRoot) {
+  $modules = Join-Path $projectRoot 'node_modules'
+  if (-not (Test-Path $modules)) { return $true }
+  $lockFile = Join-Path $projectRoot 'package-lock.json'
+  $sentinel = Join-Path $modules '.package-lock.json'
+  if (-not (Test-Path $lockFile)) { return $false }
+  if (-not (Test-Path $sentinel)) { return $true }
+  return (Get-Item $lockFile).LastWriteTime -gt (Get-Item $sentinel).LastWriteTime
+}
+
 if (-not $SkipInstall) {
-  if (-not (Test-Path (Join-Path $repoRoot 'node_modules'))) {
+  if (Test-NeedsInstall $repoRoot) {
     Write-Step "Installing web dependencies (npm install)"
     npm install
   }
-  if (-not (Test-Path (Join-Path $repoRoot 'api\node_modules'))) {
+  $apiRoot = Join-Path $repoRoot 'api'
+  if (Test-NeedsInstall $apiRoot) {
     Write-Step "Installing API dependencies (cd api && npm install)"
-    Push-Location (Join-Path $repoRoot 'api')
+    Push-Location $apiRoot
     try { npm install } finally { Pop-Location }
   }
 }
 
-# --- 4. Launch Windows Terminal tabs ---------------------------------
+# Fail-fast probe: even with $SkipInstall or a successful npm install above,
+# the local Angular CLI shim must exist before we launch the wt 'web' tab.
+# Otherwise `npm start` in a fresh tab fails with the cryptic cmd error
+# `'ng' is not recognized as an internal or external command, operable
+# program or batch file.` several tabs deep. This catches partial installs,
+# concurrent npm install races (where bin shims are mid-rename), and any
+# other state where node_modules\.bin\ng.cmd is unexpectedly missing.
+$ngShim = Join-Path $repoRoot 'node_modules\.bin\ng.cmd'
+if (-not (Test-Path $ngShim)) {
+  Write-Step "Local Angular CLI shim missing - running npm install"
+  npm install
+  if (-not (Test-Path $ngShim)) {
+    Write-Host "node_modules\.bin\ng.cmd is still missing after npm install." -ForegroundColor Red
+    Write-Host "Run 'npm ci' manually and inspect the install log before retrying." -ForegroundColor Red
+    exit 1
+  }
+}
+
+# --- 4. Verify dev ports are free ------------------------------------
+
+Write-Step "Checking dev ports are free"
+
+$devPorts = 4200, 7071, 9876
+$held = @()
+foreach ($port in $devPorts) {
+  $listeners = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+  foreach ($listener in $listeners) {
+    $proc = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+    $held += [pscustomobject]@{
+      Port = $port
+      ProcessId = $listener.OwningProcess
+      Name = if ($proc) { $proc.ProcessName } else { '<gone>' }
+    }
+  }
+}
+
+if ($held.Count -gt 0) {
+  Write-Host ""
+  Write-Host "Dev ports already in use:" -ForegroundColor Red
+  foreach ($entry in $held) {
+    Write-Host ("  port {0,-5} held by PID {1} ({2})" -f $entry.Port, $entry.ProcessId, $entry.Name) -ForegroundColor Red
+  }
+  Write-Host ""
+  Write-Host "Run scripts\dev-stop.ps1 to free them, then re-run scripts\dev.ps1." -ForegroundColor Yellow
+  exit 1
+}
+
+# --- 5. Launch Windows Terminal tabs ---------------------------------
 
 Write-Step "Launching Windows Terminal tabs"
 
@@ -157,11 +233,15 @@ $wtArgs = @(
 
 if (-not $SkipTests) {
   # Tests tab: ng test on top, jest --watch in a split pane below.
+  # ng is a local devDep, not a global tool, so route the call through
+  # `npx` to pick up node_modules/.bin/ng. (`npm start` / `npm run watch`
+  # already get this for free because npm-script PATH includes
+  # node_modules/.bin; bare `ng` in a fresh wt tab does not.)
   $wtArgs += @(
     ';'
     'new-tab',    '--title', 'tests', '-d', $repoRoot,
       'pwsh', '-NoExit', '-Command',
-      'ng test --watch=true --browsers=ChromeHeadless'
+      'npx ng test --watch=true --browsers=ChromeHeadless'
     ';'
     'split-pane', '-H', '-d', $apiDir,
       'pwsh', '-NoExit', '-Command', 'npx jest --watch'
@@ -179,3 +259,4 @@ if (-not $SkipTests) {
 }
 Write-Host ""
 Write-Host "Close the Windows Terminal tabs to stop each process."
+Write-Host "If ports stay stuck after closing tabs, run scripts\dev-stop.ps1." -ForegroundColor DarkGray

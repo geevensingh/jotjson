@@ -7,7 +7,7 @@ import {
   AuthenticationResult,
   EndSessionRequest,
   EventMessage,
-  IPublicClientApplication
+  IPublicClientApplication,
 } from '@azure/msal-browser';
 import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import { MSAL_INSTANCE } from '../app/core/auth/msal-instance';
@@ -65,7 +65,7 @@ export class FakeMsalClient implements Partial<IPublicClientApplication> {
     return Promise.resolve({
       accessToken: this.nextSilentToken ?? '',
       idToken: this.nextSilentIdToken ?? '',
-      account: this.activeAccount
+      account: this.activeAccount,
     } as AuthenticationResult);
   }
 }
@@ -79,7 +79,9 @@ export class FakeMsalBroadcastService {
  * Providers to drop into `TestBed.configureTestingModule` for any spec that
  * transitively imports a component depending on `AuthService`.
  */
-export function provideFakeAuth(client?: FakeMsalClient): (Provider | ReturnType<typeof provideHttpClient>)[] {
+export function provideFakeAuth(
+  client?: FakeMsalClient,
+): (Provider | ReturnType<typeof provideHttpClient>)[] {
   const fake = client ?? new FakeMsalClient();
   return [
     { provide: MSAL_INSTANCE, useValue: fake as unknown as IPublicClientApplication },
@@ -92,7 +94,7 @@ export function provideFakeAuth(client?: FakeMsalClient): (Provider | ReturnType
     // specific requests still construct cleanly; none are expected to fire
     // while the fake auth user is `null` (anon lifecycle).
     provideHttpClient(),
-    provideHttpClientTesting()
+    provideHttpClientTesting(),
   ];
 }
 
@@ -106,9 +108,9 @@ export function makeAccount(overrides: Partial<AccountInfo> = {}): AccountInfo {
     idTokenClaims: {
       oid: 'oid-1',
       name: 'Test User',
-      email: 'user@example.com'
+      email: 'user@example.com',
     },
-    ...overrides
+    ...overrides,
   } as AccountInfo;
 }
 
@@ -124,7 +126,7 @@ export function makeAccount(overrides: Partial<AccountInfo> = {}): AccountInfo {
  */
 export function signInFakeUser(
   auth: AuthService,
-  opts: { user?: AuthUser; configured?: boolean } = {}
+  opts: { user?: AuthUser; configured?: boolean } = {},
 ): void {
   const configured = opts.configured ?? true;
   if (configured) {
@@ -133,8 +135,7 @@ export function signInFakeUser(
   const user: AuthUser = opts.user ?? {
     id: 'oid-1',
     displayName: 'Test User',
-    email: 'user@example.com'
+    email: 'user@example.com',
   };
-  (auth as unknown as { userSignal: { set(v: AuthUser | null): void } })
-    .userSignal.set(user);
+  (auth as unknown as { userSignal: { set(v: AuthUser | null): void } }).userSignal.set(user);
 }

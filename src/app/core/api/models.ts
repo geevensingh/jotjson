@@ -1,3 +1,9 @@
+export interface BlobHighlight {
+  path: string;
+  color: string;
+  cascade: boolean;
+}
+
 export interface JsonBlob {
   id: string;
   slug: string;
@@ -7,6 +13,8 @@ export interface JsonBlob {
   updatedAt: string;
   ownerId: string;
   isPublic: boolean;
+  highlights?: BlobHighlight[];
+  version: number;
 }
 
 /**
@@ -42,6 +50,7 @@ export interface ThemeColorSet {
   matchingValueColor: string;
   ancestorColor: string;
   searchHighlightColor: string;
+  manualHighlightColor: string;
 }
 
 export interface TreeHighlightColors {
@@ -54,25 +63,126 @@ export interface UserPreferences {
   editorFontSize: number;
   editorTabSize: 2 | 4;
   defaultTreeExpansionDepth: number;
-  defaultRuleSetId?: string;
+  /**
+   * Rule sets applied to the JSON view (eye/eye-off toggle on the
+   * Formatting Rules listing page; chip toggle on the home toolbar).
+   * Persisted server-side so the selection survives across sessions
+   * and devices. IDs that no longer resolve to an owned rule set are
+   * filtered out at read time. See DESIGN_SPEC.md §Features 7.
+   *
+   * Naming history: this field was originally `activeRuleSetIds`, was
+   * renamed to `defaultRuleSetIds` in M6f-5, then renamed back to
+   * `activeRuleSetIds` (issue #83) because the toggle is plain
+   * enabled/disabled - there is no separate per-document override.
+   * The wire surface emits only this canonical key; stale stored
+   * docs default to `[]` server-side. See DESIGN_SPEC.md ->
+   * Versioning -> Schema evolution.
+   */
+  activeRuleSetIds: string[];
   editorWordWrap: boolean;
   layoutOrientation: 'horizontal' | 'vertical';
   treeFontSize: number;
   treeShowTypeLabels: boolean;
   treeShowDateAnnotations: boolean;
+  /**
+   * When true, JSONC line/block comments harvested by the parser are
+   * surfaced in the tree view as dimmed inline annotations next to the
+   * value (or before the key for leading comments). Default true; this
+   * is the named feature of M7k. See DESIGN_SPEC.md - Home Page Tree.
+   */
+  treeShowComments: boolean;
+  treeDateAnnotationUnits: {
+    year: boolean;
+    month: boolean;
+    day: boolean;
+    hour: boolean;
+    minute: boolean;
+    second: boolean;
+  };
+  treeDateAnnotationFriendlyForms: boolean;
   treeAssumeUtcForIsoDateTime: boolean;
   treeAssumeUtcForIsoDateOnly: boolean;
-  historyTrackingMode: 'save_only' | 'all_actions';
+  recentlyViewedEnabled: boolean;
+  /**
+   * When true, selecting a tree row reveals the matching range in the
+   * editor and moving the editor cursor selects the matching tree row.
+   * When false, both panes operate independently. Default true. See
+   * DESIGN_SPEC.md - Tree feature, selection sync.
+   */
+  treeEditorSelectionSync: boolean;
+  /**
+   * When true, the JSON tree expands to an automatically computed depth
+   * that fits the visible viewport (auto-fit mode). When false, the tree
+   * expands to the fixed depth set by `defaultTreeExpansionDepth`.
+   * Default true. See DESIGN_SPEC.md - Tree feature, auto-fit expansion.
+   */
+  treeAutoFitToWindow: boolean;
   searchCaseSensitive: boolean;
   searchRegexMode: boolean;
   searchScope: 'keys' | 'values' | 'both';
+  /**
+   * Restricts tree search to nodes whose classified value type matches.
+   * `'all'` means no type filter. When set to a specific type, the
+   * existing `searchScope` rules still decide whether key text and/or
+   * value text are eligible for the text match. Empty query +
+   * non-`'all'` lists every node of that type as a navigator.
+   *
+   * Mirrors `ValueClassification` from
+   * `src/app/shared/utils/value-classifier.ts` minus `'undefined'`.
+   */
+  searchValueType:
+    | 'all'
+    | 'date'
+    | 'date/time'
+    | 'uuid'
+    | 'url'
+    | 'email'
+    | 'path'
+    | 'ipv4'
+    | 'ipv6'
+    | 'integer'
+    | 'number'
+    | 'string'
+    | 'boolean'
+    | 'null'
+    | 'array'
+    | 'object';
   blobQuotaStrategy: 'auto_fifo' | 'manual';
   seenBlobQuotaModal: boolean;
   seenClipboardBanner: boolean;
+  /**
+   * Display prefix used when copying a tree row's path to the clipboard.
+   * Internal/canonical `pathString` always uses the JSONPath sentinel `$`;
+   * only the clipboard text is rewritten per this preference.
+   *
+   * - `jsonpath`: `$.foo[0]` (default)
+   * - `none`:     `foo[0]` (lodash-style; leading dot stripped)
+   * - `root`:     `root.foo[0]`
+   * - `data`:     `Data.foo[0]` (capital D)
+   */
+  treePathRoot: 'jsonpath' | 'none' | 'root' | 'data';
+  /**
+   * Cold-boot clipboard auto-paste behavior. When the home page (`/`) is
+   * loaded with valid object/array JSON in the clipboard (and clipboard
+   * permission is granted), this controls what happens:
+   *
+   * - `ask`:    show a one-shot non-blocking banner offering Always /
+   *             Just this time / Never (default).
+   * - `always`: silently load the clipboard JSON instead of the saved
+   *             draft, with an Undo snackbar that restores the prior
+   *             draft if clicked.
+   * - `never`:  feature dormant; never read the clipboard on cold boot
+   *             and never show the banner.
+   *
+   * Roams server-side for signed-in users, but clipboard permission
+   * remains per-device/per-origin: a roamed `'always'` only activates
+   * after each browser independently grants clipboard-read.
+   */
+  coldBootClipboardAutoPaste: 'ask' | 'always' | 'never';
   treeHighlightColors: TreeHighlightColors;
 }
 
-export type HistoryAction = 'saved' | 'viewed' | 'edited' | 'deleted' | 'pasted';
+export type HistoryAction = 'viewed';
 
 export interface HistoryEntry {
   id: string;
@@ -84,6 +194,23 @@ export interface HistoryEntry {
   action: HistoryAction;
 }
 
+/**
+ * Closed whitelist of icon identifiers a formatting rule may attach to
+ * a matched key/value. New icons require a spec amendment, not a
+ * user-supplied free-form string. See DESIGN_SPEC.md §Features 7.
+ */
+export type FormattingIcon = 'warning' | 'check' | 'star' | 'info' | 'error' | 'flag' | 'bookmark';
+
+export const FORMATTING_ICONS: readonly FormattingIcon[] = [
+  'warning',
+  'check',
+  'star',
+  'info',
+  'error',
+  'flag',
+  'bookmark',
+] as const;
+
 export interface FormattingStyle {
   backgroundColor?: string;
   textColor?: string;
@@ -91,23 +218,110 @@ export interface FormattingStyle {
   italic?: boolean;
   underline?: boolean;
   borderColor?: string;
-  icon?: string;
+  icon?: FormattingIcon;
 }
 
-export interface FormattingRule {
+/**
+ * Match-type union for v1. The `regex` option is deferred to v1.1
+ * pending a safe-evaluation strategy (see DESIGN_SPEC.md §Features 7,
+ * "Regex policy"). Add `'regex'` back here when M6+ ships it.
+ */
+export type FormattingRuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
+
+export interface FormattingRuleSimple {
   id: string;
+  /** Missing legacy kind is read as 'simple'. */
+  kind?: 'simple';
   target: 'key' | 'value' | 'key_and_value';
-  matchType: 'exact' | 'contains' | 'regex' | 'starts_with' | 'ends_with';
+  matchType: FormattingRuleMatchType;
   matchValue: string;
   caseSensitive: boolean;
   style: FormattingStyle;
 }
+
+export interface FormattingRulePair {
+  id: string;
+  kind: 'pair';
+  keyMatch: KeyMatch;
+  valueMatch: ValueMatch;
+  style: FormattingStyle;
+}
+
+export interface KeyMatch {
+  matchType: FormattingRuleMatchType;
+  matchValue: string;
+  caseSensitive: boolean;
+}
+
+export type ValueMatch =
+  | {
+      kind: 'text';
+      matchType: FormattingRuleMatchType;
+      matchValue: string;
+      caseSensitive: boolean;
+    }
+  | {
+      kind: 'predicate';
+      predicate: ValuePredicate;
+    };
+
+export type ValuePredicate =
+  | 'is_null'
+  | 'is_not_null'
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'has_content'
+  | 'lacks_content'
+  | 'is_string'
+  | 'is_not_string'
+  | 'is_number'
+  | 'is_not_number'
+  | 'is_integer'
+  | 'is_not_integer'
+  | 'is_boolean'
+  | 'is_not_boolean'
+  | 'is_object'
+  | 'is_not_object'
+  | 'is_array'
+  | 'is_not_array';
+
+export type ValueKind = 'string' | 'number' | 'integer' | 'boolean' | 'null' | 'array' | 'object';
+
+export type FormattingRule = FormattingRuleSimple | FormattingRulePair;
 
 export interface FormattingRuleSet {
   id: string;
   userId: string;
   name: string;
   rules: FormattingRule[];
+  /**
+   * Monotonically incremented on every successful PUT. Surfaced as the
+   * `ETag` response header and required via `If-Match` on PUT for
+   * optimistic concurrency. See DESIGN_SPEC.md §Features 7.
+   */
+  version: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Server-defined built-in preset returned by `GET /api/rule-set-presets`.
+ * Cloned into a user-owned rule set via
+ * `POST /api/rule-set-presets/:id/clone`. See DESIGN_SPEC.md §Features 7
+ * "Built-in Presets".
+ */
+export interface RuleSetPreset {
+  id: string;
+  name: string;
+  rules: FormattingRule[];
+}
+
+/**
+ * Wire payload accepted by POST `/api/rule-sets` and PUT
+ * `/api/rule-sets/{id}`. The server assigns `id`, `userId`, `version`,
+ * `createdAt`, and `updatedAt`; only `name` + `rules` are caller-supplied.
+ */
+export interface RuleSetPayload {
+  name: string;
+  rules: FormattingRule[];
 }

@@ -1,38 +1,36 @@
 /**
  * Cosmos DB accessor for HistoryEntry documents. History entries are stored
- * in the `history` container, partitioned by `/userId`. They record activity
- * on blobs owned or viewed by signed-in users (saved, edited, deleted,
- * viewed, pasted) for the M5b timeline UI.
+ * in the `history` container, partitioned by `/userId`. Records the
+ * authenticated user's `viewed` events on shared blobs they don't own,
+ * for the "Recently viewed" timeline UI.
  *
  * Document shape (matches DESIGN_SPEC §Domain Model / HistoryEntry):
  * ```
  * {
  *   id: string,        // UUID - Cosmos primary key
  *   userId: string,    // Entra oid of the actor; partition key
- *   blobId?: string,   // Source blob UUID; absent for "pasted" events
+ *   blobId?: string,   // Source blob UUID
  *   slug?: string,     // Snapshot of the blob's slug at record time
  *   title?: string,    // Snapshot of the blob's title at record time
  *   accessedAt: string,// ISO timestamp
- *   action: "viewed" | "saved" | "edited" | "deleted" | "pasted"
+ *   action: "viewed"
  * }
  * ```
  *
+ * v1 narrowing (post-M5d): only `viewed` is recorded; legacy rows of
+ * other action types are filtered out by `listEntries` and age out via
+ * FIFO. See DESIGN_SPEC §M5 for context.
+ *
  * Retention: 1,000 entries per user, FIFO-pruned on each write.
- * Paste debounce: 60 seconds per user, enforced via getRecentPasteAt.
+ * View debounce: 5 minutes per (user, blob), enforced via getRecentViewAt.
  */
 import type { Container } from '@azure/cosmos';
 import { randomUUID } from 'crypto';
 import { getCosmos } from './cosmos';
 
-export type HistoryAction = 'viewed' | 'saved' | 'edited' | 'deleted' | 'pasted';
+export type HistoryAction = 'viewed';
 
-export const HISTORY_ACTIONS: ReadonlySet<HistoryAction> = new Set<HistoryAction>([
-  'viewed',
-  'saved',
-  'edited',
-  'deleted',
-  'pasted'
-]);
+export const HISTORY_ACTIONS: ReadonlySet<HistoryAction> = new Set<HistoryAction>(['viewed']);
 
 export interface HistoryDocument {
   id: string;
@@ -62,12 +60,6 @@ export interface ListEntriesOptions {
    */
   q?: string;
   /**
-   * Whitelist of actions to include. When omitted or empty, all actions
-   * pass. Values are validated by the caller (HTTP layer) - this accessor
-   * trusts the array.
-   */
-  actions?: HistoryAction[];
-  /**
    * Inclusive lower bound on accessedAt (ISO string). Caller validates
    * format; this accessor passes the value through verbatim.
    */
@@ -82,7 +74,7 @@ export interface ListEntriesResult {
 }
 
 export const HISTORY_RETENTION_PER_USER = 1000;
-export const PASTE_DEBOUNCE_SECONDS = 60;
+export const VIEW_DEBOUNCE_SECONDS = 300;
 export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 200;
 
@@ -117,7 +109,7 @@ export async function recordEntry(input: RecordEntryInput): Promise<HistoryDocum
     action: input.action,
     ...(input.blobId !== undefined ? { blobId: input.blobId } : {}),
     ...(input.slug !== undefined ? { slug: input.slug } : {}),
-    ...(input.title !== undefined ? { title: input.title } : {})
+    ...(input.title !== undefined ? { title: input.title } : {}),
   };
   const response = await getHistoryContainer().items.create<HistoryDocument>(doc);
   const saved = response.resource ?? doc;
@@ -139,52 +131,65 @@ export async function recordEntry(input: RecordEntryInput): Promise<HistoryDocum
 export async function pruneFifo(userId: string): Promise<number> {
   const container = getHistoryContainer();
   const { resources: countRows } = await container.items
-    .query<number>({
-      query: 'SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid',
-      parameters: [{ name: '@uid', value: userId }]
-    }, { partitionKey: userId })
+    .query<number>(
+      {
+        query: 'SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid',
+        parameters: [{ name: '@uid', value: userId }],
+      },
+      { partitionKey: userId },
+    )
     .fetchAll();
   const total = countRows[0] ?? 0;
   if (total <= HISTORY_RETENTION_PER_USER) return 0;
 
   const overflow = total - HISTORY_RETENTION_PER_USER;
   const { resources: oldest } = await container.items
-    .query<{ id: string }>({
-      query:
-        'SELECT TOP @n c.id FROM c WHERE c.userId = @uid ORDER BY c.accessedAt ASC, c.id ASC',
-      parameters: [
-        { name: '@uid', value: userId },
-        { name: '@n', value: overflow }
-      ]
-    }, { partitionKey: userId })
+    .query<{ id: string }>(
+      {
+        query:
+          'SELECT TOP @n c.id FROM c WHERE c.userId = @uid ORDER BY c.accessedAt ASC, c.id ASC',
+        parameters: [
+          { name: '@uid', value: userId },
+          { name: '@n', value: overflow },
+        ],
+      },
+      { partitionKey: userId },
+    )
     .fetchAll();
   let deleted = 0;
   for (const row of oldest) {
     try {
       await container.item(row.id, userId).delete();
       deleted++;
-    } catch (err) {
+    } catch (error) {
       // Tolerate 404 from concurrent prune; rethrow anything else so the
       // caller's catch block can log it.
-      const code = (err as { code?: number }).code;
-      if (code !== 404) throw err;
+      const code = (error as { code?: number }).code;
+      if (code !== 404) throw error;
     }
   }
   return deleted;
 }
 
 /**
- * Return the ISO timestamp of the user's most recent `"pasted"` entry,
- * or `null` if none exists. Used by the POST /api/history endpoint to
- * enforce the PASTE_DEBOUNCE_SECONDS server-side debounce.
+ * Return the ISO timestamp of the user's most recent `"viewed"` entry
+ * for the given blob, or `null` if none exists. Used by the GET
+ * /api/blobs/{idOrSlug} endpoint to enforce the
+ * VIEW_DEBOUNCE_SECONDS server-side debounce.
  */
-export async function getRecentPasteAt(userId: string): Promise<string | null> {
-  const { resources } = await getHistoryContainer().items
-    .query<{ accessedAt: string }>({
-      query:
-        'SELECT TOP 1 c.accessedAt FROM c WHERE c.userId = @uid AND c.action = "pasted" ORDER BY c.accessedAt DESC',
-      parameters: [{ name: '@uid', value: userId }]
-    }, { partitionKey: userId })
+export async function getRecentViewAt(userId: string, blobId: string): Promise<string | null> {
+  const { resources } = await getHistoryContainer()
+    .items.query<{ accessedAt: string }>(
+      {
+        query:
+          'SELECT TOP 1 c.accessedAt FROM c WHERE c.userId = @uid AND c.action = "viewed" AND c.blobId = @bid ORDER BY c.accessedAt DESC',
+        parameters: [
+          { name: '@uid', value: userId },
+          { name: '@bid', value: blobId },
+        ],
+      },
+      { partitionKey: userId },
+    )
     .fetchAll();
   return resources[0]?.accessedAt ?? null;
 }
@@ -197,32 +202,21 @@ export async function getRecentPasteAt(userId: string): Promise<string | null> {
  */
 export async function listEntries(
   userId: string,
-  options: ListEntriesOptions = {}
+  options: ListEntriesOptions = {},
 ): Promise<ListEntriesResult> {
-  const pageSize = Math.min(
-    Math.max(1, options.pageSize ?? DEFAULT_PAGE_SIZE),
-    MAX_PAGE_SIZE
-  );
+  const pageSize = Math.min(Math.max(1, options.pageSize ?? DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
   const q = typeof options.q === 'string' ? options.q.trim() : '';
   // Lower-case once on the server so the Cosmos call doesn't have to
   // recompute LOWER(@q) per row. The query side wraps the column values
   // in LOWER(...) so the comparison stays case-insensitive.
   const qLower = q.toLowerCase();
   const parameters: { name: string; value: string | number | string[] }[] = [
-    { name: '@uid', value: userId }
+    { name: '@uid', value: userId },
   ];
-  let where = 'c.userId = @uid';
+  let where = 'c.userId = @uid AND c.action = "viewed"';
   if (qLower) {
-    where +=
-      ' AND (CONTAINS(LOWER(c.title), @q) OR CONTAINS(LOWER(c.slug), @q))';
+    where += ' AND (CONTAINS(LOWER(c.title), @q) OR CONTAINS(LOWER(c.slug), @q))';
     parameters.push({ name: '@q', value: qLower });
-  }
-  const actions = Array.isArray(options.actions)
-    ? Array.from(new Set(options.actions))
-    : [];
-  if (actions.length > 0) {
-    where += ' AND ARRAY_CONTAINS(@actions, c.action)';
-    parameters.push({ name: '@actions', value: actions });
   }
   if (typeof options.from === 'string' && options.from.length > 0) {
     where += ' AND c.accessedAt >= @from';
@@ -235,22 +229,18 @@ export async function listEntries(
   const iterator = getHistoryContainer().items.query<HistoryDocument>(
     {
       query: `SELECT * FROM c WHERE ${where} ORDER BY c.accessedAt DESC`,
-      parameters
+      parameters,
     },
     {
       partitionKey: userId,
       maxItemCount: pageSize,
-      ...(options.continuationToken
-        ? { continuationToken: options.continuationToken }
-        : {})
-    }
+      ...(options.continuationToken ? { continuationToken: options.continuationToken } : {}),
+    },
   );
   const response = await iterator.fetchNext();
   return {
     entries: response.resources ?? [],
-    ...(response.continuationToken
-      ? { continuationToken: response.continuationToken }
-      : {})
+    ...(response.continuationToken ? { continuationToken: response.continuationToken } : {}),
   };
 }
 
@@ -266,19 +256,22 @@ export async function clearAll(userId: string): Promise<number> {
   // for users near the 1k cap.
   while (true) {
     const { resources } = await container.items
-      .query<{ id: string }>({
-        query: 'SELECT TOP 100 c.id FROM c WHERE c.userId = @uid',
-        parameters: [{ name: '@uid', value: userId }]
-      }, { partitionKey: userId })
+      .query<{ id: string }>(
+        {
+          query: 'SELECT TOP 100 c.id FROM c WHERE c.userId = @uid',
+          parameters: [{ name: '@uid', value: userId }],
+        },
+        { partitionKey: userId },
+      )
       .fetchAll();
     if (resources.length === 0) break;
     for (const row of resources) {
       try {
         await container.item(row.id, userId).delete();
         totalDeleted++;
-      } catch (err) {
-        const code = (err as { code?: number }).code;
-        if (code !== 404) throw err;
+      } catch (error) {
+        const code = (error as { code?: number }).code;
+        if (code !== 404) throw error;
       }
     }
   }

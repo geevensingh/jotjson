@@ -1,12 +1,15 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError, Subject } from 'rxjs';
 import { signal } from '@angular/core';
-import {
-  PreferencesService,
-  DEFAULT_PREFERENCES
-} from './preferences.service';
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import { PreferencesService, DEFAULT_PREFERENCES } from './preferences.service';
 import { AuthService } from '../auth/auth.service';
-import { UserApiService } from '../api/user-api.service';
+import {
+  UserApiService,
+  type PreferencesWithEtag,
+  type UserWithEtag,
+} from '../api/user-api.service';
+import { LoggerService } from '../telemetry/logger.service';
 import type { User, UserPreferences } from '../api/models';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
@@ -23,20 +26,25 @@ class AuthServiceStub {
 }
 
 class UserApiServiceStub {
-  getMe = jasmine.createSpy('getMe').and.returnValue(of<User | null>(null));
+  getMe = jasmine.createSpy('getMe').and.returnValue(of<UserWithEtag | null>(null));
   seed = jasmine.createSpy('seed').and.callFake((prefs: UserPreferences) =>
-    of<User>({
-      id: 'u-1',
-      displayName: 'Test',
-      email: 'x@y.z',
-      createdAt: 't',
-      plan: 'free',
-      preferences: prefs
-    })
+    of<UserWithEtag>({
+      user: {
+        id: 'u-1',
+        displayName: 'Test',
+        email: 'x@y.z',
+        createdAt: 't',
+        plan: 'free',
+        preferences: prefs,
+      },
+      etag: '"1"',
+    }),
   );
-  putPreferences = jasmine.createSpy('putPreferences').and.callFake((p: UserPreferences) =>
-    of<UserPreferences>(p)
-  );
+  putPreferences = jasmine
+    .createSpy('putPreferences')
+    .and.callFake((p: UserPreferences, _ifMatch: string) =>
+      of<PreferencesWithEtag>({ preferences: p, etag: '"2"' }),
+    );
 }
 
 function makeUser(overrides: Partial<UserPreferences> = {}): User {
@@ -46,24 +54,63 @@ function makeUser(overrides: Partial<UserPreferences> = {}): User {
     email: 'x@y.z',
     createdAt: 't',
     plan: 'free',
-    preferences: { ...DEFAULT_PREFERENCES, ...overrides }
+    preferences: { ...DEFAULT_PREFERENCES, ...overrides },
+  };
+}
+
+function makeUserResponse(
+  overrides: Partial<UserPreferences> = {},
+  etag: string | null = '"1"',
+): UserWithEtag {
+  return { user: makeUser(overrides), etag };
+}
+
+type PartialTreeHighlightColors = {
+  dark?: Partial<UserPreferences['treeHighlightColors']['dark']>;
+  light?: Partial<UserPreferences['treeHighlightColors']['light']>;
+};
+
+type PartialTreeDateAnnotationUnits = Partial<UserPreferences['treeDateAnnotationUnits']>;
+
+function makeTreeHighlightPatch(
+  treeHighlightColors: PartialTreeHighlightColors,
+): Partial<UserPreferences> {
+  return {
+    treeHighlightColors: treeHighlightColors as unknown as UserPreferences['treeHighlightColors'],
+  };
+}
+
+function makeTreeDateAnnotationUnitsPatch(
+  treeDateAnnotationUnits: PartialTreeDateAnnotationUnits,
+): Partial<UserPreferences> {
+  return {
+    treeDateAnnotationUnits:
+      treeDateAnnotationUnits as unknown as UserPreferences['treeDateAnnotationUnits'],
   };
 }
 
 describe('PreferencesService', () => {
   let auth: AuthServiceStub;
   let api: UserApiServiceStub;
+  let logger: jasmine.SpyObj<LoggerService>;
 
   beforeEach(() => {
     localStorage.removeItem(STORAGE_KEY);
     TestBed.resetTestingModule();
     auth = new AuthServiceStub();
     api = new UserApiServiceStub();
+    logger = jasmine.createSpyObj<LoggerService>('LoggerService', [
+      'event',
+      'info',
+      'warn',
+      'error',
+    ]);
     TestBed.configureTestingModule({
       providers: [
         { provide: AuthService, useValue: auth },
-        { provide: UserApiService, useValue: api }
-      ]
+        { provide: UserApiService, useValue: api },
+        { provide: LoggerService, useValue: logger },
+      ],
     });
   });
 
@@ -87,10 +134,7 @@ describe('PreferencesService', () => {
   });
 
   it('hydrates from localStorage on construction', () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ theme: 'light', editorFontSize: 18 })
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: 'light', editorFontSize: 18 }));
     const svc = TestBed.inject(PreferencesService);
     expect(svc.prefs().theme).toBe('light');
     expect(svc.prefs().editorFontSize).toBe(18);
@@ -126,27 +170,104 @@ describe('PreferencesService', () => {
     expect(svc.effectiveTheme()).toBe(expected);
   });
 
+  it('folds legacy defaultRuleSetIds/defaultRuleSetId into activeRuleSetIds when hydrating from localStorage', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        theme: 'dark',
+        historyTrackingMode: 'save_only',
+        defaultRuleSetIds: ['rs-stale-array'],
+        defaultRuleSetId: 'rs-old-singular',
+      }),
+    );
+    const svc = TestBed.inject(PreferencesService);
+    const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+    expect(prefs.theme).toBe('dark');
+    expect(prefs['historyTrackingMode']).toBeUndefined();
+    expect(prefs['defaultRuleSetIds']).toBeUndefined();
+    expect(prefs['defaultRuleSetId']).toBeUndefined();
+    // recentlyViewedEnabled defaults to true; the API strips
+    // `historyTrackingMode` on read but does not synthesize a value
+    // from it - the boolean default comes from DEFAULT_PREFERENCES.
+    expect(prefs.recentlyViewedEnabled).toBe(DEFAULT_PREFERENCES.recentlyViewedEnabled);
+    // The legacy array shape is folded by the frontend
+    // `mergeWithDefaults` (defense-in-depth for stale localStorage);
+    // the API itself no longer folds rule-set IDs - it strips legacy
+    // keys and defaults `activeRuleSetIds` to [].
+    expect(prefs.activeRuleSetIds).toEqual(['rs-stale-array']);
+  });
+
+  it('drops unknown keys when hydrating from a remote response and folds legacy defaultRuleSetIds', async () => {
+    // Build the user payload directly (bypassing makeUser's
+    // ...DEFAULT_PREFERENCES spread) so the canonical
+    // `activeRuleSetIds` is genuinely absent from the remote prefs
+    // and the migration shim has work to do.
+    const remoteRaw: Record<string, unknown> = { ...DEFAULT_PREFERENCES };
+    delete remoteRaw['activeRuleSetIds'];
+    remoteRaw['theme'] = 'light';
+    remoteRaw['historyTrackingMode'] = 'all_actions';
+    remoteRaw['defaultRuleSetIds'] = ['rs-stale'];
+    const user = {
+      id: 'u-1',
+      displayName: 'Test',
+      email: 'x@y.z',
+      createdAt: 't',
+      plan: 'free' as const,
+      preferences: remoteRaw as unknown as UserPreferences,
+    };
+    const svc = TestBed.inject(PreferencesService);
+    api.getMe.and.returnValue(of({ user, etag: '"1"' }));
+    auth.signInAs('u-1');
+    TestBed.flushEffects();
+    await svc.__waitForSync();
+    const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+    expect(prefs.theme).toBe('light');
+    expect(prefs['historyTrackingMode']).toBeUndefined();
+    expect(prefs['defaultRuleSetIds']).toBeUndefined();
+    expect(prefs.activeRuleSetIds).toEqual(['rs-stale']);
+  });
+
   it('merges deep treeHighlightColors shape from storage', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        treeHighlightColors: { dark: { selectionColor: '#123456' } }
-      })
+        treeHighlightColors: { dark: { selectionColor: '#123456' } },
+      }),
     );
     const svc = TestBed.inject(PreferencesService);
     const colors = svc.prefs().treeHighlightColors;
     expect(colors.dark.selectionColor).toBe('#123456');
     // Backfilled dark fields - regression for shallow-merge bug.
     expect(colors.dark.matchingValueColor).toBe(
-      DEFAULT_PREFERENCES.treeHighlightColors.dark.matchingValueColor
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.matchingValueColor,
     );
     expect(colors.dark.ancestorColor).toBe(
-      DEFAULT_PREFERENCES.treeHighlightColors.dark.ancestorColor
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.ancestorColor,
     );
     expect(colors.dark.searchHighlightColor).toBe(
-      DEFAULT_PREFERENCES.treeHighlightColors.dark.searchHighlightColor
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.searchHighlightColor,
+    );
+    expect(colors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
     );
     expect(colors.light).toEqual(DEFAULT_PREFERENCES.treeHighlightColors.light);
+  });
+
+  it('backfills missing manualHighlightColor when hydrating legacy stored colors', () => {
+    const legacyColors = structuredClone(
+      DEFAULT_PREFERENCES.treeHighlightColors,
+    ) as unknown as Record<string, Record<string, unknown>>;
+    delete legacyColors['dark']?.['manualHighlightColor'];
+    delete legacyColors['light']?.['manualHighlightColor'];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ treeHighlightColors: legacyColors }));
+    const svc = TestBed.inject(PreferencesService);
+    const colors = svc.prefs().treeHighlightColors;
+    expect(colors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
+    );
+    expect(colors.light.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.light.manualHighlightColor,
+    );
   });
 
   it('backfills partial nested treeHighlightColors from the server', async () => {
@@ -156,23 +277,432 @@ describe('PreferencesService', () => {
         // Cast through unknown - the server may legitimately return a
         // partial object for older user docs that predate a new field.
         dark: { selectionColor: '#abcdef' },
-        light: { ancestorColor: '#fefefe' }
-      } as UserPreferences['treeHighlightColors']
+        light: { ancestorColor: '#fefefe' },
+      } as UserPreferences['treeHighlightColors'],
     };
     const svc = TestBed.inject(PreferencesService);
-    api.getMe.and.returnValue(of(makeUser(partial)));
+    api.getMe.and.returnValue(of(makeUserResponse(partial)));
     auth.signInAs('u-1');
     TestBed.flushEffects();
     await svc.__waitForSync();
     const colors = svc.prefs().treeHighlightColors;
     expect(colors.dark.selectionColor).toBe('#abcdef');
     expect(colors.dark.matchingValueColor).toBe(
-      DEFAULT_PREFERENCES.treeHighlightColors.dark.matchingValueColor
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.matchingValueColor,
+    );
+    expect(colors.dark.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.dark.manualHighlightColor,
     );
     expect(colors.light.ancestorColor).toBe('#fefefe');
     expect(colors.light.selectionColor).toBe(
-      DEFAULT_PREFERENCES.treeHighlightColors.light.selectionColor
+      DEFAULT_PREFERENCES.treeHighlightColors.light.selectionColor,
     );
+    expect(colors.light.manualHighlightColor).toBe(
+      DEFAULT_PREFERENCES.treeHighlightColors.light.manualHighlightColor,
+    );
+  });
+
+  it('merges deep treeDateAnnotationUnits shape from storage', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        treeDateAnnotationUnits: { year: false },
+      }),
+    );
+    const svc = TestBed.inject(PreferencesService);
+
+    expect(svc.prefs().treeDateAnnotationUnits).toEqual({
+      ...DEFAULT_PREFERENCES.treeDateAnnotationUnits,
+      year: false,
+    });
+  });
+
+  it('backfills partial nested treeDateAnnotationUnits from the server', async () => {
+    const partial: UserPreferences = {
+      ...DEFAULT_PREFERENCES,
+      treeDateAnnotationUnits: {
+        year: false,
+        minute: false,
+      } as UserPreferences['treeDateAnnotationUnits'],
+    };
+    const svc = TestBed.inject(PreferencesService);
+    api.getMe.and.returnValue(of(makeUserResponse(partial)));
+    auth.signInAs('u-1');
+    TestBed.flushEffects();
+    await svc.__waitForSync();
+
+    expect(svc.prefs().treeDateAnnotationUnits).toEqual({
+      ...DEFAULT_PREFERENCES.treeDateAnnotationUnits,
+      year: false,
+      minute: false,
+    });
+  });
+
+  it('preserves untouched booleans when patching treeDateAnnotationUnits partially', () => {
+    const svc = TestBed.inject(PreferencesService);
+
+    svc.update(makeTreeDateAnnotationUnitsPatch({ year: false }));
+
+    expect(svc.prefs().treeDateAnnotationUnits).toEqual({
+      ...DEFAULT_PREFERENCES.treeDateAnnotationUnits,
+      year: false,
+    });
+  });
+
+  it('applies full treeDateAnnotationUnits patches', () => {
+    const svc = TestBed.inject(PreferencesService);
+    const fullUnits: UserPreferences['treeDateAnnotationUnits'] = {
+      year: false,
+      month: false,
+      day: true,
+      hour: false,
+      minute: true,
+      second: false,
+    };
+
+    svc.update({ treeDateAnnotationUnits: fullUnits });
+
+    expect(svc.prefs().treeDateAnnotationUnits).toEqual(fullUnits);
+  });
+
+  it('applies treeDateAnnotationFriendlyForms boolean patches', () => {
+    const svc = TestBed.inject(PreferencesService);
+
+    svc.update({ treeDateAnnotationFriendlyForms: false });
+    expect(svc.prefs().treeDateAnnotationFriendlyForms).toBeFalse();
+
+    svc.update({ treeDateAnnotationFriendlyForms: true });
+    expect(svc.prefs().treeDateAnnotationFriendlyForms).toBeTrue();
+  });
+
+  describe('pref.changed telemetry', () => {
+    it('emits a string event for a changed theme', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ theme: 'dark' });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'theme', source: 'user', kind: 'string', value: 'dark' },
+        undefined,
+      );
+    });
+
+    it('emits a string event for a changed coldBootClipboardAutoPaste', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ coldBootClipboardAutoPaste: 'always' });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'coldBootClipboardAutoPaste',
+          source: 'user',
+          kind: 'string',
+          value: 'always',
+        },
+        undefined,
+      );
+    });
+
+    it('emits a number event with bucket and measurement for editorFontSize', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ editorFontSize: 18 });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'editorFontSize', source: 'user', kind: 'number', valueBucket: '17-20' },
+        { value: 18 },
+      );
+    });
+
+    it('emits a count event with bucket and measurement for activeRuleSetIds', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ activeRuleSetIds: ['a', 'b'] });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'activeRuleSetIds', source: 'user', kind: 'count', countBucket: '<100' },
+        { count: 2 },
+      );
+    });
+
+    it('emits a count event with enabled-unit measurement for treeDateAnnotationUnits', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeDateAnnotationUnitsPatch({ year: false, second: false }));
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeDateAnnotationUnits',
+          source: 'user',
+          kind: 'count',
+          countBucket: '<100',
+        },
+        { count: 4 },
+      );
+    });
+
+    it('emits boolean dimensions as strings', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ treeShowTypeLabels: false });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'treeShowTypeLabels', source: 'user', kind: 'boolean', value: 'false' },
+        undefined,
+      );
+    });
+
+    it('emits a boolean event for treeDateAnnotationFriendlyForms', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ treeDateAnnotationFriendlyForms: false });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeDateAnnotationFriendlyForms',
+          source: 'user',
+          kind: 'boolean',
+          value: 'false',
+        },
+        undefined,
+      );
+    });
+
+    it('emits only the changed treeHighlightColors leaf', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeHighlightPatch({ dark: { selectionColor: '#ff0000' } }));
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeHighlightColors.dark.selectionColor',
+          source: 'user',
+          kind: 'color',
+          isDefault: 'false',
+          bucket: 'red',
+        },
+        undefined,
+      );
+    });
+
+    it('emits a color event when dark manualHighlightColor changes', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeHighlightPatch({ dark: { manualHighlightColor: '#ff0000' } }));
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeHighlightColors.dark.manualHighlightColor',
+          source: 'user',
+          kind: 'color',
+          isDefault: 'false',
+          bucket: 'red',
+        },
+        undefined,
+      );
+    });
+
+    it('emits a color event when light manualHighlightColor changes', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeHighlightPatch({ light: { manualHighlightColor: '#00ff00' } }));
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        {
+          key: 'treeHighlightColors.light.manualHighlightColor',
+          source: 'user',
+          kind: 'color',
+          isDefault: 'false',
+          bucket: 'green',
+        },
+        undefined,
+      );
+    });
+
+    it('reset emits one user-sourced event per key that differs from defaults', () => {
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark', editorFontSize: 18, treeShowTypeLabels: false });
+      logger.event.calls.reset();
+
+      svc.reset();
+
+      const calls = logger.event.calls.allArgs();
+      expect(calls.length).toBe(3);
+      expect(calls.map((callArguments) => callArguments[1]?.['source'])).toEqual([
+        'user',
+        'user',
+        'user',
+      ]);
+      expect(calls.map((callArguments) => callArguments[1]?.['key'])).toEqual([
+        'theme',
+        'editorFontSize',
+        'treeShowTypeLabels',
+      ]);
+    });
+
+    it('sign-in hydration emits init-sourced events for remote preference diffs', async () => {
+      const svc = TestBed.inject(PreferencesService);
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'dark', editorFontSize: 18 })));
+
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      await svc.__waitForSync();
+
+      expect(logger.event).toHaveBeenCalledTimes(2);
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'theme', source: 'init', kind: 'string', value: 'dark' },
+        undefined,
+      );
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'editorFontSize', source: 'init', kind: 'number', valueBucket: '17-20' },
+        { value: 18 },
+      );
+    });
+
+    it('sign-out reset emits init-sourced events for non-default current prefs', async () => {
+      const svc = TestBed.inject(PreferencesService);
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'dark', editorFontSize: 18 })));
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      await svc.__waitForSync();
+      logger.event.calls.reset();
+
+      auth.signOut();
+      TestBed.flushEffects();
+
+      expect(logger.event).toHaveBeenCalledTimes(2);
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'theme', source: 'init', kind: 'string', value: 'system' },
+        undefined,
+      );
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'editorFontSize', source: 'init', kind: 'number', valueBucket: '13-14' },
+        { value: 14 },
+      );
+    });
+
+    it('emits one event for each changed key in a multi-key patch', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ theme: 'dark', editorFontSize: 18 });
+
+      expect(logger.event).toHaveBeenCalledTimes(2);
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'theme', source: 'user', kind: 'string', value: 'dark' },
+        undefined,
+      );
+      expect(logger.event).toHaveBeenCalledWith(
+        'pref.changed',
+        { key: 'editorFontSize', source: 'user', kind: 'number', valueBucket: '17-20' },
+        { value: 18 },
+      );
+    });
+
+    it('does not emit when theme is already system', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ theme: 'system' });
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit for an empty patch', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({});
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when editorFontSize is unchanged', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ editorFontSize: 14 });
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit during constructor initial load', () => {
+      TestBed.inject(PreferencesService);
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when matchMedia recomputes the system theme', () => {
+      const systemThemeChangeListeners: Array<() => void> = [];
+      spyOn(window, 'matchMedia').and.callFake(
+        (query: string): MediaQueryList => ({
+          matches: true,
+          media: query,
+          onchange: null,
+          addEventListener: (
+            type: string,
+            listener: EventListenerOrEventListenerObject | null,
+          ): void => {
+            if (type !== 'change' || listener === null) {
+              return;
+            }
+            systemThemeChangeListeners.push((): void => {
+              const event = new Event('change');
+              if (typeof listener === 'function') {
+                listener(event);
+              } else {
+                listener.handleEvent(event);
+              }
+            });
+          },
+          removeEventListener: (): void => undefined,
+          dispatchEvent: (): boolean => true,
+          addListener: (): void => undefined,
+          removeListener: (): void => undefined,
+        }),
+      );
+      const svc = TestBed.inject(PreferencesService);
+      logger.event.calls.reset();
+
+      for (const fireSystemThemeChange of systemThemeChangeListeners) {
+        fireSystemThemeChange();
+      }
+      TestBed.flushEffects();
+
+      expect(svc.prefs().theme).toBe('system');
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('does not emit when a treeHighlightColors leaf is unchanged', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update(makeTreeHighlightPatch({ dark: { selectionColor: '#264f78' } }));
+
+      expect(logger.event).not.toHaveBeenCalled();
+    });
+
+    it('emits a boolean event for treeAutoFitToWindow', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ treeAutoFitToWindow: false });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'treeAutoFitToWindow', source: 'user', kind: 'boolean', value: 'false' },
+        undefined,
+      );
+    });
   });
 
   describe('runtime --highlight-* projection on document.body', () => {
@@ -185,16 +715,16 @@ describe('PreferencesService', () => {
       svc.update({ theme: 'dark' });
       TestBed.flushEffects();
       expect(readBodyVar('--highlight-selection')).toBe(
-        DEFAULT_PREFERENCES.treeHighlightColors.dark.selectionColor
+        DEFAULT_PREFERENCES.treeHighlightColors.dark.selectionColor,
       );
       svc.update({
         treeHighlightColors: {
           ...svc.prefs().treeHighlightColors,
           dark: {
             ...svc.prefs().treeHighlightColors.dark,
-            selectionColor: '#aabbcc'
-          }
-        }
+            selectionColor: '#aabbcc',
+          },
+        },
       });
       TestBed.flushEffects();
       expect(readBodyVar('--highlight-selection')).toBe('#aabbcc');
@@ -210,9 +740,9 @@ describe('PreferencesService', () => {
           ...svc.prefs().treeHighlightColors,
           light: {
             ...svc.prefs().treeHighlightColors.light,
-            selectionColor: '#ff0000'
-          }
-        }
+            selectionColor: '#ff0000',
+          },
+        },
       });
       TestBed.flushEffects();
       expect(readBodyVar('--highlight-selection')).toBe(before);
@@ -240,11 +770,11 @@ describe('PreferencesService', () => {
           ...DEFAULT_PREFERENCES.treeHighlightColors,
           dark: {
             ...DEFAULT_PREFERENCES.treeHighlightColors.dark,
-            selectionColor: '#deadbe'
-          }
-        }
+            selectionColor: '#deadbe',
+          },
+        },
       };
-      api.getMe.and.returnValue(of(makeUser(customized)));
+      api.getMe.and.returnValue(of(makeUserResponse(customized)));
       auth.signInAs('u-1');
       TestBed.flushEffects();
       await svc.__waitForSync();
@@ -255,7 +785,7 @@ describe('PreferencesService', () => {
       // After sign-out the prefs reset to DEFAULT_PREFERENCES (theme 'system').
       const effective = svc.effectiveTheme();
       expect(readBodyVar('--highlight-selection')).toBe(
-        DEFAULT_PREFERENCES.treeHighlightColors[effective].selectionColor
+        DEFAULT_PREFERENCES.treeHighlightColors[effective].selectionColor,
       );
     });
 
@@ -263,7 +793,7 @@ describe('PreferencesService', () => {
       jasmine.clock().install();
       try {
         const svc = TestBed.inject(PreferencesService);
-        api.getMe.and.returnValue(of(makeUser()));
+        api.getMe.and.returnValue(of(makeUserResponse()));
         auth.signInAs('u-1');
         TestBed.flushEffects();
         await svc.__waitForSync();
@@ -272,14 +802,14 @@ describe('PreferencesService', () => {
         svc.update({
           treeHighlightColors: {
             ...base,
-            dark: { ...base.dark, selectionColor: '#111111' }
-          }
+            dark: { ...base.dark, selectionColor: '#111111' },
+          },
         });
         svc.update({
           treeHighlightColors: {
             ...svc.prefs().treeHighlightColors,
-            dark: { ...svc.prefs().treeHighlightColors.dark, selectionColor: '#222222' }
-          }
+            dark: { ...svc.prefs().treeHighlightColors.dark, selectionColor: '#222222' },
+          },
         });
         TestBed.flushEffects();
         expect(api.putPreferences).not.toHaveBeenCalled();
@@ -293,12 +823,99 @@ describe('PreferencesService', () => {
     });
   });
 
+  describe('theme-color meta tags', () => {
+    function installThemeColorMetas(): {
+      darkMeta: HTMLMetaElement;
+      lightMeta: HTMLMetaElement;
+    } {
+      const darkMeta = document.createElement('meta');
+      darkMeta.id = 'meta-theme-color-dark';
+      darkMeta.name = 'theme-color';
+      darkMeta.content = '#1e1e1e';
+      darkMeta.setAttribute('media', '(prefers-color-scheme: dark)');
+      document.head.appendChild(darkMeta);
+
+      const lightMeta = document.createElement('meta');
+      lightMeta.id = 'meta-theme-color-light';
+      lightMeta.name = 'theme-color';
+      lightMeta.content = '#fafafa';
+      lightMeta.setAttribute('media', '(prefers-color-scheme: light)');
+      document.head.appendChild(lightMeta);
+
+      return { darkMeta, lightMeta };
+    }
+
+    function removeThemeColorMetas(): void {
+      document.getElementById('meta-theme-color-dark')?.remove();
+      document.getElementById('meta-theme-color-light')?.remove();
+    }
+
+    afterEach(() => {
+      removeThemeColorMetas();
+    });
+
+    it('keeps both tags media-scoped when theme is "system"', () => {
+      const { darkMeta, lightMeta } = installThemeColorMetas();
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'system' });
+      TestBed.flushEffects();
+      expect(darkMeta.getAttribute('media')).toBe('(prefers-color-scheme: dark)');
+      expect(darkMeta.content).toBe('#1e1e1e');
+      expect(lightMeta.getAttribute('media')).toBe('(prefers-color-scheme: light)');
+      expect(lightMeta.content).toBe('#fafafa');
+    });
+
+    it('strips media and forces dark color on both tags when theme is "dark"', () => {
+      const { darkMeta, lightMeta } = installThemeColorMetas();
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark' });
+      TestBed.flushEffects();
+      expect(darkMeta.hasAttribute('media')).toBe(false);
+      expect(darkMeta.content).toBe('#1e1e1e');
+      expect(lightMeta.hasAttribute('media')).toBe(false);
+      expect(lightMeta.content).toBe('#1e1e1e');
+    });
+
+    it('strips media and forces light color on both tags when theme is "light"', () => {
+      const { darkMeta, lightMeta } = installThemeColorMetas();
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'light' });
+      TestBed.flushEffects();
+      expect(darkMeta.hasAttribute('media')).toBe(false);
+      expect(darkMeta.content).toBe('#fafafa');
+      expect(lightMeta.hasAttribute('media')).toBe(false);
+      expect(lightMeta.content).toBe('#fafafa');
+    });
+
+    it('restores both media-scoped tags on transition from explicit to system', () => {
+      const { darkMeta, lightMeta } = installThemeColorMetas();
+      const svc = TestBed.inject(PreferencesService);
+      svc.update({ theme: 'dark' });
+      TestBed.flushEffects();
+      expect(darkMeta.hasAttribute('media')).toBe(false);
+      svc.update({ theme: 'system' });
+      TestBed.flushEffects();
+      expect(darkMeta.getAttribute('media')).toBe('(prefers-color-scheme: dark)');
+      expect(darkMeta.content).toBe('#1e1e1e');
+      expect(lightMeta.getAttribute('media')).toBe('(prefers-color-scheme: light)');
+      expect(lightMeta.content).toBe('#fafafa');
+    });
+
+    it('is a no-op when the meta tags are absent (defensive)', () => {
+      const svc = TestBed.inject(PreferencesService);
+      expect(() => {
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+      }).not.toThrow();
+    });
+  });
+
   describe('sync lifecycle', () => {
     it('replaces local prefs with the server copy when the user doc exists (remote wins)', async () => {
       const svc = TestBed.inject(PreferencesService);
       svc.update({ theme: 'dark', editorFontSize: 20 });
       TestBed.flushEffects();
-      api.getMe.and.returnValue(of(makeUser({ theme: 'light', editorFontSize: 16 })));
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'light', editorFontSize: 16 })));
       auth.signInAs('u-1');
       TestBed.flushEffects();
       const end = await svc.__waitForSync();
@@ -333,7 +950,7 @@ describe('PreferencesService', () => {
 
     it('clears previous user prefs from localStorage and resets on sign-out', async () => {
       const svc = TestBed.inject(PreferencesService);
-      api.getMe.and.returnValue(of(makeUser({ theme: 'light', editorFontSize: 22 })));
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'light', editorFontSize: 22 })));
       auth.signInAs('u-1');
       TestBed.flushEffects();
       await svc.__waitForSync();
@@ -355,7 +972,7 @@ describe('PreferencesService', () => {
       jasmine.clock().install();
       try {
         const svc = TestBed.inject(PreferencesService);
-        api.getMe.and.returnValue(of(makeUser()));
+        api.getMe.and.returnValue(of(makeUserResponse()));
         auth.signInAs('u-1');
         TestBed.flushEffects();
         await svc.__waitForSync();
@@ -373,7 +990,7 @@ describe('PreferencesService', () => {
 
     it('ignores in-flight hydration results when the user changes', async () => {
       const svc = TestBed.inject(PreferencesService);
-      const slow = new Subject<User | null>();
+      const slow = new Subject<UserWithEtag | null>();
       api.getMe.and.returnValue(slow.asObservable());
       auth.signInAs('u-1');
       TestBed.flushEffects();
@@ -381,10 +998,193 @@ describe('PreferencesService', () => {
       auth.signOut();
       TestBed.flushEffects();
       // Late response for user u-1 must be ignored.
-      slow.next(makeUser({ theme: 'light' }));
+      slow.next(makeUserResponse({ theme: 'light' }));
       slow.complete();
       expect(svc.syncState()).toBe('anon');
       expect(svc.prefs()).toEqual(DEFAULT_PREFERENCES);
+    });
+
+    it('threads the latest etag from getMe -> putPreferences', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUserResponse({}, '"7"')));
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences).toHaveBeenCalledTimes(1);
+        const ifMatch = api.putPreferences.calls.mostRecent().args[1];
+        expect(ifMatch).toBe('"7"');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('threads the latest etag from a successful PUT into the next PUT', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUserResponse({}, '"1"')));
+        // Each successive PUT returns an incrementing etag.
+        let nextEtag = 2;
+        api.putPreferences.and.callFake((p: UserPreferences) =>
+          of<PreferencesWithEtag>({ preferences: p, etag: `"${nextEtag++}"` }),
+        );
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(1);
+        expect(api.putPreferences.calls.argsFor(0)[1]).toBe('"1"');
+        // After the response handler ran synchronously, lastKnownEtag
+        // should be '"2"'. The next user edit should send "2".
+        svc.update({ editorFontSize: 18 });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(2);
+        expect(api.putPreferences.calls.argsFor(1)[1]).toBe('"2"');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('serializes in-flight writes (no second PUT until first completes)', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUserResponse({}, '"1"')));
+        // First PUT is held open via a Subject; second update arrives
+        // while the first is still in flight.
+        const firstPut = new Subject<PreferencesWithEtag>();
+        api.putPreferences.and.returnValue(firstPut.asObservable());
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(1);
+        // While the first PUT is still pending, the user makes another
+        // change. We must NOT fire a second PUT yet (would be stale
+        // IfMatch).
+        svc.update({ editorFontSize: 18 });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(1);
+        // Now the first PUT resolves with a fresh etag. The pending
+        // dirty flag should re-fire the debounce; switch the spy back
+        // to the default success behavior so the follow-up PUT can
+        // complete.
+        api.putPreferences.and.callFake((p: UserPreferences) =>
+          of<PreferencesWithEtag>({ preferences: p, etag: '"3"' }),
+        );
+        firstPut.next({ preferences: svc.prefs(), etag: '"2"' });
+        firstPut.complete();
+        await Promise.resolve();
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        expect(api.putPreferences.calls.count()).toBe(2);
+        // The second PUT must use the FRESH etag from the first
+        // response, not the original "1".
+        expect(api.putPreferences.calls.argsFor(1)[1]).toBe('"2"');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('on 412 conflict refetches, replaces local, and emits a conflict event', async () => {
+      jasmine.clock().install();
+      try {
+        const svc = TestBed.inject(PreferencesService);
+        api.getMe.and.returnValue(of(makeUserResponse({ theme: 'system' }, '"1"')));
+        auth.signInAs('u-1');
+        TestBed.flushEffects();
+        await svc.__waitForSync();
+        // Subscribe to events$ before we trigger the conflict.
+        const events: Array<{ kind: string }> = [];
+        svc.events$.subscribe((event) => events.push(event));
+        // The user changes prefs; the server returns 412.
+        api.putPreferences.and.returnValue(
+          throwError(() => new HttpErrorResponse({ status: 412, statusText: 'PF' })),
+        );
+        // Next getMe (post-conflict refetch) returns server prefs that
+        // differ from the user's local copy.
+        api.getMe.and.returnValue(of(makeUserResponse({ theme: 'light' }, '"5"')));
+        svc.update({ theme: 'dark' });
+        TestBed.flushEffects();
+        jasmine.clock().tick(600);
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(api.putPreferences.calls.count()).toBe(1);
+        // Local prefs replaced with server's "light".
+        expect(svc.prefs().theme).toBe('light');
+        expect(events.length).toBe(1);
+        expect(events[0]?.kind).toBe('conflict');
+      } finally {
+        jasmine.clock().uninstall();
+      }
+    });
+
+    it('on seed 409 silently refetches via getMe and adopts server state', async () => {
+      const svc = TestBed.inject(PreferencesService);
+      // First getMe says no doc; seed races and gets 409; the recovery
+      // getMe returns the winning tab's user state.
+      api.getMe.and.returnValues(
+        of(null),
+        of(makeUserResponse({ theme: 'light', editorFontSize: 22 }, '"1"')),
+      );
+      api.seed.and.returnValue(
+        throwError(() => new HttpErrorResponse({ status: 409, statusText: 'C' })),
+      );
+      const events: Array<{ kind: string }> = [];
+      svc.events$.subscribe((event) => events.push(event));
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      const end = await svc.__waitForSync();
+      expect(end).toBe('synced');
+      expect(svc.prefs().theme).toBe('light');
+      expect(svc.prefs().editorFontSize).toBe(22);
+      // Per plan, this recovery is silent (no toast / event).
+      expect(events.length).toBe(0);
+    });
+  });
+
+  describe('treeAutoFitToWindow one-shot migration', () => {
+    it('sets treeAutoFitToWindow=true when depth is 2 (default) and field is absent', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ defaultTreeExpansionDepth: 2 }));
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(true);
+    });
+
+    it('sets treeAutoFitToWindow=false when depth is customized and field is absent', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ defaultTreeExpansionDepth: 5 }));
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(false);
+    });
+
+    it('respects explicit treeAutoFitToWindow=false even when depth is 2', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ defaultTreeExpansionDepth: 2, treeAutoFitToWindow: false }),
+      );
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(false);
+    });
+
+    it('sets treeAutoFitToWindow=true when neither depth nor treeAutoFitToWindow is present', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: 'dark' }));
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(true);
+    });
+
+    it('new user (no prefs at all) gets treeAutoFitToWindow=true', () => {
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().treeAutoFitToWindow).toBe(true);
     });
   });
 });

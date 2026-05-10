@@ -1,37 +1,53 @@
 import {
   BlobValidationError,
   MAX_BLOB_BYTES,
+  MAX_HIGHLIGHT_PATH_LENGTH,
+  MAX_HIGHLIGHTS,
   MAX_TITLE_LENGTH,
   SlugGenerationError,
+  assertHighlightPath,
+  assertHighlights,
   createBlob,
   deleteBlobById,
   findBlobByIdOrSlug,
   listBlobsByOwner,
   updateBlob,
   __resetBlobsContainerForTesting,
-  type BlobDocument
+  type BlobDocument,
+  type BlobHighlight,
 } from './blobs';
+import { VersionConflictError } from './cosmos';
+import { HIGHLIGHT_PATH_FIXTURES } from '../../../src/testing/fixtures/highlight-paths.fixture';
 
 // In-memory fake Cosmos container. Tracks items + exposes the query / create /
 // replace entry points that blobs.ts uses.
 interface FakeContainer {
   items: BlobDocument[];
+  nextEtag: number;
   forceSlugCollision?: boolean;
 }
 
 function makeFakeContainer(): FakeContainer {
-  return { items: [] };
+  return { items: [], nextEtag: 1 };
 }
 
 let fake: FakeContainer;
 
 jest.mock('./cosmos', () => {
+  const actual = jest.requireActual<typeof import('./cosmos')>('./cosmos');
   return {
+    ...actual,
     getCosmos: () => ({
       database: {
         container: () => ({
           items: {
-            query: ({ query, parameters }: { query: string; parameters: { name: string; value: unknown }[] }) => ({
+            query: ({
+              query,
+              parameters,
+            }: {
+              query: string;
+              parameters: { name: string; value: unknown }[];
+            }) => ({
               fetchAll: async () => {
                 const params = Object.fromEntries(parameters.map((p) => [p.name, p.value]));
                 let resources: unknown[];
@@ -56,40 +72,112 @@ jest.mock('./cosmos', () => {
                   throw new Error(`Unexpected query in test: ${query}`);
                 }
                 return { resources };
-              }
+              },
             }),
             create: async (doc: BlobDocument) => {
-              fake.items.push(doc);
-              return { resource: doc };
-            }
+              const stored = { ...doc, _etag: `etag-${fake.nextEtag}` };
+              fake.nextEtag += 1;
+              fake.items.push(stored);
+              return { resource: stored };
+            },
           },
           item: (id: string, partitionKey: string) => ({
-            replace: async (doc: BlobDocument) => {
-              const idx = fake.items.findIndex(
-                (b) => b.id === id && b.ownerId === partitionKey
+            replace: async (
+              doc: BlobDocument,
+              options?: { accessCondition?: { type: string; condition: string } },
+            ) => {
+              const index = fake.items.findIndex(
+                (blob) => blob.id === id && blob.ownerId === partitionKey,
               );
-              if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
-              fake.items[idx] = doc;
-              return { resource: doc };
+              if (index === -1) throw Object.assign(new Error('not found'), { code: 404 });
+              const current = fake.items[index];
+              if (!current) throw Object.assign(new Error('not found'), { code: 404 });
+              const condition = options?.accessCondition;
+              if (condition?.type === 'IfMatch' && condition.condition !== current._etag) {
+                throw Object.assign(new Error('precondition failed'), { code: 412 });
+              }
+              if ('_etag' in doc) {
+                throw new Error('replace body must not include _etag (helper bug)');
+              }
+              const stored = { ...doc, _etag: `etag-${fake.nextEtag}` };
+              fake.nextEtag += 1;
+              fake.items[index] = stored;
+              return { resource: stored };
             },
             delete: async () => {
-              const idx = fake.items.findIndex(
-                (b) => b.id === id && b.ownerId === partitionKey
-              );
+              const idx = fake.items.findIndex((b) => b.id === id && b.ownerId === partitionKey);
               if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
               fake.items.splice(idx, 1);
               return {};
-            }
-          })
-        })
-      }
-    })
+            },
+          }),
+        }),
+      },
+    }),
   };
 });
 
 beforeEach(() => {
   fake = makeFakeContainer();
   __resetBlobsContainerForTesting();
+});
+
+const VALID_HIGHLIGHT: BlobHighlight = {
+  path: '$.foo',
+  color: '#ffeb3b',
+  cascade: false,
+};
+
+function makeHighlight(overrides: Partial<BlobHighlight> = {}): BlobHighlight {
+  return { ...VALID_HIGHLIGHT, ...overrides };
+}
+
+describe('highlight validators', () => {
+  it('accepts every canonical path from the shared corpus', () => {
+    for (const fixtureEntry of HIGHLIGHT_PATH_FIXTURES) {
+      expect(assertHighlightPath(fixtureEntry.path)).toBe(fixtureEntry.path);
+    }
+  });
+
+  it('rejects non-hex colors', () => {
+    expect(() => assertHighlights([{ ...VALID_HIGHLIGHT, color: 'yellow' }])).toThrow(
+      BlobValidationError,
+    );
+  });
+
+  it('rejects non-canonical paths', () => {
+    const invalidPaths = ['foo', '$.foo..bar', '$.foo[01]', '$[abc]', '$["weird\\u0020key"]'];
+    for (const path of invalidPaths) {
+      expect(() => assertHighlights([makeHighlight({ path })])).toThrow(BlobValidationError);
+    }
+  });
+
+  it('rejects empty and over-long paths', () => {
+    expect(() => assertHighlights([makeHighlight({ path: '' })])).toThrow(BlobValidationError);
+    const overLongPath = `$.${'a'.repeat(MAX_HIGHLIGHT_PATH_LENGTH)}`;
+    expect(() => assertHighlights([makeHighlight({ path: overLongPath })])).toThrow(
+      BlobValidationError,
+    );
+  });
+
+  it('rejects duplicate paths', () => {
+    expect(() =>
+      assertHighlights([makeHighlight({ color: '#111111' }), makeHighlight({ color: '#222222' })]),
+    ).toThrow(BlobValidationError);
+  });
+
+  it('rejects oversize arrays', () => {
+    const tooManyHighlights = Array.from({ length: MAX_HIGHLIGHTS + 1 }, (_unused, index) =>
+      makeHighlight({ path: `$.path${index}` }),
+    );
+    expect(() => assertHighlights(tooManyHighlights)).toThrow(BlobValidationError);
+  });
+
+  it('rejects non-boolean cascade values', () => {
+    expect(() => assertHighlights([{ ...VALID_HIGHLIGHT, cascade: 'yes' }])).toThrow(
+      BlobValidationError,
+    );
+  });
 });
 
 describe('createBlob', () => {
@@ -101,6 +189,7 @@ describe('createBlob', () => {
     expect(doc.ownerId).toBe('owner-1');
     expect(doc.isPublic).toBe(false);
     expect(doc.title).toBeUndefined();
+    expect(doc.version).toBe(1);
     expect(doc.createdAt).toBe(doc.updatedAt);
     expect(fake.items).toHaveLength(1);
   });
@@ -122,30 +211,49 @@ describe('createBlob', () => {
     expect(b.isPublic).toBe(true);
   });
 
+  it('stores highlights supplied on create', async () => {
+    const highlights = [makeHighlight({ path: '$.created', cascade: true })];
+    const doc = await createBlob('owner-1', { content: '{"created":{}}', highlights });
+    expect(doc.highlights).toEqual(highlights);
+    expect(fake.items).toHaveLength(1);
+    expect(fake.items[0]?.highlights).toEqual(highlights);
+  });
+
   it('rejects content larger than MAX_BLOB_BYTES', async () => {
     const tooBig = 'a'.repeat(MAX_BLOB_BYTES + 1);
     await expect(createBlob('owner-1', { content: tooBig })).rejects.toBeInstanceOf(
-      BlobValidationError
+      BlobValidationError,
     );
   });
 
-  it('rejects non-string content', async () => {
+  it('accepts content of length exactly MAX_BLOB_BYTES', async () => {
+    const exact = 'a'.repeat(MAX_BLOB_BYTES);
+    const doc = await createBlob('owner-1', { content: exact });
+    expect(doc.content).toBe(exact);
+  });
+
+  it('rejects content whose serialized document exceeds the total cap', async () => {
+    const escapingContent = '"'.repeat(MAX_BLOB_BYTES);
     await expect(
-      createBlob('owner-1', { content: 42 as unknown as string })
-    ).rejects.toBeInstanceOf(BlobValidationError);
+      createBlob('owner-1', { content: escapingContent, highlights: [VALID_HIGHLIGHT] }),
+    ).rejects.toThrow(/blob document too large/);
+  });
+
+  it('rejects non-string content', async () => {
+    await expect(createBlob('owner-1', { content: 42 })).rejects.toBeInstanceOf(
+      BlobValidationError,
+    );
   });
 
   it('rejects title longer than MAX_TITLE_LENGTH', async () => {
     const tooLong = 'x'.repeat(MAX_TITLE_LENGTH + 1);
-    await expect(
-      createBlob('owner-1', { content: '[]', title: tooLong })
-    ).rejects.toBeInstanceOf(BlobValidationError);
+    await expect(createBlob('owner-1', { content: '[]', title: tooLong })).rejects.toBeInstanceOf(
+      BlobValidationError,
+    );
   });
 
   it('rejects missing ownerId', async () => {
-    await expect(createBlob('', { content: '[]' })).rejects.toBeInstanceOf(
-      BlobValidationError
-    );
+    await expect(createBlob('', { content: '[]' })).rejects.toBeInstanceOf(BlobValidationError);
   });
 
   it('retries on slug collision and produces distinct slugs', async () => {
@@ -159,9 +267,9 @@ describe('createBlob', () => {
 
   it('throws SlugGenerationError when every generated slug already exists', async () => {
     fake.forceSlugCollision = true;
-    await expect(
-      createBlob('owner-2', { content: '[]' })
-    ).rejects.toBeInstanceOf(SlugGenerationError);
+    await expect(createBlob('owner-2', { content: '[]' })).rejects.toBeInstanceOf(
+      SlugGenerationError,
+    );
   });
 });
 
@@ -195,19 +303,20 @@ describe('updateBlob', () => {
   it('replaces content and stamps updatedAt', async () => {
     const orig = await seed();
     await new Promise((r) => setTimeout(r, 2));
-    const updated = await updateBlob(orig, { content: '{"b":2}' });
+    const updated = await updateBlob(orig, { content: '{"b":2}' }, orig.version);
     expect(updated.content).toBe('{"b":2}');
+    expect(updated.version).toBe(2);
     expect(updated.id).toBe(orig.id);
     expect(updated.slug).toBe(orig.slug);
     expect(updated.createdAt).toBe(orig.createdAt);
     expect(new Date(updated.updatedAt).getTime()).toBeGreaterThan(
-      new Date(orig.updatedAt).getTime()
+      new Date(orig.updatedAt).getTime(),
     );
   });
 
   it('updates title and isPublic independently', async () => {
     const orig = await seed();
-    const updated = await updateBlob(orig, { title: 'new', isPublic: true });
+    const updated = await updateBlob(orig, { title: 'new', isPublic: true }, orig.version);
     expect(updated.title).toBe('new');
     expect(updated.isPublic).toBe(true);
     expect(updated.content).toBe(orig.content);
@@ -215,24 +324,86 @@ describe('updateBlob', () => {
 
   it('clears the title when patched to an empty string', async () => {
     const orig = await seed();
-    const updated = await updateBlob(orig, { title: '' });
+    const updated = await updateBlob(orig, { title: '' }, orig.version);
     expect(updated.title).toBeUndefined();
+  });
+
+  it('round-trips replaced highlights across create, read, update, and read', async () => {
+    const created = await createBlob('owner-1', { content: '{"foo":1}' });
+    expect((await findBlobByIdOrSlug(created.id))?.highlights).toBeUndefined();
+
+    const highlights = [makeHighlight({ path: '$.foo', color: '#00ffaa', cascade: true })];
+    await updateBlob(created, { highlights }, created.version);
+
+    const found = await findBlobByIdOrSlug(created.id);
+    expect(found?.highlights).toEqual(highlights);
+  });
+
+  it('preserves stored highlights when the update omits highlights', async () => {
+    const highlights = [makeHighlight({ path: '$.foo', color: '#abcdef', cascade: true })];
+    const original = await createBlob('owner-1', { content: '{"foo":1}', highlights });
+
+    const updated = await updateBlob(original, { title: 'renamed' }, original.version);
+
+    expect(updated.highlights).toEqual(highlights);
+    expect((await findBlobByIdOrSlug(original.id))?.highlights).toEqual(highlights);
   });
 
   it('enforces size limit on content updates', async () => {
     const orig = await seed();
     const tooBig = 'a'.repeat(MAX_BLOB_BYTES + 1);
-    await expect(updateBlob(orig, { content: tooBig })).rejects.toBeInstanceOf(
-      BlobValidationError
+    await expect(updateBlob(orig, { content: tooBig }, orig.version)).rejects.toBeInstanceOf(
+      BlobValidationError,
     );
   });
 
   it('ignores undefined patch fields', async () => {
     const orig = await seed();
-    const updated = await updateBlob(orig, {});
+    const updated = await updateBlob(orig, {}, orig.version);
     expect(updated.content).toBe(orig.content);
     expect(updated.title).toBe(orig.title);
     expect(updated.isPublic).toBe(orig.isPublic);
+  });
+
+  it('rejects stale expected versions before replacing', async () => {
+    const original = await seed();
+    await expect(
+      updateBlob(original, { title: 'stale' }, original.version + 1),
+    ).rejects.toBeInstanceOf(VersionConflictError);
+  });
+
+  it('normalizes legacy docs without version and persists version 2 on update', async () => {
+    const created = await seed();
+    const legacy = { ...created } as Partial<BlobDocument>;
+    delete legacy.version;
+    fake.items[0] = legacy as BlobDocument;
+
+    const found = await findBlobByIdOrSlug(created.id);
+    expect(found?.version).toBe(1);
+    const list = await listBlobsByOwner('owner-1');
+    expect(list[0]?.version).toBe(1);
+
+    const updated = await updateBlob(found!, { title: 'migrated' }, 1);
+    expect(updated.version).toBe(2);
+    expect(fake.items[0]?.version).toBe(2);
+  });
+
+  it('uses Cosmos ETag preconditions so concurrent snapshots cannot both replace', async () => {
+    const created = await seed();
+    const firstSnapshot = await findBlobByIdOrSlug(created.id);
+    const secondSnapshot = await findBlobByIdOrSlug(created.id);
+
+    const results = await Promise.allSettled([
+      updateBlob(firstSnapshot!, { title: 'first' }, 1),
+      updateBlob(secondSnapshot!, { title: 'second' }, 1),
+    ]);
+
+    const fulfilled = results.filter((result) => result.status === 'fulfilled');
+    const rejected = results.filter((result) => result.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(VersionConflictError);
+    expect(fake.items[0]?.version).toBe(2);
   });
 });
 

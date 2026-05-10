@@ -1,0 +1,162 @@
+:host {
+  display: block;
+  --jj-breadcrumb-muted-color: #a0a0a0;
+  --jj-breadcrumb-current-bg: #264f78;
+  --jj-breadcrumb-current-color: #ffffff;
+}
+
+:host-context(.theme-light) {
+  --jj-breadcrumb-muted-color: #5c5c5c;
+  --jj-breadcrumb-current-bg: #cce4f7;
+  --jj-breadcrumb-current-color: #1a1a1a;
+}
+
+.jj-breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--jj-breadcrumb-muted-color);
+  font-family: inherit;
+  padding: 4px 8px;
+  min-height: 24px;
+  min-width: 0;
+}
+
+.jj-breadcrumb {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.jj-breadcrumb--empty {
+  color: var(--jj-breadcrumb-muted-color);
+  font-style: italic;
+}
+
+.jj-breadcrumb__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.jj-breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+  // Non-shrinking by default. Without this, flex would silently
+  // squeeze every chip to fit the container, the chips would
+  // text-overflow-ellipsize themselves into single letters, and
+  // `scrollWidth > clientWidth` would never be true - so the
+  // collapse-into-overflow algorithm would never fire.
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+// The very last visible item is allowed to shrink ONLY when the
+// algorithm is fully collapsed (the host class flips on at that
+// point - see `isFullyCollapsed` in the component). Reasons to
+// gate the shrinkable behaviour:
+//   - When all items are non-shrinking, flexbox lays out at natural
+//     widths, so `scrollWidth > clientWidth` reliably detects
+//     overflow and the collapse-into-`...` algorithm engages. If
+//     the last item were shrinkable by default, flex would soak up
+//     the overflow into that one chip (silently ellipsizing it)
+//     before the JS measurement ran, and the algorithm would never
+//     fire - producing an ellipsized current chip with the rest at
+//     full width.
+// Once the algorithm has reached its terminal state (only first +
+// overflow + last visible) - or there are too few crumbs to ever
+// produce an overflow chip (1 or 2) - we let the last item shrink
+// as a graceful final fallback so the bar doesn't blow out its
+// container.
+.jj-breadcrumb-bar.is-fully-collapsed .jj-breadcrumb__list .jj-breadcrumb__item:last-child {
+  flex: 0 1 auto;
+}
+
+.jj-breadcrumb__item--overflow {
+  flex-shrink: 0;
+}
+
+.jj-breadcrumb__chip {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  padding: 2px 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  min-width: 0;
+
+  &:hover:not([aria-current='location']) {
+    color: var(--color-primary);
+    background: rgba(127, 127, 127, 0.12);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  &[aria-current='location'] {
+    background: var(--jj-breadcrumb-current-bg);
+    color: var(--jj-breadcrumb-current-color);
+    cursor: pointer;
+  }
+}
+
+.jj-breadcrumb__chip--overflow {
+  flex-shrink: 0;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.jj-breadcrumb__sep {
+  color: var(--jj-breadcrumb-muted-color);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.jj-breadcrumb__copy {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--jj-breadcrumb-muted-color);
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  padding: 0;
+
+  &:hover:not(:disabled) {
+    color: var(--color-primary);
+    background: rgba(127, 127, 127, 0.12);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+}

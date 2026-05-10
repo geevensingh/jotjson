@@ -13,5 +13,12 @@ Key points (see `AGENTS.md` for the authoritative version):
 - Use `jsonc-parser` (not `JSON.parse`) for user JSON/JSONC input.
 - Standalone Angular components, `OnPush`, `inject()`, strict TypeScript.
 - Tests are required for logic changes. Run lint + test + build before done.
+- Plans with meaningful UI changes must include a mockup before approval (see `AGENTS.md` §11).
 - No new frameworks, languages, or cloud services without approval.
 - Never log or transmit clipboard/editor contents or secrets.
+
+## Copilot CLI Specifics
+
+When `AGENTS.md` §11 calls for parallel sub-agent execution, use `/fleet` mode
+whenever possible -- especially when implementing an approved plan. Apply it on
+every wave of the plan's dependency graph, not just the first one.

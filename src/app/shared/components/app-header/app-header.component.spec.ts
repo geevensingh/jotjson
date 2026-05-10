@@ -2,11 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AppHeaderComponent } from './app-header.component';
 import { AuthService } from '../../../core/auth/auth.service';
-import {
-  FakeMsalClient,
-  provideFakeAuth,
-  signInFakeUser
-} from '../../../../testing/auth.testing';
+import { FakeMsalClient, provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 
 describe('AppHeaderComponent', () => {
   beforeEach(() => {
@@ -16,7 +12,7 @@ describe('AppHeaderComponent', () => {
   async function create(client?: FakeMsalClient) {
     await TestBed.configureTestingModule({
       imports: [AppHeaderComponent],
-      providers: [...provideFakeAuth(client), provideRouter([])]
+      providers: [...provideFakeAuth(client), provideRouter([])],
     }).compileComponents();
     // Force the "configured" branch so the signed-in vs not tests are
     // deterministic across envs (CI overwrites environment.ts with the
@@ -41,7 +37,7 @@ describe('AppHeaderComponent', () => {
   it('renders a sign-in button when configured and not signed in', async () => {
     const { fixture } = await create();
     const btn = fixture.nativeElement.querySelector(
-      'button[aria-label="Sign in"]'
+      'button[aria-label="Sign in"]',
     ) as HTMLButtonElement;
     expect(btn).toBeTruthy();
     expect(btn.disabled).toBe(false);
@@ -50,14 +46,14 @@ describe('AppHeaderComponent', () => {
   it('renders a disabled placeholder when auth is not configured', async () => {
     await TestBed.configureTestingModule({
       imports: [AppHeaderComponent],
-      providers: [...provideFakeAuth(), provideRouter([])]
+      providers: [...provideFakeAuth(), provideRouter([])],
     }).compileComponents();
     const auth = TestBed.inject(AuthService);
     (auth as unknown as { isConfigured: boolean }).isConfigured = false;
     const fixture = TestBed.createComponent(AppHeaderComponent);
     fixture.detectChanges();
     const btn = fixture.nativeElement.querySelector(
-      'button[aria-label="Sign in (not configured)"]'
+      'button[aria-label="Sign in (not configured)"]',
     ) as HTMLButtonElement;
     expect(btn).toBeTruthy();
     expect(btn.disabled).toBe(true);
@@ -66,7 +62,7 @@ describe('AppHeaderComponent', () => {
   it('renders user display name (linking to /profile) when signed in, with no sign-out button', async () => {
     const { fixture, auth } = await create();
     signInFakeUser(auth, {
-      user: { id: 'oid-1', displayName: 'Test User', email: 'user@example.com' }
+      user: { id: 'oid-1', displayName: 'Test User', email: 'user@example.com' },
     });
     fixture.detectChanges();
 
@@ -81,18 +77,29 @@ describe('AppHeaderComponent', () => {
 
     // Blobs affordance is visible only when signed in.
     const blobsLink = fixture.nativeElement.querySelector(
-      'a[aria-label="Your saved blobs"]'
+      'a[aria-label="Your saved blobs"]',
     ) as HTMLAnchorElement;
     expect(blobsLink).toBeTruthy();
     expect(blobsLink.getAttribute('href')).toBe('/blobs');
+
+    // Formatting rules affordance is also signed-in only.
+    const rulesLink = fixture.nativeElement.querySelector(
+      'a[aria-label="Formatting rules"]',
+    ) as HTMLAnchorElement;
+    expect(rulesLink).toBeTruthy();
+    expect(rulesLink.getAttribute('href')).toBe('/formatting-rules');
   });
 
   it('does not render the Blobs link when signed out', async () => {
     const { fixture } = await create();
-    const blobsLink = fixture.nativeElement.querySelector(
-      'a[aria-label="Your saved blobs"]'
-    );
+    const blobsLink = fixture.nativeElement.querySelector('a[aria-label="Your saved blobs"]');
     expect(blobsLink).toBeNull();
+  });
+
+  it('does not render the Formatting rules link when signed out', async () => {
+    const { fixture } = await create();
+    const rulesLink = fixture.nativeElement.querySelector('a[aria-label="Formatting rules"]');
+    expect(rulesLink).toBeNull();
   });
 
   it('onSignIn delegates to AuthService', async () => {

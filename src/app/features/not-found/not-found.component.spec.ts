@@ -9,7 +9,7 @@ describe('NotFoundComponent', () => {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [NotFoundComponent],
-      providers: [provideRouter([]), ...provideFakeAuth()]
+      providers: [provideRouter([]), ...provideFakeAuth()],
     }).compileComponents();
     const fixture = TestBed.createComponent(NotFoundComponent);
     fixture.detectChanges();
@@ -51,7 +51,7 @@ describe('NotFoundComponent', () => {
     // Angular 20 removed ng-reflect-* attributes; check the href the
     // RouterLink directive populates on the anchor instead.
     const anchor = (fixture.nativeElement as HTMLElement).querySelector(
-      'a[routerLink]'
+      'a[routerLink]',
     ) as HTMLAnchorElement | null;
     expect(anchor).toBeTruthy();
     expect(anchor?.getAttribute('href')).toBe('/');
