@@ -116,7 +116,7 @@ jobs:
       # ------------------------------------------------------------------
       - name: Download CI web bundle
         if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: web-dist
           run-id: ${{ github.event.workflow_run.id }}
@@ -128,7 +128,7 @@ jobs:
 
       - name: Download CI api bundle
         if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: api-dist
           run-id: ${{ github.event.workflow_run.id }}
