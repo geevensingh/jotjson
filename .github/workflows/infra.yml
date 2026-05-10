@@ -25,8 +25,11 @@ name: Infra (Bicep)
 #
 # 3. pull_request to main (any path)
 #    -> changes runs. If infra changed: build + what-if run, with
-#       what-if output visible in the PR's checks tab. If not: all
-#       other jobs skip. Fork PRs skip what-if (deploy never runs from
+#       what-if output visible in the PR's checks tab. The "ensure
+#       resource group exists" step is skipped on PRs to keep
+#       what-if read-only (the step is idempotent but still hits
+#       ARM and writes an activity-log entry). If not: all other
+#       jobs skip. Fork PRs skip what-if (deploy never runs from
 #       a PR regardless) -- GitHub doesn't pass secrets to fork-PR
 #       runs, so without the guard the run would fail noisily on
 #       azure/login. The check is OPTIONAL today; the changes-job
@@ -40,7 +43,7 @@ name: Infra (Bicep)
 #                                                      via the deploy
 #                                                      job's if-gate)
 #   workflow_dispatch     [deploy/manual]
-#   pull_request          [validate] <PR title>
+#   pull_request          [infra] <PR title>
 #   any other event       <event-specific default>    (GitHub default)
 #
 # We fall back to GitHub's default for push because GitHub Actions
@@ -54,7 +57,7 @@ name: Infra (Bicep)
 
 run-name: >-
   ${{ (github.event_name == 'pull_request'
-        && format('[validate] {0}', github.event.pull_request.title))
+        && format('[infra] {0}', github.event.pull_request.title))
       || (github.event_name == 'workflow_dispatch' && '[deploy/manual]')
       || '' }}
 
@@ -141,6 +144,13 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Ensure resource group exists
+        # Skip on PRs to keep what-if read-only. `az group create` is
+        # idempotent but still hits ARM and writes an Update entry in
+        # the RG's activity log. The cold-start path runs through
+        # workflow_dispatch or push to main (both still execute this
+        # step); in steady state the RG already exists and what-if
+        # succeeds on PRs without it.
+        if: github.event_name != 'pull_request'
         run: |
           az group create \
             --name rg-jotjson-dev \
