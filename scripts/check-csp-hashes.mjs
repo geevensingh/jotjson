@@ -1,21 +1,29 @@
 #!/usr/bin/env node
 // Verifies that the CSP header in `staticwebapp.config.json` covers every
-// inline `<script>` block in the served HTML, and (in CI) that the runtime
-// origins baked into the production bundle are covered by the CSP allowlist.
+// inline `<script>` block AND every inline event-handler attribute (e.g.
+// `onload="..."`) in the served HTML, that the policy retains the
+// structural tokens our app needs (`'unsafe-hashes'`, the documented
+// inline-handler hash literal, `data:` in `font-src`, no `script-src-attr`),
+// and (in CI) that the runtime origins baked into the production bundle
+// are covered by the CSP allowlist.
 //
 // Three modes:
 //
 //   --src         (default; runs in `npm run lint`)
 //                 Hash inline scripts in `src/index.html` and verify that
-//                 every hash is present in `script-src`. Catches policy/source
-//                 drift in the inner loop.
+//                 every hash is present in `script-src`. Also runs the
+//                 policy-structure assertions. Catches policy/source drift
+//                 in the inner loop.
 //
 //   --dist        (runs after `npm run build`)
-//                 Same logic against `dist/jotjson/browser/index.html`. This
-//                 is the authoritative gate: browsers hash whatever the file
+//                 Same logic against ALL three production HTML files
+//                 (`index.html`, `404/index.html`, `shell.html`) plus the
+//                 inline event-handler hashes Angular emits. This is the
+//                 authoritative gate: browsers hash whatever the file
 //                 actually contains, and Angular's prod build (Beasties +
-//                 esbuild) is allowed to mutate the served index.html. CI
-//                 invokes this after the production build.
+//                 esbuild) is allowed to mutate the served HTML. CI invokes
+//                 this after the production build. Detects stale hashes in
+//                 the policy too (so unused hashes do not bit-rot).
 //
 //   --ci-origins  (CI-only; runs when ENTRA_AUTHORITY and/or
 //                 APP_INSIGHTS_CONNECTION_STRING are set)
@@ -41,6 +49,31 @@ import { pathToFileURL } from 'node:url';
 export const SRC_INDEX = 'src/index.html';
 export const DIST_INDEX = 'dist/jotjson/browser/index.html';
 export const SWA_CONFIG = 'staticwebapp.config.json';
+
+// All HTML files Azure Static Web Apps may serve under the configured CSP
+// header. Browsers compute hashes against the served bytes for whichever of
+// these the user lands on, so all three must be covered.
+//   - index.html       prerendered home (M7h).
+//   - 404/index.html   prerendered 404.
+//   - shell.html       SPA navigation fallback (`navigationFallback.rewrite`
+//                      in this very file). Served on every non-prerendered
+//                      route -- the most-served HTML in deployment.
+export const DIST_HTML_FILES = [
+  'dist/jotjson/browser/index.html',
+  'dist/jotjson/browser/404/index.html',
+  'dist/jotjson/browser/shell.html',
+];
+
+// SHA-256 of the literal `this.media='all'` event-handler value Angular's
+// build emits when `optimization.styles.inlineCritical: true` (default).
+// Beasties rewrites `<link rel="stylesheet" href="...">` to a deferred
+// `<link rel="preload" as="style" onload="this.media='all'">` print-CSS
+// pattern. Browsers hash the HTML-decoded attribute value; this constant is
+// what `script-src` must list (paired with `'unsafe-hashes'` to make hash
+// matching apply to event-handler attributes).
+//
+// Reproduce via: `node scripts/print-csp-hash.mjs`.
+export const INLINE_HANDLER_HASH = "'sha256-MhtPZXr7+LpJUY5qtMutB+qWfQtMaPccfe7QXtCcEYc='";
 
 // Application Insights JS SDK fetches dynamic config (sampling, throttling,
 // feature flags) from this CDN at SDK init. The host is hardcoded inside
@@ -88,7 +121,7 @@ export function readCsp(swaConfigPath = SWA_CONFIG) {
   };
 }
 
-function extractInlineScripts(html) {
+export function extractInlineScripts(html) {
   // Match <script ...>...</script> blocks that have NO `src=` attribute.
   // Capture the bytes between the tags exactly (including whitespace) so
   // SHA-256 matches the browser's CSP hashing rule.
@@ -101,7 +134,41 @@ function extractInlineScripts(html) {
   return out;
 }
 
-function sha256Token(content) {
+// Decodes the named and numeric HTML entities a tag-attribute parser would
+// resolve before handing the value to the CSP hashing pass. Browsers hash
+// the *decoded* attribute value, not the raw bytes, so callers must decode
+// before computing `sha256Token`. Order matters: numeric refs first, then
+// the four/five named refs HTML defines for attribute context, with `&amp;`
+// last to avoid double-decoding sequences like `&amp;lt;`.
+export function decodeHtmlEntities(text) {
+  return text
+    .replace(/&#[xX]([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+// Returns the decoded value of every `on*=` event-handler attribute in the
+// HTML. Supports double-quoted, single-quoted, and unquoted attribute
+// values, and is case-insensitive on the attribute name (so `Onload`,
+// `ONCLICK`, etc. all match). The leading `\s` anchor prevents false
+// positives like `<a href="...?onload=1">` (no whitespace before "on"
+// inside an already-quoted attribute value).
+export function extractInlineEventHandlers(html) {
+  const re = /\son[a-zA-Z]+\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  const out = [];
+  let match;
+  while ((match = re.exec(html)) !== null) {
+    const raw = match[1] ?? match[2] ?? match[3] ?? '';
+    out.push(decodeHtmlEntities(raw));
+  }
+  return out;
+}
+
+export function sha256Token(content) {
   // Normalize CRLF -> LF before hashing. Files checked out on Windows may
   // have CRLF locally while the production bundle (built and uploaded by
   // Linux CI) ships LF; both should agree on the same hash. Browsers hash
@@ -111,7 +178,134 @@ function sha256Token(content) {
   return `'sha256-${digest}'`;
 }
 
-function checkHashes(filePath, mode) {
+// Pure: given a list of HTML strings, returns the union of hashes the CSP
+// `script-src` must cover (one per inline script body, one per distinct
+// event-handler attribute value), plus per-source counts for the OK
+// summary line.
+export function computeExpectedHashes(htmlContents) {
+  const expected = new Set();
+  let scriptCount = 0;
+  let handlerCount = 0;
+  for (const html of htmlContents) {
+    const scripts = extractInlineScripts(html);
+    scriptCount += scripts.length;
+    for (const body of scripts) expected.add(sha256Token(body));
+    const handlers = extractInlineEventHandlers(html);
+    handlerCount += handlers.length;
+    for (const value of handlers) expected.add(sha256Token(value));
+  }
+  return { expected, scriptCount, handlerCount };
+}
+
+// Pure: structural assertions on the CSP value itself, independent of any
+// HTML. Catches drift like "someone re-added `script-src-attr 'none'`",
+// "the documented inline-handler hash got removed but the inline handler
+// is still in the dist HTML", or "`data:` got dropped from `font-src` and
+// Monaco codicons broke." Returns { ok, errors }.
+export function checkPolicyStructure({ directives, headerName }) {
+  const errors = [];
+  if (!headerName) {
+    errors.push(`${SWA_CONFIG} has no CSP header to check structure against.`);
+    return { ok: false, errors };
+  }
+
+  const scriptSrc = directives['script-src'] ?? [];
+  if (!scriptSrc.includes("'unsafe-hashes'")) {
+    errors.push(
+      `script-src is missing 'unsafe-hashes'. Required for hash matching ` +
+        `to apply to inline event-handler attributes (Angular inlineCritical).`,
+    );
+  }
+  if (!scriptSrc.includes(INLINE_HANDLER_HASH)) {
+    errors.push(
+      `script-src is missing the documented inline-handler hash ` +
+        `${INLINE_HANDLER_HASH} (literal \`this.media='all'\` from Angular's ` +
+        `inlineCritical print-CSS preload pattern).`,
+    );
+  }
+
+  // Folding `'unsafe-hashes'` into `script-src` and dropping `script-src-attr`
+  // entirely is a deliberate choice: per CSP3 section 6.1, browsers that do
+  // not implement `script-src-attr` (older Safari/Firefox ESRs through late
+  // 2023) fall back to `script-src`. Setting `script-src-attr 'none'` would
+  // block the inline handler in modern browsers; setting it to anything
+  // else requires duplicating the hash list. Cleanest is to omit the
+  // directive and let the more-permissive `script-src` cover all browsers
+  // uniformly.
+  if ('script-src-attr' in directives) {
+    errors.push(
+      `script-src-attr is set; it should be omitted entirely so that ` +
+        `legacy browsers fall back to script-src (which carries the ` +
+        `'unsafe-hashes' + hash combination).`,
+    );
+  }
+
+  const fontSrc = directives['font-src'] ?? [];
+  if (!fontSrc.includes('data:')) {
+    errors.push(
+      `font-src is missing 'data:'. Required for Monaco codicons (the ` +
+        `editor's icon font is shipped inline as a data: URL inside ` +
+        `vs/editor/editor.main.css).`,
+    );
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+// Pure: combines hash coverage and policy-structure checks into a single
+// boolean result with structured error sets, suitable for either CLI
+// printing or test assertions.
+export function checkHashesAndPolicy({
+  expected,
+  scriptCount,
+  handlerCount,
+  directives,
+  headerName,
+  mode,
+}) {
+  if (!headerName) {
+    return {
+      ok: false,
+      headerName: null,
+      scriptCount,
+      handlerCount,
+      structureErrors: [
+        `${SWA_CONFIG} globalHeaders has no Content-Security-Policy ` +
+          `or Content-Security-Policy-Report-Only.`,
+      ],
+      missing: [...expected],
+      stale: [],
+    };
+  }
+
+  const scriptSrc = directives['script-src'] ?? [];
+  const policyHashes = new Set(
+    scriptSrc.filter((token) => /^'sha256-[A-Za-z0-9+/=]+'$/.test(token)),
+  );
+  const missing = [...expected].filter((hash) => !policyHashes.has(hash));
+
+  // Stale-hash detection only runs in --dist mode. The dist HTML is the
+  // authoritative artifact (browsers hash these bytes), so any policy hash
+  // not present in any dist HTML is genuinely unused. In --src mode the
+  // source HTML does NOT contain the inlineCritical event handler (Angular
+  // injects it during the build), so a stale check there would falsely
+  // flag the documented INLINE_HANDLER_HASH constant as removable.
+  const stale = mode === '--dist' ? [...policyHashes].filter((hash) => !expected.has(hash)) : [];
+
+  const struct = checkPolicyStructure({ directives, headerName });
+
+  return {
+    ok: missing.length === 0 && stale.length === 0 && struct.ok,
+    headerName,
+    scriptCount,
+    handlerCount,
+    structureErrors: struct.errors,
+    missing,
+    stale,
+  };
+}
+
+function readHtmlOrError(filePath, mode) {
   if (!existsSync(filePath)) {
     if (mode === '--dist') {
       console.error(
@@ -120,48 +314,56 @@ function checkHashes(filePath, mode) {
     } else {
       console.error(`check-csp-hashes (${mode}): ${filePath} does not exist.`);
     }
-    return false;
+    return null;
   }
-  const html = readFileSync(filePath, 'utf8');
-  const scripts = extractInlineScripts(html);
-  const expectedHashes = scripts.map(sha256Token);
+  return readFileSync(filePath, 'utf8');
+}
+
+function checkHashes(mode) {
+  const htmlPaths = mode === '--dist' ? DIST_HTML_FILES : [SRC_INDEX];
+  const htmlContents = [];
+  for (const path of htmlPaths) {
+    const html = readHtmlOrError(path, mode);
+    if (html === null) return false;
+    htmlContents.push(html);
+  }
+  const { expected, scriptCount, handlerCount } = computeExpectedHashes(htmlContents);
 
   const { headerName, directives } = readCsp();
-  if (!headerName) {
-    console.error(
-      `check-csp-hashes (${mode}): ${SWA_CONFIG} globalHeaders has no ` +
-        `Content-Security-Policy or Content-Security-Policy-Report-Only. ` +
-        `Inline scripts found in ${filePath}:`,
-    );
-    for (const hash of expectedHashes) console.error(`  ${hash}`);
-    return false;
-  }
-  const scriptSrc = directives['script-src'] ?? [];
-  const policyHashes = scriptSrc.filter((token) => /^'sha256-[A-Za-z0-9+/=]+'$/.test(token));
+  const result = checkHashesAndPolicy({
+    expected,
+    scriptCount,
+    handlerCount,
+    directives,
+    headerName,
+    mode,
+  });
 
-  const expectedSet = new Set(expectedHashes);
-  const policySet = new Set(policyHashes);
-  const missing = [...expectedSet].filter((hash) => !policySet.has(hash));
-  const stale = [...policySet].filter((hash) => !expectedSet.has(hash));
-
-  if (missing.length === 0 && stale.length === 0) {
+  if (result.ok) {
     console.log(
       `check-csp-hashes (${mode}): OK ` +
-        `(${expectedHashes.length} inline script(s), ${headerName})`,
+        `(${result.scriptCount} inline script(s), ${result.handlerCount} inline event handler(s), ` +
+        `${result.headerName})`,
     );
     return true;
   }
 
-  console.error(`check-csp-hashes (${mode}): mismatch in ${headerName} script-src`);
-  if (missing.length) {
+  const headerLabel = result.headerName ?? '(no header)';
+  console.error(`check-csp-hashes (${mode}): mismatch in ${headerLabel}`);
+  if (result.structureErrors.length) {
+    console.error('');
+    console.error('  Policy structure errors:');
+    for (const message of result.structureErrors) console.error(`    ${message}`);
+  }
+  if (result.missing.length) {
     console.error('');
     console.error('  Missing from script-src in staticwebapp.config.json (paste these in):');
-    for (const hash of missing) console.error(`    ${hash}`);
+    for (const hash of result.missing) console.error(`    ${hash}`);
   }
-  if (stale.length) {
+  if (result.stale.length) {
     console.error('');
     console.error('  Stale in script-src in staticwebapp.config.json (remove these):');
-    for (const hash of stale) console.error(`    ${hash}`);
+    for (const hash of result.stale) console.error(`    ${hash}`);
   }
   return false;
 }
@@ -285,9 +487,9 @@ function main() {
 
   let ok;
   if (mode === '--src') {
-    ok = checkHashes(SRC_INDEX, '--src');
+    ok = checkHashes('--src');
   } else if (mode === '--dist') {
-    ok = checkHashes(DIST_INDEX, '--dist');
+    ok = checkHashes('--dist');
   } else if (mode === '--ci-origins') {
     ok = checkOriginsFromEnv();
   } else {

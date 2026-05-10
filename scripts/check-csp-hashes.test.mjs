@@ -17,6 +17,13 @@ import {
   readCsp,
   checkOrigins,
   AI_CONFIG_CDN_HOST,
+  decodeHtmlEntities,
+  extractInlineEventHandlers,
+  computeExpectedHashes,
+  checkPolicyStructure,
+  checkHashesAndPolicy,
+  sha256Token,
+  INLINE_HANDLER_HASH,
 } from './check-csp-hashes.mjs';
 
 // --- parseCspString -------------------------------------------------------
@@ -304,4 +311,309 @@ test('checkOrigins accumulates multiple errors instead of bailing on the first',
     result.errors.length >= 4,
     `expected >= 4 errors, got ${result.errors.length}: ${JSON.stringify(result.errors)}`,
   );
+});
+
+// --- decodeHtmlEntities ---------------------------------------------------
+
+test('decodeHtmlEntities decodes the named entities used in attribute values', () => {
+  assert.equal(decodeHtmlEntities('&apos;'), "'");
+  assert.equal(decodeHtmlEntities('&quot;'), '"');
+  assert.equal(decodeHtmlEntities('&lt;'), '<');
+  assert.equal(decodeHtmlEntities('&gt;'), '>');
+  assert.equal(decodeHtmlEntities('&amp;'), '&');
+});
+
+test('decodeHtmlEntities decodes numeric and hex character references', () => {
+  // Decimal: &#39; is apostrophe; &#34; is quote.
+  assert.equal(decodeHtmlEntities('this.media=&#39;all&#39;'), "this.media='all'");
+  // Hex: &#x27; is also apostrophe; case-insensitive on the 'x'.
+  assert.equal(decodeHtmlEntities('this.media=&#x27;all&#x27;'), "this.media='all'");
+  assert.equal(decodeHtmlEntities('&#X27;'), "'");
+});
+
+test('decodeHtmlEntities does not double-decode &amp;lt;', () => {
+  // If decoded right-to-left as written, this would become '<'. The
+  // implementation explicitly resolves named refs first and `&amp;` last to
+  // preserve `&lt;` literal in the source.
+  assert.equal(decodeHtmlEntities('&amp;lt;'), '&lt;');
+});
+
+// --- extractInlineEventHandlers -------------------------------------------
+
+test('extractInlineEventHandlers matches double-quoted on* attributes', () => {
+  const html = `<link rel="preload" as="style" onload="this.media='all'">`;
+  assert.deepEqual(extractInlineEventHandlers(html), ["this.media='all'"]);
+});
+
+test('extractInlineEventHandlers matches single-quoted on* attributes', () => {
+  const html = `<button onclick='doThing(1)'>x</button>`;
+  assert.deepEqual(extractInlineEventHandlers(html), ['doThing(1)']);
+});
+
+test('extractInlineEventHandlers matches unquoted on* attribute values', () => {
+  const html = `<button onclick=doThing>x</button>`;
+  assert.deepEqual(extractInlineEventHandlers(html), ['doThing']);
+});
+
+test('extractInlineEventHandlers is case-insensitive on the attribute name', () => {
+  const html = `<a OnLoad="a()" ONCLICK="b()">x</a>`;
+  assert.deepEqual(extractInlineEventHandlers(html), ['a()', 'b()']);
+});
+
+test('extractInlineEventHandlers decodes HTML entities in the value', () => {
+  // Same logical handler, three encodings: literal, named ref, numeric ref.
+  const html =
+    `<link onload="this.media='all'">` +
+    `<link onload="this.media=&apos;all&apos;">` +
+    `<link onload="this.media=&#39;all&#39;">`;
+  const out = extractInlineEventHandlers(html);
+  assert.deepEqual(out, ["this.media='all'", "this.media='all'", "this.media='all'"]);
+});
+
+test('extractInlineEventHandlers ignores non-on* attributes', () => {
+  // `formaction` and `name="onload"` look superficially similar but are
+  // not event handlers; only `on*=` patterns should be returned.
+  const html = `<input name="onload" formaction="/x" type="text">`;
+  assert.deepEqual(extractInlineEventHandlers(html), []);
+});
+
+test('extractInlineEventHandlers does not match `onfoo=` inside a quoted value', () => {
+  // The leading `\s` anchor is what protects against this: inside the
+  // quoted value the chars before "on" are part of the value, not whitespace.
+  const html = `<a href="/path?onload=1">x</a>`;
+  assert.deepEqual(extractInlineEventHandlers(html), []);
+});
+
+test('extractInlineEventHandlers handles empty attribute values', () => {
+  const html = `<a onclick="">x</a><a onclick=''>x</a>`;
+  assert.deepEqual(extractInlineEventHandlers(html), ['', '']);
+});
+
+test('extractInlineEventHandlers tolerates whitespace around `=`', () => {
+  const html = `<a onclick = "doThing()">x</a>`;
+  assert.deepEqual(extractInlineEventHandlers(html), ['doThing()']);
+});
+
+// --- checkPolicyStructure -------------------------------------------------
+
+function makeStructDirectives(overrides = {}) {
+  return {
+    'script-src': [
+      "'self'",
+      "'unsafe-eval'",
+      "'unsafe-hashes'",
+      INLINE_HANDLER_HASH,
+      ...(overrides.scriptSrcExtra ?? []),
+    ],
+    'font-src': ["'self'", 'data:', ...(overrides.fontSrcExtra ?? [])],
+    ...(overrides.extra ?? {}),
+  };
+}
+
+test('checkPolicyStructure ok when all required tokens are present', () => {
+  const result = checkPolicyStructure({
+    directives: makeStructDirectives(),
+    headerName: 'Content-Security-Policy-Report-Only',
+  });
+  assert.deepEqual(result, { ok: true, errors: [] });
+});
+
+test("checkPolicyStructure fails when 'unsafe-hashes' is missing from script-src", () => {
+  const directives = makeStructDirectives();
+  directives['script-src'] = directives['script-src'].filter((t) => t !== "'unsafe-hashes'");
+  const result = checkPolicyStructure({
+    directives,
+    headerName: 'Content-Security-Policy-Report-Only',
+  });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.errors.some((e) => e.includes("'unsafe-hashes'")),
+    `expected an unsafe-hashes error, got: ${JSON.stringify(result.errors)}`,
+  );
+});
+
+test('checkPolicyStructure fails when the documented inline-handler hash is missing', () => {
+  const directives = makeStructDirectives();
+  directives['script-src'] = directives['script-src'].filter((t) => t !== INLINE_HANDLER_HASH);
+  const result = checkPolicyStructure({
+    directives,
+    headerName: 'Content-Security-Policy-Report-Only',
+  });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.errors.some((e) => e.includes(INLINE_HANDLER_HASH)),
+    `expected an inline-handler-hash error, got: ${JSON.stringify(result.errors)}`,
+  );
+});
+
+test('checkPolicyStructure fails when script-src-attr is set (regression guard)', () => {
+  const directives = makeStructDirectives({ extra: { 'script-src-attr': ["'none'"] } });
+  const result = checkPolicyStructure({
+    directives,
+    headerName: 'Content-Security-Policy-Report-Only',
+  });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.errors.some((e) => e.includes('script-src-attr')),
+    `expected a script-src-attr error, got: ${JSON.stringify(result.errors)}`,
+  );
+});
+
+test("checkPolicyStructure fails when font-src lacks 'data:'", () => {
+  const directives = makeStructDirectives();
+  directives['font-src'] = ["'self'"];
+  const result = checkPolicyStructure({
+    directives,
+    headerName: 'Content-Security-Policy-Report-Only',
+  });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.errors.some((e) => e.includes('font-src')),
+    `expected a font-src error, got: ${JSON.stringify(result.errors)}`,
+  );
+});
+
+test('checkPolicyStructure fails when no CSP header is configured', () => {
+  const result = checkPolicyStructure({ directives: {}, headerName: null });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.errors.some((e) => e.includes('no CSP header')),
+    `expected a no-CSP-header error, got: ${JSON.stringify(result.errors)}`,
+  );
+});
+
+// --- computeExpectedHashes ------------------------------------------------
+
+test('computeExpectedHashes unions hashes across multiple HTML strings', () => {
+  const a = `<script>console.log("a");</script>`;
+  const b = `<script>console.log("b");</script><link onload="this.media='all'">`;
+  const result = computeExpectedHashes([a, b]);
+  // 2 distinct script bodies + 1 distinct event-handler value = 3 hashes.
+  assert.equal(result.expected.size, 3);
+  assert.equal(result.scriptCount, 2);
+  assert.equal(result.handlerCount, 1);
+  // The documented inline-handler hash must be among the computed hashes.
+  assert.ok(
+    result.expected.has(INLINE_HANDLER_HASH),
+    `expected to find ${INLINE_HANDLER_HASH} in computed hashes, got: ${[...result.expected].join(', ')}`,
+  );
+});
+
+test('computeExpectedHashes deduplicates identical handlers across files', () => {
+  // Same handler value in two HTML strings produces one hash, two counts.
+  const html = `<link onload="this.media='all'">`;
+  const result = computeExpectedHashes([html, html]);
+  assert.equal(result.expected.size, 1);
+  assert.equal(result.handlerCount, 2);
+  assert.equal(result.scriptCount, 0);
+});
+
+// --- checkHashesAndPolicy -------------------------------------------------
+
+function makeFullDirectives({ extraScriptSrc = [], includeUnsafeHashes = true } = {}) {
+  return {
+    'script-src': [
+      "'self'",
+      "'unsafe-eval'",
+      ...(includeUnsafeHashes ? ["'unsafe-hashes'"] : []),
+      INLINE_HANDLER_HASH,
+      ...extraScriptSrc,
+    ],
+    'font-src': ["'self'", 'data:'],
+  };
+}
+
+test('checkHashesAndPolicy ok when every expected hash is present and policy is structurally sound', () => {
+  const expected = new Set([INLINE_HANDLER_HASH]);
+  const result = checkHashesAndPolicy({
+    expected,
+    scriptCount: 0,
+    handlerCount: 1,
+    directives: makeFullDirectives(),
+    headerName: 'Content-Security-Policy-Report-Only',
+    mode: '--dist',
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.missing, []);
+  assert.deepEqual(result.stale, []);
+  assert.deepEqual(result.structureErrors, []);
+});
+
+test('checkHashesAndPolicy reports a missing hash when an event handler is not in script-src', () => {
+  const expected = new Set([INLINE_HANDLER_HASH, "'sha256-NotInPolicy='"]);
+  const result = checkHashesAndPolicy({
+    expected,
+    scriptCount: 0,
+    handlerCount: 2,
+    directives: makeFullDirectives(),
+    headerName: 'Content-Security-Policy-Report-Only',
+    mode: '--dist',
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.missing, ["'sha256-NotInPolicy='"]);
+});
+
+test('checkHashesAndPolicy reports a stale hash in --dist mode when the policy lists an unused hash', () => {
+  // Policy lists an extra hash that does not appear in the expected set.
+  const staleHash = "'sha256-IamStale='";
+  const expected = new Set([INLINE_HANDLER_HASH]);
+  const result = checkHashesAndPolicy({
+    expected,
+    scriptCount: 0,
+    handlerCount: 1,
+    directives: makeFullDirectives({ extraScriptSrc: [staleHash] }),
+    headerName: 'Content-Security-Policy-Report-Only',
+    mode: '--dist',
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.stale, [staleHash]);
+});
+
+test('checkHashesAndPolicy does NOT flag stale hashes in --src mode', () => {
+  // In --src mode the source HTML lacks the inlineCritical handler entirely,
+  // so the documented INLINE_HANDLER_HASH would otherwise look unused. The
+  // stale check is intentionally skipped to avoid that false positive.
+  const expected = new Set(); // src/index.html has no inline scripts in this synthetic case.
+  const result = checkHashesAndPolicy({
+    expected,
+    scriptCount: 0,
+    handlerCount: 0,
+    directives: makeFullDirectives(),
+    headerName: 'Content-Security-Policy-Report-Only',
+    mode: '--src',
+  });
+  assert.deepEqual(result.stale, []);
+  // Structure check still passes -- the policy itself is well-formed.
+  assert.equal(result.ok, true);
+});
+
+test('checkHashesAndPolicy folds structure errors into the result', () => {
+  // Drop 'unsafe-hashes' from the policy. Even with the hash list correct,
+  // the structure check should fail and ok should be false.
+  const expected = new Set([INLINE_HANDLER_HASH]);
+  const result = checkHashesAndPolicy({
+    expected,
+    scriptCount: 0,
+    handlerCount: 1,
+    directives: makeFullDirectives({ includeUnsafeHashes: false }),
+    headerName: 'Content-Security-Policy-Report-Only',
+    mode: '--dist',
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.missing, []);
+  assert.deepEqual(result.stale, []);
+  assert.ok(
+    result.structureErrors.some((e) => e.includes("'unsafe-hashes'")),
+    `expected a structure error mentioning 'unsafe-hashes', got: ${JSON.stringify(result.structureErrors)}`,
+  );
+});
+
+// --- end-to-end: hash a real handler value, verify against policy --------
+
+test('the hash of `this.media=\\u0027all\\u0027` matches the documented INLINE_HANDLER_HASH', () => {
+  // Ground truth: hashing the literal byte sequence Angular's inlineCritical
+  // pattern emits should produce the constant we paste into the policy.
+  // This guards against drift if someone updates the constant without
+  // updating the literal it represents (or vice versa).
+  assert.equal(sha256Token("this.media='all'"), INLINE_HANDLER_HASH);
 });
