@@ -265,7 +265,7 @@ jobs:
           fi
       - name: Upload web bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-dist
           path: dist/jotjson
@@ -334,7 +334,7 @@ jobs:
         run: npm test
       - name: Upload api JUnit
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: api-junit
           path: api/test-results/api/junit.xml
@@ -361,7 +361,7 @@ jobs:
         run: npm run build
       - name: Upload api bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: api-dist
           # Pack only the files SWA Functions needs at runtime: host.json,
@@ -457,7 +457,7 @@ jobs:
           "
       - name: Upload api integration JUnit
         if: always() && steps.cosmos-preflight.outputs.enabled == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: api-integration-junit
           path: api/test-results/api-integration/junit.xml
@@ -506,7 +506,7 @@ jobs:
         run: npm run test:ci
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-coverage
           path: coverage/jotjson
@@ -514,7 +514,7 @@ jobs:
           retention-days: 7
       - name: Upload web JUnit
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-junit
           path: test-results/web/junit.xml
@@ -570,7 +570,7 @@ jobs:
         run: npm run test:e2e
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report
@@ -578,7 +578,7 @@ jobs:
           retention-days: 7
       - name: Upload Playwright traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-results
           path: test-results
@@ -586,7 +586,7 @@ jobs:
           retention-days: 7
       - name: Upload e2e JUnit
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-junit
           path: test-results/e2e/junit.xml
