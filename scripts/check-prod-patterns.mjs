@@ -53,7 +53,7 @@
 //   safe-harbor narrow.
 //
 // Runs with zero dependencies on Node 24+. Invoke directly or via
-//   npm run check:prod-patterns
+//   npm run lint:prod-patterns
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
