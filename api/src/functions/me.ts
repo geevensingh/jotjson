@@ -26,7 +26,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
 import { stripCosmosMetadata, VersionConflictError } from '../shared/cosmos';
-import { badRequest, internalError, unauthorized } from '../shared/http';
+import { badRequest, internalError, unauthorized, withSecurityHeaders } from '../shared/http';
 import {
   PreferenceValidationError,
   normalizePreferences,
@@ -226,19 +226,19 @@ app.http('me-get', {
   methods: ['GET'],
   route: 'me',
   authLevel: 'anonymous',
-  handler: getMe,
+  handler: withSecurityHeaders(getMe),
 });
 
 app.http('me-post', {
   methods: ['POST'],
   route: 'me',
   authLevel: 'anonymous',
-  handler: postMe,
+  handler: withSecurityHeaders(postMe),
 });
 
 app.http('me-preferences-put', {
   methods: ['PUT'],
   route: 'me/preferences',
   authLevel: 'anonymous',
-  handler: putMePreferences,
+  handler: withSecurityHeaders(putMePreferences),
 });
