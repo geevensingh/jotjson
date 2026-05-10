@@ -9,19 +9,69 @@
       name="description"
       content="A fast JSON and JSONC viewer. Paste raw JSON to format, search, and browse it as a tree - anonymously, or signed in for history and shareable links."
     />
-    <meta name="theme-color" content="#1e1e1e" />
+    <meta
+      id="meta-theme-color-dark"
+      name="theme-color"
+      content="#1e1e1e"
+      media="(prefers-color-scheme: dark)"
+    />
+    <meta
+      id="meta-theme-color-light"
+      name="theme-color"
+      content="#fafafa"
+      media="(prefers-color-scheme: light)"
+    />
+    <link rel="canonical" href="https://jotjson.com/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="JotJSON" />
+    <meta property="og:title" content="JotJSON - JSON viewer, formatter, and tree explorer" />
+    <meta
+      property="og:description"
+      content="A fast JSON and JSONC viewer. Paste raw JSON to format, search, and browse it as a tree - anonymously, or signed in for history and shareable links."
+    />
+    <meta property="og:url" content="https://jotjson.com/" />
+    <meta property="og:image" content="https://jotjson.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="JotJSON - JSON viewer, formatter, and tree explorer" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="JotJSON" />
+    <meta
+      name="twitter:description"
+      content="A fast JSON and JSONC viewer. Paste raw JSON to format, search, and browse it as a tree."
+    />
+    <meta name="twitter:image" content="https://jotjson.com/og.png" />
+
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <style>
       /*
-       * Pre-bootstrap splash. Renders inside <app-root> before Angular
-       * loads; bootstrap clears these children on first render so no
-       * cleanup code is needed. Theme tokens mirror src/styles/_variables.scss
-       * (color-primary #00bcd4, bg dark #1e1e1e / light #fafafa). The bar
-       * height (8px) and top:0 position match the in-app route progress bar
+       * Pre-bootstrap splash. Renders as a sibling of <app-root> (NOT
+       * inside it) so the static-prerender pipeline -- which replaces
+       * <app-root>'s children with the SSR-rendered Angular tree --
+       * does not strip the splash markup from the served HTML. Without
+       * this placement, prerendered routes (/ and /404) would briefly
+       * show their server-skeleton (e.g. the home brand + tagline)
+       * before Angular bootstrapped on top. AppComponent removes the
+       * #jot-static-splash element after its first paint via
+       * afterNextRender + double-rAF, so the Angular splash (visually
+       * identical, painted on top because it is later in DOM order)
+       * takes over without a flash gap.
+       *
+       * Theme tokens mirror src/styles/_variables.scss (color-primary
+       * #00bcd4, bg dark #1e1e1e / light #fafafa). The bar height
+       * (8px) and top:0 position match the in-app route progress bar
        * so the handoff at first NavigationEnd is visually continuous.
+       *
+       * This static splash always shows the generic "Loading JotJSON..."
+       * label; the Angular splash component takes over once mounted and
+       * cycles through "Loading JotJSON..." -> "Downloading JSON..." ->
+       * "Rendering tree..." per the lifecycle stages in
+       * LoadingSplashService.
        *
        * Strings here are intentionally outside Angular's i18n pipeline -
        * see AGENTS.md "Internationalization" section.
@@ -57,6 +107,26 @@
           --jot-fg-dim: #5a5a5a;
           --jot-track: rgba(0, 188, 212, 0.22);
         }
+      }
+      /*
+       * Class-based theme overrides for explicit user preference.
+       * Higher specificity than the media query above means an explicit
+       * `theme-dark` / `theme-light` body class (set by the inline boot
+       * script below when localStorage has an explicit override) wins
+       * over the OS preference. With `theme-system` (default markup),
+       * neither rule matches and the media query handles it.
+       */
+      .theme-dark .jot-splash {
+        --jot-bg: #1e1e1e;
+        --jot-fg: #e4e4e4;
+        --jot-fg-dim: #a0a0a0;
+        --jot-track: rgba(0, 188, 212, 0.18);
+      }
+      .theme-light .jot-splash {
+        --jot-bg: #fafafa;
+        --jot-fg: #1a1a1a;
+        --jot-fg-dim: #5a5a5a;
+        --jot-track: rgba(0, 188, 212, 0.22);
       }
       .jot-splash__bar {
         position: fixed;
@@ -180,78 +250,74 @@
         color: var(--jot-fg-dim);
         margin: 0;
       }
-      /*
-       * Two labels coexist in the static splash: one for cold-boot to
-       * any non-share route, one for cold-boot to /s/:slug. The inline
-       * script below sets data-jot-splash-kind="blob" on <html> when
-       * the path matches the share route, swapping which label is
-       * visible. CSS handles the swap so the splash paints with the
-       * correct text on the very first frame, no JavaScript-driven
-       * re-render. Hidden labels sit at display:none so they're also
-       * excluded from the accessibility tree - the visible <p> is the
-       * sole accessible name for the role="status" region.
-       */
-      .jot-splash__label--blob {
-        display: none;
-      }
-      [data-jot-splash-kind='blob'] .jot-splash__label--default {
-        display: none;
-      }
-      [data-jot-splash-kind='blob'] .jot-splash__label--blob {
-        display: block;
-      }
     </style>
-    <script>
-      // Pre-bootstrap URL-kind detection for the static splash. Runs
-      // synchronously in <head> so the attribute is set before <body>
-      // parses; the static splash CSS rules above pick up the right
-      // label on its first paint, eliminating any "Loading JotJSON..."
-      // -> "Loading JSON..." flicker on cold-boot deep-links to /s/.
-      // Pattern matches the actual share route shape (single segment
-      // after /s/) - bare /s/ and nested /s/foo/bar fall through to
-      // the default label and the eventual /404 page.
-      if (/^\/s\/[^\/]+$/.test(location.pathname)) {
-        document.documentElement.setAttribute('data-jot-splash-kind', 'blob');
-      }
-    </script>
   </head>
   <body class="theme-system">
-    <app-root>
-      <div class="jot-splash" role="status" aria-live="polite">
-        <div class="jot-splash__bar" aria-hidden="true"></div>
-        <svg
-          class="jot-splash__logo"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 512 512"
-          aria-hidden="true"
+    <script>
+      /*
+       * Cold-boot theme correctness. Reads the user's persisted
+       * preference and applies an explicit `theme-dark` / `theme-light`
+       * class to <body> BEFORE the splash element below is parsed,
+       * eliminating the wrong-palette flash when the stored preference
+       * disagrees with `prefers-color-scheme`. With no override (key
+       * missing, malformed JSON, `system`), the media query above
+       * stays authoritative.
+       *
+       * Mirror of `src/app/core/boot/resolve-boot-theme.ts`. Keep the
+       * two in sync. Tests on the helper cover the decision logic;
+       * this inline copy is covered by the CSP-hash lint gates
+       * (source mode + dist mode) and a manual smoke check.
+       *
+       * Wrapped in try/catch defensively - a broken splash is worse
+       * than a wrong-palette flash.
+       */
+      (function () {
+        try {
+          var raw = localStorage.getItem('jotjson.preferences.v1');
+          if (!raw) return;
+          var pref = JSON.parse(raw).theme;
+          if (pref !== 'dark' && pref !== 'light') return;
+          document.body.classList.remove('theme-system');
+          document.body.classList.add('theme-' + pref);
+        } catch (e) {
+          /* never break boot */
+        }
+      })();
+    </script>
+    <div id="jot-static-splash" class="jot-splash" role="status" aria-live="polite">
+      <div class="jot-splash__bar" aria-hidden="true"></div>
+      <svg
+        class="jot-splash__logo"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 512 512"
+        aria-hidden="true"
+      >
+        <rect width="512" height="512" rx="96" ry="96" fill="#1e1e1e" />
+        <g
+          fill="none"
+          stroke="#00bcd4"
+          stroke-width="36"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         >
-          <rect width="512" height="512" rx="96" ry="96" fill="#1e1e1e" />
-          <g
-            fill="none"
-            stroke="#00bcd4"
-            stroke-width="36"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M168 112 C 132 112, 120 132, 120 164 L 120 228 C 120 248, 108 256, 88 256 C 108 256, 120 264, 120 284 L 120 348 C 120 380, 132 400, 168 400"
-            />
-            <path
-              d="M344 112 C 380 112, 392 132, 392 164 L 392 228 C 392 248, 404 256, 424 256 C 404 256, 392 264, 392 284 L 392 348 C 392 380, 380 400, 344 400"
-            />
-          </g>
           <path
-            d="M296 144 L 296 316 C 296 360, 268 384, 232 384 C 200 384, 176 364, 168 336"
-            fill="none"
-            stroke="#00bcd4"
-            stroke-width="44"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+            d="M168 112 C 132 112, 120 132, 120 164 L 120 228 C 120 248, 108 256, 88 256 C 108 256, 120 264, 120 284 L 120 348 C 120 380, 132 400, 168 400"
           />
-        </svg>
-        <p class="jot-splash__label jot-splash__label--default">Loading JotJSON...</p>
-        <p class="jot-splash__label jot-splash__label--blob">Loading JSON...</p>
-      </div>
-    </app-root>
+          <path
+            d="M344 112 C 380 112, 392 132, 392 164 L 392 228 C 392 248, 404 256, 424 256 C 404 256, 392 264, 392 284 L 392 348 C 392 380, 380 400, 344 400"
+          />
+        </g>
+        <path
+          d="M296 144 L 296 316 C 296 360, 268 384, 232 384 C 200 384, 176 364, 168 336"
+          fill="none"
+          stroke="#00bcd4"
+          stroke-width="44"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <p class="jot-splash__label">Loading JotJSON...</p>
+    </div>
+    <app-root></app-root>
   </body>
 </html>

@@ -42,6 +42,7 @@ describe('shareBlobResolver', () => {
   let getWithProgressSpy: jasmine.Spy<(slug: string) => Observable<BlobFetchEvent>>;
   let navSpy: jasmine.Spy;
   let reportProgressSpy: jasmine.Spy;
+  let markBytesCompleteSpy: jasmine.Spy;
   let eventSpy: jasmine.Spy;
 
   function makeStream(...events: BlobFetchEvent[]): Observable<BlobFetchEvent> {
@@ -54,8 +55,9 @@ describe('shareBlobResolver', () => {
   beforeEach(() => {
     getWithProgressSpy = jasmine
       .createSpy<(slug: string) => Observable<BlobFetchEvent>>('getWithProgress')
-      .and.returnValue(makeStream({ kind: 'blob', blob: blob() }));
+      .and.returnValue(makeStream({ kind: 'bytesComplete' }, { kind: 'blob', blob: blob() }));
     reportProgressSpy = jasmine.createSpy('reportBlobProgress');
+    markBytesCompleteSpy = jasmine.createSpy('markBlobBytesComplete');
     eventSpy = jasmine.createSpy('event');
     TestBed.configureTestingModule({
       providers: [
@@ -63,7 +65,10 @@ describe('shareBlobResolver', () => {
         { provide: BlobService, useValue: { getWithProgress: getWithProgressSpy } },
         {
           provide: LoadingSplashService,
-          useValue: { reportBlobProgress: reportProgressSpy },
+          useValue: {
+            reportBlobProgress: reportProgressSpy,
+            markBlobBytesComplete: markBytesCompleteSpy,
+          },
         },
         { provide: LoggerService, useValue: { event: eventSpy } },
       ],
@@ -78,6 +83,24 @@ describe('shareBlobResolver', () => {
     expect(navSpy).not.toHaveBeenCalled();
   });
 
+  it('calls splash.markBlobBytesComplete on the bytesComplete event', async () => {
+    getWithProgressSpy.and.returnValue(
+      makeStream(
+        { kind: 'progress', loaded: 256, total: 1024 },
+        { kind: 'bytesComplete' },
+        { kind: 'blob', blob: blob() },
+      ),
+    );
+    await runResolver('abc123');
+    expect(markBytesCompleteSpy).toHaveBeenCalledTimes(1);
+    // The bytesComplete trigger fires AFTER the last progress event
+    // and BEFORE the terminal blob event - this is the entire point
+    // of the v0.10.7 fix.
+    expect(reportProgressSpy.calls.count()).toBeGreaterThan(0);
+    const lastReportCall = reportProgressSpy.calls.mostRecent();
+    expect(lastReportCall.args).toEqual([1024, 1024]);
+  });
+
   it('navigates to /404 with attemptedSlug and returns null on error', async () => {
     getWithProgressSpy.and.returnValue(throwError(() => ({ status: 404 })));
     const result = await runResolver('missing');
@@ -86,6 +109,7 @@ describe('shareBlobResolver', () => {
       replaceUrl: true,
       state: { attemptedSlug: 'missing' },
     });
+    expect(markBytesCompleteSpy).not.toHaveBeenCalled();
   });
 
   it('navigates to /404 (no state) and returns null when slug is empty', async () => {
@@ -110,23 +134,30 @@ describe('shareBlobResolver', () => {
       makeStream(
         { kind: 'progress', loaded: 256, total: 1024 },
         { kind: 'progress', loaded: 768, total: 1024 },
+        { kind: 'bytesComplete' },
         { kind: 'blob', blob: blob() },
       ),
     );
     await runResolver('abc123');
     const calls = reportProgressSpy.calls.allArgs();
-    // Three calls: two from progress events + one snap-to-1.0.
+    // Three calls: two from progress events + one defensive snap-to-1.0
+    // on the terminal blob event (kept in case bytesComplete somehow
+    // didn't fire).
     expect(calls.length).toBe(3);
     expect(calls[0]).toEqual([256, 1024]);
     expect(calls[1]).toEqual([768, 1024]);
     expect(calls[2])
-      .withContext('snap-to-1.0 on terminal event so the bar visually completes')
+      .withContext('defensive snap-to-1.0 on terminal event remains for the no-bytesComplete case')
       .toEqual([1024, 1024]);
   });
 
   it('does not snap when no determinate total was ever observed', async () => {
     getWithProgressSpy.and.returnValue(
-      makeStream({ kind: 'progress', loaded: 256, total: null }, { kind: 'blob', blob: blob() }),
+      makeStream(
+        { kind: 'progress', loaded: 256, total: null },
+        { kind: 'bytesComplete' },
+        { kind: 'blob', blob: blob() },
+      ),
     );
     await runResolver('abc123');
     expect(reportProgressSpy.calls.allArgs()).toEqual([[256, null]]);
@@ -134,7 +165,11 @@ describe('shareBlobResolver', () => {
 
   it('emits blob.fetch.complete with determinateProgress=true when a total was observed', async () => {
     getWithProgressSpy.and.returnValue(
-      makeStream({ kind: 'progress', loaded: 100, total: 1000 }, { kind: 'blob', blob: blob() }),
+      makeStream(
+        { kind: 'progress', loaded: 100, total: 1000 },
+        { kind: 'bytesComplete' },
+        { kind: 'blob', blob: blob() },
+      ),
     );
     await runResolver('abc123');
     expect(eventSpy).toHaveBeenCalledWith('blob.fetch.complete', { determinateProgress: true });
@@ -142,7 +177,11 @@ describe('shareBlobResolver', () => {
 
   it('emits blob.fetch.complete with determinateProgress=false when no total was observed', async () => {
     getWithProgressSpy.and.returnValue(
-      makeStream({ kind: 'progress', loaded: 100, total: null }, { kind: 'blob', blob: blob() }),
+      makeStream(
+        { kind: 'progress', loaded: 100, total: null },
+        { kind: 'bytesComplete' },
+        { kind: 'blob', blob: blob() },
+      ),
     );
     await runResolver('abc123');
     expect(eventSpy).toHaveBeenCalledWith('blob.fetch.complete', { determinateProgress: false });

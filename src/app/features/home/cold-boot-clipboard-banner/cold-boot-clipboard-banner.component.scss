@@ -1,0 +1,42 @@
+:host {
+  display: block;
+}
+
+// Single flex row at wide widths so the actions stay visually attached
+// to the message; `flex-wrap: wrap` drops them to a second line on
+// narrow viewports where they remain right-aligned by
+// `justify-content: space-between`. Mirrors the layout shape of the
+// sibling `extract-json-banner`.
+.banner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin: 0 0 8px 0;
+}
+
+.banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.banner-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.dismiss-icon {
+  // Tighten the icon-only X button so it doesn't visually outweigh the
+  // text mat-buttons next to it.
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+}

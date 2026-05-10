@@ -32,7 +32,7 @@ import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
 import { isColdAndMark } from '../../../core/telemetry/cold-flag';
 import type { BlobHighlight, FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
-import { IconComponent } from '../icon/icon.component';
+import { IconComponent, type JjIconName } from '../icon/icon.component';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import {
   JsonBreadcrumbComponent,
@@ -132,6 +132,51 @@ interface ManualHighlightRows {
   resolvedHighlightsByPath: ReadonlyMap<string, ResolvedHighlight>;
   cascadeHighlightsByPath: ReadonlyMap<string, { path: string; color: string }>;
 }
+
+/**
+ * Discriminated metadata for the single-item elevation logic on the
+ * Subtree submenu (v0.19.4). When the Subtree submenu would only
+ * contain one visible item, the row context menu elevates that item
+ * to the row level instead of nesting it behind a `Subtree >` flyout.
+ *
+ * - `'highlightTree'`: only Highlight subtree visible. Elevated as
+ *   `Highlight subtree >` (label restored to carry the scope outside
+ *   of the Subtree submenu's name context).
+ * - `'removeTreeHighlight'`: only Remove subtree highlight.
+ * - `'collapse'`: only Collapse from here (and the surfaced row is
+ *   not already showing the same action).
+ * - `'collapseSame'`: would-be Collapse, but the surfaced shortcut
+ *   row already shows it. Suppress everything; no Subtree contribution.
+ * - `'isolate'`: only single-mode Isolate. Pair mode (showIsolatePair)
+ *   contributes 2 items so it never elevates singly.
+ * - `'expandSingle'`: the only Subtree contribution is the Expand
+ *   section, AND that section has exactly one visible item, AND that
+ *   item is not already on the surfaced shortcut. The single Expand
+ *   action also elevates past the (would-be) Expand flyout.
+ * - `'expandSame'`: same as `'collapseSame'` for the Expand-1-level
+ *   case. Suppress.
+ * - `'expandSubmenu'`: the only Subtree contribution is the Expand
+ *   section with 2+ items. The Expand flyout itself is elevated
+ *   (renders directly off the row menu instead of nested inside
+ *   Subtree).
+ */
+type SubtreeElevatedAction =
+  | { kind: 'highlightTree' }
+  | { kind: 'removeTreeHighlight' }
+  | { kind: 'collapse' }
+  | { kind: 'collapseSame' }
+  | { kind: 'isolate'; mode: 'single' }
+  | { kind: 'expandSingle'; single: ExpandSingleAction }
+  | { kind: 'expandSame' }
+  | { kind: 'expandSubmenu' };
+
+/**
+ * Discriminated metadata for the single-item elevation logic on the
+ * Expand sub-submenu (v0.19.4). When the Expand sub-submenu would
+ * only contain one visible item, that item elevates one level up
+ * (into the Subtree submenu, or further if Subtree itself elevates).
+ */
+export type ExpandSingleAction = { kind: 'expandAll' } | { kind: 'expandToDepth'; depth: number };
 
 /**
  * Escapes a value for use in a CSS attribute selector. Falls back to
@@ -262,6 +307,31 @@ export class JsonTreeComponent {
   readonly selectedPath = signal<string | null>(null);
 
   /**
+   * M7g-3b. Path of the row that currently owns the keyboard cursor
+   * (roving `tabindex=0`), or `null` when no row is focusable yet
+   * (empty tree or pre-initial-focus). Decoupled from `selectedPath`
+   * because the WAI-ARIA Tree pattern distinguishes the two: the
+   * focused row is the keyboard cursor target; the selected row is
+   * the user's chosen value. Pointer click sets BOTH (so a click +
+   * ArrowDown moves from the just-clicked row); keyboard Enter / Space
+   * sets `selectedPath` from `focusedPath`. Search-Enter updates
+   * `focusedPath` silently without calling DOM `focus()` (the search
+   * input keeps focus so repeated Enter / Shift+Enter cycle hits).
+   */
+  readonly focusedPath = signal<string | null>(null);
+
+  /**
+   * M7g-3b. Bumped on every `treeControl.expansionModel.changed`
+   * emission so `computed()` signals can register a dependency on
+   * "any expand/collapse occurred" without subscribing themselves.
+   * Catches every expansion path (direct `treeControl.toggle`,
+   * `matTreeNodeToggle` clicks, `expandAll` / `collapseAll` /
+   * `expandToLevel` / `expandAndScroll`, and the initial auto-fit
+   * expansion) because they all flow through `expansionModel`.
+   */
+  private readonly expansionVersion = signal(0);
+
+  /**
    * Context-menu state (M7q). `contextNode` is the row whose menu is
    * currently open (or about to open). `ctxX` / `ctxY` carry the cursor
    * coordinates for the right-click flow; the kebab flow self-anchors
@@ -324,6 +394,8 @@ export class JsonTreeComponent {
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
   readonly collapseLabel = $localize`:@@tree.node.collapse:Collapse`;
 
+  readonly treeAriaLabel = $localize`:@@tree.aria:JSON tree`;
+
   readonly expandMenuButtonLabel = $localize`:@@tree.expand.menu.button:Expand to...`;
   readonly matchingValueAriaLabel = $localize`:@@tree.matchValue.aria:Matches the selected value`;
 
@@ -331,7 +403,7 @@ export class JsonTreeComponent {
   readonly searchCaseSensitiveTooltip = $localize`:@@tree.search.caseSensitive.tooltip:Match case`;
   readonly searchRegexLabel = $localize`:@@tree.search.regex.label:.*`;
   readonly searchRegexTooltip = $localize`:@@tree.search.regex.tooltip:Regular expression`;
-  readonly searchScopeTooltip = $localize`:@@tree.search.scope.tooltip:Search in`;
+  readonly searchScopeTooltip = $localize`:@@tree.search.scope.tooltip:Find in`;
   readonly searchScopeKeysLabel = $localize`:@@tree.search.scope.keys:Keys`;
   readonly searchScopeValuesLabel = $localize`:@@tree.search.scope.values:Values`;
   readonly searchScopeBothLabel = $localize`:@@tree.search.scope.both:Keys and values`;
@@ -340,27 +412,73 @@ export class JsonTreeComponent {
   readonly searchPrevTooltip = $localize`:@@tree.search.prev.tooltip:Previous match`;
   readonly searchNextTooltip = $localize`:@@tree.search.next.tooltip:Next match`;
 
-  // Context menu labels (M7q). Stored as readonly fields so $localize
-  // sees the literal at extract time and the template can bind to them
-  // without re-evaluating per render.
+  // Context menu labels (M7q + tree-menu-overhaul). Stored as readonly
+  // fields so $localize sees the literal at extract time and the
+  // template can bind to them without re-evaluating per render.
   readonly ctxCopyKeyLabel = $localize`:@@tree.contextMenu.copyKey:Copy key`;
   readonly ctxCopyValueLabel = $localize`:@@tree.contextMenu.copyValue:Copy value`;
   readonly ctxCopyPathLabel = $localize`:@@tree.contextMenu.copyPath:Copy path`;
-  readonly ctxSearchByKeyLabel = $localize`:@@tree.contextMenu.searchByKey:Search by key`;
-  readonly ctxSearchByValueLabel = $localize`:@@tree.contextMenu.searchByValue:Search by value`;
-  readonly ctxCollapseLabel = $localize`:@@tree.contextMenu.collapse:Collapse`;
-  readonly ctxExpandAllFromHereLabel = $localize`:@@tree.contextMenu.expandAllFromHere:Expand all from here`;
-  readonly ctxExpandToDepth1Label = $localize`:@@tree.contextMenu.expandToDepth.1:Expand 1 level from here`;
-  readonly ctxExpandToDepth2Label = $localize`:@@tree.contextMenu.expandToDepth.2:Expand 2 levels from here`;
-  readonly ctxExpandToDepth3Label = $localize`:@@tree.contextMenu.expandToDepth.3:Expand 3 levels from here`;
-  readonly ctxExpandToDepth4Label = $localize`:@@tree.contextMenu.expandToDepth.4:Expand 4 levels from here`;
-  readonly ctxExpandToDepth5Label = $localize`:@@tree.contextMenu.expandToDepth.5:Expand 5 levels from here`;
+  // i18n IDs stable per AGENTS.md §4: source text changed from
+  // "Search by key" / "Search by value" to "Find by key" / "Find by
+  // value" but the message IDs continue to read `searchByKey` /
+  // `searchByValue`. TS method names also changed (Phase 2) but
+  // telemetry IDs stay stable to preserve KQL continuity.
+  readonly ctxFindByKeyLabel = $localize`:@@tree.contextMenu.searchByKey:Find by key`;
+  readonly ctxFindByValueLabel = $localize`:@@tree.contextMenu.searchByValue:Find by value`;
+  // Surfaced default-shortcut row (top-level): label depends on row
+  // state (see `surfacedShortcutLabel` below). The "Collapse from
+  // here" reading carries the spec's §513 wording at top level; the
+  // in-Subtree variant drops "from here" because the submenu name
+  // already carries the scope.
+  readonly ctxCollapseFromHereLabel = $localize`:@@tree.contextMenu.collapse:Collapse from here`;
+  readonly ctxExpand1LevelLabel = $localize`:@@tree.contextMenu.expand1Level:Expand 1 level`;
+  // Surfaced row tooltip removed in v0.19.1 polish: the matTooltip
+  // overlay was rendering below the bolded item and obscuring the
+  // next menu row, making clicks on adjacent items difficult. Bold
+  // styling alone is the visible signal for the dblclick-equivalent
+  // action; the a11y equivalent is the `.sr-only` hint span below.
+  readonly defaultActionA11yHint = $localize`:@@tree.contextMenu.defaultActionA11yHint:; same as double-clicking the row`;
+  // Subtree submenu (Path Y). Trigger label and items inside drop the
+  // "from here" / "subtree" suffix because the submenu name carries
+  // the scope.
+  readonly ctxSubtreeMenuLabel = $localize`:@@tree.contextMenu.subtreeMenu:Subtree`;
+  readonly ctxSubtreeCollapseLabel = $localize`:@@tree.contextMenu.subtreeCollapse:Collapse`;
+  readonly ctxSubtreeExpandMenuLabel = $localize`:@@tree.contextMenu.subtreeExpandMenu:Expand`;
+  readonly ctxSubtreeExpandAllLabel = $localize`:@@tree.contextMenu.expandAllFromHere:All`;
+  // Per-depth labels inside the Subtree -> Expand submenu. Source text
+  // uses the "+N level(s)" form per DESIGN_SPEC.md §516 (relative,
+  // expand-only) -- distinct from the toolbar's snap-to-exact dropdown.
+  readonly ctxExpandToDepth1Label = $localize`:@@tree.contextMenu.expandToDepth.1:+1 level`;
+  readonly ctxExpandToDepth2Label = $localize`:@@tree.contextMenu.expandToDepth.2:+2 levels`;
+  readonly ctxExpandToDepth3Label = $localize`:@@tree.contextMenu.expandToDepth.3:+3 levels`;
+  readonly ctxExpandToDepth4Label = $localize`:@@tree.contextMenu.expandToDepth.4:+4 levels`;
+  readonly ctxExpandToDepth5Label = $localize`:@@tree.contextMenu.expandToDepth.5:+5 levels`;
+  // Spec terms preserved per DESIGN_SPEC.md §514. Renaming would lose
+  // the precise `narrowSet` / `widerSet` semantics.
   readonly ctxIsolateLabel = $localize`:@@tree.contextMenu.isolate:Isolate`;
   readonly ctxCollapseSiblingsLabel = $localize`:@@tree.contextMenu.collapseSiblings:Collapse siblings`;
+  // Single-row "Highlight" stays at top level. Subtree-scope
+  // "Highlight" lives inside the Subtree submenu. Source text changed
+  // from "Highlight tree" to "Highlight" since the submenu name
+  // already conveys the subtree scope; i18n IDs stay stable.
   readonly ctxHighlightLabel = $localize`:@@tree.contextMenu.highlight:Highlight`;
-  readonly ctxHighlightTreeLabel = $localize`:@@tree.contextMenu.highlightTree:Highlight tree`;
+  readonly ctxHighlightTreeLabel = $localize`:@@tree.contextMenu.highlightTree:Highlight`;
   readonly ctxRemoveHighlightLabel = $localize`:@@tree.contextMenu.removeHighlight:Remove highlight`;
-  readonly ctxRemoveTreeHighlightLabel = $localize`:@@tree.contextMenu.removeTreeHighlight:Remove tree highlight`;
+  readonly ctxRemoveTreeHighlightLabel = $localize`:@@tree.contextMenu.removeTreeHighlight:Remove highlight`;
+  // Elevated labels (v0.19.4): when a Subtree-scoped item is the
+  // sole Subtree child, it elevates to row level. The submenu's
+  // scope is no longer carried by the menu name, so the label
+  // restores the "subtree" / "from here" qualifier explicitly.
+  // Each i18n ID is new (these strings did not exist pre-v0.19.4).
+  readonly ctxHighlightTreeElevatedLabel = $localize`:@@tree.contextMenu.highlightTree.elevated:Highlight subtree`;
+  readonly ctxRemoveTreeHighlightElevatedLabel = $localize`:@@tree.contextMenu.removeTreeHighlight.elevated:Remove subtree highlight`;
+  readonly ctxExpandFromHereElevatedMenuLabel = $localize`:@@tree.contextMenu.expandFromHere.elevatedMenu:Expand from here`;
+  readonly ctxExpandAllFromHereElevatedLabel = $localize`:@@tree.contextMenu.expandAllFromHere.elevated:Expand all from here`;
+  readonly ctxExpandToDepth1ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.1.elevated:Expand 1 level from here`;
+  readonly ctxExpandToDepth2ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.2.elevated:Expand 2 levels from here`;
+  readonly ctxExpandToDepth3ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.3.elevated:Expand 3 levels from here`;
+  readonly ctxExpandToDepth4ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.4.elevated:Expand 4 levels from here`;
+  readonly ctxExpandToDepth5ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.5.elevated:Expand 5 levels from here`;
   readonly preferredHighlightLabel = $localize`:@@tree.highlight.swatch.preferred:Preferred`;
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
@@ -560,6 +678,74 @@ export class JsonTreeComponent {
   );
 
   /**
+   * What the row's double-click would do, given the currently-active
+   * `contextNode`. Drives the bolded "default action" affordance in
+   * the right-click menu (Path Y in the tree-menu overhaul plan):
+   *
+   *   - `'copyValue'`: dblclick copies (primitives and empty
+   *     containers). The bolded item is the always-present "Copy
+   *     value" row at the top of the menu -- no separate surfaced
+   *     shortcut row.
+   *   - `'collapseRow'`: dblclick collapses this row. A surfaced
+   *     "Collapse from here" shortcut row appears just above the
+   *     `Subtree >` trigger and gets the bold treatment.
+   *   - `'expandRow'`: dblclick expands this row. A surfaced
+   *     "Expand 1 level" shortcut row appears just above the
+   *     `Subtree >` trigger and gets the bold treatment.
+   *   - `'none'`: no `contextNode` set yet (menu is closed).
+   *
+   * The computed reads `expansionVersion()` so any
+   * `treeControl.toggle/expand/collapse/expandAll/collapseAll` flow
+   * re-evaluates the bolding without requiring components to track
+   * the expansionModel directly.
+   */
+  readonly defaultActionKind = computed<'copyValue' | 'collapseRow' | 'expandRow' | 'none'>(() => {
+    const cn = this.contextNode();
+    if (!cn) return 'none';
+    // Subscribe to expand/collapse changes so the bolded item flips
+    // when the row's expansion state changes while the menu is open
+    // (rare but possible if user keyboards through).
+    this.expansionVersion();
+    if ((cn.type === 'object' || cn.type === 'array') && cn.children?.length) {
+      return this.treeControl.isExpanded(cn) ? 'collapseRow' : 'expandRow';
+    }
+    return 'copyValue';
+  });
+
+  /**
+   * Localized label for the surfaced default-action shortcut row.
+   * `null` when no shortcut should be surfaced (primitives / empty
+   * containers -- `Copy value` is already at the top of the menu and
+   * gets the bold class directly there).
+   */
+  readonly surfacedShortcutLabel = computed<string | null>(() => {
+    switch (this.defaultActionKind()) {
+      case 'collapseRow':
+        return this.ctxCollapseFromHereLabel;
+      case 'expandRow':
+        return this.ctxExpand1LevelLabel;
+      default:
+        return null;
+    }
+  });
+
+  /**
+   * Leading-icon name for the surfaced default-action shortcut row.
+   * Mirrors `surfacedShortcutLabel`'s state machine. `null` when no
+   * shortcut row is rendered.
+   */
+  readonly surfacedShortcutIconName = computed<JjIconName | null>(() => {
+    switch (this.defaultActionKind()) {
+      case 'collapseRow':
+        return 'collapse-subtree';
+      case 'expandRow':
+        return 'expand-subtree';
+      default:
+        return null;
+    }
+  });
+
+  /**
    * Localized "12 matches" / "1 match" / "No matches" string for the
    * counter beside the search input. Returns the empty string when
    * neither a query nor a type filter is active so the counter can be
@@ -713,6 +899,28 @@ export class JsonTreeComponent {
     };
     walk(this.root());
     return map;
+  });
+
+  /**
+   * M7g-3b. Visible rows in document order (depth-first walk skipping
+   * collapsed subtrees). Drives ArrowUp / ArrowDown / Home / End
+   * navigation and the focus-recovery lifecycle effect. Re-evaluates
+   * whenever `root()` rebuilds OR `expansionVersion` increments
+   * (i.e., any expand/collapse).
+   */
+  private readonly visibleRowsInOrder = computed<readonly TreeNode[]>(() => {
+    this.expansionVersion();
+    const rootNode = this.root();
+    if (!rootNode) return [];
+    const out: TreeNode[] = [];
+    const walk = (node: TreeNode): void => {
+      out.push(node);
+      if (node.children?.length && this.treeControl.isExpanded(node)) {
+        for (const child of node.children) walk(child);
+      }
+    };
+    walk(rootNode);
+    return out;
   });
 
   /**
@@ -1034,6 +1242,69 @@ export class JsonTreeComponent {
         totalMatches,
       });
     });
+
+    // M7g-3b. Track CDK expansion-model changes via a counter signal so
+    // computed() (notably visibleRowsInOrder) can register a clean
+    // dependency on "any expand/collapse occurred". The subscription
+    // lives for the component's lifetime; expansionModel is owned by
+    // treeControl (which is owned by this component), so we don't need
+    // takeUntilDestroyed - the model is GC'd with the component.
+    const expansionSub = this.treeControl.expansionModel.changed.subscribe(() => {
+      this.expansionVersion.update((v) => v + 1);
+    });
+    this.destroyRef.onDestroy(() => expansionSub.unsubscribe());
+
+    // M7g-3b. Lifecycle effect for `focusedPath` recovery. Handles five
+    // cases in one place:
+    //   1. Empty tree -> clear focus.
+    //   2. Initial mount / no focus yet -> pick first visible row.
+    //   3. Still visible -> no-op.
+    //   4. Hidden by ancestor collapse -> walk up to nearest visible
+    //      ancestor.
+    //   5. Path no longer exists (JSON re-parse) -> reset to first
+    //      visible row.
+    // `untracked` writes prevent recursive effect runs.
+    effect(() => {
+      const visible = this.visibleRowsInOrder();
+      const path = this.focusedPath();
+
+      if (visible.length === 0) {
+        if (path !== null) untracked(() => this.focusedPath.set(null));
+        return;
+      }
+
+      if (path === null) {
+        const first = visible[0]!;
+        untracked(() => this.focusedPath.set(first.pathString));
+        return;
+      }
+
+      const visibleSet = new Set(visible.map((n) => n.pathString));
+      if (visibleSet.has(path)) return;
+
+      // Walk up the path of the (possibly hidden) node to find the
+      // nearest currently-visible ancestor.
+      const node = this.nodeIndex().get(path);
+      if (node) {
+        const parts: (string | number)[] = [];
+        let recovered: string | null = null;
+        for (let i = 0; i < node.path.length; i++) {
+          parts.push(node.path[i]!);
+          const ancestorPath = this.formatPath(parts);
+          if (visibleSet.has(ancestorPath)) recovered = ancestorPath;
+        }
+        // Root may also be the recovery target (path === '$').
+        if (recovered === null && visibleSet.has('$')) recovered = '$';
+        if (recovered !== null) {
+          const finalRecovered = recovered;
+          untracked(() => this.focusedPath.set(finalRecovered));
+          return;
+        }
+      }
+
+      // Path no longer exists in the index at all -- reset to first.
+      untracked(() => this.focusedPath.set(visible[0]!.pathString));
+    });
   }
 
   hasChild = (_: number, node: TreeNode): boolean => !!node.children && node.children.length > 0;
@@ -1042,6 +1313,12 @@ export class JsonTreeComponent {
    * Click handler for `.tree-row`. Selects the row unless the click
    * target is an interactive child (twisty toggle, kebab button,
    * etc.) in which case the child's own handler takes precedence.
+   *
+   * M7g-3b: also moves the keyboard cursor (`focusedPath`) to the
+   * clicked row so a subsequent ArrowDown moves from the row the user
+   * just clicked, not from a stale "previously focused" row. DOM
+   * focus follows automatically because the click already landed on
+   * the row element.
    */
   onSelect(node: TreeNode, event: Event): void {
     const target = event.target;
@@ -1050,7 +1327,231 @@ export class JsonTreeComponent {
       return;
     }
     this.selectedPath.set(node.pathString);
+    this.focusedPath.set(node.pathString);
     event.stopPropagation();
+  }
+
+  /**
+   * M7g-3b. Returns the roving tabindex for a tree node: `0` for the
+   * one node that owns the keyboard cursor, `-1` for everyone else.
+   * Exactly one tree node has `tabindex=0` at any time (or none if
+   * the tree is empty and `focusedPath` is `null`).
+   */
+  rowTabIndex(node: TreeNode): 0 | -1 {
+    return this.focusedPath() === node.pathString ? 0 : -1;
+  }
+
+  /**
+   * M7g-3b. Returns the 1-based depth used as `aria-level`. A root
+   * node sits at level 1 per WAI-ARIA Tree convention.
+   */
+  nodeAriaLevel(node: TreeNode): number {
+    return node.depth + 1;
+  }
+
+  /**
+   * M7g-3b. Returns 1-based position of `node` among its siblings,
+   * suitable for `aria-posinset`. Root is treated as a single-item
+   * set ("1 of 1").
+   */
+  nodePosInSet(node: TreeNode): number {
+    if (node.path.length === 0) return 1;
+    const parent = this.parentOf(node);
+    const siblings = parent?.children ?? [];
+    const idx = siblings.indexOf(node);
+    return idx >= 0 ? idx + 1 : 1;
+  }
+
+  /**
+   * M7g-3b. Returns the size of the sibling set this node belongs to,
+   * suitable for `aria-setsize`. Root is `1`.
+   */
+  nodeSetSize(node: TreeNode): number {
+    if (node.path.length === 0) return 1;
+    const parent = this.parentOf(node);
+    return parent?.children?.length ?? 1;
+  }
+
+  private parentOf(node: TreeNode): TreeNode | undefined {
+    if (node.path.length === 0) return undefined;
+    const parentPath = node.path.slice(0, -1);
+    return this.nodeIndex().get(this.formatPath(parentPath));
+  }
+
+  /**
+   * M7g-3b. Updates `focusedPath` and DOM-focuses the matching row
+   * after Angular renders the new `tabindex=0`. Defers to
+   * `requestAnimationFrame` so the tabindex flip is committed before
+   * we call `focus()`.
+   */
+  private moveFocusTo(path: string | null): void {
+    if (path === null) return;
+    this.focusedPath.set(path);
+    requestAnimationFrame(() => {
+      const el = this.host.nativeElement.querySelector(
+        `mat-nested-tree-node[data-tree-node-path="${cssEscape(path)}"]`,
+      ) as HTMLElement | null;
+      el?.focus({ preventScroll: false });
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }
+
+  /**
+   * M7g-3b. Keyboard handler bound on `<mat-nested-tree-node>` (both
+   * leaf and container variants). Implements the WAI-ARIA Tree
+   * pattern minus type-ahead (deferred to issue #108):
+   *
+   *  - Arrow Up / Down / Home / End: roving focus through visible
+   *    rows.
+   *  - Arrow Right on a collapsed container: expands; focus stays.
+   *  - Arrow Right on an expanded container: focus -> first child.
+   *  - Arrow Right on a leaf: no-op.
+   *  - Arrow Left on an expanded container: collapses; focus stays.
+   *  - Arrow Left on a collapsed container or a leaf: focus -> parent.
+   *  - Enter / Space: select the focused row (mirrors click).
+   *  - Shift+F10 / ContextMenu: open the row context menu via the
+   *    existing `openContextMenuAt` path, anchored at the row's
+   *    bounding rect.
+   *  - Ctrl+C / Cmd+C: copy the focused row's value via
+   *    `copyValue(node, 'keyboard')`. Works on leaves, containers,
+   *    and empty containers ({} / []) alike; never alters expansion
+   *    state. Strict modifier match -- Ctrl+Shift+C, Ctrl+Alt+C, and
+   *    plain 'c' are intentionally no-ops so we don't fight devtools
+   *    or AltGr layouts.
+   *
+   * Printable characters are intentionally NOT handled; type-ahead
+   * (D9 in plan.md / issue #108) is deferred to a follow-up wave so
+   * Wave 3b lands only the SERIOUS-bar fixes.
+   */
+  onTreeKeydown(event: KeyboardEvent, node: TreeNode): void {
+    // Only act when the event originated at THIS treeitem. Without
+    // this guard, a keydown that bubbles up from a descendant
+    // treeitem (or from an interactive descendant like the twisty,
+    // kebab, beacon, extract pill, or decoded pill) would run the
+    // ancestor's handler too and overwrite the descendant's writes.
+    // We compare against `currentTarget` rather than calling
+    // `stopPropagation()` so document-level handlers (e.g., Escape)
+    // still see the events we don't handle ourselves.
+    if (event.currentTarget !== event.target) {
+      return;
+    }
+
+    const visible = this.visibleRowsInOrder();
+    const currentIndex = visible.findIndex((n) => n.pathString === node.pathString);
+    const isContainer = !!node.children && node.children.length > 0;
+    const isExpanded = isContainer && this.treeControl.isExpanded(node);
+
+    switch (event.key) {
+      case 'ArrowDown': {
+        event.preventDefault();
+        if (currentIndex >= 0 && currentIndex < visible.length - 1) {
+          this.moveFocusTo(visible[currentIndex + 1]!.pathString);
+        }
+        return;
+      }
+      case 'ArrowUp': {
+        event.preventDefault();
+        if (currentIndex > 0) {
+          this.moveFocusTo(visible[currentIndex - 1]!.pathString);
+        }
+        return;
+      }
+      case 'Home': {
+        event.preventDefault();
+        if (visible.length > 0) {
+          this.moveFocusTo(visible[0]!.pathString);
+        }
+        return;
+      }
+      case 'End': {
+        event.preventDefault();
+        if (visible.length > 0) {
+          this.moveFocusTo(visible[visible.length - 1]!.pathString);
+        }
+        return;
+      }
+      case 'ArrowRight': {
+        event.preventDefault();
+        if (isContainer && !isExpanded) {
+          this.treeControl.expand(node);
+        } else if (isContainer && isExpanded && node.children && node.children.length > 0) {
+          this.moveFocusTo(node.children[0]!.pathString);
+        }
+        // Leaf: no-op.
+        return;
+      }
+      case 'ArrowLeft': {
+        event.preventDefault();
+        if (isContainer && isExpanded) {
+          this.treeControl.collapse(node);
+        } else {
+          const parent = this.parentOf(node);
+          if (parent) this.moveFocusTo(parent.pathString);
+        }
+        return;
+      }
+      case 'Enter':
+      case ' ':
+      case 'Spacebar': {
+        event.preventDefault();
+        this.selectedPath.set(node.pathString);
+        return;
+      }
+      case 'F10': {
+        if (event.shiftKey) {
+          event.preventDefault();
+          this.openRowContextMenuFromKeyboard(node);
+        }
+        return;
+      }
+      case 'ContextMenu': {
+        event.preventDefault();
+        this.openRowContextMenuFromKeyboard(node);
+        return;
+      }
+      case 'c':
+      case 'C': {
+        // Ctrl+C / Cmd+C copies the focused row's value. Strict
+        // modifier match: Ctrl+Shift+C (devtools) and Ctrl+Alt+C
+        // (AltGr on international layouts) are intentionally NOT
+        // honored. The currentTarget !== target guard at the top of
+        // this handler already ensures `node` is the focused row,
+        // and that the search input / interactive descendants
+        // (twisty, kebab, beacon, extract pill) do not route here.
+        if (!(event.ctrlKey || event.metaKey)) return;
+        if (event.altKey || event.shiftKey) return;
+        event.preventDefault();
+        this.copyValue(node, 'keyboard');
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /**
+   * M7g-3b. Open the row context menu from a keyboard gesture
+   * (Shift+F10 or ContextMenu key) by reusing the proven
+   * `openContextMenuAt` path with a synthesized `MouseEvent`. The
+   * anchor coordinates are the centre of the focused row's bounding
+   * rect so the menu lands visibly attached to the row.
+   *
+   * Silently no-ops when the row element is not in the DOM (race with
+   * a re-render).
+   */
+  private openRowContextMenuFromKeyboard(node: TreeNode): void {
+    const el = this.host.nativeElement.querySelector(
+      `mat-nested-tree-node[data-tree-node-path="${cssEscape(node.pathString)}"] > .tree-row`,
+    ) as HTMLElement | null;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const ev = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: Math.round(rect.left + rect.width / 2),
+      clientY: Math.round(rect.top + rect.height / 2),
+    });
+    this.openContextMenuAt(ev, node, 'row', false);
   }
 
   clearSelection(): void {
@@ -1109,6 +1610,11 @@ export class JsonTreeComponent {
     this.activeHitIndex.set(next);
     const path = paths[next] as string;
     this.selectedPath.set(path);
+    // M7g-3b. Also update `focusedPath` silently so a subsequent Tab
+    // into the tree lands on the active hit. Do NOT call DOM focus()
+    // on the row -- the search input keeps focus so repeated Enter /
+    // Shift+Enter keep cycling matches.
+    this.focusedPath.set(path);
     this.revealHit(path);
   }
 
@@ -1120,6 +1626,9 @@ export class JsonTreeComponent {
     this.activeHitIndex.set(prev);
     const path = paths[prev] as string;
     this.selectedPath.set(path);
+    // See goToNextMatch: focused-but-not-DOM-focused so the search
+    // input keeps focus.
+    this.focusedPath.set(path);
     this.revealHit(path);
   }
 
@@ -1453,9 +1962,13 @@ export class JsonTreeComponent {
   //   copyKey / copyValue / copyPathFromMenu - menu actions; each emits its
   //   own `tree.contextMenu.*` telemetry id and runs the copy.
   //
-  //   searchByKey / searchByValue - menu actions; each clears the type filter
+  //   findByKey / findByValue - menu actions; each clears the type filter
   //   to 'all', forces literal (non-regex) search, sets the search query,
   //   and elevates the clicked row to the active hit when it matches.
+  //   Telemetry message IDs (`tree.contextMenu.searchByKey` /
+  //   `searchByValue`) and the i18n IDs are preserved verbatim per the
+  //   stability pledge in the tree-menu overhaul plan; only the visible
+  //   labels and TS method names rename to "Find".
   //
   //   collapseFromHere / expandAllFromHere / expandToDepthFromHere - menu
   //   actions; each operates on the subtree rooted at the clicked node.
@@ -1580,11 +2093,36 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Double-click handler for `.tree-row`. Copies the row's value (raw
-   * text for primitives, pretty-printed JSON for containers) per Q5
-   * decision in plan.md. The browser also fires two `click` events
-   * before the `dblclick`; the existing `onSelect` runs for each but
-   * is idempotent on identical paths, so no debounce is needed.
+   * Double-click handler for `.tree-row`. Behavior splits by node
+   * type (issue #109; empty-container case relaxed during the
+   * tree-menu overhaul, see plan.md decision Q4b):
+   *
+   *   - **Containers with children** (`type === 'object' | 'array'`
+   *     and `children.length > 0`): toggle the row's expansion state
+   *     and emit `tree.row.doubleClickToggle` with the post-toggle
+   *     `action`. Alt is intentionally ignored on containers; the
+   *     right-click context menu still offers "Copy value" for users
+   *     who want the pretty-printed JSON.
+   *   - **Empty containers** (`{}` / `[]`): copy the literal `{}` or
+   *     `[]` to the clipboard. They have no expansion to toggle, so
+   *     the dblclick falls through to the same `copyValue` branch as
+   *     primitives. Issue #109's original "expand/collapse instead
+   *     of copying" wording is relaxed here for the edge case where
+   *     there is no expand/collapse to do; the surfaced default-
+   *     shortcut row in the right-click menu also bolds "Copy value"
+   *     for empty containers to match. Telemetry: `tree.row.
+   *     doubleClickCopyValue` with `escaped: false` (Alt-modified
+   *     copies route the escape flag through `copyValue`).
+   *   - **Primitive leaves**: copy the row's value to the clipboard
+   *     (raw text for primitives; Alt wraps as a JSON string literal
+   *     per DESIGN_SPEC.md §443).
+   *
+   * The browser also fires two `click` events before the `dblclick`;
+   * the existing `onSelect` runs for each but is idempotent on
+   * identical paths, so no debounce is needed. The interactive
+   * descendant guard (kebab pill, chevron, etc.) short-circuits the
+   * handler entirely so a dblclick on those buttons never falls into
+   * the type-based branching here.
    */
   onRowDblClick(event: MouseEvent, node: TreeNode): void {
     const target = event.target;
@@ -1592,6 +2130,14 @@ export class JsonTreeComponent {
       target instanceof Element &&
       target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')
     ) {
+      return;
+    }
+    if ((node.type === 'object' || node.type === 'array') && node.children?.length) {
+      const wasExpanded = this.treeControl.isExpanded(node);
+      this.treeControl.toggle(node);
+      this.logger.info('tree.row.doubleClickToggle', {
+        action: wasExpanded ? 'collapse' : 'expand',
+      });
       return;
     }
     this.copyValue(node, 'dblclick', event.altKey);
@@ -1628,6 +2174,10 @@ export class JsonTreeComponent {
   }
 
   onExtractMenuClick(node: TreeNode): void {
+    // Phase 4 (tree-menu overhaul): counts-only marker for the
+    // menu-driven Extract entry point. The inline pill button uses
+    // `tree.extract.click` with `source: 'rowButton'` separately.
+    this.logger.info('tree.contextMenu.extract');
     this.emitExtract(node, 'contextMenu');
   }
 
@@ -1684,6 +2234,16 @@ export class JsonTreeComponent {
   }
 
   onDecodedMenuClick(node: TreeNode): void {
+    if (this.decodedCandidate(node)) {
+      // Phase 4 (tree-menu overhaul): split show vs hide into
+      // separate counts-only events so analytics can answer "is
+      // Decode used as a one-shot inspection or as a sticky
+      // setting?". Fire BEFORE `toggleDecoded` so we read the
+      // pre-toggle state directly from `isDecoded`.
+      this.logger.info(
+        this.isDecoded(node) ? 'tree.contextMenu.decodeHide' : 'tree.contextMenu.decodeShow',
+      );
+    }
     this.toggleDecoded(node, 'contextMenu');
   }
 
@@ -1726,17 +2286,25 @@ export class JsonTreeComponent {
    * text (no enclosing quotes for strings); for objects/arrays,
    * `JSON.stringify(value, null, 2)` (pretty, per Q1 decision).
    *
-   * `source` distinguishes menu-driven from double-click-driven invocations
-   * for telemetry; both paths use identical copy semantics.
+   * `source` distinguishes menu-driven, double-click-driven, and
+   * keyboard-driven invocations for telemetry; all paths use identical
+   * copy semantics.
    *
    * When `escaped` is true, the serialized text is wrapped with
    * `JSON.stringify(...)` -- the JSON-string-literal variant matching the
    * toolbar Copy button's Alt+click affordance (DESIGN_SPEC.md §443). This
    * lets users embed the row's value as a string in another JSON document.
+   * The Ctrl+C / Cmd+C keyboard shortcut intentionally does not honor Alt
+   * (Alt+Ctrl+C is a no-op at the keydown level), so `source === 'keyboard'`
+   * always pairs with `escaped === false`.
    */
-  copyValue(node: TreeNode, source: 'menu' | 'dblclick', escaped = false): void {
+  copyValue(node: TreeNode, source: 'menu' | 'dblclick' | 'keyboard', escaped = false): void {
     const messageId =
-      source === 'menu' ? 'tree.contextMenu.copyValue' : 'tree.row.doubleClickCopyValue';
+      source === 'menu'
+        ? 'tree.contextMenu.copyValue'
+        : source === 'dblclick'
+          ? 'tree.row.doubleClickCopyValue'
+          : 'tree.keyboard.copyValue';
     this.logger.info(messageId, { escaped });
     const raw = this.serializeNodeValueForCopy(node);
     const text = escaped ? this.jsonParser.escapeAsJsonString(raw) : raw;
@@ -1770,7 +2338,7 @@ export class JsonTreeComponent {
    * Each pref change is a write-through to `PreferencesService`,
    * matching the pattern used by `setSearchScope`.
    */
-  searchByKey(node: TreeNode): void {
+  findByKey(node: TreeNode): void {
     if (node.segment === undefined) return;
     this.logger.info('tree.contextMenu.searchByKey');
     this.prefs.update({
@@ -1783,11 +2351,11 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Like `searchByKey`, but for the row's value. Hidden in the
+   * Like `findByKey`, but for the row's value. Hidden in the
    * template for containers, `null`, and `undefined` (caller should
-   * check `showSearchByValue` before invoking).
+   * check `showFindByValue` before invoking).
    */
-  searchByValue(node: TreeNode): void {
+  findByValue(node: TreeNode): void {
     if (
       node.type === 'object' ||
       node.type === 'array' ||
@@ -1833,6 +2401,11 @@ export class JsonTreeComponent {
       bucket: bucketColorHex(color),
       replacedExisting: existingHighlight ? 'true' : 'false',
     });
+    // Phase 4 (tree-menu overhaul): counts-only context-menu marker
+    // distinguishing single-row scope from subtree scope. The
+    // existing `tree.highlight.apply` event carries color / replace
+    // metadata; this pair answers "which scope is more common".
+    this.logger.info(cascade ? 'tree.contextMenu.highlightSubtree' : 'tree.contextMenu.highlight');
     this.highlightsChange.emit(nextHighlights);
     this.closeHighlightMenuChain();
   }
@@ -1951,29 +2524,282 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Collapses the clicked node and all expanded containers within its
-   * subtree. Caller should guard with `showCollapse(node)` (we early-out
-   * harmlessly when there are no children).
+   * True iff the `Subtree >` submenu trigger should render in the
+   * row menu. Path Y groups all subtree-affecting actions
+   * (highlight subtree, collapse from here, isolate variants,
+   * expand from here >) under one named submenu. The trigger
+   * renders when the submenu would have **2 or more** visible
+   * items; a single-item Subtree elevates the lone item directly
+   * into the row menu (`subtreeElevatedAction`). Zero items hide
+   * everything.
+   *
+   * Edge case (v0.19.4): when the only Subtree item would be the
+   * same action as the surfaced default-shortcut row (e.g. an
+   * expanded container has no isolate / highlight conditions met
+   * and Subtree would only contain `Collapse`, while the surfaced
+   * row already shows `Collapse from here`), elevation would
+   * produce two adjacent identical items. We suppress in that
+   * case via `subtreeElevatedAction()` returning `'collapseSame'`,
+   * and `showSubtreeMenu` returns false.
    */
-  collapseFromHere(node: TreeNode): void {
+  showSubtreeMenu(node: TreeNode): boolean {
+    return this.subtreeItemCount(node) >= 2;
+  }
+
+  /**
+   * When the Subtree submenu would have exactly one visible item,
+   * returns metadata for elevating that item to the row menu;
+   * otherwise null. The row template uses this signal to render
+   * the elevated action flat (no Subtree > trigger).
+   *
+   * Returns `'collapseSame'` as a sentinel when the lone Subtree
+   * action is `Collapse` AND the surfaced default-shortcut row is
+   * already `Collapse from here` -- in that case the row menu
+   * shouldn't render anything (the action is already accessible
+   * via the surfaced row), so the template hides Subtree entirely.
+   */
+  subtreeElevatedAction(node: TreeNode): SubtreeElevatedAction | null {
+    if (this.subtreeItemCount(node) !== 1) return null;
+    if (this.showHighlightTree(node)) {
+      return { kind: 'highlightTree' };
+    }
+    if (this.showRemoveTreeHighlight(node)) {
+      return { kind: 'removeTreeHighlight' };
+    }
+    if (this.showIsolateSingle(node)) {
+      return { kind: 'isolate', mode: 'single' };
+    }
+    if (this.showCollapse(node)) {
+      // Suppress when the surfaced shortcut already exposes the
+      // same Collapse action (avoids duplicate adjacent items).
+      if (this.defaultActionKind() === 'collapseRow') {
+        return { kind: 'collapseSame' };
+      }
+      return { kind: 'collapse' };
+    }
+    if (this.showExpandFromHereMenu(node)) {
+      // The whole Expand contribution is the single Subtree item.
+      // It either elevates (single Expand action) or stays a
+      // flyout (multiple Expand actions), but either way it is
+      // the lone Subtree item.
+      const expandSingle = this.expandFromHereSingleAction(node);
+      if (expandSingle) {
+        // Suppress when the elevated single Expand action is the
+        // same as the surfaced shortcut (e.g. only `+1` available
+        // on a collapsed container, and surfaced row is `Expand
+        // 1 level`).
+        if (
+          expandSingle.kind === 'expandToDepth' &&
+          expandSingle.depth === 1 &&
+          this.defaultActionKind() === 'expandRow'
+        ) {
+          return { kind: 'expandSame' };
+        }
+        return { kind: 'expandSingle', single: expandSingle };
+      }
+      // Multiple Expand options -- elevate the whole Expand
+      // submenu trigger to row level.
+      return { kind: 'expandSubmenu' };
+    }
+    return null;
+  }
+
+  /**
+   * Number of visible items in the `Subtree >` submenu. Each
+   * top-level submenu child counts as 1 item, including the
+   * `Expand >` sub-submenu (which counts as 1 regardless of how
+   * many depths it contains).
+   *
+   * `showIsolatePair` contributes 2 items (Isolate + Collapse
+   * siblings); the others are 1 each. Used to drive
+   * single-option elevation in v0.19.4.
+   */
+  private subtreeItemCount(node: TreeNode): number {
+    let count = 0;
+    if (this.showHighlightTree(node)) count += 1;
+    if (this.showRemoveTreeHighlight(node)) count += 1;
+    if (this.showCollapse(node)) count += 1;
+    if (this.showIsolateSingle(node)) count += 1;
+    if (this.showIsolatePair(node)) count += 2; // Isolate + Collapse siblings
+    if (this.showExpandFromHereMenu(node)) count += 1;
+    return count;
+  }
+
+  /**
+   * True iff the `Expand >` sub-submenu (inside Subtree >)
+   * should render as a flyout. Renders when there are 2 or more
+   * visible Expand items; a single Expand item elevates to the
+   * Subtree level via `expandFromHereSingleAction`. Zero items
+   * means no Expand contribution at all.
+   */
+  showExpandFromHereSubmenu(node: TreeNode): boolean {
+    return this.expandFromHereItemCount(node) >= 2;
+  }
+
+  /**
+   * True iff there is any Expand contribution (>= 1 visible item).
+   * The Expand "section" exists in the menu hierarchy; whether it
+   * renders as a flyout, an elevated-single, or contributes to a
+   * higher elevation is decided by `subtreeElevatedAction` and the
+   * template.
+   */
+  showExpandFromHereMenu(node: TreeNode): boolean {
+    return this.expandFromHereItemCount(node) >= 1;
+  }
+
+  /**
+   * When the Expand sub-submenu would have exactly one visible
+   * item, returns metadata for elevating that item; otherwise
+   * null. Cases:
+   *
+   *   - `{ kind: 'expandAll' }`: only Expand all is visible (e.g.
+   *     fully-shallow subtree with all leaves; depth +N entries
+   *     hide because `maxDescendantDepth === 0`, but the clicked
+   *     container itself is collapsed so Expand all is meaningful).
+   *   - `{ kind: 'expandToDepth', depth: N }`: only one specific
+   *     depth +N is visible (e.g. partial-expand state where
+   *     +1 is hidden because top-level is expanded, only +2 has
+   *     a collapsed container reachable, and +3..+5 exceed
+   *     subtree depth).
+   *
+   * Returns null when 0 or >= 2 items are visible.
+   */
+  expandFromHereSingleAction(node: TreeNode): ExpandSingleAction | null {
+    if (this.expandFromHereItemCount(node) !== 1) return null;
+    if (this.showExpandAllFromHere(node)) {
+      return { kind: 'expandAll' };
+    }
+    for (let depth = 1; depth <= 5; depth++) {
+      if (this.showExpandToDepth(node, depth)) {
+        return { kind: 'expandToDepth', depth };
+      }
+    }
+    return null;
+  }
+
+  private expandFromHereItemCount(node: TreeNode): number {
+    let count = 0;
+    if (this.showExpandAllFromHere(node)) count += 1;
+    for (let depth = 1; depth <= 5; depth++) {
+      if (this.showExpandToDepth(node, depth)) count += 1;
+    }
+    return count;
+  }
+
+  /**
+   * Maps an `ExpandSingleAction` to its elevated label (the
+   * row-level form, where the menu name no longer carries the
+   * "from here" scope and the label has to restore it).
+   */
+  expandSingleElevatedLabel(action: ExpandSingleAction): string {
+    if (action.kind === 'expandAll') {
+      return this.ctxExpandAllFromHereElevatedLabel;
+    }
+    switch (action.depth) {
+      case 1:
+        return this.ctxExpandToDepth1ElevatedLabel;
+      case 2:
+        return this.ctxExpandToDepth2ElevatedLabel;
+      case 3:
+        return this.ctxExpandToDepth3ElevatedLabel;
+      case 4:
+        return this.ctxExpandToDepth4ElevatedLabel;
+      case 5:
+        return this.ctxExpandToDepth5ElevatedLabel;
+      default:
+        return this.ctxExpandAllFromHereElevatedLabel;
+    }
+  }
+
+  /**
+   * Click handler for an elevated Expand single action (when the
+   * Expand sub-submenu would have only one item, that item renders
+   * directly at the Subtree or row level).
+   */
+  onExpandSingleElevatedClick(node: TreeNode, action: ExpandSingleAction): void {
+    if (action.kind === 'expandAll') {
+      this.expandAllFromHere(node);
+      return;
+    }
+    this.expandToDepthFromHere(node, action.depth);
+  }
+
+  /**
+   * Click handler for the surfaced default-shortcut row (the bolded
+   * item between the Find section and the Subtree > trigger). Dispatches
+   * to the same action that double-click would fire on the contextNode.
+   * `'copyValue'` and `'none'` cases are unreachable here because the
+   * surfaced row only renders when `defaultActionKind()` is
+   * `'collapseRow'` or `'expandRow'` (see `surfacedShortcutLabel`).
+   */
+  onSurfacedShortcutClick(node: TreeNode): void {
+    switch (this.defaultActionKind()) {
+      case 'collapseRow':
+        this.collapseFromHere(node, 'top');
+        return;
+      case 'expandRow':
+        // expandToDepthFromHere(node, 1) walks the subtree up to relative
+        // depth < 1, which expands only the clicked node -- equivalent to
+        // `treeControl.toggle(node)` when the node is collapsed.
+        // Routing through the shared depth method keeps existing
+        // `tree.contextMenu.expandToDepth` telemetry intact.
+        this.expandToDepthFromHere(node, 1, 'top');
+        return;
+    }
+  }
+
+  /**
+   * Phase 4 telemetry hook for the `Subtree >` submenu trigger.
+   * Wired via `(menuOpened)` in the row context menu template.
+   * Counts-only marker for the new submenu's discoverability.
+   */
+  onSubtreeMenuOpened(): void {
+    this.logger.info('tree.contextMenu.subtreeOpened');
+  }
+
+  /**
+   * Collapses the clicked node (single-row, non-recursive). CDK's
+   * FlatTree preserves descendants' expansion state across collapse /
+   * re-expand cycles, so re-expanding `node` restores the previous
+   * tree shape exactly. Caller should guard with `showCollapse(node)`
+   * (we early-out harmlessly when there are no children).
+   *
+   * The earlier recursive `collapseFromHere` walked the subtree and
+   * cleared every descendant's expansion state. That implementation
+   * was deleted during the tree-menu overhaul (plan.md decision):
+   * the visible outcome of single-row vs recursive collapse is
+   * identical (children are hidden either way because their parent is
+   * collapsed); the only difference was the internal preserve-vs-clear
+   * state. Single-row matches double-click semantics exactly and is
+   * the single action wired to both the surfaced top-level shortcut
+   * and the in-Subtree submenu item.
+   *
+   * `source` distinguishes the two menu entry points for telemetry
+   * (Phase 4 of the tree-menu overhaul): `'top'` for the surfaced
+   * default-shortcut row, `'submenu'` for the in-Subtree submenu
+   * item. Defaults to `'submenu'` so existing call sites continue
+   * to emit a stable shape.
+   */
+  collapseFromHere(node: TreeNode, source: 'top' | 'submenu' = 'submenu'): void {
     if (!node.children?.length) return;
-    this.logger.info('tree.contextMenu.collapse');
-    const walk = (c: TreeNode): void => {
-      if (!c.children?.length) return;
-      this.treeControl.collapse(c);
-      for (const child of c.children) walk(child);
-    };
-    walk(node);
+    this.logger.info('tree.contextMenu.collapse', { source });
+    this.treeControl.collapse(node);
   }
 
   /**
    * Expands the clicked node and every container in its subtree.
    * Caller should guard with `showExpandAllFromHere(node)`.
+   *
+   * `source` is reserved for symmetry with `collapseFromHere` /
+   * `expandToDepthFromHere`. After Path Y the only menu entry point
+   * for "Expand all" is inside the in-Subtree `Expand >` sub-submenu
+   * (`'submenu'`); the surfaced top-level shortcut routes through
+   * `expandToDepthFromHere` with `relativeDepth: 1` instead.
    */
-  expandAllFromHere(node: TreeNode): void {
+  expandAllFromHere(node: TreeNode, source: 'top' | 'submenu' = 'submenu'): void {
     const start = performance.now();
     if (!node.children?.length) return;
-    this.logger.info('tree.contextMenu.expandAllFromHere');
+    this.logger.info('tree.contextMenu.expandAllFromHere', { source });
     let nodeCount = 0;
     let maxDepth = 0;
     const walk = (currentNode: TreeNode, relativeDepth: number): void => {
@@ -1997,12 +2823,21 @@ export class JsonTreeComponent {
    * will expand it if it is collapsed.
    *
    * Telemetry includes the relative depth as a prop so we can analyze
-   * which depths users invoke most often.
+   * which depths users invoke most often. `source` distinguishes the
+   * surfaced top-level shortcut row (`'top'`, always `relativeDepth: 1`
+   * since the surfaced row mirrors a single-level dblclick expand)
+   * from the in-Subtree submenu's per-depth items (`'submenu'`).
+   * Defaults to `'submenu'` for backward compatibility with existing
+   * call sites.
    */
-  expandToDepthFromHere(node: TreeNode, relativeDepth: number): void {
+  expandToDepthFromHere(
+    node: TreeNode,
+    relativeDepth: number,
+    source: 'top' | 'submenu' = 'submenu',
+  ): void {
     const start = performance.now();
     if (!node.children?.length) return;
-    this.logger.info('tree.contextMenu.expandToDepth', { relativeDepth });
+    this.logger.info('tree.contextMenu.expandToDepth', { relativeDepth, source });
     let nodeCount = 0;
     const walk = (currentNode: TreeNode, currentDepth: number): void => {
       if (!currentNode.children?.length) return;
@@ -2027,11 +2862,11 @@ export class JsonTreeComponent {
     return true;
   }
 
-  showSearchByKey(node: TreeNode): boolean {
+  showFindByKey(node: TreeNode): boolean {
     return !this.embeddedMode() && node.segment !== undefined;
   }
 
-  showSearchByValue(node: TreeNode): boolean {
+  showFindByValue(node: TreeNode): boolean {
     if (this.embeddedMode()) return false;
     return (
       node.type !== 'object' &&
@@ -2254,23 +3089,31 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Length of the longest path from `node` down to any descendant,
-   * counting edges. Drives the cap on visible "Expand to depth +N"
-   * entries so we never offer an `+N` deeper than the subtree
-   * actually goes.
+   * Length of the longest path from `node` down to any descendant
+   * **container** (not counting primitive leaves). Drives the cap on
+   * visible "Expand to depth +N" entries so we never offer an `+N`
+   * deeper than the subtree actually has containers to expand.
    *
-   * Counts every descendant -- containers AND primitive leaves --
-   * because the deepest revealed thing might be a primitive under
-   * the deepest container, and `+(maxContainerDepth + 1)` is needed
-   * to actually reveal it.
+   * Counts only containers because primitives render as soon as
+   * their parent container is expanded -- you never need an extra
+   * `+1` to "reveal" a leaf, so its depth doesn't extend the
+   * expand-actionable subtree depth. Earlier this method counted
+   * all descendants, which produced a redundant `+N` entry on
+   * containers whose only descendants were leaves
+   * (e.g. `{ a: 1 }` clicked on `outer` showed Expand all + +1
+   * + +N up to leaf depth, with multiple entries doing the same
+   * thing as Expand all). Fixed in v0.19.4.
    *
-   * Returns 0 when `node` has no children.
+   * Returns 0 when `node` has no container descendants (i.e. all
+   * children are primitive leaves).
    */
   private maxDescendantDepth(node: TreeNode): number {
     let max = 0;
     const walk = (c: TreeNode, d: number): void => {
-      if (d > max) max = d;
       if (!c.children?.length) return;
+      // c is a container; record its depth (relative to the original
+      // `node`, which is at depth 0).
+      if (d > max) max = d;
       for (const child of c.children) walk(child, d + 1);
     };
     walk(node, 0);

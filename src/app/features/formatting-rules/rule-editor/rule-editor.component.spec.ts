@@ -181,6 +181,25 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     expect(ctx.service.update).not.toHaveBeenCalled();
   });
 
+  it('announces status pill changes through a persistent polite status region', () => {
+    const ctx = loaded();
+    ctx.fixture.detectChanges();
+    const root = ctx.fixture.nativeElement as HTMLElement;
+    const liveRegion = root.querySelector('.status-pill-live');
+
+    expect(liveRegion).not.toBeNull();
+    expect(liveRegion?.getAttribute('role')).toBe('status');
+    expect(liveRegion?.getAttribute('aria-live')).toBe('polite');
+    expect(liveRegion?.textContent).toContain('All saved');
+
+    ctx.fixture.componentInstance.savedFlash.set(true);
+    ctx.service.setPendingIds(['rs-1']);
+    ctx.fixture.detectChanges();
+
+    expect(root.querySelector('.status-pill-live')).toBe(liveRegion);
+    expect(liveRegion?.textContent).toContain('Saved offline');
+  });
+
   it('falls back to get() when cache misses', fakeAsync(() => {
     const ctx = setup({ initialCache: [] });
     ctx.fixture.detectChanges();
@@ -1073,6 +1092,94 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       } finally {
         detach(ctx);
       }
+    });
+  });
+
+  describe('M7f-4a pill colors use Material 21 semantic tokens', () => {
+    it('.pill-warn references --mat-sys-secondary-container so it auto-flips dark/light', () => {
+      // Mount a fixture so Angular emits the rule-editor component's
+      // scoped SCSS into document.styleSheets.
+      const ctx = loaded();
+      ctx.fixture.detectChanges();
+
+      const matches: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (!(rule instanceof CSSStyleRule)) continue;
+          const text = rule.cssText;
+          if (text.includes('pill-warn') && text.includes('--mat-sys-secondary-container')) {
+            matches.push(text);
+          }
+        }
+      }
+      expect(matches.length)
+        .withContext(
+          'M7f-4a: .pill-warn must reference --mat-sys-secondary-container (Material 21 has no dedicated warning role; secondary-container is the closest neutral-attention semantic match - was hardcoded #fef3c7 / #78350f, washed out in dark)',
+        )
+        .toBeGreaterThan(0);
+    });
+
+    it('.pill-ok references --mat-sys-tertiary-container so it auto-flips dark/light', () => {
+      const ctx = loaded();
+      ctx.fixture.detectChanges();
+
+      const matches: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (!(rule instanceof CSSStyleRule)) continue;
+          const text = rule.cssText;
+          if (text.includes('pill-ok') && text.includes('--mat-sys-tertiary-container')) {
+            matches.push(text);
+          }
+        }
+      }
+      expect(matches.length)
+        .withContext(
+          'M7f-4a: .pill-ok must reference --mat-sys-tertiary-container (Material 21 contrasting positive-emphasis role) so it auto-flips between dark and light themes (was hardcoded #dcfce7 / #14532d - washed out in dark)',
+        )
+        .toBeGreaterThan(0);
+    });
+
+    it('regression guard: no bare hardcoded hex on .pill-warn or .pill-ok', () => {
+      const ctx = loaded();
+      ctx.fixture.detectChanges();
+
+      const offenders: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (!(rule instanceof CSSStyleRule)) continue;
+          const text = rule.cssText;
+          if (
+            (text.includes('pill-warn') && text.includes('background: #fef3c7;')) ||
+            (text.includes('pill-ok') && text.includes('background: #dcfce7;'))
+          ) {
+            offenders.push(text);
+          }
+        }
+      }
+      expect(offenders.length)
+        .withContext(
+          'M7f-4a regression guard: .pill-warn and .pill-ok must not have bare hardcoded background hex without a Material-token fallback',
+        )
+        .toBe(0);
     });
   });
 });

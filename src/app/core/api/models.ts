@@ -161,6 +161,24 @@ export interface UserPreferences {
    * - `data`:     `Data.foo[0]` (capital D)
    */
   treePathRoot: 'jsonpath' | 'none' | 'root' | 'data';
+  /**
+   * Cold-boot clipboard auto-paste behavior. When the home page (`/`) is
+   * loaded with valid object/array JSON in the clipboard (and clipboard
+   * permission is granted), this controls what happens:
+   *
+   * - `ask`:    show a one-shot non-blocking banner offering Always /
+   *             Just this time / Never (default).
+   * - `always`: silently load the clipboard JSON instead of the saved
+   *             draft, with an Undo snackbar that restores the prior
+   *             draft if clicked.
+   * - `never`:  feature dormant; never read the clipboard on cold boot
+   *             and never show the banner.
+   *
+   * Roams server-side for signed-in users, but clipboard permission
+   * remains per-device/per-origin: a roamed `'always'` only activates
+   * after each browser independently grants clipboard-read.
+   */
+  coldBootClipboardAutoPaste: 'ask' | 'always' | 'never';
   treeHighlightColors: TreeHighlightColors;
 }
 

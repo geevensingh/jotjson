@@ -1,5 +1,15 @@
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
-import { DestroyRef, Injectable, Signal, computed, effect, inject, signal } from '@angular/core';
+import {
+  DestroyRef,
+  Injectable,
+  PLATFORM_ID,
+  Signal,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subject, catchError, fromEvent, of, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -114,6 +124,7 @@ export class RuleSetsService {
   private readonly preferences = inject(PreferencesService);
   private readonly logger = inject(LoggerService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly base = `${environment.apiBaseUrl}/rule-sets`;
 
   private readonly _serverSnapshot = signal<FormattingRuleSet[] | null>(null);
@@ -259,9 +270,14 @@ export class RuleSetsService {
 
     // Drain trigger: any time the browser comes back online, try to
     // flush the queue. The `tryDrain` guard makes this idempotent.
-    fromEvent(window, 'online')
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.tryDrain());
+    // Server platform has no `window` and no online/offline lifecycle,
+    // so the subscription is browser-only. Static prerender never
+    // queues writes (no auth, no mutators).
+    if (this.isBrowser) {
+      fromEvent(window, 'online')
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(() => this.tryDrain());
+    }
 
     // Also kick a drain when the user signs in (and is online with a
     // non-empty queue). This handles the cold-start case where the
@@ -269,7 +285,7 @@ export class RuleSetsService {
     effect(() => {
       const user = this.auth.user();
       const queueLen = this._queue().length;
-      if (user && queueLen > 0 && navigator.onLine) {
+      if (this.isBrowser && user && queueLen > 0 && navigator.onLine) {
         this.tryDrain();
       }
     });

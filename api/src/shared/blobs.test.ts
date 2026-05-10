@@ -1,6 +1,5 @@
 import {
   BlobValidationError,
-  BlobVersionConflictError,
   MAX_BLOB_BYTES,
   MAX_HIGHLIGHT_PATH_LENGTH,
   MAX_HIGHLIGHTS,
@@ -17,6 +16,7 @@ import {
   type BlobDocument,
   type BlobHighlight,
 } from './blobs';
+import { VersionConflictError } from './cosmos';
 import { HIGHLIGHT_PATH_FIXTURES } from '../../../src/testing/fixtures/highlight-paths.fixture';
 
 // In-memory fake Cosmos container. Tracks items + exposes the query / create /
@@ -34,7 +34,9 @@ function makeFakeContainer(): FakeContainer {
 let fake: FakeContainer;
 
 jest.mock('./cosmos', () => {
+  const actual = jest.requireActual<typeof import('./cosmos')>('./cosmos');
   return {
+    ...actual,
     getCosmos: () => ({
       database: {
         container: () => ({
@@ -93,6 +95,9 @@ jest.mock('./cosmos', () => {
               const condition = options?.accessCondition;
               if (condition?.type === 'IfMatch' && condition.condition !== current._etag) {
                 throw Object.assign(new Error('precondition failed'), { code: 412 });
+              }
+              if ('_etag' in doc) {
+                throw new Error('replace body must not include _etag (helper bug)');
               }
               const stored = { ...doc, _etag: `etag-${fake.nextEtag}` };
               fake.nextEtag += 1;
@@ -364,7 +369,7 @@ describe('updateBlob', () => {
     const original = await seed();
     await expect(
       updateBlob(original, { title: 'stale' }, original.version + 1),
-    ).rejects.toBeInstanceOf(BlobVersionConflictError);
+    ).rejects.toBeInstanceOf(VersionConflictError);
   });
 
   it('normalizes legacy docs without version and persists version 2 on update', async () => {
@@ -397,7 +402,7 @@ describe('updateBlob', () => {
     const rejected = results.filter((result) => result.status === 'rejected');
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(BlobVersionConflictError);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(VersionConflictError);
     expect(fake.items[0]?.version).toBe(2);
   });
 });

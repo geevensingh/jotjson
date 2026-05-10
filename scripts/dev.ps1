@@ -116,15 +116,51 @@ if ($missing.Count -gt 0) {
 
 # --- 3. Install deps if needed ---------------------------------------
 
+# Detect drift: re-install whenever node_modules is missing OR the
+# lockfile has been touched since the last install. node_modules\.package-lock.json
+# is the sentinel npm itself maintains after a successful install, so
+# comparing its mtime to package-lock.json catches: fresh clones, post-pull
+# dependency additions, mid-edit lockfile rewrites, and partial installs
+# whose sentinel was never updated. Honors $SkipInstall as the existing
+# escape hatch.
+function Test-NeedsInstall($projectRoot) {
+  $modules = Join-Path $projectRoot 'node_modules'
+  if (-not (Test-Path $modules)) { return $true }
+  $lockFile = Join-Path $projectRoot 'package-lock.json'
+  $sentinel = Join-Path $modules '.package-lock.json'
+  if (-not (Test-Path $lockFile)) { return $false }
+  if (-not (Test-Path $sentinel)) { return $true }
+  return (Get-Item $lockFile).LastWriteTime -gt (Get-Item $sentinel).LastWriteTime
+}
+
 if (-not $SkipInstall) {
-  if (-not (Test-Path (Join-Path $repoRoot 'node_modules'))) {
+  if (Test-NeedsInstall $repoRoot) {
     Write-Step "Installing web dependencies (npm install)"
     npm install
   }
-  if (-not (Test-Path (Join-Path $repoRoot 'api\node_modules'))) {
+  $apiRoot = Join-Path $repoRoot 'api'
+  if (Test-NeedsInstall $apiRoot) {
     Write-Step "Installing API dependencies (cd api && npm install)"
-    Push-Location (Join-Path $repoRoot 'api')
+    Push-Location $apiRoot
     try { npm install } finally { Pop-Location }
+  }
+}
+
+# Fail-fast probe: even with $SkipInstall or a successful npm install above,
+# the local Angular CLI shim must exist before we launch the wt 'web' tab.
+# Otherwise `npm start` in a fresh tab fails with the cryptic cmd error
+# `'ng' is not recognized as an internal or external command, operable
+# program or batch file.` several tabs deep. This catches partial installs,
+# concurrent npm install races (where bin shims are mid-rename), and any
+# other state where node_modules\.bin\ng.cmd is unexpectedly missing.
+$ngShim = Join-Path $repoRoot 'node_modules\.bin\ng.cmd'
+if (-not (Test-Path $ngShim)) {
+  Write-Step "Local Angular CLI shim missing - running npm install"
+  npm install
+  if (-not (Test-Path $ngShim)) {
+    Write-Host "node_modules\.bin\ng.cmd is still missing after npm install." -ForegroundColor Red
+    Write-Host "Run 'npm ci' manually and inspect the install log before retrying." -ForegroundColor Red
+    exit 1
   }
 }
 

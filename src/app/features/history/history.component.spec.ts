@@ -1,7 +1,8 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HistoryComponent } from './history.component';
 import { HistoryService, HistoryPage } from '../../core/api/history.service';
@@ -66,6 +67,54 @@ function setup(opts: SetupOpts = {}) {
 
   const fixture = TestBed.createComponent(HistoryComponent);
   return { fixture, stub, dialog, snack, logger };
+}
+
+function setupWithRealDialog(listResult: HistoryPage) {
+  TestBed.resetTestingModule();
+
+  const stub = {
+    list: jasmine.createSpy('list').and.returnValue(of(listResult)),
+    clear: jasmine.createSpy('clear').and.returnValue(of(undefined)),
+  };
+  const snack = { open: jasmine.createSpy('open') };
+  const logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'warn']);
+
+  TestBed.configureTestingModule({
+    imports: [HistoryComponent, MatDialogModule],
+    providers: [
+      ...provideFakeAuth(),
+      provideRouter([]),
+      provideNoopAnimations(),
+      { provide: HistoryService, useValue: stub },
+      { provide: MatSnackBar, useValue: snack },
+      { provide: LoggerService, useValue: logger },
+    ],
+  });
+
+  const fixture = TestBed.createComponent(HistoryComponent);
+  return { fixture, stub };
+}
+
+function attachToBody(fixture: ComponentFixture<unknown>): () => void {
+  document.body.appendChild(fixture.nativeElement);
+  return () => {
+    fixture.nativeElement.remove();
+  };
+}
+
+function waitForTaskQueue(): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
+}
+
+function findDialogButton(label: string): HTMLButtonElement {
+  const button = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.mat-mdc-dialog-container button'),
+  ).find((candidate) => candidate.textContent?.trim() === label);
+  expect(button).not.toBeNull();
+  if (!button) {
+    throw new Error(`Expected dialog button "${label}".`);
+  }
+  return button;
 }
 
 describe('HistoryComponent', () => {
@@ -171,6 +220,53 @@ describe('HistoryComponent', () => {
     await fixture.componentInstance.clearHistory();
     expect(stub.clear).not.toHaveBeenCalled();
     expect(fixture.componentInstance.entries().length).toBe(1);
+  });
+
+  it('focuses the page fallback after confirming clear history', async () => {
+    const { fixture } = setup({
+      listResult: { entries: [entry()] },
+      confirm: true,
+    });
+    const teardown = attachToBody(fixture);
+    try {
+      await fixture.componentInstance.reload();
+      fixture.detectChanges();
+
+      await fixture.componentInstance.clearHistory();
+      fixture.detectChanges();
+      await waitForTaskQueue();
+      fixture.detectChanges();
+
+      const main = fixture.nativeElement.querySelector('main.history') as HTMLElement;
+      expect(document.activeElement).toBe(main);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('returns focus to the clear-history trigger when the dialog cancel button closes', async () => {
+    const { fixture, stub } = setupWithRealDialog({ entries: [entry()] });
+    const teardown = attachToBody(fixture);
+    try {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const trigger = fixture.nativeElement.querySelector('.clear-button') as HTMLButtonElement;
+      trigger.focus();
+      trigger.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      findDialogButton('Cancel').click();
+      await fixture.whenStable();
+      await waitForTaskQueue();
+
+      expect(stub.clear).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      TestBed.inject(MatDialog).closeAll();
+      teardown();
+    }
   });
 
   it('clearHistory toasts on failure and leaves entries intact', async () => {

@@ -36,7 +36,7 @@ addEventListener('message', (event: MessageEvent<ScanRequest>) => {
 
   const results = message.strings.map((value) => {
     try {
-      const extracted = extractFromMixedText(value, parseJsonCandidate, { mode: 'preserveProse' });
+      const extracted = extractFromMixedText(value, parseJsonCandidate);
       if (!extracted) return null;
       return {
         text: extracted.text,

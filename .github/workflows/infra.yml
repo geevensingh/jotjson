@@ -59,9 +59,18 @@ on:
       - '.github/workflows/infra.yml'
   workflow_dispatch: {}
 
+# Workflow-level permissions are the minimum every job needs:
+#   - contents: read   -- actions/checkout@v6 (every job)
+#
+# Per-job escalations live in each job's `permissions:` block:
+#   - validate -> id-token: write (azure/login@v3 for what-if)
+#   - deploy   -> id-token: write (azure/login@v3 for deployment)
+#
+# `build` (Bicep build only, no Azure call) intentionally has no
+# id-token: write. Reduces blast radius if a third-party action used
+# during build is compromised.
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   build:
@@ -85,6 +94,9 @@ jobs:
     needs: build
     if: github.event_name != 'pull_request'
     timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
       - name: Azure login (OIDC)
@@ -127,6 +139,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
       - uses: azure/login@v3

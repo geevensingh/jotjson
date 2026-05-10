@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /404
+
+Sitemap: https://jotjson.com/sitemap.xml

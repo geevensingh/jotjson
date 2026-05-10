@@ -1,4 +1,5 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
+import { withSecurityHeaders } from '../shared/http';
 
 export async function health(
   _req: HttpRequest,
@@ -20,5 +21,5 @@ app.http('health', {
   methods: ['GET'],
   route: 'health',
   authLevel: 'anonymous',
-  handler: health,
+  handler: withSecurityHeaders(health),
 });

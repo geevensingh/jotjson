@@ -27,17 +27,25 @@ describe('CloseMatMenuOnWindowBlurDirective', () => {
     });
   });
 
-  it('closes the open menu on window.blur', fakeAsync(() => {
+  it('closes the open menu on window.blur and returns focus to the trigger', fakeAsync(() => {
     const fixture = TestBed.createComponent(TestHostComponent);
+    const teardown = attachToBody(fixture);
     const trigger = fixture.componentInstance.trigger;
 
-    fixture.detectChanges();
-    openMenu(fixture, trigger());
+    try {
+      fixture.detectChanges();
+      const triggerButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+      triggerButton.focus();
+      openMenu(fixture, trigger());
 
-    window.dispatchEvent(new Event('blur'));
-    flushMenu(fixture);
+      window.dispatchEvent(new Event('blur'));
+      flushMenu(fixture);
 
-    expect(trigger().menuOpen).toBeFalse();
+      expect(trigger().menuOpen).toBeFalse();
+      expect(document.activeElement).toBe(triggerButton);
+    } finally {
+      teardown();
+    }
   }));
 
   it('is a no-op when window.blur fires while no menu is open', fakeAsync(() => {
@@ -86,6 +94,13 @@ describe('CloseMatMenuOnWindowBlurDirective', () => {
     expect(findBlurRemoveCall(removeSpy, handlerRef)).toBeDefined();
   }));
 });
+
+function attachToBody(fixture: ComponentFixture<unknown>): () => void {
+  document.body.appendChild(fixture.nativeElement);
+  return () => {
+    fixture.nativeElement.remove();
+  };
+}
 
 function openMenu(fixture: ComponentFixture<TestHostComponent>, trigger: MatMenuTrigger): void {
   trigger.openMenu();

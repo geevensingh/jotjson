@@ -10,6 +10,14 @@ import {
 import { PreferencesService } from '../preferences/preferences.service';
 import type { UserPreferences } from '../api/models';
 
+function appendMainFallback(): HTMLElement {
+  const main = document.createElement('main');
+  main.id = 'main-content';
+  main.tabIndex = -1;
+  document.body.appendChild(main);
+  return main;
+}
+
 describe('QuotaNotificationService', () => {
   let service: QuotaNotificationService;
   let snackOpen: jasmine.Spy;
@@ -77,6 +85,18 @@ describe('QuotaNotificationService', () => {
       expect(prefsUpdate).toHaveBeenCalledWith({ blobQuotaStrategy: 'manual' });
     });
 
+    it('focuses main content after the first-time dialog closes without a trigger', async () => {
+      const main = appendMainFallback();
+      try {
+        dialogOpen.and.returnValue({ afterClosed: () => of('keep_auto') });
+        document.body.focus();
+        await service.notifyAutoDeleted({ id: 'x', slug: 's' });
+        expect(document.activeElement).toBe(main);
+      } finally {
+        main.remove();
+      }
+    });
+
     it('skips the modal when the user has already seen it', async () => {
       prefsSignal.seenBlobQuotaModal = true;
       await service.notifyAutoDeleted({ id: 'x', slug: 's' });
@@ -100,6 +120,18 @@ describe('QuotaNotificationService', () => {
         blobQuotaStrategy: 'auto_fifo',
         seenBlobQuotaModal: true,
       });
+    });
+
+    it('focuses main content after the manual-full dialog closes without a trigger', async () => {
+      const main = appendMainFallback();
+      try {
+        dialogOpen.and.returnValue({ afterClosed: () => of('dismiss') });
+        document.body.focus();
+        await service.notifyQuotaExceededManual();
+        expect(document.activeElement).toBe(main);
+      } finally {
+        main.remove();
+      }
     });
   });
 });

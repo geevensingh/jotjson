@@ -1,6 +1,6 @@
 <jj-app-header />
 
-<main class="rule-editor">
+<main id="main-content" class="rule-editor" tabindex="-1">
   <header class="editor-header">
     <a class="breadcrumb" routerLink="/formatting-rules"
       ><jj-icon name="chevron-right" class="breadcrumb-icon" />
@@ -66,52 +66,54 @@
       </div>
 
       <div class="status-row" data-testid="status-pill">
-        @switch (pillState().kind) {
-          @case ('reloading') {
-            <span class="pill pill-info" i18n="@@ruleEditor.pill.reloading">Reloading...</span>
+        <div class="status-pill-live" role="status" aria-live="polite">
+          @switch (pillState().kind) {
+            @case ('reloading') {
+              <span class="pill pill-info" i18n="@@ruleEditor.pill.reloading">Reloading...</span>
+            }
+            @case ('invalid') {
+              <span
+                class="pill pill-warn"
+                [matTooltip]="invalidReasonsText($any(pillState()).reasons)"
+                i18n="@@ruleEditor.pill.invalid"
+                >Invalid - fix to save</span
+              >
+            }
+            @case ('saving') {
+              <span class="pill pill-info" i18n="@@ruleEditor.pill.saving">Saving...</span>
+            }
+            @case ('error') {
+              <button
+                mat-stroked-button
+                type="button"
+                class="pill pill-error"
+                (click)="retrySave()"
+                data-testid="retry-save"
+                i18n="@@ruleEditor.pill.retry"
+              >
+                Save failed - retry
+              </button>
+            }
+            @case ('saved') {
+              <span class="pill pill-ok" i18n="@@ruleEditor.pill.saved">Saved</span>
+            }
+            @case ('savedOffline') {
+              <span
+                class="pill pill-info"
+                matTooltip="Will sync when back online"
+                i18n-matTooltip="@@ruleEditor.pill.savedOffline.tooltip"
+                i18n="@@ruleEditor.pill.savedOffline"
+                >Saved offline</span
+              >
+            }
+            @case ('editing') {
+              <span class="pill pill-info" i18n="@@ruleEditor.pill.editing">Editing</span>
+            }
+            @case ('idle') {
+              <span class="pill pill-idle" i18n="@@ruleEditor.pill.idle">All saved</span>
+            }
           }
-          @case ('invalid') {
-            <span
-              class="pill pill-warn"
-              [matTooltip]="invalidReasonsText($any(pillState()).reasons)"
-              i18n="@@ruleEditor.pill.invalid"
-              >Invalid - fix to save</span
-            >
-          }
-          @case ('saving') {
-            <span class="pill pill-info" i18n="@@ruleEditor.pill.saving">Saving...</span>
-          }
-          @case ('error') {
-            <button
-              mat-stroked-button
-              type="button"
-              class="pill pill-error"
-              (click)="retrySave()"
-              data-testid="retry-save"
-              i18n="@@ruleEditor.pill.retry"
-            >
-              Save failed - retry
-            </button>
-          }
-          @case ('saved') {
-            <span class="pill pill-ok" i18n="@@ruleEditor.pill.saved">Saved</span>
-          }
-          @case ('savedOffline') {
-            <span
-              class="pill pill-info"
-              matTooltip="Will sync when back online"
-              i18n-matTooltip="@@ruleEditor.pill.savedOffline.tooltip"
-              i18n="@@ruleEditor.pill.savedOffline"
-              >Saved offline</span
-            >
-          }
-          @case ('editing') {
-            <span class="pill pill-info" i18n="@@ruleEditor.pill.editing">Editing</span>
-          }
-          @case ('idle') {
-            <span class="pill pill-idle" i18n="@@ruleEditor.pill.idle">All saved</span>
-          }
-        }
+        </div>
       </div>
     </section>
 

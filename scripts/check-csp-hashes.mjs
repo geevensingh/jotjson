@@ -23,8 +23,11 @@
 //                 covered by `connect-src` AND `frame-src`, and that the
 //                 App Insights ingestion host (parsed from the connection
 //                 string's IngestionEndpoint=...) is covered by
-//                 `connect-src`. Skips silently when neither env var is
-//                 set, so contributors without secrets are not blocked.
+//                 `connect-src`, and that the AI config CDN host
+//                 (`js.monitor.azure.com`, hardcoded in
+//                 applicationinsights-web) is covered by `connect-src`.
+//                 Skips silently when neither env var is set, so
+//                 contributors without secrets are not blocked.
 //
 // Runs with zero dependencies on Node 24+. Invoke directly or via:
 //   npm run lint:csp-hashes
@@ -32,13 +35,23 @@
 //   node scripts/check-csp-hashes.mjs --ci-origins
 
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
-const SRC_INDEX = 'src/index.html';
-const DIST_INDEX = 'dist/jotjson/browser/index.html';
-const SWA_CONFIG = 'staticwebapp.config.json';
+export const SRC_INDEX = 'src/index.html';
+export const DIST_INDEX = 'dist/jotjson/browser/index.html';
+export const SWA_CONFIG = 'staticwebapp.config.json';
 
-function parseCspString(cspValue) {
+// Application Insights JS SDK fetches dynamic config (sampling, throttling,
+// feature flags) from this CDN at SDK init. The host is hardcoded inside
+// `@microsoft/applicationinsights-web` and is NOT represented in the
+// APP_INSIGHTS_CONNECTION_STRING (which only carries IngestionEndpoint,
+// LiveEndpoint, etc.). We require it explicitly in `connect-src` whenever
+// the conn string is set, so a future SDK upgrade that adds another
+// config host will be caught in observation, not in production.
+export const AI_CONFIG_CDN_HOST = 'js.monitor.azure.com';
+
+export function parseCspString(cspValue) {
   // Returns { directiveName: [tokens, ...] }. Directive names are
   // lowercased; tokens preserve case for hash literals.
   const directives = {};
@@ -52,15 +65,15 @@ function parseCspString(cspValue) {
   return directives;
 }
 
-function readCsp() {
-  const raw = readFileSync(SWA_CONFIG, 'utf8');
+export function readCsp(swaConfigPath = SWA_CONFIG) {
+  const raw = readFileSync(swaConfigPath, 'utf8');
   const config = JSON.parse(raw);
   const headers = config.globalHeaders ?? {};
   const enforced = headers['Content-Security-Policy'];
   const reportOnly = headers['Content-Security-Policy-Report-Only'];
   if (enforced && reportOnly) {
     throw new Error(
-      `${SWA_CONFIG} sets BOTH Content-Security-Policy and ` +
+      `${swaConfigPath} sets BOTH Content-Security-Policy and ` +
         `Content-Security-Policy-Report-Only. Pick exactly one.`,
     );
   }
@@ -153,7 +166,7 @@ function checkHashes(filePath, mode) {
   return false;
 }
 
-function hostFromUrl(url) {
+export function hostFromUrl(url) {
   try {
     return new URL(url).host;
   } catch {
@@ -161,7 +174,7 @@ function hostFromUrl(url) {
   }
 }
 
-function entryMatchesHost(host, entry) {
+export function entryMatchesHost(host, entry) {
   // entry is a CSP source expression like "https://*.foo.com" or
   // "https://exact.host.com" (optionally with a port). Return true if the
   // entry covers `host`.
@@ -178,7 +191,74 @@ function entryMatchesHost(host, entry) {
   return false;
 }
 
-function checkOrigins() {
+// Pure variant: reads neither the environment nor the filesystem, never
+// calls process.exit. Returns { ok, errors } where each error string is
+// suitable for printing with a single prefix prepended by the caller.
+// Used directly by tests, and via `checkOriginsFromEnv` for the CLI path.
+export function checkOrigins({ authority, aiConnection, headerName, directives }) {
+  const errors = [];
+  if (!headerName) {
+    errors.push(`${SWA_CONFIG} has no CSP header to check origins against.`);
+    return { ok: false, errors };
+  }
+  const connectSrc = directives['connect-src'] ?? [];
+  const frameSrc = directives['frame-src'] ?? [];
+
+  if (authority) {
+    const host = hostFromUrl(authority);
+    if (!host) {
+      errors.push(`ENTRA_AUTHORITY is not a valid URL: ${authority}`);
+    } else {
+      if (!connectSrc.some((entry) => entryMatchesHost(host, entry))) {
+        errors.push(
+          `ENTRA_AUTHORITY host '${host}' is not covered by connect-src in ${headerName}.`,
+        );
+      }
+      if (!frameSrc.some((entry) => entryMatchesHost(host, entry))) {
+        errors.push(
+          `ENTRA_AUTHORITY host '${host}' is not covered by frame-src in ${headerName}. ` +
+            `MSAL silent SSO uses iframes against the authority.`,
+        );
+      }
+    }
+  }
+
+  if (aiConnection) {
+    const ingestion = /(?:^|;)\s*IngestionEndpoint\s*=\s*([^;]+)/i.exec(aiConnection);
+    if (!ingestion) {
+      errors.push('APP_INSIGHTS_CONNECTION_STRING has no IngestionEndpoint=... segment.');
+    } else {
+      const endpoint = ingestion[1].trim();
+      const host = hostFromUrl(endpoint);
+      if (!host) {
+        errors.push(
+          `APP_INSIGHTS_CONNECTION_STRING IngestionEndpoint is not a valid URL: ${endpoint}`,
+        );
+      } else if (!connectSrc.some((entry) => entryMatchesHost(host, entry))) {
+        errors.push(
+          `App Insights ingestion host '${host}' is not covered by connect-src in ${headerName}.`,
+        );
+      }
+    }
+    // The applicationinsights-web SDK also fetches its dynamic config blob
+    // from `js.monitor.azure.com` at startup, on a path separate from the
+    // ingestion endpoint. Require the host explicitly whenever the AI
+    // conn string is set; the host is hardcoded inside the SDK and is
+    // not derivable from the conn string.
+    if (!connectSrc.some((entry) => entryMatchesHost(AI_CONFIG_CDN_HOST, entry))) {
+      errors.push(
+        `App Insights config CDN host '${AI_CONFIG_CDN_HOST}' is not covered by ` +
+          `connect-src in ${headerName}. The applicationinsights-web SDK fetches ` +
+          `dynamic config from this host at startup.`,
+      );
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+// CLI wrapper: reads env + fs, prints prefixed messages, returns boolean.
+function checkOriginsFromEnv() {
   const authority = (process.env.ENTRA_AUTHORITY ?? '').trim();
   const aiConnection = (process.env.APP_INSIGHTS_CONNECTION_STRING ?? '').trim();
   if (!authority && !aiConnection) {
@@ -188,81 +268,15 @@ function checkOrigins() {
     );
     return true;
   }
-
   const { headerName, directives } = readCsp();
-  if (!headerName) {
-    console.error(
-      `check-csp-hashes (--ci-origins): ${SWA_CONFIG} has no CSP header to check origins against.`,
-    );
-    return false;
+  const result = checkOrigins({ authority, aiConnection, headerName, directives });
+  for (const message of result.errors) {
+    console.error(`check-csp-hashes (--ci-origins): ${message}`);
   }
-  const connectSrc = directives['connect-src'] ?? [];
-  const frameSrc = directives['frame-src'] ?? [];
-
-  let ok = true;
-
-  if (authority) {
-    const host = hostFromUrl(authority);
-    if (!host) {
-      console.error(
-        `check-csp-hashes (--ci-origins): ENTRA_AUTHORITY is not a valid URL: ${authority}`,
-      );
-      ok = false;
-    } else {
-      const inConnect = connectSrc.some((entry) => entryMatchesHost(host, entry));
-      const inFrame = frameSrc.some((entry) => entryMatchesHost(host, entry));
-      if (!inConnect) {
-        console.error(
-          `check-csp-hashes (--ci-origins): ENTRA_AUTHORITY host '${host}' ` +
-            `is not covered by connect-src in ${headerName}.`,
-        );
-        ok = false;
-      }
-      if (!inFrame) {
-        console.error(
-          `check-csp-hashes (--ci-origins): ENTRA_AUTHORITY host '${host}' ` +
-            `is not covered by frame-src in ${headerName}. MSAL silent SSO ` +
-            `uses iframes against the authority.`,
-        );
-        ok = false;
-      }
-    }
-  }
-
-  if (aiConnection) {
-    const ingestion = /(?:^|;)\s*IngestionEndpoint\s*=\s*([^;]+)/i.exec(aiConnection);
-    if (!ingestion) {
-      console.error(
-        'check-csp-hashes (--ci-origins): APP_INSIGHTS_CONNECTION_STRING has ' +
-          'no IngestionEndpoint=... segment.',
-      );
-      ok = false;
-    } else {
-      const endpoint = ingestion[1].trim();
-      const host = hostFromUrl(endpoint);
-      if (!host) {
-        console.error(
-          `check-csp-hashes (--ci-origins): APP_INSIGHTS_CONNECTION_STRING ` +
-            `IngestionEndpoint is not a valid URL: ${endpoint}`,
-        );
-        ok = false;
-      } else {
-        const inConnect = connectSrc.some((entry) => entryMatchesHost(host, entry));
-        if (!inConnect) {
-          console.error(
-            `check-csp-hashes (--ci-origins): App Insights ingestion host ` +
-              `'${host}' is not covered by connect-src in ${headerName}.`,
-          );
-          ok = false;
-        }
-      }
-    }
-  }
-
-  if (ok) {
+  if (result.ok) {
     console.log('check-csp-hashes (--ci-origins): OK');
   }
-  return ok;
+  return result.ok;
 }
 
 function main() {
@@ -275,7 +289,7 @@ function main() {
   } else if (mode === '--dist') {
     ok = checkHashes(DIST_INDEX, '--dist');
   } else if (mode === '--ci-origins') {
-    ok = checkOrigins();
+    ok = checkOriginsFromEnv();
   } else {
     console.error(
       `check-csp-hashes: unknown mode '${mode}'. ` + `Valid: --src (default), --dist, --ci-origins`,
@@ -285,4 +299,18 @@ function main() {
   if (!ok) process.exit(1);
 }
 
-main();
+// Only invoke main() when this file is executed directly. Importers (the
+// test file) load the module solely for its exports; they must not trigger
+// the CLI side effects (env reading, fs reading, process.exit).
+const invokedDirectly = (() => {
+  try {
+    if (!process.argv[1]) return false;
+    return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url;
+  } catch {
+    return false;
+  }
+})();
+
+if (invokedDirectly) {
+  main();
+}

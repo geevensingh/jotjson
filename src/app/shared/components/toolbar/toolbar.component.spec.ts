@@ -163,6 +163,111 @@ describe('ToolbarComponent', () => {
     });
   });
 
+  describe('themeToggleLabel (predictive 3-state tooltip + aria-label, M7f-2)', () => {
+    function findThemeButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement {
+      const themeLabels = new Set([
+        'Switch to light theme',
+        'Switch to dark theme',
+        'Match system theme',
+      ]);
+      const button = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+      ).find((candidateButton) =>
+        themeLabels.has(candidateButton.getAttribute('aria-label') ?? ''),
+      );
+      if (!button) {
+        throw new Error('theme toggle button not found');
+      }
+      return button;
+    }
+
+    it('shows "Switch to dark theme" when current theme is light', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ theme: 'light' });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.themeToggleLabel()).toBe('Switch to dark theme');
+      expect(findThemeButton(fixture).getAttribute('aria-label')).toBe('Switch to dark theme');
+    });
+
+    it('shows "Match system theme" when current theme is dark (matches Profile dropdown copy)', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ theme: 'dark' });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.themeToggleLabel()).toBe('Match system theme');
+      expect(findThemeButton(fixture).getAttribute('aria-label')).toBe('Match system theme');
+    });
+
+    it('shows "Switch to light theme" when current theme is system', async () => {
+      const { fixture, prefs } = await create();
+      prefs.update({ theme: 'system' });
+      fixture.detectChanges();
+      expect(fixture.componentInstance.themeToggleLabel()).toBe('Switch to light theme');
+      expect(findThemeButton(fixture).getAttribute('aria-label')).toBe('Switch to light theme');
+    });
+  });
+
+  describe('M7f-4a state-pill--modified uses Material 21 semantic token', () => {
+    it('references --mat-sys-secondary-container so it auto-flips between dark and light themes', async () => {
+      // Mount a fixture so Angular emits the toolbar component's
+      // scoped SCSS into document.styleSheets. Then iterate the
+      // stylesheet rules and assert that the rule for
+      // .state-pill--modified references the Material 21
+      // secondary-container token. Previous hardcoded
+      // #ffecb3 / #4a3000 washed out in dark mode.
+      const { fixture } = await create();
+      fixture.detectChanges();
+
+      const matches: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (!(rule instanceof CSSStyleRule)) continue;
+          const text = rule.cssText;
+          if (
+            text.includes('state-pill--modified') &&
+            text.includes('--mat-sys-secondary-container')
+          ) {
+            matches.push(text);
+          }
+        }
+      }
+      expect(matches.length)
+        .withContext(
+          'M7f-4a: .state-pill--modified must reference --mat-sys-secondary-container so it auto-flips between dark and light themes (was hardcoded #ffecb3 / #4a3000 - washed out in dark)',
+        )
+        .toBeGreaterThan(0);
+
+      // Negative regression: no bare hardcoded hex without the
+      // semantic-token fallback.
+      const offenders: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (!(rule instanceof CSSStyleRule)) continue;
+          const text = rule.cssText;
+          if (text.includes('state-pill--modified') && text.includes('background: #ffecb3;')) {
+            offenders.push(text);
+          }
+        }
+      }
+      expect(offenders.length)
+        .withContext(
+          'M7f-4a regression guard: .state-pill--modified must not have a bare hardcoded #ffecb3 without --mat-sys-secondary-container fallback',
+        )
+        .toBe(0);
+    });
+  });
+
   describe('selection sync toggle (issue #42)', () => {
     function findSyncButton(fixture: ComponentFixture<ToolbarComponent>): HTMLButtonElement {
       const button = (fixture.nativeElement as HTMLElement).querySelector(
@@ -355,6 +460,74 @@ describe('ToolbarComponent', () => {
       fixture.detectChanges();
 
       expect(emitCount).toBe(0);
+    });
+
+    describe('M7l narrow viewport collapse', () => {
+      const NARROW_THRESHOLD = 768;
+
+      function isNarrow(): boolean {
+        return window.innerWidth < NARROW_THRESHOLD;
+      }
+
+      function displayOf(fixture: ComponentFixture<ToolbarComponent>, value: string): string {
+        const segment = findGroup(fixture).querySelector(
+          `mat-button-toggle[value="${value}"]`,
+        ) as HTMLElement | null;
+        if (!segment) return '';
+        return window.getComputedStyle(segment).display;
+      }
+
+      it('hides both-horizontal and both-vertical segments at narrow widths', async () => {
+        if (!isNarrow()) {
+          pending(
+            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+              'cannot exercise narrow SCSS media query. Skipping.',
+          );
+          return;
+        }
+        const { fixture } = await create();
+        fixture.componentRef.setInput('paneLayout', 'tree-only');
+        fixture.detectChanges();
+
+        expect(displayOf(fixture, 'both-horizontal')).toBe('none');
+        expect(displayOf(fixture, 'both-vertical')).toBe('none');
+      });
+
+      it('keeps editor-only and tree-only segments visible at narrow widths', async () => {
+        if (!isNarrow()) {
+          pending(
+            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+              'cannot exercise narrow SCSS media query. Skipping.',
+          );
+          return;
+        }
+        const { fixture } = await create();
+        fixture.componentRef.setInput('paneLayout', 'tree-only');
+        fixture.detectChanges();
+
+        expect(displayOf(fixture, 'editor-only')).not.toBe('none');
+        expect(displayOf(fixture, 'tree-only')).not.toBe('none');
+      });
+
+      it('highlights tree-only when paneLayout is tree-only at narrow widths', async () => {
+        if (!isNarrow()) {
+          pending(
+            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+              'cannot exercise narrow SCSS media query. Skipping.',
+          );
+          return;
+        }
+        const { fixture } = await create();
+        fixture.componentRef.setInput('paneLayout', 'tree-only');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const checked = (fixture.nativeElement as HTMLElement).querySelector(
+          'mat-button-toggle-group.pane-layout-group .mat-button-toggle-checked',
+        );
+        expect(checked?.getAttribute('value')).toBe('tree-only');
+      });
     });
   });
 
@@ -930,7 +1103,22 @@ describe('ToolbarComponent', () => {
     }
 
     function triggerThemeToggleButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
-      findButtonByAriaLabel(fixture, 'Toggle theme').click();
+      // Aria-label is dynamic per theme state (M7f-2). Match any of the
+      // three valid values rather than the static legacy "Toggle theme".
+      const themeLabels = new Set([
+        'Switch to light theme',
+        'Switch to dark theme',
+        'Match system theme',
+      ]);
+      const button = Array.from(
+        hostElement(fixture).querySelectorAll<HTMLButtonElement>('button'),
+      ).find((candidateButton) =>
+        themeLabels.has(candidateButton.getAttribute('aria-label') ?? ''),
+      );
+      if (!button) {
+        throw new Error('theme toggle button not found');
+      }
+      button.click();
       fixture.detectChanges();
     }
 

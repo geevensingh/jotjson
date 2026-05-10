@@ -224,6 +224,26 @@ describe('normalizePreferences', () => {
     expect(() => normalizePreferences(bad)).toThrow(/treePathRoot must be one of/);
   });
 
+  it('accepts each valid coldBootClipboardAutoPaste value', () => {
+    for (const mode of ['ask', 'always', 'never'] as const) {
+      const input = valid() as Record<string, unknown>;
+      input['coldBootClipboardAutoPaste'] = mode;
+      expect(normalizePreferences(input).coldBootClipboardAutoPaste).toBe(mode);
+    }
+  });
+
+  it('rejects an unknown coldBootClipboardAutoPaste value', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['coldBootClipboardAutoPaste'] = 'sometimes';
+    expect(() => normalizePreferences(bad)).toThrow(/coldBootClipboardAutoPaste must be one of/);
+  });
+
+  it('defaults missing coldBootClipboardAutoPaste to ask', () => {
+    const input = valid() as Record<string, unknown>;
+    delete input['coldBootClipboardAutoPaste'];
+    expect(normalizePreferences(input).coldBootClipboardAutoPaste).toBe('ask');
+  });
+
   it('rejects a non-boolean treeAutoFitToWindow', () => {
     const bad = valid() as Record<string, unknown>;
     bad['treeAutoFitToWindow'] = 'yes';
@@ -512,6 +532,34 @@ describe('normalizeStoredPreferences', () => {
     stored.treeShowComments = false;
     const result = normalizeStoredPreferences(stored);
     expect(result.treeShowComments).toBe(false);
+  });
+
+  it('defaults missing coldBootClipboardAutoPaste to ask', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+    delete stored['coldBootClipboardAutoPaste'];
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.coldBootClipboardAutoPaste).toBe('ask');
+  });
+
+  it('defaults invalid coldBootClipboardAutoPaste value to ask', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+    stored['coldBootClipboardAutoPaste'] = 'sometimes';
+    const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+    expect(result.coldBootClipboardAutoPaste).toBe('ask');
+  });
+
+  it('preserves an explicit coldBootClipboardAutoPaste=always', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES);
+    stored.coldBootClipboardAutoPaste = 'always';
+    const result = normalizeStoredPreferences(stored);
+    expect(result.coldBootClipboardAutoPaste).toBe('always');
+  });
+
+  it('preserves an explicit coldBootClipboardAutoPaste=never', () => {
+    const stored = structuredClone(DEFAULT_PREFERENCES);
+    stored.coldBootClipboardAutoPaste = 'never';
+    const result = normalizeStoredPreferences(stored);
+    expect(result.coldBootClipboardAutoPaste).toBe('never');
   });
 
   it('defaults malformed date annotation preferences', () => {

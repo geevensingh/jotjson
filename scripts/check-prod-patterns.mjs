@@ -17,6 +17,24 @@
 //      uncatalogued id into the wire format. Add the new token to
 //      `TELEMETRY_MESSAGE_IDS` instead.
 //
+//   2. `.item(...).replace(` (Cosmos write footgun)
+//      Direct `.item().replace()` calls on a Cosmos container bypass
+//      the shared `replaceWithIfMatch` helper in
+//      `api/src/shared/cosmos.ts`, which is the only path that
+//      enforces server-side `_etag` IfMatch + automatic version bump
+//      + structuredClone-based mutator + Cosmos 412 -> typed
+//      `VersionConflictError`. Use `replaceWithIfMatch<T>(...)`
+//      instead. The helper itself contains the only legitimate
+//      `.replace<T>(` call, allowed via the
+//      `// allow:cosmos-replace internal-only` pragma scoped to
+//      `api/src/shared/cosmos.ts`.
+//
+//   3. `.upsert(` (Cosmos write footgun, no exemptions)
+//      `upsert` hides whether the operation is an insert or a replace
+//      and gives neither path a concurrency guarantee. Replace with
+//      `items.create()` (insert with 409 on conflict) or
+//      `replaceWithIfMatch<T>(...)` (etag-guarded replace).
+//
 // File scope:
 //   - frontend production: `src/**/*.ts`
 //   - backend production:  `api/src/**/*.ts`
@@ -26,9 +44,13 @@
 //   - any path containing `/testing/` or ending in `.testing.ts`
 //
 // Adding new rules:
-//   Push a `{ pattern, message }` onto RULES. `pattern` is a RegExp (use
-//   `/.../g` so the scanner can iterate matches). Keep messages
-//   actionable - point at the approved alternative.
+//   Push a `{ pattern, message, pragma?, pragmaAllowedPaths? }` onto
+//   RULES. `pattern` is a RegExp (use `/.../g` so the scanner can
+//   iterate matches). Keep messages actionable - point at the approved
+//   alternative.  When `pragma` is set, the scanner allows matches on
+//   lines that contain the pragma string AND whose path matches one of
+//   `pragmaAllowedPaths` (forward-slash form) - this keeps the
+//   safe-harbor narrow.
 //
 // Runs with zero dependencies on Node 24+. Invoke directly or via
 //   npm run check:prod-patterns
@@ -44,6 +66,32 @@ const RULES = [
       ' Add the new id to TELEMETRY_MESSAGE_IDS in' +
       ' src/app/core/telemetry/telemetry-message-ids.ts (with JSDoc)' +
       ' instead of casting at the call site.',
+  },
+  {
+    // Match `.item(...)<optional whitespace incl. newlines>.replace(...)<optional generic>`.
+    // The `[^)]*` inside `.item()` keeps it on one set of parens; the
+    // `(?:<[^>\r\n]+>)?` piece allows `replace<BlobDocument>(` etc.
+    // while preventing the generic from spanning lines.
+    pattern: /\.item\([^)]*\)\s*\.replace(?:<[^>\r\n]+>)?\s*\(/g,
+    message:
+      'Direct `.item().replace(` bypasses the shared replaceWithIfMatch helper.' +
+      ' Use `replaceWithIfMatch<T>(container, partitionKey, existing, mutate)`' +
+      ' from api/src/shared/cosmos.ts so the write is etag-guarded and the' +
+      ' version field is bumped automatically.',
+    pragma: '// allow:cosmos-replace internal-only',
+    pragmaAllowedPaths: [/^api\/src\/shared\/cosmos\.ts$/],
+    paths: [/^api\/src\//],
+  },
+  {
+    pattern: /\.upsert(?:<[^>\r\n]+>)?\s*\(/g,
+    message:
+      '`.upsert(` on a Cosmos container hides insert-vs-replace and provides' +
+      ' no concurrency guarantee. Use `items.create()` for inserts' +
+      ' (409 on conflict) or `replaceWithIfMatch<T>(...)` from' +
+      ' api/src/shared/cosmos.ts for etag-guarded replaces.',
+    // Scoped to api/ only - the Angular `Meta.upsert()` DOM service in
+    // the frontend is unrelated to Cosmos and is not banned.
+    paths: [/^api\/src\//],
   },
 ];
 
@@ -68,8 +116,15 @@ function scan(path) {
   } catch {
     return [];
   }
+  // Normalize the path for cross-platform pragmaAllowedPaths matching.
+  // git ls-files returns forward-slash paths on every platform, but
+  // belt-and-suspenders against any future Windows-native call site.
+  const normalizedPath = path.replace(/\\/g, '/');
   const violations = [];
   for (const rule of RULES) {
+    if (rule.paths && !rule.paths.some((re) => re.test(normalizedPath))) {
+      continue;
+    }
     rule.pattern.lastIndex = 0;
     let m;
     while ((m = rule.pattern.exec(text)) !== null) {
@@ -90,6 +145,30 @@ function scan(path) {
       }
       if (lineSoFar.includes('//')) {
         continue;
+      }
+      // Per-rule trailing pragma support: if the rule defines a
+      // `pragma`, look for the pragma string on the line where the
+      // match ENDS. If found AND the file path matches one of
+      // `pragmaAllowedPaths`, allow the match. This safe-harbor is
+      // intentionally narrow so a stray `// allow:...` pasted into
+      // any other file is still a violation.
+      if (rule.pragma) {
+        const matchEnd = m.index + m[0].length;
+        const lineStart = (text.lastIndexOf('\n', matchEnd - 1) ?? -1) + 1;
+        const eolIdx = text.indexOf('\n', matchEnd);
+        const lineEnd = eolIdx === -1 ? text.length : eolIdx;
+        const fullLine = text.slice(lineStart, lineEnd);
+        if (fullLine.includes(rule.pragma)) {
+          const allowed =
+            !rule.pragmaAllowedPaths ||
+            rule.pragmaAllowedPaths.some((re) => re.test(normalizedPath));
+          if (allowed) {
+            continue;
+          }
+          // Pragma is present but the file is not on the allow-list.
+          // Fall through so the violation is reported with the
+          // pragma-specific guidance baked into the message.
+        }
       }
       violations.push({ path, line, col, message: rule.message, snippet: m[0] });
     }

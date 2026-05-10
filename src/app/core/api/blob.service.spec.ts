@@ -199,23 +199,55 @@ describe('BlobService', () => {
   });
 
   describe('getWithProgress', () => {
-    it('emits a final blob event when ResponseHeader and DownloadProgress are absent (in-memory tests)', () => {
+    it('emits bytesComplete then blob in that order on a flushed Response', () => {
       const events: BlobFetchEvent[] = [];
       service.getWithProgress(slug).subscribe((event) => events.push(event));
       const req = httpMock.expectOne(`${base}/${slug}`);
       expect(req.request.method).toBe('GET');
+      expect(req.request.responseType)
+        .withContext(
+          'must use text responseType so JSON.parse runs in BlobService, not in Angular before Response emits',
+        )
+        .toBe('text');
       // HttpClientTesting flushes a single Response event without an
       // intermediate ResponseHeader/DownloadProgress pair, so this
       // verifies the terminal-event handling in isolation.
-      req.flush(makeBlob());
-      expect(events).toEqual([{ kind: 'blob', blob: makeBlob() }]);
+      req.flush(JSON.stringify(makeBlob()));
+      expect(events).toEqual([{ kind: 'bytesComplete' }, { kind: 'blob', blob: makeBlob() }]);
+    });
+
+    it('preserves the progress* -> bytesComplete -> blob ordering on a streamed fetch', () => {
+      const events: BlobFetchEvent[] = [];
+      service.getWithProgress(slug).subscribe((event) => events.push(event));
+      const req = httpMock.expectOne(`${base}/${slug}`);
+      req.event(
+        new HttpHeaderResponse({
+          headers: new HttpHeaders({ 'X-Jotjson-Body-Length': '10000' }),
+          status: 200,
+          statusText: 'OK',
+          url: req.request.url,
+        }),
+      );
+      for (const loaded of [2500, 5000, 7500, 10000]) {
+        req.event({ type: HttpEventType.DownloadProgress, loaded });
+      }
+      req.flush(JSON.stringify(makeBlob()));
+      const kinds = events.map((event) => event.kind);
+      expect(kinds).toEqual([
+        'progress',
+        'progress',
+        'progress',
+        'progress',
+        'bytesComplete',
+        'blob',
+      ]);
     });
 
     it('memoizes total from X-Jotjson-Body-Length on ResponseHeader without emitting yet', () => {
       const events: BlobFetchEvent[] = [];
       service.getWithProgress(slug).subscribe((event) => events.push(event));
       const req = httpMock.expectOne(`${base}/${slug}`);
-      const headerEvent: HttpEvent<JsonBlob> = new HttpHeaderResponse({
+      const headerEvent: HttpEvent<string> = new HttpHeaderResponse({
         headers: new HttpHeaders({ 'X-Jotjson-Body-Length': '4096' }),
         status: 200,
         statusText: 'OK',
@@ -227,13 +259,13 @@ describe('BlobService', () => {
           'no progress event should fire on ResponseHeader -- empty 0% bar would flash before first byte',
         )
         .toEqual([]);
-      const progressEvent: HttpEvent<JsonBlob> = {
+      const progressEvent: HttpEvent<string> = {
         type: HttpEventType.DownloadProgress,
         loaded: 1024,
       };
       req.event(progressEvent);
       expect(events).toEqual([{ kind: 'progress', loaded: 1024, total: 4096 }]);
-      req.flush(makeBlob());
+      req.flush(JSON.stringify(makeBlob()));
       expect(events.at(-1)).toEqual({ kind: 'blob', blob: makeBlob() });
     });
 
@@ -252,7 +284,7 @@ describe('BlobService', () => {
       for (const loaded of [2500, 5000, 7500, 10000]) {
         req.event({ type: HttpEventType.DownloadProgress, loaded });
       }
-      req.flush(makeBlob());
+      req.flush(JSON.stringify(makeBlob()));
       const progressEvents = events.filter((event) => event.kind === 'progress');
       expect(progressEvents.length).toBe(4);
       for (const progressEvent of progressEvents) {
@@ -273,7 +305,7 @@ describe('BlobService', () => {
         }),
       );
       req.event({ type: HttpEventType.DownloadProgress, loaded: 1234 });
-      req.flush(makeBlob());
+      req.flush(JSON.stringify(makeBlob()));
       expect(events.find((event) => event.kind === 'progress')).toEqual({
         kind: 'progress',
         loaded: 1234,
@@ -294,7 +326,7 @@ describe('BlobService', () => {
         }),
       );
       req.event({ type: HttpEventType.DownloadProgress, loaded: 100 });
-      req.flush(makeBlob());
+      req.flush(JSON.stringify(makeBlob()));
       expect(events.find((event) => event.kind === 'progress')).toEqual({
         kind: 'progress',
         loaded: 100,
@@ -315,7 +347,7 @@ describe('BlobService', () => {
         }),
       );
       req.event({ type: HttpEventType.DownloadProgress, loaded: 100 });
-      req.flush(makeBlob());
+      req.flush(JSON.stringify(makeBlob()));
       expect(events.find((event) => event.kind === 'progress')).toEqual({
         kind: 'progress',
         loaded: 100,
@@ -326,7 +358,7 @@ describe('BlobService', () => {
     it('caches the version of the resolved blob on the final event', () => {
       service.getWithProgress(slug).subscribe();
       const req = httpMock.expectOne(`${base}/${slug}`);
-      req.flush(makeBlob({ version: 11 }));
+      req.flush(JSON.stringify(makeBlob({ version: 11 })));
       // Subsequent update should use If-Match: "11" (proves rememberBlob ran).
       service.update(id, { title: 'after progress get' }).subscribe();
       const update = httpMock.expectOne(`${base}/${id}`);
@@ -335,16 +367,17 @@ describe('BlobService', () => {
     });
 
     it('errors when Response arrives without a body', () => {
+      const events: BlobFetchEvent[] = [];
       let errorStatus: number | undefined;
       service.getWithProgress(slug).subscribe({
+        next: (event) => events.push(event),
         error: (error: { status?: number }) => {
           errorStatus = error.status;
         },
       });
       const req = httpMock.expectOne(`${base}/${slug}`);
-      // HttpClientTesting forces null body via flush(null, init).
       req.event(
-        new HttpResponse<JsonBlob>({
+        new HttpResponse<string>({
           body: null,
           status: 200,
           statusText: 'OK',
@@ -352,18 +385,47 @@ describe('BlobService', () => {
         }),
       );
       expect(errorStatus).toBe(200);
+      // bytesComplete must NOT fire on empty body - the splash should
+      // not flash "Rendering tree..." before the resolver redirects
+      // to /404.
+      expect(events).toEqual([]);
     });
 
-    it('propagates HTTP errors to subscribers', () => {
+    it('emits bytesComplete then errors when the body is not valid JSON', () => {
+      const events: BlobFetchEvent[] = [];
+      let errorStatus: number | undefined;
+      let errorBody: unknown;
+      service.getWithProgress(slug).subscribe({
+        next: (event) => events.push(event),
+        error: (error: { status?: number; error?: unknown }) => {
+          errorStatus = error.status;
+          errorBody = error.error;
+        },
+      });
+      const req = httpMock.expectOne(`${base}/${slug}`);
+      req.flush('not-valid-json{', { status: 200, statusText: 'OK' });
+      // The user briefly sees "Rendering tree..." before the resolver
+      // redirects to /404 - preferable to mislabelling the heavy
+      // parse window as "Downloading JSON...".
+      expect(events).toEqual([{ kind: 'bytesComplete' }]);
+      expect(errorStatus).toBe(200);
+      expect(typeof errorBody).toBe('string');
+      expect(errorBody as string).toMatch(/JSON parse failed/);
+    });
+
+    it('propagates HTTP errors to subscribers without firing bytesComplete', () => {
+      const events: BlobFetchEvent[] = [];
       let errorStatus: number | undefined;
       service.getWithProgress(slug).subscribe({
+        next: (event) => events.push(event),
         error: (error: { status?: number }) => {
           errorStatus = error.status;
         },
       });
       const req = httpMock.expectOne(`${base}/${slug}`);
-      req.flush({ error: 'not found' }, { status: 404, statusText: 'Not Found' });
+      req.flush('not found', { status: 404, statusText: 'Not Found' });
       expect(errorStatus).toBe(404);
+      expect(events).toEqual([]);
     });
   });
 });

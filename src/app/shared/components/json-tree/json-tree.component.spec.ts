@@ -190,6 +190,114 @@ describe('JsonTreeComponent', () => {
     }
   });
 
+  describe('row density (em-based icon chrome)', () => {
+    // CSS-contract tests: assert computed font-size / width / height on
+    // the icon chrome at small and large tree font sizes. These are
+    // deterministic and don't depend on real browser line-box metrics
+    // the way a row-pixel-height assertion would. Pixel arithmetic:
+    //   pill (1.25em) at 8px font  =>  10px
+    //   pill (1.25em) at 24px font =>  30px
+    //   twisty (1.1em) at 8px font =>  8.8px
+    //   twisty (1.1em) at 24px font => 26.4px
+
+    async function setupAttachedAtFont(value: unknown, treeFontSize: number) {
+      await createWith(value);
+      prefs.update({ treeFontSize });
+      fixture.detectChanges();
+      document.body.appendChild(fixture.nativeElement);
+    }
+
+    it('inherits tree font-size into the kebab pill via font: inherit', async () => {
+      await setupAttachedAtFont({ a: 1 }, 8);
+      try {
+        const pill = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-kebab-pill',
+        ) as HTMLElement;
+        expect(pill).withContext('expected a .tree-kebab-pill to be rendered').toBeTruthy();
+        const cs = getComputedStyle(pill);
+        // font: inherit must beat the UA default ~13.33px on <button>
+        expect(Number.parseFloat(cs.fontSize)).toBe(8);
+        // 1.25em of 8px = 10px
+        expect(Number.parseFloat(cs.width)).toBe(10);
+        expect(Number.parseFloat(cs.height)).toBe(10);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('scales the kebab pill proportionally at large tree font sizes', async () => {
+      await setupAttachedAtFont({ a: 1 }, 24);
+      try {
+        const pill = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-kebab-pill',
+        ) as HTMLElement;
+        const cs = getComputedStyle(pill);
+        expect(Number.parseFloat(cs.fontSize)).toBe(24);
+        // 1.25em of 24px = 30px
+        expect(Number.parseFloat(cs.width)).toBe(30);
+        expect(Number.parseFloat(cs.height)).toBe(30);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('scales the twisty button (1.1em) with tree font size', async () => {
+      await setupAttachedAtFont({ a: 1 }, 8);
+      try {
+        // Skip spacer twisties (.tree-spacer) - those are invisible
+        // placeholders on leaf rows; we want to assert against the
+        // actual interactive chevron button on the root container.
+        const twisty = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-twisty:not(.tree-spacer)',
+        ) as HTMLElement;
+        expect(twisty)
+          .withContext('expected an active .tree-twisty (non-spacer) to be rendered')
+          .toBeTruthy();
+        const cs = getComputedStyle(twisty);
+        expect(Number.parseFloat(cs.fontSize)).toBe(8);
+        // 1.1em of 8px = 8.8px (with browser sub-pixel rounding tolerance)
+        expect(Number.parseFloat(cs.width)).toBeCloseTo(8.8, 1);
+        expect(Number.parseFloat(cs.height)).toBeCloseTo(8.8, 1);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('applies the tightened line-height to .tree-body', async () => {
+      await setupAttachedAtFont({ a: 1 }, 8);
+      try {
+        const body = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-body',
+        ) as HTMLElement;
+        const cs = getComputedStyle(body);
+        expect(Number.parseFloat(cs.fontSize)).toBe(8);
+        // line-height: 1.4 of 8px = 11.2px (browsers may round)
+        expect(Number.parseFloat(cs.lineHeight)).toBeCloseTo(11.2, 1);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('keeps the probe row content height at or below 18px at the smallest font', async () => {
+      // Generous integration guard. The probe row contains the same chrome as
+      // a real row (twisty + key + value). At 8px tree font the chrome is
+      // dominated by the 1.25em-equivalent kebab/pill family (~10px) plus
+      // padding (~2px) plus baseline descender. <=18px gives margin for
+      // browser line-box rounding without being sloppy.
+      await setupAttachedAtFont({ a: 1 }, 8);
+      try {
+        const probe = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-row--probe',
+        ) as HTMLElement;
+        expect(probe).withContext('expected a .tree-row--probe to be rendered').toBeTruthy();
+        const rect = probe.getBoundingClientRect();
+        expect(rect.height).toBeLessThanOrEqual(18);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+  });
+
   describe('root() and path formatting', () => {
     function collectPathStrings(node: BuiltNode | undefined): string[] {
       if (!node) {
@@ -1082,8 +1190,9 @@ describe('JsonTreeComponent', () => {
           closeTrailing?: string;
         }
       >,
+      beforeDetectChanges?: () => void,
     ): Promise<void> {
-      await createWith(value);
+      await createWith(value, beforeDetectChanges);
       fixture.componentRef.setInput('commentsByPath', comments);
       fixture.detectChanges();
     }
@@ -1133,10 +1242,12 @@ describe('JsonTreeComponent', () => {
     });
 
     it('renders the trailing comment AFTER the value and BEFORE tree-row-right on leaf rows', async () => {
-      prefs.update({ treeShowTypeLabels: true });
       await createWithComments(
         { id: 42 },
         makeMap([['$.id', makeBundle(undefined, 'inline note')]]),
+        () => {
+          prefs.update({ treeShowTypeLabels: true });
+        },
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
@@ -1154,10 +1265,12 @@ describe('JsonTreeComponent', () => {
     });
 
     it('renders the trailing comment AFTER the date annotation on string rows', async () => {
-      prefs.update({ treeShowDateAnnotations: true });
       await createWithComments(
         { when: '2024-01-15T00:00:00Z' },
         makeMap([['$.when', makeBundle(undefined, 'logged at noon')]]),
+        () => {
+          prefs.update({ treeShowDateAnnotations: true });
+        },
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.when"]') as HTMLElement;
@@ -1517,8 +1630,9 @@ describe('JsonTreeComponent', () => {
     });
 
     it('renders .tree-date-annotation in the UI sans-serif font (decoration)', async () => {
-      prefs.update({ treeShowDateAnnotations: true });
-      await createWith({ when: '2024-01-15T00:00:00Z' });
+      await createWith({ when: '2024-01-15T00:00:00Z' }, () => {
+        prefs.update({ treeShowDateAnnotations: true });
+      });
       const family = attachAndComputeFontFamily('.tree-date-annotation');
       expect(family).toMatch(SANS_PATTERN);
       expect(family).not.toMatch(MONO_PATTERN);
@@ -1548,7 +1662,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set(path);
       fixture.detectChanges();
       const selected = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row[aria-selected="true"]',
+        'mat-nested-tree-node[aria-selected="true"] .tree-row',
       ) as HTMLElement | null;
       cmp.selectedPath.set(null);
       fixture.detectChanges();
@@ -1568,7 +1682,7 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       expect(cmp.selectedPath()).toBe('$.a');
       const stillSelected = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row.is-selected[aria-selected="true"]',
+        'mat-nested-tree-node[aria-selected="true"] .tree-row.is-selected',
       );
       expect(stillSelected).toBeTruthy();
     });
@@ -1762,7 +1876,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set('$.a.x');
       fixture.detectChanges();
       const xRow = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row[aria-selected="true"]',
+        'mat-nested-tree-node[aria-selected="true"] .tree-row',
       ) as HTMLElement;
       expect(xRow.classList.contains('is-selected')).toBeTrue();
       expect(xRow.classList.contains('is-search-hit')).toBeTrue();
@@ -1951,21 +2065,78 @@ describe('JsonTreeComponent', () => {
       return item;
     }
 
-    async function openHighlightFlyout(path: string, label: string): Promise<HTMLElement> {
+    /**
+     * Find a menu item by label text within a specific overlay panel.
+     * Used to disambiguate items whose label appears in multiple
+     * panels (e.g., "Highlight" appears at top-level AND inside the
+     * Subtree submenu after the Path Y overhaul).
+     */
+    function panelItemContaining(panel: HTMLElement, label: string): HTMLButtonElement {
+      const item = Array.from(
+        panel.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      ).find((menuItem) => (menuItem.textContent ?? '').trim().includes(label));
+      if (!item) {
+        throw new Error(`No menu item found for ${label} in panel`);
+      }
+      return item;
+    }
+
+    /**
+     * Open the Subtree > submenu within the currently-open row menu.
+     * Caller must have already opened the row menu (e.g., via
+     * `openMenuFor`). Returns the just-opened subtree submenu panel.
+     */
+    async function openSubtreeSubmenu(): Promise<HTMLElement> {
+      const trigger = menuItemContaining(cmp.ctxSubtreeMenuLabel);
+      // MatMenu submenu triggers open on hover (mouseenter) per Material
+      // convention. Click would also dismiss the row menu, which we don't
+      // want here.
+      trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+      const panels = Array.from(document.body.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'));
+      if (panels.length < 2) {
+        throw new Error(
+          `Expected at least 2 menu panels after opening Subtree; found ${panels.length}`,
+        );
+      }
+      return panels[panels.length - 1]!;
+    }
+
+    async function openHighlightFlyout(
+      path: string,
+      label: string,
+      scope: 'row' | 'subtree' = 'row',
+    ): Promise<HTMLElement> {
       await openMenuFor(path);
-      const item = menuItemContaining(label);
+      // The "Highlight" label appears in two panels after the Path Y
+      // overhaul: top-level (single-row scope) and inside Subtree >
+      // (subtree scope). Caller must specify which scope to navigate
+      // to so we can pick the right panel before searching for the
+      // trigger item.
+      let parentPanel: HTMLElement;
+      if (scope === 'subtree') {
+        parentPanel = await openSubtreeSubmenu();
+      } else {
+        const panels = Array.from(
+          document.body.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'),
+        );
+        parentPanel = panels[0]!;
+      }
+      const item = panelItemContaining(parentPanel, label);
       // Open the swatch flyout via Material's hover-to-open submenu path.
       // We deliberately avoid `item.click()` here because clicking the
-      // parent "Highlight" / "Highlight tree" item is now a meaningful
-      // user gesture (applies the preferred color) and would skew the
-      // emit-count assertions in tests that exercise the swatch path.
+      // parent "Highlight" item is now a meaningful user gesture
+      // (applies the preferred color) and would skew the emit-count
+      // assertions in tests that exercise the swatch path.
       item.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
       fixture.detectChanges();
       await Promise.resolve();
       fixture.detectChanges();
       const flyouts = Array.from(document.body.querySelectorAll<HTMLElement>('.highlight-flyout'));
       const flyout = flyouts[flyouts.length - 1];
-      expect(flyout).withContext(`opened flyout for ${label}`).toBeTruthy();
+      expect(flyout).withContext(`opened flyout for ${label} (${scope})`).toBeTruthy();
       return flyout as HTMLElement;
     }
 
@@ -2099,7 +2270,7 @@ describe('JsonTreeComponent', () => {
         prefs.update({ theme: 'light' });
         fixture.detectChanges();
         const events = captureHighlightChanges();
-        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel);
+        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel, 'subtree');
 
         flyout.querySelector<HTMLButtonElement>('[aria-label="Cyan #b3e5fc"]')!.click();
         fixture.detectChanges();
@@ -2203,7 +2374,11 @@ describe('JsonTreeComponent', () => {
 
         cmp.applyManualHighlight(node, false, '#ff0000');
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.apply', {
+        // Phase 4: applyManualHighlight now also fires the
+        // counts-only `tree.contextMenu.highlight` /
+        // `highlightSubtree` marker, so we assert tree.highlight.apply
+        // was emitted (with full props) without forcing single-call.
+        expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
           kind: 'single',
           bucket: 'red',
           replacedExisting: 'false',
@@ -2218,7 +2393,7 @@ describe('JsonTreeComponent', () => {
 
         cmp.applyManualHighlight(node, true, '#0000ff');
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.apply', {
+        expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
           kind: 'cascade',
           bucket: 'blue',
           replacedExisting: 'true',
@@ -2338,8 +2513,13 @@ describe('JsonTreeComponent', () => {
         enableHighlightEditing();
         setHighlights([{ path: '$.parent', color: '#7e6500', cascade: true }]);
         await openMenuFor('$.parent.child');
-
-        const item = menuItemContaining(cmp.ctxRemoveTreeHighlightLabel);
+        // After v0.19.4 single-item Subtree elevation: the only
+        // Subtree contribution for this row is Remove tree highlight,
+        // so it elevates to the row menu directly with the
+        // "Remove subtree highlight" elevated label. Look for the
+        // item at row-menu level (no Subtree submenu to navigate
+        // into).
+        const item = menuItemContaining(cmp.ctxRemoveTreeHighlightElevatedLabel);
 
         expect(item.getAttribute('aria-label')).toContain('$.parent');
       });
@@ -2383,7 +2563,7 @@ describe('JsonTreeComponent', () => {
         enableHighlightEditing();
         prefs.update({ theme: 'light' });
         fixture.detectChanges();
-        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel);
+        const flyout = await openHighlightFlyout('$.parent', cmp.ctxHighlightTreeLabel, 'subtree');
 
         flyout.querySelector<HTMLButtonElement>('[aria-label="Cyan #b3e5fc"]')!.click();
         await flushMenuClose();
@@ -2443,8 +2623,12 @@ describe('JsonTreeComponent', () => {
         setPreferredHighlightColor('#abcdef');
         const events = captureHighlightChanges();
         await openMenuFor('$.parent');
-
-        const item = menuItemContaining(cmp.ctxHighlightTreeLabel);
+        // After Path Y, the subtree-scope Highlight item lives inside
+        // the Subtree > submenu (and is labeled simply "Highlight"
+        // there, identical to the top-level single-row item). Open
+        // the Subtree panel and pick the item from there.
+        const subtreePanel = await openSubtreeSubmenu();
+        const item = panelItemContaining(subtreePanel, cmp.ctxHighlightTreeLabel);
         item.click();
         await flushMenuClose();
 
@@ -4500,6 +4684,34 @@ describe('JsonTreeComponent', () => {
       throw new Error(`No node at path ${path}`);
     }
 
+    /**
+     * Open the row menu for `path` via its kebab button. Inlined in
+     * existing M7q `rendering` tests; lifted here to keep new
+     * Path Y tests below from re-implementing the same kebab-click +
+     * detectChanges + microtask-await dance.
+     */
+    async function openMenuFor(path: string): Promise<void> {
+      const kebab = (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${path}"] .tree-kebab-pill`,
+      ) as HTMLButtonElement | null;
+      expect(kebab).withContext(`found a kebab for ${path}`).toBeTruthy();
+      kebab!.click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    /** Find the FIRST visible menu item by label substring, across all open panels. */
+    function menuItemContaining(label: string): HTMLButtonElement {
+      const item = Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      ).find((menuItem) => (menuItem.textContent ?? '').trim().includes(label));
+      if (!item) {
+        throw new Error(`No menu item found for ${label}`);
+      }
+      return item;
+    }
+
     function withCtxClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
@@ -4873,7 +5085,7 @@ describe('JsonTreeComponent', () => {
       });
     });
 
-    describe('searchByKey', () => {
+    describe('findByKey', () => {
       it('sets scope=keys, regex=false, valueType=all and queries the segment', async () => {
         await createWith({ alpha: 1, beta: 2 });
         prefs.update({
@@ -4884,7 +5096,7 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.alpha');
-        cmp.searchByKey(node);
+        cmp.findByKey(node);
         expect(prefs.prefs().searchScope).toBe('keys');
         expect(prefs.prefs().searchRegexMode).toBe(false);
         expect(prefs.prefs().searchValueType).toBe('all');
@@ -4896,7 +5108,7 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.alphabet');
-        cmp.searchByKey(node);
+        cmp.findByKey(node);
         await Promise.resolve();
         await Promise.resolve();
         const idx = cmp.activeHitIndex();
@@ -4919,7 +5131,7 @@ describe('JsonTreeComponent', () => {
         // want the inverse - just verify by calling searchByKey with a
         // node whose key doesn't match the existing query.
         const node = nodeAt('$.alpha');
-        cmp.searchByKey(node);
+        cmp.findByKey(node);
         await Promise.resolve();
         await Promise.resolve();
         // After searchByKey on $.alpha, paths = [$.alpha]; activeHit = 0.
@@ -4931,19 +5143,19 @@ describe('JsonTreeComponent', () => {
       it('does nothing on the root (no segment)', async () => {
         await createWith({ alpha: 1 });
         prefs.update({ searchScope: 'values' });
-        cmp.searchByKey(nodeAt('$'));
+        cmp.findByKey(nodeAt('$'));
         // unchanged
         expect(prefs.prefs().searchScope).toBe('values');
       });
     });
 
-    describe('searchByValue', () => {
+    describe('findByValue', () => {
       it('sets scope=values, queries the value, and elevates the clicked row', async () => {
         await createWith({ a: 'needle', b: 'haystack', c: 'needle' });
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.c');
-        cmp.searchByValue(node);
+        cmp.findByValue(node);
         await Promise.resolve();
         await Promise.resolve();
         expect(prefs.prefs().searchScope).toBe('values');
@@ -4959,7 +5171,7 @@ describe('JsonTreeComponent', () => {
         await createWith({ a: 'with "quotes"' });
         cmp.expandAll();
         fixture.detectChanges();
-        cmp.searchByValue(nodeAt('$.a'));
+        cmp.findByValue(nodeAt('$.a'));
         expect(cmp.search()).toBe('with "quotes"');
       });
 
@@ -4968,16 +5180,23 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         prefs.update({ searchScope: 'keys' });
-        cmp.searchByValue(nodeAt('$.obj'));
-        cmp.searchByValue(nodeAt('$.arr'));
-        cmp.searchByValue(nodeAt('$.blank'));
+        cmp.findByValue(nodeAt('$.obj'));
+        cmp.findByValue(nodeAt('$.arr'));
+        cmp.findByValue(nodeAt('$.blank'));
         expect(prefs.prefs().searchScope).toBe('keys');
         expect(cmp.search()).toBe('');
       });
     });
 
     describe('collapseFromHere', () => {
-      it('collapses the clicked container and all expanded descendants', async () => {
+      it("collapses the clicked container without clearing descendants' state", async () => {
+        // Path Y: collapseFromHere is now non-recursive (single-row).
+        // CDK FlatTree preserves descendants' expansion state across
+        // a parent collapse/expand cycle, so re-expanding `outer`
+        // restores `mid` to expanded. The recursive walk that the
+        // earlier implementation did was deleted to keep "one way to
+        // collapse" and avoid divergent behavior between dblclick
+        // and the menu.
         await createWith({ outer: { mid: { inner: 1 } } });
         cmp.expandAll();
         fixture.detectChanges();
@@ -4986,8 +5205,13 @@ describe('JsonTreeComponent', () => {
         expect(cmp.treeControl.isExpanded(outer)).toBe(true);
         expect(cmp.treeControl.isExpanded(mid)).toBe(true);
         cmp.collapseFromHere(outer);
-        expect(cmp.treeControl.isExpanded(outer)).toBe(false);
-        expect(cmp.treeControl.isExpanded(mid)).toBe(false);
+        expect(cmp.treeControl.isExpanded(outer)).withContext('clicked row collapses').toBe(false);
+        // mid stays in the expansionModel because we only collapsed
+        // outer; CDK preserves its state. Re-expanding outer would
+        // make mid visible again.
+        expect(cmp.treeControl.isExpanded(mid))
+          .withContext("descendant's expansion state preserved")
+          .toBe(true);
       });
     });
 
@@ -5259,24 +5483,24 @@ describe('JsonTreeComponent', () => {
         expect(cmp.showCopyKey(nodeAt('$.alpha'))).toBe(true);
       });
 
-      it('showSearchByKey: hidden in embeddedMode', async () => {
+      it('showFindByKey: hidden in embeddedMode', async () => {
         await createWith({ alpha: 1 });
         fixture.componentRef.setInput('embeddedMode', true);
         fixture.detectChanges();
-        expect(cmp.showSearchByKey(nodeAt('$.alpha'))).toBe(false);
+        expect(cmp.showFindByKey(nodeAt('$.alpha'))).toBe(false);
       });
 
-      it('showSearchByValue: hidden on object/array/null/undefined and in embeddedMode', async () => {
+      it('showFindByValue: hidden on object/array/null/undefined and in embeddedMode', async () => {
         await createWith({ obj: {}, arr: [], blank: null, str: 'x' });
         cmp.expandAll();
         fixture.detectChanges();
-        expect(cmp.showSearchByValue(nodeAt('$.obj'))).toBe(false);
-        expect(cmp.showSearchByValue(nodeAt('$.arr'))).toBe(false);
-        expect(cmp.showSearchByValue(nodeAt('$.blank'))).toBe(false);
-        expect(cmp.showSearchByValue(nodeAt('$.str'))).toBe(true);
+        expect(cmp.showFindByValue(nodeAt('$.obj'))).toBe(false);
+        expect(cmp.showFindByValue(nodeAt('$.arr'))).toBe(false);
+        expect(cmp.showFindByValue(nodeAt('$.blank'))).toBe(false);
+        expect(cmp.showFindByValue(nodeAt('$.str'))).toBe(true);
         fixture.componentRef.setInput('embeddedMode', true);
         fixture.detectChanges();
-        expect(cmp.showSearchByValue(nodeAt('$.str'))).toBe(false);
+        expect(cmp.showFindByValue(nodeAt('$.str'))).toBe(false);
       });
 
       it('showCollapse: hidden when already collapsed', async () => {
@@ -5293,18 +5517,22 @@ describe('JsonTreeComponent', () => {
         expect(cmp.showExpandAllFromHere(nodeAt('$.outer'))).toBe(false);
       });
 
-      it('showExpandToDepth: hides +N greater than the subtree max descendant depth (Bug 1)', async () => {
+      it('showExpandToDepth: hides +N greater than the deepest container descendant depth (Bug 1)', async () => {
         // Subtree { outer: { mid: { inner: 1 } } } from $.outer:
         //   $.outer (clicked, container, depth 0)
         //   $.outer.mid (container, depth 1)
         //   $.outer.mid.inner (primitive leaf, depth 2)
-        // maxDescendantDepth = 2, so +1 and +2 are in range; +3..+5 hide.
+        // After v0.19.4: maxDescendantDepth counts only containers,
+        // so it returns 1 (mid is the deepest container). +1 alone
+        // is in range; +2..+5 hide. Expand all + +1 are both meaningful
+        // but distinct: +1 expands only outer (one click); All
+        // expands outer AND mid (two clicks of work in one).
         await createWith({ outer: { mid: { inner: 1 } } });
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
         expect(cmp.showExpandToDepth(outer, 1)).toBe(true);
-        expect(cmp.showExpandToDepth(outer, 2)).toBe(true);
+        expect(cmp.showExpandToDepth(outer, 2)).toBe(false);
         expect(cmp.showExpandToDepth(outer, 3)).toBe(false);
         expect(cmp.showExpandToDepth(outer, 4)).toBe(false);
         expect(cmp.showExpandToDepth(outer, 5)).toBe(false);
@@ -5322,22 +5550,27 @@ describe('JsonTreeComponent', () => {
         }
       });
 
-      it('showExpandToDepth: caps at +1 when clicked node has only primitive children', async () => {
-        // The clicked node is a container with only primitive children;
-        // maxDescendantDepth = 1. +1 alone is meaningful.
+      it('showExpandToDepth: hides every +N when clicked node has only primitive children', async () => {
+        // After v0.19.4: the clicked node has no container descendants
+        // (all children are primitives), so maxDescendantDepth = 0
+        // and every +N hides. Only Expand all is meaningful in this
+        // case (and the single-item elevation logic in
+        // `expandFromHereSingleAction` will surface it).
         await createWith({ outer: { x: 1, y: 2 } });
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
-        expect(cmp.showExpandToDepth(outer, 1)).toBe(true);
+        expect(cmp.showExpandToDepth(outer, 1)).toBe(false);
         expect(cmp.showExpandToDepth(outer, 2)).toBe(false);
         expect(cmp.showExpandToDepth(outer, 3)).toBe(false);
       });
 
       it('showExpandToDepth: walks hidden containers under collapsed ancestors', async () => {
         // outer is expanded; mid is collapsed (so inner is hidden).
-        // +3 should still see inner (depth 2, collapsed, hidden) when
-        // computing visibility, so it shows.
+        // After v0.19.4: maxDescendantDepth(outer) counts only
+        // containers (mid d=1, inner d=2) -> 2. The leaf primitive
+        // at d=3 doesn't extend the actionable depth because
+        // expanding inner already reveals it.
         await createWith({ outer: { mid: { inner: { leaf: 1 } } } });
         cmp.expandAll();
         fixture.detectChanges();
@@ -5349,14 +5582,17 @@ describe('JsonTreeComponent', () => {
         // expanded (we did expandAll first, then only collapsed mid).
         expect(cmp.showExpandToDepth(outer, 1)).toBe(false);
         expect(cmp.showExpandToDepth(outer, 2)).toBe(true);
-        expect(cmp.showExpandToDepth(outer, 3)).toBe(true);
+        // +3 hides because maxDescendantDepth=2 (inner is the deepest
+        // container; leaf at d=3 is a primitive and doesn't count).
+        expect(cmp.showExpandToDepth(outer, 3)).toBe(false);
       });
 
       it('showExpandToDepth: partial expansion shows only +N that reach a collapsed container', async () => {
         // Mirrors the user's example: top-level expanded, second-level
         // expanded, alt-second-level collapsed (its third-level hidden
-        // and collapsed inside it). Expect: hide +1; show +2, +3; hide
-        // +4, +5.
+        // and collapsed inside it). After v0.19.4: hide +1; show +2;
+        // hide +3..+5 (third-level is the deepest container at d=2,
+        // x/y at d=3 are primitives so don't extend depth).
         await createWith({
           'top-level': {
             'second-level': { 'third-level': { x: 1, y: 2 } },
@@ -5375,7 +5611,9 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         expect(cmp.showExpandToDepth(top, 1)).toBe(false);
         expect(cmp.showExpandToDepth(top, 2)).toBe(true);
-        expect(cmp.showExpandToDepth(top, 3)).toBe(true);
+        // +3 hides post-v0.19.4: alt-third-level is at d=2 (deepest
+        // container); its primitive children at d=3 don't extend depth.
+        expect(cmp.showExpandToDepth(top, 3)).toBe(false);
         expect(cmp.showExpandToDepth(top, 4)).toBe(false);
         expect(cmp.showExpandToDepth(top, 5)).toBe(false);
       });
@@ -5392,18 +5630,113 @@ describe('JsonTreeComponent', () => {
         expect(writeText).toHaveBeenCalledWith('hi');
       });
 
-      it('copies pretty JSON for a container row', async () => {
+      it('expands a collapsed container on dblclick', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.obj');
+        expect(cmp.treeControl.isExpanded(node)).withContext('starts collapsed').toBe(false);
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(cmp.treeControl.isExpanded(node)).withContext('expanded after dblclick').toBe(true);
+        expect(writeText).not.toHaveBeenCalled();
+      });
+
+      it('collapses an expanded container on dblclick', async () => {
         await createWith({ obj: { a: 1 } });
         cmp.expandAll();
         fixture.detectChanges();
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.obj');
+        expect(cmp.treeControl.isExpanded(node)).withContext('starts expanded').toBe(true);
         withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
         await Promise.resolve();
         await Promise.resolve();
-        const arg = writeText.calls.mostRecent().args[0] as string;
-        expect(arg).toContain('\n');
-        expect(arg).toContain('"a": 1');
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('collapsed after dblclick')
+          .toBe(false);
+        expect(writeText).not.toHaveBeenCalled();
+      });
+
+      it('toggles container on dblclick even when Alt is held (no copy)', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.obj');
+        withCtxClipboard({ writeText }, () =>
+          cmp.onRowDblClick(new MouseEvent('dblclick', { altKey: true }), node),
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('Alt does not suppress toggle')
+          .toBe(true);
+        expect(writeText).not.toHaveBeenCalled();
+      });
+
+      it('emits tree.row.doubleClickToggle with the post-toggle action', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+
+        cmp.onRowDblClick(new MouseEvent('dblclick'), node);
+        expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickToggle', {
+          action: 'expand',
+        });
+
+        logger.info.calls.reset();
+        cmp.onRowDblClick(new MouseEvent('dblclick'), node);
+        expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickToggle', {
+          action: 'collapse',
+        });
+      });
+
+      it('copies the literal `{}` on dblclick of an empty object row', async () => {
+        // Per Q4b: empty containers no longer no-op on dblclick. They
+        // route through the same copyValue path as primitives, copying
+        // the literal `{}` to the clipboard. Issue #109's
+        // "expand/collapse instead of copying" wording is relaxed for
+        // this edge case (no expand/collapse possible). The
+        // `tree.row.doubleClickCopyValue` JSDoc was also updated.
+        const logger = await createWithLoggerSpy({ empty: {} });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.empty');
+        const wasExpanded = cmp.treeControl.isExpanded(node);
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('{}');
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('expansion state unchanged on empty container')
+          .toBe(wasExpanded);
+        expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickCopyValue', {
+          escaped: false,
+        });
+        expect(logger.info).not.toHaveBeenCalledWith(
+          'tree.row.doubleClickToggle',
+          jasmine.anything(),
+        );
+      });
+
+      it('copies the literal `[]` on dblclick of an empty array row', async () => {
+        const logger = await createWithLoggerSpy({ empty: [] });
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        const node = nodeAt('$.empty');
+        withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(writeText).toHaveBeenCalledWith('[]');
+        expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickCopyValue', {
+          escaped: false,
+        });
+        expect(logger.info).not.toHaveBeenCalledWith(
+          'tree.row.doubleClickToggle',
+          jasmine.anything(),
+        );
       });
 
       it('skips when the dblclick target is an interactive descendant (kebab pill)', async () => {
@@ -5421,6 +5754,31 @@ describe('JsonTreeComponent', () => {
         await Promise.resolve();
         await Promise.resolve();
         expect(writeText).not.toHaveBeenCalled();
+      });
+
+      it('skips when the dblclick target is the chevron toggle button (regression for issue #109)', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        const wasExpanded = cmp.treeControl.isExpanded(node);
+        const chevron = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-row[data-path="$.obj"] .tree-twisty[mattreenodetoggle], .tree-row[data-path="$.obj"] button[mattreenodetoggle]',
+        ) as HTMLButtonElement | null;
+        expect(chevron).withContext('found the chevron toggle button on $.obj').toBeTruthy();
+        const ev = new MouseEvent('dblclick', { bubbles: true });
+        Object.defineProperty(ev, 'target', { value: chevron });
+        cmp.onRowDblClick(ev, node);
+        // The interactive-descendant guard should short-circuit before
+        // any toggle / telemetry happens here. The chevron's own
+        // matTreeNodeToggle click handler is what flips state on click;
+        // this guard ensures dblclick on the chevron does not _also_
+        // toggle from the row handler.
+        expect(cmp.treeControl.isExpanded(node)).toBe(wasExpanded);
+        expect(logger.info).not.toHaveBeenCalledWith(
+          'tree.row.doubleClickToggle',
+          jasmine.anything(),
+        );
       });
     });
 
@@ -5486,13 +5844,650 @@ describe('JsonTreeComponent', () => {
         ) as NodeListOf<HTMLButtonElement>;
         expect(items.length).toBeGreaterThan(0);
         const first = items[0];
-        expect(first.textContent?.trim()).toBe(cmp.ctxCopyValueLabel);
+        // The bolded Copy value row carries a `.sr-only` a11y hint
+        // span suffix in v0.19.3+, so we assert that the visible
+        // label is still the prefix of textContent (the rest is the
+        // visually-hidden double-click hint).
+        expect(first.textContent?.trim().startsWith(cmp.ctxCopyValueLabel)).toBeTrue();
         expect(first.classList.contains('ctx-default-action')).toBe(true);
         document.body
           .querySelectorAll('.cdk-overlay-backdrop')
           .forEach((b) => (b as HTMLElement).click());
         fixture.detectChanges();
       });
+    });
+
+    describe('surfaced default-shortcut row (Path Y)', () => {
+      it('omits the surfaced row and bolds Copy value for a primitive', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.alpha'));
+        expect(cmp.defaultActionKind()).toBe('copyValue');
+        expect(cmp.surfacedShortcutLabel()).toBeNull();
+      });
+
+      it('surfaces "Expand 1 level" for a collapsed container', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.obj'));
+        expect(cmp.defaultActionKind()).toBe('expandRow');
+        expect(cmp.surfacedShortcutLabel()).toBe(cmp.ctxExpand1LevelLabel);
+      });
+
+      it('surfaces "Collapse from here" for an expanded container', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.obj'));
+        expect(cmp.defaultActionKind()).toBe('collapseRow');
+        expect(cmp.surfacedShortcutLabel()).toBe(cmp.ctxCollapseFromHereLabel);
+      });
+
+      it('omits the surfaced row and bolds Copy value for an empty container', async () => {
+        await createWith({ empty: {} });
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.empty'));
+        // Empty container falls into the copyValue branch because its
+        // children list is empty, even though its type is 'object'.
+        expect(cmp.defaultActionKind()).toBe('copyValue');
+        expect(cmp.surfacedShortcutLabel()).toBeNull();
+      });
+
+      it('clicking the surfaced "Expand 1 level" row expands the clicked container', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        cmp.contextNode.set(node);
+        expect(cmp.treeControl.isExpanded(node)).toBe(false);
+        cmp.onSurfacedShortcutClick(node);
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('expanded after surfaced shortcut click')
+          .toBe(true);
+      });
+
+      it('clicking the surfaced "Collapse from here" row collapses the clicked container', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        cmp.contextNode.set(node);
+        expect(cmp.treeControl.isExpanded(node)).toBe(true);
+        cmp.onSurfacedShortcutClick(node);
+        expect(cmp.treeControl.isExpanded(node))
+          .withContext('collapsed after surfaced shortcut click')
+          .toBe(false);
+      });
+
+      it('renders a `.sr-only` a11y hint on the bolded surfaced row (collapsed container)', async () => {
+        // v0.19.3: bolded items announce "; same as double-clicking
+        // the row" to AT users via a visually-hidden span. Replaces
+        // the v0.19.0 matTooltip that was dropped in v0.19.1 because
+        // the overlay obscured the next menu item.
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        await openMenuFor('$.obj');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const surfaced = items.find((m) => m.classList.contains('ctx-default-action'));
+        expect(surfaced).withContext('found surfaced bolded row').toBeTruthy();
+        const hint = surfaced!.querySelector<HTMLElement>('.sr-only');
+        expect(hint?.textContent?.trim()).toBe(cmp.defaultActionA11yHint.trim());
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('renders a `.sr-only` a11y hint on the bolded Copy value for primitives', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.alpha');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const copyValue = items.find((m) => m.classList.contains('ctx-default-action'));
+        expect(copyValue?.textContent?.trim().startsWith(cmp.ctxCopyValueLabel)).toBeTrue();
+        const hint = copyValue!.querySelector<HTMLElement>('.sr-only');
+        expect(hint?.textContent?.trim()).toBe(cmp.defaultActionA11yHint.trim());
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+    });
+
+    describe('Subtree submenu (Path Y + v0.19.4 elevation)', () => {
+      it('renders the Subtree > trigger when at least 2 subtree actions apply', async () => {
+        // After v0.19.4 single-item elevation: a single-action Subtree
+        // elevates its lone item directly to the row menu instead of
+        // nesting it. Renders as a real `Subtree >` flyout only when
+        // 2+ actions apply. A nested-container fixture clicked at a
+        // mid-level with peers gives Collapse + Isolate (single mode)
+        // = 2 items, so the trigger renders.
+        await createWith({ outer: { a: { x: 1, y: 2 }, b: { z: 3 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.outer.a');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const trigger = items.find((m) =>
+          (m.textContent ?? '').trim().includes(cmp.ctxSubtreeMenuLabel),
+        );
+        expect(trigger).withContext('Subtree trigger present').toBeTruthy();
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('elevates a single Subtree item to row level instead of rendering Subtree >', async () => {
+        // Click on an expanded container that has only primitive
+        // children: the only Subtree action would be Collapse, but
+        // the surfaced default-shortcut row already shows
+        // "Collapse from here" -- so v0.19.4 suppresses the
+        // duplicate via the `'collapseSame'` sentinel. No Subtree
+        // trigger renders at all (suppression case).
+        await createWith({ obj: { a: 1, b: 2 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.obj');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const subtreeTrigger = items.find((m) =>
+          (m.textContent ?? '').trim().includes(cmp.ctxSubtreeMenuLabel),
+        );
+        expect(subtreeTrigger)
+          .withContext('Subtree submenu suppressed (collapseSame)')
+          .toBeUndefined();
+        // Verify that the surfaced shortcut row carries the same
+        // Collapse action (so the user still has access).
+        const surfaced = items.find((m) => m.classList.contains('ctx-default-action'));
+        expect(surfaced?.textContent?.trim().startsWith(cmp.ctxCollapseFromHereLabel)).toBeTrue();
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('hides the Subtree > trigger on a primitive row (no subtree to act on)', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.alpha');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const trigger = items.find((m) =>
+          (m.textContent ?? '').trim().includes(cmp.ctxSubtreeMenuLabel),
+        );
+        expect(trigger).withContext('Subtree trigger absent on primitive').toBeUndefined();
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('Subtree submenu contains Collapse siblings + Isolate when both narrow and wider sets apply', async () => {
+        // For showIsolatePair to be true, both narrowSet (peers under
+        // the clicked row's parent) and widerSet (peers at higher
+        // ancestors) must be non-empty. The fixture has:
+        //   - root has $.outer and $.sibling (widerSet for $.outer.a)
+        //   - $.outer has .a and .b (narrowSet for $.outer.a)
+        await createWith({ outer: { a: { x: 1, y: 2 }, b: { z: 3 } }, sibling: { p: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.outer.a');
+        const trigger = menuItemContaining(cmp.ctxSubtreeMenuLabel);
+        trigger.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+        const panels = Array.from(
+          document.body.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'),
+        );
+        const subtreePanel = panels[panels.length - 1]!;
+        const labels = Array.from(
+          subtreePanel.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        ).map((m) => (m.textContent ?? '').trim());
+        // Spec terms preserved per DESIGN_SPEC.md §514.
+        expect(labels).toContain(cmp.ctxIsolateLabel);
+        expect(labels).toContain(cmp.ctxCollapseSiblingsLabel);
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('renders depth labels with `+N` prefix per DESIGN_SPEC.md §516', async () => {
+        // The +N notation distinguishes per-row relative-additive
+        // depth from the toolbar's absolute snap-to-exact dropdown.
+        expect(cmp.ctxExpandToDepth1Label).toBe('+1 level');
+        expect(cmp.ctxExpandToDepth2Label).toBe('+2 levels');
+        expect(cmp.ctxExpandToDepth3Label).toBe('+3 levels');
+        expect(cmp.ctxExpandToDepth4Label).toBe('+4 levels');
+        expect(cmp.ctxExpandToDepth5Label).toBe('+5 levels');
+      });
+
+      it('Subtree -> Expand submenu trigger renders when any depth predicate applies', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.outer');
+        expect(cmp.showExpandFromHereMenu(node)).toBeTrue();
+      });
+    });
+
+    describe('single-item elevation (v0.19.4)', () => {
+      it('expandFromHereSingleAction returns expandAll when only Expand all is visible', async () => {
+        // Container with only primitive children: maxDescendantDepth=0
+        // (no container descendants), so +N predicates all hide. Expand
+        // all is the lone Expand contribution, ready to elevate.
+        await createWith({ outer: { x: 1, y: 2 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        const single = cmp.expandFromHereSingleAction(outer);
+        expect(single).toEqual({ kind: 'expandAll' });
+        expect(cmp.showExpandFromHereSubmenu(outer))
+          .withContext('Expand sub-submenu hides for single item')
+          .toBeFalse();
+      });
+
+      it('expandFromHereSingleAction returns null when 2+ items are visible', async () => {
+        // Two-level nesting with container descendants: +1 and All
+        // both visible (different end states). No single elevation.
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        expect(cmp.expandFromHereSingleAction(outer)).toBeNull();
+        expect(cmp.showExpandFromHereSubmenu(outer))
+          .withContext('Expand sub-submenu renders for 2+ items')
+          .toBeTrue();
+      });
+
+      it('subtreeElevatedAction returns null when 2+ Subtree items apply', async () => {
+        // Collapse + Isolate (single mode peers) = 2 items.
+        await createWith({ outer: { a: { x: 1 }, b: { y: 2 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const a = nodeAt('$.outer.a');
+        expect(cmp.subtreeElevatedAction(a)).toBeNull();
+        expect(cmp.showSubtreeMenu(a)).toBeTrue();
+      });
+
+      it('subtreeElevatedAction returns collapseSame when surfaced shortcut would duplicate', async () => {
+        // Single Subtree item is Collapse, and the surfaced
+        // shortcut row also shows Collapse from here -- suppress
+        // both via the sentinel.
+        await createWith({ obj: { a: 1, b: 2 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const obj = nodeAt('$.obj');
+        cmp.contextNode.set(obj);
+        expect(cmp.defaultActionKind()).toBe('collapseRow');
+        expect(cmp.subtreeElevatedAction(obj)).toEqual({ kind: 'collapseSame' });
+        expect(cmp.showSubtreeMenu(obj))
+          .withContext('Subtree submenu suppressed when surfaced row duplicates')
+          .toBeFalse();
+      });
+
+      it('subtreeElevatedAction returns expandSingle for collapsed container with only primitives', async () => {
+        // A collapsed container with only primitive children:
+        //   - showCollapse: false (not expanded)
+        //   - showIsolate*: false (no peers expanded)
+        //   - showHighlight*: false (canEditHighlights false)
+        //   - showExpandFromHereMenu: true (Expand all is meaningful)
+        //   - expandFromHereSingleAction: { kind: 'expandAll' }
+        // Surfaced shortcut = Expand 1 level (expandRow), single
+        // Expand action is expandAll (NOT depth=1) -> elevate as
+        // 'expandSingle' (no expandSame suppression).
+        await createWith({ obj: { a: 1, b: 2 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const obj = nodeAt('$.obj');
+        cmp.contextNode.set(obj);
+        expect(cmp.defaultActionKind()).toBe('expandRow');
+        const elevated = cmp.subtreeElevatedAction(obj);
+        expect(elevated?.kind).toBe('expandSingle');
+        if (elevated?.kind === 'expandSingle') {
+          expect(elevated.single).toEqual({ kind: 'expandAll' });
+        }
+      });
+
+      it('subtreeElevatedAction returns expandSubmenu when Expand has 2+ items as the lone Subtree contribution', async () => {
+        // Collapsed container with nested containers: showCollapse
+        // false (not expanded), no isolate / highlight, but Expand
+        // has both +1 and All visible -> 2 items. Subtree count
+        // is 1 (the whole Expand "section" counts as one), so
+        // Subtree elevates the Expand submenu trigger to row level.
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.contextNode.set(outer);
+        expect(cmp.subtreeElevatedAction(outer)).toEqual({ kind: 'expandSubmenu' });
+      });
+
+      it('subtreeElevatedAction returns removeTreeHighlight on a primitive leaf with cascade ancestor', async () => {
+        // Primitive leaf with a cascade highlight on its ancestor:
+        //   - showCollapse: false (no children)
+        //   - showHighlight*: false (not a container; not editable
+        //     unless canEditHighlights)
+        //   - showRemoveTreeHighlight: true (has cascade ancestor)
+        //   - showExpandFromHereMenu: false
+        // The lone Subtree contribution elevates with the
+        // "Remove subtree highlight" elevated label.
+        await createWith({ parent: { child: 1 } });
+        // Mirror enableHighlightEditing pattern from other tests.
+        fixture.componentRef.setInput('canEditHighlights', true);
+        fixture.componentRef.setInput('highlights', [
+          { path: '$.parent', color: '#7e6500', cascade: true },
+        ]);
+        cmp.expandAll();
+        fixture.detectChanges();
+        const child = nodeAt('$.parent.child');
+        expect(cmp.subtreeElevatedAction(child)).toEqual({ kind: 'removeTreeHighlight' });
+      });
+    });
+
+    describe('icons (Phase 3)', () => {
+      it('renders a leading <jj-icon> on every top-level menu item', async () => {
+        // Phase 3 of the tree-menu overhaul applies leading icons to
+        // every top-level row in the row menu (Path Y choice: Option
+        // 1 -- icons everywhere). For a primitive row we expect at
+        // minimum: Copy value, Copy key, Copy path, Find by key,
+        // Find by value -- all five with leading icons.
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.alpha');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        expect(items.length).toBeGreaterThanOrEqual(5);
+        for (const item of items) {
+          expect(item.querySelector('jj-icon'))
+            .withContext(`menu item "${(item.textContent ?? '').trim()}" has a leading jj-icon`)
+            .toBeTruthy();
+        }
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      it('surfaces an "expand-subtree" icon on the surfaced shortcut for collapsed containers', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.obj'));
+        expect(cmp.surfacedShortcutIconName()).toBe('expand-subtree');
+      });
+
+      it('surfaces a "collapse-subtree" icon on the surfaced shortcut for expanded containers', async () => {
+        await createWith({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.obj'));
+        expect(cmp.surfacedShortcutIconName()).toBe('collapse-subtree');
+      });
+
+      it('surfaces no icon on primitives (Copy value at top is bolded directly)', async () => {
+        await createWith({ alpha: 1 });
+        fixture.detectChanges();
+        cmp.contextNode.set(nodeAt('$.alpha'));
+        expect(cmp.surfacedShortcutIconName()).toBeNull();
+      });
+    });
+
+    describe('telemetry (Phase 4)', () => {
+      it('emits tree.contextMenu.collapse with source=top from the surfaced shortcut', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        cmp.contextNode.set(node);
+        cmp.onSurfacedShortcutClick(node);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.collapse', { source: 'top' });
+      });
+
+      it('emits tree.contextMenu.collapse with source=submenu from the in-Subtree item', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.collapseFromHere(nodeAt('$.obj'));
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.collapse', {
+          source: 'submenu',
+        });
+      });
+
+      it('emits tree.contextMenu.expandToDepth with source=top relativeDepth=1 from the surfaced shortcut', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const node = nodeAt('$.obj');
+        cmp.contextNode.set(node);
+        cmp.onSurfacedShortcutClick(node);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandToDepth', {
+          relativeDepth: 1,
+          source: 'top',
+        });
+      });
+
+      it('emits tree.contextMenu.expandToDepth with source=submenu from the in-Subtree depth item', async () => {
+        const logger = await createWithLoggerSpy({ outer: { a: { x: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.expandToDepthFromHere(nodeAt('$.outer'), 3);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandToDepth', {
+          relativeDepth: 3,
+          source: 'submenu',
+        });
+      });
+
+      it('emits tree.contextMenu.expandAllFromHere with source=submenu', async () => {
+        const logger = await createWithLoggerSpy({ outer: { a: { x: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.expandAllFromHere(nodeAt('$.outer'));
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandAllFromHere', {
+          source: 'submenu',
+        });
+      });
+
+      it('emits tree.contextMenu.subtreeOpened when the Subtree submenu opens', async () => {
+        const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.onSubtreeMenuOpened();
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.subtreeOpened');
+      });
+
+      it('emits tree.contextMenu.highlight for single-row scope and highlightSubtree for cascade scope', async () => {
+        const logger = await createWithLoggerSpy({ parent: { child: 1 } });
+        cmp.canEditHighlights;
+        // Wire canEditHighlights via the component's input. The
+        // existing test fixtures often set a fake host; here we
+        // hit the predicate directly by mutating the signal.
+        fixture.componentRef.setInput('canEditHighlights', true);
+        fixture.detectChanges();
+        cmp.applyManualHighlight(nodeAt('$.parent'), false, '#fff59d');
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.highlight');
+        logger.info.calls.reset();
+        cmp.applyManualHighlight(nodeAt('$.parent'), true, '#b3e5fc');
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.highlightSubtree');
+      });
+
+      it('emits tree.contextMenu.extract from the menu-driven entry point', async () => {
+        const logger = await createWithLoggerSpy({ payload: '{"k":1}' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        // emitExtract requires extractCandidates input; without it
+        // the early-return path skips the emit. We just need to
+        // verify the menu-click logger fires before the early-out
+        // so spy on the call.
+        cmp.onExtractMenuClick(nodeAt('$.payload'));
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.extract');
+      });
+
+      it('emits tree.contextMenu.decodeShow when toggling on, decodeHide when toggling off', async () => {
+        const logger = await createWithLoggerSpy({ note: 'first\nsecond' });
+        const node = nodeAt('$.note');
+        // First menu click: toggles ON. Pre-toggle state isDecoded=false
+        // so we expect decodeShow.
+        cmp.onDecodedMenuClick(node);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.decodeShow');
+        logger.info.calls.reset();
+        // Second menu click: toggles OFF. Pre-toggle state isDecoded=true
+        // so we expect decodeHide.
+        cmp.onDecodedMenuClick(node);
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.decodeHide');
+      });
+    });
+
+    describe('Find labels (rename, i18n IDs stable)', () => {
+      it('renders "Find by key" / "Find by value" for a primitive with a key', async () => {
+        await createWith({ alpha: 1 });
+        cmp.expandAll();
+        fixture.detectChanges();
+        await openMenuFor('$.alpha');
+        const labels = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        ).map((m) => (m.textContent ?? '').trim());
+        expect(labels).toContain(cmp.ctxFindByKeyLabel);
+        expect(labels).toContain(cmp.ctxFindByValueLabel);
+        // Source text changed; values reflect the rename.
+        expect(cmp.ctxFindByKeyLabel).toBe('Find by key');
+        expect(cmp.ctxFindByValueLabel).toBe('Find by value');
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+    });
+  });
+
+  describe('dblclick container toggle (issue #109, DOM-level)', () => {
+    function withClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
+      const original = (navigator as { clipboard?: Clipboard }).clipboard;
+      const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
+      try {
+        return run();
+      } finally {
+        if (hadOwn && original) {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: original,
+          });
+        } else {
+          delete (navigator as { clipboard?: unknown }).clipboard;
+        }
+      }
+    }
+
+    function objRow(): HTMLElement {
+      const row = (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-row[data-path="$.obj"]',
+      ) as HTMLElement | null;
+      expect(row).withContext('found the $.obj container row').toBeTruthy();
+      return row!;
+    }
+
+    function objChevron(): HTMLButtonElement {
+      const chevron = (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-row[data-path="$.obj"] button[mattreenodetoggle]',
+      ) as HTMLButtonElement | null;
+      expect(chevron).withContext('found the $.obj chevron toggle').toBeTruthy();
+      return chevron!;
+    }
+
+    it('real dblclick on container row toggles expansion and does not copy', async () => {
+      const logger = await createWithLoggerSpy({ obj: { a: 1, b: 2 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      const node = (() => {
+        const stack = [cmp.root()!];
+        while (stack.length > 0) {
+          const n = stack.pop()!;
+          if (n.pathString === '$.obj') return n;
+          for (const c of n.children ?? []) stack.push(c);
+        }
+        throw new Error('no $.obj node');
+      })();
+      expect(cmp.treeControl.isExpanded(node)).withContext('starts collapsed').toBe(false);
+
+      withClipboard({ writeText }, () => {
+        objRow().dispatchEvent(
+          new MouseEvent('dblclick', { bubbles: true, cancelable: true, altKey: false }),
+        );
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(cmp.treeControl.isExpanded(node))
+        .withContext('expanded after real dblclick')
+        .toBe(true);
+      expect(writeText).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickToggle', {
+        action: 'expand',
+      });
+
+      // Second real dblclick collapses.
+      logger.info.calls.reset();
+      withClipboard({ writeText }, () => {
+        objRow().dispatchEvent(
+          new MouseEvent('dblclick', { bubbles: true, cancelable: true, altKey: false }),
+        );
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(cmp.treeControl.isExpanded(node))
+        .withContext('collapsed after second real dblclick')
+        .toBe(false);
+      expect(writeText).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickToggle', {
+        action: 'collapse',
+      });
+    });
+
+    it('dblclick on the chevron does not invoke row dblclick behavior', async () => {
+      const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+
+      // The chevron button's own click handler (matTreeNodeToggle) runs
+      // on each click. A real `dblclick` issued on the chevron is two
+      // clicks plus a synthetic dblclick: click 1 expands, click 2
+      // collapses, dblclick is short-circuited by the
+      // interactive-descendant guard. Net state: matches starting state,
+      // and crucially no `tree.row.doubleClickToggle` event fired from
+      // the row handler. (The chevron path is intentionally
+      // uninstrumented.)
+      const chevron = objChevron();
+      chevron.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, cancelable: true, altKey: false }),
+      );
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(logger.info).not.toHaveBeenCalledWith(
+        'tree.row.doubleClickToggle',
+        jasmine.anything(),
+      );
     });
   });
 
@@ -5637,6 +6632,724 @@ describe('JsonTreeComponent', () => {
       expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.copyValue', {
         escaped: true,
       });
+    });
+  });
+
+  describe('M7g-3b: keyboard navigation and ARIA attributes', () => {
+    /**
+     * Resolve the rendered <mat-nested-tree-node> for a given pathString.
+     * Throws if no node is rendered for that path (caller should
+     * `expandAll()` first when the row sits below the auto-fit depth).
+     */
+    function nodeEl(pathString: string): HTMLElement {
+      const candidates = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        'mat-nested-tree-node[data-tree-node-path]',
+      );
+      const el =
+        Array.from(candidates).find((n) => n.getAttribute('data-tree-node-path') === pathString) ??
+        null;
+      if (!el) {
+        throw new Error(`No mat-nested-tree-node rendered for path ${pathString}`);
+      }
+      return el;
+    }
+
+    function dispatchKey(target: HTMLElement, key: string, init: KeyboardEventInit = {}): void {
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
+      );
+    }
+
+    /**
+     * Wait one rAF so `moveFocusTo` has a chance to commit the deferred
+     * DOM `focus()` call.
+     */
+    function nextRaf(): Promise<void> {
+      return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    }
+
+    it('renders aria-level/posinset/setsize/expanded and exactly one tabindex=0', async () => {
+      await createWith({ a: 1, b: 2, c: 3 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      const root = nodeEl('$');
+      expect(root.getAttribute('role')).toBe('treeitem');
+      expect(root.getAttribute('aria-level')).toBe('1');
+      expect(root.getAttribute('aria-posinset')).toBe('1');
+      expect(root.getAttribute('aria-setsize')).toBe('1');
+      expect(root.getAttribute('aria-expanded')).toBe('true');
+
+      const a = nodeEl('$.a');
+      expect(a.getAttribute('aria-level')).toBe('2');
+      expect(a.getAttribute('aria-posinset')).toBe('1');
+      expect(a.getAttribute('aria-setsize')).toBe('3');
+
+      const c = nodeEl('$.c');
+      expect(c.getAttribute('aria-posinset')).toBe('3');
+      expect(c.getAttribute('aria-setsize')).toBe('3');
+
+      const focused = (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'mat-nested-tree-node[tabindex="0"]',
+      );
+      expect(focused.length).toBe(1);
+    });
+
+    it('aria-expanded flips when the container is toggled', async () => {
+      await createWith({ a: { x: 1 } });
+      const a = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.expand(a);
+      fixture.detectChanges();
+      expect(nodeEl('$.a').getAttribute('aria-expanded')).toBe('true');
+
+      cmp.treeControl.collapse(a);
+      fixture.detectChanges();
+      expect(nodeEl('$.a').getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('initial focus lands on the first visible row', async () => {
+      await createWith({ a: 1, b: 2 });
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+      expect(cmp.focusedPath()).toBe('$');
+      expect(nodeEl('$').getAttribute('tabindex')).toBe('0');
+    });
+
+    it('ArrowDown/ArrowUp move focus through visible rows', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$'), 'ArrowDown');
+      expect(cmp.focusedPath()).toBe('$.a');
+
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$.a'), 'ArrowDown');
+      expect(cmp.focusedPath()).toBe('$.b');
+
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$.b'), 'ArrowUp');
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowDown does not move past the last visible row', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$.a'), 'ArrowDown');
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowUp does not move past the first visible row', async () => {
+      await createWith({ a: 1 });
+      fixture.detectChanges();
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$'), 'ArrowUp');
+      expect(cmp.focusedPath()).toBe('$');
+    });
+
+    it('Home and End jump to first/last visible rows', async () => {
+      await createWith({ a: 1, b: 2, c: 3 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      cmp.focusedPath.set('$.b');
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$.b'), 'Home');
+      expect(cmp.focusedPath()).toBe('$');
+
+      fixture.detectChanges();
+      dispatchKey(nodeEl('$'), 'End');
+      expect(cmp.focusedPath()).toBe('$.c');
+    });
+
+    it('ArrowRight on a collapsed container expands without moving focus', async () => {
+      await createWith({ a: { x: 1 } });
+      const aNode = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.collapse(aNode);
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowRight');
+      expect(cmp.treeControl.isExpanded(aNode)).toBeTrue();
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowRight on an expanded container moves focus to first child', async () => {
+      await createWith({ a: { x: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowRight');
+      expect(cmp.focusedPath()).toBe('$.a.x');
+    });
+
+    it('ArrowRight on a leaf does not move focus or expand', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowRight');
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowLeft on an expanded container collapses without moving focus', async () => {
+      await createWith({ a: { x: 1 } });
+      const aNode = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.expand(aNode);
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowLeft');
+      expect(cmp.treeControl.isExpanded(aNode)).toBeFalse();
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('ArrowLeft on a collapsed container moves focus to parent', async () => {
+      await createWith({ a: { x: 1 } });
+      const aNode = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.collapse(aNode);
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowLeft');
+      expect(cmp.focusedPath()).toBe('$');
+    });
+
+    it('ArrowLeft on a leaf moves focus to parent', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'ArrowLeft');
+      expect(cmp.focusedPath()).toBe('$');
+    });
+
+    it('Enter on the focused row sets selectedPath', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      dispatchKey(nodeEl('$.a'), 'Enter');
+      expect(cmp.selectedPath()).toBe('$.a');
+    });
+
+    it('Space on the focused row sets selectedPath and prevents default', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+
+      const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+      nodeEl('$.a').dispatchEvent(ev);
+      expect(cmp.selectedPath()).toBe('$.a');
+      expect(ev.defaultPrevented).toBeTrue();
+    });
+
+    it('clicking a row sets BOTH selectedPath and focusedPath', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      // Reset initial focus so we can verify the click moves it.
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+
+      const aRow = nodeEl('$.a').querySelector('.tree-row') as HTMLElement;
+      aRow.click();
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.a');
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('search Enter does not yank focus from the search input', async () => {
+      await createWith({ alpha: 1, beta: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      // Attach to body so the input can receive real DOM focus.
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const input = (fixture.nativeElement as HTMLElement).querySelector(
+          'input.tree-search',
+        ) as HTMLInputElement;
+        input.focus();
+        cmp.search.set('alpha');
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        // Sanity: search produced a hit.
+        expect(cmp.searchHitCount()).toBeGreaterThan(0);
+
+        // Trigger the search-Enter cycle directly (mirrors what
+        // `(keydown.enter)="onSearchEnter($event)"` would do).
+        const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+        Object.defineProperty(ev, 'target', { value: input });
+        cmp.onSearchEnter(ev);
+        fixture.detectChanges();
+
+        expect(cmp.focusedPath()).toBe('$.alpha');
+        expect(document.activeElement).toBe(input);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('focus recovery walks up to the nearest visible ancestor when collapsed', async () => {
+      await createWith({ a: { x: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a.x');
+      fixture.detectChanges();
+      expect(cmp.focusedPath()).toBe('$.a.x');
+
+      // Collapsing $.a hides $.a.x; the lifecycle effect should
+      // recover focus to $.a (the nearest visible ancestor).
+      const aNode = cmp['nodeIndex']().get('$.a')!;
+      cmp.treeControl.collapse(aNode);
+      fixture.detectChanges();
+      expect(cmp.focusedPath()).toBe('$.a');
+    });
+
+    it('focus recovery resets to first visible row when the JSON shape changes', async () => {
+      await createWith({ a: { x: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a.x');
+      fixture.detectChanges();
+      expect(cmp.focusedPath()).toBe('$.a.x');
+
+      fixture.componentRef.setInput('value', { totally: 'different' });
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(cmp.focusedPath()).toBe('$');
+    });
+
+    it('Shift+F10 opens the row context menu via openContextMenuAt', async () => {
+      await createWith({ a: 1 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.a');
+      fixture.detectChanges();
+      // Attach so getBoundingClientRect returns non-zero values.
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const aNode = cmp['nodeIndex']().get('$.a')!;
+        dispatchKey(nodeEl('$.a'), 'F10', { shiftKey: true });
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        expect(cmp.contextNode()).toBe(aNode);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('focus the row when moveFocusTo runs (rAF deferred)', async () => {
+      await createWith({ a: 1, b: 2 });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        dispatchKey(nodeEl('$'), 'ArrowDown');
+        fixture.detectChanges();
+        await nextRaf();
+        expect(cmp.focusedPath()).toBe('$.a');
+        expect(document.activeElement).toBe(nodeEl('$.a'));
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Keyboard copy: Ctrl+C / Cmd+C with a focused tree row copies the row's
+  // value to the clipboard. Works on leaves, containers, and empty containers
+  // alike (the rubber-duck "parent or leaf" requirement). Strict modifier
+  // gate: Ctrl+Shift+C and Ctrl+Alt+C are intentional no-ops so we don't
+  // fight devtools or AltGr layouts. The `currentTarget !== target` guard
+  // at the top of `onTreeKeydown` already shields any descendant element
+  // (twisty, kebab, beacon, extract pill) and the search input (which is
+  // outside the mat-nested-tree-node anyway). Companion to the row context
+  // menu copy and the leaf-row dblclick copy paths; all three share copy
+  // semantics.
+  // ---------------------------------------------------------------------------
+  describe('keyboard copy (Ctrl+C / Cmd+C, focused tree row)', () => {
+    function withClipboard<T>(stub: { writeText?: jasmine.Spy } | undefined, run: () => T): T {
+      const original = (navigator as { clipboard?: Clipboard }).clipboard;
+      const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
+      try {
+        return run();
+      } finally {
+        if (hadOwn && original) {
+          Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: original,
+          });
+        } else {
+          delete (navigator as { clipboard?: unknown }).clipboard;
+        }
+      }
+    }
+
+    type Cn = ReturnType<JsonTreeComponent['root']>;
+    function nodeAt(path: string): NonNullable<Cn> {
+      const stack: Array<NonNullable<Cn>> = [];
+      const root = cmp.root();
+      if (root) stack.push(root);
+      while (stack.length > 0) {
+        const n = stack.pop() as NonNullable<Cn>;
+        if (n.pathString === path) return n;
+        for (const c of n.children ?? []) stack.push(c);
+      }
+      throw new Error(`No node at path ${path}`);
+    }
+
+    function rowNodeEl(pathString: string): HTMLElement {
+      const candidates = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        'mat-nested-tree-node[data-tree-node-path]',
+      );
+      const el =
+        Array.from(candidates).find((n) => n.getAttribute('data-tree-node-path') === pathString) ??
+        null;
+      if (!el) {
+        throw new Error(`No mat-nested-tree-node rendered for path ${pathString}`);
+      }
+      return el;
+    }
+
+    /** Dispatch a real KeyboardEvent('keydown') on the row element. */
+    function dispatchOnRow(target: HTMLElement, init: KeyboardEventInit): void {
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'c',
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        }),
+      );
+    }
+
+    it('Ctrl+C on a focused leaf row copies the raw value', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.note'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('hi');
+    });
+
+    it('Ctrl+C on a focused container row copies pretty JSON without changing expansion', async () => {
+      await createWith({ obj: { a: 1, b: 2 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      const node = nodeAt('$.obj');
+      const wasExpanded = cmp.treeControl.isExpanded(node);
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.obj'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const expected = JSON.stringify({ a: 1, b: 2 }, null, 2);
+      expect(writeText).toHaveBeenCalledWith(expected);
+      expect(cmp.treeControl.isExpanded(node))
+        .withContext('expansion state unchanged by keyboard copy')
+        .toBe(wasExpanded);
+    });
+
+    it('Ctrl+C on a focused expanded container row also copies pretty JSON without collapsing', async () => {
+      await createWith({ obj: { a: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+      const node = nodeAt('$.obj');
+      expect(cmp.treeControl.isExpanded(node)).withContext('starts expanded').toBe(true);
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.obj'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(writeText).toHaveBeenCalledWith(JSON.stringify({ a: 1 }, null, 2));
+      expect(cmp.treeControl.isExpanded(node))
+        .withContext('still expanded after keyboard copy')
+        .toBe(true);
+    });
+
+    it('Ctrl+C on the focused root container copies the whole document', async () => {
+      await createWith({ a: 1, b: 'two' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith(JSON.stringify({ a: 1, b: 'two' }, null, 2));
+    });
+
+    it('Ctrl+C on a focused empty object row copies "{}"', async () => {
+      await createWith({ empty: {} });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.empty');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.empty'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('{}');
+    });
+
+    it('Ctrl+C on a focused empty array row copies "[]"', async () => {
+      await createWith({ empty: [] });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.empty');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.empty'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('[]');
+    });
+
+    it('Cmd+C (metaKey) also copies on a focused row (macOS parity)', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.note'), { metaKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('hi');
+    });
+
+    it('Ctrl+Shift+C is a no-op (does not steal devtools shortcut)', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      let prevented = false;
+      withClipboard({ writeText }, () => {
+        const ev = new KeyboardEvent('keydown', {
+          key: 'C',
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        rowNodeEl('$.note').dispatchEvent(ev);
+        prevented = ev.defaultPrevented;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(prevented).withContext('Ctrl+Shift+C must not be preventDefaulted').toBe(false);
+    });
+
+    it('Ctrl+Alt+C is a no-op (does not steal AltGr layouts)', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      let prevented = false;
+      withClipboard({ writeText }, () => {
+        const ev = new KeyboardEvent('keydown', {
+          key: 'c',
+          ctrlKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        rowNodeEl('$.note').dispatchEvent(ev);
+        prevented = ev.defaultPrevented;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(prevented).withContext('Ctrl+Alt+C must not be preventDefaulted').toBe(false);
+    });
+
+    it('plain "c" with no modifier is a no-op', async () => {
+      await createWith({ note: 'hi' });
+      cmp.expandAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.note');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.note'), {});
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).not.toHaveBeenCalled();
+    });
+
+    it('emits tree.keyboard.copyValue with escaped: false', async () => {
+      const logger = await createWithLoggerSpy({ obj: { a: 1 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      withClipboard({ writeText }, () => {
+        dispatchOnRow(rowNodeEl('$.obj'), { ctrlKey: true });
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(logger.info).toHaveBeenCalledWith('tree.keyboard.copyValue', { escaped: false });
+      // No dblclick / contextMenu sibling event leaked.
+      expect(logger.info).not.toHaveBeenCalledWith(
+        'tree.row.doubleClickCopyValue',
+        jasmine.anything(),
+      );
+      expect(logger.info).not.toHaveBeenCalledWith(
+        'tree.contextMenu.copyValue',
+        jasmine.anything(),
+      );
+    });
+
+    it('does not fire when the keydown originates from a descendant of the row', async () => {
+      await createWith({ obj: { a: 1 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      // Pick the chevron toggle button: a real descendant of the
+      // mat-nested-tree-node. A Ctrl+C dispatched from the chevron
+      // bubbles up to the row, where currentTarget !== target causes
+      // the handler to short-circuit before our switch case runs.
+      const chevron = (fixture.nativeElement as HTMLElement).querySelector(
+        'mat-nested-tree-node[data-tree-node-path="$.obj"] button[mattreenodetoggle]',
+      ) as HTMLButtonElement | null;
+      expect(chevron).withContext('found the $.obj chevron button').toBeTruthy();
+
+      const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+      let prevented = false;
+      withClipboard({ writeText }, () => {
+        const ev = new KeyboardEvent('keydown', {
+          key: 'c',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        chevron!.dispatchEvent(ev);
+        prevented = ev.defaultPrevented;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText)
+        .withContext('descendant bubble must not trigger row-level copy')
+        .not.toHaveBeenCalled();
+      expect(prevented).withContext('descendant bubble must not be preventDefaulted').toBe(false);
+    });
+
+    it('Ctrl+C on a real focused container row copies its value (DOM-level)', async () => {
+      await createWith({ obj: { a: 1, b: 2, c: 3 } });
+      cmp.collapseAll();
+      fixture.detectChanges();
+      cmp.focusedPath.set('$.obj');
+      fixture.detectChanges();
+
+      // Mount fixture so Angular's (keydown) binding sees a real DOM
+      // tree. We do NOT assert document.activeElement here -- elements
+      // with tabindex="-1" don't always accept programmatic focus in
+      // headless Chromium. The keydown binding fires regardless of
+      // activeElement; the test's value is proving the real DOM
+      // wiring (Angular template -> handler -> clipboard) works
+      // end-to-end.
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        const row = rowNodeEl('$.obj');
+
+        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        let prevented = false;
+        withClipboard({ writeText }, () => {
+          const ev = new KeyboardEvent('keydown', {
+            key: 'c',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          });
+          row.dispatchEvent(ev);
+          prevented = ev.defaultPrevented;
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(writeText).toHaveBeenCalledWith(JSON.stringify({ a: 1, b: 2, c: 3 }, null, 2));
+        expect(prevented).withContext('Ctrl+C should be preventDefaulted').toBe(true);
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
     });
   });
 });

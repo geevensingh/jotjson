@@ -1,6 +1,8 @@
 import {
   ApplicationConfig,
+  EnvironmentProviders,
   ErrorHandler,
+  Provider,
   inject,
   isDevMode,
   provideAppInitializer,
@@ -20,34 +22,49 @@ import { AuthService } from './core/auth/auth.service';
 import { MSAL_INSTANCE, createMsalInstance } from './core/auth/msal-instance';
 import { TelemetryErrorHandler } from './core/telemetry/error-handler';
 
+/**
+ * Providers shared between browser bootstrap (`app.config.ts`) and
+ * server prerender bootstrap (`app.config.server.ts`). Anything here
+ * MUST be safe to construct on the Node platform-server: no `window`,
+ * `document`, `localStorage`, `matchMedia`, `navigator`, etc. at
+ * construction time.
+ *
+ * Browser-only providers (MSAL, service worker, AuthService
+ * initializer) live in {@link appConfig}'s tail. The server config
+ * supplies its own equivalents (or no-op stubs) where needed.
+ */
+export const sharedProviders: Array<Provider | EnvironmentProviders> = [
+  provideZoneChangeDetection({ eventCoalescing: true }),
+  provideRouter(
+    routes,
+    withComponentInputBinding(),
+    withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' }),
+  ),
+  provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
+  provideAnimationsAsync(),
+  { provide: ErrorHandler, useClass: TelemetryErrorHandler },
+  // Hide the Material 17+ selection-indicator checkmark on every
+  // mat-button-toggle-group. Selection is already conveyed by the
+  // highlighted background, and the indicator wastes ~24px per
+  // segment in the toolbar's right cluster. aria-checked on the
+  // inner <button> still announces selection for screen readers,
+  // so this is purely a visual change.
+  {
+    provide: MAT_BUTTON_TOGGLE_DEFAULT_OPTIONS,
+    useValue: {
+      hideSingleSelectionIndicator: true,
+      hideMultipleSelectionIndicator: true,
+    },
+  },
+];
+
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideZoneChangeDetection({ eventCoalescing: true }),
-    provideRouter(
-      routes,
-      withComponentInputBinding(),
-      withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' }),
-    ),
-    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
-    provideAnimationsAsync(),
+    ...sharedProviders,
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000',
     }),
-    { provide: ErrorHandler, useClass: TelemetryErrorHandler },
-    // Hide the Material 17+ selection-indicator checkmark on every
-    // mat-button-toggle-group. Selection is already conveyed by the
-    // highlighted background, and the indicator wastes ~24px per
-    // segment in the toolbar's right cluster. aria-checked on the
-    // inner <button> still announces selection for screen readers,
-    // so this is purely a visual change.
-    {
-      provide: MAT_BUTTON_TOGGLE_DEFAULT_OPTIONS,
-      useValue: {
-        hideSingleSelectionIndicator: true,
-        hideMultipleSelectionIndicator: true,
-      },
-    },
     // MSAL wiring - deliberately NOT using `MsalRedirectComponent` or the
     // `MSAL_GUARD_CONFIG`/`MSAL_INTERCEPTOR_CONFIG` bundles, which assume an
     // NgModule bootstrap. Standalone apps drive redirect handling themselves

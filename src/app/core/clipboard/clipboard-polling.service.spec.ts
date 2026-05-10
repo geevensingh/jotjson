@@ -86,6 +86,26 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve(value: T | PromiseLike<T>): void;
+  reject(reason?: unknown): void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolveDeferred: (value: T | PromiseLike<T>) => void = () => {
+    throw new Error('Deferred resolve called before initialization');
+  };
+  let rejectDeferred: (reason?: unknown) => void = () => {
+    throw new Error('Deferred reject called before initialization');
+  };
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveDeferred = resolve;
+    rejectDeferred = reject;
+  });
+  return { promise, resolve: resolveDeferred, reject: rejectDeferred };
+}
+
 describe('ClipboardPollingService', () => {
   let restore: () => void = () => {};
 
@@ -122,6 +142,31 @@ describe('ClipboardPollingService', () => {
     restore = () => {};
   });
 
+  // FIX FOR #140: pin document.visibilityState='visible' for every test in
+  // this file. ClipboardPollingService.startPolling() early-returns when
+  // visibility is 'hidden' (intentional production behavior to save CPU when
+  // the tab is backgrounded), so under headless Chrome on CI -- which can
+  // transiently report 'hidden' -- the constructor's startPolling() call
+  // becomes a no-op and pollHandle stays null, leaving the test's
+  // clock.tick() with no interval to fire. Pinning visibility here mirrors
+  // the real-user condition (page is visible while you're using JotJSON)
+  // and isolates the suite from headless Chrome's visibility flakiness.
+  let visibilityDescriptor: PropertyDescriptor | undefined;
+  beforeEach(() => {
+    visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+  });
+  afterEach(() => {
+    if (visibilityDescriptor) {
+      Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+    } else {
+      delete (document as unknown as { visibilityState?: unknown }).visibilityState;
+    }
+  });
+
   function createService(opts: {
     readText?: jasmine.Spy;
     permissionsQuery?: jasmine.Spy | null;
@@ -153,6 +198,58 @@ describe('ClipboardPollingService', () => {
     TestBed.configureTestingModule({});
     return TestBed.inject(ClipboardPollingService);
   }
+
+  it('sets permissionReady after async permission discovery settles', async () => {
+    const permissionCases: Array<{
+      name: string;
+      permissionsQuery: jasmine.Spy;
+      expectedState: ClipboardPermissionState;
+    }> = [
+      {
+        name: 'granted',
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+        expectedState: 'granted',
+      },
+      {
+        name: 'denied',
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('denied')),
+        expectedState: 'denied',
+      },
+      {
+        name: 'prompt',
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('prompt')),
+        expectedState: 'prompt',
+      },
+      {
+        name: 'Firefox throw',
+        permissionsQuery: jasmine.createSpy('query').and.rejectWith(new Error('nope')),
+        expectedState: 'unknown',
+      },
+    ];
+
+    for (const permissionCase of permissionCases) {
+      const svc = createService({ permissionsQuery: permissionCase.permissionsQuery });
+      expect(svc.permissionReady()).withContext(permissionCase.name).toBe(false);
+      await flush();
+      expect(svc.permissionReady()).withContext(permissionCase.name).toBe(true);
+      expect(svc.permissionState())
+        .withContext(permissionCase.name)
+        .toBe(permissionCase.expectedState);
+    }
+  });
+
+  it('sets permissionReady synchronously when navigator.clipboard is missing', () => {
+    const svc = createService({ clipboardMissing: true });
+    expect(svc.permissionReady()).toBe(true);
+    expect(svc.permissionState()).toBe('unsupported');
+  });
+
+  it('sets permissionReady synchronously when navigator.permissions is unavailable', () => {
+    const svc = createService({ permissionsQuery: null });
+    expect(svc.permissionReady()).toBe(true);
+    expect(svc.permissionState()).toBe('unknown');
+  });
+
   it('reports unsupported when navigator.clipboard is missing', async () => {
     const svc = createService({ clipboardMissing: true });
     await flush();
@@ -274,6 +371,132 @@ describe('ClipboardPollingService', () => {
     const preview = svc.preview();
     expect(preview.length).toBeLessThanOrEqual(80);
     expect(preview.endsWith('...')).toBe(true);
+  });
+
+  it('readGrantedClipboardOnce waits for permission readiness before deciding', async () => {
+    const permissionStatus = createDeferred<PermissionStatusStub>();
+    const permissionsQuery = jasmine.createSpy('query').and.returnValue(permissionStatus.promise);
+    const readText = jasmine.createSpy('readText').and.resolveTo('{"slow":true}');
+    const svc = createService({ readText, permissionsQuery });
+
+    const resultPromise = svc.readGrantedClipboardOnce('coldBootAutoPaste');
+    await flush();
+    expect(svc.permissionReady()).toBe(false);
+    expect(readText).not.toHaveBeenCalled();
+
+    permissionStatus.resolve(makeStatus('denied'));
+    const result = await resultPromise;
+
+    expect(svc.permissionReady()).toBe(true);
+    expect(result).toEqual({ ok: false });
+    expect(readText).not.toHaveBeenCalled();
+  });
+
+  it('readGrantedClipboardOnce returns text and updates derived clipboard state when granted', async () => {
+    let clipboardText = 'not json';
+    const readText = jasmine
+      .createSpy('readText')
+      .and.callFake(() => Promise.resolve(clipboardText));
+    const svc = createService({
+      readText,
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+    });
+    await flush();
+    expect(svc.hasJson()).toBe(false);
+    readText.calls.reset();
+
+    clipboardText = '{"cold":true}';
+    const result = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+    expect(result).toEqual({ ok: true, text: '{"cold":true}' });
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(svc.hasJson()).toBe(true);
+    expect(svc.preview()).toContain('"cold"');
+  });
+
+  it('readGrantedClipboardOnce returns false without reading when permission is denied or prompt', async () => {
+    const permissionStates: PermissionState[] = ['denied', 'prompt'];
+
+    for (const permissionState of permissionStates) {
+      const readText = jasmine.createSpy('readText').and.resolveTo('{"blocked":true}');
+      const svc = createService({
+        readText,
+        permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus(permissionState)),
+      });
+      await flush();
+      readText.calls.reset();
+
+      const result = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+      expect(result).withContext(permissionState).toEqual({ ok: false });
+      expect(readText).withContext(permissionState).not.toHaveBeenCalled();
+    }
+  });
+
+  it('readGrantedClipboardOnce keeps granted permission when readText throws NotAllowedError', async () => {
+    const readText = jasmine.createSpy('readText').and.resolveTo('');
+    const svc = createService({
+      readText,
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+    });
+    await flush();
+    readText.calls.reset();
+    readText.and.rejectWith(notAllowedError());
+
+    const result = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+    expect(result).toEqual({ ok: false });
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(svc.permissionState()).toBe('granted');
+  });
+
+  it('readGrantedClipboardOnce coalesces concurrent reads', async () => {
+    const clipboardRead = createDeferred<string>();
+    const readText = jasmine.createSpy('readText').and.returnValue(clipboardRead.promise);
+    const svc = createService({
+      readText,
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+    });
+    await flush();
+    readText.calls.reset();
+
+    const firstRead = svc.readGrantedClipboardOnce('coldBootAutoPaste');
+    const secondRead = svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+    expect(firstRead).toBe(secondRead);
+    // The internal `await permissionDiscoveryPromise` inserts a microtask
+    // boundary even when permission discovery is already settled, so we
+    // need to drain the queue before asserting `readText` was called.
+    await flush();
+    expect(readText).toHaveBeenCalledTimes(1);
+
+    clipboardRead.resolve('{"coalesced":true}');
+    const firstResult = await firstRead;
+    const secondResult = await secondRead;
+
+    expect(firstResult).toEqual({ ok: true, text: '{"coalesced":true}' });
+    expect(secondResult).toBe(firstResult);
+  });
+
+  it('readGrantedClipboardOnce starts a new read after the previous read settles', async () => {
+    let clipboardText = '{"first":true}';
+    const readText = jasmine
+      .createSpy('readText')
+      .and.callFake(() => Promise.resolve(clipboardText));
+    const svc = createService({
+      readText,
+      permissionsQuery: jasmine.createSpy('query').and.resolveTo(makeStatus('granted')),
+    });
+    await flush();
+    readText.calls.reset();
+
+    const firstResult = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+    clipboardText = '{"second":true}';
+    const secondResult = await svc.readGrantedClipboardOnce('coldBootAutoPaste');
+
+    expect(readText).toHaveBeenCalledTimes(2);
+    expect(firstResult).toEqual({ ok: true, text: '{"first":true}' });
+    expect(secondResult).toEqual({ ok: true, text: '{"second":true}' });
   });
 
   it('readForPaste performs exactly one readText call and returns the raw value', async () => {

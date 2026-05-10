@@ -127,6 +127,7 @@ are not 6-digit hex.
   seenBlobQuotaModal: boolean (default: false - flipped to true after the first-time quota explainer modal has been dismissed; synced server-side so the modal doesn't reappear on other devices),
   seenClipboardBanner: boolean (default: false - flipped to true after the first-time paste-permission banner has been dismissed; synced server-side so the banner doesn't reappear on other devices),
   treePathRoot: "jsonpath" | "none" | "root" | "data" (default: "jsonpath" - display prefix used when copying a tree row's path to the clipboard. Internal/canonical pathString always starts with `$`; only the clipboard text is rewritten. `jsonpath` -> `$.foo[0]`; `none` -> `foo[0]` (lodash-style, leading dot stripped); `root` -> `root.foo[0]`; `data` -> `Data.foo[0]` with capital D),
+  coldBootClipboardAutoPaste: "ask" | "always" | "never" (default: "ask" - controls cold-boot clipboard auto-paste behavior on `/` when the clipboard contains valid object/array JSON and clipboard-read permission is already granted. `ask` shows a one-shot non-blocking banner offering Always / Just this time / Never; `always` silently loads the clipboard JSON instead of the saved draft, with an Undo snackbar that restores the prior draft if clicked; `never` disables the feature entirely. Roams server-side, but clipboard permission is per-device/per-origin, so a roamed `always` only activates after each browser independently grants clipboard-read),
   treeEditorSelectionSync: boolean (default: true - bidirectional tree<->editor selection sync. When on, selecting a tree row reveals the matching range in the editor and moving the editor cursor selects the matching tree row; when off, both panes operate independently. Toggleable from the main toolbar and Profile),
   treeHighlightColors: TreeHighlightColors
 }
@@ -440,8 +441,9 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Fallback for restricted browsers:** if the browser denies clipboard polling (some require a user gesture), the button remains always visible in an "unknown" state. Clicking it triggers a user-gesture clipboard read - if the content is valid JSON, it pastes immediately; if not, a brief tooltip says "Clipboard does not contain JSON". This ensures the feature works even without polling permission.
     - **Privacy note:** clipboard contents are never sent to the server - the check is entirely client-side.
     - **Auto-unescape on paste** (toolbar Paste button and native Ctrl+V): if the pasted text is not already valid JSON/JSONC at the top level (object or array), the app attempts a best-effort unescape to recover JSON that was stringified or copied out of a log/debugger - e.g. `{\"a\":1}` becomes `{"a":1}`. A recovered payload is accepted only when it parses cleanly and yields an object or array; ordinary prose containing `\n` or stray backslashes is left alone. For toolbar paste the recovered payload is also auto-formatted. For native paste inside the Monaco editor, the unescape is applied only when the hypothetical post-paste buffer also parses cleanly, to avoid mangling a legitimate escaped string value being pasted into an existing document. Undo (Ctrl+Z) reverts to the raw paste.
-    - **Copy as escaped JSON string**: holding Alt while invoking a copy action writes `JSON.stringify(textBeingCopied)` to the clipboard - the JSON-string-literal variant of the same content - so the value can be embedded as a string in another JSON document. This is the inverse of auto-unescape on paste. Supported entry points: the toolbar Copy button (Alt+click), double-clicking a tree row (Alt+double-click copies the row's value escaped), and the row's right-click "Copy value" context-menu item (Alt+click on the menu item). All other copy actions (Copy key, Copy path, breadcrumb copy-path, share link, blob URL, build SHA) do not honor Alt.
-    - **Extract JSON from mixed text** (toolbar Paste and native Ctrl+V): if a paste does not parse as JSON/JSONC even after auto-unescape, the app scans the pasted text for embedded object/array literals (e.g., a `curl -v` transcript, a log line, or prose wrapping a payload). When one or more candidates are found, a non-destructive banner appears above the editor offering `[Extract JSON]` / `[Dismiss]`; the editor still contains the raw paste so users can decline. A single embedded block is extracted via `jsonc-parser` `format()` so comments are preserved; multiple blocks are wrapped as a JSON array via `JSON.stringify` (comments are lost across the array boundary - the banner says so). Primitives (numbers, strings, booleans, null) are not extracted. Inputs above 1 MB are skipped for performance. The banner auto-clears as soon as the editor content changes again (typing or another paste).
+    - **Copy as escaped JSON string**: holding Alt while invoking a copy action writes `JSON.stringify(textBeingCopied)` to the clipboard - the JSON-string-literal variant of the same content - so the value can be embedded as a string in another JSON document. This is the inverse of auto-unescape on paste. Supported entry points: the toolbar Copy button (Alt+click), double-clicking a primitive tree row (Alt+double-click copies the row's value escaped; Alt is ignored on container rows since their dblclick toggles expansion - see issue #109), and the row's right-click "Copy value" context-menu item (Alt+click on the menu item; this remains the way to copy a container's serialized form). All other copy actions (Copy key, Copy path, breadcrumb copy-path, share link, blob URL, build SHA) do not honor Alt.
+    - **Extract JSON from mixed text** (toolbar Paste and native Ctrl+V): if a paste does not parse as JSON/JSONC even after auto-unescape, the app scans the pasted text for embedded object/array literals (e.g., a `curl -v` transcript, a log line, or prose wrapping a payload). When one or more candidates are found, a non-destructive banner appears above the editor offering `[Extract embedded JSON]` / `[Dismiss]`; the editor still contains the raw paste so users can decline. As of M7u the paste path is prose-preserving (matching the in-tree extract action of M7t): a single block with no surrounding prose extracts to the bare value, a single block with prose becomes `{ prefix?, json, suffix? }`, multiple blocks with no prose still combine into a JSON array, and multiple blocks with prose become `{ prefix?, json1, between_1_and_2?, json2, ..., suffix? }` using 1-indexed `jsonN` keys and `between_<i>_and_<j>` inter-block prose keys. Single-block extraction (with or without prose) preserves comments via `jsonc-parser` `format()`; multi-block extraction (with or without prose) does not preserve comments and the banner says so. Prose segments whose `.trim()` is empty are omitted by design. Primitives (numbers, strings, booleans, null) are not extracted. Inputs above 1 MB are skipped for performance. The banner auto-clears as soon as the editor content changes again (typing or another paste).
+    - **Cold-boot clipboard auto-paste** (home page only): on a fresh page load of `/`, JotJSON can offer to load JSON from the clipboard instead of the saved anonymous draft. Behavior is gated on the `coldBootClipboardAutoPaste` preference (default `ask`) and only fires when ALL of the following are true: route is `/` (never `/s/:slug` deep-links), this is the initial application navigation (a one-shot guard prevents re-firing on later in-app navigation back to home), clipboard-read permission is already `granted` (the feature never triggers a permission prompt on cold boot), the clipboard text parses cleanly as JSON or JSONC AND yields a top-level object or array (primitives are ignored), the clipboard text is below 1 MB, and the editor is in anonymous draft mode (`loadedBlob` is null at evaluator start AND at apply time). When all gates pass, the preference branches three ways: `ask` shows a non-blocking banner above the editor with `[Always]` / `[Just this time]` / `[Never]` actions plus an X dismiss, layered alongside the existing M7p extract banner; `always` silently replaces the editor content with the clipboard JSON and shows a snackbar "Pasted from clipboard. Undo." that restores the prior draft if clicked; `never` is a no-op. The silent `always` path holds the cold-boot loading splash for up to 150ms while racing the clipboard read, so the swap happens before first paint and there is no draft-then-clipboard flash; if the read times out or returns no usable JSON, the splash releases, the draft hydrates as today, and a stale-result guard prevents a late-resolving read from re-applying. Snackbar Undo is the only undo affordance for the silent path: because clipboard hydration happens before Monaco mounts (to avoid the flash), there is no prior-draft state in the editor's undo stack to revert to via Ctrl+Z. Non-Chromium browsers (Safari, Firefox) and any user who has not granted clipboard-read permission see exactly today's experience - the feature degrades silently.
   - **File Upload** - two ways to load a JSON file:
     - **Toolbar button** ("Upload File"): opens a native file picker filtered to `.json`, `.jsonc`, `.jsonl`, `.geojson`, and `.txt` extensions. Reads the selected file client-side via the `FileReader` API and loads its contents into the editor.
     - **Drag & drop**: users can drag a file from their desktop onto **any part of the page**. A full-page drop zone overlay appears with a visual cue (dashed border + "Drop JSON file here" message) when a file is dragged over the window. On drop, the file is read and loaded into the editor. If the user drops **multiple files**, the drop is rejected entirely with an error toast: "Please drop one file at a time."
@@ -506,8 +508,8 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Copy key** - copies the row's key (object member name or array index). Hidden on the root.
     - **Copy value** - copies the row's value: raw text for `string`, stringified for `number`/`boolean`, the literal `null` for null, and pretty-printed (2-space, multi-line) JSON for objects/arrays.
     - **Copy path** - copies the row's path; respects `treePathRoot`.
-    - **Search by key** - sets the search to the key text, scope to `keys`, regex mode off, and the value-type filter to `all`. The clicked row becomes the active hit when present in the result set.
-    - **Search by value** - same wiring, scope `values`. Hidden on `null` and on container rows. Both search items are also hidden in `embeddedMode` (the rule-editor live preview has no search bar).
+    - **Find by key** - sets the search to the key text, scope to `keys`, regex mode off, and the value-type filter to `all`. The clicked row becomes the active hit when present in the result set.
+    - **Find by value** - same wiring, scope `values`. Hidden on `null` and on container rows. Both find items are also hidden in `embeddedMode` (the rule-editor live preview has no find bar).
     - **Collapse** - hides itself when the row is already collapsed.
     - **Isolate** / **Collapse siblings** - smart-visibility action(s) that fold the tree to focus on the clicked branch. Both leave the ancestor chain (root..clicked row) and the clicked row's own subtree expansion state untouched. Define `narrowSet` = visibly-expanded peers under the clicked row's immediate parent; `widerSet` = visibly-expanded peers at every higher ancestor (grandparent up to root). **Isolate** collapses `narrowSet U widerSet`; **Collapse siblings** collapses `narrowSet` only. Hidden expanded state under newly-collapsed off-chain branches is preserved (standard CDK FlatTree behavior). Visibility (when the clicked row resolves to a current, non-root node): show neither when both sets are empty; show single **Isolate** when `widerSet` is empty (wide and narrow produce identical end states) or when `narrowSet` is empty (narrow would be a no-op and wide is the only meaningful action); show **both Collapse siblings and Isolate** only when both sets are non-empty (the two actions produce distinct end states). Right-clicking the root row never offers Isolate items, and the actions are no-ops if the path no longer resolves in the current model.
     - **Expand all from here** - hides itself when every container in the subtree is already expanded.
@@ -569,7 +571,12 @@ The primary page. Available to **all users** (anonymous + registered).
       keyboard-reachable through standard menu navigation, and every new
       user-facing string is extractable. Keyboard navigation inside the
       swatch grid is deferred beyond v1.
-  - **Double-click a row** copies the row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text for primitives, pretty-printed JSON for containers). The dblclick path excludes the kebab pill and twisty toggle the same way single-click selection does, so clicking those buttons twice never triggers an unintended value copy. Emits the `tree.row.doubleClickCopyValue` telemetry event.
+  - **Double-click a row** behavior splits by row type (issue #109):
+    - **Primitive (leaf) rows** (string / number / boolean / null): copy the row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text). Alt+double-click wraps the value as a JSON-string literal (DESIGN_SPEC.md §443). Emits the `tree.row.doubleClickCopyValue` telemetry event with `{ escaped: boolean }`.
+    - **Container rows with children** (`object` / `array`): toggle the row's expansion state (expand if collapsed, collapse if expanded). Alt is ignored on container dblclick; right-click "Copy value" remains the way to copy a container's pretty-printed JSON. Emits the `tree.row.doubleClickToggle` telemetry event with `{ action: 'expand' | 'collapse' }` (post-toggle state).
+    - **Empty containers** (`{}` / `[]`): copy the literal `{}` or `[]` to the clipboard, routing through the same `copyValue` path as primitives (raw text, with Alt wrapping as a JSON-string literal per §443). They render via the leaf template since `hasChild` is false, so they have no expansion to toggle. The tree-menu overhaul relaxed issue #109's "objects and arrays should expand/collapse instead of copying" wording for this edge case, where there is no expand/collapse to do; the surfaced default-shortcut row in the right-click menu also bolds "Copy value" for empty containers to match. Emits the `tree.row.doubleClickCopyValue` telemetry event.
+    - In all cases the dblclick path excludes the kebab pill and twisty toggle the same way single-click selection does, so clicking those buttons twice never triggers the row dblclick handler.
+  - **Keyboard copy (Ctrl+C / Cmd+C with tree focus)**: when a tree row has DOM focus, pressing `Ctrl+C` (Windows / Linux) or `Cmd+C` (macOS) copies that row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text for primitives, pretty-printed JSON for containers). Unlike dblclick, the keyboard shortcut works on **every row, including empty containers** (`{}` / `[]`) - the user explicitly asked for "parent or leaf" parity, and keyboard copy has no expand/collapse alternative meaning to disambiguate. Expansion state is never altered. Modifier matching is strict: `Ctrl+Shift+C` (devtools) and `Ctrl+Alt+C` (AltGr on international layouts) are intentional no-ops; Alt is not honored, so this path always emits the raw (un-escaped) variant. Emits the `tree.keyboard.copyValue` telemetry event with `{ escaped: false }`.
   - **Search highlight** - a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
     - Any row whose key or value contains the search text (case-insensitive by default) is highlighted in the **search highlight color** (theme-aware default defined in `TreeHighlightColors`).
@@ -582,13 +589,13 @@ The primary page. Available to **all users** (anonymous + registered).
     - The search field is always visible - it does not need to be toggled open.
     - Keyboard shortcut: `Ctrl+F` is **context-aware** - when the editor panel is focused, it triggers Monaco's built-in find; when the tree panel is focused (or no panel is focused), it focuses the tree search field.
 
-- **Layout:** Split-pane (resizable). A 4-state segmented control in the toolbar picks one of `Editor only`, `Editor + tree side-by-side` (default), `Editor above tree`, or `Tree only`. The two "both" segments are direct-jump variants of `layoutOrientation` (which is roamed across devices); the two single-pane segments leave `layoutOrientation` untouched and persist locally under `jotjson.paneVisibility.v1` (parallel to `splitRatio`). When the user returns to a both-* segment, the previously saved `splitRatio` is automatically restored. On mobile (< 768px), the rendering always stacks vertically regardless of the user's choice; the segmented control continues to highlight the stored preference, so resizing the viewport above 768px immediately restores the chosen orientation. Single-pane segments remove the inactive pane and the splitter from layout via `display:none`.
+- **Layout:** Split-pane (resizable). A 4-state segmented control in the toolbar picks one of `Editor only`, `Editor + tree side-by-side` (default), `Editor above tree`, or `Tree only`. The two "both" segments are direct-jump variants of `layoutOrientation` (which is roamed across devices); the two single-pane segments leave `layoutOrientation` untouched and persist locally under `jotjson.paneVisibility.v1` (parallel to `splitRatio`). When the user returns to a both-* segment, the previously saved `splitRatio` is automatically restored. On narrow viewports (< 768px) the rendering collapses to a single visible pane: when the persisted `paneVisibility` is `both`, the tree pane is shown by default (the app at narrow widths is primarily for *viewing* JSON; editing in Monaco at <= 360px is impractical). When the persisted choice is `editor-only` or `tree-only`, that single-pane choice is honored. The toolbar's segmented control collapses to a 2-state toggle (`editor-only` | `tree-only`) at narrow widths via SCSS - the two `both-*` segments are hidden so the highlighted segment is always one of the visible ones. The persisted `paneVisibility` is **never** mutated by the override; resizing the viewport back above 768px immediately restores the user's stored choice (including `both`). Single-pane segments remove the inactive pane and the splitter from layout via `display:none`.
 
 - **Status bar** (always-visible strip along the bottom of the page, shipped in M7m):
-  - **Left cluster** (raw text stats): byte size in UTF-8, line count, current cursor position (`Ln X, Col Y`).
-  - **Right cluster** (parsed tree stats): total node count, max depth, counts of arrays vs. objects, a JSON / JSONC mode badge, and a build indicator. The build indicator currently shows the local-git short SHA (with a `*` suffix when the working tree was dirty) sourced from a build-time generated module, as a short-term placeholder pending M7n; M7n replaces it with a CI-authoritative `vX.Y.Z - <shortsha>` badge that links to the commit on GitHub and copies the full SHA on click.
+  - **Left cluster**: meaningful character count (`Chars` - source UTF-16 code units after whitespace and comments are stripped, computed lexically via `jsonc-parser.createScanner`; preserves the user's chosen lexemes such as `1e3` and `1.0` rather than collapsing them via `JSON.stringify`; counts trailing commas in JSONC, an off-by-one limitation of at most one character per JSONC object/array), line count, byte size in UTF-8 (`Size`), current cursor position (`Ln X, Col Y`). Both `Chars` and `Size` carry a native `title=` tooltip explaining what the value represents (`Meaningful characters (no whitespace or comments)` and `Bytes if the document was downloaded as-is (UTF-8)` respectively).
+  - **Right cluster** (parsed tree stats): total node count (labelled `Total Nodes`), max depth (`Max Depth`), object count (`Objects`), array count (`Arrays`), comment count (`Comments` - sourced from the parser-side comment harvester, surfaced as a dedicated `commentCount: number` field on `JsonParseResult` because the count cannot be derived from the post-harvest `CommentBundle` strings; rendered only when the document parsed successfully and `commentCount > 0`), a JSON / JSONC mode badge, and a build indicator. The build indicator currently shows the local-git short SHA (with a `*` suffix when the working tree was dirty) sourced from a build-time generated module, as a short-term placeholder pending M7n; M7n replaces it with a CI-authoritative `vX.Y.Z - <shortsha>` badge that links to the commit on GitHub and copies the full SHA on click. Each tree-stat (Total Nodes, Max Depth, Objects, Arrays, Comments) carries a native `title=` tooltip explaining what it counts; the visible labels do most of the clarification work and the tooltip is supplemental for sighted mouse users.
   - Stats update reactively as the user types. No interactivity beyond the version badge in v1.
-  - On narrow viewports (< 768px) the bar collapses to a single-line summary per M7l, keeping Bytes, Lines, and the Mode badge and hiding cursor/nodes/depth/counts.
+  - On narrow viewports (< 768px) the bar collapses to a single-line summary per M7l, keeping Lines, Size (Bytes), and the Mode badge and hiding Chars, cursor, tree stats (Total Nodes / Max Depth / Objects / Arrays / Comments), and the build/version badge.
 
 ### 2. Persistent Link / Share  (`/s/:id`)
 
@@ -1098,9 +1105,9 @@ for setup. The bypass cannot engage in any Azure-hosted environment.
 | GET | `/api/blobs/:id` | Optional | Get a blob by UUID or slug. Public / unlisted blobs do not require auth; owner-only blobs (post-v1) will. |
 | PUT | `/api/blobs/:id` | Required (owner) | Update a blob's content, title, `isPublic` flag, or manual highlights |
 | DELETE | `/api/blobs/:id` | Required (owner) | Delete a blob |
-| GET | `/api/me` | Required | Read the current user document. Returns 404 if not yet seeded. |
-| POST | `/api/me` | Required | First-time seed: create the user document from the request body (typically the anon user's local preferences). Idempotent; 409 if already seeded. |
-| PUT | `/api/me/preferences` | Required | Replace the preferences object with a validated + normalized copy. Returns the normalized preferences. |
+| GET | `/api/me` | Required | Read the current user document. Returns 404 if not yet seeded. Response carries `ETag: "<version>"`. |
+| POST | `/api/me` | Required | First-time seed: create the user document from the request body (typically the anon user's local preferences). Idempotent; 409 if already seeded. Response carries `ETag: "<version>"`. |
+| PUT | `/api/me/preferences` | Required | Replace the preferences object with a validated + normalized copy. Requires `If-Match: "<version>"` (400 if missing/malformed, 404 if user not seeded, 412 on stale). Returns the normalized preferences and a fresh `ETag`. |
 
 ### Planned endpoints (later milestones / post-v1)
 
@@ -1138,11 +1145,19 @@ every blob PUT as `If-Match: "<version>"`. Missing or malformed
 Failed**. On 412, the client refetches, surfaces the conflict, and rebases
 or prompts before retrying rather than silently clobbering another tab.
 
-RuleSets use the same client-facing numeric `version` / strong `ETag` /
-`If-Match` contract (see Formatting Rules Page -> Concurrency). Blob
-writes also pass Cosmos DB's `_etag` as a server-internal `IfMatch`
-precondition on replace so the update is atomically guarded even if two
-writers race after reading the same version.
+RuleSets and the user document use the same client-facing numeric
+`version` / strong `ETag` / `If-Match` contract (see Formatting Rules
+Page -> Concurrency, and `PUT /api/me/preferences`). Every Cosmos
+`replace` in the API workspace goes through the
+`replaceWithIfMatch` helper in `api/src/shared/cosmos.ts`, which
+combines the client-facing version bump with Cosmos's internal
+`_etag` `IfMatch` precondition so the update is atomically guarded
+even if two writers race after reading the same version.
+`scripts/check-prod-patterns.mjs` enforces this structurally: direct
+`.item(...).replace(...)` calls are banned outside the helper, and
+`.upsert(...)` is banned in `api/src/`. The helper plus the lint
+tripwires together make IfMatch protection the default for every
+`VersionedDocument`.
 
 ### Validation Rules
 - Max raw blob content size: **1,000,000 UTF-8 bytes** (free tier).
@@ -1174,10 +1189,10 @@ writers race after reading the same version.
 - Same-origin deployment: the SPA and `/api/*` share `jotjson.com`, so there is no cross-origin CORS preflight at the edge. If/when a separate API origin is added, CORS will be restricted to `jotjson.com` origins.
 - **Global response headers** (set in `staticwebapp.config.json` `globalHeaders`):
   - `X-Content-Type-Options: nosniff`
-  - `X-Frame-Options: DENY`
+  - `X-Frame-Options: SAMEORIGIN` - blocks third-party iframing (clickjacking) but permits same-origin iframing, which is required by MSAL silent token refresh: MSAL loads a hidden iframe at the IdP's `/authorize` endpoint with `prompt=none`, and the IdP's 302 response navigates that iframe back to `https://jotjson.com/#code=...` so MSAL can read the auth code from the fragment. `DENY` blocks that final navigation and forces every silent refresh into an `InteractionRequiredAuthError`, which the auth interceptor maps to an unauthenticated request and a 401. `SAMEORIGIN` is the standard configuration for any site using MSAL silent refresh.
   - `Referrer-Policy: strict-origin-when-cross-origin`
   - `Permissions-Policy: clipboard-read=(self), clipboard-write=(self)` - scopes the Clipboard API to the site's own origin so the Smart Paste polling (Home page §1) can read the clipboard without cross-origin leakage.
-  - **Content Security Policy** - the full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader and a SHA-256 hash for the inline splash script), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights ingestion (`*.in.applicationinsights.azure.com`, `*.livediagnostics.monitor.azure.com`), plus `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights ingestion hosts are still covered by the policy). See "CSP allowlist" further down for the App Insights origin rationale.
+  - **Content Security Policy** - the full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader and a SHA-256 hash for the inline splash script), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights (`*.in.applicationinsights.azure.com` ingestion, `*.livediagnostics.monitor.azure.com` live metrics, `js.monitor.azure.com` SDK runtime config CDN), plus `frame-ancestors 'self'` (matches `X-Frame-Options: SAMEORIGIN` so MSAL silent refresh continues to work), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights hosts - including the SDK config CDN - are still covered by the policy). See "CSP allowlist" further down for the App Insights origin rationale.
 
 ### Scalability
 - Cosmos DB serverless scales automatically.
@@ -1199,8 +1214,61 @@ writers race after reading the same version.
 - Dates, times, and relative-time annotations in the tree view already use `Intl.DateTimeFormat` / `Intl.RelativeTimeFormat` with the user's browser locale (independent of UI language).
 
 ### SEO / Social
-- Pre-rendering at build time for the `/` landing page (compatible with Static Web Apps; no server runtime needed).
-- Open Graph tags for **public** shared blob links (`/s/:id`) - show preview of JSON structure. Private (unlisted) blobs emit a `noindex` meta tag and omit OG previews.
+
+- **Static prerender at build time** for `/` and `/404` via `@angular/ssr` with
+  `outputMode: "static"` and a `ServerRoute[]` configuration in
+  `src/app/app.routes.server.ts` (`/` and `/404` -> `RenderMode.Prerender`,
+  everything else -> `RenderMode.Client`). Crawlers and social unfurlers see
+  real HTML for the homepage and 404 page without a server runtime.
+- **Shell fallback for every other route.** `scripts/postbuild-seo.mjs`
+  renames Angular's `index.csr.html` to `shell.html` post-build.
+  `staticwebapp.config.json`'s `navigationFallback.rewrite` points at
+  `/shell.html`, which boots the SPA exactly as the pre-M7h `index.html` did
+  (static splash + Angular bootstrap). Auth-gated routes (`/blobs`,
+  `/history`, `/profile`, `/formatting-rules*`) and dynamic routes
+  (`/s/:slug`) all flow through the shell.
+- **Splash UX preservation.** `scripts/postbuild-seo.mjs` injects
+  `<meta name="prerendered" content="true">` into prerendered HTML files
+  only. `LoadingSplashService` reads this marker at construction; when
+  present it pre-latches `firstNavComplete = true` so the Angular splash
+  (`<app-loading-splash>`) never paints on top of the prerendered home
+  content. Shell-fallback boots have no marker and continue the legacy
+  splash lifecycle.
+- **Server-platform safety.** No client hydration in v1 - prerender is a
+  "head start" for crawlers and first paint, not a hydration source.
+  Browser-API call sites that run during construction or eagerly-fired
+  effects (`window`, `localStorage`, MSAL) are guarded with
+  `isPlatformBrowser(inject(PLATFORM_ID))`. A server-only `app.config.server.ts`
+  provides MSAL no-op stubs and skips `provideServiceWorker` /
+  `provideAppInitializer(AuthService.initializeFromRedirect)`.
+- **Open Graph + Twitter defaults** on `src/index.html` cover the homepage
+  and survive into the prerendered `index.html`. Per-blob OG/Twitter and
+  `noindex` for unlisted blobs are still set client-side by `SeoService`
+  (M4c). `home.component.ts`'s constructor effect that wipes OG tags when
+  no blob is loaded is gated on `isBrowser` so the static defaults are not
+  stripped during prerender.
+- **`og.png`** at `public/og.png` (1200x630, `summary_large_image`).
+- **`robots.txt` + `sitemap.xml`** at `public/robots.txt` and
+  `public/sitemap.xml`, listing `https://jotjson.com/` (homepage only;
+  /404 is excluded from sitemaps).
+- **404 noindex.** `NotFoundComponent.ngOnInit()` calls
+  `seo.setNoindex(true)` and `seo.clearBlobTags()`, both of which fire
+  during the `/404` prerender so the emitted HTML carries
+  `<meta name="robots" content="noindex">` for crawlers.
+- **Service worker config.** `ngsw-config.json` `index` is `/shell.html` so
+  the SW falls back to the SPA shell for unknown navigation URLs.
+  Prerendered `/index.html` and `/404/index.html`, plus `og.png`,
+  `robots.txt`, and `sitemap.xml`, are precached.
+- **Build-time integration check.** `scripts/check-prerender.mjs`
+  (npm `check:prerender`) validates the dist layout, marker placement,
+  brand text, OG defaults, noindex, and asset presence after every build.
+- **Out of scope for v1** (tracked as priority:low follow-up issues):
+  - Server-visible OG / `noindex` for `/s/:slug`. Slug space is unbounded
+    and per-blob visibility is dynamic, so static prerender cannot
+    satisfy this. Issue: `followup-share-og`.
+  - True HTTP 404 status for unknown paths. SWA's `navigationFallback`
+    returns 200 and would need `responseOverrides` config. Issue:
+    `followup-true-404`.
 
 ### Progressive Web App (PWA)
 - The site is installable as a **browser app** (PWA) on desktop and mobile.
@@ -1214,7 +1282,7 @@ writers race after reading the same version.
     - `categories`: `["developer-tools", "utilities"]`
   - **Service Worker** via Angular's `@angular/service-worker`, registered in `app.config.ts` with `registerWhenStable:30000` and disabled in dev mode. Configured via `ngsw-config.json` with cache-first for app-shell assets (HTML, CSS, JS, fonts, icons) so the editor/tree view load offline once the app has been visited.
   - **Network-first cache for `/api/**`** via `ngsw-config.json` `dataGroups`: strategy `freshness`, 5-second network timeout, 1-hour `maxAge`, 100-entry `maxSize` - the SW serves fresh responses when the network is available and transparently falls back to the cached copy otherwise.
-  - **Update prompt**: `AppUpdateService` (in `core/update/`) subscribes to `SwUpdate.versionUpdates` and surfaces a non-dismissing Material snackbar ("A new version of JotJSON is available.") with a Reload action when a new build is deployed. Also subscribes to `SwUpdate.unrecoverable` and hard-reloads with a cache-busting query so a mid-deploy CDN race on a force-refresh cannot leave the user on a stalled page.
+  - **Update prompt**: `AppUpdateService` (in `core/update/`) is eagerly constructed at app bootstrap (injected as a normal field on `AppComponent`, not lazy-imported) so its `SwUpdate.versionUpdates` and `SwUpdate.unrecoverable` subscriptions are wired before any postMessage from the SW can arrive - `versionUpdates` is not a `ReplaySubject`, so a late subscriber would lose early `VERSION_READY` events. The service proactively calls `swUpdate.checkForUpdate()` from a single `maybeCheck(reason)` funnel (entry-gated 30-second debounce) on three triggers: once at the end of `initialize()`, on `document.visibilitychange` -> visible, and on `window.focus`. The visibility / focus triggers are the key signal for installed PWAs, where the SW process can survive across launches and Angular's built-in registration-time check therefore doesn't re-fire. On `VERSION_READY` the service distinguishes *cold launch* (no user input yet, no prior silent-apply this session) from *mid-session*: cold launch silently calls `activateUpdate()` + reload (no UX), mid-session surfaces a non-dismissing Material snackbar ("A new version of JotJSON is available.") with a Reload action. The cold-launch silent path is gated on a `userInteracted` flag (flipped on first `pointerdown` / `keydown` / `touchstart` via `{ once: true, passive: true }` listeners) and a per-session `sessionStorage` loop guard (`jotjson.update.autoApplied`) so at most one silent auto-apply happens per browser session - any subsequent `VERSION_READY` falls through to the snackbar regardless of activity state. `update.applied` carries a `trigger: 'snackbar' | 'autoApply'` closed-enum dimension so the two paths are queryable separately. Also subscribes to `SwUpdate.unrecoverable` and hard-reloads with a cache-busting query so a mid-deploy CDN race on a force-refresh cannot leave the user on a stalled page.
   - **Deployment cache headers**: `staticwebapp.config.json` sets `Cache-Control: no-cache, must-revalidate` on `/index.html` and `/ngsw.json` so browsers revalidate the shell + SW manifest on every load, shrinking the window where stale references can collide with a new build.
 - **Planned polish (post-v1):**
   - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed.
@@ -1232,14 +1300,22 @@ writers race after reading the same version.
 - **Color Palette:**
   - Primary: Teal/Cyan accent (#00BCD4 family).
   - Background: Dark (#1E1E1E) / Light (#FAFAFA).
-  - JSON types color-coded: strings=green (`#6a8759`), numbers=orange (`#ff9800`), booleans=blue (`#2196f3`), null=gray (`#9e9e9e`), arrays=purple (`#9c27b0`), objects=teal (`#009688`). Exact values live in `src/styles/_variables.scss`.
+  - JSON types color-coded. Per-theme palettes live with the surfaces
+    that use them: tree value colors in
+    `src/app/shared/components/json-tree/json-tree.component.scss`
+    (the `--tree-string-color` / `--tree-number-color` / `--tree-boolean-color`
+    / `--tree-muted-color` CSS variables, set in dark and light blocks),
+    Monaco editor syntax tokens in `src/app/shared/components/json-editor/json-editor.component.ts`
+    (`defineThemes()` `rules` arrays for `jotjson-dark` and
+    `jotjson-light`), and user-customizable highlight colors in
+    `TreeHighlightColors` (defaults in this document).
 - **Logo:** "JotJSON" wordmark - "Jot" in regular weight, "JSON" in bold, with a `{ }` icon element.
 - **Responsive breakpoints:** Mobile (< 768px), Tablet (768-1024px), Desktop (> 1024px).
 
 ### Error, Loading & Empty States
 
-- **Cold-boot splash:** a static HTML splash (logo + thin top bar + label) is inlined into `<app-root>` in `index.html` so it renders before any JS executes. The label is normally "Loading JotJSON...", but a tiny inline `<head>` script swaps in "Loading JSON..." for cold-boot deep-links to `/s/:slug` (matched against `/^\/s\/[^\/]+$/`) so the static splash already shows the right text on the very first paint. Angular's `bootstrapApplication` removes the static markup automatically on first render. The splash respects `prefers-color-scheme` and `prefers-reduced-motion`. Pre-Angular-bootstrap strings here ("Loading JotJSON..." and "Loading JSON...") are an i18n exception by necessity (the i18n pipeline runs after bootstrap).
-- **Loading splash continuation:** while the share-blob resolver is in flight on a cold-boot deep-link (e.g., `/s/abc`), the Angular-side `LoadingSplashComponent` re-renders the same `.jot-splash` markup with a `$localize`'d "Loading JSON..." label so the user sees one continuous splash from page load through `bootstrapApplication` to the first route activation. Driven by a root-singleton `LoadingSplashService` that peeks `window.location.pathname` in its constructor (so the Angular splash's first paint already matches the static splash's label) and subscribes to `Router.events`. The service tracks in-flight navigation ids as a `Set<number>`, exposes `kind: Signal<'jotjson' | 'blob' | null>`, and latches `kind = null` after the first navigation settles (any terminal event with an empty in-flight set). After that, in-app navigations never re-show the splash - they get only the route progress bar (preserves prior-page context). The service also exposes `progress: Signal<number | null>` (`null` = indeterminate, `0..1` = determinate fraction); the share-blob resolver streams progress fractions into it via `reportBlobProgress(loaded, total)` while the body downloads, snapping to `1.0` on the terminal event so the bar visually completes before the splash hides. Lifecycle is router-driven: the signal resets to `null` on every `NavigationStart` (covers cancelled-then-restarted blob navs) and again on the `kind=null` first-nav-settle transition (covers splash hide), so callers do not need to manage clears.
+- **Cold-boot splash:** a static HTML splash (logo + thin top bar + label) is inlined into `<app-root>` in `index.html` so it renders before any JS executes. The label is "Loading JotJSON..." for every URL (no URL-sniffing inline script); the label transitions through "Downloading JSON..." (download stage) and "Rendering tree..." (render-pending stage) once Angular bootstraps and `LoadingSplashComponent` takes over. Angular's `bootstrapApplication` removes the static markup automatically on first render. The splash respects `prefers-color-scheme` and `prefers-reduced-motion`. The pre-Angular-bootstrap "Loading JotJSON..." string is an i18n exception by necessity (the i18n pipeline runs after bootstrap). On cold-boot deep-links to `/s/:slug` the static "Loading JotJSON..." flashes briefly into "Downloading JSON..." once Angular is up; this brief flicker is accepted in exchange for distinct lifecycle stages (the previous M8 "Loading JSON..." preempt would conflate the bootstrap and download stages on a `/s/:slug` URL).
+- **Loading splash continuation:** the Angular-side `LoadingSplashComponent` drives three discrete lifecycle stages so a slow synchronous tree render after a cold-boot blob download does not read as "stuck at 100%". Driven by a root-singleton `LoadingSplashService` exposing `kind: Signal<'jotjson' | 'blob' | null>`, `renderPending: Signal<boolean>`, and `progress: Signal<number | null>`. (1) **Bootstrap stage** (`kind='jotjson'`, `renderPending=false`): "Loading JotJSON..." with the bar visible, indeterminate. Shown until the first `NavigationStart` flips the kind. (2) **Download stage** (`kind='blob'`, `renderPending=false`): "Downloading JSON..." with the bar visible, determinate when the share-blob resolver streams progress fractions via `reportBlobProgress(loaded, total)`, indeterminate otherwise. (3) **Render-pending stage** (`kind=null`, `renderPending=true`): "Rendering tree..." with the bar **intentionally hidden** - no honest progress signal exists for the JSON.parse + CD pass that mounts `HomeComponent` and renders the tree, and a pinned bar would re-create the very "stuck at 100%" perception this stage exists to fix. Entered via `markBlobBytesComplete()`, called by the share-blob resolver when `BlobService` emits its synthetic `bytesComplete` event - i.e., when the body bytes have fully arrived but BEFORE the synchronous `JSON.parse` runs. (For multi-MB blobs, that parse can take seconds on the main thread; entering render-pending pre-parse is what prevents the bar pinning at 100% under "Downloading JSON..." through the parse window.) The `kind!=='blob'` guard in `markBlobBytesComplete` means in-app navs are no-ops (their `kind` is null after the `firstNavComplete` latch) and a defensive double-call cannot re-arm the timer. Cleared by `HomeComponent` calling `markBlobRenderComplete()` after first browser paint, deferred via `afterNextRender` plus a double-`requestAnimationFrame` (the established paint-barrier idiom in this repo, mirroring `afterFirstPaint()` in `HomeComponent` and `JsonTreeComponent`). The clear emits a `blob.coldBoot.firstPaint` telemetry event with a `durationMs` measurement covering the bytesComplete-to-paint gap (parse + activate + construct + CD + paint), raw value, no bucket dimension. The signal also resets when `NavigationStart` fires while `renderPending=true` (user navigated away mid-render), and defensively when `NavigationCancel/Error/Skipped` fires while `renderPending=true` (e.g., the resolver redirects to `/404` after a parse error that occurred AFTER bytesComplete fired); those paths emit no telemetry because the abandoned render is not a useful first-paint sample. The render-pending stage only fires on the cold-boot first-nav blob; `firstNavComplete` latches and prevents in-app `/` -> `/s/:slug` navs from re-showing the splash - those use the route progress bar instead (preserves prior-page context). `progress` resets to `null` on every `NavigationStart` (covers cancelled-then-restarted blob navs) and on the `kind=null` first-nav-settle transition (covers splash hide), so callers do not need to manage clears.
 - **Route progress bar:** while any router navigation is in flight (resolver, lazy chunk, redirect), an 8px top-of-viewport bar (primary cyan with glow) appears, matching the splash bar visually so the handoff at first NavigationEnd is continuous. By default it animates in indeterminate mode (sliding stripes); when `LoadingSplashService.progress` is non-null - currently only the share-blob resolver streams a fraction - the bar flips to a smooth determinate fill (`transform: scaleX(var(--jot-progress, 0))`, 200ms ease-out, snapped under reduced motion). In-app navigations to `/s/:slug` from `/blobs` or `/history` go through the same resolver and get the determinate variant naturally; other in-app navs stay indeterminate. The bar is decorative (`aria-hidden`); the route change itself is what assistive tech announces. Tracking is set-based on router event ids so resolver-redirect-to-/404 sequences (where the original navigation cancels and a new one starts) keep the bar visible without flicker. The bar is suppressed while the loading splash is visible to avoid a double-rendered bar at the same position.
 - **Determinate blob-fetch progress (X-Jotjson-Body-Length):** the `GET /api/blobs/{idOrSlug}` handler manually serializes the response and stamps `X-Jotjson-Body-Length: <utf8-byte-count>` on the response headers. Azure Front Door compresses `application/json` on the fly with `Transfer-Encoding: chunked`, which strips `Content-Length`, so Angular's `HttpEventType.DownloadProgress` events otherwise arrive with `total: undefined`. The custom header (which AFD passes through unchanged) gives the client an uncompressed total to drive the determinate progress bar. `BlobService.getWithProgress(idOrSlug)` consumes it: it memoizes the value on `ResponseHeader` (without emitting yet, to avoid a 0% bar flash), then attaches it to every `DownloadProgress` event. If the header is missing or unparseable, the client falls back to indeterminate with no regression. The resolver also emits a `blob.fetch.complete` telemetry event with a `determinateProgress: boolean` property so we can spot regressions if AFD configuration drifts at the edge fleet level.
 - **Loading skeletons:** show pulsing placeholder blocks while API data loads (history list, blob fetch, rule sets). The editor + tree view render instantly from local state.
@@ -1407,9 +1483,7 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 Items to revisit before declaring v1 complete (deliberately deferred so they do not slow current development velocity):
 
 - **PR-by-default for code changes.** Today, code changes can land directly on `main`. Decide whether v1 should require code changes to land via a PR with green CI before merging, with CD/workflow hotfixes remaining as the only sanctioned direct-to-`main` path. Rationale for deferring now: keeps iteration velocity high; CI on `push: main` still runs, just after merge.
-- **Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.
-- **Production sourcemap upload to App Insights.** Currently no sourcemaps in production. Decide whether to wire symbol upload. The build topology now runs the SPA build in CI's `web` job and passes the artifact to CD with `skip_app_build: true`, so the CI job already controls the artifacts; adding a sourcemap-upload step there is unblocked.
-- **Testing-layer strategy.** The current test suite covers static analysis + unit (frontend) + unit (api) + browser integration. See the [Testing strategy](#testing-strategy) section below for the full layer model. Decide before v1 whether any of the tracked layers (api integration, smoke e2e, cross-browser, accessibility, visual regression) should be required v1 gates rather than post-v1 follow-ups.
+- ~~**Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.~~ (done)
 
 ---
 
@@ -1419,9 +1493,13 @@ JotJSON is layered: a static-analysis pass, two unit suites (frontend + Azure
 Functions), and an in-browser integration layer for components whose real
 runtime behavior cannot be faked cheaply (Monaco today; the same pattern
 applies to anything else that depends on browser globals or external scripts).
-Higher layers - api-integration against the Cosmos emulator, end-to-end smoke
-flows in a real browser, cross-browser, accessibility, and visual regression -
-are tracked as separate work items and are deliberately not gating v1.
+Three additional layers are planned v1 gates: API integration against a
+CI-only real Cosmos DB free-tier account (issue #63), anonymous Chromium
+smoke e2e (issue #64), and accessibility smoke blocking on serious/critical
+axe violations (issue #66). Cross-browser smoke (issue #65) and visual
+regression (issue #67) are tracked as post-v1 follow-ups. Signed-in smoke
+e2e (issue #68) is deferred indefinitely pending a dedicated Entra External
+ID test tenant.
 
 | Layer | In place? | Purpose |
 |---|---|---|
@@ -1429,16 +1507,17 @@ are tracked as separate work items and are deliberately not gating v1.
 | Unit (frontend) | yes | Component / service / pipe / pure logic; Monaco and other browser globals are stubbed. Co-located `*.spec.ts`. |
 | Unit (api) | yes | Azure Functions handlers and shared modules; Cosmos and Blob clients are mocked. |
 | Browser integration | yes | Real Monaco loaded once per suite via the project's loader. Verifies the loader, the asset path, and the editor's mount + value roundtrip with a real DOM. Lives alongside frontend unit specs but is named `*.integration.spec.ts`. |
-| API integration | tracked as issue | Functions + shared modules against the Microsoft Cosmos emulator container. Catches partition-key, query-shape, and continuation-token mistakes that mocks cannot. |
-| Smoke e2e | tracked as issue | Playwright on critical user flows in Chromium. Catches MSAL redirect, router lazy-load, service-worker, and CSP regressions that unit + browser-integration cannot. |
-| Cross-browser smoke | tracked as issue | Playwright matrix on Firefox + WebKit, run nightly. Catches engine-specific issues. (WebKit on Linux is not Safari; iOS-Safari still needs manual verification.) |
-| Accessibility smoke | tracked as issue | `@axe-core/playwright` invoked from each smoke flow. Backs the WCAG 2.1 AA commitment in the Accessibility section. |
-| Visual regression | tracked as issue | Pixel-diff of representative screens against a baseline. Post-v1 unless visual bugs become recurring. |
+| API integration | v1 gate (active) | Functions + shared modules against a CI-only real Cosmos DB free-tier account (1000 RU/s + 25 GB free forever; per-run unique database name; secret-presence check skips fork PRs). Catches partition-key, query-shape, and continuation-token mistakes that mocks cannot. The `vnext-preview` Linux emulator is rejected as a harness due to acknowledged flakiness. Tracked in issue #63. |
+| Smoke e2e (anonymous) | v1 gate (active) | Playwright on critical anonymous user flows in Chromium, per-PR. Catches MSAL redirect, router lazy-load, service-worker, and CSP regressions that unit + browser-integration cannot. Tracked in issue #64. |
+| Smoke e2e (signed-in) | deferred | Same harness as anonymous smoke, but covers blob CRUD, share lifecycle, profile round-trip, and MSAL silent-token refresh. Requires an Entra External ID test tenant + ROPC users in CI; tenant setup is currently out of scope. Tracked in issue #68. |
+| Cross-browser smoke | post-v1 | Playwright matrix on Firefox + WebKit, run nightly. Catches engine-specific issues. (WebKit on Linux is not Safari; iOS-Safari still needs manual verification.) Deferred post-v1 due to engine-flake risk and zero historical engine-specific shipped bugs. Tracked in issue #65. |
+| Accessibility smoke | v1 gate (active) | `@axe-core/playwright` invoked from each smoke flow, blocking on `serious` + `critical` impact only; pre-existing violations are allow-listed with dated review-by comments. Backs the WCAG 2.1 AA commitment in the Accessibility section (axe-green is necessary but not sufficient for WCAG-green - keyboard-only nav, screen-reader announcements, and dynamic focus order remain manual concerns). Tracked in issue #66. |
+| Visual regression | post-v1 | Pixel-diff of representative screens against a baseline. Post-v1 unless visual bugs become recurring. Tracked in issue #67. |
 
 What this layer model deliberately does *not* claim:
 
-- The **browser integration** layer does not prove worker correctness. The Monaco JSON worker spawns from a runtime-built blob URL; verifying that requires worker-specific assertions whose value at this layer is bounded. Worker-shaped bugs are expected to surface at the smoke-e2e layer once that exists.
-- **Unit (api)** uses mocked Cosmos / Blob clients. Partition-key bugs, indexing-policy issues, and continuation-token correctness are all uncovered by today's CI; that is the gap the API integration layer closes.
+- The **browser integration** layer does not prove Monaco worker correctness. The JSON worker spawns from a runtime-built blob URL; this layer verifies editor mount + value behavior, not worker-specific diagnostics or branch behavior. Anonymous smoke e2e (#64, active) catches user-visible worker-load regressions on covered flows, but worker-specific correctness remains intentionally unasserted.
+- **Unit (api)** still uses mocked Cosmos / Blob clients. API integration (#63, active) covers the first real-Cosmos `BlobsService.createBlob` / `findBlobByIdOrSlug` happy path, including partition-key correctness and document-shape preservation against the production indexing policy. It does NOT yet claim full BlobsService CRUD coverage, integration coverage of other services (`MeService`, `HistoryService`, `RuleSets`), exhaustive indexing-policy validation, or continuation-token pagination correctness; those are tracked as follow-ups.
 
 Layer names above are runner-neutral so this model survives runner migrations
 (see issue #47 - test-runner migration).
@@ -1593,14 +1672,61 @@ forwarded; PII messages are dropped at the source by MSAL.
 
 ### Sourcemaps
 
-Production builds do **not** emit sourcemaps today (Angular default
-for the `production` configuration). Production stack traces in App
-Insights are therefore minified. Out-of-band symbol upload to App
-Insights is a planned follow-up; the build topology already supports
-it (CI builds the SPA on the runner and uploads the bundle as a
-`web-dist` artifact; CD downloads it with `skip_app_build: true`),
-so a sourcemap-upload step can be inserted in CI's `web` job between
-the build and the artifact upload.
+Production builds emit visible sourcemaps for both scripts and
+styles (`"sourceMap": true` on the production configuration in
+`angular.json`, equivalent to
+`{ scripts: true, styles: true, vendor: false, hidden: false }`).
+JotJSON-authored TypeScript and SCSS map cleanly back to source;
+Angular framework / `node_modules` internals are skipped to keep
+artifact size in check. Each emitted JS chunk ends with a
+`//# sourceMappingURL=...` URL comment and each CSS bundle ends
+with the equivalent `/*# sourceMappingURL=... */`.
+
+Maps reach two destinations on every push-to-main:
+
+1. **Static Web Apps** - `.js.map` / `.css.map` files are part of
+   the `web-dist` artifact CI hands to CD, so they ship to SWA
+   alongside their `.js` / `.css` siblings. DevTools picks them up
+   automatically on any browser session against
+   `https://jotjson.com/`. JotJSON is open source on GitHub;
+   shipping public maps adds no new disclosure.
+2. **Azure Blob Storage container `sourcemaps`** - CI uploads
+   every `*.map` file to a dedicated container in the existing
+   environment storage account, using the existing federated
+   workload identity (`secrets.AZURE_CLIENT_ID` /
+   `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID`) plus a new
+   `secrets.AZURE_STORAGE_ACCOUNT`. The container is wired into
+   the Application Insights resource via the **Source Map** blade
+   in the Azure portal (`Application Insights -> Settings ->
+   Source Map -> Add new storage account configuration`); the
+   portal then de-symbolicates frames in the Failures blade. The
+   manual-deploy path in `cd.yml` mirrors the same upload step so
+   `workflow_dispatch` emergency redeploys keep the container in
+   sync.
+
+The AI source-map binding is **not Bicep-modeled** today: the
+`Microsoft.Insights/components` schema does not expose the JS
+source-map storage configuration. It is a one-time portal step
+per environment. If the Application Insights component is ever
+torn down and recreated, re-run the portal step; until that
+happens, AI traces temporarily go back to minified - recoverable,
+no data loss.
+
+The sourcemap upload step in CI runs **after** `Upload web bundle`
+(so an upload failure does not block the artifact upload itself
+and CD can be re-run from a saved artifact) but is **not**
+`continue-on-error: true` - failures fail the run loudly, which
+prevents CD's `workflow_run`-on-success trigger from firing and
+shipping a deploy with broken AI symbolication. `--overwrite true`
+on `az storage blob upload-batch` accommodates Angular's
+`outputHashing: all` (vendor chunks reuse hashes across builds).
+
+The Angular service worker glob list does not over-match `.map`
+files: `globToRegex` in
+`@angular/service-worker/fesm2022/config.mjs` wraps every pattern
+as `'^' + ... + '$'` (lines 178/183), so `/*.js` becomes
+`^/[^/]*\.js$` and excludes `main.js.map`. No `ngsw-config.json`
+change is needed.
 
 ### Local development
 
@@ -1619,8 +1745,11 @@ needs:
 
 - `*.in.applicationinsights.azure.com` (telemetry ingestion)
 - `*.livediagnostics.monitor.azure.com` (live metrics)
-- `js.monitor.azure.com` (CDN, only if we ever switch the SDK to a
-  CDN load - we currently bundle it via npm)
+- `js.monitor.azure.com` (the SDK fetches its dynamic runtime config -
+  sampling, throttling, feature flags - from this CDN at startup, even
+  when the SDK itself is bundled via npm; the host is hardcoded inside
+  `@microsoft/applicationinsights-web` and is NOT carried in the
+  connection string)
 
 ### Data residency
 
@@ -1691,6 +1820,27 @@ Feedback / Planning) for the gate. Use these rules:
   compatible. Edit `package.json` in the same commit.
 - **Major** (`X+1.0.0`): breaking change, or the v1.0.0 cutover.
   This is a user call - surface to the user before bumping.
+
+  **Pre-1.0 carve-out**: while the project is pre-1.0, follow
+  standard SemVer convention and apply breaking changes as **minor**
+  bumps instead. The major-on-breaking rule kicks in only once we
+  cut 1.0. Pre-1.0 breaking changes still require an explicit
+  history entry calling out the wire-level change so deploys can be
+  tracked.
+- **Multi-wave milestones**: when a milestone lands as a series of
+  waves in separate commits (e.g., M7g shipped via 3a, 3b, 3c, 3d,
+  3e, 3f, then M7g-final), each individual wave bumps **patch**
+  regardless of whether its content would, in isolation, warrant a
+  minor bump. Reserve a single SemVer bump (typically minor, or
+  whatever the aggregate close-out content warrants) for the
+  milestone-completion commit. This keeps mid-milestone commits
+  versioning-cheap while still emitting one user-visible "this
+  milestone shipped" signal at the end. The milestone must be
+  defined in advance (in this spec's milestone list or a session
+  plan) for the rule to apply - ad-hoc retroactive grouping does
+  not qualify. Example: M7g shipped via 3c -> 0.14.1, 3d -> 0.14.2,
+  3e -> 0.14.3, 3f -> 0.14.4 (all patches), then M7g-final -> 0.15.0
+  (minor).
 - **No bump**: refactors, tests, docs, deps, build/CI infrastructure,
   telemetry plumbing, dev-only changes - anything that doesn't alter
   user-visible behavior. State "no bump" in the response so the
@@ -1826,6 +1976,578 @@ Out of scope (for v1):
   counted twice in the toolbar pill count chip. Inline icons and
   ancestor badges were unaffected (the descendant Set already
   deduped); only pill counts over-reported.
+- **0.11.0**: Cosmos etag-by-default - every Cosmos `replace` in the
+  API workspace now goes through the shared
+  `replaceWithIfMatch` helper in `api/src/shared/cosmos.ts`, which
+  combines a client-facing `version` bump with Cosmos's internal
+  `_etag` `IfMatch` precondition. `lint:prod-patterns` enforces this
+  structurally: `.item(...).replace(...)` outside the helper and
+  `.upsert(...)` anywhere in `api/src/` are now lint failures.
+  `UserDocument` becomes a `VersionedDocument` (additive `version`
+  field, defaulted to `1` on read for legacy docs). The
+  `upsertUser` shared helper is replaced with
+  `createUser` / `replaceUser`. `POST /api/me` now honors the 409
+  contract for racing first-seed POSTs by relying on Cosmos
+  `items.create()` instead of upsert. **Breaking wire change**:
+  `PUT /api/me/preferences` now requires `If-Match: "<version>"`;
+  missing/malformed -> 400, no user doc seeded -> 404, stale
+  version -> 412. `GET /api/me`, `POST /api/me`, and successful
+  `PUT /api/me/preferences` responses carry a strong `ETag` header.
+  The frontend `PreferencesService` threads etags end-to-end,
+  serializes in-flight writes (at most one PUT in flight; queued
+  tail re-fires with the fresh etag on response), and surfaces a
+  "Preferences were changed in another window" snackbar via a new
+  `PreferencesNotificationService` on 412. Pre-1.0 carve-out
+  applies (breaking change shipped as minor; see Versioning).
+- **0.12.0**: M7g-3a app-shell accessibility foundations - app-header
+  gains a "Skip to main content" link (visually hidden until keyboard
+  focus, then pops to the top-left of the viewport) and a
+  `<nav aria-label="Primary">` landmark wrapping the auth-side route
+  links. Every route now exposes `<main id="main-content"
+  tabindex="-1">` plus an `<h1>` so the skip-link target works
+  everywhere and screen readers always have a top-level heading to
+  announce. A new `RouteFocusService` (root singleton) moves
+  programmatic focus to `<main>` on every router `NavigationEnd`
+  after the initial bootstrap navigation, so screen-reader and
+  keyboard users hear / start from the new page on every in-app
+  transition. Audit tooling (axe-core inside Karma, the
+  `*.a11y.spec.ts` convention, the `src/testing/a11y.ts` harness with
+  WCAG-AA-only `critical` + `serious` strict gating) landed in the
+  same milestone and gates the foundations against regression. Later
+  M7g waves (3b tree, 3c Monaco, 3d contrast, 3e focus polish,
+  3f reduced-motion) follow under their own plan-and-approve cycles.
+- **0.13.0**: M7l responsive layout - on viewports narrower than
+  768px the editor/tree split now collapses to a single visible pane
+  rather than the previously-spec'd "stacked-both" layout. When the
+  persisted `paneVisibility` is `both`, the tree pane renders by
+  default (the app at narrow widths is primarily for *viewing* JSON;
+  Monaco editing at <= 360px is impractical). Persisted single-pane
+  choices (`editor-only` or `tree-only`) are honored. The toolbar's
+  segmented control collapses to a 2-state toggle (the two `both-*`
+  segments hide via SCSS); the persisted `paneVisibility` is **never**
+  mutated by the override, so resizing back above 768px immediately
+  restores the user's stored choice (including `both`). The status bar
+  also collapses to a single-line summary keeping only Lines, Size,
+  and the Mode badge; Chars, cursor, nodes, depth, object/array
+  counts, and the build/version badge are hidden. A new
+  `createNarrowViewportSignal()` helper at `src/app/core/layout/`
+  wraps `window.matchMedia('(max-width: 767.98px)')` with the same
+  no-window fallback pattern used by `PreferencesService` for
+  `prefers-color-scheme`. All four behavioral consumers in
+  `HomeComponent` (`paneLayout`, `splitStyle`, `dispatchBeaconJump`,
+  Ctrl+F tree-search guard) read an `effectivePaneVisibility`
+  computed that overrides the persisted value while narrow,
+  guaranteeing beacon clicks never route to the hidden editor and
+  the highlighted toolbar segment is always visible. The splitter
+  pointer-down handler also bails when effective visibility is not
+  `both`, both at entry and inside the move closure to handle
+  mid-drag viewport resizes.
+- **0.13.1**: Splash polish - cover the prerendered server-skeleton on
+  cold boot so the bare-bones SEO HTML never flashes between the
+  prerender unmount and Angular bootstrap; restore the SEO `<h1>` mark
+  to the prerendered shell so search-engine crawlers always see a
+  top-level heading on the share-blob route.
+- **0.14.0**: M7g-3b json-tree WAI-ARIA Tree pattern (audit findings
+  F2.1-F2.3). Each `<mat-nested-tree-node>` now carries the full tree
+  ARIA contract -- `role="treeitem"` (CDK default), `aria-level`,
+  `aria-posinset`, `aria-setsize`, and (for containers) `aria-expanded`
+  -- with a roving `tabindex` so exactly one row is in the Tab order
+  at a time. `<mat-tree>` gets an `aria-label` (`@@tree.aria`,
+  "JSON tree"); `.tree-row` and `.tree-row--close` become
+  `role="presentation"` (visual chrome, not the tree node);
+  `.tree-children` carries `role="group"`. Keyboard navigation lands
+  per the WAI-ARIA Tree pattern: Up/Down moves between visible rows,
+  Home/End jumps to first/last visible, Right expands a collapsed
+  container or moves to the first child of an expanded container,
+  Left collapses an expanded container or moves to the parent,
+  Enter/Space selects the focused row, Shift+F10 / ContextMenu opens
+  the row context menu via the existing `openContextMenuAt`
+  hidden-anchor path. A new `focusedPath` signal drives roving
+  tabindex independently of `selectedPath` (selection and focus stay
+  separate); a single lifecycle effect handles initial focus, hidden-
+  focus recovery on ancestor collapse, and reset-to-first-visible on
+  JSON re-parse. Pointer clicks update both signals. Search-input
+  Enter / Shift+Enter handoff updates `focusedPath` silently so
+  repeated cycling stays in the search input. Type-ahead deferred to
+  post-v1 (issue #108). Wave 3b also drops a structural `*.a11y.spec.ts` for
+  the tree (role chain + roving-tabindex assertions); the strict axe
+  scan is deferred to M7g-3d alongside the broader contrast
+  remediation.
+- **0.14.1**: M7g-3c Monaco editor accessibility options (audit
+  finding F3.1). `JsonEditorComponent.ngAfterViewInit` now passes
+  explicit `accessibilitySupport: 'auto'` and `ariaLabel: 'JSON
+  editor'` (i18n message `@@editor.aria`) to
+  `monaco.editor.create()`, threading the label through to
+  Monaco's screen-reader-content element. Three new specs in
+  `json-editor.component.integration.spec.ts` cover the raw
+  options + the label rendered on the screen-reader-content
+  element + the `aria-label` on the editor textarea. Out of
+  scope (deferred): an in-Monaco axe scan of the editor's
+  internal DOM, and the `accessibilityHelp` action registration.
+- **0.14.2**: M7g-3d light-theme contrast remediation (audit
+  findings F4.1, F4.2). Adds the `--brand-color-on-surface` token
+  so the brand mark uses cyan in dark mode and `#006978` on light
+  without changing the primary palette token. Theme-aware tree
+  palette (`--tree-string`, `--tree-number`, `--tree-boolean`,
+  `--tree-muted`) clearing AA on both themes including the count
+  badge and type badge. Breadcrumb muted text + icons raised to
+  AA; matched / current chip pairs added. New strict breadcrumb
+  axe spec; re-enabled the strict tree axe scan in dark and
+  light; added app-shell strict gates in dark and light; added a
+  header light-theme strict gate.
+- **0.14.3**: M7g-3e focus polish + offline-pill announcement
+  (audit finding F5.2). Rule-editor `pillState()` switch wrapped
+  in a persistent `role="status" aria-live="polite"` region so
+  saved / saved-offline / queued / error transitions are
+  announced to screen readers. Delete-confirm focus-fallback
+  pattern (next-row, fallback to parent with `tabindex="-1"`)
+  wired into the `MatDialogRef.afterClosed()` handlers in
+  blobs/history/home. Quota-notification dialogs return focus to
+  `#main-content`. The `CloseMatMenuOnWindowBlurDirective`
+  blur-close path got automated focus-return spec coverage
+  (manual route-level verification of focus restoration is
+  deferred to the manual-checks plan). Five new strict overlay
+  axe specs co-located per dialog host.
+- **0.14.4**: M7g-3f reduced-motion sweep + lint gate (audit
+  finding F6.1). Per-file `prefers-reduced-motion: reduce` motion
+  guards across eight SCSS files (`formatting-rules`,
+  `rule-sets-toolbar`, `status-bar`, `rule-preview`, `blobs`,
+  `history`, `toolbar`, `route-progress-bar`). One allow-pragma
+  on `.route-progress-bar__stripe--primary`'s opacity pulse
+  (RDP / OS animation-off forces `prefers-reduced-motion: reduce`
+  and a static bar would look frozen; full reasoning recorded in
+  the accessibility memory cited from this commit). New
+  `scripts/check-reduced-motion.mjs` lint gate (nesting-aware,
+  pragma-aware, scans `transition:` / `animation:` / `@keyframes`
+  in tracked + untracked SCSS files), wired into `npm run
+  lint:all` via the new `npm run lint:reduced-motion` script.
+- **0.14.5**: Issue #109 - tree-row double-click semantics split by
+  node type. Container rows (`object` / `array` with children) now
+  toggle expansion on dblclick instead of copying their pretty-printed
+  JSON; primitive (leaf) rows still copy. Empty `{}` / `[]` are a
+  no-op. Alt is ignored on container dblclick (Alt+dblclick on a
+  primitive still emits the JSON-string-literal variant). The
+  right-click "Copy value" context-menu item remains the canonical way
+  to copy a container's serialized form. New
+  `tree.row.doubleClickToggle` telemetry event with
+  `{ action: 'expand' | 'collapse' }` (post-toggle state); the
+  existing `tree.row.doubleClickCopyValue` event now fires only for
+  primitive rows. The chevron-button toggle path is intentionally
+  uninstrumented for parity with pre-issue-#109 behavior.
+- **0.14.6**: Keyboard copy shortcut for the tree view. Ctrl+C / Cmd+C
+  with a tree row focused copies the focused row's value to the
+  clipboard with the same extraction semantics as the right-click
+  Copy value action (raw text for primitives, pretty-printed JSON for
+  containers). Works on leaves, containers, and empty containers
+  (`{}` / `[]`) alike - "parent or leaf" parity per the user's
+  request. Expansion state is never altered by the shortcut. Strict
+  modifier gate: Ctrl+Shift+C (devtools) and Ctrl+Alt+C (AltGr
+  layouts) are intentional no-ops. New `tree.keyboard.copyValue`
+  telemetry event with `{ escaped: false }`.
+- **0.14.7**: MSAL silent token refresh fix - relax `X-Frame-Options`
+  from `DENY` to `SAMEORIGIN` and the report-only CSP `frame-ancestors`
+  from `'none'` to `'self'`. MSAL's silent-refresh flow loads a hidden
+  iframe at the IdP's `/authorize?prompt=none`, which 302s back to
+  `https://jotjson.com/#code=...` so MSAL can read the auth code from
+  the fragment and exchange it for a fresh access token. `DENY` blocks
+  that final same-origin iframe navigation, MSAL throws
+  `InteractionRequiredAuthError`, the auth interceptor maps it to an
+  unauthenticated request, and the caller gets a 401 once the cached
+  access token expires (~1h). Symptom: signed-in users intermittently
+  see 401s on `/api/me`, `/api/blobs`, `/api/history` etc. on hard
+  refresh while still seeing their profile pill in the toolbar (which
+  is hydrated from the MSAL account cache, separate from the access
+  token). `SAMEORIGIN` / `'self'` still block third-party clickjacking
+  (the actual threat model `X-Frame-Options` addresses); the only
+  protection removed is "jotjson.com iframing itself," which is
+  exactly what MSAL silent refresh legitimately does. No client code
+  change; pure SWA-config edit.
+- **0.15.0**: Status-bar tree-stat clarity + new Comments stat
+  (issue + PR #104). Tree-stat span labels rename to the literal
+  user suggestions - Total Nodes, Max Depth, Objects, Arrays - and
+  every span gets a `title=` tooltip explaining the metric (the
+  build-info badge precedent). A new content-aware Comments stat
+  surfaces comment count whenever the document parsed
+  successfully and contains `//` or `/* */` comments, regardless
+  of editor mode. Counting moves into `harvestComments` at parse
+  time (extractCommentBody only trims whitespace, so the joined
+  CommentBundle string cannot reliably be counted) and is exposed
+  as `commentCount` on `JsonParseResult`. Visibility mirrors
+  `treeStats()` gating exactly so a parse-failed document does
+  not render Comments alongside placeholder dashes. i18n message
+  IDs stay stable per AGENTS.md S4 - only source text changes.
+- **0.15.1**: Status-bar Chars stat made meaningful (issue + PR
+  #103). Before the change Chars (UTF-16 source length) and Size
+  (UTF-8 source bytes) told the user essentially the same thing;
+  the gap between formatted and minified content was invisible.
+  Chars is redefined to count source characters with whitespace
+  and comments stripped, computed lexically via the
+  `jsonc-parser` scanner (not via `JSON.stringify`, which would
+  normalize lexemes - `1e3` -> `1000`, `1.0` -> `1`, `"\u0041"` ->
+  `"A"` - and break the Min == Size invariant on already-minified
+  input). Label stays `Chars`; the meaning is documented via an
+  updated `aria-label` plus a new `title=` tooltip, and a
+  matching tooltip is added to Size. Known limitation documented
+  in DESIGN_SPEC.md: trailing commas in JSONC are still counted
+  (the scanner emits `CommaToken` whether or not the AST keeps
+  the comma).
+- **0.15.2**: M7g-3g `.user-name` focus-visible 3:1 indicator
+  (audit finding F5.1). The link in
+  `src/app/shared/components/app-header/app-header.component.scss`
+  now matches the `.brand` selector's existing
+  `box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.6)` focus-visible
+  treatment, satisfying WCAG 2.4.7 / 1.4.11. New focus-visible
+  regression spec in `app-header.component.a11y.spec.ts` uses
+  stylesheet-rule introspection (programmatic `.focus()` does
+  not reliably trigger `:focus-visible` in headless Chrome - the
+  same reason the sibling `.skip-link` opts into bare `:focus`).
+  Last open M7g audit finding before milestone close-out.
+- **0.16.0**: M7g milestone close-out. All seven fix waves (3a -
+  3g) have shipped; finding-level audit issues F1.1 through F6.1
+  are addressed. The milestone marker in the Milestones list is
+  flipped to done. Manual TBD checks from the M7g audit checklist
+  (200% zoom verification at 1280x800, Windows Narrator route
+  walkthrough, tab-order pass on each route, manual focus-
+  restoration verification for `CloseMatMenuOnWindowBlurDirective`)
+  are explicitly deferred and tracked separately. Deferred-finding
+  GH issues (WCAG 2.5.8 target-size 24px, iOS VoiceOver pass,
+  cross-browser pass, axe best-practice rules) plus splitter
+  aria-valuenow + arrow-key resize (issue #125) are post-V1; the
+  toolbar pane-toggle provides the practical keyboard alternative
+  for switching between panes.
+- **0.19.5**: Tree row context-menu single-option elevation
+  (v0.19.4 follow-up to the v0.19.0 Path Y overhaul). Two fixes:
+  (1) `maxDescendantDepth` now counts only **container** descendants
+  (not primitive leaves), eliminating the redundancy where a
+  collapsed container with only primitive children would offer
+  Expand all + +1 (both producing the same end state). Containers
+  whose only descendants are leaves now show only Expand all;
+  containers with N levels of nested containers show Expand all
+  plus +1..+N where +N actually reaches a collapsed container.
+  (2) Single-option flyout elevation (UX rule: never present a
+  flyout with only one option). When the `Expand >` sub-submenu
+  would have one visible item, that item renders inline within
+  Subtree with the elevated label form (e.g. "Expand all from
+  here") instead of behind another flyout. When the `Subtree >`
+  submenu would have one visible item (treating the whole Expand
+  contribution as 1), that item elevates to row level. New
+  elevated labels (`@@tree.contextMenu.highlightTree.elevated`,
+  `@@tree.contextMenu.removeTreeHighlight.elevated`,
+  `@@tree.contextMenu.expandFromHere.elevatedMenu`,
+  `@@tree.contextMenu.expandAllFromHere.elevated`,
+  `@@tree.contextMenu.expandToDepth.{1..5}.elevated`) restore the
+  scope qualifier dropped inside Subtree. When the lone elevated
+  Subtree item would duplicate the surfaced default-shortcut row
+  (e.g. only Collapse available with the surfaced row already
+  showing "Collapse from here", or only `+1` available with the
+  surfaced row showing "Expand 1 level"), the Subtree contribution
+  suppresses entirely via `'collapseSame'` / `'expandSame'`
+  sentinels in `subtreeElevatedAction`. Spec terms (Isolate,
+  Collapse siblings) preserved per DESIGN_SPEC.md S514.
+- **0.19.3**: Three small follow-ups to the v0.19.0-v0.19.2 row
+  context-menu work. (1) Accessibility for the bolded default
+  action: a `.sr-only` span suffix announces "; same as
+  double-clicking the row" to screen readers. Applies to the bolded
+  Copy value row (for primitives and empty containers) and to the
+  bolded surfaced shortcut row (for collapsed / expanded
+  containers). Replaces the matTooltip that was dropped in v0.19.1
+  because Material's overlay obscured the next menu item. New i18n
+  string `@@tree.contextMenu.defaultActionA11yHint`. (2) Icon
+  stroke-weight consistency: the inner content bars on the
+  `find-by-value` glyph were tightened from `stroke-width="1.4"` to
+  the registry-default `1.75` so the icon matches the visual weight
+  of its peers. (3) `Subtree > Expand` submenu reorder: "All" now
+  sits at the top of the list (separated by a divider from `+1`,
+  `+2`, `+3`, `+4`, `+5`), since the most-common usage of "expand
+  this subtree" is "show me everything," and the depth options are
+  fall-back precision tools. The change is template-only; the
+  underlying `expandAllFromHere` and `expandToDepthFromHere`
+  predicates and emit-paths are unchanged.
+- **0.19.2**: Tree menu icon-spacing fix. The shipping menu was
+  rendering `<jj-icon>` leading icons too tight against the label
+  text because Material's default menu-item layout only adds a gap
+  between Material's native `<mat-icon>` (which has the recognized
+  `.mat-mdc-menu-item-icon` slot class) and the label, not arbitrary
+  custom-component children. The mockups had used an explicit
+  `gap: 12px` on the flex parent, so they read with breathing room
+  on both sides of the icon -- but the real menu's icon-to-label
+  spacing collapsed to whatever Material defaulted children to. Add
+  a `margin-inline-end: 12px` on `<jj-icon>` inside `.jj-menu`
+  menu-items in `_material.scss` so labels align with the
+  icon-gutter pattern from the mockups (roughly equal whitespace
+  on the menu-edge side and the label side of each icon).
+  Affects every `<jj-icon>` rendered inside any `.jj-menu`-styled
+  menu (the row context menu, the Subtree submenu, and any other
+  `<mat-menu class="jj-menu">` that uses `<jj-icon>` leading
+  glyphs).
+- **0.19.1**: Tree row context-menu polish. Three fixes to v0.19.0:
+  (1) `Collapse siblings` in the Subtree submenu now has a leading
+  icon (`collapse-siblings`) so its label aligns with the iconified
+  rows above and below; previously the missing icon left the text
+  flush with the icon-gutter and the row read as "left-flush text
+  among iconified peers" (the variant we'd rejected during the A2
+  icon-strategy round). (2) `Find by key` and `Find by value` now
+  use distinct icons (`find-by-key` -- a key in front of a magnifying
+  glass with the lens masked behind the key, handle to lower-right;
+  and `find-by-value` -- the lens with two short horizontal "content"
+  bars inside) instead of both rendering the generic `search` icon.
+  (3) The `matTooltip` ("Same as double-click") on the bolded
+  surfaced default-shortcut row and on the bolded primitive Copy
+  value row was dropped: Material's tooltip overlay rendered
+  `position: below` and obscured the next menu item, making
+  adjacent rows hard to click. Bold styling alone is the signal for
+  the dblclick-equivalent action; the `defaultActionTooltip` field
+  and `@@tree.contextMenu.defaultActionTooltip` i18n string were
+  removed in the same change.
+- **0.19.0**: Tree row context-menu overhaul (Path Y). The right-click
+  menu rewires into five sections (Copy / Transform / Mark / Find /
+  Reshape) with a state-dependent surfaced default-shortcut row above
+  a new `Subtree` submenu that contains all subtree-affecting actions
+  (Highlight subtree, Collapse, Isolate, Collapse siblings, and an
+  `Expand` sub-submenu with `+1..+5 levels` and `All`). The bolded
+  default item now matches double-click semantics: primitives bold
+  Copy value, expanded containers surface "Collapse from here",
+  collapsed containers surface "Expand 1 level", and empty containers
+  bold Copy value (issue #109's "expand/collapse instead of copying"
+  wording is relaxed for the empty-container edge case where there
+  is no expand/collapse to do). Vocabulary changes: "Search by ..."
+  -> "Find by ..." (rename propagates to the toolbar tree search
+  bar, history search, and profile preferences "Search" group);
+  "Highlight tree" -> "Highlight" (inside the Subtree submenu, where
+  the submenu name carries the scope); "Collapse" -> "Collapse from
+  here". Spec terms (Isolate, Collapse siblings, Expand to depth +N
+  per S516) preserved verbatim. Non-recursive collapse is now the
+  single collapse action everywhere -- the earlier recursive
+  `collapseFromHere` walk was deleted because the visible outcome
+  matches single-row collapse and CDK FlatTree preserves descendant
+  state across collapse/re-expand cycles. The icon registry gains
+  five new SVGs (`key`, `collapse-subtree`, `expand-subtree`,
+  `isolate`, `subtree`) and every top-level row in the row menu now
+  renders a leading icon. Six new telemetry events ship under
+  `tree.contextMenu.*` (subtreeOpened, highlight, highlightSubtree,
+  extract, decodeShow, decodeHide); existing collapse / expandToDepth
+  / expandAllFromHere events gain a `source: 'top' | 'submenu'`
+  property to disambiguate the surfaced shortcut from the in-Subtree
+  duplicate. i18n message IDs and existing telemetry IDs are
+  preserved verbatim per the stability pledge in AGENTS.md S4.
+- **0.18.2**: M7u prose-preserving paste-banner extraction - the
+  toolbar Paste, native Monaco Ctrl+V, and `.txt`/`.log` upload
+  paths now produce the same prose-preserving output shape as the
+  in-tree extract action of M7t: bare value (1 block, no prose),
+  `{ prefix?, json, suffix? }` (1 block + prose), bare array
+  (N blocks, no prose), or
+  `{ prefix?, json1, between_1_and_2?, json2, ..., suffix? }`
+  (N blocks + prose). Banner copy aligns with the in-tree
+  affordance: action button reads "Extract embedded JSON" and the
+  message text drops the "combined into an array" claim that no
+  longer holds. The dual-mode `extractFromMixedText` core API is
+  retired in the same change (`JsonExtractorService` was the only
+  remaining `'unwrap'`-mode caller); the function no longer takes
+  an `options.mode` parameter, the `ExtractMode` type and the
+  unwrap-only BOM strip are removed, and the function
+  unconditionally preserves prose with a no-prose fast path that
+  returns the bare value/array. Existing
+  `home.extract.banner.shown` / `accept` / `dismiss` telemetry
+  events gain a `proseSegments` measurement matching
+  `tree.extract.click`.
+- **0.18.1**: Installed-PWA update detection fix. `AppUpdateService`
+  is now eagerly injected on `AppComponent` (replacing the previous
+  lazy `import().then(injector.get(...).initialize())` chain) so its
+  `SwUpdate.versionUpdates` and `SwUpdate.unrecoverable`
+  subscriptions wire up in the constructor, before any `VERSION_READY`
+  postMessage from the SW can arrive. The service also calls
+  `swUpdate.checkForUpdate()` proactively from a single
+  `maybeCheck(reason)` funnel with a 30-second entry-gated debounce
+  on three triggers: once at `initialize()`, on
+  `document.visibilitychange` -> visible, and on `window.focus`. The
+  visibility / focus triggers are the key signal for installed PWAs,
+  where the SW process can survive across launches and Angular's
+  built-in registration-time check therefore doesn't re-fire. On
+  `VERSION_READY` before any user interaction (`pointerdown` /
+  `keydown` / `touchstart`) and with the per-session `sessionStorage`
+  loop guard (`jotjson.update.autoApplied`) clear, the service
+  silently calls `activateUpdate()` + reload - so a freshly relaunched
+  installed PWA always boots into the latest deployed version without
+  requiring a snackbar click or `Ctrl+F5`. Mid-session updates still
+  surface the existing "A new version of JotJSON is available.
+  Reload" snackbar; the cold-launch and mid-session paths are
+  distinguished in telemetry by a new closed-enum `trigger: 'snackbar'
+  | 'autoApply'` dimension on the existing `update.applied` event.
+  The fix is patch-only: no new public API, no schema change, no
+  service-worker config change, no CDN cache-header change.
+- **0.18.0**: Cold-boot clipboard auto-paste. New
+  `coldBootClipboardAutoPaste: 'ask' | 'always' | 'never'`
+  preference (default `ask`) controls whether the home page reads
+  the clipboard on cold boot and offers to load JSON from it
+  instead of the saved draft. `ask` shows a one-shot non-blocking
+  banner with `[Always]` / `[Just this time]` / `[Never]` actions
+  plus an X dismiss; `always` silently replaces the draft with
+  clipboard JSON and shows an Undo snackbar; `never` disables the
+  feature. Strict gates: home route only (never on `/s/:slug`),
+  initial-nav one-shot guard, permission must be already granted
+  (no cold-boot permission prompt), clipboard text must parse
+  cleanly as JSON/JSONC AND yield a top-level object or array
+  (primitives ignored), clipboard size <= 1 MB, anonymous-draft
+  mode only (`loadedBlob` null at start AND at apply time). To
+  enable a flash-free silent path, two new infrastructure APIs
+  ship in this release: `LoadingSplashService.beginBootstrapHold(
+  reason, maxMs)` (a narrow bootstrap-only splash hold that does
+  not affect the blob render-pending lifecycle) and
+  `ClipboardPollingService.permissionReady` +
+  `readGrantedClipboardOnce(reason)` (a coalesced cold-boot read
+  that awaits async permission discovery and never promotes the
+  state to `denied` on background failure - matches `checkOnce`
+  semantics, not `readForPaste` semantics). The preference roams
+  server-side for signed-in users, but clipboard-read permission
+  remains per-device/per-origin: a roamed `always` only activates
+  after each browser independently grants clipboard access. The
+  silent path supports Undo via the snackbar action only, not via
+  Ctrl+Z (clipboard hydrates before Monaco mounts, so there is
+  no prior-draft state in the editor's undo stack to revert to).
+- **0.17.0**: Tree row density + scalable icon sizing. The tree
+  body's `line-height` tightens from `1.55` to `1.4`, and tree
+  icon chrome (kebab pill, extract pill, decoded pill, twisty,
+  beacon badge, formatting-rule key/value icons) now scales with
+  the user's `treeFontSize` preference instead of pinning at
+  fixed pixel sizes. Three coordinated changes: (1) the
+  `<jj-icon>` shared component gains a new `size: 'auto'` mode
+  (alongside the existing `size: number`) that omits the SVG's
+  intrinsic `width`/`height` HTML attributes and lets the host
+  element default to `1em x 1em` via a `:host(.jj-icon--auto)`
+  rule, so consumers can size icons with CSS instead of fighting
+  the component's emitted attrs; (2) the tree's button wrappers
+  use `em`-relative sizes (`.tree-kebab-pill` / `.tree-decoded-
+  pill` / `.tree-extract-pill` at `1.25em`, `.tree-beacon-badge`
+  at `1.25em`, `.tree-twisty` at `1.1em`) plus `font: inherit`
+  to cancel the browser-default `<button>` font-size of
+  `~13.33px` (`-webkit-small-control`) that would otherwise make
+  `1.25em` compute against the wrong base; (3) the 12 tree-
+  internal icons (`more-vert`, `extract`, `decoded`, `chevron-
+  right`, `chevron-down`, plus the 7 `FormattingIcon` values
+  `warning`/`check`/`star`/`info`/`error`/`flag`/`bookmark`) are
+  redesigned with a uniform `1.288x` scale around their center
+  using an SVG `<g transform>` group with `vector-effect:
+  non-scaling-stroke`, so the visible glyph fills more of the
+  24x24 viewBox while strokes stay at the original 1.75 user-
+  unit thickness. Net effect: at the default 13px tree font,
+  rows go from `~22px` to `~18-19px` (~14% denser); at the
+  minimum 8px tree font, rows go from `~28px` to `~12-13px`
+  (>2x denser, finally making the small-font option useful).
+  Row alignment also flips from `align-items: baseline` to
+  `center` on `.tree-row` and `.tree-row-right` because
+  baseline alignment with replaced inline-flex content (the
+  icon SVGs) synthesizes baselines at the bottom of the button
+  box and inflated rows even with em-sized buttons. Hit-target
+  trade-off: at 8px tree font, the kebab pill is ~10px square -
+  sub-WCAG-2.1 24x24 minimum. Acceptable because (a) JotJSON is
+  desktop-first, (b) the user explicitly opts into the small
+  font, and (c) the row menu remains reachable via right-click
+  anywhere on the row and via keyboard. The 7 `FormattingIcon`
+  values are also rendered in the toolbar beacon-pills surface,
+  which gets the redesigned icons "for free" - a consistency
+  win, not a regression. Out of scope: redesigning the
+  remaining ~28 icons used by other surfaces (toolbar, sidebar,
+  etc.); those keep their original viewBox padding pending a
+  future cleanup pass.
+- **0.16.5**: M7f milestone close-out (M7f-4b no-op + spec
+  flip). The M7f-4b "native-control sweep after `color-scheme`"
+  wave ships nothing concrete: with the M7f-1 `color-scheme: dark | light`
+  declarations on `.theme-dark` / `.theme-light` / `.theme-system`
+  (under the `prefers-color-scheme: light` media query), native
+  UA-painted controls - scrollbars, autofill chrome, native form
+  fields, `<input type="color">` swatches - follow the active
+  theme automatically. Audit confirmed zero pre-existing
+  `scrollbar-color` or `:-webkit-autofill` rules in tracked SCSS,
+  so nothing conflicts with the new `color-scheme` declarations.
+  Deferred from M7f as out of scope for v1: theme-aware OG image
+  / favicon, empty-state illustrations, Monaco diff editor
+  styling. The Polish & launch milestone marker for M7f flips to
+  done; all five sub-waves (1, 2, 3, 4a, 4b) are landed.
+- **0.16.4**: M7f-4a hardcoded semantic-pill colors moved to
+  Material 21 tokens. The three previously hardcoded "light-only"
+  semantic-color pills now reference Material 21 semantic tokens so
+  they auto-flip between dark and light themes via the
+  `mat.all-component-colors` emission in `src/styles/_material.scss`:
+  `.state-pill--modified` (toolbar) -> `--mat-sys-secondary-container`
+  / `--mat-sys-on-secondary-container` (was `#ffecb3` / `#4a3000`);
+  `.pill-warn` (rule-editor) -> `--mat-sys-secondary-container` /
+  `--mat-sys-on-secondary-container` (was `#fef3c7` / `#78350f`);
+  `.pill-ok` (rule-editor) -> `--mat-sys-tertiary-container` /
+  `--mat-sys-on-tertiary-container` (was `#dcfce7` / `#14532d`).
+  Material 21 has no dedicated "warning" semantic role distinct from
+  secondary, so the warn pill uses secondary-container as the
+  closest neutral-attention match; if the visual signal proves
+  insufficient the per-theme override fallback noted in the rule
+  block can be wired in. New stylesheet-introspection specs in
+  `toolbar.component.spec.ts` (one) and `rule-editor.component.spec.ts`
+  (three) assert each rule references the expected token and guard
+  against regressions to bare hardcoded hex.
+- **0.16.3**: M7f-3 Monaco JSON syntax theming + dead `$json-*`
+  token cleanup. The `defineThemes()` calls on `JsonEditorComponent`
+  now register `rules` arrays mapping JSON tokenizer scopes
+  (`string.value.json`, `number.json`, `keyword.json` - verified
+  against `monaco-editor/esm/vs/language/json/tokenization.js` in
+  Monaco 0.55.1) to per-theme palette colors that mirror the tree's
+  `--tree-string-color` / `--tree-number-color` / `--tree-boolean-color`
+  values, so the editor and the tree feel like one surface in both
+  themes. Property keys (`string.key.json`) inherit from the base
+  `vs` / `vs-dark` palette unchanged. Three new integration specs
+  spy on `monaco.editor.defineTheme` and assert the registered rule
+  shape for each theme. The unused `$json-string` / `$json-number` /
+  `$json-boolean` / `$json-null` / `$json-array` / `$json-object`
+  SCSS tokens (zero refs in tracked SCSS) are removed from
+  `src/styles/_variables.scss`; `DESIGN_SPEC.md` UI/UX Color Palette
+  bullet now points at the three canonical sources (tree CSS
+  variables, Monaco theme rules, `TreeHighlightColors`) instead of
+  the deleted variables file.
+- **0.16.2**: M7f-2 theme toggle UX. Replaces the static
+  `matTooltip="Toggle theme"` and `aria-label="Toggle theme"` on the
+  toolbar theme-toggle button with a predictive 3-state computed
+  label that names the next state in the `light -> dark -> system`
+  cycle: `light` -> "Switch to dark theme", `dark` -> "Match system
+  theme" (matches the Profile dropdown's "Match system" copy),
+  `system` -> "Switch to light theme". The aria-label binds to the
+  same computed value so screen readers get the same affordance.
+  Three new i18n message IDs (`@@toolbar.theme.tooltip.toLight`,
+  `@@toolbar.theme.tooltip.toDark`, `@@toolbar.theme.tooltip.toSystem`)
+  replace the legacy `@@toolbar.theme.tooltip` and
+  `@@toolbar.theme.aria` entries; rename is justified because one
+  static concept becomes three semantically distinct messages. Three
+  new toolbar-component specs assert the tooltip + aria-label across
+  all three current-state values; the existing
+  `triggerThemeToggleButtonClick` helper is updated to find the
+  button by any of the three valid dynamic aria-labels.
+- **0.16.1**: M7f-1 theme propagation infrastructure. Three
+  related changes ship together so the **active** theme - including
+  explicit overrides that disagree with `prefers-color-scheme` - is
+  honored by browser chrome, native UA-painted controls, and the
+  cold-boot splash. (1) `<meta name="theme-color">` is now a pair
+  of `media`-scoped tags (one for each scheme) plus a
+  `PreferencesService` effect that strips `media` and forces both
+  `content` values to the resolved color when the user picks an
+  explicit override. The effect is gated on a new
+  `isPlatformBrowser(inject(PLATFORM_ID))` field so prerender ships
+  the unmodified media-scoped pair. (2) `src/styles/_theme.scss`
+  declares `color-scheme: dark | light` on the corresponding theme
+  classes (and inside the `prefers-color-scheme: light` media query
+  for `.theme-system`) so native scrollbars, autofill, and color
+  inputs follow the active palette. (3) An inline classic
+  `<script>` immediately after `<body>` reads
+  `localStorage['jotjson.preferences.v1']` and applies an explicit
+  `theme-dark` / `theme-light` body class before the static splash
+  is parsed, eliminating the wrong-palette flash on cold boot when
+  the stored preference disagrees with the OS. The splash CSS gains
+  matching `.theme-dark .jot-splash` / `.theme-light .jot-splash`
+  variants so the class-based override beats the existing
+  `prefers-color-scheme` media query. Supporting infrastructure:
+  the inline-script bytes are mirrored by a pure helper at
+  `src/app/core/boot/resolve-boot-theme.ts` (unit tested), the
+  first inline-script SHA-256 hash is added to
+  `staticwebapp.config.json` `script-src`, and both source-mode and
+  dist-mode CSP-hash checks pass. New specs cover the meta-tag
+  effect across the four `system`+OS / `dark` / `light` permutations,
+  the `color-scheme` rules via stylesheet introspection, and the
+  boot-theme helper.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build
@@ -2098,14 +2820,71 @@ Out of scope (for v1):
    - ~~**M7c**: Smart date/time detection + relative-time annotations in the tree view (Home page §1).~~ (done)
    - ~~**M7d**: Selection highlighting (selected row + matching-value rows + ancestor chain) in the tree view (Home page §1).~~ (done)
    - ~~**M7e**: Custom domain (`jotjson.com`).~~ (done)
-   - **M7f**: Dark/light theme polish.
-   - **M7g**: Accessibility audit.
-   - **M7h**: SEO (pre-rendering + OG tags).
+   - ~~**M7f**: Dark/light theme polish.~~ (done)
+     - Five sub-waves shipping incrementally as patch
+       releases. M7f-1: theme propagation infrastructure
+       (dual `<meta name="theme-color">` tags + browser-only
+       effect that strips `media` on explicit overrides;
+       `color-scheme: dark | light` declarations in
+       `_theme.scss`; first inline-script CSP hash for the
+       cold-boot splash flicker fix). M7f-2: predictive
+       3-state tooltip + aria-label on the toolbar theme
+       toggle, replacing the static "Toggle theme" copy.
+       M7f-3: Monaco JSON syntax token theming via per-theme
+       `rules` arrays mapping `string.value.json`,
+       `number.json`, `keyword.json` to the tree palette;
+       removal of unused `$json-*` SCSS tokens. M7f-4a:
+       three hardcoded "light-only" semantic-color pills
+       (`.state-pill--modified`, `.pill-warn`, `.pill-ok`)
+       moved to Material 21 `--mat-sys-secondary-container`
+       / `--mat-sys-tertiary-container` tokens. M7f-4b:
+       no-op close-out. With the M7f-1 `color-scheme`
+       declaration in place, native UA-painted controls
+       (scrollbars, autofill, color-input swatches) follow
+       the active theme automatically with no further
+       overrides; an audit confirmed zero pre-existing
+       `scrollbar-color` / `:-webkit-autofill` rules in the
+       tracked SCSS, so nothing was at risk of conflicting
+       with the new declaration. The deferred M7f-4b
+       follow-ups (theme-aware OG image / favicon, empty-
+       state illustrations, Monaco diff editor styling) are
+       out of scope for v1.
+   - ~~**M7g**: Accessibility audit.~~ (done)
+     - Seven fix waves (3a-3g) closing audit findings F1.1
+       through F6.1. Highlights: app-shell focus order +
+       skip-link + landmarks (3a); WAI-ARIA Tree pattern with
+       roving tabindex on the json-tree (3b); explicit Monaco
+       editor a11y options + i18n label (3c); light-theme
+       contrast remediation including theme-aware tree palette
+       and breadcrumb chips (3d); focus polish + offline-pill
+       aria-live + delete-confirm focus fallback (3e);
+       reduced-motion sweep + new lint gate (3f); user-name
+       focus-visible 3:1 indicator (3g). Manual TBD checks
+       (200% zoom, Narrator, tab-order, focus-restoration)
+       deferred; deferred-finding GH issues (target-size 24px,
+       iOS VoiceOver, cross-browser, axe best-practice) plus
+       splitter aria-valuenow + arrow-key resize (issue #125)
+       are post-V1.
+   - ~~**M7h**: SEO (pre-rendering + OG tags).~~ (done)
+     - `@angular/ssr` static prerender of `/` and `/404`; `shell.html`
+       fallback for everything else via `scripts/postbuild-seo.mjs`.
+       Splash discrimination via `<meta name="prerendered">` marker
+       (`LoadingSplashService` pre-latches `firstNavComplete` when
+       present). Static OG/Twitter defaults + canonical in
+       `src/index.html`; `public/{og.png,robots.txt,sitemap.xml}` shipped.
+       Server-platform safety: `app.config.server.ts` MSAL stubs, no
+       service worker on server, browser-only `inject()` guards in
+       `LoadingSplashService` / `RuleSetsService` / `AppComponent` /
+       `HomeComponent`. Build integration check at
+       `scripts/check-prerender.mjs`. Out of scope (deferred):
+       per-`/s/:slug` server-visible OG (`followup-share-og`) and
+       real HTTP 404 status (`followup-true-404`). See SEO / Social
+       section above for the full implementation.
    - ~~**M7i**: Monitoring (App Insights dashboards & alerts).~~ (done)
      - App Insights workbook (5 sections) + 4 alerts + 1 action group shipped. Bicep modules: `infra/modules/{actionGroup,alerts,monitoringWorkbook}.bicep` + `infra/main.bicep` wiring + `infra/modules/appInsights.bicep` outputs. Docs: see `docs/telemetry.md` -> "Dashboards & alerts (M7i)". Post-V1 follow-ups: issues #87-#94.
    - ~~**M7j**: Static Web Apps upgrade to Standard tier - flipped during M7e (commit 1ba34e1) because apex custom-domain binding requires Standard. See M7o for the BYO Functions follow-up.~~ (done)
    - ~~**M7k**: Surface JSONC comments in the tree view - the parser harvests every `//` and `/* */` comment in a second pass and attaches it to the nearest tree node; comments render as dimmed inline annotations on the same row as the value they document (trailing slot when on the same source line as the value, leading slot when introducing the next value). Single-line + ellipsis with full text via tooltip; toggleable via `treeShowComments` (default true). Comments do not participate in formatting-rules matching or tree search. Decoration-vs-data font philosophy codified alongside (commits `7d937c5` M7k-0 mockup-rule docs, `82f9073` M7k-1 parser harvest, `4f7d604` M7k-2 tree rendering, `66f695d` font philosophy, `fa02122` placement fix-up, plus this commit for M7k-3 preference + spec).~~ (done)
-   - **M7l**: Responsive layout - on viewports narrower than 768px, force the editor/tree split to stack vertically (editor on top, tree below) regardless of the user's `layoutOrientation` preference, per Home page §Layout. Also collapse the status bar (M7m) to a single-line summary - keep Bytes, Lines, and Mode; hide cursor, nodes, depth, and object/array counts.
+   - ~~**M7l**: Responsive layout - on viewports narrower than 768px, collapse the editor/tree split to a single visible pane: when persisted `paneVisibility` is `both`, render the tree pane by default (view-first at narrow widths); when persisted is `editor-only` or `tree-only`, honor the single-pane choice. The toolbar's segmented control collapses to a 2-state toggle (`editor-only` | `tree-only`); the persisted `paneVisibility` is never mutated by the override. Also collapse the status bar (M7m) to a single-line summary - keep Bytes, Lines, and Mode; hide Chars, cursor, nodes, depth, object/array counts, and the build/version badge.~~ (done)
    - ~~**M7m**: Status bar - a slim, always-visible strip along the bottom of the Home page that surfaces at-a-glance stats about the current document. Left cluster covers the raw text (character count, line count, byte size in UTF-8, current cursor line/column); right cluster covers the parsed tree (total node count, max depth, array vs. object counts, JSON vs. JSONC mode indicator). Stats update reactively as the user types. Hidden or collapsed to a single-line summary on narrow viewports (see M7l). No interactivity required in v1 - purely informational.~~ (done)
    - ~~**M7n**: Version & commit surfacing - replace the short-term `dev`/local-git SHA indicator with a CI-authoritative version badge. Build tooling injects `{ version, sha, builtAt, branch }` from `package.json` + `GITHUB_SHA` / `GITHUB_REF_NAME` env vars into a generated module (no local `git` dependency). Status bar (right cluster, after the mode badge) shows `vX.Y.Z - abc1234`, clickable to copy the full SHA to the clipboard and linking to the corresponding commit on GitHub. Also emit a one-line `console.info` banner on app start so the version lands in bug-report consoles. Release discipline: bump `package.json` `version` on user-visible releases (via `npm version`). Future follow-up (not part of this step): a `GET /api/version` endpoint so the frontend can also surface the backend SHA and flag skew.~~ (done)
      - Build-time version module (`src/app/core/version/version.ts`) generated from `package.json` + `GITHUB_SHA` / `GITHUB_REF_NAME`. Status bar surfaces `vX.Y.Z - abc1234` with click-to-copy SHA and a GitHub commit link; one-line `console.info` banner on boot. `GET /api/version` follow-up remains a future step. Commit `04d542f`.
@@ -2115,6 +2894,7 @@ Out of scope (for v1):
    - ~~**M7r**: Title suggester (wand button) - heuristic suggestions for the document title. A small wand icon button between the title input and the state pill (signed-in users only) opens a menu of 2-7 candidate titles inferred from the current document. Computed lazily on click via a registry of pure strategy functions in `src/app/core/title-suggester/`, ordered by confidence and deduplicated case-insensitively, against the already-memoized parsed value plus the most recent uploaded/dropped file's name. Strategies cover known formats (`package.json`, Kubernetes, OpenAPI/Swagger, JSON Schema, GeoJSON, ARM, `tsconfig`, GitHub Actions workflows, Postman), HAL self-links, common identifier fields, type discriminators, top-level keys, descriptions, generic shape descriptions, and last-resort `firstChars` / `Untitled` fallbacks. A post-dedupe synthetic floor (`Untitled - YYYY-MM-DD` then `Untitled (n)`) guarantees at least 2 menu entries. The candidate's literal text is never logged in telemetry; only the strategy `source` and total candidate count.~~ (done)
     - ~~**M7s**: Tree string-leaf extract affordance - parsed string leaves are scanned 1000 ms after parse settle via the Web Worker extractor, with delimiter pre-screening, 50-item chunks, and a 10000-entry LRU cache. Extractable rows show a small row pill plus a context-menu item; clicks are source-version guarded, patch only the selected value range with `jsonc-parser` `findNodeAtLocation` + `applyEdits`, and preserve comments both outside the target subtree and inside the extracted JSONC payload. Telemetry records only counts and source enums.~~ (done)
     - ~~**M7t**: Prose-preserving in-tree extraction - correctness fix for M7s where strings containing prose around embedded JSON (for example, HTTP request text whose body is JSON but whose request line and headers are plain text) were replaced by only the parsed JSON. When prose is present, the tree extract action replaces the string with a structured object that preserves prose next to parsed JSON: 1 JSON block with no prose still becomes the bare value; N >= 2 blocks with no prose still become an array; 1 block with prose becomes `{ prefix?, json, suffix? }`; and N >= 2 blocks with prose becomes `{ prefix?, json1, between_1_and_2?, json2, ..., suffix? }` using 1-indexed `jsonN` keys and `between_<i>_and_<j>` inter-block prose keys. Prose segments whose `.trim()` is empty are omitted by design to keep output clean, so the wrapper is prose-preserving but not strictly byte-for-byte for whitespace-only segments. Single-block-with-prose preserves JSONC comments inside `json`; multi-block extraction, with or without prose, keeps M7s behavior and does not preserve comments. A BOM is preserved when it lands in prose because the prose-preserving path does not strip a leading BOM. The existing `tree.extract.click` telemetry event gains `proseSegments`, the count of prose segments that are non-empty after trim. The M7p paste-banner path keeps the old unwrap behavior for now; M7u will apply the same fix there.~~ (done)
+    - ~~**M7u**: Prose-preserving paste-banner extraction - completes the M7t pairing for the M7p paste-banner / file-load extract path. The toolbar Paste, native Monaco Ctrl+V, and `.txt`/`.log` upload paths now produce the same prose-preserving output shape as the in-tree action: bare value (1 block, no prose), `{ prefix?, json, suffix? }` (1 block + prose), bare array (N blocks, no prose), or `{ prefix?, json1, between_1_and_2?, json2, ..., suffix? }` (N blocks + prose). Banner copy is aligned with the in-tree affordance: action button reads "Extract embedded JSON" (matching `tree.extract.button.title`) and the message text drops the "combined into an array" claim that no longer holds when prose is preserved. The dual-mode core API is retired in the same change: the `JsonExtractorService` had been the only remaining `'unwrap'`-mode caller, so `extractFromMixedText` no longer takes an `options.mode` parameter, the `ExtractMode` type and the unwrap-only BOM strip are removed, and the function unconditionally preserves prose (with a no-prose fast path that returns the bare value/array). The existing `home.extract.banner.shown` / `accept` / `dismiss` telemetry events gain a `proseSegments` measurement matching `tree.extract.click`.~~ (done)
     - ~~**M8**: Loading splash + route progress bar - eliminate the two blank-screen windows users hit when clicking a share link. (1) Cold-boot splash: a static splash (logo + thin top bar + label) is inlined into `<app-root>` in `index.html` so it renders before Angular bootstrap completes. The label is "Loading JotJSON..." by default, with a tiny inline `<head>` script swapping in "Loading JSON..." when the URL matches `/^\/s\/[^\/]+$/` so cold-boot deep-links paint with the right label on the first frame. Angular's `bootstrapApplication` removes the static markup automatically on first render. (2) Loading splash continuation: an Angular-side `LoadingSplashComponent` re-renders the same `.jot-splash` markup with a `$localize`'d label ("Loading JotJSON..." or "Loading JSON...") so the splash stays visible from page load through bootstrap and the share-blob resolver until the first route activation. Driven by a root-singleton `LoadingSplashService` that peeks `window.location.pathname` in its constructor and subscribes to `Router.events`; latches `kind=null` once the first nav settles, so in-app navigations never re-show the splash. (3) Route progress bar: an indeterminate top-of-viewport bar (8px, primary cyan with glow) shown for any pending navigation (resolver, lazy chunk, redirect). Owned by an eager root-singleton `NavigationProgressService` that subscribes to `Router.events` in its constructor and tracks in-flight navigations as a `Set<number>` keyed on event id - so a resolver-cancel-and-redirect sequence (e.g., `/s/:slug` 404 -> `/404`) keeps the bar visible without flicker. The visual `RouteProgressBarComponent` lives at `src/app/shared/components/route-progress-bar/`, sits as a sibling of `<router-outlet>` in `AppComponent`, is `aria-hidden` (decorative), suppresses itself while the loading splash is visible to avoid a double-rendered bar, and matches the splash bar's position and style for visual continuity at the bootstrap-to-app handoff. Reduced-motion fallback uses an opacity pulse (Remote Desktop sessions force `prefers-reduced-motion: reduce`, so a static fallback would look like a frozen page). The pre-bootstrap labels in `index.html` are documented i18n exceptions because they must render before the Angular i18n pipeline is initialized.~~ (done)
 
 ---

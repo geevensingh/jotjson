@@ -18,7 +18,6 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { AuthError, requireAuth, tryAuth } from '../shared/auth';
 import {
   BlobValidationError,
-  BlobVersionConflictError,
   MAX_BLOBS_PER_USER,
   SlugGenerationError,
   createBlob,
@@ -29,6 +28,7 @@ import {
   type BlobDocument,
   type BlobHighlight,
 } from '../shared/blobs';
+import { stripCosmosMetadata, VersionConflictError, type PublicShape } from '../shared/cosmos';
 import { getRecentViewAt, recordEntry, VIEW_DEBOUNCE_SECONDS } from '../shared/history';
 import {
   badRequest,
@@ -37,6 +37,7 @@ import {
   notFound,
   quotaExceeded,
   unauthorized,
+  withSecurityHeaders,
 } from '../shared/http';
 import { readUser } from '../shared/users';
 
@@ -63,13 +64,11 @@ async function recordViewedSafely(
   }
 }
 
-type PublicBlobDocument = Omit<BlobDocument, '_etag'>;
+type PublicBlobDocument = PublicShape<BlobDocument>;
 type BlobResponseBody = PublicBlobDocument & { highlights: BlobHighlight[] };
 
 function publicBlob(blob: BlobDocument): PublicBlobDocument {
-  const { _etag: _cosmosEtag, ...doc } = blob;
-  void _cosmosEtag;
-  return doc;
+  return stripCosmosMetadata(blob);
 }
 
 function withResponseHighlights(blob: BlobDocument): BlobResponseBody {
@@ -418,7 +417,7 @@ export async function putBlob(
     return withEtag(200, saved);
   } catch (error) {
     if (error instanceof BlobValidationError) return badRequest(error.message);
-    if (error instanceof BlobVersionConflictError) return preconditionFailed(error.message);
+    if (error instanceof VersionConflictError) return preconditionFailed(error.message);
     return internalError(context, 'putBlob write', error);
   }
 }
@@ -427,33 +426,33 @@ app.http('blobs-post', {
   methods: ['POST'],
   route: 'blobs',
   authLevel: 'anonymous',
-  handler: postBlob,
+  handler: withSecurityHeaders(postBlob),
 });
 
 app.http('blobs-list', {
   methods: ['GET'],
   route: 'blobs',
   authLevel: 'anonymous',
-  handler: listBlobs,
+  handler: withSecurityHeaders(listBlobs),
 });
 
 app.http('blobs-get', {
   methods: ['GET'],
   route: 'blobs/{idOrSlug}',
   authLevel: 'anonymous',
-  handler: getBlob,
+  handler: withSecurityHeaders(getBlob),
 });
 
 app.http('blobs-put', {
   methods: ['PUT'],
   route: 'blobs/{id}',
   authLevel: 'anonymous',
-  handler: putBlob,
+  handler: withSecurityHeaders(putBlob),
 });
 
 app.http('blobs-delete', {
   methods: ['DELETE'],
   route: 'blobs/{id}',
   authLevel: 'anonymous',
-  handler: deleteBlob,
+  handler: withSecurityHeaders(deleteBlob),
 });

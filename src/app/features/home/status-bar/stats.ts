@@ -1,14 +1,21 @@
-import type { Node as JsoncNode } from 'jsonc-parser';
+import { createScanner, type Node as JsoncNode } from 'jsonc-parser';
 
 /**
  * Pure helpers for the Home page status bar (M7m). Kept free of Angular so
  * they can be unit-tested with `describe` without a TestBed.
  */
 
+// SyntaxKind values inlined: jsonc-parser exports SyntaxKind as a `const enum`,
+// which TypeScript cannot access under `isolatedModules`. See jsonc-parser
+// main.d.ts: LineCommentTrivia=12, BlockCommentTrivia=13, LineBreakTrivia=14,
+// Trivia=15, EOF=17.
+const SK_LINE_COMMENT_TRIVIA = 12;
+const SK_BLOCK_COMMENT_TRIVIA = 13;
+const SK_LINE_BREAK_TRIVIA = 14;
+const SK_TRIVIA = 15;
+const SK_EOF = 17;
+
 export interface TextStats {
-  /** UTF-16 code units. Matches JavaScript's `String.length` and what every
-   *  editor surfaces as "character count". */
-  chars: number;
   /** 1 + number of `\n` occurrences when the text is non-empty; 0 otherwise. */
   lines: number;
   /** UTF-8 byte length. */
@@ -28,17 +35,53 @@ export interface TreeStats {
 
 export function computeTextStats(text: string): TextStats {
   if (!text) {
-    return { chars: 0, lines: 0, bytes: 0 };
+    return { lines: 0, bytes: 0 };
   }
   let newlines = 0;
   for (let i = 0; i < text.length; i++) {
     if (text.charCodeAt(i) === 10) newlines++;
   }
   return {
-    chars: text.length,
     lines: newlines + 1,
     bytes: new TextEncoder().encode(text).length,
   };
+}
+
+/**
+ * "Meaningful character" count for the status bar Chars stat (issue #103).
+ *
+ * Counts source UTF-16 code units across every non-trivia token reported by
+ * `jsonc-parser`'s scanner, i.e. excludes whitespace, line breaks, line
+ * comments, and block comments. Computed lexically from `text` so the count
+ * preserves the user's chosen lexemes -- `1e3`, `1.0`, and `"\u0041"` are
+ * each counted at their source length, not at the length of a canonical
+ * `JSON.stringify` round-trip.
+ *
+ * Known limitation: trailing commas in JSONC are still counted (the scanner
+ * emits them as `CommaToken` regardless of whether the AST would discard
+ * them). The overcount is at most one character per JSONC object/array.
+ *
+ * Always returns a number -- partial / unparsable input still produces a
+ * meaningful count, matching how Lines and Size are also always computed.
+ */
+export function computeMinifiedChars(text: string): number {
+  if (!text) return 0;
+  const scanner = createScanner(text, false);
+  let total = 0;
+  while (true) {
+    const kind = scanner.scan();
+    if (kind === SK_EOF) break;
+    if (
+      kind === SK_TRIVIA ||
+      kind === SK_LINE_BREAK_TRIVIA ||
+      kind === SK_LINE_COMMENT_TRIVIA ||
+      kind === SK_BLOCK_COMMENT_TRIVIA
+    ) {
+      continue;
+    }
+    total += scanner.getTokenLength();
+  }
+  return total;
 }
 
 export function computeTreeStats(ast: JsoncNode | undefined): TreeStats | undefined {

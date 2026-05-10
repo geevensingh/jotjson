@@ -8,6 +8,17 @@
   background: var(--bg);
   color: var(--fg);
   font-family: v.$font-ui;
+  --tree-string-color: #7fa164;
+  --tree-number-color: #ff9b30;
+  --tree-boolean-color: #3fa1f3;
+  --tree-muted-color: #a0a0a0;
+}
+
+:host-context(.theme-light) {
+  --tree-string-color: #3f6a25;
+  --tree-number-color: #8a4b00;
+  --tree-boolean-color: #005ea8;
+  --tree-muted-color: #5c5c5c;
 }
 
 .tree-controls {
@@ -64,7 +75,7 @@
 .tree-search-count {
   display: inline-grid;
   font-size: 12px;
-  color: rgba(127, 127, 127, 0.9);
+  color: var(--tree-muted-color);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -102,11 +113,11 @@
   padding: 8px 4px 14px;
   font-family: v.$font-mono;
   font-size: var(--tree-font-size, 13px);
-  line-height: 1.55;
+  line-height: 1.4;
 }
 
 .tree-empty {
-  color: rgba(127, 127, 127, 0.7);
+  color: var(--tree-muted-color);
   padding: 20px;
   text-align: center;
   font-family: v.$font-ui;
@@ -120,11 +131,12 @@
 
 .tree-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 2px;
   padding: 1px 4px 1px 0;
   border-radius: 3px;
   cursor: default;
+  min-height: 0;
 
   // Formatting-rules CSS-var seam (M6a.75). When a row participates in
   // a matched formatting rule, the engine sets these custom properties
@@ -181,6 +193,25 @@
   }
 }
 
+// M7g-3b. Roving keyboard-focus ring on the focused tree node. Drawn
+// just outside the row using `box-shadow` so it stacks with the
+// existing `.is-active-match` outline (which is drawn just inside at
+// `outline-offset: -2px`). When a row is both keyboard-focused AND
+// the active search hit, both rings render concurrently.
+//
+// The browser default outline is suppressed because the box-shadow
+// above already conveys focus.
+mat-nested-tree-node:focus-visible {
+  outline: none;
+
+  > .tree-row {
+    box-shadow:
+      inset 4px 0 0 var(--tree-row-format-border, transparent),
+      0 0 0 2px var(--mat-sys-primary, var(--color-primary));
+    border-radius: 3px;
+  }
+}
+
 .tree-match-badge {
   display: inline-flex;
   align-items: center;
@@ -201,8 +232,11 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
   margin-right: 4px;
   pointer-events: none;
+
   // Sit on the type-token's color (not the row's `--fg`), so the icon
   // visually pairs with whatever it is decorating.
   &.tree-rule-icon--key {
@@ -217,13 +251,13 @@
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  width: 16px;
-  height: 16px;
+  width: 1.1em;
+  height: 1.1em;
+  font: inherit;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: 10px;
   padding: 0;
   opacity: 0.75;
 
@@ -245,8 +279,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 1.25em;
+  height: 1.25em;
   margin-right: 2px;
   padding: 0;
   border: 0;
@@ -254,6 +288,7 @@
   background: transparent;
   color: inherit;
   cursor: pointer;
+  font: inherit;
   opacity: 0.75;
 
   &:hover {
@@ -279,23 +314,24 @@
 
   &::after {
     content: ': ';
-    color: rgba(127, 127, 127, 0.8);
+    color: var(--tree-muted-color);
     font-weight: normal;
   }
 }
 
 .tree-index {
-  color: rgba(127, 127, 127, 0.8);
+  color: var(--tree-muted-color);
   font-weight: normal;
   margin-right: 6px;
 }
 
 .tree-value-string {
-  // CSS-var seam (M6a.75): default preserves the legacy string color.
+  // CSS-var seam (M6a.75): default keeps string tokens green while
+  // clearing WCAG 2.1 AA contrast in both supported themes.
   // The engine sets `--tree-value-color` etc. on the row when a
   // value-target rule matches. Bold/italic/underline get their own
   // vars so a rule can flip them per node without specificity wars.
-  color: var(--tree-value-color, #6a8759);
+  color: var(--tree-value-color, var(--tree-string-color));
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
@@ -324,26 +360,26 @@
 }
 
 .tree-value-number {
-  color: var(--tree-value-color, #ff9b30);
+  color: var(--tree-value-color, var(--tree-number-color));
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
 }
 
 .tree-value-boolean {
-  color: var(--tree-value-color, #3fa1f3);
+  color: var(--tree-value-color, var(--tree-boolean-color));
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
 }
 
 .tree-value-null {
-  color: rgba(127, 127, 127, 0.75);
+  color: var(--tree-muted-color);
   font-style: italic;
 }
 
 .tree-value-container {
-  color: rgba(127, 127, 127, 0.9);
+  color: var(--tree-muted-color);
 
   .tree-value-brace {
     color: inherit;
@@ -354,7 +390,7 @@
 .tree-row-right {
   margin-left: auto;
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   // Never compress the right cluster. Long leading/trailing JSONC
   // comments shrink first via their own `min-width: 0` + ellipsis;
@@ -365,7 +401,7 @@
   flex-shrink: 0;
 
   .tree-count {
-    color: rgba(127, 127, 127, 0.7);
+    color: var(--tree-muted-color);
     font-style: italic;
     // Decoration -> sans (DESIGN_SPEC.md tree font philosophy).
     font-family: var(--font-ui);
@@ -438,7 +474,7 @@
   margin-left: 8px;
   border-radius: 9px;
   background: rgba(127, 127, 127, 0.15);
-  color: rgba(127, 127, 127, 0.85);
+  color: var(--tree-muted-color);
   text-transform: lowercase;
   letter-spacing: 0.3px;
   font-family: v.$font-ui;
@@ -476,14 +512,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: rgba(127, 127, 127, 0.6);
+  width: 1.25em;
+  height: 1.25em;
+  color: var(--tree-muted-color);
   border: 0;
   background: none;
   cursor: pointer;
   padding: 0;
   border-radius: 3px;
+  font: inherit;
 
   &:hover {
     color: var(--color-primary);

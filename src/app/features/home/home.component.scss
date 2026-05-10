@@ -14,6 +14,25 @@
   min-height: 0;
 }
 
+// <main> wrapper added in M7g-3a so HomeComponent has a primary
+// landmark + accessible heading. It holds the split panes and the
+// status bar; the toolbar lives outside in <jj-app-header>'s slot.
+//
+// `tabindex="-1"` makes the landmark programmatically focusable (the
+// route-focus service moves focus here on every NavigationEnd after
+// the initial cold boot) without taking a Tab stop in the keyboard
+// order. The default browser focus outline on a non-interactive
+// landmark is silenced because the visible focus indicator is the
+// page contents themselves (a screen reader announces the new
+// page's <h1>; sighted users see the new route render).
+.home-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  outline: none;
+}
+
 .split {
   display: grid;
   grid-template-columns: 1fr var(--splitter-size) 1fr;
@@ -75,10 +94,12 @@
 
 // 3-state pane visibility (issue #39). When in single-pane mode,
 // hide the splitter and the inactive pane and force the grid to a
-// single 1fr track. The `!important` rules at this specificity
-// (`.split.editor-only` = 0,2,0) beat the mobile media query's
-// bare `.split { ... !important }` rules at L77-85 (specificity
-// 0,1,0), so single-pane mode works correctly on narrow viewports.
+// single 1fr track. With M7l, the same single-pane classes are
+// also applied at narrow viewports via the JS-driven
+// `effectivePaneVisibility` computed (Home component) when the
+// persisted visibility is `'both'` and the viewport is below the
+// 768px breakpoint - so the previous "force stacked-both at narrow"
+// CSS rule was removed in favor of single-pane rendering.
 .split.editor-only .splitter,
 .split.editor-only .pane-tree {
   display: none;
@@ -93,14 +114,4 @@
 .split.tree-only {
   grid-template-columns: 1fr !important;
   grid-template-rows: 1fr !important;
-}
-
-@media (max-width: #{v.$breakpoint-mobile}) {
-  .split {
-    grid-template-columns: 1fr !important;
-    grid-template-rows: 1fr var(--splitter-size) 1fr !important;
-  }
-  .splitter {
-    cursor: row-resize;
-  }
 }

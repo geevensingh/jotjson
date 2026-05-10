@@ -182,7 +182,7 @@ one-time Entra app-registration walkthrough.
 
 Three workflows run on push and PR:
 
-- **CI** (`ci.yml`) - Web build + type-check, API build, Bicep validate, web
+- **CI** (`ci.yml`) - Web build + type-check, API build & test, Bicep validate, web
   unit tests with coverage artifact.
 - **CD** (`cd.yml`) - Deploys the web app + managed Functions to Azure Static
   Web Apps. Gated on `AZURE_STATIC_WEB_APPS_API_TOKEN` being configured.
@@ -224,3 +224,10 @@ AI-assisted commits include:
 ```
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ```
+
+## Security
+
+To report a security vulnerability, please use GitHub's Private
+Vulnerability Reporting rather than a public issue. See
+[`SECURITY.md`](./SECURITY.md) for the policy, scope, and
+response-time expectations.

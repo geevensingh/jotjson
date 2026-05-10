@@ -13,7 +13,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
 import { clearAll, listEntries } from '../shared/history';
-import { badRequest, internalError, unauthorized } from '../shared/http';
+import { badRequest, internalError, unauthorized, withSecurityHeaders } from '../shared/http';
 
 function isIsoTimestamp(value: string): boolean {
   // Require a full ISO 8601 date-time so that we don't silently accept
@@ -117,12 +117,12 @@ app.http('history-get', {
   methods: ['GET'],
   route: 'history',
   authLevel: 'anonymous',
-  handler: getHistory,
+  handler: withSecurityHeaders(getHistory),
 });
 
 app.http('history-delete', {
   methods: ['DELETE'],
   route: 'history',
   authLevel: 'anonymous',
-  handler: deleteHistory,
+  handler: withSecurityHeaders(deleteHistory),
 });

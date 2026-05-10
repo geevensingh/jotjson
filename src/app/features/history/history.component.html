@@ -1,6 +1,6 @@
 <jj-app-header />
 
-<main class="history">
+<main id="main-content" class="history" tabindex="-1" #historyFocusFallback>
   <header class="history-header">
     <h1 i18n="@@history.title">Recently viewed</h1>
     <p class="subtitle" i18n="@@history.subtitle">
@@ -28,9 +28,9 @@
         spellcheck="false"
         [value]="searchInputValue()"
         (input)="onSearchInput($any($event.target).value)"
-        placeholder="Search title or slug"
+        placeholder="Find title or slug"
         i18n-placeholder="@@history.search.placeholder"
-        aria-label="Search history"
+        aria-label="Find in history"
         i18n-aria-label="@@history.search.aria"
       />
       @if (searchInputValue()) {
@@ -38,7 +38,7 @@
           type="button"
           class="search-clear"
           (click)="clearSearch()"
-          aria-label="Clear search"
+          aria-label="Clear find"
           i18n-aria-label="@@history.search.clear"
         >
           <jj-icon name="clear" />

@@ -5,9 +5,9 @@
       type="search"
       class="tree-search"
       [class.tree-search--invalid]="searchRegexInvalid()"
-      placeholder="Search keys, values, or paths..."
+      placeholder="Find keys, values, or paths..."
       i18n-placeholder="@@tree.search.placeholder"
-      aria-label="Search tree"
+      aria-label="Find in tree"
       i18n-aria-label="@@tree.search.aria"
       [value]="search()"
       (input)="onSearchInput($event)"
@@ -200,12 +200,26 @@
     <span class="tree-value-string">"x"</span>
   </div>
   @if (root()) {
-    <mat-tree [dataSource]="dataSource" [treeControl]="treeControl">
+    <mat-tree
+      [dataSource]="dataSource"
+      [treeControl]="treeControl"
+      [attr.aria-label]="treeAriaLabel"
+    >
       <!-- Leaf nodes -->
-      <mat-nested-tree-node *matTreeNodeDef="let node">
+      <mat-nested-tree-node
+        *matTreeNodeDef="let node"
+        [attr.data-tree-node-path]="node.pathString"
+        [attr.aria-level]="nodeAriaLevel(node)"
+        [attr.aria-posinset]="nodePosInSet(node)"
+        [attr.aria-setsize]="nodeSetSize(node)"
+        [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
+        [attr.tabindex]="rowTabIndex(node)"
+        (keydown)="onTreeKeydown($event, node)"
+      >
         @let manualHighlight = resolvedHighlightsByPath().get(node.pathString);
         <div
           class="tree-row jj-no-select"
+          role="presentation"
           [attr.data-path]="node.pathString"
           [style]="ruleStyleVars(node)"
           [style.--manual-highlight]="manualHighlight?.color ?? null"
@@ -216,7 +230,6 @@
           [class.is-ancestor]="ancestorPaths().has(node.pathString)"
           [class.is-match]="matchingPaths().has(node.pathString)"
           [class.is-selected]="selectedPath() === node.pathString"
-          [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
           (click)="onSelect(node, $event)"
           (contextmenu)="onRowContextMenu($event, node)"
           (dblclick)="onRowDblClick($event, node)"
@@ -234,7 +247,7 @@
           }
 
           @for (ki of keyIcons(node); track ki) {
-            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="13" />
+            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="'auto'" />
           }
           @if (node.segment !== undefined) {
             @if (segmentIsIndex(node)) {
@@ -245,7 +258,7 @@
           }
 
           @for (vi of valueIcons(node); track vi) {
-            <jj-icon class="tree-rule-icon tree-rule-icon--value" [name]="vi" [size]="13" />
+            <jj-icon class="tree-rule-icon tree-rule-icon--value" [name]="vi" [size]="'auto'" />
           }
           @switch (node.type) {
             @case ('string') {
@@ -319,7 +332,7 @@
                   i18n-aria-label="@@tree.extract.button.aria"
                   aria-label="Extract embedded JSON from this string"
                 >
-                  <jj-icon name="extract" [size]="15" />
+                  <jj-icon name="extract" [size]="'auto'" />
                 </button>
               }
               @if (decodedCandidate(node)) {
@@ -331,7 +344,7 @@
                   [attr.aria-label]="isDecoded(node) ? decodedHideAriaLabel : decodedShowAriaLabel"
                   (click)="onDecodedButtonClick(node, $event)"
                 >
-                  <jj-icon name="decoded" [size]="15" />
+                  <jj-icon name="decoded" [size]="'auto'" />
                 </button>
               }
               <button
@@ -342,7 +355,7 @@
                 [attr.aria-label]="kebabAriaLabel"
                 [attr.title]="kebabTitleLabel"
               >
-                <jj-icon name="more-vert" [size]="15" />
+                <jj-icon name="more-vert" [size]="'auto'" />
               </button>
             </span>
           } @else {
@@ -368,7 +381,7 @@
                   i18n-aria-label="@@tree.extract.button.aria"
                   aria-label="Extract embedded JSON from this string"
                 >
-                  <jj-icon name="extract" [size]="15" />
+                  <jj-icon name="extract" [size]="'auto'" />
                 </button>
               }
               @if (decodedCandidate(node)) {
@@ -380,7 +393,7 @@
                   [attr.aria-label]="isDecoded(node) ? decodedHideAriaLabel : decodedShowAriaLabel"
                   (click)="onDecodedButtonClick(node, $event)"
                 >
-                  <jj-icon name="decoded" [size]="15" />
+                  <jj-icon name="decoded" [size]="'auto'" />
                 </button>
               }
               <button
@@ -391,7 +404,7 @@
                 [attr.aria-label]="kebabAriaLabel"
                 [attr.title]="kebabTitleLabel"
               >
-                <jj-icon name="more-vert" [size]="15" />
+                <jj-icon name="more-vert" [size]="'auto'" />
               </button>
             </span>
           }
@@ -402,10 +415,21 @@
       </mat-nested-tree-node>
 
       <!-- Container nodes -->
-      <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
+      <mat-nested-tree-node
+        *matTreeNodeDef="let node; when: hasChild"
+        [attr.data-tree-node-path]="node.pathString"
+        [attr.aria-level]="nodeAriaLevel(node)"
+        [attr.aria-posinset]="nodePosInSet(node)"
+        [attr.aria-setsize]="nodeSetSize(node)"
+        [attr.aria-expanded]="treeControl.isExpanded(node)"
+        [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
+        [attr.tabindex]="rowTabIndex(node)"
+        (keydown)="onTreeKeydown($event, node)"
+      >
         @let manualHighlight = resolvedHighlightsByPath().get(node.pathString);
         <div
           class="tree-row jj-no-select"
+          role="presentation"
           [attr.data-path]="node.pathString"
           [style]="ruleStyleVars(node)"
           [style.--manual-highlight]="manualHighlight?.color ?? null"
@@ -416,7 +440,6 @@
           [class.is-ancestor]="ancestorPaths().has(node.pathString)"
           [class.is-match]="matchingPaths().has(node.pathString)"
           [class.is-selected]="selectedPath() === node.pathString"
-          [attr.aria-selected]="selectedPath() === node.pathString ? 'true' : null"
           (click)="onSelect(node, $event)"
           (contextmenu)="onRowContextMenu($event, node)"
           (dblclick)="onRowDblClick($event, node)"
@@ -429,7 +452,7 @@
           >
             <jj-icon
               [name]="treeControl.isExpanded(node) ? 'chevron-down' : 'chevron-right'"
-              [size]="14"
+              [size]="'auto'"
             />
           </button>
 
@@ -442,7 +465,7 @@
               matTooltipShowDelay="500"
               (click)="onAncestorBadgeClick(node, ai, $event)"
             >
-              <jj-icon [name]="ai" [size]="12" />
+              <jj-icon [name]="ai" [size]="'auto'" />
             </button>
           }
 
@@ -457,7 +480,7 @@
           }
 
           @for (ki of keyIcons(node); track ki) {
-            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="13" />
+            <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="'auto'" />
           }
           @if (node.segment !== undefined) {
             @if (segmentIsIndex(node)) {
@@ -502,7 +525,7 @@
               [attr.aria-label]="kebabAriaLabel"
               [attr.title]="kebabTitleLabel"
             >
-              <jj-icon name="more-vert" [size]="15" />
+              <jj-icon name="more-vert" [size]="'auto'" />
             </button>
           </span>
           @if (manualHighlight) {
@@ -510,12 +533,17 @@
           }
         </div>
 
-        <div class="tree-children" [class.tree-children-hidden]="!treeControl.isExpanded(node)">
+        <div
+          class="tree-children"
+          role="group"
+          [class.tree-children-hidden]="!treeControl.isExpanded(node)"
+        >
           <ng-container matTreeNodeOutlet></ng-container>
           @if (treeControl.isExpanded(node)) {
             @let closeManualHighlight = cascadeHighlightsByPath().get(node.pathString);
             <div
               class="tree-row tree-row--close"
+              role="presentation"
               [attr.data-close-path]="node.pathString"
               [class.has-manual-highlight]="closeManualHighlight"
               [style.--manual-highlight]="closeManualHighlight?.color ?? null"
@@ -574,22 +602,34 @@
 
 <mat-menu #rowMenu="matMenu" class="jj-menu tree-row-menu">
   @if (contextNode(); as cn) {
+    <!-- Copy section -->
     <button
       mat-menu-item
       type="button"
-      class="ctx-default-action"
+      [class.ctx-default-action]="defaultActionKind() === 'copyValue'"
       (click)="copyValue(cn, 'menu', $event.altKey)"
     >
-      {{ ctxCopyValueLabel }}
+      <jj-icon name="copy" [size]="18" />
+      <span>{{ ctxCopyValueLabel }}</span>
+      @if (defaultActionKind() === 'copyValue') {
+        <span class="sr-only">{{ defaultActionA11yHint }}</span>
+      }
     </button>
     @if (showCopyKey(cn)) {
       <button mat-menu-item type="button" (click)="copyKey(cn)">
-        {{ ctxCopyKeyLabel }}
+        <jj-icon name="key" [size]="18" />
+        <span>{{ ctxCopyKeyLabel }}</span>
       </button>
     }
     <button mat-menu-item type="button" (click)="copyPathFromMenu(cn)">
-      {{ ctxCopyPathLabel }}
+      <jj-icon name="copy-path" [size]="18" />
+      <span>{{ ctxCopyPathLabel }}</span>
     </button>
+    <!-- Transform section: Extract / Decode (conditional). Existing
+         icons preserved here; Phase 3 adds icons elsewhere. -->
+    @if (extractCandidate(cn) || decodedCandidate(cn)) {
+      <mat-divider />
+    }
     @if (extractCandidate(cn)) {
       <button mat-menu-item type="button" (click)="onExtractMenuClick(cn)">
         <jj-icon name="extract" [size]="18" />
@@ -602,7 +642,9 @@
         <span>{{ isDecoded(cn) ? decodedHideMenuLabel : decodedShowMenuLabel }}</span>
       </button>
     }
-    @if (showAnyHighlightAction(cn)) {
+    <!-- Mark section: single-row Highlight + Remove highlight.
+         Subtree-scoped Highlight lives inside the Subtree submenu. -->
+    @if (showHighlight(cn) || showRemoveHighlight(cn)) {
       <mat-divider />
     }
     @if (showHighlight(cn)) {
@@ -613,9 +655,139 @@
         (click)="onHighlightItemClick($event, cn, false)"
         (menuOpened)="onSwatchMenuOpened('single')"
       >
-        {{ ctxHighlightLabel }}
+        <jj-icon name="bookmark" [size]="18" />
+        <span>{{ ctxHighlightLabel }}</span>
       </button>
     }
+    @if (showRemoveHighlight(cn)) {
+      <button mat-menu-item type="button" (click)="removeManualHighlight(cn)">
+        <jj-icon name="trash" [size]="18" />
+        <span>{{ ctxRemoveHighlightLabel }}</span>
+      </button>
+    }
+    <!-- Find section -->
+    @if (showFindByKey(cn) || showFindByValue(cn)) {
+      <mat-divider />
+    }
+    @if (showFindByKey(cn)) {
+      <button mat-menu-item type="button" (click)="findByKey(cn)">
+        <jj-icon name="find-by-key" [size]="18" />
+        <span>{{ ctxFindByKeyLabel }}</span>
+      </button>
+    }
+    @if (showFindByValue(cn)) {
+      <button mat-menu-item type="button" (click)="findByValue(cn)">
+        <jj-icon name="find-by-value" [size]="18" />
+        <span>{{ ctxFindByValueLabel }}</span>
+      </button>
+    }
+    <!-- Reshape section: surfaced default-shortcut + Subtree submenu.
+         The surfaced row carries the .ctx-default-action class only
+         here (not at the top Copy value row) when the dblclick action
+         is collapse / expand-1-level. For primitives and empty
+         containers the bolding lives on Copy value at the top. -->
+    @if (surfacedShortcutLabel() || showSubtreeMenu(cn)) {
+      <mat-divider />
+    }
+    @if (surfacedShortcutLabel(); as label) {
+      <button
+        mat-menu-item
+        type="button"
+        class="ctx-default-action"
+        (click)="onSurfacedShortcutClick(cn)"
+      >
+        @if (surfacedShortcutIconName(); as iconName) {
+          <jj-icon [name]="iconName" [size]="18" />
+        }
+        <span>{{ label }}</span>
+        <span class="sr-only">{{ defaultActionA11yHint }}</span>
+      </button>
+    }
+    @if (showSubtreeMenu(cn)) {
+      <button
+        mat-menu-item
+        type="button"
+        [matMenuTriggerFor]="subtreeMenu"
+        (menuOpened)="onSubtreeMenuOpened()"
+      >
+        <jj-icon name="subtree" [size]="18" />
+        <span>{{ ctxSubtreeMenuLabel }}</span>
+      </button>
+    } @else if (subtreeElevatedAction(cn); as elevated) {
+      <!--
+        Single-item Subtree elevation (v0.19.4): when the Subtree
+        submenu would only contain one visible action, that action
+        is rendered directly in the row menu instead of nested
+        behind a `Subtree >` flyout. Eliminates the "open submenu
+        with only one option" UX. `'collapseSame'` and `'expandSame'`
+        sentinels suppress entirely (the action is already on the
+        surfaced default-shortcut row).
+      -->
+      @switch (elevated.kind) {
+        @case ('highlightTree') {
+          <button
+            mat-menu-item
+            type="button"
+            [matMenuTriggerFor]="highlightTreeMenu"
+            (click)="onHighlightItemClick($event, cn, true)"
+            (menuOpened)="onSwatchMenuOpened('cascade')"
+          >
+            <jj-icon name="bookmark" [size]="18" />
+            <span>{{ ctxHighlightTreeElevatedLabel }}</span>
+          </button>
+        }
+        @case ('removeTreeHighlight') {
+          <button
+            mat-menu-item
+            type="button"
+            [attr.aria-label]="removeTreeHighlightAriaLabel(cn)"
+            (click)="removeManualTreeHighlight(cn)"
+          >
+            <jj-icon name="trash" [size]="18" />
+            <span>{{ ctxRemoveTreeHighlightElevatedLabel }}</span>
+          </button>
+        }
+        @case ('collapse') {
+          <button mat-menu-item type="button" (click)="collapseFromHere(cn)">
+            <jj-icon name="collapse-subtree" [size]="18" />
+            <span>{{ ctxCollapseFromHereLabel }}</span>
+          </button>
+        }
+        @case ('isolate') {
+          <button mat-menu-item type="button" (click)="isolateRow(cn, 'single')">
+            <jj-icon name="isolate" [size]="18" />
+            <span>{{ ctxIsolateLabel }}</span>
+          </button>
+        }
+        @case ('expandSingle') {
+          <button
+            mat-menu-item
+            type="button"
+            (click)="onExpandSingleElevatedClick(cn, elevated.single)"
+          >
+            <jj-icon name="expand-subtree" [size]="18" />
+            <span>{{ expandSingleElevatedLabel(elevated.single) }}</span>
+          </button>
+        }
+        @case ('expandSubmenu') {
+          <button mat-menu-item type="button" [matMenuTriggerFor]="expandFromHereMenu">
+            <jj-icon name="expand-subtree" [size]="18" />
+            <span>{{ ctxExpandFromHereElevatedMenuLabel }}</span>
+          </button>
+        }
+      }
+    }
+  }
+</mat-menu>
+
+<!--
+  Subtree submenu: contains every subtree-affecting action. Items
+  inside drop the "from here" / "subtree" suffix because the submenu
+  name carries the scope. Spec terms (Isolate, Collapse siblings)
+  preserved per DESIGN_SPEC.md §514.
+-->
+<mat-menu #subtreeMenu="matMenu" class="jj-menu tree-row-menu">
+  @if (contextNode(); as cn) {
     @if (showHighlightTree(cn)) {
       <button
         mat-menu-item
@@ -624,12 +796,8 @@
         (click)="onHighlightItemClick($event, cn, true)"
         (menuOpened)="onSwatchMenuOpened('cascade')"
       >
-        {{ ctxHighlightTreeLabel }}
-      </button>
-    }
-    @if (showRemoveHighlight(cn)) {
-      <button mat-menu-item type="button" (click)="removeManualHighlight(cn)">
-        {{ ctxRemoveHighlightLabel }}
+        <jj-icon name="bookmark" [size]="18" />
+        <span>{{ ctxHighlightTreeLabel }}</span>
       </button>
     }
     @if (showRemoveTreeHighlight(cn)) {
@@ -639,57 +807,90 @@
         [attr.aria-label]="removeTreeHighlightAriaLabel(cn)"
         (click)="removeManualTreeHighlight(cn)"
       >
-        {{ ctxRemoveTreeHighlightLabel }}
-      </button>
-    }
-    @if (showSearchByKey(cn) || showSearchByValue(cn)) {
-      <mat-divider />
-    }
-    @if (showSearchByKey(cn)) {
-      <button mat-menu-item type="button" (click)="searchByKey(cn)">
-        {{ ctxSearchByKeyLabel }}
-      </button>
-    }
-    @if (showSearchByValue(cn)) {
-      <button mat-menu-item type="button" (click)="searchByValue(cn)">
-        {{ ctxSearchByValueLabel }}
+        <jj-icon name="trash" [size]="18" />
+        <span>{{ ctxRemoveTreeHighlightLabel }}</span>
       </button>
     }
     @if (
-      showCollapse(cn) ||
-      showIsolateSingle(cn) ||
-      showIsolatePair(cn) ||
-      showExpandAllFromHere(cn) ||
-      showExpandToDepth(cn, 1) ||
-      showExpandToDepth(cn, 2) ||
-      showExpandToDepth(cn, 3) ||
-      showExpandToDepth(cn, 4) ||
-      showExpandToDepth(cn, 5)
+      (showHighlightTree(cn) || showRemoveTreeHighlight(cn)) &&
+      (showCollapse(cn) || showIsolateSingle(cn) || showIsolatePair(cn))
     ) {
       <mat-divider />
     }
     @if (showCollapse(cn)) {
       <button mat-menu-item type="button" (click)="collapseFromHere(cn)">
-        {{ ctxCollapseLabel }}
+        <jj-icon name="collapse-subtree" [size]="18" />
+        <span>{{ ctxSubtreeCollapseLabel }}</span>
       </button>
     }
     @if (showIsolateSingle(cn)) {
       <button mat-menu-item type="button" (click)="isolateRow(cn, 'single')">
-        {{ ctxIsolateLabel }}
+        <jj-icon name="isolate" [size]="18" />
+        <span>{{ ctxIsolateLabel }}</span>
       </button>
     }
     @if (showIsolatePair(cn)) {
       <button mat-menu-item type="button" (click)="collapseSiblings(cn)">
-        {{ ctxCollapseSiblingsLabel }}
+        <jj-icon name="collapse-siblings" [size]="18" />
+        <span>{{ ctxCollapseSiblingsLabel }}</span>
       </button>
       <button mat-menu-item type="button" (click)="isolateRow(cn, 'wide')">
-        {{ ctxIsolateLabel }}
+        <jj-icon name="isolate" [size]="18" />
+        <span>{{ ctxIsolateLabel }}</span>
       </button>
     }
+    @if (
+      (showCollapse(cn) || showIsolateSingle(cn) || showIsolatePair(cn)) &&
+      showExpandFromHereMenu(cn)
+    ) {
+      <mat-divider />
+    }
+    @if (showExpandFromHereSubmenu(cn)) {
+      <button mat-menu-item type="button" [matMenuTriggerFor]="expandFromHereMenu">
+        <jj-icon name="expand-subtree" [size]="18" />
+        <span>{{ ctxSubtreeExpandMenuLabel }}</span>
+      </button>
+    } @else if (expandFromHereSingleAction(cn); as single) {
+      <!--
+        Single-item Expand elevation inside Subtree (v0.19.4):
+        when the Expand sub-submenu would only contain one item,
+        that item renders inline within Subtree instead of nested
+        behind another `Expand >` flyout. Label uses the elevated
+        form (e.g. "Expand all from here") because the submenu's
+        scope is no longer carried by an "Expand" name.
+      -->
+      <button mat-menu-item type="button" (click)="onExpandSingleElevatedClick(cn, single)">
+        <jj-icon name="expand-subtree" [size]="18" />
+        <span>{{ expandSingleElevatedLabel(single) }}</span>
+      </button>
+    }
+  }
+</mat-menu>
+
+<!--
+  Expand-from-here sub-submenu (inside Subtree). Per DESIGN_SPEC.md
+  §516, depth labels carry "+N" prefix to distinguish relative
+  expand-only semantics from the toolbar's absolute "Expand to Level"
+  dropdown. "All" reuses the existing @@tree.contextMenu.expandAllFromHere
+  i18n ID with new source text "All" (the longer "Expand all from
+  here" reading would duplicate the parent submenu name).
+-->
+<mat-menu #expandFromHereMenu="matMenu" class="jj-menu tree-row-menu">
+  @if (contextNode(); as cn) {
     @if (showExpandAllFromHere(cn)) {
       <button mat-menu-item type="button" (click)="expandAllFromHere(cn)">
-        {{ ctxExpandAllFromHereLabel }}
+        {{ ctxSubtreeExpandAllLabel }}
       </button>
+    }
+    @if (
+      showExpandAllFromHere(cn) &&
+      (showExpandToDepth(cn, 1) ||
+        showExpandToDepth(cn, 2) ||
+        showExpandToDepth(cn, 3) ||
+        showExpandToDepth(cn, 4) ||
+        showExpandToDepth(cn, 5))
+    ) {
+      <mat-divider />
     }
     @if (showExpandToDepth(cn, 1)) {
       <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 1)">

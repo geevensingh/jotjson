@@ -30,3 +30,8 @@ src/testing/fixtures/
 # actionlint can validate locally before push. Workflows can be
 # folded back in once that validation step is added.
 .github/workflows/
+
+# Scratch / preview artifacts (HTML mockups, ad-hoc renders, plan-review
+# pages produced by the visual-explainer skill, etc.). Mirrors the
+# /output/ entry in .gitignore.
+output/

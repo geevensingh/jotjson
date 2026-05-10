@@ -1,4 +1,4 @@
-import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, flushMicrotasks, TestBed, tick } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { Title, By } from '@angular/platform-browser';
 import { EMPTY, Subject, of, throwError } from 'rxjs';
@@ -8,12 +8,12 @@ import { HomeComponent } from './home.component';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { DraftService } from '../../core/preferences/draft.service';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
-import { provideRouter, Router } from '@angular/router';
+import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { BlobService, type BlobSyncEvent } from '../../core/api/blob.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import type { BlobHighlight, JsonBlob } from '../../core/api/models';
 import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
@@ -24,14 +24,25 @@ import { extractFromMixedText as extractFromMixedTextCore } from '../../core/jso
 import type { ParseJsonCandidate } from '../../core/json/json-extractor.core';
 import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { LoggerService } from '../../core/telemetry/logger.service';
+import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
-import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
+import {
+  ClipboardPollingService,
+  type ClipboardGrantedReadResult,
+  type ClipboardPermissionState,
+} from '../../core/clipboard/clipboard-polling.service';
+import {
+  ColdBootClipboardBannerComponent,
+  type ColdBootClipboardChoice,
+} from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
 import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
 import {
   JsonTreeComponent,
   type TreeExtractRequest,
 } from '../../shared/components/json-tree/json-tree.component';
+import { BeaconNavigationService } from '../../core/beacons/beacon-navigation.service';
+import { installMatchMediaStub } from '../../../testing/match-media.testing';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -51,8 +62,38 @@ const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
  * integration layer's job. See DESIGN_SPEC.md > Testing strategy.
  */
 function setupMinimalMonacoStub(): void {
-  beforeEach(() => installMinimalMonacoStub());
-  afterEach(() => restoreMonacoStub());
+  beforeEach(() => {
+    installMinimalMonacoStub();
+    sharedMatchMediaHarness = installMatchMediaStub();
+    sharedMatchMediaHarness.set('(max-width: 767.98px)', false);
+  });
+  afterEach(() => {
+    restoreMonacoStub();
+    sharedMatchMediaHarness?.uninstall();
+    sharedMatchMediaHarness = null;
+  });
+}
+
+let sharedMatchMediaHarness: ReturnType<typeof installMatchMediaStub> | null = null;
+
+function setNarrowViewport(narrow: boolean): void {
+  if (!sharedMatchMediaHarness) {
+    throw new Error('setupMinimalMonacoStub() must be active to control narrow viewport');
+  }
+  sharedMatchMediaHarness.set('(max-width: 767.98px)', narrow);
+}
+
+function fireNarrowViewport(narrow: boolean): void {
+  if (!sharedMatchMediaHarness) {
+    throw new Error('setupMinimalMonacoStub() must be active to control narrow viewport');
+  }
+  sharedMatchMediaHarness.fire('(max-width: 767.98px)', narrow);
+}
+
+function waitForSingleAnimationFrame(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 }
 
 function waitForDoubleAnimationFrame(): Promise<void> {
@@ -67,6 +108,13 @@ function waitForTaskQueue(): Promise<void> {
   return new Promise<void>((resolve) => {
     setTimeout(() => resolve(), 0);
   });
+}
+
+function attachToBody(fixture: ComponentFixture<unknown>): () => void {
+  document.body.appendChild(fixture.nativeElement);
+  return () => {
+    fixture.nativeElement.remove();
+  };
 }
 
 function clearHomeStorage(): void {
@@ -839,6 +887,800 @@ describe('HomeComponent (unit-level)', () => {
     c.onKeydown(ev2);
     expect(focusSpy).toHaveBeenCalled();
     expect(ev2.preventDefault).toHaveBeenCalled();
+  });
+});
+
+describe('HomeComponent narrow-viewport responsive layout (M7l)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])],
+    });
+  });
+
+  afterEach(() => {
+    clearHomeStorage();
+  });
+
+  function createHome(narrow: boolean): {
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>;
+    c: HomeComponent;
+  } {
+    setNarrowViewport(narrow);
+    const fixture = TestBed.createComponent(HomeComponent);
+    return { fixture, c: fixture.componentInstance };
+  }
+
+  it('effectivePaneVisibility collapses persisted "both" to "tree-only" only when narrow', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    c.paneVisibility.set('editor-only');
+    expect(c.effectivePaneVisibility()).toBe('editor-only');
+
+    c.paneVisibility.set('tree-only');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    fireNarrowViewport(false);
+    c.paneVisibility.set('both');
+    expect(c.effectivePaneVisibility()).toBe('both');
+
+    c.paneVisibility.set('editor-only');
+    expect(c.effectivePaneVisibility()).toBe('editor-only');
+
+    c.paneVisibility.set('tree-only');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+  });
+
+  it('persisted paneVisibility is never mutated by the narrow override', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.paneVisibility()).toBe('both');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    fireNarrowViewport(false);
+    expect(c.paneVisibility()).toBe('both');
+    expect(c.effectivePaneVisibility()).toBe('both');
+  });
+
+  it('paneLayout reflects effective (not persisted) visibility at narrow', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.paneLayout()).toBe('tree-only');
+
+    fireNarrowViewport(false);
+    expect(c.paneLayout()).toBe('both-horizontal');
+
+    TestBed.inject(PreferencesService).update({ layoutOrientation: 'vertical' });
+    expect(c.paneLayout()).toBe('both-vertical');
+
+    fireNarrowViewport(true);
+    expect(c.paneLayout()).toBe('tree-only');
+  });
+
+  it('splitStyle collapses to a single 1fr track when effective visibility is single-pane at narrow', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.splitStyle()).toEqual({ 'grid-template-columns': '1fr' });
+
+    fireNarrowViewport(false);
+    expect(c.splitStyle()['grid-template-columns']).toContain('50.000%');
+  });
+
+  it('host element gets .tree-only class at narrow when persisted is "both"', () => {
+    const { fixture } = createHome(true);
+    fixture.componentInstance.paneVisibility.set('both');
+    fixture.detectChanges();
+    const split = fixture.nativeElement.querySelector('.split') as HTMLElement | null;
+    expect(split?.classList.contains('tree-only')).toBeTrue();
+    expect(split?.classList.contains('editor-only')).toBeFalse();
+  });
+
+  it('host element honors persisted "editor-only" at narrow', () => {
+    const { fixture } = createHome(true);
+    fixture.componentInstance.paneVisibility.set('editor-only');
+    fixture.detectChanges();
+    const split = fixture.nativeElement.querySelector('.split') as HTMLElement | null;
+    expect(split?.classList.contains('editor-only')).toBeTrue();
+    expect(split?.classList.contains('tree-only')).toBeFalse();
+  });
+
+  it('dispatchBeaconJump routes to tree (not the hidden editor) at narrow with persisted "both" + lastActive "editor"', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    const beaconNav = TestBed.inject(BeaconNavigationService);
+    beaconNav.markEditorActive();
+    expect(beaconNav.lastActivePane()).toBe('editor');
+
+    const tree = jasmine.createSpyObj('JsonTreeComponent', ['selectByPathString']);
+    spyOn(c as unknown as { tree: () => unknown }, 'tree').and.returnValue(tree);
+
+    beaconNav.requestJump({ path: ['a', 0], icon: 'warning', source: 'pill' });
+
+    expect(tree.selectByPathString).toHaveBeenCalled();
+  });
+
+  it('dispatchBeaconJump still uses lastActivePane when wide with persisted "both"', () => {
+    const { c } = createHome(false);
+    c.paneVisibility.set('both');
+    const beaconNav = TestBed.inject(BeaconNavigationService);
+    beaconNav.markEditorActive();
+
+    const tree = jasmine.createSpyObj('JsonTreeComponent', ['selectByPathString']);
+    spyOn(c as unknown as { tree: () => unknown }, 'tree').and.returnValue(tree);
+
+    beaconNav.requestJump({ path: ['a', 0], icon: 'warning', source: 'pill' });
+
+    expect(tree.selectByPathString).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+F skips tree-search routing at narrow when persisted is "both" (tree pane is hidden via override)', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    const focusSpy = spyOn(c as unknown as { focusTreeSearch: () => void }, 'focusTreeSearch');
+    const ev = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true });
+    spyOn(ev, 'preventDefault');
+    c.onKeydown(ev);
+    expect(focusSpy).toHaveBeenCalled();
+    expect(ev.preventDefault).toHaveBeenCalled();
+  });
+
+  it('onSplitterPointerDown is a no-op when effective visibility is not "both" at narrow', () => {
+    const { c } = createHome(true);
+    c.paneVisibility.set('both');
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    const setPointerCapture = jasmine.createSpy('setPointerCapture');
+    const addEventListener = jasmine.createSpy('addEventListener');
+    const target = {
+      setPointerCapture,
+      addEventListener,
+      removeEventListener: jasmine.createSpy('removeEventListener'),
+    } as unknown as HTMLElement;
+    const before = c.splitRatio();
+    c.onSplitterPointerDown({
+      button: 0,
+      pointerId: 1,
+      currentTarget: target,
+      preventDefault: jasmine.createSpy('preventDefault'),
+    } as unknown as PointerEvent);
+
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(addEventListener).not.toHaveBeenCalled();
+    expect(c.splitRatio()).toBe(before);
+  });
+
+  it('mid-drag move handler bails when narrow flips during drag', () => {
+    const { fixture, c } = createHome(false);
+    c.paneVisibility.set('both');
+    c.splitRatio.set(0.5);
+    fixture.detectChanges();
+    expect(c.effectivePaneVisibility()).toBe('both');
+
+    const splitHostEl = (
+      c as unknown as { splitHost: () => { nativeElement: HTMLElement } | undefined }
+    ).splitHost();
+    expect(splitHostEl).toBeTruthy();
+    spyOn(splitHostEl!.nativeElement, 'getBoundingClientRect').and.returnValue({
+      top: 0,
+      left: 0,
+      right: 1000,
+      bottom: 1000,
+      width: 1000,
+      height: 1000,
+      x: 0,
+      y: 0,
+      toJSON(): unknown {
+        return {};
+      },
+    });
+
+    let moveHandler: ((event: PointerEvent) => void) | null = null;
+    const target = {
+      setPointerCapture: jasmine.createSpy('setPointerCapture'),
+      releasePointerCapture: jasmine.createSpy('releasePointerCapture'),
+      addEventListener: jasmine
+        .createSpy('addEventListener')
+        .and.callFake((type: string, fn: (event: PointerEvent) => void) => {
+          if (type === 'pointermove') moveHandler = fn;
+        }),
+      removeEventListener: jasmine.createSpy('removeEventListener'),
+    } as unknown as HTMLElement;
+
+    c.onSplitterPointerDown({
+      button: 0,
+      pointerId: 1,
+      currentTarget: target,
+      preventDefault: jasmine.createSpy('preventDefault'),
+    } as unknown as PointerEvent);
+
+    expect(moveHandler).withContext('move handler should have been registered').not.toBeNull();
+
+    moveHandler!({ clientX: 700, clientY: 500 } as PointerEvent);
+    expect(c.splitRatio()).toBeCloseTo(0.7, 3);
+
+    fireNarrowViewport(true);
+    expect(c.effectivePaneVisibility()).toBe('tree-only');
+
+    moveHandler!({ clientX: 200, clientY: 500 } as PointerEvent);
+    expect(c.splitRatio()).toBeCloseTo(0.7, 3);
+  });
+});
+
+describe('cold-boot clipboard auto-paste', () => {
+  setupMinimalMonacoStub();
+
+  type HomeFixture = ComponentFixture<HomeComponent>;
+  type ReadResult = ClipboardGrantedReadResult;
+  type Preference = 'ask' | 'always' | 'never';
+
+  interface DeferredPromise<T> {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (reason?: unknown) => void;
+  }
+
+  interface SnackBarStub {
+    open: jasmine.Spy<
+      (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
+    >;
+  }
+
+  interface LoadingSplashStub {
+    beginBootstrapHold: jasmine.Spy<(reason: 'coldBootClipboard', maxMs: number) => () => void>;
+    markBlobRenderComplete: jasmine.Spy<() => void>;
+  }
+
+  interface ColdBootHarness {
+    fixture: HomeFixture;
+    component: HomeComponent;
+    preferences: PreferencesService;
+    clipboard: Partial<ClipboardPollingService> & {
+      readGrantedClipboardOnce: jasmine.Spy<(reason: 'coldBootAutoPaste') => Promise<ReadResult>>;
+      awaitPermissionReady: jasmine.Spy<() => Promise<void>>;
+      permissionReadySignal: ReturnType<typeof signal<boolean>>;
+      permissionStateSignal: ReturnType<typeof signal<ClipboardPermissionState>>;
+    };
+    snack: SnackBarStub;
+    snackAction: Subject<void>;
+    snackRef: MatSnackBarRef<TextOnlySnackBar>;
+    loadingSplash: LoadingSplashStub;
+    releaseSpies: jasmine.Spy<() => void>[];
+    eventSpy: jasmine.Spy<LoggerService['event']>;
+  }
+
+  function createDeferredPromise<T>(): DeferredPromise<T> {
+    let resolvePromise: ((value: T) => void) | undefined;
+    let rejectPromise: ((reason?: unknown) => void) | undefined;
+    const promise = new Promise<T>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    if (!resolvePromise || !rejectPromise) {
+      throw new Error('Deferred promise callbacks were not initialized');
+    }
+    return { promise, resolve: resolvePromise, reject: rejectPromise };
+  }
+
+  function makeSnackBarRef(actionSubject: Subject<void>): MatSnackBarRef<TextOnlySnackBar> {
+    const dismissed = new Subject<unknown>();
+    const snackRef: Partial<MatSnackBarRef<TextOnlySnackBar>> & {
+      __dismissedSubject: Subject<unknown>;
+    } = {
+      onAction: () => actionSubject.asObservable(),
+      afterDismissed: () =>
+        dismissed.asObservable() as unknown as ReturnType<
+          MatSnackBarRef<TextOnlySnackBar>['afterDismissed']
+        >,
+      dismiss: jasmine.createSpy('dismiss'),
+      __dismissedSubject: dismissed,
+    };
+    return snackRef as unknown as MatSnackBarRef<TextOnlySnackBar>;
+  }
+
+  function createColdBootHarness(
+    options: {
+      preference?: Preference;
+      permissionState?: ClipboardPermissionState;
+      permissionReady?: boolean;
+      permissionReadyPromise?: Promise<void>;
+      readResult?: ReadResult;
+      readPromise?: Promise<ReadResult>;
+      draft?: string;
+      routePath?: string;
+      routerUrl?: string;
+      initialBlob?: JsonBlob;
+    } = {},
+  ): ColdBootHarness {
+    clearHomeStorage();
+    if (options.draft !== undefined) {
+      localStorage.setItem(DRAFT_KEY, options.draft);
+    }
+
+    TestBed.resetTestingModule();
+    const permissionStateSignal = signal<ClipboardPermissionState>(
+      options.permissionState ?? 'granted',
+    );
+    const permissionReadySignal = signal(options.permissionReady ?? true);
+    const readResult = options.readResult ?? { ok: true, text: '{"clipboard":true}' };
+    const clipboard = {
+      permissionStateSignal,
+      permissionReadySignal,
+      permissionState: permissionStateSignal.asReadonly(),
+      permissionReady: permissionReadySignal.asReadonly(),
+      hasJson: signal(false).asReadonly(),
+      preview: signal('').asReadonly(),
+      readGrantedClipboardOnce: jasmine
+        .createSpy('readGrantedClipboardOnce')
+        .and.callFake(() => options.readPromise ?? Promise.resolve(readResult)),
+      awaitPermissionReady: jasmine
+        .createSpy('awaitPermissionReady')
+        .and.callFake(() => options.permissionReadyPromise ?? Promise.resolve()),
+      checkOnce: jasmine.createSpy('checkOnce').and.returnValue(Promise.resolve()),
+      startPolling: jasmine.createSpy('startPolling'),
+      stopPolling: jasmine.createSpy('stopPolling'),
+    } satisfies Partial<ClipboardPollingService> & {
+      permissionStateSignal: ReturnType<typeof signal<ClipboardPermissionState>>;
+      permissionReadySignal: ReturnType<typeof signal<boolean>>;
+      readGrantedClipboardOnce: jasmine.Spy<(reason: 'coldBootAutoPaste') => Promise<ReadResult>>;
+      awaitPermissionReady: jasmine.Spy<() => Promise<void>>;
+    };
+
+    const releaseSpies: jasmine.Spy<() => void>[] = [];
+    const loadingSplash: LoadingSplashStub = {
+      beginBootstrapHold: jasmine.createSpy('beginBootstrapHold').and.callFake(() => {
+        const release = jasmine.createSpy('releaseColdBootClipboardHold');
+        releaseSpies.push(release);
+        return release;
+      }),
+      markBlobRenderComplete: jasmine.createSpy('markBlobRenderComplete'),
+    };
+    const snackAction = new Subject<void>();
+    const snackRef = makeSnackBarRef(snackAction);
+    const snack: SnackBarStub = {
+      open: jasmine.createSpy('open').and.returnValue(snackRef),
+    };
+    const activatedRoute = {
+      routeConfig: { path: options.routePath ?? '' },
+    } satisfies Partial<ActivatedRoute>;
+
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: activatedRoute },
+        { provide: ClipboardPollingService, useValue: clipboard },
+        { provide: LoadingSplashService, useValue: loadingSplash },
+        { provide: MatSnackBar, useValue: snack },
+      ],
+    });
+
+    const preferences = TestBed.inject(PreferencesService);
+    preferences.update({ coldBootClipboardAutoPaste: options.preference ?? 'ask' });
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const router = TestBed.inject(Router);
+    Object.defineProperty(router, 'url', {
+      configurable: true,
+      get: () => options.routerUrl ?? '/',
+    });
+    Object.defineProperty(router, 'navigated', {
+      configurable: true,
+      get: () => false,
+    });
+
+    const fixture = TestBed.createComponent(HomeComponent);
+    if (options.initialBlob !== undefined) {
+      fixture.componentRef.setInput('initialBlob', options.initialBlob);
+      fixture.componentRef.changeDetectorRef.detectChanges();
+      TestBed.flushEffects();
+    }
+
+    return {
+      fixture,
+      component: fixture.componentInstance,
+      preferences,
+      clipboard,
+      snack,
+      snackAction,
+      snackRef,
+      loadingSplash,
+      releaseSpies,
+      eventSpy,
+    };
+  }
+
+  async function flushColdBootEvaluation(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  async function createAskBannerHarness(text = '{"clipboard":true}'): Promise<ColdBootHarness> {
+    const harness = createColdBootHarness({
+      preference: 'ask',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text },
+    });
+    await flushColdBootEvaluation();
+    harness.fixture.detectChanges();
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeTrue();
+    expectBannerCard(harness.fixture, true);
+    return harness;
+  }
+
+  function expectBannerCard(fixture: HomeFixture, visible: boolean): void {
+    fixture.detectChanges();
+    const bannerCard = fixture.nativeElement.querySelector(
+      'jj-cold-boot-clipboard-banner mat-card',
+    ) as HTMLElement | null;
+    if (visible) {
+      expect(bannerCard).withContext('cold-boot banner card should be visible').not.toBeNull();
+    } else {
+      expect(bannerCard).withContext('cold-boot banner card should be hidden').toBeNull();
+    }
+  }
+
+  function emitColdBootChoice(fixture: HomeFixture, choice: ColdBootClipboardChoice): void {
+    fixture.detectChanges();
+    const bannerDebugElement = fixture.debugElement.query(
+      By.directive(ColdBootClipboardBannerComponent),
+    );
+    expect(bannerDebugElement).withContext('cold-boot banner host should exist').not.toBeNull();
+    const banner = bannerDebugElement.componentInstance as ColdBootClipboardBannerComponent;
+    banner.choice.emit(choice);
+    fixture.detectChanges();
+  }
+
+  function sizeBytes(text: string): number {
+    return new TextEncoder().encode(text).length;
+  }
+
+  function expectColdBootSnack(snack: SnackBarStub): void {
+    expect(snack.open).toHaveBeenCalledOnceWith('Pasted from clipboard.', 'Undo', {
+      duration: 8000,
+    });
+  }
+
+  function coldBootTelemetryArgs(eventSpy: jasmine.Spy<LoggerService['event']>): unknown[][] {
+    return eventSpy.calls
+      .allArgs()
+      .filter(([messageId]) => String(messageId).startsWith('home.clipboard.coldBoot.'));
+  }
+
+  it('permission ungranted -> evaluator does nothing (no banner, no read, no hold)', async () => {
+    const harness = createColdBootHarness({
+      preference: 'always',
+      permissionState: 'denied',
+      permissionReady: true,
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.clipboard.awaitPermissionReady).toHaveBeenCalled();
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expect(harness.snack.open).not.toHaveBeenCalled();
+  });
+
+  it('permission query slow -> evaluator awaits permissionReady before deciding', async () => {
+    const permissionDeferred = createDeferredPromise<void>();
+    const harness = createColdBootHarness({
+      preference: 'always',
+      permissionReady: false,
+      permissionReadyPromise: permissionDeferred.promise,
+    });
+
+    await flushColdBootEvaluation();
+    // Before permission is ready, the silent path must not have started.
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+
+    // Resolve the permission discovery as 'granted'.
+    harness.clipboard.permissionReadySignal.set(true);
+    permissionDeferred.resolve();
+    await flushColdBootEvaluation();
+
+    // Now the silent path proceeds.
+    expect(harness.loadingSplash.beginBootstrapHold).toHaveBeenCalledOnceWith(
+      'coldBootClipboard',
+      150,
+    );
+    expect(harness.clipboard.readGrantedClipboardOnce).toHaveBeenCalledOnceWith(
+      'coldBootAutoPaste',
+    );
+  });
+
+  it('on /s/:slug (initialBlob input is non-null) -> evaluator never fires', async () => {
+    const harness = createColdBootHarness({
+      preference: 'ask',
+      routePath: 's/:slug',
+      routerUrl: '/s/abc123',
+      initialBlob: makeIdentityBlob(),
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectBannerCard(harness.fixture, false);
+  });
+
+  it('editing a saved blob (loadedBlob is non-null at evaluator start) -> never fires', async () => {
+    // Delay permission readiness so we have a window to seed loadedBlob
+    // before the cold-boot evaluator clears its first await.
+    const permissionDeferred = createDeferredPromise<void>();
+    const harness = createColdBootHarness({
+      preference: 'always',
+      permissionReadyPromise: permissionDeferred.promise,
+    });
+
+    harness.component.__loadBlobForTesting(makeIdentityBlob({ content: '{"saved":true}' }));
+    permissionDeferred.resolve();
+    await flushColdBootEvaluation();
+
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+    expect(harness.component.content()).toBe('{"saved":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+  });
+
+  it('editing a saved blob mid-evaluation (loadedBlob becomes non-null between read start and apply) -> apply is aborted', async () => {
+    const deferredRead = createDeferredPromise<ReadResult>();
+    const harness = createColdBootHarness({
+      preference: 'ask',
+      draft: '{"draft":true}',
+      readPromise: deferredRead.promise,
+    });
+
+    harness.component.__loadBlobForTesting(makeIdentityBlob({ content: '{"saved":true}' }));
+    deferredRead.resolve({ ok: true, text: '{"clipboard":true}' });
+    await flushColdBootEvaluation();
+
+    expect(harness.clipboard.readGrantedClipboardOnce).toHaveBeenCalledOnceWith(
+      'coldBootAutoPaste',
+    );
+    expect(harness.component.content()).toBe('{"saved":true}');
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalledWith('home.clipboard.coldBoot.prompt.shown');
+  });
+
+  it("preference 'never' -> never fires; no read", async () => {
+    const harness = createColdBootHarness({ preference: 'never' });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.clipboard.readGrantedClipboardOnce).not.toHaveBeenCalled();
+    expect(harness.loadingSplash.beginBootstrapHold).not.toHaveBeenCalled();
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectBannerCard(harness.fixture, false);
+  });
+
+  it("preference 'ask' + valid object/array JSON -> banner visible; home.clipboard.coldBoot.prompt.shown emitted", async () => {
+    const harness = await createAskBannerHarness('[{"clipboard":true}]');
+
+    expect(harness.clipboard.readGrantedClipboardOnce).toHaveBeenCalledOnceWith(
+      'coldBootAutoPaste',
+    );
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.eventSpy.calls.allArgs()).toEqual([['home.clipboard.coldBoot.prompt.shown']]);
+  });
+
+  it("banner Always click -> sets preference to 'always', replaces document, opens Undo snackbar, emits prompt.choice and autoPaste", async () => {
+    const clipboardText = '{"clipboard":true}';
+    const harness = await createAskBannerHarness(clipboardText);
+    harness.eventSpy.calls.reset();
+
+    emitColdBootChoice(harness.fixture, 'always');
+
+    const bytes = sizeBytes(clipboardText);
+    expect(harness.preferences.prefs().coldBootClipboardAutoPaste).toBe('always');
+    expect(harness.component.content()).toBe(clipboardText);
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectColdBootSnack(harness.snack);
+    expect(coldBootTelemetryArgs(harness.eventSpy)).toEqual([
+      ['home.clipboard.coldBoot.prompt.choice', { choice: 'always' }],
+      [
+        'home.clipboard.coldBoot.autoPaste',
+        { sizeBytesBucket: bucketBytes(bytes) },
+        { sizeBytes: bytes },
+      ],
+    ]);
+  });
+
+  it('banner Just this time click -> replaces document, opens snackbar, emits prompt.choice, does NOT change preference', async () => {
+    const clipboardText = '{"clipboard":true}';
+    const harness = await createAskBannerHarness(clipboardText);
+    harness.eventSpy.calls.reset();
+
+    emitColdBootChoice(harness.fixture, 'just-this-time');
+
+    expect(harness.preferences.prefs().coldBootClipboardAutoPaste).toBe('ask');
+    expect(harness.component.content()).toBe(clipboardText);
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectColdBootSnack(harness.snack);
+    expect(harness.eventSpy.calls.allArgs()).toEqual([
+      ['home.clipboard.coldBoot.prompt.choice', { choice: 'just-this-time' }],
+    ]);
+  });
+
+  it("banner Never click -> sets preference to 'never', no paste, emits prompt.choice", async () => {
+    const harness = await createAskBannerHarness();
+    harness.eventSpy.calls.reset();
+
+    emitColdBootChoice(harness.fixture, 'never');
+
+    expect(harness.preferences.prefs().coldBootClipboardAutoPaste).toBe('never');
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(coldBootTelemetryArgs(harness.eventSpy)).toEqual([
+      ['home.clipboard.coldBoot.prompt.choice', { choice: 'never' }],
+    ]);
+  });
+
+  it('banner dismiss (X / Esc) -> hides, no preference change, no paste, emits prompt.choice', async () => {
+    const harness = await createAskBannerHarness();
+    harness.eventSpy.calls.reset();
+
+    emitColdBootChoice(harness.fixture, 'dismiss');
+
+    expect(harness.preferences.prefs().coldBootClipboardAutoPaste).toBe('ask');
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy.calls.allArgs()).toEqual([
+      ['home.clipboard.coldBoot.prompt.choice', { choice: 'dismiss' }],
+    ]);
+  });
+
+  it("preference 'always' + fast read (<150ms) with valid JSON -> silent paste, snackbar, telemetry, splash hold released", async () => {
+    const clipboardText = '{"clipboard":true}';
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: clipboardText },
+    });
+
+    await flushColdBootEvaluation();
+
+    const bytes = sizeBytes(clipboardText);
+    expect(harness.loadingSplash.beginBootstrapHold).toHaveBeenCalledOnceWith(
+      'coldBootClipboard',
+      150,
+    );
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe(clipboardText);
+    expect(harness.component.coldBootClipboardBannerVisible()).toBeFalse();
+    expectColdBootSnack(harness.snack);
+    expect(harness.eventSpy.calls.allArgs()).toEqual([
+      [
+        'home.clipboard.coldBoot.autoPaste',
+        { sizeBytesBucket: bucketBytes(bytes) },
+        { sizeBytes: bytes },
+      ],
+    ]);
+  });
+
+  it("preference 'always' + slow read (>150ms) -> draft hydrates, splash hold released; late-resolving read does not apply", fakeAsync(() => {
+    const deferredRead = createDeferredPromise<ReadResult>();
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readPromise: deferredRead.promise,
+    });
+
+    expect(harness.component.content()).toBe('{"draft":true}');
+    tick(150);
+    flushMicrotasks();
+
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+
+    deferredRead.resolve({ ok: true, text: '{"clipboard":true}' });
+    flushMicrotasks();
+
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+  }));
+
+  it('preference \'always\' + clipboard primitive (e.g. "hi" or 123) -> no paste; JSON-shape gate', async () => {
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: '"hi"' },
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+  });
+
+  it("preference 'always' + clipboard >1MB -> no paste; size gate", async () => {
+    const oversizedText = `{"value":"${'x'.repeat(1024 * 1024)}"}`;
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: oversizedText },
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(sizeBytes(oversizedText)).toBeGreaterThan(1024 * 1024);
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+  });
+
+  it("preference 'always' + clipboard non-JSON -> no paste", async () => {
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: 'not json' },
+    });
+
+    await flushColdBootEvaluation();
+
+    expect(harness.releaseSpies[0]).toHaveBeenCalledTimes(1);
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.snack.open).not.toHaveBeenCalled();
+    expect(harness.eventSpy).not.toHaveBeenCalled();
+  });
+
+  it('snackbar Undo -> restores prior draft via document replacement; emits autoPaste.undo', async () => {
+    const harness = createColdBootHarness({
+      preference: 'always',
+      draft: '{"draft":true}',
+      readResult: { ok: true, text: '{"clipboard":true}' },
+    });
+    await flushColdBootEvaluation();
+    harness.eventSpy.calls.reset();
+
+    harness.snackAction.next();
+
+    expect(harness.component.content()).toBe('{"draft":true}');
+    expect(harness.eventSpy.calls.allArgs()).toEqual([['home.clipboard.coldBoot.autoPaste.undo']]);
+  });
+
+  it("snackbar reference retained -> verify the cold-boot snackbar's MatSnackBarRef is captured and reachable", async () => {
+    const harness = await createAskBannerHarness();
+    expect(
+      (
+        harness.component as unknown as {
+          coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null;
+        }
+      ).coldBootClipboardSnackRef,
+    ).toBeNull();
+
+    emitColdBootChoice(harness.fixture, 'just-this-time');
+    await flushColdBootEvaluation();
+    harness.fixture.detectChanges();
+
+    const retainedRef = (
+      harness.component as unknown as {
+        coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null;
+      }
+    ).coldBootClipboardSnackRef;
+    expect(retainedRef).withContext('SnackBarRef should be retained after paste').not.toBeNull();
+    expect(retainedRef).toBe(harness.snackRef);
   });
 });
 
@@ -1892,22 +2734,71 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     fixture.detectChanges();
   }
 
-  function openMenuItemLabels(): string[] {
-    return Array.from(document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'))
+  async function expectHighlightActionsVisible(
+    fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,
+    visible: boolean,
+  ): Promise<void> {
+    // Path Y overhaul: subtree-scope highlight items moved into the
+    // Subtree > submenu, where their labels are simply "Highlight" /
+    // "Remove highlight" (the submenu name carries the subtree
+    // scope). The top-level menu still has single-row "Highlight" /
+    // "Remove highlight". So we check both panels -- top-level for
+    // single-row, and inside the Subtree submenu for the cascade
+    // variants.
+    const tree = getTree(fixture);
+    const topPanel = document.body.querySelector<HTMLElement>('.mat-mdc-menu-panel');
+    expect(topPanel).withContext('row menu panel open').toBeTruthy();
+    const topLabels = Array.from(
+      topPanel!.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+    )
       .map((menuItem) => (menuItem.textContent ?? '').trim())
       .filter((text) => text.length > 0);
-  }
 
-  function expectHighlightActionsVisible(visible: boolean): void {
-    const labels = openMenuItemLabels();
-    for (const label of [
-      'Highlight',
-      'Highlight tree',
-      'Remove highlight',
-      'Remove tree highlight',
-    ]) {
-      expect(labels.includes(label)).withContext(`${label} visibility`).toBe(visible);
+    // Top-level: single-row Highlight + Remove highlight. Both
+    // gate on canEditHighlights, so visibility=false -> both absent.
+    expect(topLabels.includes(tree.ctxHighlightLabel))
+      .withContext(`top-level Highlight visibility (visible=${visible})`)
+      .toBe(visible);
+    expect(topLabels.includes(tree.ctxRemoveHighlightLabel))
+      .withContext(`top-level Remove highlight visibility (visible=${visible})`)
+      .toBe(visible);
+
+    if (visible) {
+      // Open the Subtree submenu and check the cascade-scope items.
+      const subtreeTrigger = Array.from(
+        topPanel!.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      ).find((menuItem) => (menuItem.textContent ?? '').trim().includes(tree.ctxSubtreeMenuLabel));
+      expect(subtreeTrigger).withContext('Subtree submenu trigger present').toBeTruthy();
+      subtreeTrigger!.dispatchEvent(
+        new MouseEvent('mouseenter', { bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+      const allPanels = Array.from(
+        document.body.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'),
+      );
+      const subtreePanel = allPanels[allPanels.length - 1];
+      expect(subtreePanel).withContext('Subtree submenu panel open').toBeTruthy();
+      const subtreeLabels = Array.from(
+        subtreePanel!.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+      )
+        .map((menuItem) => (menuItem.textContent ?? '').trim())
+        .filter((text) => text.length > 0);
+      expect(subtreeLabels.includes(tree.ctxHighlightTreeLabel))
+        .withContext('subtree-scope Highlight (inside Subtree submenu) visibility')
+        .toBeTrue();
+      expect(subtreeLabels.includes(tree.ctxRemoveTreeHighlightLabel))
+        .withContext('subtree-scope Remove highlight (inside Subtree submenu) visibility')
+        .toBeTrue();
     }
+    // visibility=false case: `canEditHighlights` is false in the
+    // component, so all four highlight-related items are hidden by
+    // their predicates regardless of which panel they live in.
+    // Asserting their absence at the top level (above) is sufficient
+    // -- the Subtree submenu trigger itself may still render due to
+    // other reshape predicates, but its highlight-related contents
+    // would also be hidden.
   }
 
   function highlightedReadOnlyBlob(ownerId: string): JsonBlob {
@@ -1936,7 +2827,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
         '.tree-row[data-path="$.parent.child"].has-manual-highlight',
       ),
     ).toBeTruthy();
-    expectHighlightActionsVisible(false);
+    await expectHighlightActionsVisible(fixture, false);
   });
 
   it('passes canEditHighlights false and hides highlight menu actions for signed-in non-owners', async () => {
@@ -1946,7 +2837,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     await openTreeMenuForPath(fixture, '$.parent.child');
 
     expect(getTree(fixture).canEditHighlights()).toBeFalse();
-    expectHighlightActionsVisible(false);
+    await expectHighlightActionsVisible(fixture, false);
   });
 
   it('passes canEditHighlights true and shows highlight menu actions for the owner', async () => {
@@ -1956,7 +2847,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     await openTreeMenuForPath(fixture, '$.parent.child');
 
     expect(getTree(fixture).canEditHighlights()).toBeTrue();
-    expectHighlightActionsVisible(true);
+    await expectHighlightActionsVisible(fixture, true);
   });
 
   it('passes canEditHighlights true for an unsaved buffer', async () => {
@@ -1971,7 +2862,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     await openTreeMenuForPath(fixture, '$.parent.child');
 
     expect(getTree(fixture).canEditHighlights()).toBeTrue();
-    expectHighlightActionsVisible(true);
+    await expectHighlightActionsVisible(fixture, true);
   });
 
   it('save round-trips highlights and clears dirty from the server response', async () => {
@@ -2678,6 +3569,28 @@ describe('HomeComponent blob actions (M4b)', () => {
     expect(fixture.componentInstance.loadedBlob()).not.toBeNull();
   });
 
+  it('onDeleteBlob focuses the home main fallback after confirming delete', async () => {
+    const { fixture } = setup({
+      userId: 'owner-me',
+      loaded: blob(),
+      confirm: true,
+    });
+    const router = TestBed.inject(Router);
+    spyOn(router, 'navigate').and.resolveTo(true);
+    const teardown = attachToBody(fixture);
+    try {
+      fixture.detectChanges();
+      await fixture.componentInstance.onDeleteBlob();
+      fixture.detectChanges();
+      await waitForTaskQueue();
+
+      const main = fixture.nativeElement.querySelector('main.home-main') as HTMLElement;
+      expect(document.activeElement).toBe(main);
+    } finally {
+      teardown();
+    }
+  });
+
   it('onDeleteBlob toasts an error when delete fails and preserves local state', async () => {
     const { fixture, snack } = setup({
       userId: 'owner-me',
@@ -3091,6 +4004,138 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     expect(component.extractBannerVisible()).toBe(false);
     expect(component.extractedCandidate()).toBeNull();
   });
+
+  // M7u: prose-preserving paste extraction (formerly only on tree path).
+  // The extractor service runs unmocked so these tests cover the full
+  // pipeline end-to-end.
+
+  it('M7u: editor paste of one block with no surrounding prose extracts to the bare value', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    component.onEditorPaste({
+      pastedText: '{"a":1}',
+      postPasteContent: '{"a":1}',
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.blockCount).toBe(1);
+    expect(candidate?.data.proseSegments ?? 0).toBe(0);
+    const parsed = JSON.parse(candidate!.data.text) as unknown;
+    expect(parsed).toEqual({ a: 1 });
+  });
+
+  it('M7u: editor paste of one block with surrounding prose extracts to a wrapper', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    component.onEditorPaste({
+      pastedText: 'INFO: log line {"a":1} trailing words',
+      postPasteContent: 'INFO: log line {"a":1} trailing words',
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.blockCount).toBe(1);
+    expect(candidate?.data.proseSegments ?? 0).toBe(2);
+    const parsed = JSON.parse(candidate!.data.text) as Record<string, unknown>;
+    expect(parsed['prefix']).toBe('INFO: log line ');
+    expect(parsed['json']).toEqual({ a: 1 });
+    expect(parsed['suffix']).toBe(' trailing words');
+  });
+
+  it('M7u: editor paste of multiple blocks with no prose extracts to the bare array', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    component.onEditorPaste({
+      pastedText: '{"a":1}{"b":2}',
+      postPasteContent: '{"a":1}{"b":2}',
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.blockCount).toBe(2);
+    expect(candidate?.data.proseSegments ?? 0).toBe(0);
+    const parsed = JSON.parse(candidate!.data.text) as unknown;
+    expect(parsed).toEqual([{ a: 1 }, { b: 2 }]);
+  });
+
+  it('M7u: editor paste of multiple blocks with prose extracts to a prose-preserving wrapper (real-world HTTP transcript)', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    // The user-reported real-world sample: HTTP request details with two
+    // JSON payloads (x-ms-test header and request body) wrapped in
+    // request-line, header, and operation-name prose.
+    const pasted =
+      'Dependent service request details: POST /v1.0/events api-version: 2019-09-30 ' +
+      'x-ms-test: {"scenarios":"PurchaseRunner,skip-provisioning,auto-patch:completed",' +
+      '"contact":"compur","retention":"2026-05-08T22:12:21.6474607Z"} ' +
+      'x-ms-correlation-id: ea49bede-d5da-4998-9f6a-f86dc20c5174 MS-CV: XqqPdwxcOUqvxyi3.1.2 ' +
+      'Content-Type: application/json ' +
+      '{"eventId":"5366e945-262e-42dc-8cdf-8969adcdea65_2019-05-31","fetchPayload":true,' +
+      '"queryParameters":{"eventType":"BusinessLocationSummary",' +
+      '"eventSource":"account-organization-2019-05-31","version":1,' +
+      '"accountId":"257c0731-7897-5830-7c4e-708dae0a712b",' +
+      '"organizationId":"5366e945-262e-42dc-8cdf-8969adcdea65_2019-05-31",' +
+      '"businessLocationId":"eea4cdb9-166e-5e35-3afb-502f12a5aea5"},"continuationToken":null}. ' +
+      'OperationName: RequestDetails_Collector_SearchEvents_BusinessLocationSummary.';
+
+    component.onEditorPaste({
+      pastedText: pasted,
+      postPasteContent: pasted,
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.blockCount).toBe(2);
+    expect((candidate?.data.proseSegments ?? 0) >= 1).toBeTrue();
+
+    const parsed = JSON.parse(candidate!.data.text) as Record<string, unknown>;
+    const keys = Object.keys(parsed);
+    expect(keys).toContain('json1');
+    expect(keys).toContain('json2');
+    expect(keys).toContain('prefix');
+    expect(keys).toContain('suffix');
+    expect(keys.some((k) => k.startsWith('between_'))).toBeTrue();
+
+    expect(parsed['prefix'] as string).toContain('Dependent service request details');
+    expect(parsed['json1']).toEqual({
+      scenarios: 'PurchaseRunner,skip-provisioning,auto-patch:completed',
+      contact: 'compur',
+      retention: '2026-05-08T22:12:21.6474607Z',
+    });
+    const body = parsed['json2'] as Record<string, unknown>;
+    expect(body['eventId']).toBe('5366e945-262e-42dc-8cdf-8969adcdea65_2019-05-31');
+    expect(body['fetchPayload']).toBe(true);
+    expect(parsed['suffix'] as string).toContain(
+      'OperationName: RequestDetails_Collector_SearchEvents_BusinessLocationSummary.',
+    );
+  });
+
+  it('M7u: leading BOM with prose is preserved in the prefix', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+
+    component.onEditorPaste({
+      pastedText: '\uFEFFhello {"a":1}',
+      postPasteContent: '\uFEFFhello {"a":1}',
+      postPasteParses: false,
+    });
+
+    const candidate = component.extractedCandidate();
+    expect(candidate).not.toBeNull();
+    expect(candidate?.data.proseSegments).toBe(1);
+    const parsed = JSON.parse(candidate!.data.text) as Record<string, unknown>;
+    expect(parsed['prefix']).toBe('\uFEFFhello ');
+    expect(parsed['json']).toEqual({ a: 1 });
+  });
 });
 
 describe('HomeComponent extract-banner telemetry', () => {
@@ -3163,7 +4208,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     );
   });
 
@@ -3179,7 +4224,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     );
   });
 
@@ -3199,7 +4244,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.pick' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     ]);
   });
 
@@ -3222,7 +4267,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.drag' },
-      { blockCount: 2, preservesComments: 0, hasComments: 0 },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     ]);
   });
 
@@ -3241,7 +4286,12 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls.length).toBe(1);
     expect(calls[0][0]).toBe('home.extract.banner.accept');
     expect(calls[0][1]).toEqual({ source: 'editor.paste' });
-    expect(calls[0][2]).toEqual({ blockCount: 2, preservesComments: 0, hasComments: 0 });
+    expect(calls[0][2]).toEqual({
+      blockCount: 2,
+      preservesComments: 0,
+      hasComments: 0,
+      proseSegments: 0,
+    });
   });
 
   it('shown event reports hasComments:1 when source had JSONC comments', () => {
@@ -3262,7 +4312,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(eventSpy).toHaveBeenCalledWith(
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 1 },
+      { blockCount: 2, preservesComments: 0, hasComments: 1, proseSegments: 0 },
     );
   });
 
@@ -3288,7 +4338,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.accept',
       { source: 'editor.paste' },
-      { blockCount: 2, preservesComments: 0, hasComments: 1 },
+      { blockCount: 2, preservesComments: 0, hasComments: 1, proseSegments: 0 },
     ]);
   });
 
@@ -3308,7 +4358,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'editor.paste', reason: 'user.click' },
-      { blockCount: 2 },
+      { blockCount: 2, proseSegments: 0 },
     ]);
   });
 
@@ -3330,7 +4380,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'editor.paste', reason: 'content.changed' },
-      { blockCount: 2 },
+      { blockCount: 2, proseSegments: 0 },
     ]);
   });
 
@@ -3359,12 +4409,12 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(calls[0]).toEqual([
       'home.extract.banner.dismiss',
       { source: 'paste', reason: 'content.changed' },
-      { blockCount: 2 },
+      { blockCount: 2, proseSegments: 0 },
     ]);
     expect(calls[1]).toEqual([
       'home.extract.banner.shown',
       { source: 'editor.paste' },
-      { blockCount: 1, preservesComments: 1, hasComments: 0 },
+      { blockCount: 1, preservesComments: 1, hasComments: 0, proseSegments: 0 },
     ]);
   });
 
@@ -4177,9 +5227,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     if (typeof rawParameterValue !== 'string') {
       throw new Error('Expected fixture Parameters[0].Value to be a string');
     }
-    const replacement = extractFromMixedTextCore(rawParameterValue, parseJsonCandidate, {
-      mode: 'preserveProse',
-    });
+    const replacement = extractFromMixedTextCore(rawParameterValue, parseJsonCandidate);
     if (replacement === null) {
       throw new Error('Expected fixture Parameters[0].Value to be extractable');
     }
@@ -4386,4 +5434,64 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
       candidateNodes: 2,
     });
   }));
+});
+
+describe('HomeComponent splash render-complete hook (Phase C)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+    TestBed.resetTestingModule();
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+  });
+
+  it('invokes LoadingSplashService.markBlobRenderComplete after a DOUBLE rAF, not a single one (paint barrier)', async () => {
+    // The hook must defer past the next paint so the user actually
+    // sees the "Rendering tree..." label before the splash hides.
+    // A single rAF runs BEFORE the next paint and would clear the
+    // splash on the same tick. This test guards against silent
+    // regression to single-rAF.
+    const splash = jasmine.createSpyObj<LoadingSplashService>('LoadingSplashService', [
+      'markBlobRenderComplete',
+    ]);
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: LoadingSplashService, useValue: splash },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.detectChanges();
+
+    // afterNextRender schedules its callback after the render
+    // phases complete; let microtasks drain so the outer rAF
+    // gets queued before we start waiting on rAFs.
+    await Promise.resolve();
+
+    await waitForSingleAnimationFrame();
+    expect(splash.markBlobRenderComplete)
+      .withContext(
+        'a single rAF must NOT trigger the call - that would clear the splash before the next paint',
+      )
+      .not.toHaveBeenCalled();
+
+    await waitForSingleAnimationFrame();
+    expect(splash.markBlobRenderComplete)
+      .withContext(
+        'after the second rAF (paint barrier crossed) the hook must fire so render-pending clears',
+      )
+      .toHaveBeenCalledTimes(1);
+  });
 });

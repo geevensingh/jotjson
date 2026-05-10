@@ -6,6 +6,8 @@ import {
   HostListener,
   OnDestroy,
   OnInit,
+  PLATFORM_ID,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -13,8 +15,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import {
   format as jsoncFormat,
@@ -36,6 +39,7 @@ import type { BlobHighlight, CreateBlobResponse, JsonBlob } from '../../core/api
 import { DraftService } from '../../core/preferences/draft.service';
 import { persistedSignal } from '../../core/preferences/persisted-signal';
 import { LoggerService } from '../../core/telemetry/logger.service';
+import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
 import { bucketBytes } from '../../core/telemetry/buckets';
 import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
 import { SeoService } from '../../core/seo/seo.service';
@@ -46,7 +50,7 @@ import {
   type BeaconJumpRequest,
 } from '../../core/beacons/beacon-navigation.service';
 import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import { debounceTime, firstValueFrom } from 'rxjs';
 import {
   ConfirmDialogComponent,
@@ -74,8 +78,15 @@ import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/to
 import { EditorMode } from './editor-mode';
 import { StatusBarComponent } from './status-bar/status-bar.component';
 import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
-import { ClipboardPollingService } from '../../core/clipboard/clipboard-polling.service';
+import {
+  ClipboardPollingService,
+  type ClipboardGrantedReadResult,
+} from '../../core/clipboard/clipboard-polling.service';
 import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.component';
+import {
+  ColdBootClipboardBannerComponent,
+  type ColdBootClipboardChoice,
+} from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
@@ -83,6 +94,7 @@ import { validateAndReadSingleFile } from '../../core/upload/upload-file-validat
 import { patchExtractedValue } from './extract-json-patcher';
 import type { PatchResult } from './extract-json-patcher';
 import { collectStringLeaves } from './string-leaf-collector';
+import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
 
 /**
  * Local-only pane visibility (issue #39). Stored in `localStorage`
@@ -93,6 +105,15 @@ import { collectStringLeaves } from './string-leaf-collector';
  */
 type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
 type UploadSource = 'drag' | 'pick';
+
+type ColdBootClipboardCandidate = {
+  text: string;
+  sizeBytes: number;
+};
+
+type ColdBootClipboardReadRaceResult =
+  | { kind: 'read'; result: ClipboardGrantedReadResult }
+  | { kind: 'timeout' };
 
 /**
  * Origin path that surfaced the current M7p extract candidate. Used as a
@@ -118,6 +139,8 @@ type LoadedSnapshot = {
 const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 
 const TREE_EXTRACT_SCAN_DEBOUNCE_MS = 1000;
+const COLD_BOOT_CLIPBOARD_TIMEOUT_MS = 150;
+const COLD_BOOT_CLIPBOARD_MAX_BYTES = 1 * 1024 * 1024;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -160,6 +183,7 @@ function sameHighlightEntry(
     ToolbarComponent,
     StatusBarComponent,
     ClipboardBannerComponent,
+    ColdBootClipboardBannerComponent,
     RuleSetsToolbarComponent,
     DropOverlayComponent,
     ExtractJsonBannerComponent,
@@ -180,6 +204,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly blobs = inject(BlobService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly titleService = inject(Title);
   private readonly seo = inject(SeoService);
   private readonly quota = inject(QuotaNotificationService);
@@ -190,11 +215,23 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly logger = inject(LoggerService);
   private readonly dropController = inject(DocumentDropController);
   private readonly beaconNav = inject(BeaconNavigationService);
+  private readonly loadingSplash = inject(LoadingSplashService);
+  protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   /** Mirrors the controller's drag-active signal for the drop overlay. */
   readonly dropActive = this.dropController.dropActive;
 
   private disposeDropHandler?: () => void;
+  private destroyed = false;
+  private coldBootClipboardEvaluated = false;
+  private coldBootClipboardCandidate: ColdBootClipboardCandidate | null = null;
+  /**
+   * Retained reference to the snackbar opened by the cold-boot auto-paste
+   * silent / banner-paste paths. Held so an unrelated snackbar opening
+   * later cannot squelch the only undo affordance for the silent path.
+   * Cleared on dismiss.
+   */
+  private coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -227,6 +264,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     const cand = this.extractedCandidate();
     return cand !== null && cand.sourceVersion === this.contentVersion();
   });
+  private readonly coldBootBannerVisibleSignal = signal(false);
+  readonly coldBootClipboardBannerVisible = this.coldBootBannerVisibleSignal.asReadonly();
 
   /**
    * Persistent in-pane banner state for upload-source validation errors
@@ -262,7 +301,10 @@ export class HomeComponent implements OnInit, OnDestroy {
           source: previousCandidate.source,
           reason: 'content.changed',
         },
-        { blockCount: previousCandidate.data.blockCount },
+        {
+          blockCount: previousCandidate.data.blockCount,
+          proseSegments: previousCandidate.data.proseSegments ?? 0,
+        },
       );
       this.extractedCandidate.set(null);
     }
@@ -323,7 +365,10 @@ export class HomeComponent implements OnInit, OnDestroy {
           source: previousCandidate.source,
           reason: 'content.changed',
         },
-        { blockCount: previousCandidate.data.blockCount },
+        {
+          blockCount: previousCandidate.data.blockCount,
+          proseSegments: previousCandidate.data.proseSegments ?? 0,
+        },
       );
     }
     if (data === null || source === null) {
@@ -342,6 +387,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         blockCount: data.blockCount,
         preservesComments: data.preservesComments ? 1 : 0,
         hasComments: data.hasComments ? 1 : 0,
+        proseSegments: data.proseSegments ?? 0,
       },
     );
     // Conditional auto-focus: only when the user clicked the toolbar
@@ -516,21 +562,47 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   /**
-   * 4-state derived view of `paneVisibility` + `layoutOrientation`,
-   * matching the segments of the toolbar's pane-layout segmented
-   * control. Single-pane states ignore the orientation pref - it is
-   * preserved untouched and re-applied when the user picks a `both-*`
-   * segment again.
+   * `true` when the viewport is narrow per the M7l breakpoint
+   * (< 768px). Drives `effectivePaneVisibility` below; the persisted
+   * `paneVisibility` is never mutated by this signal.
+   */
+  readonly narrowViewport = createNarrowViewportSignal();
+
+  /**
+   * Effective (rendered) pane visibility (M7l). At narrow widths the
+   * `'both'` state collapses to `'tree-only'` so the user sees the
+   * tree (the primary value at small sizes per AGENTS.md). Persisted
+   * single-pane choices are honored unchanged. The persisted
+   * `paneVisibility` is never mutated; widening the viewport restores
+   * the original choice. All behavior consumers (paneLayout,
+   * splitStyle, beacon dispatch, Ctrl+F routing, template class
+   * bindings) read this signal rather than `paneVisibility` directly.
+   */
+  readonly effectivePaneVisibility = computed<PaneVisibility>(() => {
+    const persisted = this.paneVisibility();
+    if (this.narrowViewport() && persisted === 'both') return 'tree-only';
+    return persisted;
+  });
+
+  /**
+   * 4-state derived view of `effectivePaneVisibility` +
+   * `layoutOrientation`, matching the segments of the toolbar's
+   * pane-layout segmented control. Single-pane states ignore the
+   * orientation pref - it is preserved untouched and re-applied when
+   * the user picks a `both-*` segment again. Deriving from the
+   * effective (not persisted) visibility ensures the highlighted
+   * segment is always one of the visible segments at narrow widths
+   * where the `both-*` segments are CSS-hidden.
    */
   readonly paneLayout = computed<PaneLayout>(() => {
-    const visibility = this.paneVisibility();
+    const visibility = this.effectivePaneVisibility();
     if (visibility === 'editor-only') return 'editor-only';
     if (visibility === 'tree-only') return 'tree-only';
     return this.layoutOrientation() === 'vertical' ? 'both-vertical' : 'both-horizontal';
   });
 
   readonly splitStyle = computed(() => {
-    const visibility = this.paneVisibility();
+    const visibility = this.effectivePaneVisibility();
     const orientation = this.layoutOrientation();
     if (visibility !== 'both') {
       return orientation === 'vertical'
@@ -546,6 +618,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   private readonly splitHost = viewChild<ElementRef<HTMLElement>>('splitHost');
+
+  private readonly homeFocusFallback = viewChild<ElementRef<HTMLElement>>('homeFocusFallback');
 
   private readonly treeHost = viewChild<ElementRef<HTMLElement>>('treeHost');
 
@@ -576,6 +650,20 @@ export class HomeComponent implements OnInit, OnDestroy {
   } | null = null;
 
   constructor() {
+    // Signal first browser paint of the JSON tree to LoadingSplashService
+    // so the cold-boot "Rendering tree..." splash hides on the frame
+    // *after* paint. Double-rAF mirrors `afterFirstPaint` (line 1256-1264)
+    // and the JsonTreeComponent paint barrier - a single rAF runs before
+    // the next paint and can clear the splash on the same tick the
+    // user would have seen the label. The service guards re-entry, so
+    // this is a safe no-op for in-app `/` -> `/s/:slug` navigations
+    // where renderPending was never set.
+    afterNextRender(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => this.loadingSplash.markBlobRenderComplete());
+      });
+    });
+
     // Persist anonymous draft edits only while no saved blob is loaded.
     effect(() => {
       if (this.loadedBlob() === null) {
@@ -621,17 +709,25 @@ export class HomeComponent implements OnInit, OnDestroy {
       const dirtyPrefix = this.dirty() ? '* ' : '';
       if (!blob) {
         this.titleService.setTitle(`${dirtyPrefix}${this.homepageTitle}`);
-        this.seo.clearBlobTags();
+        // Skip on server prerender so the static OG defaults from
+        // index.html survive into the prerendered HTML. Crawlers see the
+        // homepage's og:title / og:description / og:type / og:url /
+        // og:site_name / twitter:card without an Angular-side wipe.
+        if (this.isBrowser) {
+          this.seo.clearBlobTags();
+        }
         return;
       }
       const label =
         title.trim().length > 0 ? title.trim() : $localize`:@@app.title.untitled:Untitled`;
       this.titleService.setTitle(`${dirtyPrefix}${label} | JotJSON`);
-      if (blob.isPublic) {
-        this.seo.setOpenGraphForBlob(blob);
-      } else {
-        this.seo.clearBlobTags();
-        this.seo.setNoindex(true);
+      if (this.isBrowser) {
+        if (blob.isPublic) {
+          this.seo.setOpenGraphForBlob(blob);
+        } else {
+          this.seo.clearBlobTags();
+          this.seo.setNoindex(true);
+        }
       }
     });
 
@@ -678,33 +774,244 @@ export class HomeComponent implements OnInit, OnDestroy {
     // page visibility. Visibilitychange / focus listeners force a re-check
     // when the user returns to the tab, so the Paste button updates
     // promptly after an external copy.
-    this.clipboard.checkOnce();
-    const onVisibility = (): void => {
-      if (document.visibilityState === 'visible') {
-        this.clipboard.checkOnce();
-      } else {
-        this.clipboard.stopPolling();
-      }
-    };
-    const onFocus = (): void => {
+    //
+    // Skip on the server platform - the static prerender of `/` runs in
+    // Node where `document` and `window` are not defined; the listeners
+    // and the gating effect both reference them. The full clipboard wiring
+    // re-attaches naturally once the browser bootstrap reaches this same
+    // constructor.
+    if (this.isBrowser) {
+      this.evaluateColdBootClipboard();
       this.clipboard.checkOnce();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', onFocus);
-    this.destroyRef.onDestroy(() => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', onFocus);
-      this.clipboard.stopPolling();
-    });
-
-    effect(() => {
-      const state = this.clipboard.permissionState();
-      if (state === 'granted' && document.visibilityState === 'visible') {
-        this.clipboard.startPolling();
-      } else {
+      const onVisibility = (): void => {
+        if (document.visibilityState === 'visible') {
+          this.clipboard.checkOnce();
+        } else {
+          this.clipboard.stopPolling();
+        }
+      };
+      const onFocus = (): void => {
+        this.clipboard.checkOnce();
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      window.addEventListener('focus', onFocus);
+      this.destroyRef.onDestroy(() => {
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('focus', onFocus);
         this.clipboard.stopPolling();
+      });
+
+      effect(() => {
+        const state = this.clipboard.permissionState();
+        if (state === 'granted' && document.visibilityState === 'visible') {
+          this.clipboard.startPolling();
+        } else {
+          this.clipboard.stopPolling();
+        }
+      });
+    }
+  }
+
+  private evaluateColdBootClipboard(): void {
+    if (!this.shouldStartColdBootClipboardEvaluation()) {
+      return;
+    }
+    this.coldBootClipboardEvaluated = true;
+
+    const preference = this.prefs.prefs().coldBootClipboardAutoPaste;
+    if (preference === 'always') {
+      void this.evaluateAlwaysColdBootClipboard();
+      return;
+    }
+    void this.evaluateAskColdBootClipboard();
+  }
+
+  private shouldStartColdBootClipboardEvaluation(): boolean {
+    return (
+      this.isBrowser &&
+      !this.router.navigated &&
+      !this.coldBootClipboardEvaluated &&
+      this.isHomeRouteForColdBootClipboard() &&
+      this.loadedBlob() === null &&
+      this.prefs.prefs().coldBootClipboardAutoPaste !== 'never'
+    );
+  }
+
+  private isHomeRouteForColdBootClipboard(): boolean {
+    const pathBeforeQuery = this.router.url.split('?')[0] ?? this.router.url;
+    const normalizedPath = pathBeforeQuery.split('#')[0] ?? pathBeforeQuery;
+    return (
+      !this.destroyed &&
+      this.route.routeConfig?.path === '' &&
+      (normalizedPath === '/' || normalizedPath === '') &&
+      this.initialBlob() == null
+    );
+  }
+
+  private canApplyColdBootClipboard(): boolean {
+    return this.isHomeRouteForColdBootClipboard() && this.loadedBlob() === null;
+  }
+
+  private async evaluateAlwaysColdBootClipboard(): Promise<void> {
+    // Permission gate: the silent path commits to a 150ms splash hold, so
+    // we must avoid acquiring it for users who don't have clipboard-read
+    // permission granted (Safari, Firefox, anyone who has not opted in
+    // via the existing M7a clipboard banner). The roamed `'always'`
+    // preference can land on any browser, including those where the
+    // local clipboard permission is still `prompt` or `denied`. Wait
+    // for permission discovery to settle before deciding - the service
+    // kicks off discovery during DI so this typically resolves within a
+    // microtask. Non-granted users skip immediately, paying zero added
+    // cold-boot latency.
+    await this.clipboard.awaitPermissionReady();
+    if (this.clipboard.permissionState() !== 'granted') {
+      return;
+    }
+    if (!this.canApplyColdBootClipboard()) {
+      // Route or document state changed while we awaited permission.
+      return;
+    }
+    const release = this.loadingSplash.beginBootstrapHold(
+      'coldBootClipboard',
+      COLD_BOOT_CLIPBOARD_TIMEOUT_MS,
+    );
+    try {
+      const raceResult = await this.raceColdBootClipboardRead(
+        this.clipboard.readGrantedClipboardOnce('coldBootAutoPaste'),
+      );
+      if (raceResult.kind === 'timeout' || !raceResult.result.ok) {
+        return;
+      }
+      const candidate = this.toColdBootClipboardCandidate(raceResult.result.text);
+      if (candidate === null || !this.canApplyColdBootClipboard()) {
+        return;
+      }
+      this.applyColdBootClipboardCandidate(candidate, true);
+    } finally {
+      release();
+    }
+  }
+
+  private async evaluateAskColdBootClipboard(): Promise<void> {
+    const result = await this.clipboard.readGrantedClipboardOnce('coldBootAutoPaste');
+    if (!result.ok || !this.canApplyColdBootClipboard()) {
+      return;
+    }
+    const candidate = this.toColdBootClipboardCandidate(result.text);
+    if (candidate === null || !this.canApplyColdBootClipboard()) {
+      return;
+    }
+    this.coldBootClipboardCandidate = candidate;
+    this.coldBootBannerVisibleSignal.set(true);
+    this.logger.event('home.clipboard.coldBoot.prompt.shown');
+  }
+
+  private raceColdBootClipboardRead(
+    readPromise: Promise<ClipboardGrantedReadResult>,
+  ): Promise<ColdBootClipboardReadRaceResult> {
+    let timeoutId: number | null = null;
+    const timeoutPromise = new Promise<ColdBootClipboardReadRaceResult>((resolve) => {
+      timeoutId = window.setTimeout(
+        () => resolve({ kind: 'timeout' }),
+        COLD_BOOT_CLIPBOARD_TIMEOUT_MS,
+      );
+    });
+    const taggedReadPromise = readPromise.then<ColdBootClipboardReadRaceResult>((result) => ({
+      kind: 'read',
+      result,
+    }));
+    return Promise.race([taggedReadPromise, timeoutPromise]).finally(() => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
       }
     });
+  }
+
+  private toColdBootClipboardCandidate(text: string): ColdBootClipboardCandidate | null {
+    const sizeBytes = new TextEncoder().encode(text).length;
+    if (sizeBytes > COLD_BOOT_CLIPBOARD_MAX_BYTES) {
+      return null;
+    }
+    const parsed = this.parser.parse(text);
+    if (parsed.errors.length > 0 || !this.isTopLevelObjectOrArray(parsed.value)) {
+      return null;
+    }
+    return { text, sizeBytes };
+  }
+
+  private isTopLevelObjectOrArray(value: unknown): boolean {
+    return Array.isArray(value) || (typeof value === 'object' && value !== null);
+  }
+
+  onColdBootClipboardChoice(choice: ColdBootClipboardChoice): void {
+    this.coldBootBannerVisibleSignal.set(false);
+    this.logger.event('home.clipboard.coldBoot.prompt.choice', { choice });
+
+    if (choice === 'never') {
+      this.prefs.update({ coldBootClipboardAutoPaste: 'never' });
+      this.coldBootClipboardCandidate = null;
+      return;
+    }
+    if (choice === 'dismiss') {
+      this.coldBootClipboardCandidate = null;
+      return;
+    }
+
+    const candidate = this.coldBootClipboardCandidate;
+    this.coldBootClipboardCandidate = null;
+    if (choice === 'always') {
+      this.prefs.update({ coldBootClipboardAutoPaste: 'always' });
+    }
+    if (candidate === null || !this.canApplyColdBootClipboard()) {
+      return;
+    }
+    this.applyColdBootClipboardCandidate(candidate, choice === 'always');
+  }
+
+  private applyColdBootClipboardCandidate(
+    candidate: ColdBootClipboardCandidate,
+    emitAutoPasteTelemetry: boolean,
+  ): void {
+    const priorDraft = this.content();
+    this.replaceDocument(candidate.text);
+    this.resetHighlightsForDocumentReplacement();
+    this.lastFilename.set(null);
+    this.suggestedTitlesForMenu.set([]);
+    if (emitAutoPasteTelemetry) {
+      this.logger.event(
+        'home.clipboard.coldBoot.autoPaste',
+        { sizeBytesBucket: bucketBytes(candidate.sizeBytes) },
+        { sizeBytes: candidate.sizeBytes },
+      );
+    }
+    this.openColdBootClipboardUndoSnack(priorDraft);
+  }
+
+  private openColdBootClipboardUndoSnack(priorDraft: string): void {
+    // Retain the SnackBarRef so other snackbars opening later cannot
+    // squelch the only undo affordance for the silent / banner-paste
+    // path. Cleared on dismiss.
+    const snackRef: MatSnackBarRef<TextOnlySnackBar> = this.snack.open(
+      $localize`:@@home.coldBootClipboard.snackbar.pasted:Pasted from clipboard.`,
+      $localize`:@@home.coldBootClipboard.snackbar.undo:Undo`,
+      { duration: 8000 },
+    );
+    this.coldBootClipboardSnackRef = snackRef;
+    snackRef
+      .onAction()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.replaceDocument(priorDraft);
+        this.logger.event('home.clipboard.coldBoot.autoPaste.undo');
+      });
+    snackRef
+      .afterDismissed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.coldBootClipboardSnackRef === snackRef) {
+          this.coldBootClipboardSnackRef = null;
+        }
+      });
   }
 
   private applyLoadedBlob(blob: JsonBlob): void {
@@ -1010,6 +1317,12 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   onSplitterPointerDown(ev: PointerEvent): void {
     if (ev.button !== 0) return;
+    // Defensive guard: at narrow viewport widths the splitter is
+    // CSS-hidden via `display:none`, so this handler should be
+    // unreachable. If a stale event still fires (e.g. during a
+    // viewport-width transition), refuse to start a drag rather than
+    // mutate the persisted desktop split ratio.
+    if (this.effectivePaneVisibility() !== 'both') return;
     const host = this.splitHost()?.nativeElement;
     if (!host) return;
     ev.preventDefault();
@@ -1018,6 +1331,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     const vertical = this.layoutOrientation() === 'vertical';
 
     const move = (e: PointerEvent): void => {
+      // Mid-drag guard (M7l): if the viewport crosses into narrow
+      // mid-drag, the splitter is no longer rendered. Stop writing
+      // splitRatio so the persisted desktop ratio survives the
+      // transition unchanged.
+      if (this.effectivePaneVisibility() !== 'both') return;
       const rect = host.getBoundingClientRect();
       const raw = vertical
         ? (e.clientY - rect.top) / rect.height
@@ -1109,14 +1427,15 @@ export class HomeComponent implements OnInit, OnDestroy {
   /**
    * Cross-pane dispatcher for beacon jump intents (pill clicks +
    * ancestor-badge clicks). Decides whether to drive the tree or the
-   * editor based on `paneVisibility()` plus
+   * editor based on `effectivePaneVisibility()` plus
    * `BeaconNavigationService.lastActivePane()` (the latter only used
-   * when both panes are visible). Always emits
-   * `beacons.crossPane.dispatched` telemetry with closed-enum props
-   * (no paths, no key/value content).
+   * when both panes are visible). Reads *effective* visibility (M7l)
+   * so narrow-viewport dispatches never route to a hidden pane.
+   * Always emits `beacons.crossPane.dispatched` telemetry with
+   * closed-enum props (no paths, no key/value content).
    */
   private dispatchBeaconJump(request: BeaconJumpRequest): void {
-    const paneVisibility = this.paneVisibility();
+    const paneVisibility = this.effectivePaneVisibility();
     const lastActive = this.beaconNav.lastActivePane();
     const target: 'tree' | 'editor' =
       paneVisibility === 'editor-only'
@@ -1361,6 +1680,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         blockCount: candidate.data.blockCount,
         preservesComments: candidate.data.preservesComments ? 1 : 0,
         hasComments: candidate.data.hasComments ? 1 : 0,
+        proseSegments: candidate.data.proseSegments ?? 0,
       },
     );
     // Clear the candidate FIRST so `setContent`'s banner-replace guard
@@ -1377,7 +1697,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.logger.event(
         'home.extract.banner.dismiss',
         { source: candidate.source, reason: 'user.click' },
-        { blockCount: candidate.data.blockCount },
+        {
+          blockCount: candidate.data.blockCount,
+          proseSegments: candidate.data.proseSegments ?? 0,
+        },
       );
     }
     this.extractedCandidate.set(null);
@@ -1421,6 +1744,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.disposeDropHandler?.();
     this.disposeDropHandler = undefined;
   }
@@ -1862,7 +2186,8 @@ export class HomeComponent implements OnInit, OnDestroy {
         $localize`:@@common.dismiss:Dismiss`,
         { duration: 3000 },
       );
-      void this.router.navigate(['/']);
+      await this.router.navigate(['/']);
+      this.scheduleFocusAfterDelete();
     } catch (error) {
       this.logger.warn('share.delete.failed');
       void error;
@@ -1872,6 +2197,10 @@ export class HomeComponent implements OnInit, OnDestroy {
         { duration: 4000 },
       );
     }
+  }
+
+  private scheduleFocusAfterDelete(): void {
+    setTimeout(() => this.homeFocusFallback()?.nativeElement.focus(), 0);
   }
 
   focusTreeSearch(): void {
@@ -1905,13 +2234,14 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     // Ctrl+F when focus is NOT in the editor -> focus tree search. When in the
     // editor, Monaco's native find runs. When the tree pane is hidden via the
-    // 3-state pane visibility toggle (issue #39) we skip the routing rather
-    // than focusing a `display:none` input - the keypress falls through to
-    // the browser default.
+    // 3-state pane visibility toggle (issue #39) or by the M7l narrow-viewport
+    // override we skip the routing rather than focusing a `display:none`
+    // input - the keypress falls through to the browser default. Reads
+    // *effective* visibility so the narrow-viewport collapse is honored.
     if ((ev.ctrlKey || ev.metaKey) && ev.key === 'f') {
       const active = document.activeElement;
       const inEditor = active?.closest('.monaco-editor') != null;
-      const treeHidden = this.paneVisibility() === 'editor-only';
+      const treeHidden = this.effectivePaneVisibility() === 'editor-only';
       if (!inEditor && !treeHidden) {
         ev.preventDefault();
         this.focusTreeSearch();

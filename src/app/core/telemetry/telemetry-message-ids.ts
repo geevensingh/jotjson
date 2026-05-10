@@ -328,7 +328,13 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           between the event and the reload so the envelope
    *           dispatches before the navigation tears down the
    *           document.
-   * Props: none.
+   * Props:
+   *   - `trigger`: closed-enum `'snackbar' | 'autoApply'`. Distinguishes
+   *     a user-clicked Reload on the version-available snackbar from a
+   *     cold-launch silent auto-apply (no user interaction yet, no
+   *     prior silent-apply this session). The two paths converge in
+   *     `activateAndReload()`; the trigger argument is propagated from
+   *     the caller.
    * Measurements: none.
    */
   'update.applied',
@@ -457,15 +463,20 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   editor; `'upload.pick'` = toolbar Upload button; `'upload.drag'`
    *   = files dropped onto the document.
    * Measurements: { blockCount: number; preservesComments: 0 | 1;
-   *   hasComments: 0 | 1 }. `blockCount` is the number of JSON blocks
-   *   the extractor recovered from the mixed text. `preservesComments`
-   *   is 1 when the extractor's output FORMAT retains comments (always
-   *   1 for single-block, always 0 for multi-block) and 0 otherwise.
-   *   `hasComments` is 1 when at least one accepted candidate's source
-   *   slice contained a JSONC comment and 0 otherwise. The product
-   *   `hasComments && !preservesComments` (i.e., `hasComments=1 &&
-   *   preservesComments=0`) is exactly when the banner shows the
-   *   "Comments will be dropped" warning. Numeric so AI can `avg()` /
+   *   hasComments: 0 | 1; proseSegments: number }. `blockCount` is the
+   *   number of JSON blocks the extractor recovered from the mixed
+   *   text. `preservesComments` is 1 when the extractor's output
+   *   FORMAT retains comments (single-block always 1; multi-block
+   *   always 0) and 0 otherwise. `hasComments` is 1 when at least one
+   *   accepted candidate's source slice contained a JSONC comment and
+   *   0 otherwise. The product `hasComments && !preservesComments`
+   *   (i.e., `hasComments=1 && preservesComments=0`) is exactly when
+   *   the banner shows the "Comments will be dropped" warning.
+   *   `proseSegments` is the count of non-whitespace prose segments
+   *   preserved in the wrapper output (0 when the input has no
+   *   surrounding prose, in which case the result is the bare value
+   *   or bare array; >0 when the wrapper carries `prefix`/`suffix`/
+   *   `between_<i>_and_<j>` keys). Numeric so AI can `avg()` /
    *   `sum()` them.
    */
   'home.extract.banner.shown',
@@ -482,9 +493,10 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
    *   | 'upload.drag' } - mirrors `home.extract.banner.shown`.
    * Measurements: { blockCount: number; preservesComments: 0 | 1;
-   *   hasComments: 0 | 1 } - mirrors `home.extract.banner.shown` so
-   *   accept-rate by block-count, comments-preservation, and
-   *   warning-exposure can be computed by a join.
+   *   hasComments: 0 | 1; proseSegments: number } - mirrors
+   *   `home.extract.banner.shown` so accept-rate by block-count,
+   *   comments-preservation, warning-exposure, and prose presence
+   *   can be computed by a join.
    */
   'home.extract.banner.accept',
 
@@ -505,13 +517,84 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   | 'upload.drag'; reason: 'user.click' | 'content.changed' }.
    *   `source` is whatever path produced the candidate that is now
    *   being dismissed (carried on the `extractedCandidate` signal).
-   * Measurements: { blockCount: number }. Accept-vs-dismiss skew
-   *   by block-count; `preservesComments` is intentionally not
-   *   replicated here since it is queryable via the matching
-   *   `home.extract.banner.shown` event for the same source/session
-   *   (one-to-one prior to dismiss).
+   * Measurements: { blockCount: number; proseSegments: number }.
+   *   Accept-vs-dismiss skew by block-count and prose presence.
+   *   `preservesComments` is intentionally not replicated here since
+   *   it is queryable via the matching `home.extract.banner.shown`
+   *   event for the same source/session (one-to-one prior to
+   *   dismiss).
    */
   'home.extract.banner.dismiss',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` cold-boot evaluator
+   *           (`features/home/home.component.ts`) when the
+   *           cold-boot clipboard banner becomes visible -
+   *           preference is `'ask'`, the route is `/`, clipboard
+   *           permission is `'granted'`, and the clipboard text
+   *           parses as a top-level JSON object/array below the
+   *           1MB cap. One-shot per cold boot.
+   * Props: none. Cold-boot context is implied by the message id.
+   * Measurements: none.
+   */
+  'home.clipboard.coldBoot.prompt.shown',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` cold-boot evaluator
+   *           (`features/home/home.component.ts`) when the user
+   *           interacts with the cold-boot clipboard banner.
+   *           Always paired with a preceding
+   *           `home.clipboard.coldBoot.prompt.shown` in the same
+   *           cold boot.
+   * Props: { choice: 'always' | 'just-this-time' | 'never'
+   *   | 'dismiss' }. `'always'` and `'never'` set the persisted
+   *   `coldBootClipboardAutoPaste` preference; `'just-this-time'`
+   *   pastes once without changing the preference; `'dismiss'`
+   *   covers the X icon, Esc, and click-outside paths (no paste,
+   *   no preference change, ask again next cold boot).
+   * Measurements: none.
+   */
+  'home.clipboard.coldBoot.prompt.choice',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` cold-boot evaluator
+   *           (`features/home/home.component.ts`) when the silent
+   *           auto-paste path fires - preference is `'always'`,
+   *           clipboard permission is `'granted'`, and the
+   *           clipboard text parses as a top-level JSON
+   *           object/array below the 1MB cap. The bootstrap
+   *           splash is held briefly (max 150ms) so the swap
+   *           happens before first paint; a successful fire here
+   *           means the read won the race and the snackbar
+   *           "Pasted from clipboard. Undo." is shown. One-shot
+   *           per cold boot; bounded by user gesture (one cold
+   *           boot per process) so volume is naturally limited.
+   * Props: { sizeBytesBucket: ReturnType<typeof bucketBytes> }.
+   *   Closed-enum size bucket of the clipboard payload (e.g.
+   *   `'<1KB'`, `'1-10KB'`, ...). Bucket goes in props; the raw
+   *   numeric value is in measurements.
+   * Measurements: { sizeBytes: number }. Raw UTF-8 byte count of
+   *   the clipboard text we applied. Mirrors the `paste.handle`
+   *   shape so KQL can `avg(sizeBytes)` across both paths.
+   */
+  'home.clipboard.coldBoot.autoPaste',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` snackbar Undo handler
+   *           (`features/home/home.component.ts`) when the user
+   *           clicks Undo on the cold-boot auto-paste snackbar.
+   *           Bounded by user gesture (one click per
+   *           auto-paste). Always paired with a preceding
+   *           `home.clipboard.coldBoot.autoPaste` in the same
+   *           cold boot.
+   * Props: none.
+   * Measurements: none.
+   */
+  'home.clipboard.coldBoot.autoPaste.undo',
 
   /**
    * Severity: warn
@@ -575,6 +658,51 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Measurements: none.
    */
   'blob.fetch.complete',
+
+  /**
+   * Kind: event
+   * Fired by: `LoadingSplashService.markBlobRenderComplete`
+   *           (`core/loading-splash/loading-splash.service.ts`)
+   *           when called while `renderPending === true`. The
+   *           `markBlobRenderComplete` call is wired into
+   *           `HomeComponent`'s constructor via
+   *           `afterNextRender` + double `requestAnimationFrame`,
+   *           so the event fires exactly when the user has actually
+   *           seen the first paint of the JSON tree on a cold-boot
+   *           deep-link to `/s/:slug`. The idempotent guard ensures
+   *           in-app `/` -> `/s/:slug` navigations (which mount a
+   *           fresh `HomeComponent` and re-fire the hook) do NOT
+   *           emit -- `renderPending` is only set on the first
+   *           cold-boot blob nav.
+   *
+   *           One-shot per session (cold-boot blob deep-link is the
+   *           only path that sets `renderPending=true`, and the
+   *           `firstNavComplete` latch prevents subsequent navs from
+   *           re-triggering it).
+   * Props: none.
+   * Measurements: { durationMs: number }
+   *   - elapsed wallclock time in ms from `markBlobBytesComplete`
+   *     (when `BlobService` signals the body bytes have arrived,
+   *     immediately before its synchronous `JSON.parse`) to the
+   *     moment the double-rAF callback fires
+   *     `markBlobRenderComplete` (i.e., the frame after first paint).
+   *     Covers the JSON.parse window + resolver finalization +
+   *     route activation + `HomeComponent` construction +
+   *     change-detection + browser paint -- the full heavy-work
+   *     window the user is actually waiting on.
+   *
+   *     Note: prior to v0.10.7 this measured `NavigationEnd` ->
+   *     first paint, which excluded the synchronous JSON.parse
+   *     (the dominant contributor on multi-MB blobs). KQL
+   *     dashboards plotting `durationMs` across the v0.10.6 ->
+   *     v0.10.7 boundary should expect a step increase.
+   *
+   *     Raw value; use `percentile(durationMs, 50)` /
+   *     `percentile(durationMs, 95)` in KQL to track the
+   *     post-fetch render-time distribution and inform whether
+   *     virtualized tree rendering becomes a priority.
+   */
+  'blob.coldBoot.firstPaint',
 
   // Blobs
 
@@ -1008,7 +1136,7 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: info
-   * Fired by: `JsonTreeComponent.searchByKey`
+   * Fired by: `JsonTreeComponent.findByKey`
    *           (`shared/components/json-tree/json-tree.component.ts`)
    * Props: none
    */
@@ -1016,7 +1144,7 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: info
-   * Fired by: `JsonTreeComponent.searchByValue`
+   * Fired by: `JsonTreeComponent.findByValue`
    *           (`shared/components/json-tree/json-tree.component.ts`)
    * Props: none
    */
@@ -1025,25 +1153,48 @@ export const TELEMETRY_MESSAGE_IDS = [
   /**
    * Severity: info
    * Fired by: `JsonTreeComponent.collapseFromHere`
-   *           (`shared/components/json-tree/json-tree.component.ts`)
-   * Props: none
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Wired to both the surfaced top-level shortcut row (the
+   *           bolded "Collapse from here" item rendered for expanded
+   *           containers) and the in-Subtree submenu's "Collapse"
+   *           item; the `source` prop disambiguates which path the
+   *           user took. Per Path Y the action itself is a single
+   *           non-recursive `treeControl.collapse(node)` regardless
+   *           of which entry point fires it.
+   * Props: { source: 'top' | 'submenu' }. `'top'` for the surfaced
+   * shortcut row, `'submenu'` for the in-Subtree item. Lets analytics
+   * see whether the surfaced default-shortcut affordance pays off
+   * relative to the duplicated in-submenu copy.
    */
   'tree.contextMenu.collapse',
 
   /**
    * Severity: info
    * Fired by: `JsonTreeComponent.expandAllFromHere`
-   *           (`shared/components/json-tree/json-tree.component.ts`)
-   * Props: none
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Reachable only via the in-Subtree submenu's `Expand >
+   *           All` leaf after Path Y; the surfaced top-level shortcut
+   *           never fires this event (it routes through
+   *           `expandToDepth` with `relativeDepth: 1`).
+   * Props: { source: 'top' | 'submenu' }. Always `'submenu'` after
+   * Path Y; the prop is present for symmetry with `collapse` /
+   * `expandToDepth` so KQL filters can apply uniformly.
    */
   'tree.contextMenu.expandAllFromHere',
 
   /**
    * Severity: info
    * Fired by: `JsonTreeComponent.expandToDepthFromHere`
-   *           (`shared/components/json-tree/json-tree.component.ts`)
-   * Props: { relativeDepth: number }. The N in "expand N levels from
-   * here"; lets us see which depths users invoke most often.
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Wired to the surfaced top-level "Expand 1 level"
+   *           shortcut row (which routes here with `relativeDepth: 1`
+   *           and `source: 'top'`) AND to the in-Subtree submenu's
+   *           per-depth items (`+1, +2, +3, +4, +5`).
+   * Props: { relativeDepth: number, source: 'top' | 'submenu' }.
+   * `relativeDepth` is the N in "expand N levels from here"; lets us
+   * see which depths users invoke most often. `source` disambiguates
+   * the surfaced top-level shortcut from the in-Subtree item the
+   * same way as `collapse`.
    */
   'tree.contextMenu.expandToDepth',
 
@@ -1081,6 +1232,89 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Severity: info
+   * Fired by: `(menuOpened)` listener on the `Subtree >` submenu
+   *           trigger inside the row context menu
+   *           (`shared/components/json-tree/json-tree.component.html`).
+   *           Phase 4 of the tree-menu overhaul: tells us whether
+   *           users are discovering the new Subtree submenu (Path Y)
+   *           or sticking with the surfaced top-level shortcut.
+   * Props: none. The trigger renders only when at least one
+   *        subtree-affecting predicate is true; counts-only is
+   *        sufficient to answer the discoverability question.
+   * Volume control: bounded-frequency (one open per user gesture).
+   */
+  'tree.contextMenu.subtreeOpened',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.applyManualHighlight` (`cascade`
+   *           false branch) reached from the top-level row menu's
+   *           single-row "Highlight" item
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Phase 4: distinguishes single-row highlight scope
+   *           from subtree scope so analytics can show which is
+   *           more common.
+   * Props: none. `tree.highlight.apply` already carries the color
+   *        bucket; this event is a counts-only marker for the
+   *        per-row scope's invocation count.
+   */
+  'tree.contextMenu.highlight',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.applyManualHighlight` (`cascade`
+   *           true branch) reached from the in-Subtree submenu's
+   *           "Highlight" item
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Pairs with `tree.contextMenu.highlight`.
+   * Props: none.
+   */
+  'tree.contextMenu.highlightSubtree',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onExtractMenuClick`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           when the conditional "Extract embedded JSON" item is
+   *           triggered from the row context menu. The same row
+   *           also exposes Extract via the inline pill button which
+   *           emits its own `tree.extract.click` event with
+   *           `source: 'rowButton'`; this menu-driven path is
+   *           tracked separately so we can see whether users prefer
+   *           the inline pill or the menu item.
+   * Props: none. `tree.extract.apply` already carries size / kind
+   *        buckets when the extraction succeeds.
+   */
+  'tree.contextMenu.extract',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onDecodedMenuClick` (when the row
+   *           is currently in the JSON-escaped view and the click
+   *           reveals decoded text)
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           The Decode toggle has two states (show / hide) wired
+   *           through `tree.decoded.click` (which carries
+   *           `direction: 'on' | 'off'`); these context-menu events
+   *           are counts-only markers of the menu-driven entry
+   *           point per scope (show vs hide answer different
+   *           questions: discovery vs muscle-memory toggle).
+   * Props: none.
+   */
+  'tree.contextMenu.decodeShow',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onDecodedMenuClick` (when the row
+   *           is currently in the decoded view and the click
+   *           hides it back to the JSON-escaped form)
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   * Props: none.
+   */
+  'tree.contextMenu.decodeHide',
+
+  /**
+   * Severity: info
    * Fired by: `JsonTreeComponent.copyValue` (`source === 'dblclick'`
    *           branch) (`shared/components/json-tree/json-tree.component.ts`).
    *           See also `tree.contextMenu.copyValue` for the
@@ -1088,8 +1322,56 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Props: { escaped: boolean }. `true` when Alt was held during the
    * row double-click; emits the JSON-string-literal variant of the
    * value (DESIGN_SPEC.md §443).
+   *
+   * Since issue #109, this event fires for primitive (leaf) rows
+   * AND for empty containers (`{}` / `[]`). The tree-menu overhaul
+   * (plan.md decision Q4b) relaxed issue #109's "expand/collapse
+   * instead of copying" wording for the empty-container edge case
+   * where there is no expand/collapse to do -- dblclick on an empty
+   * container now copies the literal `{}` or `[]`. Container rows
+   * with children (`type === 'object' | 'array'` and
+   * `children.length > 0`) still emit `tree.row.doubleClickToggle`
+   * instead of this event.
    */
   'tree.row.doubleClickCopyValue',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onRowDblClick` container branch
+   *           (`shared/components/json-tree/json-tree.component.ts`).
+   *           Issue #109 split dblclick semantics: container rows
+   *           toggle their expansion state instead of copying.
+   * Props: { action: 'expand' | 'collapse' }. The post-toggle state
+   * (i.e., what the row became after the double-click), so analytics
+   * directly answer "how often did dblclick expand vs collapse".
+   * Volume control: bounded-frequency (one user double-click per
+   * emit). No path or content data. Empty containers do not emit
+   * this event -- they fall through to `tree.row.doubleClickCopyValue`
+   * since the tree-menu overhaul relaxed issue #109's wording for
+   * containers with no children. The chevron-button toggle path
+   * remains uninstrumented for parity with pre-issue-#109 behavior.
+   */
+  'tree.row.doubleClickToggle',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.copyValue` (`source === 'keyboard'`
+   *           branch), invoked from `onTreeKeydown`'s Ctrl+C / Cmd+C
+   *           case (`shared/components/json-tree/json-tree.component.ts`).
+   *           See also `tree.contextMenu.copyValue` and
+   *           `tree.row.doubleClickCopyValue`; all three share copy
+   *           semantics (raw text for primitives, pretty JSON for
+   *           containers; toast on success/failure).
+   * Props: { escaped: boolean }. Always `false` on this path -- the
+   * Ctrl+C / Cmd+C shortcut intentionally does not honor Alt for the
+   * JSON-string-literal escape variant. The prop is kept for shape
+   * parity with the other two copy events so analytics queries that
+   * group across all copy entry points stay uniform.
+   * Volume control: bounded-frequency (one user keypress per emit).
+   * Fires for any focused tree row -- leaf, container with children,
+   * or empty container ({} / []) alike. No path or content data.
+   */
+  'tree.keyboard.copyValue',
 
   /**
    * Severity: info
@@ -1173,7 +1455,9 @@ export const TELEMETRY_MESSAGE_IDS = [
    *          source: 'pill' | 'badge';
    *          icon: FormattingIcon }.
    *   All closed enums. `target` is the pane that handled the jump;
-   *   `paneVisibility` is the layout state that drove dispatch;
+   *   `paneVisibility` is the *effective* layout state that drove
+   *   dispatch (post-M7l narrow-viewport override; equal to the
+   *   persisted state on wide viewports);
    *   `source` distinguishes pill clicks from ancestor-badge clicks;
    *   `icon` identifies the bucket. No paths, no key/value strings.
    */

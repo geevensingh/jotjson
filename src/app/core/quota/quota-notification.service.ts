@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Injectable, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -23,6 +24,7 @@ export class QuotaNotificationService {
   private readonly snack = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
   private readonly prefs = inject(PreferencesService);
+  private readonly document = inject(DOCUMENT);
 
   async notifyAutoDeleted(info: AutoDeletedBlobInfo): Promise<void> {
     const name = info.title?.trim() || info.slug;
@@ -40,6 +42,7 @@ export class QuotaNotificationService {
       { autoFocus: 'dialog', width: '420px' },
     );
     const choice = await firstValueFrom(ref.afterClosed());
+    this.focusMainContentIfStranded();
     if (choice === 'switch_to_manual') {
       this.prefs.update({ blobQuotaStrategy: 'manual' });
     }
@@ -51,9 +54,22 @@ export class QuotaNotificationService {
       { autoFocus: 'dialog', width: '420px' },
     );
     const choice = await firstValueFrom(ref.afterClosed());
+    this.focusMainContentIfStranded();
     if (choice === 'switch_to_auto') {
       this.prefs.update({ blobQuotaStrategy: 'auto_fifo', seenBlobQuotaModal: true });
     }
+  }
+
+  private focusMainContentIfStranded(): void {
+    const activeElement = this.document.activeElement;
+    if (
+      activeElement &&
+      activeElement !== this.document.body &&
+      this.document.contains(activeElement)
+    ) {
+      return;
+    }
+    this.document.getElementById('main-content')?.focus();
   }
 }
 

@@ -86,8 +86,12 @@
 }
 
 .state-pill--modified {
-  background: #ffecb3;
-  color: #4a3000;
+  // Material 21 secondary-container token (M7f-4a). Auto-flips between
+  // dark and light themes via mat.all-component-colors emission in
+  // src/styles/_material.scss; previous hardcoded #ffecb3 / #4a3000
+  // were tuned for light only and washed out in dark.
+  background: var(--mat-sys-secondary-container, #ffecb3);
+  color: var(--mat-sys-on-secondary-container, #4a3000);
 }
 
 .state-pill--saving::before {
@@ -98,7 +102,6 @@
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
-  animation: state-pill-spin 0.8s linear infinite;
 }
 
 .state-pill--signInToSave {
@@ -216,9 +219,15 @@
   }
 }
 
-@keyframes state-pill-spin {
-  to {
-    transform: rotate(360deg);
+@media (prefers-reduced-motion: no-preference) {
+  .state-pill--saving::before {
+    animation: state-pill-spin 0.8s linear infinite;
+  }
+
+  @keyframes state-pill-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 }
 
@@ -240,6 +249,19 @@
   .title-display,
   .title-input,
   .title-suggest-wand {
+    display: none;
+  }
+
+  // M7l: collapse the pane-layout segmented control to two segments
+  // (`editor-only` | `tree-only`) at narrow widths. The two `both-*`
+  // segments hide because there is not enough room to show both
+  // panes meaningfully on phones / narrow split-screen views; the
+  // app's primary value at this size is viewing the tree (see
+  // AGENTS.md and DESIGN_SPEC.md M7l). `paneLayout` is derived from
+  // the *effective* visibility, so the active segment is always one
+  // of the two visible ones - no hidden-selected state.
+  .pane-layout-group mat-button-toggle[value='both-horizontal'],
+  .pane-layout-group mat-button-toggle[value='both-vertical'] {
     display: none;
   }
 }

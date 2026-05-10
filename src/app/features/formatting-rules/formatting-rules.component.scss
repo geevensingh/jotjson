@@ -73,7 +73,10 @@
   background: var(--mat-sys-surface-container-low);
   border-radius: 0.6rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: opacity 150ms ease;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: opacity 150ms ease;
+  }
 }
 
 .rule-set-card.is-busy {

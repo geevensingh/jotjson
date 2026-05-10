@@ -258,10 +258,8 @@
   <button
     type="button"
     mat-icon-button
-    matTooltip="Toggle theme"
-    i18n-matTooltip="@@toolbar.theme.tooltip"
-    aria-label="Toggle theme"
-    i18n-aria-label="@@toolbar.theme.aria"
+    [matTooltip]="themeToggleLabel()"
+    [attr.aria-label]="themeToggleLabel()"
     (click)="toggleTheme.emit()"
   >
     <jj-icon [name]="themeIcon()" />

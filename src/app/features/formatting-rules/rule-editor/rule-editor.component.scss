@@ -354,8 +354,14 @@
 }
 
 .pill-warn {
-  background: #fef3c7;
-  color: #78350f;
+  // Material 21 secondary-container token (M7f-4a). Auto-flips
+  // dark/light; previous hardcoded #fef3c7 / #78350f washed out in
+  // dark mode. Material 21 has no dedicated "warning" role, so
+  // secondary-container is the closest semantic match (neutral
+  // attention) - falls back to per-theme overrides if visual signal
+  // proves insufficient.
+  background: var(--mat-sys-secondary-container, #fef3c7);
+  color: var(--mat-sys-on-secondary-container, #78350f);
   cursor: help;
 }
 
@@ -366,8 +372,12 @@
 }
 
 .pill-ok {
-  background: #dcfce7;
-  color: #14532d;
+  // Material 21 tertiary-container token (M7f-4a). Auto-flips
+  // dark/light; previous hardcoded #dcfce7 / #14532d washed out in
+  // dark mode. Tertiary container is Material's contrasting
+  // positive-emphasis role.
+  background: var(--mat-sys-tertiary-container, #dcfce7);
+  color: var(--mat-sys-on-tertiary-container, #14532d);
 }
 
 .pill-idle {

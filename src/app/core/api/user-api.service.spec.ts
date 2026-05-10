@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import type { UserPreferences } from './models';
+import type { PreferencesWithEtag, UserWithEtag } from './user-api.service';
 import { UserApiService } from './user-api.service';
 
 function fakePreferences(): UserPreferences {
@@ -39,6 +40,7 @@ function fakePreferences(): UserPreferences {
     seenBlobQuotaModal: false,
     seenClipboardBanner: false,
     treePathRoot: 'jsonpath',
+    coldBootClipboardAutoPaste: 'ask',
     treeHighlightColors: {
       dark: {
         selectionColor: '#000000',
@@ -100,21 +102,110 @@ describe('UserApiService', () => {
     expect(caught).toBeTruthy();
   });
 
-  it('seed() POSTs preferences to /api/me', () => {
+  it('getMe() returns the user body and ETag when present', () => {
+    let received: UserWithEtag | null | 'unset' = 'unset';
+    service.getMe().subscribe({
+      next: (value) => (received = value),
+    });
+    const req = httpMock.expectOne(base);
+    const body = {
+      id: 'u-1',
+      displayName: 'Alice',
+      email: 'a@b.com',
+      createdAt: 't',
+      plan: 'free' as const,
+      preferences: fakePreferences(),
+    };
+    req.flush(body, { status: 200, statusText: 'OK', headers: { ETag: '"3"' } });
+    expect(received).not.toBe('unset');
+    expect(received).not.toBeNull();
+    if (received !== null && received !== 'unset') {
+      const wrapper = received as UserWithEtag;
+      expect(wrapper.user).toEqual(body);
+      expect(wrapper.etag).toBe('"3"');
+    }
+  });
+
+  it('getMe() returns null etag when server omits ETag header', () => {
+    let received: UserWithEtag | null | 'unset' = 'unset';
+    service.getMe().subscribe({
+      next: (value) => (received = value),
+    });
+    const req = httpMock.expectOne(base);
+    req.flush(
+      {
+        id: 'u-1',
+        displayName: 'Alice',
+        email: 'a@b.com',
+        createdAt: 't',
+        plan: 'free',
+        preferences: fakePreferences(),
+      },
+      { status: 200, statusText: 'OK' },
+    );
+    if (received !== null && received !== 'unset') {
+      const wrapper = received as UserWithEtag;
+      expect(wrapper.etag).toBeNull();
+    } else {
+      fail('expected response wrapper');
+    }
+  });
+
+  it('seed() POSTs preferences to /api/me and returns ETag', () => {
     const prefs = fakePreferences();
-    service.seed(prefs).subscribe();
+    let received: UserWithEtag | 'unset' = 'unset';
+    service.seed(prefs).subscribe({
+      next: (value) => (received = value),
+    });
     const req = httpMock.expectOne(base);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ preferences: prefs });
-    req.flush({});
+    req.flush(
+      {
+        id: 'u-1',
+        displayName: 'Alice',
+        email: 'a@b.com',
+        createdAt: 't',
+        plan: 'free',
+        preferences: prefs,
+      },
+      { status: 201, statusText: 'Created', headers: { ETag: '"1"' } },
+    );
+    if (received !== 'unset') {
+      const wrapper = received as UserWithEtag;
+      expect(wrapper.etag).toBe('"1"');
+    } else {
+      fail('expected response wrapper');
+    }
   });
 
-  it('putPreferences() PUTs to /api/me/preferences with the payload', () => {
+  it('putPreferences() PUTs to /api/me/preferences with the If-Match header', () => {
     const prefs = fakePreferences();
-    service.putPreferences(prefs).subscribe();
+    let received: PreferencesWithEtag | 'unset' = 'unset';
+    service.putPreferences(prefs, '"3"').subscribe({
+      next: (value) => (received = value),
+    });
     const req = httpMock.expectOne(`${base}/preferences`);
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual(prefs);
-    req.flush(prefs);
+    expect(req.request.headers.get('If-Match')).toBe('"3"');
+    req.flush(prefs, { status: 200, statusText: 'OK', headers: { ETag: '"4"' } });
+    if (received !== 'unset') {
+      const wrapper = received as PreferencesWithEtag;
+      expect(wrapper.etag).toBe('"4"');
+    } else {
+      fail('expected response wrapper');
+    }
+  });
+
+  it('putPreferences() propagates 412 conflicts', () => {
+    const prefs = fakePreferences();
+    let caught: unknown = null;
+    service.putPreferences(prefs, '"1"').subscribe({
+      error: (err) => (caught = err),
+    });
+    const req = httpMock.expectOne(`${base}/preferences`);
+    req.flush('precondition failed', { status: 412, statusText: 'Precondition Failed' });
+    expect(caught).toBeTruthy();
   });
 });

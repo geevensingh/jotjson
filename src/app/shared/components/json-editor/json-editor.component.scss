@@ -29,7 +29,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(127, 127, 127, 0.8);
+  // Use Material's per-theme muted-text token so the placeholder meets
+  // WCAG AA contrast against `var(--bg)` in both `theme-dark` and
+  // `theme-light` (#145). The previous hardcoded `rgba(127, 127, 127,
+  // 0.8)` flattened to ~3.17:1 on dark and ~2.76:1 on light, both
+  // failing AA. Material 3 generates `on-surface-variant` per theme
+  // for exactly this "muted but readable" role; tokens are defined
+  // globally by `mat.all-component-themes` in `src/styles/_material.scss`.
+  color: var(--mat-sys-on-surface-variant);
   font-family: v.$font-ui;
   font-size: 13px;
   pointer-events: none;

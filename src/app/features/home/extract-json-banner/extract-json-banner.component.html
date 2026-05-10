@@ -9,10 +9,12 @@
   >
     <span class="banner-text">
       @if (blockCount() === 1) {
-        <span i18n="@@home.paste.extract.banner.message.single">Found JSON inside your paste.</span>
+        <span i18n="@@home.paste.extract.banner.message.single"
+          >Found embedded JSON in your paste.</span
+        >
       } @else {
         <span i18n="@@home.paste.extract.banner.message.multi"
-          >Found {{ blockCount() }} JSON blocks - they can be combined into an array.</span
+          >Found {{ blockCount() }} embedded JSON blocks in your paste.</span
         >
       }
       @if (commentsWillBeDropped()) {
@@ -22,33 +24,18 @@
       }
     </span>
     <span class="banner-actions">
-      @if (blockCount() === 1) {
-        <button
-          #extractButton
-          type="button"
-          mat-button
-          color="primary"
-          class="extract-button"
-          (click)="extract.emit()"
-          i18n="@@home.paste.extract.banner.actionSingle"
-        >
-          <jj-icon name="extract" />
-          <span>Extract JSON</span>
-        </button>
-      } @else {
-        <button
-          #extractButton
-          type="button"
-          mat-button
-          color="primary"
-          class="extract-button"
-          (click)="extract.emit()"
-          i18n="@@home.paste.extract.banner.actionMulti"
-        >
-          <jj-icon name="extract" />
-          <span>Extract blocks as array</span>
-        </button>
-      }
+      <button
+        #extractButton
+        type="button"
+        mat-button
+        color="primary"
+        class="extract-button"
+        (click)="extract.emit()"
+        i18n="@@home.paste.extract.banner.action"
+      >
+        <jj-icon name="extract" />
+        <span>Extract embedded JSON</span>
+      </button>
       <button
         type="button"
         mat-button

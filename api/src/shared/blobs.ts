@@ -27,7 +27,12 @@
 import type { Container, ItemResponse } from '@azure/cosmos';
 import { randomBytes, randomUUID } from 'crypto';
 import { parse, type ParseError } from 'jsonc-parser';
-import { getCosmos } from './cosmos';
+import {
+  getCosmos,
+  replaceWithIfMatch,
+  VersionConflictError,
+  type VersionedDocument,
+} from './cosmos';
 
 export interface BlobHighlight {
   path: string;
@@ -35,7 +40,7 @@ export interface BlobHighlight {
   cascade: boolean;
 }
 
-export interface BlobDocument {
+export interface BlobDocument extends VersionedDocument {
   id: string;
   slug: string;
   content: string;
@@ -46,8 +51,6 @@ export interface BlobDocument {
   version: number;
   createdAt: string;
   updatedAt: string;
-  /** Cosmos system ETag used only for server-side optimistic concurrency. */
-  _etag?: string;
 }
 
 export interface CreateBlobInput {
@@ -113,18 +116,17 @@ export class SlugGenerationError extends Error {
   }
 }
 
-export class BlobVersionConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BlobVersionConflictError';
-  }
-}
-
 let cached: Container | undefined;
 
 export function getBlobsContainer(): Container {
   if (!cached) {
-    cached = getCosmos().database.container('blobs');
+    // Container name is overridable via env var so the api-integration
+    // test harness can point at a per-run isolated container in the
+    // CI Cosmos free-tier account. Production deploys leave this unset
+    // and use the canonical 'blobs' container name from
+    // infra/modules/cosmosDb.bicep.
+    const containerName = process.env['COSMOS_BLOBS_CONTAINER'] ?? 'blobs';
+    cached = getCosmos().database.container(containerName);
   }
   return cached;
 }
@@ -154,12 +156,6 @@ function normalizeVersion(value: unknown): number {
 function normalizeBlobDocument(doc: BlobDocument): BlobDocument {
   const version = normalizeVersion(doc.version);
   return doc.version === version ? doc : { ...doc, version };
-}
-
-function isCosmosPreconditionFailed(error: unknown): boolean {
-  if (!isRecord(error)) return false;
-  const code = error['code'];
-  return code === 412 || code === 'PreconditionFailed';
 }
 
 function isDecimalDigit(character: string | undefined): boolean {
@@ -507,52 +503,38 @@ export async function updateBlob(
 ): Promise<BlobDocument> {
   const current = normalizeBlobDocument(existing);
   if (current.version !== expectedVersion) {
-    throw new BlobVersionConflictError(
+    throw new VersionConflictError(
       `Blob was modified by another writer (expected version ${expectedVersion}, found ${current.version})`,
     );
   }
-  if (!current._etag) {
-    throw new BlobVersionConflictError('Blob is missing the Cosmos ETag required for replace');
-  }
 
-  const next: BlobDocument = { ...current };
-  delete next._etag;
-  if (patch.content !== undefined) {
-    next.content = validateContent(patch.content);
-  }
-  if (patch.title !== undefined) {
-    const title = validateTitle(patch.title);
-    if (title === undefined) {
-      delete next.title;
-    } else {
-      next.title = title;
-    }
-  }
-  if (patch.isPublic !== undefined) {
-    next.isPublic = validateIsPublic(patch.isPublic);
-  }
-  if (patch.highlights !== undefined) {
-    next.highlights = assertHighlights(patch.highlights);
-  }
-  validateBlobDocumentSize(next.content, next.highlights);
-  next.version = current.version + 1;
-  next.updatedAt = new Date().toISOString();
-
-  try {
-    const response: ItemResponse<BlobDocument> = await getBlobsContainer()
-      .item(current.id, current.ownerId)
-      .replace<BlobDocument>(next, {
-        accessCondition: { type: 'IfMatch', condition: current._etag },
-      });
-    return normalizeBlobDocument(response.resource ?? next);
-  } catch (error) {
-    if (isCosmosPreconditionFailed(error)) {
-      throw new BlobVersionConflictError(
-        `Blob was modified by another writer (expected version ${expectedVersion})`,
-      );
-    }
-    throw error;
-  }
+  const result = await replaceWithIfMatch<BlobDocument>(
+    getBlobsContainer(),
+    current.ownerId,
+    current,
+    (draft) => {
+      if (patch.content !== undefined) {
+        draft.content = validateContent(patch.content);
+      }
+      if (patch.title !== undefined) {
+        const title = validateTitle(patch.title);
+        if (title === undefined) {
+          delete draft.title;
+        } else {
+          draft.title = title;
+        }
+      }
+      if (patch.isPublic !== undefined) {
+        draft.isPublic = validateIsPublic(patch.isPublic);
+      }
+      if (patch.highlights !== undefined) {
+        draft.highlights = assertHighlights(patch.highlights);
+      }
+      validateBlobDocumentSize(draft.content, draft.highlights);
+      draft.updatedAt = new Date().toISOString();
+    },
+  );
+  return normalizeBlobDocument(result);
 }
 
 /**

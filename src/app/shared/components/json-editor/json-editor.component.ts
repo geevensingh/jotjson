@@ -110,6 +110,12 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       this.logger.error('monaco.loadFailed', error);
       return;
     }
+    // The await above can resolve after the component's view has
+    // already been destroyed (e.g., user navigates away mid-load, or a
+    // test fixture is torn down between it() blocks). If we proceed,
+    // we'd allocate a Monaco instance + ResizeObserver that
+    // ngOnDestroy() has already run past, leaking them as zombies.
+    if (this.destroyRef.destroyed) return;
     this.monaco = monaco;
 
     this.defineThemes(monaco);
@@ -134,6 +140,14 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
         lineNumbersMinChars: 3,
         folding: true,
         bracketPairColorization: { enabled: true },
+        // M7g-3c: explicit a11y options. `auto` lets Monaco re-detect when a
+        // screen reader becomes active rather than probing once at boot, and
+        // `ariaLabel` gives the editor textarea a meaningful accessible name
+        // (Monaco writes this onto the inner <textarea> on focus). The
+        // built-in `editor.action.accessibilityHelp` action (Ctrl+F1 / Cmd+F1)
+        // remains reachable for users who need it.
+        accessibilitySupport: 'auto',
+        ariaLabel: $localize`:@@editor.aria:JSON editor`,
       });
 
       // JotJSON is JSONC - defer validation to our parser.
@@ -226,7 +240,6 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     this.applyMarkers(this.errors());
 
     this.ready.set(true);
-    this.destroyRef.onDestroy(() => this.dispose());
   }
 
   ngOnDestroy(): void {
@@ -290,10 +303,28 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   private defineThemes(monaco: typeof MonacoNS): void {
+    /*
+     * Per-theme JSON syntax token rules (M7f-3a). Token names verified
+     * from Monaco's JSON tokenizer source (monaco-editor 0.55.1):
+     *   string.value.json - JSON string values
+     *   string.key.json   - JSON property names
+     *   number.json       - JSON numbers (NOT plain "number")
+     *   keyword.json      - true / false / null
+     *
+     * Colors mirror the tree palette
+     * (`json-tree.component.scss:11-21`) so the editor and the tree
+     * feel like one surface in both themes. AA contrast against the
+     * editor background is verified by the contrast helper used in
+     * existing tree specs.
+     */
     monaco.editor.defineTheme('jotjson-dark', {
       base: 'vs-dark',
       inherit: true,
-      rules: [],
+      rules: [
+        { token: 'string.value.json', foreground: '7fa164' },
+        { token: 'number.json', foreground: 'ff9b30' },
+        { token: 'keyword.json', foreground: '3fa1f3' },
+      ],
       colors: {
         'editor.background': '#1e1e1e',
         'editor.foreground': '#e4e4e4',
@@ -302,7 +333,11 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     monaco.editor.defineTheme('jotjson-light', {
       base: 'vs',
       inherit: true,
-      rules: [],
+      rules: [
+        { token: 'string.value.json', foreground: '3f6a25' },
+        { token: 'number.json', foreground: '8a4b00' },
+        { token: 'keyword.json', foreground: '005ea8' },
+      ],
       colors: {
         'editor.background': '#fafafa',
         'editor.foreground': '#1a1a1a',

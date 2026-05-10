@@ -30,7 +30,10 @@ unless a task explicitly overrides a specific rule.
 - **Hosting:** Azure Static Web Apps with managed Functions.
 
 Do not introduce new frameworks, languages, ORMs, state libraries, CSS
-frameworks, or cloud services without explicit approval.
+frameworks, or cloud services without explicit approval. Likewise, do
+not work around npm peer-dependency installation errors with
+`npm install --legacy-peer-deps` or `--force` without explicit user
+approval (see §7).
 
 ## 3. Repository Layout
 
@@ -114,6 +117,62 @@ Place new code in the correct bucket:
   privacy guardrails). The TL;DR for Angular code is "use
   `LoggerService` not `console.*` in production."
 
+### Server-platform safety (prerender)
+
+The home (`/`) and 404 (`/404`) routes are statically prerendered by
+`@angular/ssr` running in Node at build time (M7h). The build runs
+component constructors, field initializers, and eagerly-fired effects
+on the **server platform**, which has no `window`, no `localStorage` /
+`sessionStorage`, no `navigator`, no `IntersectionObserver`, no
+`document.addEventListener` semantics for `online` / `offline`, etc.
+A throw at any of these call sites aborts the prerender and the home
+route silently emits `index.csr.html` (the SPA shell) instead of a real
+prerendered `index.html`.
+
+Rules for code that reaches the prerender path:
+
+- **Inject `PLATFORM_ID` and gate browser-API code** with
+  `isPlatformBrowser(inject(PLATFORM_ID))`. Establish the browser flag
+  as a `protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));`
+  field initializer (injection context); never call `inject()` from
+  inside `ngOnInit` or other lifecycle hooks. Reference examples:
+  `src/app/core/loading-splash/loading-splash.service.ts`,
+  `src/app/core/api/rule-sets.service.ts`,
+  `src/app/features/home/home.component.ts`.
+- **Effects in constructors fire during prerender.** Anything an
+  `effect()` does on the first sync run hits the server platform.
+  Gate browser-only side effects (`localStorage` writes,
+  `seo.clearBlobTags()`, `MatSnackBar.open()`, audio/clipboard
+  bindings) on `this.isBrowser` inside the effect body, or skip the
+  effect entirely with an early return.
+- **Heavy components** (Monaco, JsonTree, status bar) keep the
+  ApplicationRef unstable forever and time out the prerender. Wrap
+  them in `@if (isBrowser) { ... } @else { <server-skeleton/> }`. The
+  `@else` block ships the SEO copy crawlers should see (`<h1>` brand,
+  tagline, description); the real components mount after client
+  bootstrap. Reference: `src/app/features/home/home.component.html`.
+- **Server-only providers** live in `src/app/app.config.server.ts`.
+  This config supplies MSAL no-op stubs (`MSAL_INSTANCE`,
+  `MsalService`, `MsalBroadcastService`), skips
+  `provideServiceWorker`, and replaces
+  `provideAppInitializer(AuthService.initializeFromRedirect)` with a
+  no-op. Do not modify the browser `app.config.ts` to "be safe on the
+  server" - keep server-specific behavior in `app.config.server.ts`.
+- **Splash discrimination.** Prerendered HTML files carry
+  `<meta name="prerendered" content="true">` (injected by
+  `scripts/postbuild-seo.mjs`). `LoadingSplashService` reads the marker
+  at construction and pre-latches `firstNavComplete = true` so the
+  Angular splash never paints over prerendered content. Shell-fallback
+  boots (every other route) have no marker and follow the legacy
+  splash lifecycle.
+- **Verify in CI.** `npm run check:prerender` (run by the postbuild
+  pipeline) asserts the dist layout, marker placement, OG defaults,
+  noindex, and asset presence. Run it locally after touching any of
+  `src/index.html`, `app.config*.ts`, `app.routes.server.ts`,
+  `home.component.*`, `not-found.component.*`,
+  `loading-splash.service.ts`, `staticwebapp.config.json`, or
+  `scripts/postbuild-seo.mjs`.
+
 ### Internationalization (i18n)
 - v1 ships in English only, but **all user-facing strings must be extractable**
   per `DESIGN_SPEC.md` §Internationalization.
@@ -136,9 +195,11 @@ Place new code in the correct bucket:
   in `src/index.html`) sit outside the i18n pipeline by necessity -
   `$localize` and `i18n` attributes only resolve once Angular is up.
   These strings stay hardcoded in English. Keep the set as small as
-  possible (currently the splash labels "Loading JotJSON..." and
-  "Loading JSON...", with the latter shown on cold-boot deep-links
-  to `/s/:slug`); any new pre-bootstrap text needs the same exception
+  possible (currently a single splash label "Loading JotJSON..."
+  shown for both `/` and `/s/:slug` cold boots; the more specific
+  "Downloading JSON..." and "Rendering tree..." labels come from the
+  Angular splash component once it mounts and go through `$localize`
+  normally); any new pre-bootstrap text needs the same exception
   comment.
 - Never use plain strings in templates or `console.warn`/`toast` calls when
   they are user-visible.
@@ -326,6 +387,14 @@ Events catalog.
   workspace currently uses `*.test.ts` (Jest convention). New api/
   test files should still use `*.test.ts` until the workspace is
   migrated. Do not mix conventions within a workspace.
+  - Within `api/`, **integration tests** (real-Cosmos-backed; #63)
+    use `*.integration.test.ts` and live under `api/integration/`,
+    NOT under `api/src/`. This keeps integration helpers out of
+    the production build (`api/tsconfig.json` includes `src/**/*.ts`)
+    and out of production-pattern lint scope. Integration tests
+    are CI-only by default; run locally via
+    `npm --prefix api run test:integration` after setting
+    `COSMOS_CI_*` env vars (see `docs/ci-cosmos.md`).
 
 ### ASCII-only repository
 - Tracked source files **must be ASCII** unless the codepoint is explicitly
@@ -446,9 +515,19 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
 For incremental work, prefer the fast inner loop over the full
 Definition of Done cycle (§7) on every iteration:
 
-- **`npm run verify:fast`** runs `lint` + `ng test` in one shot,
+- **`npm run verify:fast`** runs `lint` + `test:scripts` (Node-built-in
+  unit tests for `scripts/*.mjs`) + `ng test` in one shot,
   **without** the production build or i18n extraction. Use this as
-  the default check during iteration.
+  the default check during iteration. **Smoke e2e** (`npm run test:e2e`)
+  is intentionally NOT part of `verify:fast` - it builds a production
+  bundle and starts a real browser, which takes much longer than the
+  fast inner loop. Run e2e only when you've changed code under `e2e/`,
+  or when you want to verify a flow before committing. CI runs e2e
+  on every PR regardless. **API integration** tests
+  (`npm --prefix api run test:integration`, #63) are also NOT part of
+  `verify:fast` - they require a real Cosmos DB account (`COSMOS_CI_*`
+  env vars) and are CI-only by default. Run locally only when you've
+  changed code under `api/integration/` or `api/src/shared/blobs.ts`.
 - For focused iteration, pass `--include` through to `ng test`:
   ```
   npm run verify:fast -- --include='**/extract-json-banner/**'
@@ -478,6 +557,15 @@ ng test --watch --browsers=ChromeHeadless --include='**/<focus>/**'
 After the initial cold start, every save reports type errors and
 re-runs affected tests in seconds. Stop the watchers before running
 the full DoD cycle to avoid Karma port collisions.
+
+**Align local with CI before non-trivial work.** Run `npm ci` (root)
+and `npm --prefix api ci` once at the start of a meaningful change
+so local `node_modules` matches the lockfile CI installs from. Plain
+`npm install` floats transitive deps to the latest version matching
+the semver range and can drift from what's pinned -- a "passes
+locally" claim against drifted `node_modules` is not equivalent to
+"passes on CI." After the initial `npm ci`, plain `npm test` is fine
+for the iteration loop.
 
 ## 6. Security & Privacy
 
@@ -518,22 +606,28 @@ Before finishing a task:
    both workspaces. (You can still run them individually: root
    `npm run lint` and `npm --prefix api run lint`.) Frontend lint is
    `tsc --noEmit -p tsconfig.app.json` + `check-ascii.mjs`,
-   `check-spec-patterns.mjs`, `check-prod-patterns.mjs`, and
-   `check-format.mjs` (the prettier annotation wrapper -
-   `npm run format:check` is the equivalent for direct invocation).
+   `check-spec-patterns.mjs`, `check-prod-patterns.mjs`,
+   `check-lockfile.mjs`, and `check-format.mjs` (the prettier
+   annotation wrapper - `npm run format:check` is the equivalent for
+   direct invocation).
    Formatting is enforced repo-wide, including `api/**`, from the
    root. The `api/` lint is `tsc --noEmit`. ESLint is not installed.
 
-   Each gate also has its own per-script entry point so CI can run
-   them as separate steps with inline annotations and a per-gate
+   Each gate also has its own per-script entry point. CI runs most
+   of them as separate steps with inline annotations and a per-gate
    summary: `npm run lint:tsc`, `npm run lint:ascii`,
    `npm run lint:spec-patterns`, `npm run lint:prod-patterns`,
-   `npm run lint:format`. **When CI fails, look at the failing
-   step's name in the run page** - the gate that broke is named
-   directly (e.g., "Lint - Prettier formatting"). The "Lint
-   summary" rollup step at the end of the job restates which gate
-   failed and the exact fix command. File-level (and where
-   available, line-level) failures are surfaced as inline
+   `npm run lint:format`. (The `lint:lockfile` gate is
+   intentionally **not** a separate CI step: CI's job-level
+   `npm ci` already enforces lockfile-vs-manifest sync natively, so
+   a duplicate CI step would never fire. The script exists as a
+   `lint:*` entry point so it shows up in `lint:all` and can be
+   invoked directly during local debugging.) **When CI fails, look
+   at the failing step's name in the run page** - the gate that
+   broke is named directly (e.g., "Lint - Prettier formatting").
+   The "Lint summary" rollup step at the end of the job restates
+   which gate failed and the exact fix command. File-level (and
+   where available, line-level) failures are surfaced as inline
    annotations on the PR Files Changed view.
 
    A husky pre-commit hook installed by `npm install`'s `prepare`
@@ -545,7 +639,10 @@ Before finishing a task:
    hand-formatted files) are respected automatically. The hook does not
    run tsc, ASCII, or pattern checks; those still surface only in
    `npm run lint:all` and CI.
-2. `npm test` passes (frontend and `api/`).
+2. `npm test` passes (frontend and `api/`). For changes touching
+   `scripts/*.mjs`, also `npm run test:scripts` (Node-built-in unit
+   tests; runs automatically as part of `npm run verify:fast` and
+   the `web` CI job).
 3. `npm run build` (or `ng build --configuration production`) succeeds.
 4. `npm run check:ascii` passes (no new non-ASCII codepoints outside the
    allowlist in `scripts/check-ascii.mjs`).
@@ -578,6 +675,27 @@ Before finishing a task:
     response (and ideally in the commit body) so the decision is on
     the record. The build counter + SHA already give per-deploy
     resolution, so most non-feature work is "no bump."
+12. **Never use `npm install --legacy-peer-deps` or `--force`** to
+    work around peer-dependency installation errors without explicit
+    user approval. These flags are known lockfile-drift attractors:
+    they skip recording transitive optional-peer entries that
+    `npm ci` on Linux later rejects, breaking CI for everyone (see
+    retro: M7h CI break, fix in commit 78c0dd7). If npm refuses an
+    install on peer-dep grounds, stop and ask the user whether to
+    bump the conflicting package, pin a different version, or accept
+    the override - do not work around silently.
+
+    If the user does approve an override, it must be persisted before
+    commit by either:
+    - committing the matching flag in `.npmrc` at the workspace root
+      (so subsequent `npm ci` runs use the same resolution), or
+    - regenerating the lockfile afterward with the override removed
+      (`Remove-Item package-lock.json; npm install --package-lock-only`)
+      so the committed lockfile is valid under default settings.
+
+    Either way, `npm run lint:lockfile` (which runs `npm ci --dry-run`
+    against root and `api/`) must pass before commit. The `lint`
+    chain runs it automatically, so this is enforced by `lint:all`.
 
 ## 8. Git & PR Hygiene
 
@@ -593,6 +711,26 @@ Before finishing a task:
 - Never commit secrets, `.env`, `node_modules`, build output, or editor files
   beyond what `.gitignore` already covers.
 - Do not rewrite or force-push shared branches.
+- **NEVER bypass branch protection.** Do not use `gh pr merge --admin`,
+  `--force`, or any other flag/UI/API path that bypasses required
+  reviews, required status checks, or unresolved review-thread blocks.
+  This rule has zero exceptions, including:
+  - When the user owns the repo and `--admin` would technically work.
+  - When the change "looks trivial" (a comment-only edit, a typo fix).
+  - When CI is "obviously" green and the only block is an unresolved
+    review thread or missing approver.
+  - When the user is unavailable and the PR has been sitting.
+  - When you have local user approval to merge -- that is not the same
+    as approval to **bypass policy**. The policy exists for the human
+    workflow gates (review, conversation resolution, required checks);
+    user-of-the-moment consent does not waive those gates.
+
+  If a PR is blocked, surface the block in plain language (which gate
+  is failing, e.g., "1 unresolved review thread", "review required",
+  "1 of 10 checks pending"), explain how it can be cleared (resolve
+  thread, request review, wait for CI), and stop. Do not propose
+  `--admin` as an option in `ask_user`. The user can clear the block
+  themselves through the GitHub UI; agents do not.
 - When a commit is authored with AI assistance, include:
 
   ```
@@ -699,6 +837,35 @@ Before finishing a task:
   does not qualify even when the user's intent to eventually fix it
   is obvious. The user reporting a problem is delegating diagnosis
   and planning to you, not authorization.
+- **CI failures are plan-triggers, not retry-triggers.** Never
+  re-run a failed CI job, "Re-run all jobs", or push a
+  speculative fix on the agent's own judgment when CI is red,
+  even when the changeset on the run looks obviously unrelated
+  to the failing test. **On `main`, this is zero-tolerance**:
+  never autonomously retry a red CI run, full stop. On PR and
+  feature branches the same no-autoretry rule applies, but you
+  may at least propose a retry as part of a plan -- still
+  subject to user authorization before acting. The default
+  response to any CI failure is: tell the user the job failed,
+  summarize what broke (which job, which test or step, the
+  assertion or exit code, what the changeset on the run
+  actually touched), and ask what to do. When the failure
+  looks like a flake, propose filing a `flaky-test` issue so
+  it can be hardened rather than re-running silently -- silent
+  retries hide both genuine flakes (so they never get fixed)
+  and genuine regressions (so they ship anyway, with a green
+  second attempt covering for the red first attempt). The
+  direct-command carve-out applies only when the user has
+  issued an explicit retry instruction in the same or a recent
+  turn (e.g., "re-run that job", "rerun the failed attempt",
+  and similarly explicit retry instructions); the agent's own
+  judgment that "this is probably a flake" is not such a
+  command. This rule is distinct from the fix-and-push rule
+  for agent-caused breakage: when the agent's own change broke
+  CI on `main`, the agent must still push the fix and watch
+  the re-run go green before declaring the task done. That
+  rule is about *fixing* known breakage caused by the agent;
+  this one is about not *retrying* unknown failures on a hunch.
 - **Rubber-duck every plan before presenting it.** Once you have a
   candidate plan, run it through a rubber-duck / critic sub-agent
   for an independent critique (correctness, missed edge cases,

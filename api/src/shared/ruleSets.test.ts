@@ -1,6 +1,5 @@
 import {
   RuleSetValidationError,
-  RuleSetVersionConflictError,
   assertRule,
   assertRuleSetPayload,
   assertStyle,
@@ -16,16 +15,20 @@ import {
   type RuleSetDocument,
   type ValuePredicate,
 } from './ruleSets';
+import { VersionConflictError } from './cosmos';
 
 interface FakeContainer {
   items: RuleSetDocument[];
+  nextEtag: number;
   failNextRead?: { code: number };
 }
 
 let fake: FakeContainer;
 
 jest.mock('./cosmos', () => {
+  const actual = jest.requireActual<typeof import('./cosmos')>('./cosmos');
   return {
+    ...actual,
     getCosmos: () => ({
       database: {
         container: () => ({
@@ -56,8 +59,10 @@ jest.mock('./cosmos', () => {
               },
             }),
             create: async (doc: RuleSetDocument) => {
-              fake.items.push(doc);
-              return { resource: doc };
+              const stored = { ...doc, _etag: `etag-${fake.nextEtag}` };
+              fake.nextEtag += 1;
+              fake.items.push(stored);
+              return { resource: stored };
             },
           },
           item: (id: string, partitionKey: string) => ({
@@ -68,13 +73,27 @@ jest.mock('./cosmos', () => {
                 throw err;
               }
               const found = fake.items.find((r) => r.id === id && r.userId === partitionKey);
-              return { resource: found ?? null };
+              return { resource: found ? { ...found } : null };
             },
-            replace: async (next: RuleSetDocument) => {
+            replace: async (
+              next: RuleSetDocument,
+              options?: { accessCondition?: { type: string; condition: string } },
+            ) => {
               const idx = fake.items.findIndex((r) => r.id === id && r.userId === partitionKey);
               if (idx === -1) throw Object.assign(new Error('not found'), { code: 404 });
-              fake.items[idx] = next;
-              return { resource: next };
+              const current = fake.items[idx];
+              if (!current) throw Object.assign(new Error('not found'), { code: 404 });
+              const condition = options?.accessCondition;
+              if (condition?.type === 'IfMatch' && condition.condition !== current._etag) {
+                throw Object.assign(new Error('precondition failed'), { code: 412 });
+              }
+              if ('_etag' in next) {
+                throw new Error('replace body must not include _etag (helper bug)');
+              }
+              const stored = { ...next, _etag: `etag-${fake.nextEtag}` };
+              fake.nextEtag += 1;
+              fake.items[idx] = stored;
+              return { resource: stored };
             },
             delete: async () => {
               const idx = fake.items.findIndex((r) => r.id === id && r.userId === partitionKey);
@@ -90,7 +109,7 @@ jest.mock('./cosmos', () => {
 });
 
 beforeEach(() => {
-  fake = { items: [] };
+  fake = { items: [], nextEtag: 1 };
   __resetRuleSetsContainerForTesting();
 });
 
@@ -563,14 +582,33 @@ describe('repository', () => {
     expect(next.name).toBe('Renamed');
   });
 
-  it('replaceRuleSet throws RuleSetVersionConflictError on version mismatch', async () => {
+  it('replaceRuleSet throws VersionConflictError on version mismatch', async () => {
     const stored = makeStored('a', 'u-1', '2026-01-01T00:00:00Z');
     fake.items = [stored];
     await expect(replaceRuleSet(stored, { name: 'x', rules: [] }, 999)).rejects.toBeInstanceOf(
-      RuleSetVersionConflictError,
+      VersionConflictError,
     );
     // No mutation when the precondition fails.
     expect(fake.items[0]?.version).toBe(1);
+  });
+
+  it('replaceRuleSet uses Cosmos ETag preconditions so concurrent snapshots cannot both replace', async () => {
+    fake.items = [];
+    const created = await createRuleSet('u-1', { name: 'Errors', rules: [] });
+    const firstSnapshot = await readRuleSet(created.id, 'u-1');
+    const secondSnapshot = await readRuleSet(created.id, 'u-1');
+
+    const results = await Promise.allSettled([
+      replaceRuleSet(firstSnapshot!, { name: 'first', rules: [] }, 1),
+      replaceRuleSet(secondSnapshot!, { name: 'second', rules: [] }, 1),
+    ]);
+
+    const fulfilled = results.filter((result) => result.status === 'fulfilled');
+    const rejected = results.filter((result) => result.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(VersionConflictError);
+    expect(fake.items[0]?.version).toBe(2);
   });
 
   it('deleteRuleSetById returns true when the doc was removed', async () => {
@@ -593,5 +631,6 @@ function makeStored(id: string, userId: string, createdAt: string): RuleSetDocum
     version: 1,
     createdAt,
     updatedAt: createdAt,
+    _etag: `etag-seed-${id}`,
   };
 }

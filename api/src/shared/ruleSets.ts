@@ -20,15 +20,20 @@
  * }
  * ```
  *
- * The `version` field is the sole concurrency primitive. We do not
- * use Cosmos's built-in `_etag` because the spec defines a numeric
- * version that is meaningful to clients and stable across rebuilds.
- * `If-Match` request headers carry the integer; mismatches return
- * 412 from the handler layer.
+ * Concurrency: the integer `version` is the client-facing concurrency
+ * token (carried on `If-Match`); on the wire to Cosmos we use the
+ * shared `replaceWithIfMatch` helper, which also enforces server-side
+ * `_etag` IfMatch so the version + replace pair is atomic from the
+ * client's point of view.
  */
 import type { Container, ItemResponse } from '@azure/cosmos';
 import { randomUUID } from 'crypto';
-import { getCosmos } from './cosmos';
+import {
+  getCosmos,
+  replaceWithIfMatch,
+  VersionConflictError,
+  type VersionedDocument,
+} from './cosmos';
 import {
   MAX_RULES_PER_SET,
   MAX_RULE_MATCH_VALUE_LENGTH,
@@ -180,7 +185,7 @@ export interface FormattingRulePair {
 
 export type FormattingRule = FormattingRuleSimple | FormattingRulePair;
 
-export interface RuleSetDocument {
+export interface RuleSetDocument extends VersionedDocument {
   id: string;
   userId: string;
   name: string;
@@ -206,13 +211,6 @@ export class RuleSetValidationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'RuleSetValidationError';
-  }
-}
-
-export class RuleSetVersionConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'RuleSetVersionConflictError';
   }
 }
 
@@ -577,10 +575,14 @@ export async function createRuleSet(
  * Replace an existing rule set with the supplied (name, rules). The
  * caller has already loaded `existing` and is therefore responsible
  * for enforcing concurrency: if `expectedVersion` does not equal
- * `existing.version`, this throws `RuleSetVersionConflictError` so
- * the handler can return 412. On success the new doc carries
- * `version: existing.version + 1` and a refreshed `updatedAt`;
- * `id`, `userId`, and `createdAt` are preserved.
+ * `existing.version`, this throws `VersionConflictError` early so
+ * the handler can return 412 without a wire round trip. The replace
+ * itself is also guarded by `_etag` IfMatch via `replaceWithIfMatch`
+ * - so even if two callers pass the same `expectedVersion`, only one
+ * write succeeds; the other gets `VersionConflictError`. On success
+ * the new doc carries `version: existing.version + 1` and a
+ * refreshed `updatedAt`; `id`, `userId`, and `createdAt` are
+ * preserved.
  */
 export async function replaceRuleSet(
   existing: RuleSetDocument,
@@ -588,23 +590,20 @@ export async function replaceRuleSet(
   expectedVersion: number,
 ): Promise<RuleSetDocument> {
   if (existing.version !== expectedVersion) {
-    throw new RuleSetVersionConflictError(
+    throw new VersionConflictError(
       `Rule set was modified by another writer (expected version ${expectedVersion}, found ${existing.version})`,
     );
   }
-  const next: RuleSetDocument = {
-    id: existing.id,
-    userId: existing.userId,
-    name: payload.name,
-    rules: payload.rules,
-    version: existing.version + 1,
-    createdAt: existing.createdAt,
-    updatedAt: new Date().toISOString(),
-  };
-  const response: ItemResponse<RuleSetDocument> = await getRuleSetsContainer()
-    .item(existing.id, existing.userId)
-    .replace<RuleSetDocument>(next);
-  return response.resource ?? next;
+  return replaceWithIfMatch<RuleSetDocument>(
+    getRuleSetsContainer(),
+    existing.userId,
+    existing,
+    (draft) => {
+      draft.name = payload.name;
+      draft.rules = payload.rules;
+      draft.updatedAt = new Date().toISOString();
+    },
+  );
 }
 
 /**

@@ -6,10 +6,31 @@ on:
   pull_request:
     branches: [main]
 
+# Workflow-level permissions are the absolute minimum every job
+# needs:
+#   - contents: read   -- actions/checkout@v6 (every job)
+#
+# Per-job escalations live in each job's `permissions:` block:
+#   - web             -> id-token: write (azure/login@v3 for sourcemap upload)
+#   - api             -> checks: write (dorny/test-reporter@v2)
+#   - api-integration -> checks: write (dorny/test-reporter@v2)
+#   - web-tests       -> checks: write (dorny/test-reporter@v2)
+#   - smoke-e2e       -> checks: write (dorny/test-reporter@v2)
+#   - workflows-lint  -> no escalation (actionlint only)
+#
+# Notable previous over-grants tightened:
+#   - id-token: write was workflow-level (giving every job an OIDC
+#     token they never used). Now scoped to the `web` job only, the
+#     only job that calls out to Azure.
+#   - checks: write was workflow-level (giving workflows-lint and
+#     other non-publishing jobs the right to mutate check runs they
+#     never create). Now scoped to the four dorny/test-reporter@v2
+#     callers only.
+#   - pull-requests: write was workflow-level but no step actually
+#     posts PR comments. dorny/test-reporter@v2 reports via check
+#     runs, not PR comments. Removed.
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -20,6 +41,15 @@ jobs:
     name: Web build & type-check
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The web job calls azure/login@v3 (federated OIDC) for the
+    # sourcemap upload step. id-token: write is granted only here so
+    # other CI jobs cannot exchange a token for Azure access if a
+    # third-party action they invoke is compromised. The web job does
+    # not publish check runs (no dorny/test-reporter usage), so
+    # checks: write is intentionally omitted.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -68,12 +98,26 @@ jobs:
         id: lint-format
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:format
+      - name: Script tests
+        # Unit tests for scripts/*.mjs (currently: scripts/check-csp-hashes.mjs).
+        # Uses Node's built-in test runner (no extra deps). Runs in the web
+        # job because that is where lint:csp-hashes lives; keeps the
+        # scripts/ scope under one job.
+        id: test-scripts
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run test:scripts
       - name: Lint summary
         # Inspects each gate's outcome and writes a single
         # $GITHUB_STEP_SUMMARY block listing every failing gate and its
         # fix command. Per-gate `if: failure()` would not work here
         # because failure() is job-wide and would fire for every later
         # gate once any earlier gate failed.
+        #
+        # Covers the 6 lint gates plus the Script tests step, which sits
+        # in this same fast-check phase of the web job. Without wiring
+        # test-scripts in here, a Script tests failure would still let
+        # this summary print "all gates passed" because of the custom
+        # `if:` condition above.
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         env:
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
@@ -82,10 +126,11 @@ jobs:
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
           OUTCOME_CSP: ${{ steps.lint-csp-hashes.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
+          OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
         run: |
           fail=0
           {
-            echo "## Lint results"
+            echo "## Lint and script-test results"
             echo ""
             emit() {
               local label="$1"
@@ -100,17 +145,18 @@ jobs:
                 echo "- :grey_question: ${label} (${outcome})"
               fi
             }
-            emit "TypeScript (tsc)"        "$OUTCOME_TSC"    "fix the type error reported above"
-            emit "ASCII allowlist"         "$OUTCOME_ASCII"  "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
-            emit "Spec patterns"           "$OUTCOME_SPEC"   "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
-            emit "Production patterns"     "$OUTCOME_PROD"   "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
-            emit "CSP hashes (source)"     "$OUTCOME_CSP"    "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
-            emit "Prettier formatting"     "$OUTCOME_FORMAT" "npm run format"
+            emit "TypeScript (tsc)"        "$OUTCOME_TSC"          "fix the type error reported above"
+            emit "ASCII allowlist"         "$OUTCOME_ASCII"        "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
+            emit "Spec patterns"           "$OUTCOME_SPEC"         "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
+            emit "Production patterns"     "$OUTCOME_PROD"         "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
+            emit "CSP hashes (source)"     "$OUTCOME_CSP"          "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
+            emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
+            emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
             echo ""
             if [ "$fail" -eq 1 ]; then
-              echo "One or more lint gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
+              echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 6 lint gates passed."
+              echo "All 7 gates passed (6 lint + script tests)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts
@@ -225,11 +271,49 @@ jobs:
           path: dist/jotjson
           if-no-files-found: error
           retention-days: 30
+      # ------------------------------------------------------------------
+      # Sourcemap upload to Azure Blob Storage for App Insights
+      # symbolication. Runs AFTER the artifact upload so a transient
+      # storage hiccup doesn't block CD's input artifact (artifact
+      # already preserved); but we DO fail loudly so CD's
+      # workflow_run-on-success trigger doesn't fire and ship a deploy
+      # whose AI traces silently lack symbolication. The maps remain
+      # in the web-dist artifact and are deployed to SWA unchanged -
+      # this step only mirrors them into the AI-connected Storage
+      # container so the portal can de-symbolicate exception details.
+      # See DESIGN_SPEC.md "Sourcemaps" section.
+      # ------------------------------------------------------------------
+      - name: Azure login (sourcemap upload)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Upload sourcemaps to Azure Blob Storage
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+        run: |
+          az storage blob upload-batch \
+            --source dist/jotjson/browser \
+            --destination sourcemaps \
+            --account-name "$STORAGE_ACCOUNT" \
+            --pattern '*.map' \
+            --auth-mode login \
+            --overwrite true
+      - name: Azure logout (sourcemap upload)
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
 
   api:
-    name: API build
+    name: API build & test
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     defaults:
       run:
         working-directory: api
@@ -264,6 +348,129 @@ jobs:
           path: api/test-results/api/junit.xml
           reporter: java-junit
           fail-on-error: false
+      # ------------------------------------------------------------------
+      # Build the API and upload it as the api-dist artifact for cd.yml's
+      # workflow_run path. With cd.yml passing skip_api_build: true to the
+      # SWA action, Oryx is bypassed entirely; the deploy is just an
+      # upload of the prebuilt tree. This eliminates the Oryx SDK-detect
+      # flake (CDN XPath null-node) that periodically fails CD. Gated on
+      # push-to-main only, mirroring the web-dist gate.
+      # ------------------------------------------------------------------
+      - name: Build API
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npm run build
+      - name: Upload api bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-dist
+          # Pack only the files SWA Functions needs at runtime: host.json,
+          # package manifest + lockfile (so cd.yml can `npm ci` prod deps),
+          # and the compiled JS under dist/. Omits node_modules (cd.yml
+          # reinstalls), source TypeScript, tests, and tsconfig.
+          path: |
+            api/host.json
+            api/package.json
+            api/package-lock.json
+            api/dist
+          if-no-files-found: error
+          retention-days: 30
+
+  api-integration:
+    name: Smoke api integration (real Cosmos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - name: Cosmos secret preflight
+        id: cosmos-preflight
+        # GitHub Actions does not support `secrets.* != ''` in `if:`
+        # conditions on jobs/steps. Instead we read the secrets into
+        # env (which DOES work) and write a non-secret enabled flag.
+        # Partial config (one secret set, the other not) fails loud.
+        env:
+          COSMOS_CI_ENDPOINT: ${{ secrets.COSMOS_CI_ENDPOINT }}
+          COSMOS_CI_KEY: ${{ secrets.COSMOS_CI_KEY }}
+        run: |
+          if [ -z "$COSMOS_CI_ENDPOINT" ] && [ -z "$COSMOS_CI_KEY" ]; then
+            echo "Both COSMOS_CI_* secrets unset - skipping integration tests."
+            echo "See docs/ci-cosmos.md for provisioning instructions."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$COSMOS_CI_ENDPOINT" ] || [ -z "$COSMOS_CI_KEY" ]; then
+            echo "::error::Partial Cosmos CI secret config (one of {COSMOS_CI_ENDPOINT, COSMOS_CI_KEY} unset). Configure both or neither."
+            exit 1
+          else
+            echo "Cosmos CI secrets present; integration job active."
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run integration tests
+        if: steps.cosmos-preflight.outputs.enabled == 'true'
+        env:
+          COSMOS_ENDPOINT: ${{ secrets.COSMOS_CI_ENDPOINT }}
+          COSMOS_KEY: ${{ secrets.COSMOS_CI_KEY }}
+          COSMOS_DATABASE: jotjson-ci
+          # run_id + run_attempt avoids stale-state collisions on
+          # workflow rerun (run_id is reused; run_attempt increments).
+          COSMOS_BLOBS_CONTAINER: blobs-${{ github.run_id }}-${{ github.run_attempt }}
+        run: npm run test:integration
+      - name: Cleanup integration container (backstop)
+        # `if: always()` covers Jest hard-crashes that bypass
+        # globalTeardown. Setup-time orphan cleanup at the next run
+        # covers runner cancellation that bypasses both layers.
+        if: always() && steps.cosmos-preflight.outputs.enabled == 'true'
+        env:
+          COSMOS_CI_ENDPOINT: ${{ secrets.COSMOS_CI_ENDPOINT }}
+          COSMOS_CI_KEY: ${{ secrets.COSMOS_CI_KEY }}
+          COSMOS_DATABASE: jotjson-ci
+          CONTAINER_TO_DROP: blobs-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          node -e "
+          const { CosmosClient } = require('@azure/cosmos');
+          const client = new CosmosClient({
+            endpoint: process.env.COSMOS_CI_ENDPOINT,
+            key: process.env.COSMOS_CI_KEY,
+          });
+          (async () => {
+            try {
+              await client
+                .database(process.env.COSMOS_DATABASE)
+                .container(process.env.CONTAINER_TO_DROP)
+                .delete();
+              console.log('Backstop cleanup: dropped ' + process.env.CONTAINER_TO_DROP);
+            } catch (error) {
+              console.warn('Backstop cleanup: ' + (error.message || error));
+            }
+          })();
+          "
+      - name: Upload api integration JUnit
+        if: always() && steps.cosmos-preflight.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-integration-junit
+          path: api/test-results/api-integration/junit.xml
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Publish api integration test results
+        if: always() && steps.cosmos-preflight.outputs.enabled == 'true'
+        uses: dorny/test-reporter@v2
+        with:
+          name: API integration test results
+          path: api/test-results/api-integration/junit.xml
+          reporter: java-junit
+          fail-on-error: false
 
   workflows-lint:
     name: Workflows lint (actionlint)
@@ -282,6 +489,10 @@ jobs:
     name: Web unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -291,7 +502,8 @@ jobs:
       - run: npm ci
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
-      - run: npm run test:ci
+      - name: Run tests with coverage
+        run: npm run test:ci
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
@@ -314,6 +526,78 @@ jobs:
         with:
           name: Web test results
           path: test-results/web/junit.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  e2e:
+    name: Smoke e2e (anonymous, Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Publishes test results via dorny/test-reporter@v2.
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Materialize environment.ts
+        # Anonymous bundle: uses the example environment (no real MSAL secrets).
+        # Mirrors the pattern in the `web-tests` job.
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
+      - name: Generate build-info.ts
+        run: npm run build:info
+      - name: Build production bundle
+        run: npm run build
+      - name: Resolve Playwright version
+        id: pw-version
+        # Cache key needs an exact version. Read it from the installed package
+        # so OS + version uniquely identify the browser binary set.
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run smoke e2e
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload e2e JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-junit
+          path: test-results/e2e/junit.xml
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Publish e2e test results
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: Smoke e2e results
+          path: test-results/e2e/junit.xml
           reporter: java-junit
           fail-on-error: false
 

@@ -4,12 +4,13 @@ import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.ser
 import { JsonParseResult } from '../../../core/json/json-parser.service';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { EditorMode } from '../editor-mode';
-import { computeTextStats, computeTreeStats, formatBytes } from './stats';
+import { computeMinifiedChars, computeTextStats, computeTreeStats, formatBytes } from './stats';
 
 /**
  * Home page status bar (M7m). Purely informational row showing text and tree
- * stats. Read-only; no interactivity in v1. Responsive collapsing is deferred
- * to M7l per DESIGN_SPEC.md.
+ * stats. Read-only; no interactivity in v1. On narrow viewports the bar
+ * collapses via CSS to a single line keeping only Lines, Size, and the Mode
+ * badge (M7l - see status-bar.component.scss).
  */
 @Component({
   selector: 'jj-status-bar',
@@ -27,6 +28,14 @@ export class StatusBarComponent {
 
   readonly textStats = computed(() => computeTextStats(this.text()));
 
+  /**
+   * "Meaningful character" count surfaced as the Chars stat (issue #103):
+   * the source character count after whitespace and comments are stripped.
+   * Driven off `text()` (lexical, not semantic) so the count is computable
+   * for any input, including partial / parse-error documents.
+   */
+  readonly meaningfulChars = computed(() => computeMinifiedChars(this.text()));
+
   readonly bytesLabel = computed(() => formatBytes(this.textStats().bytes));
 
   /** Tree stats are undefined when the document failed to parse or is empty. */
@@ -35,6 +44,23 @@ export class StatusBarComponent {
     if (!pr || pr.empty || pr.errors.length > 0) return undefined;
     return computeTreeStats(pr.ast);
   });
+
+  /**
+   * The Comments stat mirrors `treeStats()` gating (hidden when the
+   * document is empty or parse-failed) AND requires `commentCount > 0`
+   * so the chip never appears as "Comments 0" on commentless docs.
+   * Visibility is content-driven, not mode-driven: the parser allows
+   * comments regardless of the editor `mode` (`disallowComments: false`
+   * in JsonParserService), so a JSON-mode document with pasted comments
+   * still surfaces the count.
+   */
+  readonly showComments = computed(() => {
+    const pr = this.parseResult();
+    if (!pr || pr.empty || pr.errors.length > 0) return false;
+    return pr.commentCount > 0;
+  });
+
+  readonly commentCount = computed(() => this.parseResult()?.commentCount ?? 0);
 
   readonly cursorLabel = computed(() => {
     const position = this.cursor();

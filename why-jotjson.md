@@ -33,9 +33,11 @@ background worker - not just the top-level paste.
 
 Pasted a `curl -v` output? A log line with a payload glued to it? A stack
 trace with a JSON body? JotJSON scans the buffer for embedded `{...}` and
-`[...]` blocks and shows a non-destructive banner: **[Extract JSON]** /
-**[Dismiss]**. Your raw paste stays in the editor either way. Single block
-extracted with comments preserved; multiple blocks combined into an array.
+`[...]` blocks and shows a non-destructive banner: **[Extract embedded
+JSON]** / **[Dismiss]**. Your raw paste stays in the editor either way.
+A bare block extracts to the block; surrounding prose is preserved
+under `prefix` / `suffix` / `between_<i>_and_<j>` keys so log headers,
+HTTP request lines, and trailing operation names don't get lost.
 
 ### Auto-unescape on paste (and copy back)
 
@@ -151,26 +153,40 @@ strings are read as UTC or local.
 
 - Format / minify, with a comment-preserving formatter (`jsonc-parser`)
 - One-click smart-paste button that lights up when the clipboard contains JSON
+- Cold-boot auto-paste: opt in once and JotJSON quietly loads JSON from the
+  clipboard on every fresh launch, with one-click Undo
 - Drag-and-drop file upload (up to 5 MB) with binary-file rejection
 - Download as `.json` / `.jsonc` (extension auto-picked from content)
 - Live validation with line + column on parse errors
-- Search across keys, values, or both, with case-sensitive and regex toggles
+- Find across keys, values, or both, with case-sensitive and regex toggles
 - Collapse all / expand all / expand to level 1-10, with keyboard shortcuts
 - Selection breadcrumb with **Copy JSON path** and a configurable root prefix
   (`$`, lodash-style, `root.`, `Data.`, or none)
-- Per-row context menu: copy key / value / path, search by key / value, expand-from-here
-- Double-click any row to copy its value
+- Per-row context menu: copy key / value / path, find by key / value, expand-from-here
+- Double-click a leaf row to copy its value; double-click a container to expand or collapse it
+- Press `Ctrl+C` / `Cmd+C` with a tree row focused to copy the focused row's value (works on leaves, containers, and empty containers alike)
 - Inferred type badges on every row: `uuid`, `url`, `email`, `path`, `ipv4`,
   `ipv6`, `date`, plus container item / key counts
-- Status bar: byte size, line count, cursor position, total node count, max
-  depth, array vs. object counts
+- Status bar: meaningful character count (whitespace and comments
+  excluded), byte size, line count, cursor position, total node count,
+  max depth, array vs. object counts
 - Themes: dark / light / match-system, with per-theme color customization for
   every highlight slot
 - 4-way layout: editor only, side-by-side, stacked, tree only - resizable split
-- Editor / tree / search preferences (font size, tab size, word wrap, default
-  expansion depth, default search scope)
+- Editor / tree / find preferences (font size, tab size, word wrap, default
+  expansion depth, default find scope)
 - Keyboard shortcuts: `Ctrl+F` (context-aware between editor and tree),
   `Ctrl+Shift+[` / `]`, `Alt+1` .. `Alt+9`
+- Keyboard-friendly app shell: a "Skip to main content" link as the first
+  Tab stop on every route, primary navigation marked up as a real `<nav>`
+  landmark, and screen-reader focus moves to the new page on every route
+  change
+- Keyboard-navigable tree view: Tab to enter, Up/Down/Home/End to move
+  between rows, Right/Left to expand/collapse or jump to first child /
+  parent, Enter or Space to select, Shift+F10 / ContextMenu key to open
+  the row menu - with the full WAI-ARIA Tree contract (`role="treeitem"`,
+  level / position / set-size / expanded state) so screen readers
+  announce position and structure on every move
 
 ---
 

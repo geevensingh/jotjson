@@ -34,12 +34,6 @@ jest.mock('../shared/blobs', () => ({
       this.name = 'SlugGenerationError';
     }
   },
-  BlobVersionConflictError: class BlobVersionConflictError extends Error {
-    constructor(message: string) {
-      super(message);
-      this.name = 'BlobVersionConflictError';
-    }
-  },
 }));
 
 jest.mock('../shared/users', () => ({
@@ -55,7 +49,6 @@ jest.mock('../shared/history', () => ({
 import { AuthError, requireAuth as requireAuthMock, tryAuth as tryAuthMock } from '../shared/auth';
 import {
   BlobValidationError,
-  BlobVersionConflictError,
   SlugGenerationError,
   createBlob as createBlobMock,
   deleteBlobById as deleteBlobByIdMock,
@@ -64,6 +57,7 @@ import {
   updateBlob as updateBlobMock,
   type BlobHighlight,
 } from '../shared/blobs';
+import { VersionConflictError } from '../shared/cosmos';
 import {
   recordEntry as recordEntryMock,
   getRecentViewAt as getRecentViewAtMock,
@@ -533,9 +527,9 @@ describe('PUT /api/blobs/:id', () => {
     expect(res.status).toBe(400);
   });
 
-  it('translates BlobVersionConflictError into 412', async () => {
+  it('translates VersionConflictError into 412', async () => {
     findBlob.mockResolvedValueOnce(sampleBlob);
-    updateBlob.mockRejectedValueOnce(new BlobVersionConflictError('race'));
+    updateBlob.mockRejectedValueOnce(new VersionConflictError('race'));
     const response = await putBlob(
       makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { title: 'new' } }),
       ctx,

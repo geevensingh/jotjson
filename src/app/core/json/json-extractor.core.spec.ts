@@ -1,7 +1,7 @@
 import { parse } from 'jsonc-parser';
 import type { ParseError } from 'jsonc-parser';
 import { extractFromMixedText } from './json-extractor.core';
-import type { ExtractedJson, ExtractMode, ParseJsonCandidate } from './json-extractor.core';
+import type { ExtractedJson, ParseJsonCandidate } from './json-extractor.core';
 
 const parseJsonCandidate: ParseJsonCandidate = (candidateText: string) => {
   const errors: ParseError[] = [];
@@ -13,7 +13,7 @@ const parseJsonCandidate: ParseJsonCandidate = (candidateText: string) => {
 };
 
 describe('extractFromMixedText core', () => {
-  it('keeps unwrap mode bare for one block without prose', () => {
+  it('returns the bare value for one block without prose', () => {
     const extracted = extractRequired('{"a":1}');
 
     expect(extracted.blockCount).toBe(1);
@@ -22,7 +22,7 @@ describe('extractFromMixedText core', () => {
     expect(parseJsoncText(extracted.text)).toEqual({ a: 1 });
   });
 
-  it('keeps unwrap mode array-shaped for multiple blocks without prose', () => {
+  it('returns the bare array for multiple blocks without prose', () => {
     const extracted = extractRequired('{"a":1}{"b":2}');
 
     expect(extracted.blockCount).toBe(2);
@@ -31,15 +31,8 @@ describe('extractFromMixedText core', () => {
     expect(parseJsoncText(extracted.text)).toEqual([{ a: 1 }, { b: 2 }]);
   });
 
-  it('returns the unwrap output in preserveProse mode for one block without prose', () => {
-    const unwrap = extractRequired('{"a":1}', 'unwrap');
-    const preserveProse = extractRequired('{"a":1}', 'preserveProse');
-
-    expect(preserveProse).toEqual(unwrap);
-  });
-
   it('wraps prefix-only prose with prefix and json keys', () => {
-    const extracted = extractRequired('before {"a":1}', 'preserveProse');
+    const extracted = extractRequired('before {"a":1}');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(Object.keys(wrapper)).toEqual(['prefix', 'json']);
@@ -50,7 +43,7 @@ describe('extractFromMixedText core', () => {
   });
 
   it('wraps suffix-only prose with json and suffix keys', () => {
-    const extracted = extractRequired('{"a":1} after', 'preserveProse');
+    const extracted = extractRequired('{"a":1} after');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(Object.keys(wrapper)).toEqual(['json', 'suffix']);
@@ -60,7 +53,7 @@ describe('extractFromMixedText core', () => {
   });
 
   it('wraps prefix and suffix prose around one block', () => {
-    const extracted = extractRequired('before {"a":1} after', 'preserveProse');
+    const extracted = extractRequired('before {"a":1} after');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(Object.keys(wrapper)).toEqual(['prefix', 'json', 'suffix']);
@@ -71,16 +64,14 @@ describe('extractFromMixedText core', () => {
   });
 
   it('omits whitespace-only prose and returns the bare value', () => {
-    const unwrap = extractRequired('   {"a":1}\n', 'unwrap');
-    const preserveProse = extractRequired('   {"a":1}\n', 'preserveProse');
+    const extracted = extractRequired('   {"a":1}\n');
 
-    expect(preserveProse.text).toBe(unwrap.text);
-    expect(preserveProse.proseSegments).toBe(0);
-    expect(parseJsoncText(preserveProse.text)).toEqual({ a: 1 });
+    expect(extracted.proseSegments).toBe(0);
+    expect(parseJsoncText(extracted.text)).toEqual({ a: 1 });
   });
 
-  it('preserves a leading BOM in the prefix for preserveProse mode', () => {
-    const extracted = extractRequired('\uFEFFhello {"a":1}', 'preserveProse');
+  it('preserves a leading BOM in the prefix when prose is present', () => {
+    const extracted = extractRequired('\uFEFFhello {"a":1}');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(extracted.text).toContain('\\uFEFF');
@@ -89,11 +80,15 @@ describe('extractFromMixedText core', () => {
     expect(extracted.proseSegments).toBe(1);
   });
 
+  it('treats a bare BOM prefix as whitespace and returns the bare value', () => {
+    const extracted = extractRequired('\uFEFF{"a":1}');
+
+    expect(extracted.proseSegments).toBe(0);
+    expect(parseJsoncText(extracted.text)).toEqual({ a: 1 });
+  });
+
   it('preserves comments inside one prose-wrapped JSON block', () => {
-    const extracted = extractRequired(
-      'hi { /* json comment */ "a":1 // line comment\n}',
-      'preserveProse',
-    );
+    const extracted = extractRequired('hi { /* json comment */ "a":1 // line comment\n}');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(extracted.preservesComments).toBeTrue();
@@ -104,30 +99,22 @@ describe('extractFromMixedText core', () => {
   });
 
   it('keeps trailing-comma JSONC parseable inside one prose wrapper', () => {
-    const extracted = extractRequired('hi {"a":1,}', 'preserveProse');
+    const extracted = extractRequired('hi {"a":1,}');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(wrapper['json']).toEqual({ a: 1 });
     expect(extracted.preservesComments).toBeTrue();
   });
 
-  it('returns the unwrap array in preserveProse mode for multiple blocks without prose', () => {
-    const unwrap = extractRequired('{"a":1}{"b":2}', 'unwrap');
-    const preserveProse = extractRequired('{"a":1}{"b":2}', 'preserveProse');
-
-    expect(preserveProse).toEqual(unwrap);
-    expect(parseJsoncText(preserveProse.text)).toEqual([{ a: 1 }, { b: 2 }]);
-  });
-
   it('omits whitespace-only prose between multiple blocks', () => {
-    const extracted = extractRequired('{"a":1}\n  {"b":2}', 'preserveProse');
+    const extracted = extractRequired('{"a":1}\n  {"b":2}');
 
     expect(extracted.proseSegments).toBe(0);
     expect(parseJsoncText(extracted.text)).toEqual([{ a: 1 }, { b: 2 }]);
   });
 
   it('wraps between-only prose for two blocks', () => {
-    const extracted = extractRequired('{"a":1} sep {"b":2}', 'preserveProse');
+    const extracted = extractRequired('{"a":1} sep {"b":2}');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(Object.keys(wrapper)).toEqual(['json1', 'between_1_and_2', 'json2']);
@@ -139,7 +126,7 @@ describe('extractFromMixedText core', () => {
   });
 
   it('wraps prefix, between, and suffix prose for two blocks', () => {
-    const extracted = extractRequired('pre {"a":1} mid {"b":2} post', 'preserveProse');
+    const extracted = extractRequired('pre {"a":1} mid {"b":2} post');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(Object.keys(wrapper)).toEqual(['prefix', 'json1', 'between_1_and_2', 'json2', 'suffix']);
@@ -152,7 +139,7 @@ describe('extractFromMixedText core', () => {
   });
 
   it('escapes quotes, backslashes, and newlines in prose segments', () => {
-    const extracted = extractRequired('a"b\\c\n {"x":1}', 'preserveProse');
+    const extracted = extractRequired('a"b\\c\n {"x":1}');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(extracted.text).toContain('a\\"b\\\\c\\n ');
@@ -161,7 +148,7 @@ describe('extractFromMixedText core', () => {
   });
 
   it('escapes line and paragraph separators while preserving their parsed values', () => {
-    const extracted = extractRequired('line\u2028paragraph\u2029 {"x":1}', 'preserveProse');
+    const extracted = extractRequired('line\u2028paragraph\u2029 {"x":1}');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(extracted.text).toContain('\\u2028');
@@ -170,17 +157,14 @@ describe('extractFromMixedText core', () => {
   });
 
   it('emits valid JSONC for prose wrappers', () => {
-    const extracted = extractRequired('pre {"a":1} post', 'preserveProse');
+    const extracted = extractRequired('pre {"a":1} post');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(wrapper).toEqual({ prefix: 'pre ', json: { a: 1 }, suffix: ' post' });
   });
 
   it('uses one-indexed json and between keys for three blocks', () => {
-    const extracted = extractRequired(
-      'pre {"a":1} first {"b":2} second {"c":3} post',
-      'preserveProse',
-    );
+    const extracted = extractRequired('pre {"a":1} first {"b":2} second {"c":3} post');
     const wrapper = expectJsoncRecord(extracted.text);
 
     expect(Object.keys(wrapper)).toEqual([
@@ -203,8 +187,8 @@ describe('extractFromMixedText core', () => {
   });
 });
 
-function extractRequired(input: string, mode: ExtractMode = 'unwrap'): ExtractedJson {
-  const extracted = extractFromMixedText(input, parseJsonCandidate, { mode });
+function extractRequired(input: string): ExtractedJson {
+  const extracted = extractFromMixedText(input, parseJsonCandidate);
   if (extracted === null) {
     throw new Error(`Expected extraction for ${input}`);
   }

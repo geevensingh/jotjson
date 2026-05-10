@@ -1,0 +1,36 @@
+name: 'JotJSON CodeQL config'
+
+# CodeQL Advanced Setup configuration. Switched from the auto-managed
+# Default Setup so we can scope analysis paths and exclude rules with
+# documented justification, eliminating the re-trigger-and-dismiss
+# whack-a-mole on known false positives. See the project security
+# audit log in the History section of DESIGN_SPEC.md for context.
+
+paths-ignore:
+  # Test code is not a security-analysis target. Test helpers and
+  # fixtures frequently match sanitization-style rules without
+  # exploitable risk: inputs are spec-author-controlled literals,
+  # outputs feed assertions, not user-facing surfaces.
+  - '**/*.spec.ts'
+  - '**/*.test.ts'
+  # check-prerender.mjs is a CI build assertion script that verifies
+  # the post-build dist/ layout. Substring matches like
+  # `sitemapXml.includes('https://jotjson.com/')` are content
+  # assertions, not URL sanitization, and were repeatedly flagged by
+  # `js/incomplete-url-substring-sanitization`.
+  - 'scripts/check-prerender.mjs'
+
+query-filters:
+  # cd.yml's job-level `if:` filter excludes PR-triggered CI runs via
+  # `github.event.workflow_run.event == 'push'`, which is the standard
+  # documented mitigation for the artifact-poisoning attack class
+  # (https://securitylab.github.com/research/github-actions-preventing-pwn-requests/).
+  # The downloaded artifact is content-verified by the
+  # "Sanity-check downloaded bundle (auto deploy)" step before any
+  # privileged step. `workflow_dispatch:` is declared without inputs.
+  # The artifact is consumed only by Azure/static-web-apps-deploy,
+  # which uploads files to the SWA edge but does not execute them
+  # on the runner. Documented in SECURITY.md and in the dismissed
+  # comments on alerts #1 and #6.
+  - exclude:
+      id: actions/artifact-poisoning/critical

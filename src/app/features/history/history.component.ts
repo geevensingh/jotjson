@@ -11,6 +11,7 @@ import {
   effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
@@ -79,6 +80,8 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
     () =>
       this.searchTerm().trim().length > 0 || this.fromDate().length > 0 || this.toDate().length > 0,
   );
+
+  private readonly focusFallback = viewChild<ElementRef<HTMLElement>>('historyFocusFallback');
 
   constructor() {
     inject(DestroyRef);
@@ -339,6 +342,7 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.entries.set([]);
       this.continuationToken.set(undefined);
       this.state.set('ready');
+      this.scheduleFocusAfterClear();
       this.snack.open(
         $localize`:@@history.clear.success:History cleared.`,
         $localize`:@@common.dismiss:Dismiss`,
@@ -353,6 +357,10 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
         { duration: 4000 },
       );
     }
+  }
+
+  private scheduleFocusAfterClear(): void {
+    setTimeout(() => this.focusFallback()?.nativeElement.focus(), 0);
   }
 
   /** Click on a row - navigates to /s/<slug> when one is available. */

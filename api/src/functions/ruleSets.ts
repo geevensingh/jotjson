@@ -26,7 +26,6 @@ import { AuthError, requireAuth } from '../shared/auth';
 import {
   MAX_RULE_SETS_PER_USER,
   RuleSetValidationError,
-  RuleSetVersionConflictError,
   assertRuleSetPayload,
   createRuleSet,
   deleteRuleSetById,
@@ -36,6 +35,7 @@ import {
   replaceRuleSet,
   type RuleSetDocument,
 } from '../shared/ruleSets';
+import { stripCosmosMetadata, VersionConflictError, type PublicShape } from '../shared/cosmos';
 import {
   findPreset,
   listPresets as listPresetsData,
@@ -48,11 +48,18 @@ import {
   notFound,
   quotaExceeded,
   unauthorized,
+  withSecurityHeaders,
 } from '../shared/http';
-import { readUser, upsertUser } from '../shared/users';
+import { readUser, replaceUser } from '../shared/users';
 
 function preconditionFailed(message: string): HttpResponseInit {
   return { status: 412, jsonBody: { error: message } };
+}
+
+type PublicRuleSetDocument = PublicShape<RuleSetDocument>;
+
+function publicRuleSet(doc: RuleSetDocument): PublicRuleSetDocument {
+  return stripCosmosMetadata(doc);
 }
 
 /**
@@ -66,7 +73,7 @@ function withEtag(status: number, doc: RuleSetDocument): HttpResponseInit {
   return {
     status,
     headers: { ETag: `"${doc.version}"` },
-    jsonBody: doc,
+    jsonBody: publicRuleSet(doc),
   };
 }
 
@@ -148,7 +155,7 @@ export async function listRuleSets(
   }
   try {
     const items = await listRuleSetsByOwner(principal.id);
-    return { status: 200, jsonBody: items };
+    return { status: 200, jsonBody: items.map(publicRuleSet) };
   } catch (error) {
     return internalError(context, 'listRuleSets read', error);
   }
@@ -239,7 +246,7 @@ export async function putRuleSet(
     return withEtag(200, next);
   } catch (error) {
     if (error instanceof RuleSetValidationError) return badRequest(error.message);
-    if (error instanceof RuleSetVersionConflictError) {
+    if (error instanceof VersionConflictError) {
       // Race: someone else replaced the doc between our read and write.
       return preconditionFailed(error.message);
     }
@@ -300,7 +307,7 @@ export async function deleteRuleSet(
 /**
  * Strip references to the deleted rule set from the owner's user
  * document. Filters the deleted ID out of `activeRuleSetIds`.
- * Performs a single upsert when (and only when) the array actually
+ * Performs a single replace when (and only when) the array actually
  * changes - we don't churn `updatedAt` for users who never
  * referenced the set.
  *
@@ -310,25 +317,41 @@ export async function deleteRuleSet(
  * wire hygiene, and the user's first canonical PUT will fully heal
  * the stored doc. See DESIGN_SPEC.md -> Versioning -> Schema
  * evolution.
+ *
+ * Concurrency: a concurrent rule-set delete by the same user could
+ * race with this cleanup. The replace is etag-guarded by the shared
+ * helper; on `VersionConflictError` we re-read and re-apply, bounded
+ * to a small attempt count so a Function instance never hangs on
+ * pathological contention.
  */
 async function cleanupUserReferences(userId: string, deletedSetId: string): Promise<void> {
-  const user = await readUser(userId);
-  if (!user) return;
-  const prefs = user.preferences;
-  if (!prefs) return;
-  const sourceArray = Array.isArray(prefs.activeRuleSetIds) ? prefs.activeRuleSetIds : [];
-  if (!sourceArray.includes(deletedSetId)) return;
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const user = await readUser(userId);
+    if (!user) return;
+    const prefs = user.preferences;
+    if (!prefs) return;
+    const sourceArray = Array.isArray(prefs.activeRuleSetIds) ? prefs.activeRuleSetIds : [];
+    if (!sourceArray.includes(deletedSetId)) return;
 
-  const nextPrefs = {
-    ...prefs,
-    activeRuleSetIds: sourceArray.filter((id) => id !== deletedSetId),
-  };
-
-  await upsertUser({
-    ...user,
-    preferences: nextPrefs,
-    updatedAt: new Date().toISOString(),
-  });
+    try {
+      await replaceUser(user, (draft) => {
+        draft.preferences = {
+          ...prefs,
+          activeRuleSetIds: sourceArray.filter((id) => id !== deletedSetId),
+        };
+        draft.updatedAt = new Date().toISOString();
+      });
+      return;
+    } catch (error) {
+      if (error instanceof VersionConflictError) {
+        // Another writer beat us; re-read and try again.
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error(`cleanupUserReferences: ${MAX_ATTEMPTS} attempts exhausted for user ${userId}`);
 }
 
 /**
@@ -416,7 +439,7 @@ app.http('rule-sets-post', {
   methods: ['POST'],
   route: 'rule-sets',
   authLevel: 'anonymous',
-  handler: postRuleSet,
+  handler: withSecurityHeaders(postRuleSet),
 });
 
 app.http('rule-sets-presets-list', {
@@ -433,40 +456,40 @@ app.http('rule-sets-presets-list', {
   // any client still hitting the old path.
   route: 'rule-set-presets',
   authLevel: 'anonymous',
-  handler: listPresets,
+  handler: withSecurityHeaders(listPresets),
 });
 
 app.http('rule-sets-presets-clone', {
   methods: ['POST'],
   route: 'rule-set-presets/{id}/clone',
   authLevel: 'anonymous',
-  handler: clonePreset,
+  handler: withSecurityHeaders(clonePreset),
 });
 
 app.http('rule-sets-list', {
   methods: ['GET'],
   route: 'rule-sets',
   authLevel: 'anonymous',
-  handler: listRuleSets,
+  handler: withSecurityHeaders(listRuleSets),
 });
 
 app.http('rule-sets-get', {
   methods: ['GET'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: getRuleSet,
+  handler: withSecurityHeaders(getRuleSet),
 });
 
 app.http('rule-sets-put', {
   methods: ['PUT'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: putRuleSet,
+  handler: withSecurityHeaders(putRuleSet),
 });
 
 app.http('rule-sets-delete', {
   methods: ['DELETE'],
   route: 'rule-sets/{id}',
   authLevel: 'anonymous',
-  handler: deleteRuleSet,
+  handler: withSecurityHeaders(deleteRuleSet),
 });

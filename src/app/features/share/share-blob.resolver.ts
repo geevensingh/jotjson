@@ -51,10 +51,21 @@ export const shareBlobResolver: ResolveFn<JsonBlob | null> = (route) => {
           splash.reportBlobProgress(event.loaded, event.total);
           return;
         }
-        // Terminal blob event: snap the bar to 1.0 so the determinate
-        // fill visually completes before the splash hides. Without
-        // this, a final chunk that arrives in one large jump can race
-        // with the Response event and leave the bar stuck around 97%.
+        if (event.kind === 'bytesComplete') {
+          // The body bytes have arrived; transition the splash to
+          // "Rendering tree..." BEFORE the synchronous JSON.parse
+          // runs in BlobService. For huge blobs this masks the
+          // multi-second parse window, which would otherwise pin
+          // the bar at 100% under "Downloading JSON...".
+          splash.markBlobBytesComplete();
+          return;
+        }
+        // Terminal blob event (event.kind === 'blob'). The
+        // `bytesComplete` handler above already moved the splash to
+        // render-pending and cleared progress, so this snap-to-1.0
+        // is a no-op on the success path. Leave it as a defensive
+        // last-resort completion for the (theoretical) case where
+        // BlobService skips the bytesComplete event.
         if (lastTotal !== null) {
           splash.reportBlobProgress(lastTotal, lastTotal);
         }

@@ -61,7 +61,10 @@
     border-right: 2px solid currentcolor;
     border-bottom: 2px solid currentcolor;
     transform: rotate(-45deg);
-    transition: transform 120ms ease;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform 120ms ease;
+    }
   }
 
   details[open] > &::before {
