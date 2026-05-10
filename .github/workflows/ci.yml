@@ -6,14 +6,25 @@ on:
   pull_request:
     branches: [main]
 
+# Workflow-level permissions are the minimum every job needs:
+#   - contents: read   -- actions/checkout@v6 (every job)
+#   - checks: write    -- dorny/test-reporter@v2 publishes check runs
+#                         (api, api-integration, web-tests, smoke-e2e)
+#
+# Per-job escalations live in each job's `permissions:` block:
+#   - web        -> id-token: write (azure/login@v3 for sourcemap upload)
+#
+# Notable previous over-grants tightened:
+#   - id-token: write was workflow-level (giving every job an OIDC
+#     token they never used). Now scoped to the `web` job only, the
+#     only job that calls out to Azure. Reduces blast radius if a
+#     third-party action used by an unrelated job is compromised.
+#   - pull-requests: write was workflow-level but no step actually
+#     posts PR comments. dorny/test-reporter@v2 reports via check
+#     runs (checks: write), not PR comments. Removed.
 permissions:
   contents: read
   checks: write
-  pull-requests: write
-  # Required for federated OIDC login (azure/login@v3) in the
-  # sourcemap-upload step. Only the web job uses it; other jobs
-  # do not call out to Azure.
-  id-token: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -24,6 +35,14 @@ jobs:
     name: Web build & type-check
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The web job calls azure/login@v3 (federated OIDC) for the
+    # sourcemap upload step. id-token: write is granted only here so
+    # other CI jobs cannot exchange a token for Azure access if a
+    # third-party action they invoke is compromised.
+    permissions:
+      contents: read
+      checks: write
+      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
