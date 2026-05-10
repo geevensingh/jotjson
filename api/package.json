@@ -34,8 +34,5 @@
     "jest-junit": "^17.0.0",
     "ts-jest": "^29.4.9",
     "typescript": "~6.0.3"
-  },
-  "overrides": {
-    "uuid": "^14.0.0"
   }
 }
