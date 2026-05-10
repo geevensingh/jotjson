@@ -336,19 +336,27 @@ jobs:
         # message instead of letting the artifact balloon back
         # unnoticed.
         #
-        # Only check packages that are pure devDeps AND not
-        # transitively pulled by any prod dep. `@types/node` and
-        # `@types/jsonwebtoken` survive `--omit=dev` as transitive
-        # deps of `applicationinsights` and `jwks-rsa` respectively
-        # (verified via `npm ls @types/node`); they are inert .d.ts
-        # files at runtime and not worth blocking the deploy on.
+        # `npm ls <pkg> --all --parseable` walks the full installed
+        # tree (including nested `node_modules/<dep>/node_modules/`
+        # entries that npm may emit when resolving version conflicts),
+        # so a top-level `[ -d node_modules/$d ]` check would miss
+        # those. The parseable output is empty when the package is
+        # absent.
+        #
+        # The check list is intentionally limited to the highest-
+        # impact pure devDeps from `api/package.json`. `@types/node`
+        # and `@types/jsonwebtoken` are deliberately excluded: they
+        # survive `--omit=dev` as transitive deps of
+        # `applicationinsights` and `jwks-rsa` respectively (verified
+        # via `npm ls @types/node`), are inert .d.ts files at runtime,
+        # and not worth blocking the deploy on.
         if: steps.check.outputs.have_token == 'true' && github.event_name == 'workflow_run'
         working-directory: api
         run: |
           fail=0
-          for d in typescript jest ts-jest jest-junit; do
-            if [ -d "node_modules/$d" ]; then
-              echo "::error::Expected node_modules/$d to be absent after --omit=dev, but it exists."
+          for d in typescript jest ts-jest jest-junit "@types/jest"; do
+            if [ -n "$(npm ls "$d" --all --parseable 2>/dev/null)" ]; then
+              echo "::error::Expected $d to be absent from node_modules after --omit=dev, but npm reports it installed."
               fail=1
             fi
           done
