@@ -579,9 +579,8 @@ for the iteration loop.
 - All API routes that mutate or read user data require a valid Entra External ID
   token except
   the explicitly-public blob read path.
-- **Content Security Policy** - shipping as Report-Only during a production
-  observation window (see `DESIGN_SPEC.md` -> Security), then flipped to
-  enforced. Two practical rules for contributors:
+- **Content Security Policy** - enforced (see `DESIGN_SPEC.md` -> Security).
+  Two practical rules for contributors:
   - **Touching `src/index.html` inline `<script>` or `<style>` blocks**
     requires running `npm run lint:csp-hashes` (also runs in `npm run lint`)
     and pasting the new SHA-256 hash into `script-src` in
