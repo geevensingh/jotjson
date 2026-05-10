@@ -1,0 +1,53 @@
+# Azure Functions deployment exclusion list (gitignore-style).
+#
+# Honored by `func azure functionapp publish` (Azure Functions Core
+# Tools) and by the Static Web Apps managed-Functions publish path.
+# Directory patterns are anchored with a leading `/` defensively so
+# that they only match at the api/ root, even if a parser uses
+# git-style "match anywhere" semantics. Without the leading `/`, a
+# pattern like `src/` could match `dist/src/`, which would strip the
+# compiled Functions entry points referenced by package.json `main`.
+#
+# Runtime essentials kept: host.json, package.json, package-lock.json,
+# node_modules/, dist/.
+
+# Source - compiled to /dist before deploy
+/src/
+/tsconfig.json
+/tsconfig.test.json
+*.tsbuildinfo
+
+# Tests
+/integration/
+/jest.config.js
+/jest.config.integration.js
+/test-results/
+/coverage/
+
+# One-off CI/dev helpers (not used by Functions runtime)
+/scripts/
+
+# Local dev
+/local.settings.json
+/local.settings.sample.json
+
+# Docs / repo metadata
+/README.md
+/.gitignore
+/.funcignore
+
+# IDE / editor
+/.vscode/
+/.vs/
+
+# Source maps (debug-only; small but unnecessary in production).
+# Bare pattern (no leading `/`) matches at any depth, per gitignore
+# semantics, without relying on globstar `**/` support that not all
+# .funcignore parsers implement.
+*.js.map
+
+# Azure Functions Core Tools local state (mirrors api/.gitignore)
+/.python_packages/
+/bin/
+/obj/
+*.log
