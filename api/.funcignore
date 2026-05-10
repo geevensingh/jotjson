@@ -40,8 +40,11 @@
 /.vscode/
 /.vs/
 
-# Source maps (debug-only; small but unnecessary in production)
-**/*.js.map
+# Source maps (debug-only; small but unnecessary in production).
+# Bare pattern (no leading `/`) matches at any depth, per gitignore
+# semantics, without relying on globstar `**/` support that not all
+# .funcignore parsers implement.
+*.js.map
 
 # Azure Functions Core Tools local state (mirrors api/.gitignore)
 /.python_packages/
