@@ -98,12 +98,26 @@ jobs:
         id: lint-format
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:format
+      - name: Script tests
+        # Unit tests for scripts/*.mjs (currently: scripts/check-csp-hashes.mjs).
+        # Uses Node's built-in test runner (no extra deps). Runs in the web
+        # job because that is where lint:csp-hashes lives; keeps the
+        # scripts/ scope under one job.
+        id: test-scripts
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run test:scripts
       - name: Lint summary
         # Inspects each gate's outcome and writes a single
         # $GITHUB_STEP_SUMMARY block listing every failing gate and its
         # fix command. Per-gate `if: failure()` would not work here
         # because failure() is job-wide and would fire for every later
         # gate once any earlier gate failed.
+        #
+        # Covers the 6 lint gates plus the Script tests step, which sits
+        # in this same fast-check phase of the web job. Without wiring
+        # test-scripts in here, a Script tests failure would still let
+        # this summary print "all gates passed" because of the custom
+        # `if:` condition above.
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         env:
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
@@ -112,10 +126,11 @@ jobs:
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
           OUTCOME_CSP: ${{ steps.lint-csp-hashes.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
+          OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
         run: |
           fail=0
           {
-            echo "## Lint results"
+            echo "## Lint and script-test results"
             echo ""
             emit() {
               local label="$1"
@@ -130,17 +145,18 @@ jobs:
                 echo "- :grey_question: ${label} (${outcome})"
               fi
             }
-            emit "TypeScript (tsc)"        "$OUTCOME_TSC"    "fix the type error reported above"
-            emit "ASCII allowlist"         "$OUTCOME_ASCII"  "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
-            emit "Spec patterns"           "$OUTCOME_SPEC"   "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
-            emit "Production patterns"     "$OUTCOME_PROD"   "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
-            emit "CSP hashes (source)"     "$OUTCOME_CSP"    "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
-            emit "Prettier formatting"     "$OUTCOME_FORMAT" "npm run format"
+            emit "TypeScript (tsc)"        "$OUTCOME_TSC"          "fix the type error reported above"
+            emit "ASCII allowlist"         "$OUTCOME_ASCII"        "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
+            emit "Spec patterns"           "$OUTCOME_SPEC"         "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
+            emit "Production patterns"     "$OUTCOME_PROD"         "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
+            emit "CSP hashes (source)"     "$OUTCOME_CSP"          "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
+            emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
+            emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
             echo ""
             if [ "$fail" -eq 1 ]; then
-              echo "One or more lint gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
+              echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 6 lint gates passed."
+              echo "All 7 gates passed (6 lint + script tests)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts
