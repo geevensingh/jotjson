@@ -3,32 +3,47 @@ name: Infra (Bicep)
 # ----------------------------------------------------------------------
 # Trigger -> behavior (READ BEFORE EDITING):
 #
-# 1. push to main (paths: infra/**, this file)
-#    -> build + what-if + auto-deploy. Deploy is gated on
-#       build/what-if success (the `az ... what-if` call must
-#       complete; it's a preview, not a content-aware gate).
-#       PR-time diff review is the meaningful safety check.
+# All triggers fire the workflow. A `changes` job runs first and
+# detects whether any path under `infra/**` or
+# `.github/workflows/infra.yml` was modified. Other jobs gate on the
+# changes output and skip when no infra paths changed. Skipped jobs
+# report as success to GitHub branch protection, so the check name
+# "Bicep what-if" always reports a result -- ready for a future
+# required-status flip without blocking PRs that don't touch infra.
+#
+# 1. push to main (any path)
+#    -> changes runs. If infra changed: build + what-if + auto-deploy
+#       (deploy gated on build/what-if success; the `az ... what-if`
+#       call must complete -- it's a preview, not a content-aware
+#       gate). If not: all other jobs skip.
 #
 # 2. workflow_dispatch
-#    -> same path as push; manual override for redeploys (e.g.,
-#       rolling forward to a specific SHA, post-manual-Azure
-#       changes).
+#    -> escape hatch: paths-filter treats workflow_dispatch as "all
+#       paths changed", so build + what-if + deploy all run regardless
+#       of actual diff. Manual override for redeploys (rolling forward
+#       to a specific SHA, post-manual-Azure changes).
 #
-# 3. pull_request to main
-#    -> build only. validate (what-if) is skipped on PRs;
-#       expanding it to PRs is a separate decision (requires
-#       Azure secrets / OIDC policy for PR runs).
+# 3. pull_request to main (any path)
+#    -> changes runs. If infra changed: build + what-if run, with
+#       what-if output visible in the PR's checks tab. The "ensure
+#       resource group exists" step is skipped on PRs to keep
+#       what-if read-only (the step is idempotent but still hits
+#       ARM and writes an activity-log entry). If not: all other
+#       jobs skip. Fork PRs skip what-if (deploy never runs from
+#       a PR regardless) -- GitHub doesn't pass secrets to fork-PR
+#       runs, so without the guard the run would fail noisily on
+#       azure/login. The check is OPTIONAL today; the changes-job
+#       restructure prepares it for a future required-status flip.
 #
 # Run titles per trigger:
 #   push to main          <commit subject>            (GitHub default;
-#                                                      push always = deploy
-#                                                      via the deploy job's
-#                                                      if-gate, so the
-#                                                      absence of an explicit
-#                                                      tag implicitly means
-#                                                      a deploy)
+#                                                      push to main with
+#                                                      infra changes
+#                                                      implies a deploy
+#                                                      via the deploy
+#                                                      job's if-gate)
 #   workflow_dispatch     [deploy/manual]
-#   pull_request          [build-only] <PR title>
+#   pull_request          [infra] <PR title>
 #   any other event       <event-specific default>    (GitHub default)
 #
 # We fall back to GitHub's default for push because GitHub Actions
@@ -42,21 +57,15 @@ name: Infra (Bicep)
 
 run-name: >-
   ${{ (github.event_name == 'pull_request'
-        && format('[build-only] {0}', github.event.pull_request.title))
+        && format('[infra] {0}', github.event.pull_request.title))
       || (github.event_name == 'workflow_dispatch' && '[deploy/manual]')
       || '' }}
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'infra/**'
-      - '.github/workflows/infra.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'infra/**'
-      - '.github/workflows/infra.yml'
   workflow_dispatch: {}
 
 # Workflow-level permissions are the minimum every job needs:
@@ -66,16 +75,59 @@ on:
 #   - validate -> id-token: write (azure/login@v3 for what-if)
 #   - deploy   -> id-token: write (azure/login@v3 for deployment)
 #
-# `build` (Bicep build only, no Azure call) intentionally has no
+# `changes` and `build` (no Azure calls) intentionally have no
 # id-token: write. Reduces blast radius if a third-party action used
-# during build is compromised.
+# during change detection or build is compromised.
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    # dorny/paths-filter@v3 uses the GitHub REST API to list changed
+    # files on pull_request events, which requires `pull-requests: read`
+    # per its README. Base-repo PRs work with `contents: read` alone via
+    # the default token's implicit allowances, but fork PRs or future
+    # token-default tightening would break. Job-scoped (not
+    # workflow-level) per least privilege; other jobs don't need PR
+    # read access.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # dorny/paths-filter@v3 uses git commands (not the API) on
+          # `push` events where the pushed branch equals `base`, which
+          # is our `push: main` case. It diffs against "the most recent
+          # commit on the same branch before the push" -- needing local
+          # history beyond the default shallow fetch-depth of 1.
+          # `fetch-depth: 0` fetches full history. (For pull_request
+          # events the API is used and this setting is moot but
+          # harmless.)
+          fetch-depth: 0
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # paths-filter treats triggers other than pull_request /
+          # pull_request_target / push / merge_group as "all paths
+          # changed", so workflow_dispatch reports infra=true and the
+          # downstream gates fall through to "run everything". That's
+          # the escape hatch that keeps manual redeploys functional.
+          filters: |
+            infra:
+              - 'infra/**'
+              - '.github/workflows/infra.yml'
+
   build:
     name: Bicep build
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
@@ -91,8 +143,14 @@ jobs:
   validate:
     name: Bicep what-if
     runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name != 'pull_request'
+    needs: [changes, build]
+    # Run when infra changed (push/PR/dispatch) AND, for PRs, only when
+    # the PR is from the base repo. Fork PRs would otherwise fail at
+    # azure/login because GitHub doesn't pass secrets to fork-PR runs.
+    if: |
+      needs.changes.outputs.infra == 'true'
+      && (github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository)
     timeout-minutes: 10
     permissions:
       contents: read
@@ -106,6 +164,13 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Ensure resource group exists
+        # Skip on PRs to keep what-if read-only. `az group create` is
+        # idempotent but still hits ARM and writes an Update entry in
+        # the RG's activity log. The cold-start path runs through
+        # workflow_dispatch or push to main (both still execute this
+        # step); in steady state the RG already exists and what-if
+        # succeeds on PRs without it.
+        if: github.event_name != 'pull_request'
         run: |
           az group create \
             --name rg-jotjson-dev \
@@ -131,8 +196,14 @@ jobs:
 
   deploy:
     name: Deploy
-    needs: [build, validate]
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    needs: [changes, build, validate]
+    # workflow_dispatch is the manual escape hatch (always deploy).
+    # Otherwise: only deploy on push to main when infra actually changed
+    # (push that touches no infra paths runs the changes job alone and
+    # skips deploy). PRs never deploy.
+    if: |
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && needs.changes.outputs.infra == 'true')
     concurrency:
       group: infra-deploy-dev
       cancel-in-progress: false
