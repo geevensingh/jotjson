@@ -78,7 +78,7 @@ jobs:
           DEPLOY_REDIRECT_URI: ${{ vars.NONPROD_DEPLOY_REDIRECT_URI }}
         run: |
           # The redirectUri must be the real SWA default hostname captured
-          # from the first infra-nonprod.yml deploy and pinned via the
+          # from the first infra-nonprod.yml deploy and set via the
           # repo-level Variable `NONPROD_DEPLOY_REDIRECT_URI` (plan step
           # 1.9). Until then this guard fires and the deploy fails fast.
           if [ -z "$DEPLOY_REDIRECT_URI" ]; then
@@ -86,11 +86,21 @@ jobs:
             echo "Set it to https://<nonprod-swa-hostname>/ per plan step 1.9 before triggering this workflow."
             exit 1
           fi
+          # Strict allowlist: only the SWA default-hostname pattern is
+          # accepted. This is intentional - a permissive catchall like
+          # `https://*/` would silently accept the prod custom domain
+          # `https://jotjson.com/` (or any other host) and bake a
+          # wrong-env redirect into the nonprod bundle. Phase 1 does
+          # not use a custom domain on nonprod (the bicepparam sets
+          # `customDomain = ''`); when/if a custom domain is added to
+          # nonprod, expand this allowlist with the specific host then,
+          # not via a wildcard.
           case "$DEPLOY_REDIRECT_URI" in
             https://*.azurestaticapps.net/) : ;;
-            https://*/) : ;;
             *)
-              echo "::error::NONPROD_DEPLOY_REDIRECT_URI ('$DEPLOY_REDIRECT_URI') doesn't look like a URL (must start with https:// and end with /)."
+              echo "::error::NONPROD_DEPLOY_REDIRECT_URI ('$DEPLOY_REDIRECT_URI') is not an allowed nonprod hostname."
+              echo "Allowed pattern: https://<name>.azurestaticapps.net/"
+              echo "If you need to add a custom domain for nonprod, expand the allowlist in this file rather than loosening the pattern."
               exit 1
               ;;
           esac
