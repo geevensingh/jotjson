@@ -194,9 +194,17 @@ jobs:
           ENTRA_KNOWN_AUTHORITY: ${{ secrets.ENTRA_KNOWN_AUTHORITY }}
           ENTRA_API_SCOPE: ${{ secrets.ENTRA_API_SCOPE }}
           APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.APP_INSIGHTS_CONNECTION_STRING }}
+          # MSAL only allows one redirectUri in its config. For prod
+          # this workflow stays at https://jotjson.com/ (the canonical
+          # custom domain). Sibling workflows (cd-nonprod.yml) override
+          # DEPLOY_REDIRECT_URI to point at their own SWA hostname.
+          DEPLOY_REDIRECT_URI: 'https://jotjson.com/'
         run: |
           # Duplicates ci.yml's bake step. See "Build topology" comment at
           # the top of this file for why this duplication exists.
+          # ci.yml's bake stays hard-coded to https://jotjson.com/ because
+          # ci.yml only runs on push-to-main and only ever produces the
+          # prod artifact; only this manual path needs to retarget.
           cat > src/environments/environment.prod.ts <<'EOF'
           import { Environment } from './environment.interface';
 
@@ -207,8 +215,8 @@ jobs:
               clientId: '__ENTRA_SPA_CLIENT_ID__',
               authority: '__ENTRA_AUTHORITY__',
               knownAuthorities: ['__ENTRA_KNOWN_AUTHORITY__'],
-              redirectUri: 'https://jotjson.com/',
-              postLogoutRedirectUri: 'https://jotjson.com/',
+              redirectUri: '__DEPLOY_REDIRECT_URI__',
+              postLogoutRedirectUri: '__DEPLOY_REDIRECT_URI__',
               scopes: ['__ENTRA_API_SCOPE__']
             },
             appInsightsConnectionString: '__APP_INSIGHTS_CONNECTION_STRING__'
@@ -220,8 +228,9 @@ jobs:
           sed -i "s|__ENTRA_KNOWN_AUTHORITY__|${ENTRA_KNOWN_AUTHORITY}|g" src/environments/environment.prod.ts
           sed -i "s|__ENTRA_API_SCOPE__|${ENTRA_API_SCOPE}|g" src/environments/environment.prod.ts
           sed -i "s|__APP_INSIGHTS_CONNECTION_STRING__|${APP_INSIGHTS_CONNECTION_STRING}|g" src/environments/environment.prod.ts
-          if grep -q "__ENTRA_" src/environments/environment.prod.ts; then
-            echo "::error::One or more ENTRA_* secrets are missing - aborting deploy."
+          sed -i "s|__DEPLOY_REDIRECT_URI__|${DEPLOY_REDIRECT_URI}|g" src/environments/environment.prod.ts
+          if grep -q "__ENTRA_\|__DEPLOY_REDIRECT_URI__" src/environments/environment.prod.ts; then
+            echo "::error::One or more required deploy values are missing (ENTRA_* / DEPLOY_REDIRECT_URI) - aborting deploy."
             exit 1
           fi
 

@@ -1,0 +1,259 @@
+name: Deploy (SWA) - nonprod
+
+# ----------------------------------------------------------------------
+# Non-production SWA + Functions deploy (Visual Studio Enterprise sub).
+# Mirrors cd.yml's `workflow_dispatch` (manual) path but targets the
+# nonprod SWA (`swa-jotjson-nonprod`) under AZURE_SUBSCRIPTION_ID_NONPROD.
+#
+# Trigger: `workflow_dispatch` only. There is no `workflow_run` path -
+# nonprod does not auto-deploy on push to main (Phase 2 cd-preview.yml
+# handles PR-driven deploys; nonprod is the stable "what main looks like
+# when manually promoted" env). Future automation can be added once the
+# manual flow is proven.
+#
+# Auth (Azure): uses federated SP `gh-actions-jotjson`
+# (appId c4866b60-d20b-43f1-b81e-ca01dac6e102) via
+# `environment: nonprod` matching the federated cred
+# `repo:geevensingh/jotjson:environment:nonprod`. Role: Contributor on
+# `rg-jotjson-nonprod` only.
+#
+# Auth (SWA): uses `AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD` repo
+# secret (populated per plan step 1.8a after the first infra deploy).
+#
+# Redirect URI: `DEPLOY_REDIRECT_URI` is set to a placeholder until
+# step 1.9 pins it to the actual SWA default hostname captured from
+# the first infra deploy. The pre-deploy guard step fails if the
+# placeholder is still present, so the deploy is fail-safe.
+#
+# Entra: reuses the same `ENTRA_*` repo secrets as prod (same CIAM
+# tenant). Sign-in works on this env only after the nonprod hostname
+# is registered as a redirect URI in the Entra SPA app reg (per plan
+# step 1.7).
+#
+# App Insights: uses `APP_INSIGHTS_CONNECTION_STRING_NONPROD` repo
+# secret (different AI resource than prod; captured from the first
+# infra deploy per plan step 1.8b).
+#
+# Sourcemap upload: targets the nonprod storage account
+# `stjotjsonnonprod` (resource name follows the same hyphen-stripped
+# pattern as prod's `stjotjsondev`; the actual account name is
+# resolved via the `AZURE_STORAGE_ACCOUNT_NONPROD` secret).
+# ----------------------------------------------------------------------
+
+run-name: >-
+  [nonprod] ${{ github.event.head_commit.message || github.sha }}
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: swa-deploy-nonprod
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Build and deploy to Azure Static Web Apps (nonprod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: nonprod
+    steps:
+      - name: Check for deploy token
+        id: check
+        env:
+          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
+        run: |
+          if [ -z "$SWA_TOKEN" ]; then
+            echo "::error::AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD not set - cannot deploy."
+            echo "Populate the secret per plan step 1.8a (az staticwebapp secrets list)."
+            exit 1
+          fi
+          echo "have_token=true" >> "$GITHUB_OUTPUT"
+
+      - name: Validate redirect URI is pinned
+        env:
+          DEPLOY_REDIRECT_URI: ${{ vars.NONPROD_DEPLOY_REDIRECT_URI }}
+        run: |
+          # The redirectUri must be the real SWA default hostname captured
+          # from the first infra-nonprod.yml deploy and set via the
+          # repo-level Variable `NONPROD_DEPLOY_REDIRECT_URI` (plan step
+          # 1.9). Until then this guard fires and the deploy fails fast.
+          if [ -z "$DEPLOY_REDIRECT_URI" ]; then
+            echo "::error::NONPROD_DEPLOY_REDIRECT_URI repo variable is unset."
+            echo "Set it to https://<nonprod-swa-hostname>/ per plan step 1.9 before triggering this workflow."
+            exit 1
+          fi
+          # Strict allowlist: only the SWA default-hostname pattern is
+          # accepted. This is intentional - a permissive catchall like
+          # `https://*/` would silently accept the prod custom domain
+          # `https://jotjson.com/` (or any other host) and bake a
+          # wrong-env redirect into the nonprod bundle. Phase 1 does
+          # not use a custom domain on nonprod (the bicepparam sets
+          # `customDomain = ''`); when/if a custom domain is added to
+          # nonprod, expand this allowlist with the specific host then,
+          # not via a wildcard.
+          case "$DEPLOY_REDIRECT_URI" in
+            https://*.azurestaticapps.net/) : ;;
+            *)
+              echo "::error::NONPROD_DEPLOY_REDIRECT_URI ('$DEPLOY_REDIRECT_URI') is not an allowed nonprod hostname."
+              echo "Allowed pattern: https://<name>.azurestaticapps.net/"
+              echo "If you need to add a custom domain for nonprod, expand the allowlist in this file rather than loosening the pattern."
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+          lfs: false
+          # Full history so the inline `npm run build` produces a real
+          # `buildNumber`. Mirrors cd.yml's workflow_dispatch path.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install web deps
+        run: npm ci
+
+      - name: Materialize environment.ts
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
+
+      - name: Bake nonprod auth config into environment.prod.ts
+        env:
+          ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
+          ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
+          ENTRA_KNOWN_AUTHORITY: ${{ secrets.ENTRA_KNOWN_AUTHORITY }}
+          ENTRA_API_SCOPE: ${{ secrets.ENTRA_API_SCOPE }}
+          APP_INSIGHTS_CONNECTION_STRING: ${{ secrets.APP_INSIGHTS_CONNECTION_STRING_NONPROD }}
+          DEPLOY_REDIRECT_URI: ${{ vars.NONPROD_DEPLOY_REDIRECT_URI }}
+        run: |
+          # Mirrors cd.yml's parameterised bake step (with
+          # APP_INSIGHTS_CONNECTION_STRING_NONPROD substituted for the
+          # prod connection string).
+          cat > src/environments/environment.prod.ts <<'EOF'
+          import { Environment } from './environment.interface';
+
+          export const environment: Environment = {
+            production: true,
+            apiBaseUrl: '/api',
+            auth: {
+              clientId: '__ENTRA_SPA_CLIENT_ID__',
+              authority: '__ENTRA_AUTHORITY__',
+              knownAuthorities: ['__ENTRA_KNOWN_AUTHORITY__'],
+              redirectUri: '__DEPLOY_REDIRECT_URI__',
+              postLogoutRedirectUri: '__DEPLOY_REDIRECT_URI__',
+              scopes: ['__ENTRA_API_SCOPE__']
+            },
+            appInsightsConnectionString: '__APP_INSIGHTS_CONNECTION_STRING__'
+          };
+          EOF
+          sed -i 's/^          //' src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_SPA_CLIENT_ID__|${ENTRA_SPA_CLIENT_ID}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_AUTHORITY__|${ENTRA_AUTHORITY}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_KNOWN_AUTHORITY__|${ENTRA_KNOWN_AUTHORITY}|g" src/environments/environment.prod.ts
+          sed -i "s|__ENTRA_API_SCOPE__|${ENTRA_API_SCOPE}|g" src/environments/environment.prod.ts
+          sed -i "s|__APP_INSIGHTS_CONNECTION_STRING__|${APP_INSIGHTS_CONNECTION_STRING}|g" src/environments/environment.prod.ts
+          sed -i "s|__DEPLOY_REDIRECT_URI__|${DEPLOY_REDIRECT_URI}|g" src/environments/environment.prod.ts
+          if grep -q "__ENTRA_\|__DEPLOY_REDIRECT_URI__" src/environments/environment.prod.ts; then
+            echo "::error::One or more required deploy values are missing (ENTRA_* / DEPLOY_REDIRECT_URI) - aborting deploy."
+            exit 1
+          fi
+
+      - name: Build SPA
+        run: npm run build -- --configuration=production
+
+      - name: Copy SWA config into bundle
+        run: cp staticwebapp.config.json dist/jotjson/browser/staticwebapp.config.json
+
+      - name: Sanity-check production bundle
+        run: |
+          if [ ! -f dist/jotjson/browser/index.html ]; then
+            echo "::error::dist/jotjson/browser/index.html missing"
+            exit 1
+          fi
+          if [ ! -f dist/jotjson/browser/staticwebapp.config.json ]; then
+            echo "::error::dist/jotjson/browser/staticwebapp.config.json missing"
+            exit 1
+          fi
+          if grep -r --include='*.js' '__ENTRA_\|__DEPLOY_REDIRECT_URI__' dist/jotjson/browser/; then
+            echo "::error::Production bundle contains __ENTRA_* or __DEPLOY_REDIRECT_URI__ placeholder - secret bake failed"
+            exit 1
+          fi
+
+      - name: Azure login (sourcemap upload)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_NONPROD }}
+      - name: Upload sourcemaps to Azure Blob Storage
+        env:
+          STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT_NONPROD }}
+        run: |
+          if [ -z "$STORAGE_ACCOUNT" ]; then
+            echo "::warning::AZURE_STORAGE_ACCOUNT_NONPROD not set - skipping sourcemap upload."
+            echo "Set the secret to the nonprod storage account name (e.g. stjotjsonnonprod) to enable AI symbolication."
+            exit 0
+          fi
+          az storage blob upload-batch \
+            --source dist/jotjson/browser \
+            --destination sourcemaps \
+            --account-name "$STORAGE_ACCOUNT" \
+            --pattern '*.map' \
+            --auth-mode login \
+            --overwrite true
+      - name: Azure logout (sourcemap upload)
+        if: ${{ always() }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
+
+      - name: Install API full deps
+        working-directory: api
+        run: npm ci
+
+      - name: Build API
+        working-directory: api
+        run: npm run build
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          # With skip_app_build: true the SWA action treats app_location
+          # as the prebuilt SPA output directory (per Microsoft docs).
+          # With skip_api_build: true it likewise treats api_location as
+          # a prebuilt Functions tree and uploads it as-is - no Oryx.
+          app_location: 'dist/jotjson/browser'
+          api_location: 'api'
+          skip_app_build: true
+          skip_api_build: true
+
+      - name: Summary
+        if: ${{ always() && !cancelled() }}
+        env:
+          REDIRECT_URI: ${{ vars.NONPROD_DEPLOY_REDIRECT_URI }}
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            {
+              echo "## Deployed (nonprod)"
+              echo ""
+              echo "- SWA: swa-jotjson-nonprod"
+              echo "- Redirect URI: $REDIRECT_URI"
+              echo "- Subscription: nonprod (VS Enterprise)"
+              echo "- Commit: ${{ github.sha }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Deploy failed (nonprod)"
+              echo ""
+              echo "- SWA: swa-jotjson-nonprod"
+              echo "- Commit: ${{ github.sha }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
