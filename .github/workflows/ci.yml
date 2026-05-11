@@ -513,10 +513,38 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
+      # Pinned per #69. Both the install script URL and the binary
+      # version resolve to the v1.7.12 release tag (not `main` or
+      # "latest") so CI runs are reproducible against accidental
+      # upstream drift. This does NOT defend against a maliciously
+      # force-moved tag or a swapped release asset; that residual
+      # risk is tracked in #182 (Option C, sha256-verified binary).
+      #
+      # To refresh: bump ACTIONLINT_VERSION below to the new release
+      # (digits only, no `v` prefix). Dependabot does not track raw
+      # curl URLs in `run:` steps.
       - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
         run: |
-          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          echo "$PWD" >> "$GITHUB_PATH"
+          set -euo pipefail
+          if [[ ! "${ACTIONLINT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ACTIONLINT_VERSION must be X.Y.Z (digits only, no 'v' prefix), got '${ACTIONLINT_VERSION}'" >&2
+            exit 1
+          fi
+          script="$(mktemp)"
+          curl -fsSL \
+            "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash" \
+            -o "${script}"
+          install_dir="${RUNNER_TEMP}/actionlint"
+          mkdir -p "${install_dir}"
+          bash "${script}" "${ACTIONLINT_VERSION}" "${install_dir}"
+          rm "${script}"
+          if ! [ -x "${install_dir}/actionlint" ]; then
+            echo "actionlint not installed at ${install_dir}/actionlint" >&2
+            exit 1
+          fi
+          echo "${install_dir}" >> "$GITHUB_PATH"
       - name: Run actionlint
         run: actionlint -color
 
