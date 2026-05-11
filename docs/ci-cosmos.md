@@ -195,3 +195,5 @@ different account anyway).
 - **"More than 20 blobs-* containers"**: setup throws this hard cap
   to stay under Cosmos's 25-container shared-throughput limit. Run
   `npm --prefix api run cleanup:cosmos-ci` to drop orphans.
+
+<!-- mergify-test-target: temporary marker to verify Mergify auto-update; will be closed without merging -->
