@@ -12,10 +12,10 @@ on:
 #
 # Per-job escalations live in each job's `permissions:` block:
 #   - web             -> id-token: write (azure/login@v3 for sourcemap upload)
-#   - api             -> checks: write (dorny/test-reporter@v2)
-#   - api-integration -> checks: write (dorny/test-reporter@v2)
-#   - web-tests       -> checks: write (dorny/test-reporter@v2)
-#   - smoke-e2e       -> checks: write (dorny/test-reporter@v2)
+#   - api             -> checks: write (dorny/test-reporter@v3)
+#   - api-integration -> checks: write (dorny/test-reporter@v3)
+#   - web-tests       -> checks: write (dorny/test-reporter@v3)
+#   - smoke-e2e       -> checks: write (dorny/test-reporter@v3)
 #   - workflows-lint  -> no escalation (actionlint only)
 #
 # Notable previous over-grants tightened:
@@ -326,7 +326,7 @@ jobs:
     name: API build & test
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Publishes test results via dorny/test-reporter@v2.
+    # Publishes test results via dorny/test-reporter@v3.
     permissions:
       contents: read
       checks: write
@@ -410,7 +410,7 @@ jobs:
     name: Smoke api integration (real Cosmos)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Publishes test results via dorny/test-reporter@v2.
+    # Publishes test results via dorny/test-reporter@v3.
     permissions:
       contents: read
       checks: write
@@ -561,7 +561,7 @@ jobs:
     name: Web unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Publishes test results via dorny/test-reporter@v2.
+    # Publishes test results via dorny/test-reporter@v3.
     permissions:
       contents: read
       checks: write
@@ -619,7 +619,7 @@ jobs:
     name: Smoke e2e (anonymous, Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Publishes test results via dorny/test-reporter@v2.
+    # Publishes test results via dorny/test-reporter@v3.
     permissions:
       contents: read
       checks: write
