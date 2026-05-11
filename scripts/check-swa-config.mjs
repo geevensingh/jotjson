@@ -152,18 +152,45 @@ export function getExcludedExtensions(excludeEntries) {
 }
 
 // Converts a SWA route pattern to a regex. `**` matches across segments,
-// `*` matches within a segment. Other regex metachars are escaped. Used
-// to detect whether a wildcard route preceding the must-revalidate exact
+// Convert a SWA route pattern to a regex anchored at start/end. SWA
+// wildcard syntax (https://learn.microsoft.com/en-us/azure/static-web-apps/configuration#wildcard-pattern):
+//   - `*` is only valid at the END of a route pattern.
+//   - `*` matches any characters, INCLUDING slashes (multi-segment).
+//   - `*.{ext1,ext2,...}` at the end filters by one of several extensions.
+//   - `*.ext` at the end filters by a single extension.
+// SWA does NOT define `**`. Defensively we collapse any `**+` run to a
+// single `*` so a contributor writing `/**` cannot silently bypass the
+// route-order shadowing check by leaning on a non-SWA token.
+// Other regex metacharacters in the literal prefix are escaped. Used to
+// detect whether a wildcard route preceding the must-revalidate exact
 // paths would shadow them.
 export function routePatternToRegex(pattern) {
-  const SENTINEL_DOUBLE = '\0\0';
-  const SENTINEL_SINGLE = '\0';
-  const tokenized = pattern.replace(/\*\*/g, SENTINEL_DOUBLE).replace(/\*/g, SENTINEL_SINGLE);
-  const escaped = tokenized.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-  const restored = escaped
-    .replace(new RegExp(SENTINEL_DOUBLE, 'g'), '.*')
-    .replace(new RegExp(SENTINEL_SINGLE, 'g'), '[^/]*');
-  return new RegExp(`^${restored}$`);
+  const collapsed = pattern.replace(/\*\*+/g, '*');
+  const trailing = /\*(?:\.\{([^}]+)\}|\.([A-Za-z0-9]+))?$/.exec(collapsed);
+
+  if (!trailing) {
+    const escaped = collapsed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${escaped}$`);
+  }
+
+  const prefix = collapsed.slice(0, trailing.index);
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  if (trailing[1] !== undefined) {
+    const exts = trailing[1]
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .map((entry) => entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return new RegExp(`^${escapedPrefix}.*\\.(?:${exts.join('|')})$`);
+  }
+
+  if (trailing[2] !== undefined) {
+    const ext = trailing[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${escapedPrefix}.*\\.${ext}$`);
+  }
+
+  return new RegExp(`^${escapedPrefix}.*$`);
 }
 
 export function routeMatchesPath(routePattern, path) {

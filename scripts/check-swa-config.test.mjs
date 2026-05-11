@@ -87,25 +87,45 @@ test('getExcludedExtensions ignores entries that are not *.EXT shape', () => {
 
 // --- routePatternToRegex / routeMatchesPath -------------------------------
 
-test('routePatternToRegex single * matches within a segment', () => {
+test('routePatternToRegex single * matches across segments (SWA semantics)', () => {
   assert.equal(routeMatchesPath('/api/*', '/api/blobs'), true);
-  assert.equal(routeMatchesPath('/api/*', '/api/blobs/123'), false);
+  assert.equal(routeMatchesPath('/api/*', '/api/blobs/123'), true);
+  assert.equal(routeMatchesPath('/api/*', '/api/me/preferences'), true);
 });
 
-test('routePatternToRegex double ** matches across segments', () => {
+test('routePatternToRegex /* matches every absolute path', () => {
+  for (const path of ['/index.html', '/404/index.html', '/shell.html', '/ngsw.json']) {
+    assert.equal(routeMatchesPath('/*', path), true, `expected '/*' to match '${path}'`);
+  }
+});
+
+test('routePatternToRegex *.{ext,ext} respects the extension filter', () => {
+  assert.equal(routeMatchesPath('/*.{html,htm}', '/index.html'), true);
+  assert.equal(routeMatchesPath('/*.{html,htm}', '/404/index.html'), true);
+  assert.equal(routeMatchesPath('/*.{html,htm}', '/ngsw.json'), false);
+});
+
+test('routePatternToRegex *.ext respects the extension filter', () => {
+  assert.equal(routeMatchesPath('/*.json', '/ngsw.json'), true);
+  assert.equal(routeMatchesPath('/*.json', '/index.html'), false);
+});
+
+test('routePatternToRegex collapses non-SWA ** to single * (defensive)', () => {
+  // SWA does not define `**`. Treating it the same as `*` ensures a
+  // contributor cannot silently bypass the shadowing check by writing
+  // `/**` instead of `/*`.
   assert.equal(routeMatchesPath('/api/**', '/api/blobs/123'), true);
 });
 
-test('routePatternToRegex escapes regex metacharacters', () => {
+test('routePatternToRegex escapes regex metacharacters in the literal prefix', () => {
   assert.equal(routeMatchesPath('/index.html', '/index.html'), true);
   // The `.` in `.html` must not match `/indexXhtml`.
   assert.equal(routeMatchesPath('/index.html', '/indexXhtml'), false);
 });
 
-test('routePatternToRegex wildcard matches the canonical must-revalidate paths', () => {
-  for (const path of MUST_REVALIDATE_PATHS) {
-    assert.equal(routeMatchesPath('/**', path), true, `expected '/**' to match '${path}'`);
-  }
+test('routePatternToRegex non-wildcard pattern equals exact match', () => {
+  assert.equal(routeMatchesPath('/api/blobs', '/api/blobs'), true);
+  assert.equal(routeMatchesPath('/api/blobs', '/api/blobs/123'), false);
 });
 
 // --- Happy path: real config passes all assertions ------------------------
@@ -237,6 +257,7 @@ test('navigationFallback.exclude split into multiple entries passes', () => {
 test('/api/* allowedRoles missing anonymous fails', () => {
   const config = cloneConfig();
   const apiRoute = config.routes.find((route) => route.route === '/api/*');
+  assert.ok(apiRoute, "expected base config to contain a '/api/*' route");
   apiRoute.allowedRoles = ['authenticated'];
   assertHasErrorMatching(checkRoutes(config), /anonymous/);
 });
@@ -245,8 +266,11 @@ test('/api/* allowedRoles missing anonymous fails', () => {
 
 test('wildcard route preceding must-revalidate rules fails', () => {
   const config = cloneConfig();
+  // `/*` is the canonical SWA pattern that matches every absolute path.
+  // (`/**` is not valid SWA syntax; we exercise the defensive collapse in
+  // a dedicated routePatternToRegex test above.)
   config.routes = [
-    { route: '/**', headers: { 'Cache-Control': 'public, max-age=31536000' } },
+    { route: '/*', headers: { 'Cache-Control': 'public, max-age=31536000' } },
     ...config.routes,
   ];
   assertHasErrorMatching(checkRoutes(config), /shadow|precedes/);
@@ -265,6 +289,8 @@ for (const path of MUST_REVALIDATE_PATHS) {
 test('Cache-Control value drift on /index.html fails', () => {
   const config = cloneConfig();
   const route = config.routes.find((entry) => entry.route === '/index.html');
+  assert.ok(route, "expected base config to contain a '/index.html' route");
+  assert.ok(route.headers, "expected '/index.html' route to have a headers object");
   route.headers['Cache-Control'] = 'public, max-age=300';
   assertHasErrorMatching(checkRoutes(config), /Cache-Control/);
   // Sanity check: REQUIRED_CACHE_CONTROL itself is the value we want;
