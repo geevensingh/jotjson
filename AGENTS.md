@@ -779,7 +779,10 @@ Before finishing a task:
   "1 of 10 checks pending"), explain how it can be cleared (resolve
   thread, request review, wait for CI), and stop. Do not propose
   `--admin` as an option in `ask_user`. The user can clear the block
-  themselves through the GitHub UI; agents do not.
+  themselves through the GitHub UI; agents do not bypass it.
+  (Resolving review threads the agent has legitimately addressed with
+  a pushed commit is a different action -- see "Responding to PR
+  review feedback" below.)
 - **Auto-update of PR branches.** `main` is protected with `strict: true`
   on classic branch protection (require branches to be up to date before
   merge). A Mergify GitHub App install, configured by `.mergify.yml` at
@@ -992,8 +995,9 @@ recommend auto-merge in the PR description (e.g., a one-line
 "Recommend auto-merge once CI passes -- reply 'ship it' to
 enable.") so the user does not have to ask:
 
-- **Docs-only**: changes to `*.md`, `docs/**`, comments inside
-  config files. No code touched.
+- **Docs-only**: changes to `*.md`, `docs/**`, or comments inside
+  config files. No executable or runtime behavior touched (no logic,
+  no schemas, no build steps, no tests).
 - **Lint/format-only**: changes produced by an automated
   formatter or linter with no semantic diff (e.g., prettier
   rerun, import reorder).
