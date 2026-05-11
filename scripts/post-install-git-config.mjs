@@ -19,7 +19,7 @@
 import { execFileSync } from 'node:child_process';
 
 try {
-  execFileSync('git', ['config', 'blame.ignoreRevsFile', '.git-blame-ignore-revs', '--local'], {
+  execFileSync('git', ['config', '--local', 'blame.ignoreRevsFile', '.git-blame-ignore-revs'], {
     stdio: 'ignore',
   });
 } catch {
