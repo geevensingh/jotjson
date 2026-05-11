@@ -1176,20 +1176,124 @@ ran) and ask whether to revert, follow-up-fix, or accept.
   the re-run go green before declaring the task done. That
   rule is about *fixing* known breakage caused by the agent;
   this one is about not *retrying* unknown failures on a hunch.
-- **Rubber-duck every plan before presenting it.** Once you have a
-  candidate plan, run it through a rubber-duck / critic sub-agent
-  for an independent critique (correctness, missed edge cases,
-  simpler alternatives, scope creep) before presenting the plan to
-  the user. If no rubber-duck sub-agent is available in the current
-  runtime, perform an explicit self-critique against the same
-  checklist and label it as such. **Surface any rubber-duck finding
-  that materially changes risk, scope, test strategy, or recommended
-  approach** -- do not silently absorb such findings. Adopt findings
-  that prevent bugs or test failures; you may set aside findings
-  that would significantly complicate the plan without clear
-  benefit, but state when you have done so. This step applies to
-  plans you author; it does **not** apply to direct-command echoes,
-  which are not plans.
+- **Rubber-duck every plan before presenting it -- unconditionally.**
+  Every plan, every time, regardless of size, medium, or perceived
+  triviality. Mechanics:
+
+  - **Verified critic-capable runtimes.** Copilot CLI (`task` tool),
+    Claude Code (`Task` tool). If a runtime lacks sub-agent
+    invocation, stop and tell the user; do not present plans from
+    that runtime.
+
+  - **Critic selection.** Default solo critic: `deep-review:skeptic`
+    (attack mindset). `deep-review:architect` (direction mindset)
+    is permitted for direction-heavy plans. **`deep-review:advocate`
+    is forbidden as a solo critic** -- its role is to defend, not
+    attack. For plans that touch `AGENTS.md`, `DESIGN_SPEC.md`,
+    `staticwebapp.config.json`, auth, security, schema evolution,
+    or migrations, use the **three-agent panel** (`:skeptic`
+    + `:advocate` + `:architect`). `general-purpose` is permitted
+    only when no `deep-review:*` agent is available, and the prompt
+    must be explicitly adversarial. **`explore` is not a critic**
+    -- it is a research agent; do not use it for rubber-duck.
+
+  - **Critic prompt requirements.** The prompt must (a) include
+    explicit adversarial framing ("find at least one weakness; if
+    you genuinely cannot, say so explicitly"), and (b) be quoted
+    (or summarised in one line if long) in the plan alongside the
+    findings so its quality is auditable.
+
+  - **Critic invocation failure is not a fallback.** If the critic
+    invocation times out, errors, or is refused, surface the
+    failure to the user and do not present the plan. Retry with a
+    different critic only after telling the user the first attempt
+    failed. Self-critique inline with plan generation, no matter
+    how rigorous, does not satisfy this rule under any
+    circumstance.
+
+  - **Quote findings in full.** Quote the critic's findings
+    verbatim in the plan; do not paraphrase, do not elide, do not
+    truncate. If the critic output is unwieldy (over ~1500 chars),
+    save the full transcript as `plan.critic-<N>.md` alongside
+    `plan.md` and link from the gate section, but still inline a
+    full verbatim copy of the findings list.
+
+  - **Tag each finding's disposition**: `ADOPT` (link to the plan
+    section that was changed), `SET ASIDE` (one-line reason), or
+    `OUT OF SCOPE` (one-line reason).
+
+  - **Critic-vs-user-preference conflict.** When a finding
+    materially contradicts a user choice already made, do not
+    classify it as `SET ASIDE` on the strength of the user choice
+    alone. Surface the disagreement via `ask_user` with a one-line
+    summary of the critic's reasoning. The user re-confirming their
+    choice converts the finding to `ADOPT-via-user-override`, not
+    `SET ASIDE`.
+
+  - **Surface findings in the response.** The message that presents
+    the plan must either (a) list every finding with its
+    disposition tag, or (b) give counts ("N findings, M adopted, K
+    set aside, L out of scope -- see gate section") so the user can
+    spot suspiciously-zero counts at a glance. Material findings
+    (those that change risk, scope, test strategy, or recommended
+    approach) must be highlighted by name regardless of which
+    presentation mode you pick.
+
+  - **Plan updates.** Any revision that changes scope, approach,
+    test strategy, or risk requires a fresh rubber-duck
+    invocation. Append a **new** `Pre-presentation gate` section
+    (do not overwrite the prior one) so the audit trail is
+    preserved. Typo / formatting edits to the plan itself are
+    exempt.
+
+  - **Borderline direct-command requests.** If you find yourself
+    classifying a borderline request as a direct command to skip
+    the rubber-duck gate, default to plan-and-rubber-duck. The
+    cost of an extra critic invocation is lower than the cost of
+    a missed flaw.
+
+  - **Recursive plans.** This rule applies to plans presented to
+    the **user** for approval. Sub-agent execution plans within
+    an already-approved parent plan do not require their own
+    rubber-duck unless they discover new scope, new files outside
+    the parent plan, or changes to the approved approach.
+
+  - **Independence is mechanical, not epistemic.** A sub-agent is
+    the same model with separate context; that is enough to catch
+    "I missed this because I was attached to my own plan", which
+    is the failure this rule fixes. For high-stakes plans use the
+    three-agent panel to broaden epistemic coverage.
+
+  This step applies to plans you author; it does **not** apply to
+  direct-command echoes, which are not plans.
+
+- **Every plan ends with a "Pre-presentation gate" section,**
+  regardless of medium (inline chat, `plan.md`, `exit_plan_mode`).
+  An empty gate section means the plan is not ready to present.
+  Required structure:
+
+  ```
+  ## Pre-presentation gate
+
+  - **Critic agent**: <agent_type> -- <one-line invocation summary>
+  - **Critic prompt**: <one-line summary, or "see plan.critic-N.md">
+  - **Critic conclusion**: <one-line, e.g. "15 findings raised" or
+    "no material weaknesses found">
+  - **Findings adopted**:
+    - <finding> (-> changed: <plan section>)
+  - **Findings set aside**:
+    - <finding> -- <one-line reason>
+  - **Findings out of scope**:
+    - <finding> -- <one-line reason>
+  ```
+
+  For inline plans, render the gate as a fenced block at the end of
+  the message. For `plan.md`, render it as the file's last section
+  (or append a new gate on plan revision, preserving prior gates).
+  For `exit_plan_mode` content, render it as a trailing section
+  before exiting. The `Critic conclusion` line is required even when
+  the critic raised no material findings -- it disambiguates
+  "critic was silent" from "critic spoke and I adopted".
 - **User unavailability is never authorization to proceed.** If the
   runtime reports the user as away, busy, or unresponsive, that does
   not let you act on a guess. Ask the question anyway and wait. Do
