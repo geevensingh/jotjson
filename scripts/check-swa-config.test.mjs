@@ -38,12 +38,16 @@ function cloneConfig() {
   return JSON.parse(JSON.stringify(readConfig()));
 }
 
-function assertHasErrorMatching(errors, pattern) {
+function assertHasErrorMatching(errors, matcher) {
   assert.ok(errors.length > 0, `expected at least one error, got none`);
-  const matched = errors.some((message) => pattern.test(message));
+  const test =
+    typeof matcher === 'string'
+      ? (message) => message.includes(matcher)
+      : (message) => matcher.test(message);
+  const matched = errors.some(test);
   assert.ok(
     matched,
-    `expected an error matching ${pattern}, got:\n${errors.map((m) => `  - ${m}`).join('\n')}`,
+    `expected an error matching ${matcher}, got:\n${errors.map((m) => `  - ${m}`).join('\n')}`,
   );
 }
 
@@ -254,7 +258,7 @@ for (const path of MUST_REVALIDATE_PATHS) {
   test(`Cache-Control rule for ${path} removed fails`, () => {
     const config = cloneConfig();
     config.routes = config.routes.filter((entry) => entry.route !== path);
-    assertHasErrorMatching(checkRoutes(config), new RegExp(path.replace(/\//g, '\\/')));
+    assertHasErrorMatching(checkRoutes(config), path);
   });
 }
 
