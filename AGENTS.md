@@ -510,6 +510,38 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
 - Test names describe behavior: `it('returns 404 when blob slug is unknown')`.
 - Run the full lint + test + build suite before declaring completion (see §7).
 
+### CI Insights (Mergify)
+
+After each test job, CI uploads the suite's JUnit XML to Mergify CI Insights
+via `mergifyio/gha-mergify-ci@v17`. Wired suites: **api unit**, **api
+integration**, **web unit** (Karma), **e2e** (Playwright). Dashboards live
+at `https://dashboard.mergify.com/ci-insights/jobs`. JUnit artifacts and
+`dorny/test-reporter` PR check-runs are unchanged and remain the canonical
+in-repo signal; Mergify is an additive cross-PR view for flake and
+duration trends.
+
+- **Auto-Retry and Quarantine are explicitly disabled** per §11's
+  zero-tolerance for silent retries on `main`. The four test steps must
+  **not** carry `continue-on-error: true` (which would let Mergify
+  override the runner's success/failure conclusion). Only the
+  `Mergify CI Upload (*)` steps themselves carry `continue-on-error: true`,
+  so a Mergify outage or expired token doesn't fail CI.
+- **Token visibility**: each upload is followed by a `Mergify CI Upload -
+  failure notice (*)` step that writes a `::warning::` annotation and a
+  `$GITHUB_STEP_SUMMARY` line when the upload fails. This surfaces
+  token/permission breakage on the run page; otherwise a stale dashboard
+  is the only signal.
+- **Conditional firing**: uploads use `if: steps.<id>.outcome ==
+  'success' || ... 'failure'` (not `if: success() || failure()`), so the
+  upload runs only when the test step actually executed. This prevents
+  an `npm ci` failure from triggering an upload of a non-existent JUnit
+  file.
+- **Rollback**: delete the four `Mergify CI Upload (*)` steps and the
+  four `Mergify CI Upload - failure notice (*)` steps from
+  `.github/workflows/ci.yml`, remove the four `id:` attributes from
+  the test steps, and revoke the `MERGIFY_TOKEN` repository secret.
+  JUnit artifact uploads and `dorny/test-reporter` are unaffected.
+
 ### Fast inner loop
 
 For incremental work, prefer the fast inner loop over the full
