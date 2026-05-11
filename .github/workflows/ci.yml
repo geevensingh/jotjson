@@ -5,11 +5,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # merge_group fires on the temp ref the merge queue builds
-  # (main + queued PR). Required so the 6 checks below report on
-  # the merge-group SHA the queue tests before fast-forwarding main.
-  # See AGENTS.md section 8 for the merge-queue notes.
-  merge_group:
 
 # Workflow-level permissions are the absolute minimum every job
 # needs:

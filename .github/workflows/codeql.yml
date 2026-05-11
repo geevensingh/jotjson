@@ -14,11 +14,6 @@ on:
     # Weekly Monday-noon-UTC scan catches drift between PR runs (e.g.,
     # transitive dependency advisories that land between pushes).
     - cron: '0 12 * * 1'
-  # merge_group fires on the temp ref the merge queue builds
-  # (main + queued PR). Required so the two Analyze checks below
-  # report on the merge-group SHA the queue tests before
-  # fast-forwarding main. See AGENTS.md section 8.
-  merge_group:
 
 permissions:
   actions: read
