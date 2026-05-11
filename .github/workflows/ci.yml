@@ -338,7 +338,21 @@ jobs:
           npx tsc --pretty false --noEmit
           echo "::remove-matcher owner=tsc-jotjson::"
       - name: Run tests
+        id: run-api-tests
         run: npm test
+      - name: Mergify CI Upload (api unit)
+        if: steps.run-api-tests.outcome == 'success' || steps.run-api-tests.outcome == 'failure'
+        continue-on-error: true
+        uses: mergifyio/gha-mergify-ci@v17
+        with:
+          token: ${{ secrets.MERGIFY_TOKEN }}
+          report_path: api/test-results/api/junit.xml
+          test_step_outcome: ${{ steps.run-api-tests.outcome }}
+      - name: Mergify CI Upload - failure notice (api unit)
+        if: failure() && steps.run-api-tests.outcome != 'skipped'
+        run: |
+          echo "::warning::Mergify CI upload may have failed for api unit. Check MERGIFY_TOKEN secret and dashboard."
+          echo "Mergify CI upload may have failed for api unit. Check MERGIFY_TOKEN secret and dashboard." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload api JUnit
         if: always()
         uses: actions/upload-artifact@v7
@@ -424,6 +438,7 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Run integration tests
+        id: run-api-integration
         if: steps.cosmos-preflight.outputs.enabled == 'true'
         env:
           COSMOS_ENDPOINT: ${{ secrets.COSMOS_CI_ENDPOINT }}
@@ -433,6 +448,19 @@ jobs:
           # workflow rerun (run_id is reused; run_attempt increments).
           COSMOS_BLOBS_CONTAINER: blobs-${{ github.run_id }}-${{ github.run_attempt }}
         run: npm run test:integration
+      - name: Mergify CI Upload (api integration)
+        if: (steps.run-api-integration.outcome == 'success' || steps.run-api-integration.outcome == 'failure') && steps.cosmos-preflight.outputs.enabled == 'true'
+        continue-on-error: true
+        uses: mergifyio/gha-mergify-ci@v17
+        with:
+          token: ${{ secrets.MERGIFY_TOKEN }}
+          report_path: api/test-results/api-integration/junit.xml
+          test_step_outcome: ${{ steps.run-api-integration.outcome }}
+      - name: Mergify CI Upload - failure notice (api integration)
+        if: failure() && steps.run-api-integration.outcome != 'skipped' && steps.cosmos-preflight.outputs.enabled == 'true'
+        run: |
+          echo "::warning::Mergify CI upload may have failed for api integration. Check MERGIFY_TOKEN secret and dashboard."
+          echo "Mergify CI upload may have failed for api integration. Check MERGIFY_TOKEN secret and dashboard." >> "$GITHUB_STEP_SUMMARY"
       - name: Cleanup integration container (backstop)
         # `if: always()` covers Jest hard-crashes that bypass
         # globalTeardown. Setup-time orphan cleanup at the next run
@@ -510,7 +538,21 @@ jobs:
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
       - name: Run tests with coverage
+        id: run-web-tests
         run: npm run test:ci
+      - name: Mergify CI Upload (web unit)
+        if: steps.run-web-tests.outcome == 'success' || steps.run-web-tests.outcome == 'failure'
+        continue-on-error: true
+        uses: mergifyio/gha-mergify-ci@v17
+        with:
+          token: ${{ secrets.MERGIFY_TOKEN }}
+          report_path: test-results/web/junit.xml
+          test_step_outcome: ${{ steps.run-web-tests.outcome }}
+      - name: Mergify CI Upload - failure notice (web unit)
+        if: failure() && steps.run-web-tests.outcome != 'skipped'
+        run: |
+          echo "::warning::Mergify CI upload may have failed for web unit. Check MERGIFY_TOKEN secret and dashboard."
+          echo "Mergify CI upload may have failed for web unit. Check MERGIFY_TOKEN secret and dashboard." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v7
@@ -574,7 +616,21 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run smoke e2e
+        id: run-e2e-tests
         run: npm run test:e2e
+      - name: Mergify CI Upload (e2e)
+        if: steps.run-e2e-tests.outcome == 'success' || steps.run-e2e-tests.outcome == 'failure'
+        continue-on-error: true
+        uses: mergifyio/gha-mergify-ci@v17
+        with:
+          token: ${{ secrets.MERGIFY_TOKEN }}
+          report_path: test-results/e2e/junit.xml
+          test_step_outcome: ${{ steps.run-e2e-tests.outcome }}
+      - name: Mergify CI Upload - failure notice (e2e)
+        if: failure() && steps.run-e2e-tests.outcome != 'skipped'
+        run: |
+          echo "::warning::Mergify CI upload may have failed for e2e. Check MERGIFY_TOKEN secret and dashboard."
+          echo "Mergify CI upload may have failed for e2e. Check MERGIFY_TOKEN secret and dashboard." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7
