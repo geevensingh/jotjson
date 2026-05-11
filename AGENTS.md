@@ -593,6 +593,23 @@ for the iteration loop.
     same change. CI's `--ci-origins` mode validates the secret-baked
     auth and App Insights origins, but other directives are
     contributor-enforced.
+- **`staticwebapp.config.json` non-CSP assertions** - `scripts/check-swa-config.mjs`
+  (lint chain) covers the rest of the file: the non-CSP `globalHeaders`
+  entries (`X-Frame-Options`, `X-Content-Type-Options`,
+  `Strict-Transport-Security`, `Referrer-Policy`, `Permissions-Policy`),
+  the `navigationFallback.rewrite` value (`/shell.html`), the
+  `navigationFallback.exclude` extension set (`/api/*` plus the canonical
+  static-asset extensions, with brace-group expansion so contributors
+  can split `*.{js,css}` without tripping the gate), the `/api/*`
+  `allowedRoles` (must include `anonymous`), route-order shadowing (no
+  wildcard route may precede the must-revalidate Cache-Control rules),
+  the four `Cache-Control: no-cache, must-revalidate` rules
+  (`/index.html`, `/shell.html`, `/404/index.html`, `/ngsw.json`),
+  `platform.apiRuntime` (must be in the small allowlist of currently-
+  supported Node versions), and the `.webmanifest` MIME type. The
+  validator works against the source file; it does NOT prove the CDN
+  serves what the file describes - that's tracked under issue #179
+  (PR preview environments).
 
 ## 7. Definition of Done
 

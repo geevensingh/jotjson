@@ -1,0 +1,322 @@
+// Unit tests for scripts/check-swa-config.mjs.
+//
+// Runs under Node's built-in test runner: `node --test`. No external
+// dependencies. The test file imports the script as a module; the script
+// guards `main()` behind an "invoked directly" check so importing it does
+// not trigger CLI side effects (fs reads, process.exit).
+//
+// Coverage shape: one happy-path test that reads the actual
+// `staticwebapp.config.json` and asserts no errors, then one negative
+// test per assertion (mutating a clone of the parsed config in-memory)
+// to prove each assertion is doing real work. Each negative test asserts
+// at least one error is returned AND that the error message mentions the
+// expected field name, so a future refactor that silently swallows the
+// failure into a different code path is still caught.
+
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import {
+  checkConfig,
+  checkGlobalHeaders,
+  checkMimeTypes,
+  checkNavigationFallback,
+  checkPlatform,
+  checkRoutes,
+  expandBraceGlob,
+  getExcludedExtensions,
+  MUST_REVALIDATE_PATHS,
+  readConfig,
+  REQUIRED_CACHE_CONTROL,
+  routeMatchesPath,
+  SUPPORTED_API_RUNTIMES,
+} from './check-swa-config.mjs';
+
+// Deep-clones via JSON. Sufficient for our config shape (plain JSON,
+// no Dates / Maps / Sets / functions / undefined sentinels).
+function cloneConfig() {
+  return JSON.parse(JSON.stringify(readConfig()));
+}
+
+function assertHasErrorMatching(errors, pattern) {
+  assert.ok(errors.length > 0, `expected at least one error, got none`);
+  const matched = errors.some((message) => pattern.test(message));
+  assert.ok(
+    matched,
+    `expected an error matching ${pattern}, got:\n${errors.map((m) => `  - ${m}`).join('\n')}`,
+  );
+}
+
+// --- expandBraceGlob ------------------------------------------------------
+
+test('expandBraceGlob expands a single brace group', () => {
+  assert.deepEqual(expandBraceGlob('*.{js,css}'), ['*.js', '*.css']);
+});
+
+test('expandBraceGlob passes through entries with no braces', () => {
+  assert.deepEqual(expandBraceGlob('/api/*'), ['/api/*']);
+});
+
+test('expandBraceGlob expands multiple groups recursively', () => {
+  assert.deepEqual(expandBraceGlob('{a,b}.{x,y}').sort(), ['a.x', 'a.y', 'b.x', 'b.y']);
+});
+
+// --- getExcludedExtensions ------------------------------------------------
+
+test('getExcludedExtensions parses the brace-grouped form', () => {
+  const exts = getExcludedExtensions(['/*.{js,css,map}']);
+  assert.equal(exts.has('js'), true);
+  assert.equal(exts.has('css'), true);
+  assert.equal(exts.has('map'), true);
+});
+
+test('getExcludedExtensions parses split entries (no brace group)', () => {
+  const exts = getExcludedExtensions(['/*.js', '/*.css']);
+  assert.equal(exts.has('js'), true);
+  assert.equal(exts.has('css'), true);
+});
+
+test('getExcludedExtensions ignores entries that are not *.EXT shape', () => {
+  const exts = getExcludedExtensions(['/api/*', '/foo']);
+  assert.equal(exts.size, 0);
+});
+
+// --- routePatternToRegex / routeMatchesPath -------------------------------
+
+test('routePatternToRegex single * matches within a segment', () => {
+  assert.equal(routeMatchesPath('/api/*', '/api/blobs'), true);
+  assert.equal(routeMatchesPath('/api/*', '/api/blobs/123'), false);
+});
+
+test('routePatternToRegex double ** matches across segments', () => {
+  assert.equal(routeMatchesPath('/api/**', '/api/blobs/123'), true);
+});
+
+test('routePatternToRegex escapes regex metacharacters', () => {
+  assert.equal(routeMatchesPath('/index.html', '/index.html'), true);
+  // The `.` in `.html` must not match `/indexXhtml`.
+  assert.equal(routeMatchesPath('/index.html', '/indexXhtml'), false);
+});
+
+test('routePatternToRegex wildcard matches the canonical must-revalidate paths', () => {
+  for (const path of MUST_REVALIDATE_PATHS) {
+    assert.equal(routeMatchesPath('/**', path), true, `expected '/**' to match '${path}'`);
+  }
+});
+
+// --- Happy path: real config passes all assertions ------------------------
+
+test('checkConfig passes on the actual staticwebapp.config.json', () => {
+  const result = checkConfig(readConfig());
+  assert.deepEqual(
+    result.errors,
+    [],
+    `expected no errors, got:\n${result.errors.map((m) => `  - ${m}`).join('\n')}`,
+  );
+  assert.equal(result.ok, true);
+});
+
+// --- Negative: X-Frame-Options drift --------------------------------------
+
+test('X-Frame-Options set to DENY fails (re-breaks MSAL silent SSO)', () => {
+  const config = cloneConfig();
+  config.globalHeaders['X-Frame-Options'] = 'DENY';
+  assertHasErrorMatching(checkGlobalHeaders(config), /X-Frame-Options/);
+});
+
+test('X-Frame-Options removed entirely fails', () => {
+  const config = cloneConfig();
+  delete config.globalHeaders['X-Frame-Options'];
+  assertHasErrorMatching(checkGlobalHeaders(config), /X-Frame-Options/);
+});
+
+// --- Negative: X-Content-Type-Options -------------------------------------
+
+test('X-Content-Type-Options removed fails', () => {
+  const config = cloneConfig();
+  delete config.globalHeaders['X-Content-Type-Options'];
+  assertHasErrorMatching(checkGlobalHeaders(config), /X-Content-Type-Options/);
+});
+
+// --- Negative: HSTS -------------------------------------------------------
+
+test('HSTS max-age below 1 year fails', () => {
+  const config = cloneConfig();
+  config.globalHeaders['Strict-Transport-Security'] = 'max-age=86400; includeSubDomains';
+  assertHasErrorMatching(checkGlobalHeaders(config), /max-age=86400/);
+});
+
+test('HSTS missing includeSubDomains fails', () => {
+  const config = cloneConfig();
+  config.globalHeaders['Strict-Transport-Security'] = 'max-age=31536000';
+  assertHasErrorMatching(checkGlobalHeaders(config), /includeSubDomains/);
+});
+
+test('HSTS header missing entirely fails', () => {
+  const config = cloneConfig();
+  delete config.globalHeaders['Strict-Transport-Security'];
+  assertHasErrorMatching(checkGlobalHeaders(config), /Strict-Transport-Security/);
+});
+
+// --- Negative: Referrer-Policy --------------------------------------------
+
+test('Referrer-Policy removed fails', () => {
+  const config = cloneConfig();
+  delete config.globalHeaders['Referrer-Policy'];
+  assertHasErrorMatching(checkGlobalHeaders(config), /Referrer-Policy/);
+});
+
+// --- Negative: Permissions-Policy -----------------------------------------
+
+test('Permissions-Policy mutated to drop clipboard-write fails', () => {
+  const config = cloneConfig();
+  config.globalHeaders['Permissions-Policy'] = 'clipboard-read=(self)';
+  assertHasErrorMatching(checkGlobalHeaders(config), /Permissions-Policy/);
+});
+
+// --- Negative: CSP header presence ----------------------------------------
+
+test('CSP header removed fails (delegated detailed checks to check-csp-hashes.mjs)', () => {
+  const config = cloneConfig();
+  delete config.globalHeaders['Content-Security-Policy'];
+  assertHasErrorMatching(checkGlobalHeaders(config), /Content-Security-Policy/);
+});
+
+// --- Negative: navigationFallback.rewrite ---------------------------------
+
+test('navigationFallback.rewrite set to /index.html fails', () => {
+  const config = cloneConfig();
+  config.navigationFallback.rewrite = '/index.html';
+  assertHasErrorMatching(checkNavigationFallback(config), /rewrite/);
+});
+
+// --- Negative: navigationFallback.exclude ---------------------------------
+
+test('navigationFallback.exclude missing /api/* fails', () => {
+  const config = cloneConfig();
+  config.navigationFallback.exclude = config.navigationFallback.exclude.filter(
+    (entry) => entry !== '/api/*',
+  );
+  assertHasErrorMatching(checkNavigationFallback(config), /\/api\/\*/);
+});
+
+test('navigationFallback.exclude missing a static-asset extension fails', () => {
+  const config = cloneConfig();
+  // Replace the brace-grouped entry with one that lacks `webmanifest`.
+  config.navigationFallback.exclude = ['/api/*', '/*.{js,css,map,svg,ico,png,jpg,webp,woff,woff2}'];
+  assertHasErrorMatching(checkNavigationFallback(config), /webmanifest/);
+});
+
+test('navigationFallback.exclude split into multiple entries passes', () => {
+  // Proves the brace-expander is doing real work: a contributor can split
+  // `*.{js,css}` into `*.js` and `*.css` without tripping the gate.
+  const config = cloneConfig();
+  config.navigationFallback.exclude = [
+    '/api/*',
+    '/*.js',
+    '/*.css',
+    '/*.map',
+    '/*.svg',
+    '/*.ico',
+    '/*.png',
+    '/*.jpg',
+    '/*.webp',
+    '/*.woff',
+    '/*.woff2',
+    '/*.webmanifest',
+  ];
+  assert.deepEqual(checkNavigationFallback(config), []);
+});
+
+// --- Negative: /api/* allowedRoles ----------------------------------------
+
+test('/api/* allowedRoles missing anonymous fails', () => {
+  const config = cloneConfig();
+  const apiRoute = config.routes.find((route) => route.route === '/api/*');
+  apiRoute.allowedRoles = ['authenticated'];
+  assertHasErrorMatching(checkRoutes(config), /anonymous/);
+});
+
+// --- Negative: route-order shadowing --------------------------------------
+
+test('wildcard route preceding must-revalidate rules fails', () => {
+  const config = cloneConfig();
+  config.routes = [
+    { route: '/**', headers: { 'Cache-Control': 'public, max-age=31536000' } },
+    ...config.routes,
+  ];
+  assertHasErrorMatching(checkRoutes(config), /shadow|precedes/);
+});
+
+// --- Negative: Cache-Control per must-revalidate path ---------------------
+
+for (const path of MUST_REVALIDATE_PATHS) {
+  test(`Cache-Control rule for ${path} removed fails`, () => {
+    const config = cloneConfig();
+    config.routes = config.routes.filter((entry) => entry.route !== path);
+    assertHasErrorMatching(checkRoutes(config), new RegExp(path.replace(/\//g, '\\/')));
+  });
+}
+
+test('Cache-Control value drift on /index.html fails', () => {
+  const config = cloneConfig();
+  const route = config.routes.find((entry) => entry.route === '/index.html');
+  route.headers['Cache-Control'] = 'public, max-age=300';
+  assertHasErrorMatching(checkRoutes(config), /Cache-Control/);
+  // Sanity check: REQUIRED_CACHE_CONTROL itself is the value we want;
+  // restoring it should make the gate green.
+  route.headers['Cache-Control'] = REQUIRED_CACHE_CONTROL;
+  const routeErrors = checkRoutes(config).filter((message) =>
+    message.includes("routes['/index.html']"),
+  );
+  assert.deepEqual(routeErrors, []);
+});
+
+// --- Negative: platform.apiRuntime ----------------------------------------
+
+test('platform.apiRuntime missing fails', () => {
+  const config = cloneConfig();
+  delete config.platform;
+  assertHasErrorMatching(checkPlatform(config), /apiRuntime/);
+});
+
+test('platform.apiRuntime set to node:18 (EOL) fails', () => {
+  const config = cloneConfig();
+  config.platform.apiRuntime = 'node:18';
+  assertHasErrorMatching(checkPlatform(config), /node:18/);
+});
+
+test('platform.apiRuntime set to each allowlisted value passes', () => {
+  for (const runtime of SUPPORTED_API_RUNTIMES) {
+    const config = cloneConfig();
+    config.platform.apiRuntime = runtime;
+    assert.deepEqual(checkPlatform(config), [], `expected '${runtime}' to be accepted, got errors`);
+  }
+});
+
+// --- Negative: mimeTypes --------------------------------------------------
+
+test('mimeTypes[.webmanifest] removed fails', () => {
+  const config = cloneConfig();
+  delete config.mimeTypes['.webmanifest'];
+  assertHasErrorMatching(checkMimeTypes(config), /\.webmanifest/);
+});
+
+test('mimeTypes key without leading dot fails (proves dot-prefix is intentional)', () => {
+  const config = cloneConfig();
+  config.mimeTypes['webmanifest'] = config.mimeTypes['.webmanifest'];
+  delete config.mimeTypes['.webmanifest'];
+  assertHasErrorMatching(checkMimeTypes(config), /\.webmanifest/);
+});
+
+// --- checkConfig aggregator -----------------------------------------------
+
+test('checkConfig aggregates errors from all sub-checks', () => {
+  const config = cloneConfig();
+  config.globalHeaders['X-Frame-Options'] = 'DENY';
+  config.platform.apiRuntime = 'node:18';
+  const result = checkConfig(config);
+  assert.equal(result.ok, false);
+  assertHasErrorMatching(result.errors, /X-Frame-Options/);
+  assertHasErrorMatching(result.errors, /node:18/);
+});
