@@ -37,7 +37,7 @@ describe('computeAutoFitDepth', () => {
 
   it('wide flat object with 26 children, capacity 40: picks depth 1', () => {
     // nodesAt = [1, 26]; sum[0..0] = 1, sum[0..1] = 27; limit = 60; 27 <= 60 -> K = 1
-    const children = Array.from({ length: 26 }, (_, index) => makeNode(1));
+    const children = Array.from({ length: 26 }, () => makeNode(1));
     const root = makeNode(0, children);
     const result = computeAutoFitDepth(root, 40);
     expect(result).toEqual({ chosenDepth: 1, chosenRows: 27, totalNodes: 27 });
@@ -45,8 +45,8 @@ describe('computeAutoFitDepth', () => {
 
   it('wide explosion (100 children each with 26 grandchildren), capacity 10: picks depth 0', () => {
     // nodesAt = [1, 100, 2600]; limit = 15; sum[0..0] = 1 (ok), sum[0..1] = 101 (over) -> K = 0
-    const grandchildren = Array.from({ length: 26 }, (_, index) => makeNode(2));
-    const children = Array.from({ length: 100 }, (_, index) => makeNode(1, grandchildren));
+    const grandchildren = Array.from({ length: 26 }, () => makeNode(2));
+    const children = Array.from({ length: 100 }, () => makeNode(1, grandchildren));
     const root = makeNode(0, children);
     const result = computeAutoFitDepth(root, 10);
     expect(result.chosenDepth).toBe(0);
@@ -71,8 +71,8 @@ describe('computeAutoFitDepth', () => {
     // root has 3 children: users-container (10 leaves), groups-container (5 leaves), roles-leaf
     // nodesAt = [1, 3, 15]; limit = 15
     // sum[0..0] = 1 (ok), sum[0..1] = 4 (ok), sum[0..2] = 19 (over) -> K = 1
-    const userLeaves = Array.from({ length: 10 }, (_, index) => makeNode(2));
-    const groupLeaves = Array.from({ length: 5 }, (_, index) => makeNode(2));
+    const userLeaves = Array.from({ length: 10 }, () => makeNode(2));
+    const groupLeaves = Array.from({ length: 5 }, () => makeNode(2));
     const usersNode = makeNode(1, userLeaves);
     const groupsNode = makeNode(1, groupLeaves);
     const rolesNode = makeNode(1);
@@ -86,10 +86,10 @@ describe('computeAutoFitDepth', () => {
   it('1.5x tolerance accepts a level that overflows 1x but not 1.5x (sum = 55, capacity 40)', () => {
     // depth 0: 1 node, depth 1: 1 node, depth 2: 28 nodes, depth 3: 25 nodes
     // sum[0..2] = 30, sum[0..3] = 55; limit = 60; 55 <= 60 -> picks depth 3
-    const depth3Nodes = Array.from({ length: 25 }, (_, index) => makeNode(3));
+    const depth3Nodes = Array.from({ length: 25 }, () => makeNode(3));
     const depth2Nodes = [
       ...Array.from({ length: 25 }, (_, index) => makeNode(2, [depth3Nodes[index]])),
-      ...Array.from({ length: 3 }, (_, index) => makeNode(2)),
+      ...Array.from({ length: 3 }, () => makeNode(2)),
     ];
     const depth1Node = makeNode(1, depth2Nodes);
     const root = makeNode(0, [depth1Node]);
@@ -116,7 +116,7 @@ describe('computeAutoFitDepth', () => {
   });
 
   it('capacity = 0: returns chosenDepth 0, chosenRows 1 for a non-empty tree (no crash)', () => {
-    const children = Array.from({ length: 10 }, (_, index) => makeNode(1));
+    const children = Array.from({ length: 10 }, () => makeNode(1));
     const root = makeNode(0, children);
     const result = computeAutoFitDepth(root, 0);
     expect(result.chosenDepth).toBe(0);
@@ -126,7 +126,7 @@ describe('computeAutoFitDepth', () => {
 
   it('tolerance = 0: treated as 1.0, strict fit behavior', () => {
     // nodesAt = [1, 10]; limit = 1.0 * 10 = 10; sum[0..0] = 1 (ok), sum[0..1] = 11 (over) -> K = 0
-    const children = Array.from({ length: 10 }, (_, index) => makeNode(1));
+    const children = Array.from({ length: 10 }, () => makeNode(1));
     const root = makeNode(0, children);
     const result = computeAutoFitDepth(root, 10, 0);
     expect(result.chosenDepth).toBe(0);

@@ -407,7 +407,7 @@ describe('JsonBreadcrumbComponent', () => {
     });
 
     it('attaches a ResizeObserver to the chip list <ol>', async () => {
-      const fixture = await createWith(makeCrumbs(3));
+      await createWith(makeCrumbs(3));
       expect(observerInstances.length).toBe(1);
       const observed = observerInstances[0]!.observed[0];
       expect(observed).toBeDefined();

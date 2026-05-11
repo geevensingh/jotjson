@@ -20,82 +20,93 @@ import { scheduleStaticSplashRemoval } from './static-splash-removal';
 export class AppComponent implements OnInit {
   readonly title = 'JotJSON';
 
-  private readonly injector = inject(Injector);
+  // Fields assigned in the constructor body below. Other eager
+  // injections in that constructor are bare `inject(...)` expression
+  // statements because nothing on this class needs to read their
+  // references after construction - the side effect of constructing
+  // the singleton (and its event subscriptions) is the whole point.
+  private readonly injector: Injector;
+  private readonly appUpdate: AppUpdateService;
+  private readonly isBrowser: boolean;
 
-  // Eagerly inject so document drag-drop listeners attach at app start
-  // rather than lazily on first Home mount. This ensures off-route drops
-  // (on /history, /profile, etc.) are intercepted even if the user has
-  // not yet visited Home.
-  private readonly dropController = inject(DocumentDropController);
+  constructor() {
+    this.injector = inject(Injector);
 
-  // Eagerly inject so the router-events subscription is established
-  // before the very first NavigationStart fires. The cold-boot deep-link
-  // to /s/:slug fires NavigationStart almost immediately after bootstrap;
-  // a late subscriber would miss it and the route progress bar would
-  // never appear during the resolver wait - exactly the M8 critical
-  // path. See also `core/telemetry/route-tracker.ts`, which handles the
-  // analogous timing problem for telemetry.
-  private readonly navigationProgress = inject(NavigationProgressService);
+    // Eagerly inject so document drag-drop listeners attach at app start
+    // rather than lazily on first Home mount. This ensures off-route drops
+    // (on /history, /profile, etc.) are intercepted even if the user has
+    // not yet visited Home.
+    inject(DocumentDropController);
 
-  // Eagerly inject for the same reason as NavigationProgressService:
-  // the splash service must observe the very first NavigationStart so
-  // the cold-boot to /s/:slug confirms kind='blob' (the constructor's
-  // URL peek already set it), keeps it through the resolver wait, and
-  // latches kind=null once the first nav settles.
-  private readonly loadingSplash = inject(LoadingSplashService);
+    // Eagerly inject so the router-events subscription is established
+    // before the very first NavigationStart fires. The cold-boot deep-link
+    // to /s/:slug fires NavigationStart almost immediately after bootstrap;
+    // a late subscriber would miss it and the route progress bar would
+    // never appear during the resolver wait - exactly the M8 critical
+    // path. See also `core/telemetry/route-tracker.ts`, which handles the
+    // analogous timing problem for telemetry.
+    inject(NavigationProgressService);
 
-  // Eagerly inject so focus-to-<main> behaviour is wired before the
-  // first in-app NavigationEnd. Skipping the initial bootstrap nav is
-  // built into the service; subsequent transitions get programmatic
-  // focus so screen-reader users hear the new page's heading announced.
-  private readonly routeFocus = inject(RouteFocusService);
+    // Eagerly inject for the same reason as NavigationProgressService:
+    // the splash service must observe the very first NavigationStart so
+    // the cold-boot to /s/:slug confirms kind='blob' (the constructor's
+    // URL peek already set it), keeps it through the resolver wait, and
+    // latches kind=null once the first nav settles.
+    inject(LoadingSplashService);
 
-  // Eagerly inject so the conflict-toast subscription is alive before
-  // the user can possibly trigger a 412 from PreferencesService. The
-  // service subscribes to PreferencesService.events$ in its
-  // constructor; if it were lazy, conflict events fired during
-  // bootstrap (e.g. cross-tab race during initial sign-in seed) would
-  // be missed because Subjects don't replay.
-  private readonly preferencesNotifications = inject(PreferencesNotificationService);
+    // Eagerly inject so focus-to-<main> behaviour is wired before the
+    // first in-app NavigationEnd. Skipping the initial bootstrap nav is
+    // built into the service; subsequent transitions get programmatic
+    // focus so screen-reader users hear the new page's heading announced.
+    inject(RouteFocusService);
 
-  // Eagerly inject so SwUpdate.versionUpdates / .unrecoverable
-  // subscriptions wire up in the service's constructor, before any
-  // postMessage from the SW can arrive. versionUpdates is not a
-  // ReplaySubject; a lazy import would let early VERSION_READY events
-  // slip past unobserved on installed PWAs where the SW process
-  // survived the previous launch. The constructor is server-platform
-  // safe (no window/document access); browser-only side effects are
-  // attached lazily inside `initialize()`, called below.
-  private readonly appUpdate = inject(AppUpdateService);
+    // Eagerly inject so the conflict-toast subscription is alive before
+    // the user can possibly trigger a 412 from PreferencesService. The
+    // service subscribes to PreferencesService.events$ in its
+    // constructor; if it were lazy, conflict events fired during
+    // bootstrap (e.g. cross-tab race during initial sign-in seed) would
+    // be missed because Subjects don't replay.
+    inject(PreferencesNotificationService);
 
-  // Captured at construction time (an injection context) so `ngOnInit`
-  // can branch on platform without calling `inject()` inside a
-  // lifecycle hook (which would throw NG0203).
-  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+    // Eagerly inject so SwUpdate.versionUpdates / .unrecoverable
+    // subscriptions wire up in the service's constructor, before any
+    // postMessage from the SW can arrive. versionUpdates is not a
+    // ReplaySubject; a lazy import would let early VERSION_READY events
+    // slip past unobserved on installed PWAs where the SW process
+    // survived the previous launch. The constructor is server-platform
+    // safe (no window/document access); browser-only side effects are
+    // attached lazily inside `initialize()`, called below.
+    this.appUpdate = inject(AppUpdateService);
 
-  // Remove the pre-bootstrap static splash (`#jot-static-splash` in
-  // src/index.html) after the Angular splash has painted on top of
-  // it. The static splash is a sibling of `<app-root>` so the
-  // prerender pipeline cannot strip it; the trade-off is we have to
-  // remove it explicitly once Angular has taken over.
-  //
-  // `afterNextRender` is browser-only (no-op during SSR), runs after
-  // Angular's render phases, and the inner double-rAF (inside
-  // `scheduleStaticSplashRemoval`) defers the removal one full paint
-  // past Angular's first commit. This matches the canonical
-  // paint-barrier idiom used by HomeComponent and JsonTreeComponent:
-  // a single rAF can fire on the same tick as the pending paint,
-  // leaving a flash gap; double-rAF guarantees the browser has
-  // actually painted the Angular splash before the static splash is
-  // detached, so the visual handoff is seamless (both render the
-  // identical `.jot-splash` markup).
-  //
-  // The body lives in `./static-splash-removal.ts` so the double-rAF
-  // behavior can be unit-tested in isolation, free of cross-spec rAF
-  // bleed (see #170 and `static-splash-removal.spec.ts`).
-  private readonly _removeStaticSplash = afterNextRender(() => {
-    scheduleStaticSplashRemoval();
-  });
+    // Captured at construction time (an injection context) so `ngOnInit`
+    // can branch on platform without calling `inject()` inside a
+    // lifecycle hook (which would throw NG0203).
+    this.isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+
+    // Remove the pre-bootstrap static splash (`#jot-static-splash` in
+    // src/index.html) after the Angular splash has painted on top of
+    // it. The static splash is a sibling of `<app-root>` so the
+    // prerender pipeline cannot strip it; the trade-off is we have to
+    // remove it explicitly once Angular has taken over.
+    //
+    // `afterNextRender` is browser-only (no-op during SSR), runs after
+    // Angular's render phases, and the inner double-rAF (inside
+    // `scheduleStaticSplashRemoval`) defers the removal one full paint
+    // past Angular's first commit. This matches the canonical
+    // paint-barrier idiom used by HomeComponent and JsonTreeComponent:
+    // a single rAF can fire on the same tick as the pending paint,
+    // leaving a flash gap; double-rAF guarantees the browser has
+    // actually painted the Angular splash before the static splash is
+    // detached, so the visual handoff is seamless (both render the
+    // identical `.jot-splash` markup).
+    //
+    // The body lives in `./static-splash-removal.ts` so the double-rAF
+    // behavior can be unit-tested in isolation, free of cross-spec rAF
+    // bleed (see #170 and `static-splash-removal.spec.ts`).
+    afterNextRender(() => {
+      scheduleStaticSplashRemoval();
+    });
+  }
 
   ngOnInit(): void {
     // Skip browser-only side effects during static prerender. The

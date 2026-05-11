@@ -875,7 +875,7 @@ export class PreferencesService {
           if (gen !== this.syncGen) return;
           this.lastSyncedSnapshot = snapshot;
           this.lastKnownEtag = response.etag;
-          this.drainDirty(gen);
+          this.drainDirty();
         },
         error: (error: unknown) => {
           this.writeInFlight = false;
@@ -896,7 +896,7 @@ export class PreferencesService {
       });
   }
 
-  private drainDirty(gen: number): void {
+  private drainDirty(): void {
     if (!this.pendingDirty) return;
     this.pendingDirty = false;
     // Re-fire after a tick so a burst of edits naturally coalesces
