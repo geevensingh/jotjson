@@ -779,7 +779,10 @@ Before finishing a task:
   "1 of 10 checks pending"), explain how it can be cleared (resolve
   thread, request review, wait for CI), and stop. Do not propose
   `--admin` as an option in `ask_user`. The user can clear the block
-  themselves through the GitHub UI; agents do not.
+  themselves through the GitHub UI; agents do not bypass it.
+  (Resolving review threads the agent has legitimately addressed with
+  a pushed commit is a different action -- see "Responding to PR
+  review feedback" below.)
 - **Auto-update of PR branches.** `main` is protected with `strict: true`
   on classic branch protection (require branches to be up to date before
   merge). A Mergify GitHub App install, configured by `.mergify.yml` at
@@ -801,6 +804,254 @@ Before finishing a task:
   labels are the only priority signal in the repo (we do not use a
   Project board field). Existing kind/area labels (e.g., `bug`,
   `accessibility`, `tech-debt`, `ux`) are orthogonal and still apply.
+
+### PR descriptions for agent-authored PRs
+
+When the **Copilot CLI runtime** opens a PR -- **or pushes commits
+to an open PR that does not yet have a Session block for the
+current session** -- append a **Session** block to the end of the
+PR description so the user can resume the same session to address
+review feedback:
+
+```
+---
+**Session**
+- AI-Local: `<local-session-id>`
+- AI-Cloud: `<cloud-session-id>`
+```
+
+The `AI-` prefix marks these as agent-runtime identifiers so they
+are greppable and unambiguous.
+
+Canonical sources for the Copilot CLI runtime:
+
+- `workspace.yaml` -> `id` for `AI-Local`
+- `workspace.yaml` -> `mc_session_id` for `AI-Cloud`
+
+`workspace.yaml` lives at the root of the agent's session folder
+(typically `~/.copilot/session-state/<local-session-id>/`). Never
+invent values. If a CLI session genuinely lacks one of these fields
+(e.g., a corrupted workspace.yaml), omit the matching line and add
+a one-line note in the PR description explaining what is missing
+and why.
+
+**Before appending**, fetch the current PR description (e.g.,
+`gh pr view <num> --json body`) and check whether a Session block
+for the **current** session's `AI-Local` / `AI-Cloud` pair is
+already present. If yes, skip -- do not duplicate. If a Session
+block from a *different* session is present, **append** a new
+block rather than overwriting; the history of which sessions
+touched the PR is useful context.
+
+This rule applies only to the Copilot CLI runtime. Other agent
+runtimes (e.g., Copilot Coding Agent) have different session-ID
+semantics and are out of scope for this rule until added
+explicitly.
+
+### Responding to PR review feedback
+
+Review comments -- from humans **and** from bots
+(`copilot-pull-request-reviewer[bot]`, dependabot, code-scanning
+agents, etc.) -- are **proposals**, not orders. Apply the §11
+critical-thinking and rubber-duck pipeline to every substantive
+comment before responding.
+
+- **Treat reviewer comments like user suggestions.** Evaluate each
+  comment against `DESIGN_SPEC.md`, the approved plan, and existing
+  conventions. If a comment conflicts with the spec, the plan, or
+  a deliberate prior decision, **push back with a reasoned reply**
+  -- do not silently rewrite the code to match. Acceptance is the
+  default for clearly-correct comments (typo, missing null check,
+  broken link); critical evaluation is mandatory for everything
+  else.
+- **Bot comments carry no special authority.** A comment from
+  `copilot-pull-request-reviewer[bot]`, dependabot, a code-scanning
+  tool, or any other automated reviewer gets the *same* treatment
+  as a human comment -- no more, no less. A bot's confident tone
+  is not a reason to skip the rubber-duck step or to action a
+  suggestion that conflicts with the spec.
+- **One reasoned pushback then escalate.** If you post a pushback
+  reply to a bot comment and the bot re-asserts the same concern,
+  do **not** loop into another rubber-duck/reply cycle. Escalate
+  to the user (or merging maintainer) with a one-paragraph summary
+  of the disagreement and stop. This prevents adversarial-bot
+  loops that consume turns without resolution.
+- **Distinguish in-scope vs out-of-scope feedback.** A comment is
+  **in-scope** if and only if the proposed fix would preserve the
+  approved plan's **public API, stored shape, user-visible
+  behavior, and design intent** -- i.e., it points out a flaw in
+  *how* the plan was implemented (a bug in the change, a missed
+  edge case, a convention violation, a missing null check, a
+  naming-convention nit). Address in-scope comments directly after
+  the rubber-duck step. A comment is **out-of-scope** if the
+  proposed fix would change the approved API, stored shape,
+  user-visible behavior, or design intent, **or** if it requires
+  unrelated refactoring (a refactor, a new feature, a different
+  design choice, a renamed file, a "while you're here, also
+  change..." request). Treat out-of-scope comments as a new
+  plan-trigger per §11: post a reasoned response on the PR and do
+  **not** push a fix without fresh user authorization. When
+  uncertain whether a comment is in-scope or out-of-scope, treat
+  as out-of-scope. In CLI mode, seek authorization via `ask_user`.
+  In cloud-coding-agent mode without a live user channel, post
+  the proposed response/plan as a PR comment and **stop** until
+  the user or merging maintainer explicitly authorizes proceeding
+  -- silence is not authorization.
+- **Rubber-duck before responding to substantive comments.**
+  Substantive comments (any non-trivial code change) require the
+  §11 rubber-duck pipeline before you respond. You may batch
+  related substantive comments and rubber-duck them together
+  (e.g., five comments about the same function get one
+  rubber-duck pass, not five). **Trivial comments may be actioned
+  directly without rubber-ducking**, where "trivial" is narrowly
+  scoped to: an obvious typo or grammar fix in a code comment or
+  documentation; a broken-link fix; a lint nit produced by an
+  automated tool (e.g., naming-convention rename, missing
+  semicolon, import order). User-facing string changes are
+  **never** trivial (they require i18n extraction per §4) even
+  if the change is one line. When uncertain whether a comment is
+  trivial, treat as substantive and rubber-duck.
+- **Resolve threads only AFTER pushing the addressing commit, and
+  verify the fix landed.** Never resolve a thread before the
+  addressing commit is pushed. After pushing, **always** resolve
+  the thread -- reviewer bots do not return to verify, so leaving
+  addressed threads open is noise that hides genuine unresolved
+  items. For pushback-only responses (no code change), resolve
+  only after the user or merging maintainer has accepted the
+  reply; do not unilaterally resolve a thread on a comment you
+  disagreed with. Before resolving, re-read the thread and confirm
+  the pushed change (or accepted reply) actually addresses what
+  was raised.
+
+  **Resolving an addressed thread is not bypassing a
+  branch-protection block.** The existing rule above ("The user
+  can clear the block themselves through the GitHub UI; agents do
+  not") prohibits unilateral bypass via `--admin` / `--force` --
+  it does not prohibit resolving a thread the agent has
+  legitimately addressed with a pushed commit. The two actions
+  are distinct: bypass overrides a policy gate; thread resolution
+  signals that the work the reviewer requested is complete.
+
+- **Never bypass branch protection to "clear" unresolved threads.**
+  Restated from the rule above: if a PR is blocked by *unresolved*
+  threads (i.e., threads where you have not pushed an addressing
+  commit or do not have accepted pushback), the path forward is to
+  resolve them with fixes or accepted pushback replies -- never
+  `gh pr merge --admin`, `--force`, or any other bypass. Zero
+  exceptions, including bot threads on trivial-looking comments.
+
+### Auto-merge
+
+Auto-merge (`gh pr merge --auto`) is the policy-compliant way to
+indicate "this PR should land once gates pass". It is **not** a
+bypass: GitHub holds the merge until all required gates (reviews,
+conversation resolution, required status checks) pass, then
+merges automatically. (If all gates are already satisfied when
+you enable auto-merge, GitHub will merge **immediately** -- so
+only enable auto-merge when you actually want the merge to
+proceed.) Compare to `gh pr merge --admin`, which IS a bypass and
+is prohibited under all circumstances (see the branch-protection
+rule above).
+
+**Default: OFF.** The agent does not enable auto-merge on its own
+judgment. The user merges manually, or explicitly authorizes
+auto-merge per PR.
+
+**Enable auto-merge only when all of the following are true:**
+
+- The user has **explicitly authorized merging this PR** with an
+  unambiguous verb-led phrase: "ship it", "auto-merge it",
+  "approve and merge", "merge when green", or equivalent. Per
+  **§10 "Discussion is not approval"**, ambiguous conversational
+  signals ("looks good", "go ahead", "yes") do **not** count. If
+  you are unsure whether a phrase qualifies, ask via `ask_user`;
+  do not enable auto-merge on a guess.
+- The authorization applies to the **current state** of the PR.
+  If the user's authorization is combined with new requested
+  scope ("ship it after adding X"), complete the new scope first,
+  rerun the §7 DoD checks, rubber-duck the final diff, then seek
+  **fresh authorization** for the new final state.
+- All intended commits for this PR have been pushed. Do not
+  enable auto-merge while still iterating on the changeset.
+- The PR is not a draft.
+- The §7 Definition-of-Done checks pass locally (lint, test,
+  build, for both root and `api/`).
+- You have rubber-ducked the **final state** of the PR -- not
+  just the plan (the final state may differ if rubber-ducked
+  review feedback changed the diff).
+
+If any criterion is unmet, do not enable auto-merge. Surface what
+is missing in plain language and wait for the user, exactly as
+you would for a branch-protection block.
+
+Use the squash strategy -- this repo only permits squash merges
+(`allow_squash_merge: true`, others false):
+
+`gh pr merge <number> --auto --squash`
+
+**Proactive recommendation for low-risk classes.** For PRs in the
+following narrowly-defined low-risk classes, the agent **should**
+recommend auto-merge in the PR description (e.g., a one-line
+"Recommend auto-merge once CI passes -- reply 'ship it' to
+enable.") so the user does not have to ask:
+
+- **Docs-only**: changes to `*.md`, `docs/**`, or comments inside
+  config files. No executable or runtime behavior touched (no logic,
+  no schemas, no build steps, no tests).
+- **Lint/format-only**: changes produced by an automated
+  formatter or linter with no semantic diff (e.g., prettier
+  rerun, import reorder).
+- **Patch-level dev-dependency bumps** from dependabot or
+  equivalent, where the lockfile is the only meaningful change,
+  the dependency is in `devDependencies` (not `dependencies`),
+  and CI passes.
+- **Typo fixes in code comments only** -- not in user-facing
+  strings, which go through Angular i18n (§4) and require
+  `messages.xlf` regeneration.
+
+**Anti-lawyering rule:** if any touched file or hunk falls outside
+its low-risk class, the **whole PR** is outside the class. A
+"docs-only" PR that also touches a `.ts` file is not docs-only;
+do not proactively recommend auto-merge.
+
+For any PR outside these classes -- new features, refactors,
+behavior changes, infra, schema changes, test
+additions/removals, anything that changes a public API or stored
+shape -- the agent should **not** recommend auto-merge
+proactively. Let the user decide unprompted.
+
+**After enabling auto-merge**, keep it enabled only for **purely
+mechanical** follow-up commits:
+
+- Lint or format touch-ups produced by an automated tool.
+- Comment-only edits (changes to code comments or doc files).
+- The literal text change a reviewer requested for a trivial
+  issue (typo or broken link **in a code comment or doc file
+  only** -- never in a user-facing string, which requires i18n
+  per §4 and is substantive even if one line), with no
+  surrounding logic touched.
+
+For any non-mechanical follow-up (additional code, scope
+expansion, refactor, new tests with new assertions, behavior
+change, **any user-facing-string change**), **disable auto-merge
+first** (`gh pr merge <num> --disable-auto`), push the commit,
+then either seek fresh merge authorization or leave auto-merge
+off and let the user re-enable. This prevents the case where
+auto-merge silently merges code the user never approved.
+
+**Recovery if you forget to disable.** If you push a substantive
+follow-up commit while auto-merge is still enabled:
+
+1. Immediately run `gh pr merge <num> --disable-auto`.
+2. Disclose the mistake in plain language to the user (in the
+   next response or as a PR comment) -- name the commit and why
+   it should have triggered a disable.
+3. Seek fresh merge authorization before re-enabling auto-merge.
+
+If the PR has already merged before you can disable, do **not**
+silently move on. Report the merge to the user with the same
+disclosure (which commit, why it was substantive, what gates
+ran) and ask whether to revert, follow-up-fix, or accept.
 
 ## 9. Scope Discipline
 
