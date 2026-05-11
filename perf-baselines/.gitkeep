@@ -1,0 +1,10 @@
+# Per-machine baselines live in this directory.
+#
+# File layout: `<PERF_MACHINE>.json`, e.g. `linux-x64-3f9c2a.json`.
+# Each file is keyed `<layer>.<scenario>.<fixture>.<size> -> { median, iqr, lastUpdatedUtc, codeShaAtBaseline }`.
+#
+# See docs/perf.md for the file format and the `perf:baseline` workflow.
+#
+# Contributors seed their own baseline on first use; we do NOT ship a
+# default baseline because perf characteristics are bimodal between
+# laptops, desktops, and CI runners.

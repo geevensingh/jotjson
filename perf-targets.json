@@ -1,0 +1,13 @@
+{
+  "$schema": "./perf-targets.schema.json",
+  "_comment": "Operationalizable NFR targets only. Each row is a hard ceiling that perf:diff flags as a regression even if the baseline drifts.",
+  "rows": [
+    {
+      "key": "l3.paste-large.cosmos-doc-sample.5m.longestTaskMs",
+      "ceiling": 200,
+      "ceilingUnit": "ms",
+      "anchorsNfr": "DESIGN_SPEC.md NFR #1 (open a 5 MB JSON file without freezing the page)",
+      "rationale": "Longest task during a 5 MB paste must stay under 200 ms so the UI thread does not freeze. Other DESIGN_SPEC NFRs (TTI<2s on 4G; api/ p95<200ms) are deferred to follow-up issues; their measurement requires CI infra not in scope for v1."
+    }
+  ]
+}
