@@ -1478,12 +1478,13 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 - **Infrastructure** - Bicep templates applied via a separate workflow on changes to `/infra` directory.
 - **Workflow lint** - `actionlint` runs against `.github/workflows/` in CI.
 - **Spec-pattern lint** - `scripts/check-spec-patterns.mjs` runs in CI's lint job and fails on known-fragile testing idioms (e.g. `spyOnProperty(navigator, 'clipboard', ...)` which silently passes on Windows headless Chrome but throws on the Linux runner). New rules are added as we encounter cross-platform test failures.
+- **Branch protection on `main`** - required PR with green required status checks (web build, api build, workflow lint, web unit tests, anonymous smoke e2e, api integration, CodeQL), `required_linear_history: true`, `allow_force_pushes: false`, and `required_conversation_resolution: true`. PRs are the only sanctioned path to `main`; the bypass ban is codified in `AGENTS.md` §8.
 
 ### Pre-v1 readiness review
 
-Items to revisit before declaring v1 complete (deliberately deferred so they do not slow current development velocity):
+Items revisited before declaring v1 complete (deliberately deferred so they did not slow current development velocity). **All items in this section are now done**; enforcement of the PR-by-default policy lives in branch protection on `main` and in `AGENTS.md` §8 ("NEVER bypass branch protection").
 
-- **PR-by-default for code changes.** Today, code changes can land directly on `main`. Decide whether v1 should require code changes to land via a PR with green CI before merging, with CD/workflow hotfixes remaining as the only sanctioned direct-to-`main` path. Rationale for deferring now: keeps iteration velocity high; CI on `push: main` still runs, just after merge.
+- ~~**PR-by-default for code changes.** Code changes must land via a PR with green CI before merging; CD/workflow hotfixes remain as the only sanctioned direct-to-`main` path.~~ (done - enforced by branch protection: `required_pull_request_reviews`, required status checks, `required_linear_history: true`, `allow_force_pushes: false`; bypass ban codified in `AGENTS.md` §8.)
 - ~~**Bundle size budget.** `angular.json` `maximumWarning` / `maximumError` were temporarily relaxed; tighten before launch.~~ (done)
 
 ---
