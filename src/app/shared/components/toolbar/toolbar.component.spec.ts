@@ -2,11 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
-import { ToolbarComponent } from './toolbar.component';
-import { PreferencesService } from '../../../core/preferences/preferences.service';
-import { AuthService } from '../../../core/auth/auth.service';
-import { LoggerService } from '../../../core/telemetry/logger.service';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
+import { AuthService } from '../../../core/auth/auth.service';
+import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
+import { ToolbarComponent } from './toolbar.component';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 

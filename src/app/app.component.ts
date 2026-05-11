@@ -1,12 +1,12 @@
-import { afterNextRender, Component, OnInit, PLATFORM_ID, inject, Injector } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { afterNextRender, Component, inject, Injector, OnInit, PLATFORM_ID } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { PreferencesNotificationService } from './core/preferences/preferences-notification.service';
-import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import { LoadingSplashService } from './core/loading-splash/loading-splash.service';
 import { NavigationProgressService } from './core/navigation/navigation-progress.service';
 import { RouteFocusService } from './core/navigation/route-focus.service';
+import { PreferencesNotificationService } from './core/preferences/preferences-notification.service';
 import { AppUpdateService } from './core/update/app-update.service';
+import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import { LoadingSplashComponent } from './shared/components/loading-splash/loading-splash.component';
 import { RouteProgressBarComponent } from './shared/components/route-progress-bar/route-progress-bar.component';
 

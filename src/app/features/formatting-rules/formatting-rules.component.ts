@@ -1,37 +1,37 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  Injector,
-  OnInit,
-  ViewChild,
-  afterNextRender,
   computed,
   effect,
+  ElementRef,
   inject,
+  Injector,
+  OnInit,
   signal,
+  ViewChild,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
-import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
-import { RuleSetsService } from '../../core/api/rule-sets.service';
 import type { FormattingRuleSet } from '../../core/api/models';
 import { NAME_MAX } from '../../core/api/models.constants';
+import { RuleSetsService } from '../../core/api/rule-sets.service';
 import {
   PreferencesService,
   PreferenceSyncState,
 } from '../../core/preferences/preferences.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
-import { JJ_MENU_IMPORTS } from '../../shared/material/jj-menu-imports';
 import {
   ConfirmDialogComponent,
   ConfirmDialogData,
 } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
+import { JJ_MENU_IMPORTS } from '../../shared/material/jj-menu-imports';
 import {
   ClonePresetDialogComponent,
   ClonePresetDialogResult,

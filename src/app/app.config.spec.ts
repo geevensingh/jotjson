@@ -1,8 +1,8 @@
 import { EnvironmentProviders, inject, provideAppInitializer } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { FakeMsalClient, provideFakeAuth } from '../testing/auth.testing';
 import { appConfig } from './app.config';
 import { AuthService } from './core/auth/auth.service';
-import { FakeMsalClient, provideFakeAuth } from '../testing/auth.testing';
 
 /**
  * Regression: opening a share link in a fresh tab used to race MSAL hydration

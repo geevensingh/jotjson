@@ -1,14 +1,8 @@
-import { TestBed } from '@angular/core/testing';
-import {
-  HttpClient,
-  HttpRequest,
-  HttpResponse,
-  provideHttpClient,
-  withInterceptors,
-} from '@angular/common/http';
+import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { authInterceptor } from './auth.interceptor';
+import { TestBed } from '@angular/core/testing';
 import { AuthService } from '../auth/auth.service';
+import { authInterceptor } from './auth.interceptor';
 
 function fakeAuthService(opts: {
   signedIn: boolean;

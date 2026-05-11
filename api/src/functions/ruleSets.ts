@@ -23,24 +23,7 @@
  */
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { AuthError, requireAuth } from '../shared/auth';
-import {
-  MAX_RULE_SETS_PER_USER,
-  RuleSetValidationError,
-  assertRuleSetPayload,
-  createRuleSet,
-  deleteRuleSetById,
-  findRuleSetById,
-  listRuleSetsByOwner,
-  readRuleSet,
-  replaceRuleSet,
-  type RuleSetDocument,
-} from '../shared/ruleSets';
 import { stripCosmosMetadata, VersionConflictError, type PublicShape } from '../shared/cosmos';
-import {
-  findPreset,
-  listPresets as listPresetsData,
-  presetToCreatePayload,
-} from '../shared/ruleSetPresets';
 import {
   badRequest,
   forbidden,
@@ -50,6 +33,23 @@ import {
   unauthorized,
   withSecurityHeaders,
 } from '../shared/http';
+import {
+  findPreset,
+  listPresets as listPresetsData,
+  presetToCreatePayload,
+} from '../shared/ruleSetPresets';
+import {
+  assertRuleSetPayload,
+  createRuleSet,
+  deleteRuleSetById,
+  findRuleSetById,
+  listRuleSetsByOwner,
+  MAX_RULE_SETS_PER_USER,
+  readRuleSet,
+  replaceRuleSet,
+  RuleSetValidationError,
+  type RuleSetDocument,
+} from '../shared/ruleSets';
 import { readUser, replaceUser } from '../shared/users';
 
 function preconditionFailed(message: string): HttpResponseInit {

@@ -1,18 +1,18 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { of, throwError } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { BlobsComponent } from './blobs.component';
-import { BlobService } from '../../core/api/blob.service';
-import { provideFakeAuth } from '../../../testing/auth.testing';
-import type { JsonBlob } from '../../core/api/models';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideRouter } from '@angular/router';
+import { of, throwError } from 'rxjs';
 import {
   attachFixtureToBody,
   expectNoStrictA11yViolations,
   getOverlayContainerElement,
 } from '../../../testing/a11y';
+import { provideFakeAuth } from '../../../testing/auth.testing';
+import { BlobService } from '../../core/api/blob.service';
+import type { JsonBlob } from '../../core/api/models';
+import { BlobsComponent } from './blobs.component';
 
 /**
  * Wave 3a (M7g-3a) shell-landmark spec for the /blobs route. Asserts the

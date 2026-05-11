@@ -1,13 +1,13 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { attachFixtureToBody, expectNoStrictA11yViolations } from '../testing/a11y';
+import { provideFakeAuth } from '../testing/auth.testing';
 import { AppComponent } from './app.component';
 import { LoggerService } from './core/telemetry/logger.service';
 import { RouteTracker } from './core/telemetry/route-tracker';
 import { AppUpdateService } from './core/update/app-update.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
-import { attachFixtureToBody, expectNoStrictA11yViolations } from '../testing/a11y';
-import { provideFakeAuth } from '../testing/auth.testing';
 
 function waitForDoubleAnimationFrame(): Promise<void> {
   return new Promise<void>((resolve) => {

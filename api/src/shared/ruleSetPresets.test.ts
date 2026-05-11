@@ -4,8 +4,8 @@ jest.mock('./cosmos', () => ({
   }),
 }));
 
-import { assertRule, assertRuleSetPayload } from './ruleSets';
 import { PRESET_RULE_SETS, findPreset, listPresets, presetToCreatePayload } from './ruleSetPresets';
+import { assertRule, assertRuleSetPayload } from './ruleSets';
 
 describe('built-in rule-set presets', () => {
   it('exposes the five spec presets in a stable order', () => {

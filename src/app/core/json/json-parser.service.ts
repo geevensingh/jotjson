@@ -1,11 +1,11 @@
 import { inject, Injectable } from '@angular/core';
 import {
-  parseTree,
-  ParseError,
-  printParseErrorCode,
-  Node as JsoncNode,
   getLocation,
   getNodePath,
+  Node as JsoncNode,
+  ParseError,
+  parseTree,
+  printParseErrorCode,
   visit,
 } from 'jsonc-parser';
 import { bucketBytes } from '../telemetry/buckets';

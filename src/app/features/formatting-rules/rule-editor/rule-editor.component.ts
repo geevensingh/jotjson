@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,15 +12,14 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { HttpErrorResponse } from '@angular/common/http';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   EMPTY,
   Observable,
@@ -34,9 +34,6 @@ import {
   tap,
 } from 'rxjs';
 
-import { AuthService } from '../../../core/auth/auth.service';
-import { RuleSetsService } from '../../../core/api/rule-sets.service';
-import { NAME_MAX } from '../../../core/api/models.constants';
 import {
   FORMATTING_ICONS,
   FormattingIcon,
@@ -50,6 +47,9 @@ import {
   ValueMatch,
   ValuePredicate,
 } from '../../../core/api/models';
+import { NAME_MAX } from '../../../core/api/models.constants';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { AppHeaderComponent } from '../../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { RulePreviewComponent } from './rule-preview/rule-preview.component';

@@ -10,17 +10,17 @@ import {
 } from '@angular/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import type { FormattingIcon } from '../../../core/api/models';
-import { LoggerService } from '../../../core/telemetry/logger.service';
 import {
   BeaconNavigationService,
   type BeaconJumpRequest,
 } from '../../../core/beacons/beacon-navigation.service';
+import { LoggerService } from '../../../core/telemetry/logger.service';
+import { IconComponent } from '../icon/icon.component';
 import {
   EMPTY_BEACON_INDEX,
   type BeaconIndex,
   type PathArray,
 } from '../json-tree/formatting-beacons-index';
-import { IconComponent } from '../icon/icon.component';
 
 /**
  * Toolbar beacon pills: one pill per icon-bucket that has at least

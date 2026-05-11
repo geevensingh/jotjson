@@ -5,15 +5,15 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
 
-import { AuthService } from '../../../core/auth/auth.service';
-import { RuleSetsService } from '../../../core/api/rule-sets.service';
-import type { FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
-import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 import {
   attachFixtureToBody,
   expectNoStrictA11yViolations,
   getOverlayContainerElement,
 } from '../../../../testing/a11y';
+import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
+import type { FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar.component';
 
 function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {

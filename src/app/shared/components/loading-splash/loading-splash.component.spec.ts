@@ -1,5 +1,5 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LoadingSplashService } from '../../../core/loading-splash/loading-splash.service';
 import { LoadingSplashComponent } from './loading-splash.component';
 

@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { HomeComponent } from './home.component';
+import { provideRouter } from '@angular/router';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
+import { HomeComponent } from './home.component';
 
 /**
  * Lightweight DOM-pattern shell spec for the home route. The full axe scan

@@ -12,10 +12,10 @@
 //   public/icons/icon-512-maskable.png
 //   public/favicon.ico  (16 + 32 + 48)
 import { readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import sharp from 'sharp';
+import { fileURLToPath } from 'node:url';
 import pngToIco from 'png-to-ico';
+import sharp from 'sharp';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');

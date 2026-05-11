@@ -1,5 +1,7 @@
+import { VersionConflictError } from './cosmos';
 import {
   RuleSetValidationError,
+  __resetRuleSetsContainerForTesting,
   assertRule,
   assertRuleSetPayload,
   assertStyle,
@@ -9,13 +11,11 @@ import {
   listRuleSetsByOwner,
   readRuleSet,
   replaceRuleSet,
-  __resetRuleSetsContainerForTesting,
   type FormattingRulePair,
   type FormattingRuleSimple,
   type RuleSetDocument,
   type ValuePredicate,
 } from './ruleSets';
-import { VersionConflictError } from './cosmos';
 
 interface FakeContainer {
   items: RuleSetDocument[];

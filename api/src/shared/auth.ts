@@ -13,8 +13,8 @@
  * than silently bypassing validation.
  */
 import type { HttpRequest } from '@azure/functions';
-import * as jwt from 'jsonwebtoken';
 import type { GetPublicKeyOrSecret, JwtPayload } from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 // Pinned to jwks-rsa v3.x. v4 upgrades to jose v6, which is ESM-only
 // (no CJS dist). Jest's vm.Script runtime cannot parse `export` syntax,
 // so any test suite that transitively imports this module fails to

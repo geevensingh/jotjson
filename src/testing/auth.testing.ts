@@ -1,7 +1,7 @@
-import { Provider } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { Subject } from 'rxjs';
+import { Provider } from '@angular/core';
+import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import {
   AccountInfo,
   AuthenticationResult,
@@ -9,10 +9,10 @@ import {
   EventMessage,
   IPublicClientApplication,
 } from '@azure/msal-browser';
-import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
-import { MSAL_INSTANCE } from '../app/core/auth/msal-instance';
-import { AuthService } from '../app/core/auth/auth.service';
+import { Subject } from 'rxjs';
 import { AuthUser } from '../app/core/auth/auth-user';
+import { AuthService } from '../app/core/auth/auth.service';
+import { MSAL_INSTANCE } from '../app/core/auth/msal-instance';
 
 /**
  * Spec-side stand-in for MSAL's `PublicClientApplication`. Records calls to

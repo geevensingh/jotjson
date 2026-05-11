@@ -16,13 +16,13 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSliderModule } from '@angular/material/slider';
+import { FormattingRuleSet, ThemeColorSet, UserPreferences } from '../../core/api/models';
+import { RuleSetsService } from '../../core/api/rule-sets.service';
 import { AuthService } from '../../core/auth/auth.service';
 import {
   DEFAULT_PREFERENCES,
   PreferencesService,
 } from '../../core/preferences/preferences.service';
-import { FormattingRuleSet, ThemeColorSet, UserPreferences } from '../../core/api/models';
-import { RuleSetsService } from '../../core/api/rule-sets.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 

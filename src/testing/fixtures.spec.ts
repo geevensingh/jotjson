@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { JsonParserService } from '../app/core/json/json-parser.service';
-import { JsonExtractorService } from '../app/core/json/json-extractor.service';
-import { JsonTreeComponent } from '../app/shared/components/json-tree/json-tree.component';
-import { PreferencesService } from '../app/core/preferences/preferences.service';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { JsonExtractorService } from '../app/core/json/json-extractor.service';
+import { JsonParserService } from '../app/core/json/json-parser.service';
+import { PreferencesService } from '../app/core/preferences/preferences.service';
+import { JsonTreeComponent } from '../app/shared/components/json-tree/json-tree.component';
 import { provideFakeAuth } from './auth.testing';
 
 /**

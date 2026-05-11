@@ -1,5 +1,5 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LoadingSplashService } from '../../../core/loading-splash/loading-splash.service';
 import { NavigationProgressService } from '../../../core/navigation/navigation-progress.service';
 import { RouteProgressBarComponent } from './route-progress-bar.component';

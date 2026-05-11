@@ -1,14 +1,14 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { HistoryComponent } from './history.component';
-import { HistoryService, HistoryPage } from '../../core/api/history.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
+import { HistoryPage, HistoryService } from '../../core/api/history.service';
 import type { HistoryEntry } from '../../core/api/models';
 import { LoggerService } from '../../core/telemetry/logger.service';
+import { HistoryComponent } from './history.component';
 
 function entry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
   return {

@@ -1,4 +1,5 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
+import { MsalBroadcastService } from '@azure/msal-angular';
 import {
   AccountInfo,
   AuthenticationResult,
@@ -7,13 +8,12 @@ import {
   InteractionRequiredAuthError,
   IPublicClientApplication,
 } from '@azure/msal-browser';
-import { MsalBroadcastService } from '@azure/msal-angular';
 import { filter } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
-import { AuthUser } from './auth-user';
-import { MSAL_INSTANCE } from './msal-instance';
 import { LoggerService } from '../telemetry/logger.service';
 import { TelemetryService } from '../telemetry/telemetry.service';
+import { AuthUser } from './auth-user';
+import { MSAL_INSTANCE } from './msal-instance';
 
 type AuthTelemetryMode = 'dev' | 'msal';
 

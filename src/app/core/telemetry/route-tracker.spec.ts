@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
 import { NavigationEnd, Router } from '@angular/router';
+import { Subject } from 'rxjs';
 import { RouteTracker } from './route-tracker';
 import { TelemetryService } from './telemetry.service';
 

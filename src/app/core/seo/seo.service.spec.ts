@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Meta } from '@angular/platform-browser';
-import { SeoService } from './seo.service';
 import type { JsonBlob } from '../api/models';
+import { SeoService } from './seo.service';
 
 function blob(overrides: Partial<JsonBlob> = {}): JsonBlob {
   return {

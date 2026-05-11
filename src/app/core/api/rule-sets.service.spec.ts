@@ -1,11 +1,11 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { environment } from '../../../environments/environment';
-import { AuthService } from '../auth/auth.service';
+import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import { AuthUser } from '../auth/auth-user';
+import { AuthService } from '../auth/auth.service';
 import { PreferencesService } from '../preferences/preferences.service';
 import { LoggerService } from '../telemetry/logger.service';
-import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import {
   FormattingRule,
   FormattingRuleSet,

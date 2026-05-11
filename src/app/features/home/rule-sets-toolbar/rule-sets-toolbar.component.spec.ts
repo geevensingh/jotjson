@@ -1,19 +1,18 @@
 import { TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { of, throwError } from 'rxjs';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
-import { AuthService } from '../../../core/auth/auth.service';
-import { RuleSetsService } from '../../../core/api/rule-sets.service';
-import { PreferencesService } from '../../../core/preferences/preferences.service';
 import type {
-  FormattingRule,
   FormattingRuleSet,
   FormattingRuleSimple,
   RuleSetPreset,
 } from '../../../core/api/models';
-import { RuleSetsToolbarComponent } from './rule-sets-toolbar.component';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { AuthService } from '../../../core/auth/auth.service';
+import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { ClonePresetDialogComponent } from './clone-preset-dialog.component';
+import { RuleSetsToolbarComponent } from './rule-sets-toolbar.component';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 

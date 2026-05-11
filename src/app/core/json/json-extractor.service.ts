@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { extractFromMixedText } from './json-extractor.core';
 import type { ExtractedJson } from './json-extractor.core';
+import { extractFromMixedText } from './json-extractor.core';
 import { JsonParserService } from './json-parser.service';
 
 export type { ExtractedJson } from './json-extractor.core';

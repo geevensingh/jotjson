@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { AppHeaderComponent } from './app-header.component';
-import { AuthService } from '../../../core/auth/auth.service';
 import { FakeMsalClient, provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
+import { AuthService } from '../../../core/auth/auth.service';
+import { AppHeaderComponent } from './app-header.component';
 
 describe('AppHeaderComponent', () => {
   beforeEach(() => {

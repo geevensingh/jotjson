@@ -1,12 +1,14 @@
-import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { ClipboardBannerComponent } from './clipboard-banner.component';
+import { TestBed } from '@angular/core/testing';
 import {
   ClipboardPermissionState,
   ClipboardPollingService,
 } from '../../../core/clipboard/clipboard-polling.service';
-import { PreferencesService } from '../../../core/preferences/preferences.service';
-import { DEFAULT_PREFERENCES } from '../../../core/preferences/preferences.service';
+import {
+  DEFAULT_PREFERENCES,
+  PreferencesService,
+} from '../../../core/preferences/preferences.service';
+import { ClipboardBannerComponent } from './clipboard-banner.component';
 
 describe('ClipboardBannerComponent', () => {
   let permissionState: ReturnType<typeof signal<ClipboardPermissionState>>;

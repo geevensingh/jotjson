@@ -15,7 +15,7 @@
 // Output: one line per distinct decoded handler value, formatted as:
 //   "<decoded-value>"  ->  'sha256-<base64>'
 
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { extractInlineEventHandlers, sha256Token } from './check-csp-hashes.mjs';
 
 const targetPath = process.argv[2] ?? 'dist/jotjson/browser/index.html';

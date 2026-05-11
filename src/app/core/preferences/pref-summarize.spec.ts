@@ -1,5 +1,5 @@
-import { bucketColorHex, bucketDepth, bucketFontSize, bucketTabSize } from './pref-summarize';
 import type { ColorBucket } from './pref-summarize';
+import { bucketColorHex, bucketDepth, bucketFontSize, bucketTabSize } from './pref-summarize';
 
 describe('preference telemetry summary helpers', () => {
   describe('bucketColorHex', () => {

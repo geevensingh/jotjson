@@ -1,16 +1,16 @@
-import { TestBed } from '@angular/core/testing';
-import { of, throwError, Subject } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
-import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
-import { PreferencesService, DEFAULT_PREFERENCES } from './preferences.service';
-import { AuthService } from '../auth/auth.service';
+import { TestBed } from '@angular/core/testing';
+import { of, Subject, throwError } from 'rxjs';
+import type { User, UserPreferences } from '../api/models';
 import {
   UserApiService,
   type PreferencesWithEtag,
   type UserWithEtag,
 } from '../api/user-api.service';
+import { AuthService } from '../auth/auth.service';
 import { LoggerService } from '../telemetry/logger.service';
-import type { User, UserPreferences } from '../api/models';
+import { DEFAULT_PREFERENCES, PreferencesService } from './preferences.service';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 

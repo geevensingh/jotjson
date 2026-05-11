@@ -1,3 +1,4 @@
+import { NestedTreeControl } from '@angular/cdk/tree';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -16,51 +17,50 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuTrigger } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
-import { MatDividerModule } from '@angular/material/divider';
-import { NestedTreeControl } from '@angular/cdk/tree';
-import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
-import { PreferencesService } from '../../../core/preferences/preferences.service';
-import { bucketColorHex } from '../../../core/preferences/pref-summarize';
-import { CommentBundle, JsonParserService } from '../../../core/json/json-parser.service';
-import type { ExtractedJson } from '../../../core/json/json-extractor.service';
+import type { BlobHighlight, FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
-import { LoggerService } from '../../../core/telemetry/logger.service';
+import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation.service';
+import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
+import type { ExtractedJson } from '../../../core/json/json-extractor.service';
+import { CommentBundle, JsonParserService } from '../../../core/json/json-parser.service';
+import { bucketColorHex } from '../../../core/preferences/pref-summarize';
+import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
 import { isColdAndMark } from '../../../core/telemetry/cold-flag';
-import type { BlobHighlight, FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
-import { jsonTypeOf, JsonValueType } from '../../pipes/json-type.pipe';
-import { IconComponent, type JjIconName } from '../icon/icon.component';
+import { LoggerService } from '../../../core/telemetry/logger.service';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
+import { JsonValueType, jsonTypeOf } from '../../pipes/json-type.pipe';
+import { ParsedDate, formatDateAnnotation, parseAsDate } from '../../utils/date-detect';
+import { classifyJsonValue, isJsonValueEmpty } from '../../utils/formatting-value-kind';
+import { ValueClassification, classifyValue } from '../../utils/value-classifier';
+import { IconComponent, type JjIconName } from '../icon/icon.component';
 import {
   JsonBreadcrumbComponent,
   type BreadcrumbClick,
   type BreadcrumbContextMenu,
   type BreadcrumbCrumb,
 } from '../json-breadcrumb/json-breadcrumb.component';
+import { computeAutoFitDepth } from './auto-fit-depth';
+import { EMPTY_BEACON_INDEX, buildBeaconIndex, type BeaconIndex } from './formatting-beacons-index';
 import {
   EMPTY_RULE_RESULT,
   RuleEngineNode,
   RuleEngineResult,
   evaluateFormattingRules,
 } from './formatting-rules-engine';
-import { ParsedDate, formatDateAnnotation, parseAsDate } from '../../utils/date-detect';
-import { classifyJsonValue, isJsonValueEmpty } from '../../utils/formatting-value-kind';
-import { classifyValue, ValueClassification } from '../../utils/value-classifier';
-import { computeAutoFitDepth } from './auto-fit-depth';
-import { findNearestCascade, indexHighlights, resolveManualHighlight } from './highlight-resolver';
-import type { ResolvedHighlight } from './highlight-resolver';
 import {
   HIGHLIGHT_PALETTE_DARK,
   HIGHLIGHT_PALETTE_LIGHT,
   contrastText,
   type PaletteSwatch,
 } from './highlight-palette';
+import type { ResolvedHighlight } from './highlight-resolver';
+import { findNearestCascade, indexHighlights, resolveManualHighlight } from './highlight-resolver';
 import { findScrollableAncestor } from './scroll-container';
-import { EMPTY_BEACON_INDEX, buildBeaconIndex, type BeaconIndex } from './formatting-beacons-index';
-import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation.service';
 
 /**
  * Search-by-type filter values. `'all'` is the no-filter sentinel.

@@ -1,11 +1,11 @@
-import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { signal } from '@angular/core';
-import { ProfileComponent } from './profile.component';
-import { AuthService } from '../../core/auth/auth.service';
-import type { AuthUser } from '../../core/auth/auth-user';
+import { TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideRouter } from '@angular/router';
 import { provideFakeAuth } from '../../../testing/auth.testing';
+import type { AuthUser } from '../../core/auth/auth-user';
+import { AuthService } from '../../core/auth/auth.service';
+import { ProfileComponent } from './profile.component';
 
 /**
  * Wave 3a (M7g-3a) shell-landmark spec for the /profile route.

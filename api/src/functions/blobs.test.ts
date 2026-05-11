@@ -46,6 +46,7 @@ jest.mock('../shared/history', () => ({
   VIEW_DEBOUNCE_SECONDS: 300,
 }));
 
+import type { TelemetryClient } from 'applicationinsights';
 import { AuthError, requireAuth as requireAuthMock, tryAuth as tryAuthMock } from '../shared/auth';
 import {
   BlobValidationError,
@@ -59,16 +60,15 @@ import {
 } from '../shared/blobs';
 import { VersionConflictError } from '../shared/cosmos';
 import {
-  recordEntry as recordEntryMock,
   getRecentViewAt as getRecentViewAtMock,
+  recordEntry as recordEntryMock,
 } from '../shared/history';
-import { readUser as readUserMock } from '../shared/users';
-import { deleteBlob, getBlob, listBlobs, postBlob, putBlob } from './blobs';
-import type { TelemetryClient } from 'applicationinsights';
 import {
   __resetTelemetryInitForTesting,
   __setTelemetryClientForTesting as __setTelemetryClientForTestingT,
 } from '../shared/telemetry';
+import { readUser as readUserMock } from '../shared/users';
+import { deleteBlob, getBlob, listBlobs, postBlob, putBlob } from './blobs';
 
 // Silence the warn-once that shared/http.ts forbidden() would otherwise
 // trigger via trackEvent when the connection string env var is missing.

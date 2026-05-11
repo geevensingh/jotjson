@@ -1,3 +1,4 @@
+import { isPlatformBrowser } from '@angular/common';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import {
   DestroyRef,
@@ -9,7 +10,6 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subject, catchError, fromEvent, of, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';

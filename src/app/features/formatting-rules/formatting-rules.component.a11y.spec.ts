@@ -1,20 +1,20 @@
-import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { signal } from '@angular/core';
-import { of, throwError } from 'rxjs';
+import { TestBed } from '@angular/core/testing';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { FormattingRulesComponent } from './formatting-rules.component';
-import { RuleSetsService } from '../../core/api/rule-sets.service';
-import { PreferencesService } from '../../core/preferences/preferences.service';
-import { provideFakeAuth } from '../../../testing/auth.testing';
-import type { FormattingRuleSet, RuleSetPreset } from '../../core/api/models';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideRouter } from '@angular/router';
+import { of, throwError } from 'rxjs';
 import {
   attachFixtureToBody,
   expectNoStrictA11yViolations,
   getOverlayContainerElement,
 } from '../../../testing/a11y';
+import { provideFakeAuth } from '../../../testing/auth.testing';
+import type { FormattingRuleSet, RuleSetPreset } from '../../core/api/models';
+import { RuleSetsService } from '../../core/api/rule-sets.service';
+import { PreferencesService } from '../../core/preferences/preferences.service';
+import { FormattingRulesComponent } from './formatting-rules.component';
 
 /**
  * Wave 3a shell-landmark coverage plus Wave 3e strict overlay scans for

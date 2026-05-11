@@ -8,8 +8,8 @@
  * primitive) is unaffected by this module; this is purely a display
  * concern.
  */
-import { parseAsDate, ParseOptions } from './date-detect';
 import type { JsonValueType } from '../pipes/json-type.pipe';
+import { parseAsDate, ParseOptions } from './date-detect';
 
 export type ValueClassification =
   | 'date'

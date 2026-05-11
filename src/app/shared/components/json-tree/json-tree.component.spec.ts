@@ -1,25 +1,25 @@
-import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { By } from '@angular/platform-browser';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
-import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
-import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
-import { PreferencesService } from '../../../core/preferences/preferences.service';
-import { RuleSetsService } from '../../../core/api/rule-sets.service';
-import { LoggerService } from '../../../core/telemetry/logger.service';
-import { bucketCount } from '../../../core/telemetry/buckets';
-import type { ExtractedJson } from '../../../core/json/json-extractor.service';
-import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
+import { By } from '@angular/platform-browser';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideFakeAuth } from '../../../../testing/auth.testing';
+import { HIGHLIGHT_PATH_FIXTURES } from '../../../../testing/fixtures/highlight-paths.fixture';
 import type {
   BlobHighlight,
   FormattingRule,
   FormattingRuleSet,
   FormattingRuleSimple,
 } from '../../../core/api/models';
-import { provideFakeAuth } from '../../../../testing/auth.testing';
-import { HIGHLIGHT_PATH_FIXTURES } from '../../../../testing/fixtures/highlight-paths.fixture';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import type { ExtractedJson } from '../../../core/json/json-extractor.service';
+import { PreferencesService } from '../../../core/preferences/preferences.service';
+import { bucketCount } from '../../../core/telemetry/buckets';
+import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
+import { LoggerService } from '../../../core/telemetry/logger.service';
+import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
+import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';

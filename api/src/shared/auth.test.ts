@@ -1,7 +1,7 @@
-import { generateKeyPairSync } from 'node:crypto';
-import * as jwt from 'jsonwebtoken';
 import type { HttpRequest } from '@azure/functions';
 import type { TelemetryClient } from 'applicationinsights';
+import * as jwt from 'jsonwebtoken';
+import { generateKeyPairSync } from 'node:crypto';
 import {
   AuthError,
   __resetDevAuthWarnForTesting,

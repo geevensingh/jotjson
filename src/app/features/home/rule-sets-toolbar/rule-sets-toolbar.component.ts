@@ -10,9 +10,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
-import { AuthService } from '../../../core/auth/auth.service';
-import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import type { FormattingRuleSet } from '../../../core/api/models';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import {
   ClonePresetDialogComponent,
   ClonePresetDialogResult,
