@@ -33,7 +33,7 @@ import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
 import { isColdAndMark } from '../../../core/telemetry/cold-flag';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
-import { JsonValueType, jsonTypeOf } from '../../pipes/json-type.pipe';
+import { JsonValueType } from '../../pipes/json-type.pipe';
 import { ParsedDate, formatDateAnnotation, parseAsDate } from '../../utils/date-detect';
 import { classifyJsonValue, isJsonValueEmpty } from '../../utils/formatting-value-kind';
 import { ValueClassification, classifyValue } from '../../utils/value-classifier';
@@ -45,6 +45,7 @@ import {
   type BreadcrumbCrumb,
 } from '../json-breadcrumb/json-breadcrumb.component';
 import { computeAutoFitDepth } from './auto-fit-depth';
+import { buildTree, formatPath, type TreeNode } from './build-tree';
 import { EMPTY_BEACON_INDEX, buildBeaconIndex, type BeaconIndex } from './formatting-beacons-index';
 import {
   EMPTY_RULE_RESULT,
@@ -61,6 +62,7 @@ import {
 import type { ResolvedHighlight } from './highlight-resolver';
 import { findNearestCascade, indexHighlights, resolveManualHighlight } from './highlight-resolver';
 import { findScrollableAncestor } from './scroll-container';
+export type { TreeNode };
 
 /**
  * Search-by-type filter values. `'all'` is the no-filter sentinel.
@@ -107,25 +109,11 @@ const TYPE_LABELS: Record<ValueClassification, string> = {
   undefined: $localize`:@@tree.type.undefined:undefined`,
 };
 
-export interface TreeNode {
-  segment: string | number | undefined;
-  path: (string | number)[];
-  pathString: string;
-  value: unknown;
-  type: JsonValueType;
-  depth: number;
-  children?: TreeNode[];
-}
-
 export interface TreeExtractRequest {
   path: (string | number)[];
   sourceVersion: number;
   replacement: ExtractedJson;
   source: 'rowButton' | 'contextMenu';
-}
-
-interface TreeBuildCounter {
-  nodeCount: number;
 }
 
 interface ManualHighlightRows {
@@ -956,7 +944,7 @@ export class JsonTreeComponent {
       const label = typeof segment === 'number' ? `[${segment}]` : String(segment);
       out.push({
         label,
-        canonicalPath: this.formatPath(partial),
+        canonicalPath: formatPath(partial),
         current: i === path.length,
       });
     }
@@ -1019,7 +1007,7 @@ export class JsonTreeComponent {
     }
     for (let i = 0; i < selected.path.length - 1; i++) {
       partial.push(selected.path[i] as string | number);
-      ancestors.add(this.formatPath(partial));
+      ancestors.add(formatPath(partial));
     }
     return ancestors;
   });
@@ -1290,7 +1278,7 @@ export class JsonTreeComponent {
         let recovered: string | null = null;
         for (let i = 0; i < node.path.length; i++) {
           parts.push(node.path[i]!);
-          const ancestorPath = this.formatPath(parts);
+          const ancestorPath = formatPath(parts);
           if (visibleSet.has(ancestorPath)) recovered = ancestorPath;
         }
         // Root may also be the recovery target (path === '$').
@@ -1375,7 +1363,7 @@ export class JsonTreeComponent {
   private parentOf(node: TreeNode): TreeNode | undefined {
     if (node.path.length === 0) return undefined;
     const parentPath = node.path.slice(0, -1);
-    return this.nodeIndex().get(this.formatPath(parentPath));
+    return this.nodeIndex().get(formatPath(parentPath));
   }
 
   /**
@@ -1701,7 +1689,7 @@ export class JsonTreeComponent {
    * source.
    */
   expandNodeAtPath(path: (string | number)[]): void {
-    const node = this.nodeIndex().get(this.formatPath(path));
+    const node = this.nodeIndex().get(formatPath(path));
     if (!node) return;
     this.treeControl.expand(node);
   }
@@ -1763,7 +1751,7 @@ export class JsonTreeComponent {
     const partial: (string | number)[] = [];
     for (let i = 0; i < node.path.length - 1; i++) {
       partial.push(node.path[i] as string | number);
-      const ancestor = this.nodeIndex().get(this.formatPath(partial));
+      const ancestor = this.nodeIndex().get(formatPath(partial));
       if (ancestor) this.treeControl.expand(ancestor);
     }
     // Defer scroll until after Angular renders the expansion.
@@ -3415,7 +3403,7 @@ export class JsonTreeComponent {
     let descendantCount = 0;
     let firstMatch: readonly (string | number)[] | undefined;
     for (const candidate of matches) {
-      const candidatePathString = this.formatPath([...candidate]);
+      const candidatePathString = formatPath([...candidate]);
       if (candidatePathString === ancestorPathString) continue;
       if (!candidatePathString.startsWith(ancestorPathString)) continue;
       // Ensure it's a strict descendant boundary (not just a prefix
@@ -3449,7 +3437,7 @@ export class JsonTreeComponent {
     const ancestorPathString = node.pathString;
     let descendantCount = 0;
     for (const candidate of matches) {
-      const candidatePathString = this.formatPath([...candidate]);
+      const candidatePathString = formatPath([...candidate]);
       if (candidatePathString === ancestorPathString) continue;
       if (!candidatePathString.startsWith(ancestorPathString)) continue;
       const next = candidatePathString.charAt(ancestorPathString.length);
@@ -3637,19 +3625,7 @@ export class JsonTreeComponent {
 
   private buildRoot(raw: unknown): TreeNode {
     const start = performance.now();
-    const counter: TreeBuildCounter = { nodeCount: 1 };
-    const root: TreeNode = {
-      segment: undefined,
-      path: [],
-      pathString: '$',
-      value: raw,
-      type: jsonTypeOf(raw),
-      depth: 0,
-    };
-    if (root.type === 'object' || root.type === 'array') {
-      root.children = this.buildChildren(raw, [], counter);
-    }
-    const nodeCount = counter.nodeCount;
+    const { root, nodeCount } = buildTree(raw);
     this.latestBuildNodeCount = nodeCount;
     const timeMs = performance.now() - start;
     if (timeMs > TREE_BUILD_SLOW_THRESHOLD_MS) {
@@ -3663,60 +3639,5 @@ export class JsonTreeComponent {
       );
     }
     return root;
-  }
-
-  private buildChildren(
-    value: unknown,
-    parentPath: (string | number)[],
-    counter: TreeBuildCounter,
-  ): TreeNode[] {
-    if (Array.isArray(value)) {
-      return value.map((child, index) =>
-        this.buildNode(index, child, [...parentPath, index], counter),
-      );
-    }
-    if (value && typeof value === 'object') {
-      const objectValue = value as Record<string, unknown>;
-      return Object.keys(objectValue).map((key) =>
-        this.buildNode(key, objectValue[key], [...parentPath, key], counter),
-      );
-    }
-    return [];
-  }
-
-  private buildNode(
-    segment: string | number,
-    value: unknown,
-    path: (string | number)[],
-    counter: TreeBuildCounter,
-  ): TreeNode {
-    counter.nodeCount += 1;
-    const type = jsonTypeOf(value);
-    const node: TreeNode = {
-      segment,
-      path,
-      pathString: this.formatPath(path),
-      value,
-      type,
-      depth: path.length,
-    };
-    if (type === 'object' || type === 'array') {
-      node.children = this.buildChildren(value, path, counter);
-    }
-    return node;
-  }
-
-  private formatPath(path: (string | number)[]): string {
-    let out = '$';
-    for (const seg of path) {
-      if (typeof seg === 'number') {
-        out += `[${seg}]`;
-      } else if (/^[A-Za-z_$][\w$]*$/.test(seg)) {
-        out += `.${seg}`;
-      } else {
-        out += `[${JSON.stringify(seg)}]`;
-      }
-    }
-    return out;
   }
 }

@@ -89,11 +89,13 @@ export class LoggerService {
 
   info(messageId: TelemetryMessageId, props?: TelemetryProps): void {
     this.consoleMirror('info', messageId, props);
+    this.emitToPerfHarness('info', messageId, props);
     this.handle({ ts: Date.now(), severity: 'info', messageId, props });
   }
 
   warn(messageId: TelemetryMessageId, props?: TelemetryProps): void {
     this.consoleMirror('warn', messageId, props);
+    this.emitToPerfHarness('warn', messageId, props);
     this.handle({ ts: Date.now(), severity: 'warn', messageId, props });
   }
 
@@ -106,6 +108,7 @@ export class LoggerService {
     const normalized =
       cause === null || cause === undefined ? undefined : normalizeError(cause, httpCtx);
     this.consoleMirror('error', messageId, props, normalized);
+    this.emitToPerfHarness('error', messageId, props);
     this.handle({
       ts: Date.now(),
       severity: 'error',
@@ -135,6 +138,7 @@ export class LoggerService {
     measurements?: TelemetryMeasurements,
   ): void {
     this.consoleMirrorEvent(messageId, props, measurements);
+    this.emitToPerfHarness('event', messageId, props, measurements);
     this.handle({
       ts: Date.now(),
       severity: 'info',
@@ -238,4 +242,59 @@ export class LoggerService {
       // ignore
     }
   }
+
+  // --- test seam ---
+
+  /**
+   * Attaches a perf-harness sink that receives every event emitted by
+   * `info`, `warn`, `error`, and `event` calls. Used by the Playwright
+   * perf harness (`perf/browser/util/perf-harness.ts`) to observe
+   * existing telemetry events (e.g. `paste.handle`, `monaco.loaded`)
+   * without spying or adding production DOM markers.
+   *
+   * The seam is named per AGENTS.md `__<verb>ForTesting` convention.
+   * Production code MUST NOT call this method. The harness is only
+   * attached by the Playwright perf config when running with
+   * `JOTJSON_PERF_HARNESS=1` in the perf browser context.
+   */
+  __attachPerfHarnessForTesting(sink: PerfHarnessSink): void {
+    this.perfSink = sink;
+  }
+
+  /**
+   * Detaches the perf-harness sink. Counterpart of
+   * `__attachPerfHarnessForTesting`. Idempotent.
+   */
+  __detachPerfHarnessForTesting(): void {
+    this.perfSink = null;
+  }
+
+  private perfSink: PerfHarnessSink | null = null;
+
+  private emitToPerfHarness(
+    severity: Severity | 'event',
+    messageId: TelemetryMessageId,
+    props?: TelemetryProps,
+    measurements?: TelemetryMeasurements,
+  ): void {
+    if (this.perfSink === null) return;
+    try {
+      this.perfSink({ ts: Date.now(), severity, messageId, props, measurements });
+    } catch {
+      // Never throw out of the logger; harness failures are noise.
+    }
+  }
 }
+
+/**
+ * Shape of the perf-harness sink. See `LoggerService.__attachPerfHarnessForTesting`.
+ */
+export interface PerfHarnessEvent {
+  ts: number;
+  severity: 'info' | 'warn' | 'error' | 'event';
+  messageId: TelemetryMessageId;
+  props?: TelemetryProps;
+  measurements?: TelemetryMeasurements;
+}
+
+export type PerfHarnessSink = (entry: PerfHarnessEvent) => void;
