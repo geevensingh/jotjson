@@ -119,6 +119,15 @@
             ],
             "styles": ["src/styles.scss"],
             "scripts": []
+          },
+          "configurations": {
+            "perf": {
+              "tsConfig": "tsconfig.perf-l2.json",
+              "karmaConfig": "karma.perf.conf.js",
+              "include": ["**/*.perf.ts"],
+              "codeCoverage": false,
+              "watch": false
+            }
           }
         }
       }

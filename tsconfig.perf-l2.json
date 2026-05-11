@@ -1,0 +1,21 @@
+/* Layer-2 (Karma) perf-bench tsconfig.
+ *
+ * Differs from `tsconfig.spec.json` ONLY by include/exclude:
+ *   - INCLUDES `src/`*`*`/`*.perf.ts` (the perf-bench files).
+ *   - EXCLUDES `src/`*`*`/`*.spec.ts` (the regular unit specs).
+ *
+ * Used by `ng test --configuration perf` (see angular.json -> test ->
+ * configurations.perf), driven by `karma.perf.conf.js`.
+ *
+ * We keep this file separate from `tsconfig.spec.json` so the perf
+ * file-set never bleeds into `npm test` / `verify:fast`.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/perf-l2",
+    "types": ["jasmine", "@angular/localize"]
+  },
+  "include": ["src/**/*.perf.ts", "src/**/*.d.ts"],
+  "exclude": ["src/**/*.spec.ts"]
+}
