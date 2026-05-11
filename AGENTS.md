@@ -731,6 +731,16 @@ Before finishing a task:
   thread, request review, wait for CI), and stop. Do not propose
   `--admin` as an option in `ask_user`. The user can clear the block
   themselves through the GitHub UI; agents do not.
+- **Auto-update of PR branches.** `main` is protected with `strict: true`
+  on classic branch protection (require branches to be up to date before
+  merge). A Mergify GitHub App install, configured by `.mergify.yml` at
+  the repo root, auto-pushes a merge of `main` into the PR head whenever
+  an open non-draft, non-conflicting PR targeting `main` is behind. This
+  fires the PR's normal `pull_request: synchronize` event, re-runs CI,
+  and lets GitHub's native auto-merge land the PR when green. Net
+  effect: enabling auto-merge once is sufficient -- no manual "Update
+  branch" click is needed when `main` advances. Rollback is uninstalling
+  the Mergify app + deleting `.mergify.yml`.
 - When a commit is authored with AI assistance, include:
 
   ```

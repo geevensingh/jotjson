@@ -1,0 +1,9 @@
+pull_request_rules:
+  - name: Keep PR branches up to date with main
+    conditions:
+      - base=main
+      - -conflict
+      - -closed
+      - -draft
+    actions:
+      update:
