@@ -1,10 +1,10 @@
+import type { FormattingIcon } from '../../../core/api/models';
 import {
   buildBeaconIndex,
   EMPTY_BEACON_INDEX,
   type BeaconIndex,
   type PathArray,
 } from './formatting-beacons-index';
-import type { FormattingIcon } from '../../../core/api/models';
 import type { TreeNode } from './json-tree.component';
 
 function makeNode(

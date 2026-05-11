@@ -28,9 +28,9 @@ import { AuthError, requireAuth } from '../shared/auth';
 import { stripCosmosMetadata, VersionConflictError } from '../shared/cosmos';
 import { badRequest, internalError, unauthorized, withSecurityHeaders } from '../shared/http';
 import {
-  PreferenceValidationError,
   normalizePreferences,
   normalizeStoredPreferences,
+  PreferenceValidationError,
 } from '../shared/preferences';
 import {
   createUser,

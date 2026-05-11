@@ -1,13 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { BlobsComponent } from './blobs.component';
-import { BlobService } from '../../core/api/blob.service';
 import { provideFakeAuth } from '../../../testing/auth.testing';
+import { BlobService } from '../../core/api/blob.service';
 import type { JsonBlob } from '../../core/api/models';
+import { BlobsComponent } from './blobs.component';
 
 function blob(overrides: Partial<JsonBlob> = {}): JsonBlob {
   return {

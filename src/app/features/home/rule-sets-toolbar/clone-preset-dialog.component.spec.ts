@@ -1,9 +1,9 @@
 import { TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { Observable, of, throwError } from 'rxjs';
 import { MatDialogRef } from '@angular/material/dialog';
+import { Observable, of, throwError } from 'rxjs';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
-import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import type { FormattingRule, FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { ClonePresetDialogComponent } from './clone-preset-dialog.component';
 
 function rule(id: string): FormattingRule {

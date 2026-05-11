@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
+import { RouterLink } from '@angular/router';
 import { SeoService } from '../../core/seo/seo.service';
+import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 
 @Component({
   selector: 'app-not-found',

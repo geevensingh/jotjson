@@ -36,9 +36,9 @@
  */
 import { TestBed } from '@angular/core/testing';
 import type * as MonacoNS from 'monaco-editor';
+import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { JsonEditorComponent } from './json-editor.component';
 import { __resetMonacoLoaderForTesting, loadMonaco } from './monaco-loader';
-import { provideFakeAuth } from '../../../../testing/auth.testing';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const HOST_WIDTH_PX = 800;

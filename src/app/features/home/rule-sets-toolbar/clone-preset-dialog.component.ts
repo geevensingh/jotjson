@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
-import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import type { FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
 
 /**
  * Result returned via `MatDialogRef.close()` when the user successfully

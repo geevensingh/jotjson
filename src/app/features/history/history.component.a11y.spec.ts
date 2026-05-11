@@ -1,19 +1,19 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { of, throwError } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { HistoryComponent } from './history.component';
-import { HistoryService, HistoryPage } from '../../core/api/history.service';
-import { provideFakeAuth } from '../../../testing/auth.testing';
-import { LoggerService } from '../../core/telemetry/logger.service';
-import type { HistoryEntry } from '../../core/api/models';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideRouter } from '@angular/router';
+import { of, throwError } from 'rxjs';
 import {
   attachFixtureToBody,
   expectNoStrictA11yViolations,
   getOverlayContainerElement,
 } from '../../../testing/a11y';
+import { provideFakeAuth } from '../../../testing/auth.testing';
+import { HistoryPage, HistoryService } from '../../core/api/history.service';
+import type { HistoryEntry } from '../../core/api/models';
+import { LoggerService } from '../../core/telemetry/logger.service';
+import { HistoryComponent } from './history.component';
 
 /**
  * Wave 3a (M7g-3a) shell-landmark spec for the /history route. Asserts

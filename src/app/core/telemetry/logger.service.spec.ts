@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { environment } from '../../../environments/environment';
 import { LoggerService } from './logger.service';
-import { TelemetryService } from './telemetry.service';
 import { msalBridge } from './msal-bridge';
 import { normalizeError } from './normalize-error';
+import { TelemetryService } from './telemetry.service';
 
 describe('LoggerService', () => {
   let originalCs: string | undefined;

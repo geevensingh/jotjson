@@ -9,17 +9,17 @@ import {
   viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
+import type { SuggestionCandidate } from '../../../core/title-suggester/types';
 import { SignedInDirective } from '../../directives/signed-in.directive';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import { IconComponent, JjIconName } from '../icon/icon.component';
-import type { SuggestionCandidate } from '../../../core/title-suggester/types';
-import { ToolbarBeaconPillsComponent } from '../toolbar-beacon-pills/toolbar-beacon-pills.component';
 import { EMPTY_BEACON_INDEX, type BeaconIndex } from '../json-tree/formatting-beacons-index';
+import { ToolbarBeaconPillsComponent } from '../toolbar-beacon-pills/toolbar-beacon-pills.component';
 
 type ToolbarAction =
   | 'paste'

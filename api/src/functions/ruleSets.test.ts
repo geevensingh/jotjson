@@ -58,7 +58,9 @@ jest.mock('../shared/users', () => ({
   replaceUser: jest.fn(),
 }));
 
+import type { TelemetryClient } from 'applicationinsights';
 import { AuthError, requireAuth as requireAuthMock } from '../shared/auth';
+import { VersionConflictError } from '../shared/cosmos';
 import { findPreset } from '../shared/ruleSetPresets';
 import {
   createRuleSet as createRuleSetMock,
@@ -69,22 +71,20 @@ import {
   replaceRuleSet as replaceRuleSetMock,
   RuleSetValidationError,
 } from '../shared/ruleSets';
-import { VersionConflictError } from '../shared/cosmos';
+import {
+  __resetTelemetryInitForTesting,
+  __setTelemetryClientForTesting as __setTelemetryClientForTestingT,
+} from '../shared/telemetry';
 import { readUser as readUserMock, replaceUser as replaceUserMock } from '../shared/users';
 import {
-  deleteRuleSet,
   clonePreset,
+  deleteRuleSet,
   getRuleSet,
   listPresets,
   listRuleSets,
   postRuleSet,
   putRuleSet,
 } from './ruleSets';
-import type { TelemetryClient } from 'applicationinsights';
-import {
-  __resetTelemetryInitForTesting,
-  __setTelemetryClientForTesting as __setTelemetryClientForTestingT,
-} from '../shared/telemetry';
 
 // Silence the warn-once that shared/http.ts forbidden() would otherwise
 // trigger via trackEvent when the connection string env var is missing.

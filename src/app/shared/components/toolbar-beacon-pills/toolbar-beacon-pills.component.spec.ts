@@ -1,16 +1,16 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { ToolbarBeaconPillsComponent } from './toolbar-beacon-pills.component';
+import type { FormattingIcon } from '../../../core/api/models';
+import {
+  BeaconNavigationService,
+  type BeaconJumpRequest,
+} from '../../../core/beacons/beacon-navigation.service';
 import {
   EMPTY_BEACON_INDEX,
   type BeaconIndex,
   type PathArray,
 } from '../json-tree/formatting-beacons-index';
-import {
-  BeaconNavigationService,
-  type BeaconJumpRequest,
-} from '../../../core/beacons/beacon-navigation.service';
-import type { FormattingIcon } from '../../../core/api/models';
+import { ToolbarBeaconPillsComponent } from './toolbar-beacon-pills.component';
 
 function buildIndex(buckets: ReadonlyArray<[FormattingIcon, readonly PathArray[]]>): BeaconIndex {
   const matchesByIcon = new Map<FormattingIcon, readonly PathArray[]>();

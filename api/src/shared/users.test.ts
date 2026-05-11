@@ -1,14 +1,14 @@
+import { VersionConflictError } from './cosmos';
+import { DEFAULT_PREFERENCES } from './preferences';
 import {
+  __resetUsersContainerForTesting,
   createUser,
   normalizeStoredUser,
   readUser,
   replaceUser,
   UserAlreadyExistsError,
-  __resetUsersContainerForTesting,
   type UserDocument,
 } from './users';
-import { VersionConflictError } from './cosmos';
-import { DEFAULT_PREFERENCES } from './preferences';
 
 interface FakeContainer {
   items: UserDocument[];

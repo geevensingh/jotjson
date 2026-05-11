@@ -1,7 +1,7 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { type BreadcrumbCrumb, JsonBreadcrumbComponent } from './json-breadcrumb.component';
 import { attachFixtureToBody, expectNoStrictA11yViolations } from '../../../../testing/a11y';
+import { type BreadcrumbCrumb, JsonBreadcrumbComponent } from './json-breadcrumb.component';
 
 const REPRESENTATIVE_CRUMBS: readonly BreadcrumbCrumb[] = [
   { label: '$', canonicalPath: '$', current: false },

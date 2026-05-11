@@ -9,17 +9,17 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { BlobService } from '../../core/api/blob.service';
-import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
 import type { JsonBlob } from '../../core/api/models';
-import { LoggerService } from '../../core/telemetry/logger.service';
+import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
 import { SeoService } from '../../core/seo/seo.service';
+import { LoggerService } from '../../core/telemetry/logger.service';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import {

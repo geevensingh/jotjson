@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { NotFoundComponent } from './not-found.component';
-import { provideFakeAuth } from '../../../testing/auth.testing';
+import { provideRouter } from '@angular/router';
 import { attachFixtureToBody, expectNoStrictA11yViolations } from '../../../testing/a11y';
+import { provideFakeAuth } from '../../../testing/auth.testing';
+import { NotFoundComponent } from './not-found.component';
 
 /**
  * Strict-gate accessibility spec for the simplest route in the app. Acts as

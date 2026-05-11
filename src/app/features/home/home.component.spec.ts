@@ -1,48 +1,48 @@
-import { ComponentFixture, fakeAsync, flushMicrotasks, TestBed, tick } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { Title, By } from '@angular/platform-browser';
-import { EMPTY, Subject, of, throwError } from 'rxjs';
-import { parse } from 'jsonc-parser';
-import type { ParseError } from 'jsonc-parser';
-import { HomeComponent } from './home.component';
-import { PreferencesService } from '../../core/preferences/preferences.service';
-import { DraftService } from '../../core/preferences/draft.service';
-import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
-import { ActivatedRoute, provideRouter, Router } from '@angular/router';
-import { BlobService, type BlobSyncEvent } from '../../core/api/blob.service';
-import { AuthService } from '../../core/auth/auth.service';
-import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
+import { ComponentFixture, fakeAsync, flushMicrotasks, TestBed, tick } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
+import { By, Title } from '@angular/platform-browser';
+import { ActivatedRoute, provideRouter, Router } from '@angular/router';
+import type { ParseError } from 'jsonc-parser';
+import { parse } from 'jsonc-parser';
+import { EMPTY, of, Subject, throwError } from 'rxjs';
+import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
+import { installMatchMediaStub } from '../../../testing/match-media.testing';
+import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
+import { BlobService, type BlobSyncEvent } from '../../core/api/blob.service';
 import type { BlobHighlight, JsonBlob } from '../../core/api/models';
-import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
-import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
-import { DropOverlayComponent } from './file-upload/drop-overlay.component';
-import { JsonExtractorService } from '../../core/json/json-extractor.service';
-import type { ExtractedJson } from '../../core/json/json-extractor.service';
-import { extractFromMixedText as extractFromMixedTextCore } from '../../core/json/json-extractor.core';
-import type { ParseJsonCandidate } from '../../core/json/json-extractor.core';
-import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
-import { LoggerService } from '../../core/telemetry/logger.service';
-import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
-import { bucketBytes } from '../../core/telemetry/buckets';
-import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
+import { AuthService } from '../../core/auth/auth.service';
+import { BeaconNavigationService } from '../../core/beacons/beacon-navigation.service';
 import {
   ClipboardPollingService,
   type ClipboardGrantedReadResult,
   type ClipboardPermissionState,
 } from '../../core/clipboard/clipboard-polling.service';
-import {
-  ColdBootClipboardBannerComponent,
-  type ColdBootClipboardChoice,
-} from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
-import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
+import type { ParseJsonCandidate } from '../../core/json/json-extractor.core';
+import { extractFromMixedText as extractFromMixedTextCore } from '../../core/json/json-extractor.core';
+import type { ExtractedJson } from '../../core/json/json-extractor.service';
+import { JsonExtractorService } from '../../core/json/json-extractor.service';
+import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
+import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
+import { DraftService } from '../../core/preferences/draft.service';
+import { PreferencesService } from '../../core/preferences/preferences.service';
+import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
+import { bucketBytes } from '../../core/telemetry/buckets';
+import { LoggerService } from '../../core/telemetry/logger.service';
+import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
+import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import {
   JsonTreeComponent,
   type TreeExtractRequest,
 } from '../../shared/components/json-tree/json-tree.component';
-import { BeaconNavigationService } from '../../core/beacons/beacon-navigation.service';
-import { installMatchMediaStub } from '../../../testing/match-media.testing';
+import {
+  ColdBootClipboardBannerComponent,
+  type ColdBootClipboardChoice,
+} from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
+import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
+import { DropOverlayComponent } from './file-upload/drop-overlay.component';
+import { HomeComponent } from './home.component';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';

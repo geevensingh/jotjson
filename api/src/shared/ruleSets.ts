@@ -29,9 +29,9 @@
 import type { Container, ItemResponse } from '@azure/cosmos';
 import { randomUUID } from 'crypto';
 import {
+  VersionConflictError,
   getCosmos,
   replaceWithIfMatch,
-  VersionConflictError,
   type VersionedDocument,
 } from './cosmos';
 import {

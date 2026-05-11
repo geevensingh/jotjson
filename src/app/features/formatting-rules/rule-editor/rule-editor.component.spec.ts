@@ -1,21 +1,17 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { signal } from '@angular/core';
 import {
   ComponentFixture,
-  TestBed,
   fakeAsync,
   flush,
   flushMicrotasks,
+  TestBed,
   tick,
 } from '@angular/core/testing';
-import { provideRouter, Router, ActivatedRoute, convertToParamMap } from '@angular/router';
-import { Subject, BehaviorSubject } from 'rxjs';
-import { HttpErrorResponse } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { signal } from '@angular/core';
+import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import { BehaviorSubject, Subject } from 'rxjs';
 
-import { RuleEditorComponent } from './rule-editor.component';
-import { RuleSetsService } from '../../../core/api/rule-sets.service';
-import { JsonTreeComponent } from '../../../shared/components/json-tree/json-tree.component';
-import { AuthService } from '../../../core/auth/auth.service';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 import type {
   FormattingRule,
@@ -23,6 +19,10 @@ import type {
   FormattingRuleSet,
   FormattingRuleSimple,
 } from '../../../core/api/models';
+import { RuleSetsService } from '../../../core/api/rule-sets.service';
+import { AuthService } from '../../../core/auth/auth.service';
+import { JsonTreeComponent } from '../../../shared/components/json-tree/json-tree.component';
+import { RuleEditorComponent } from './rule-editor.component';
 
 function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
   return {

@@ -1,6 +1,6 @@
+import { DESCRIPTION_PREVIEW_LEN } from '../constants';
 import type { SuggestionStrategy } from '../types';
 import { isPlainObject, readString } from './helpers';
-import { DESCRIPTION_PREVIEW_LEN } from '../constants';
 
 /**
  * `descriptionFallback` strategy (confidence 40).

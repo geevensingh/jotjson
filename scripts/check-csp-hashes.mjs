@@ -43,7 +43,7 @@
 //   node scripts/check-csp-hashes.mjs --ci-origins
 
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export const SRC_INDEX = 'src/index.html';

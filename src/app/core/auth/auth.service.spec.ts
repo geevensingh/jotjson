@@ -1,17 +1,17 @@
 import { TestBed } from '@angular/core/testing';
-import { EventMessage, EventType, InteractionRequiredAuthError } from '@azure/msal-browser';
 import { MsalBroadcastService } from '@azure/msal-angular';
+import { EventMessage, EventType, InteractionRequiredAuthError } from '@azure/msal-browser';
 import { environment } from '../../../environments/environment';
-import { AuthService } from './auth.service';
-import { AuthUser } from './auth-user';
-import { LoggerService } from '../telemetry/logger.service';
-import { TelemetryService } from '../telemetry/telemetry.service';
 import {
   FakeMsalBroadcastService,
   FakeMsalClient,
   makeAccount,
   provideFakeAuth,
 } from '../../../testing/auth.testing';
+import { LoggerService } from '../telemetry/logger.service';
+import { TelemetryService } from '../telemetry/telemetry.service';
+import { AuthUser } from './auth-user';
+import { AuthService } from './auth.service';
 
 describe('AuthService', () => {
   let fake: FakeMsalClient;

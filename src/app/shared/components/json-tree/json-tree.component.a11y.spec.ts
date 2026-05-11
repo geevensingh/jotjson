@@ -1,9 +1,9 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { JsonTreeComponent } from './json-tree.component';
-import { provideFakeAuth } from '../../../../testing/auth.testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { attachFixtureToBody, expectNoStrictA11yViolations } from '../../../../testing/a11y';
+import { provideFakeAuth } from '../../../../testing/auth.testing';
+import { JsonTreeComponent } from './json-tree.component';
 
 /**
  * M7g-3b structural accessibility spec for the JSON tree component.

@@ -1,7 +1,7 @@
-import { parse } from 'jsonc-parser';
 import type { ParseError } from 'jsonc-parser';
-import { extractFromMixedText } from './json-extractor.core';
+import { parse } from 'jsonc-parser';
 import type { ExtractedJson, ParseJsonCandidate } from './json-extractor.core';
+import { extractFromMixedText } from './json-extractor.core';
 
 const parseJsonCandidate: ParseJsonCandidate = (candidateText: string) => {
   const errors: ParseError[] = [];

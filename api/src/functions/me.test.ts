@@ -1,6 +1,6 @@
 import type { HttpRequest, InvocationContext } from '@azure/functions';
-import { DEFAULT_PREFERENCES } from '../shared/preferences';
 import { VersionConflictError } from '../shared/cosmos';
+import { DEFAULT_PREFERENCES } from '../shared/preferences';
 
 // Intercept the app.http registration so importing me.ts doesn't try to
 // register with the real Functions host at module load time.
@@ -32,11 +32,10 @@ jest.mock('../shared/users', () => ({
   UserAlreadyExistsError: _UserAlreadyExistsError,
 }));
 
-import { AuthError } from '../shared/auth';
-import { requireAuth as requireAuthMock } from '../shared/auth';
+import { AuthError, requireAuth as requireAuthMock } from '../shared/auth';
 import {
-  readUser as readUserMock,
   createUser as createUserMock,
+  readUser as readUserMock,
   replaceUser as replaceUserMock,
   UserAlreadyExistsError,
 } from '../shared/users';

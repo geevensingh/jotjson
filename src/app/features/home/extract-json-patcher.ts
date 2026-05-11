@@ -1,5 +1,5 @@
-import { applyEdits, findNodeAtLocation, parseTree } from 'jsonc-parser';
 import type { ParseError } from 'jsonc-parser';
+import { applyEdits, findNodeAtLocation, parseTree } from 'jsonc-parser';
 import type { ExtractedJson } from '../../core/json/json-extractor.service';
 
 export interface PatchResult {

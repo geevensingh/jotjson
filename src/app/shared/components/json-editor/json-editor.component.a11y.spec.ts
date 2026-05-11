@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import type * as MonacoNS from 'monaco-editor';
 
-import { LoggerService } from '../../../core/telemetry/logger.service';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
-import { contrastRatio, AA_THRESHOLD } from '../../utils/contrast';
+import { LoggerService } from '../../../core/telemetry/logger.service';
+import { AA_THRESHOLD, contrastRatio } from '../../utils/contrast';
 import { JsonEditorComponent } from './json-editor.component';
 import { __resetMonacoLoaderForTesting, __setMonacoLoaderPromiseForTesting } from './monaco-loader';
 

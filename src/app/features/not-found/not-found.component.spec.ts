@@ -1,8 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router } from '@angular/router';
-import { Location } from '@angular/common';
-import { NotFoundComponent } from './not-found.component';
+import { provideRouter } from '@angular/router';
 import { provideFakeAuth } from '../../../testing/auth.testing';
+import { NotFoundComponent } from './not-found.component';
 
 describe('NotFoundComponent', () => {
   async function create() {

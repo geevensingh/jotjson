@@ -1,31 +1,93 @@
+import { isPlatformBrowser } from '@angular/common';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
+  effect,
   ElementRef,
   HostListener,
+  inject,
+  input,
   OnDestroy,
   OnInit,
   PLATFORM_ID,
-  afterNextRender,
-  computed,
-  effect,
-  inject,
-  input,
   signal,
   viewChild,
 } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import { Title } from '@angular/platform-browser';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
-  format as jsoncFormat,
   applyEdits,
   createScanner,
   findNodeAtLocation,
+  format as jsoncFormat,
   Node as JsoncNode,
 } from 'jsonc-parser';
+import { debounceTime, firstValueFrom } from 'rxjs';
+import { BlobService } from '../../core/api/blob.service';
+import type { BlobHighlight, CreateBlobResponse, JsonBlob } from '../../core/api/models';
+import { AuthService } from '../../core/auth/auth.service';
+import {
+  BeaconNavigationService,
+  type BeaconJumpRequest,
+} from '../../core/beacons/beacon-navigation.service';
+import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
+import {
+  ClipboardPollingService,
+  type ClipboardGrantedReadResult,
+} from '../../core/clipboard/clipboard-polling.service';
+import { ExtractedJson, JsonExtractorService } from '../../core/json/json-extractor.service';
+import { JsonParseResult, JsonParserService } from '../../core/json/json-parser.service';
+import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
+import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
+import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
+import { DraftService } from '../../core/preferences/draft.service';
+import { persistedSignal } from '../../core/preferences/persisted-signal';
+import { PreferencesService } from '../../core/preferences/preferences.service';
+import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
+import { SeoService } from '../../core/seo/seo.service';
+import { bucketBytes } from '../../core/telemetry/buckets';
+import { LoggerService } from '../../core/telemetry/logger.service';
+import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
+import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
+import type { SuggestionCandidate } from '../../core/title-suggester/types';
+import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
+import { validateAndReadSingleFile } from '../../core/upload/upload-file-validator';
+import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
+import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
+import {
+  EMPTY_BEACON_INDEX,
+  type BeaconIndex,
+} from '../../shared/components/json-tree/formatting-beacons-index';
+import { highlightsEqual } from '../../shared/components/json-tree/highlight-resolver';
+import {
+  JsonTreeComponent,
+  type TreeExtractRequest,
+} from '../../shared/components/json-tree/json-tree.component';
+import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/toolbar.component';
+import {
+  ConfirmDialogComponent,
+  ConfirmDialogData,
+} from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
+import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.component';
+import {
+  ColdBootClipboardBannerComponent,
+  type ColdBootClipboardChoice,
+} from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
+import { EditorMode } from './editor-mode';
+import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
+import type { PatchResult } from './extract-json-patcher';
+import { patchExtractedValue } from './extract-json-patcher';
+import { DropOverlayComponent } from './file-upload/drop-overlay.component';
+import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
+import { StatusBarComponent } from './status-bar/status-bar.component';
+import { collectStringLeaves } from './string-leaf-collector';
+import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
 
 // SyntaxKind values inlined: jsonc-parser exports SyntaxKind as a `const enum`,
 // which TypeScript cannot access under `isolatedModules`. See jsonc-parser
@@ -33,68 +95,6 @@ import {
 const SK_LINE_COMMENT = 12;
 const SK_BLOCK_COMMENT = 13;
 const SK_EOF = 17;
-import { AuthService } from '../../core/auth/auth.service';
-import { BlobService } from '../../core/api/blob.service';
-import type { BlobHighlight, CreateBlobResponse, JsonBlob } from '../../core/api/models';
-import { DraftService } from '../../core/preferences/draft.service';
-import { persistedSignal } from '../../core/preferences/persisted-signal';
-import { LoggerService } from '../../core/telemetry/logger.service';
-import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
-import { bucketBytes } from '../../core/telemetry/buckets';
-import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
-import { SeoService } from '../../core/seo/seo.service';
-import { PreferencesService } from '../../core/preferences/preferences.service';
-import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
-import {
-  BeaconNavigationService,
-  type BeaconJumpRequest,
-} from '../../core/beacons/beacon-navigation.service';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
-import { debounceTime, firstValueFrom } from 'rxjs';
-import {
-  ConfirmDialogComponent,
-  ConfirmDialogData,
-} from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
-import { JsonParserService, JsonParseResult } from '../../core/json/json-parser.service';
-import { JsonExtractorService, ExtractedJson } from '../../core/json/json-extractor.service';
-import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
-import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
-import type { SuggestionCandidate } from '../../core/title-suggester/types';
-import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
-import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
-import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
-import {
-  JsonTreeComponent,
-  type TreeExtractRequest,
-} from '../../shared/components/json-tree/json-tree.component';
-import {
-  EMPTY_BEACON_INDEX,
-  type BeaconIndex,
-} from '../../shared/components/json-tree/formatting-beacons-index';
-import { highlightsEqual } from '../../shared/components/json-tree/highlight-resolver';
-import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
-import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/toolbar.component';
-import { EditorMode } from './editor-mode';
-import { StatusBarComponent } from './status-bar/status-bar.component';
-import { ClipboardCopyService } from '../../core/clipboard/clipboard-copy.service';
-import {
-  ClipboardPollingService,
-  type ClipboardGrantedReadResult,
-} from '../../core/clipboard/clipboard-polling.service';
-import { ClipboardBannerComponent } from './clipboard-banner/clipboard-banner.component';
-import {
-  ColdBootClipboardBannerComponent,
-  type ColdBootClipboardChoice,
-} from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
-import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
-import { DropOverlayComponent } from './file-upload/drop-overlay.component';
-import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
-import { validateAndReadSingleFile } from '../../core/upload/upload-file-validator';
-import { patchExtractedValue } from './extract-json-patcher';
-import type { PatchResult } from './extract-json-patcher';
-import { collectStringLeaves } from './string-leaf-collector';
-import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
 
 /**
  * Local-only pane visibility (issue #39). Stored in `localStorage`

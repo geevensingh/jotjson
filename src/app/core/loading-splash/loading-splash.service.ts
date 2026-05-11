@@ -1,13 +1,13 @@
 import { isPlatformBrowser } from '@angular/common';
 import { Injectable, PLATFORM_ID, Signal, inject, signal } from '@angular/core';
 import {
-  Event as RouterEvent,
   NavigationCancel,
   NavigationEnd,
   NavigationError,
   NavigationSkipped,
   NavigationStart,
   Router,
+  Event as RouterEvent,
 } from '@angular/router';
 import { LoggerService } from '../telemetry/logger.service';
 

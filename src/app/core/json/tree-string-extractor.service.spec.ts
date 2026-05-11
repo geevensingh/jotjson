@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { LoggerService } from '../telemetry/logger.service';
-import { MAX_INPUT_LENGTH } from './json-extractor.core';
 import type { ExtractedJson } from './json-extractor.core';
+import { MAX_INPUT_LENGTH } from './json-extractor.core';
 import {
   TREE_STRING_EXTRACTOR_BATCH_SIZE,
   TREE_STRING_EXTRACTOR_CACHE_CAPACITY,

@@ -5,25 +5,25 @@
 // guards `main()` behind an "invoked directly" check so importing it does
 // not trigger CLI side effects (env reads, fs reads, process.exit).
 
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { test } from 'node:test';
 import {
-  parseCspString,
-  entryMatchesHost,
-  hostFromUrl,
-  readCsp,
-  checkOrigins,
   AI_CONFIG_CDN_HOST,
-  decodeHtmlEntities,
-  extractInlineEventHandlers,
-  computeExpectedHashes,
-  checkPolicyStructure,
   checkHashesAndPolicy,
-  sha256Token,
+  checkOrigins,
+  checkPolicyStructure,
+  computeExpectedHashes,
+  decodeHtmlEntities,
+  entryMatchesHost,
+  extractInlineEventHandlers,
+  hostFromUrl,
   INLINE_HANDLER_HASH,
+  parseCspString,
+  readCsp,
+  sha256Token,
 } from './check-csp-hashes.mjs';
 
 // --- parseCspString -------------------------------------------------------

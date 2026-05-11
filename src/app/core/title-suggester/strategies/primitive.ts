@@ -1,5 +1,5 @@
-import type { SuggestionStrategy } from '../types';
 import { FIRST_CHARS_PREVIEW_LEN } from '../constants';
+import type { SuggestionStrategy } from '../types';
 
 /**
  * `primitive` strategy (confidence 25).

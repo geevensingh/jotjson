@@ -4,16 +4,16 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatCheckboxHarness } from '@angular/material/checkbox/testing';
 import { MatSlideToggleHarness } from '@angular/material/slide-toggle/testing';
 import { provideRouter } from '@angular/router';
-import { ProfileComponent } from './profile.component';
-import { AuthService } from '../../core/auth/auth.service';
+import { provideFakeAuth } from '../../../testing/auth.testing';
+import { FormattingRuleSet, UserPreferences } from '../../core/api/models';
+import { RuleSetsService } from '../../core/api/rule-sets.service';
 import { AuthUser } from '../../core/auth/auth-user';
+import { AuthService } from '../../core/auth/auth.service';
 import {
   DEFAULT_PREFERENCES,
   PreferencesService,
 } from '../../core/preferences/preferences.service';
-import { RuleSetsService } from '../../core/api/rule-sets.service';
-import { FormattingRuleSet, UserPreferences } from '../../core/api/models';
-import { provideFakeAuth } from '../../../testing/auth.testing';
+import { ProfileComponent } from './profile.component';
 
 type DateAnnotationUnitKey = keyof UserPreferences['treeDateAnnotationUnits'];
 

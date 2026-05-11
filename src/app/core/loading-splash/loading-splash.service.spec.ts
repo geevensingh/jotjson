@@ -1,8 +1,6 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { PLATFORM_ID } from '@angular/core';
-import { Subject } from 'rxjs';
+import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import {
-  Event as RouterEvent,
   NavigationCancel,
   NavigationCancellationCode,
   NavigationEnd,
@@ -11,9 +9,11 @@ import {
   NavigationSkippedCode,
   NavigationStart,
   Router,
+  Event as RouterEvent,
 } from '@angular/router';
-import { LoadingSplashService } from './loading-splash.service';
+import { Subject } from 'rxjs';
 import { LoggerService } from '../telemetry/logger.service';
+import { LoadingSplashService } from './loading-splash.service';
 
 describe('LoadingSplashService', () => {
   let events: Subject<RouterEvent>;

@@ -1,11 +1,10 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed, fakeAsync, flush, tick } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { BehaviorSubject, Subject } from 'rxjs';
 
-import { RuleSetsService } from '../../core/api/rule-sets.service';
+import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import type {
   FormattingRule,
   FormattingRulePair,
@@ -15,11 +14,8 @@ import type {
   RuleSetPayload,
   ValuePredicate,
 } from '../../core/api/models';
+import { RuleSetsService } from '../../core/api/rule-sets.service';
 import { AuthService } from '../../core/auth/auth.service';
-import {
-  JsonTreeComponent,
-  type TreeNode,
-} from '../../shared/components/json-tree/json-tree.component';
 import {
   EMPTY_RULE_RESULT,
   describeRule,
@@ -27,7 +23,10 @@ import {
   type RuleEngineNode,
   type RuleEngineResult,
 } from '../../shared/components/json-tree/formatting-rules-engine';
-import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
+import {
+  JsonTreeComponent,
+  type TreeNode,
+} from '../../shared/components/json-tree/json-tree.component';
 import { RuleEditorComponent } from './rule-editor/rule-editor.component';
 
 const PREFERENCES_STORAGE_KEY = 'jotjson.preferences.v1';

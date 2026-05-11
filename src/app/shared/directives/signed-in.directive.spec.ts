@@ -1,9 +1,9 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { SignedInDirective } from './signed-in.directive';
-import { AuthService } from '../../core/auth/auth.service';
-import { AuthUser } from '../../core/auth/auth-user';
 import { provideFakeAuth } from '../../../testing/auth.testing';
+import { AuthUser } from '../../core/auth/auth-user';
+import { AuthService } from '../../core/auth/auth.service';
+import { SignedInDirective } from './signed-in.directive';
 
 @Component({
   standalone: true,

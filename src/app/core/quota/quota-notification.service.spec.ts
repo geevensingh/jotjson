@@ -1,14 +1,14 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { of } from 'rxjs';
+import type { UserPreferences } from '../api/models';
+import { PreferencesService } from '../preferences/preferences.service';
 import {
   QuotaFirstTimeDialogComponent,
   QuotaManualFullDialogComponent,
   QuotaNotificationService,
 } from './quota-notification.service';
-import { PreferencesService } from '../preferences/preferences.service';
-import type { UserPreferences } from '../api/models';
 
 function appendMainFallback(): HTMLElement {
   const main = document.createElement('main');

@@ -1,7 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Subject } from 'rxjs';
 import {
-  Event as RouterEvent,
   NavigationCancel,
   NavigationCancellationCode,
   NavigationEnd,
@@ -10,7 +8,9 @@ import {
   NavigationSkippedCode,
   NavigationStart,
   Router,
+  Event as RouterEvent,
 } from '@angular/router';
+import { Subject } from 'rxjs';
 import { NavigationProgressService } from './navigation-progress.service';
 
 describe('NavigationProgressService', () => {

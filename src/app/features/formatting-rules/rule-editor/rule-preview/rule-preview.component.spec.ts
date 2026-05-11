@@ -1,15 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
-import { RulePreviewComponent } from './rule-preview.component';
-import { JsonTreeComponent } from '../../../../shared/components/json-tree/json-tree.component';
+import { provideFakeAuth } from '../../../../../testing/auth.testing';
 import type {
   FormattingRule,
   FormattingRulePair,
   FormattingRuleSet,
   FormattingRuleSimple,
 } from '../../../../core/api/models';
-import { provideFakeAuth } from '../../../../../testing/auth.testing';
+import { JsonTreeComponent } from '../../../../shared/components/json-tree/json-tree.component';
+import { RulePreviewComponent } from './rule-preview.component';
 
 function rule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
   return {

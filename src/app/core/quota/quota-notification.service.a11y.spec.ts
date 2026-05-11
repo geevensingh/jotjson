@@ -4,14 +4,14 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 
-import type { UserPreferences } from '../api/models';
-import { PreferencesService } from '../preferences/preferences.service';
-import { QuotaNotificationService } from './quota-notification.service';
 import {
   attachFixtureToBody,
   expectNoStrictA11yViolations,
   getOverlayContainerElement,
 } from '../../../testing/a11y';
+import type { UserPreferences } from '../api/models';
+import { PreferencesService } from '../preferences/preferences.service';
+import { QuotaNotificationService } from './quota-notification.service';
 
 @Component({
   standalone: true,

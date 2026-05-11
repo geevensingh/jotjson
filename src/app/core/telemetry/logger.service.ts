@@ -1,13 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { msalBridge } from './msal-bridge';
 import { HttpErrorContext, NormalizedError, normalizeError } from './normalize-error';
+import { TelemetryMessageId } from './telemetry-message-ids';
 import {
-  TelemetryService,
   TelemetryMeasurements,
   TelemetryProps,
+  TelemetryService,
   TelemetrySeverity,
 } from './telemetry.service';
-import { TelemetryMessageId } from './telemetry-message-ids';
 
 const BUFFER_CAP = 100;
 const BOOT_FAIL_KEY = 'jotjson.bootErr';

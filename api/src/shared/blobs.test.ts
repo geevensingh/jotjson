@@ -1,23 +1,23 @@
+import { HIGHLIGHT_PATH_FIXTURES } from '../../../src/testing/fixtures/highlight-paths.fixture';
 import {
+  __resetBlobsContainerForTesting,
+  assertHighlightPath,
+  assertHighlights,
   BlobValidationError,
+  createBlob,
+  deleteBlobById,
+  findBlobByIdOrSlug,
+  listBlobsByOwner,
   MAX_BLOB_BYTES,
   MAX_HIGHLIGHT_PATH_LENGTH,
   MAX_HIGHLIGHTS,
   MAX_TITLE_LENGTH,
   SlugGenerationError,
-  assertHighlightPath,
-  assertHighlights,
-  createBlob,
-  deleteBlobById,
-  findBlobByIdOrSlug,
-  listBlobsByOwner,
   updateBlob,
-  __resetBlobsContainerForTesting,
   type BlobDocument,
   type BlobHighlight,
 } from './blobs';
 import { VersionConflictError } from './cosmos';
-import { HIGHLIGHT_PATH_FIXTURES } from '../../../src/testing/fixtures/highlight-paths.fixture';
 
 // In-memory fake Cosmos container. Tracks items + exposes the query / create /
 // replace entry points that blobs.ts uses.

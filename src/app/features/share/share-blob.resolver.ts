@@ -3,8 +3,8 @@ import { Router, type ResolveFn } from '@angular/router';
 import { Observable, catchError, of } from 'rxjs';
 import { BlobService, type BlobFetchEvent } from '../../core/api/blob.service';
 import type { JsonBlob } from '../../core/api/models';
-import { LoggerService } from '../../core/telemetry/logger.service';
 import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
+import { LoggerService } from '../../core/telemetry/logger.service';
 
 /**
  * Resolver for `/s/:slug`. Fetches the blob server-side before the component

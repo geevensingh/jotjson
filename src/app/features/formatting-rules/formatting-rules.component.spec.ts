@@ -1,17 +1,17 @@
-import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router } from '@angular/router';
-import { Subject, of, throwError } from 'rxjs';
-import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { FormattingRulesComponent } from './formatting-rules.component';
+import { provideRouter, Router } from '@angular/router';
+import { of, Subject, throwError } from 'rxjs';
+import { provideFakeAuth } from '../../../testing/auth.testing';
+import type { FormattingRuleSet } from '../../core/api/models';
 import { RuleSetsService } from '../../core/api/rule-sets.service';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { ConfirmDialogComponent } from '../../shared/dialogs/confirm-dialog/confirm-dialog.component';
 import { ClonePresetDialogComponent } from '../home/rule-sets-toolbar/clone-preset-dialog.component';
-import { provideFakeAuth } from '../../../testing/auth.testing';
-import type { FormattingRuleSet } from '../../core/api/models';
+import { FormattingRulesComponent } from './formatting-rules.component';
 
 function ruleSet(overrides: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
   return {

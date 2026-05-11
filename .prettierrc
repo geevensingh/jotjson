@@ -11,5 +11,6 @@
   "htmlWhitespaceSensitivity": "strict",
   "endOfLine": "auto",
   "singleAttributePerLine": false,
-  "embeddedLanguageFormatting": "auto"
+  "embeddedLanguageFormatting": "auto",
+  "plugins": ["prettier-plugin-organize-imports"]
 }

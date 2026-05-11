@@ -1,10 +1,3 @@
-import {
-  EMPTY_RULE_RESULT,
-  describeRule,
-  evaluateFormattingRules,
-  type RuleEngineNode,
-  type RuleEngineResult,
-} from './formatting-rules-engine';
 import type {
   FormattingRule,
   FormattingRuleMatchType,
@@ -14,6 +7,13 @@ import type {
   FormattingStyle,
   ValuePredicate,
 } from '../../../core/api/models';
+import {
+  EMPTY_RULE_RESULT,
+  describeRule,
+  evaluateFormattingRules,
+  type RuleEngineNode,
+  type RuleEngineResult,
+} from './formatting-rules-engine';
 
 function rule(overrides: Partial<FormattingRuleSimple> = {}): FormattingRuleSimple {
   return {

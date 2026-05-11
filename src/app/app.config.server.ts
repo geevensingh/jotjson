@@ -1,16 +1,16 @@
 import { ApplicationConfig, mergeApplicationConfig } from '@angular/core';
 import { provideServerRendering, withRoutes } from '@angular/ssr';
-import { Subject } from 'rxjs';
+import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import {
   AccountInfo,
   AuthenticationResult,
   EventMessage,
   IPublicClientApplication,
 } from '@azure/msal-browser';
-import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
-import { MSAL_INSTANCE } from './core/auth/msal-instance';
+import { Subject } from 'rxjs';
 import { sharedProviders } from './app.config';
 import { serverRoutes } from './app.routes.server';
+import { MSAL_INSTANCE } from './core/auth/msal-instance';
 
 /**
  * Server-only stub for `IPublicClientApplication`. The real MSAL

@@ -1,5 +1,5 @@
-import { CosmosClient, Database } from '@azure/cosmos';
 import type { Container, ItemResponse } from '@azure/cosmos';
+import { CosmosClient, Database } from '@azure/cosmos';
 // `@azure/identity` is loaded lazily inside `getCosmos` (only on the
 // dead-code AAD branch) because its transitive dep on `@azure/msal-node`
 // pulls in `uuid` (ESM-only). Importing it at the top level forces every

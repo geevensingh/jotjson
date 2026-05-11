@@ -1,10 +1,10 @@
-import { Component, inject, Injector, runInInjectionContext, Signal } from '@angular/core';
+import { Component, Injector, runInInjectionContext, Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { createNarrowViewportSignal } from './narrow-viewport';
 import {
   installMatchMediaStub,
   type MatchMediaHarness,
 } from '../../../testing/match-media.testing';
+import { createNarrowViewportSignal } from './narrow-viewport';
 
 const NARROW_QUERY = '(max-width: 767.98px)';
 

@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { Subject } from 'rxjs';
-import type { FormattingIcon } from '../api/models';
 import type { PathArray } from '../../shared/components/json-tree/formatting-beacons-index';
+import type { FormattingIcon } from '../api/models';
 
 /**
  * Cross-pane navigation state for beacon pills + ancestor badges.

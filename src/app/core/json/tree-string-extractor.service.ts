@@ -1,8 +1,8 @@
-import { Injectable, InjectionToken, inject, signal } from '@angular/core';
 import type { Signal, WritableSignal } from '@angular/core';
+import { Injectable, InjectionToken, inject, signal } from '@angular/core';
 import { LoggerService } from '../telemetry/logger.service';
-import { MAX_INPUT_LENGTH } from './json-extractor.core';
 import type { ExtractedJson } from './json-extractor.core';
+import { MAX_INPUT_LENGTH } from './json-extractor.core';
 
 export const TREE_STRING_EXTRACTOR_CACHE_CAPACITY = 10_000;
 export const TREE_STRING_EXTRACTOR_BATCH_SIZE = 50;

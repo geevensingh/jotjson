@@ -1,5 +1,5 @@
-import { IPublicClientApplication, PublicClientApplication, LogLevel } from '@azure/msal-browser';
 import { MSAL_INSTANCE } from '@azure/msal-angular';
+import { IPublicClientApplication, LogLevel, PublicClientApplication } from '@azure/msal-browser';
 import { environment } from '../../../environments/environment';
 import { msalBridge } from '../telemetry/msal-bridge';
 

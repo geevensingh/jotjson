@@ -1,4 +1,4 @@
-import { contrastRatio, meetsAA, AA_THRESHOLD, THEME_DEFAULTS } from './contrast';
+import { AA_THRESHOLD, contrastRatio, meetsAA, THEME_DEFAULTS } from './contrast';
 
 describe('contrast utility (M6g-3)', () => {
   describe('contrastRatio', () => {
