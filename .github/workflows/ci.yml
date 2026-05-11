@@ -533,13 +533,13 @@ jobs:
             exit 1
           fi
           script="$(mktemp)"
+          trap 'rm -f "${script}"' EXIT
           curl -fsSL \
             "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash" \
             -o "${script}"
           install_dir="${RUNNER_TEMP}/actionlint"
           mkdir -p "${install_dir}"
           bash "${script}" "${ACTIONLINT_VERSION}" "${install_dir}"
-          rm "${script}"
           if ! [ -x "${install_dir}/actionlint" ]; then
             echo "actionlint not installed at ${install_dir}/actionlint" >&2
             exit 1
