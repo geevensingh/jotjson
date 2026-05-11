@@ -1002,3 +1002,5 @@ Issue #92 covers expanding to SMS / Teams / webhook receivers.
 - #91 broad auth-rejection alert
 - #92 more receivers
 - #93 stg/prod params
+
+<!-- mergify-test-mover: temporary marker; merging this PR advances main to test Mergify auto-update on PR #177 -->
