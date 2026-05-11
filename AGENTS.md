@@ -1200,7 +1200,7 @@ ran) and ask whether to revert, follow-up-fix, or accept.
   - **Critic prompt requirements.** The prompt must (a) include
     explicit adversarial framing ("find at least one weakness; if
     you genuinely cannot, say so explicitly"), and (b) be quoted
-    (or summarised in one line if long) in the plan alongside the
+    (or summarized in one line if long) in the plan alongside the
     findings so its quality is auditable.
 
   - **Critic invocation failure is not a fallback.** If the critic
@@ -1276,7 +1276,7 @@ ran) and ask whether to revert, follow-up-fix, or accept.
   ## Pre-presentation gate
 
   - **Critic agent**: <agent_type> -- <one-line invocation summary>
-  - **Critic prompt**: <one-line summary, or "see plan.critic-N.md">
+  - **Critic prompt**: <one-line summary, or "see plan.critic-<N>.md">
   - **Critic conclusion**: <one-line, e.g. "15 findings raised" or
     "no material weaknesses found">
   - **Findings adopted**:
