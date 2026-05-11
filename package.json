@@ -39,7 +39,7 @@
     "format:check": "prettier --check .",
     "extract-i18n": "ng extract-i18n --output-path=src/locale --out-file=messages.xlf",
     "build:info": "node scripts/write-build-info.mjs",
-    "prepare": "husky",
+    "prepare": "husky && node scripts/post-install-git-config.mjs",
     "prestart": "node scripts/write-build-info.mjs",
     "prebuild": "node scripts/write-build-info.mjs",
     "prebuild:prod": "node scripts/write-build-info.mjs",
