@@ -11,3 +11,6 @@
 
 # chore: format codebase with prettier (initial Prettier rollout)
 15e23c408430cd1a261ed85aee72a4a0a5073c6a
+
+# chore: add prettier-plugin-organize-imports (#171)
+e47cbc60a0e334830576c5f60c7de698023f255b
