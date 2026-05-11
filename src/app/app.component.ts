@@ -9,6 +9,7 @@ import { AppUpdateService } from './core/update/app-update.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import { LoadingSplashComponent } from './shared/components/loading-splash/loading-splash.component';
 import { RouteProgressBarComponent } from './shared/components/route-progress-bar/route-progress-bar.component';
+import { scheduleStaticSplashRemoval } from './static-splash-removal';
 
 @Component({
   selector: 'app-root',
@@ -79,20 +80,21 @@ export class AppComponent implements OnInit {
   // remove it explicitly once Angular has taken over.
   //
   // `afterNextRender` is browser-only (no-op during SSR), runs after
-  // Angular's render phases, and the inner double-rAF defers the
-  // removal one full paint past Angular's first commit. This matches
-  // the canonical paint-barrier idiom used by HomeComponent and
-  // JsonTreeComponent: a single rAF can fire on the same tick as the
-  // pending paint, leaving a flash gap; double-rAF guarantees the
-  // browser has actually painted the Angular splash before the
-  // static splash is detached, so the visual handoff is seamless
-  // (both render the identical `.jot-splash` markup).
+  // Angular's render phases, and the inner double-rAF (inside
+  // `scheduleStaticSplashRemoval`) defers the removal one full paint
+  // past Angular's first commit. This matches the canonical
+  // paint-barrier idiom used by HomeComponent and JsonTreeComponent:
+  // a single rAF can fire on the same tick as the pending paint,
+  // leaving a flash gap; double-rAF guarantees the browser has
+  // actually painted the Angular splash before the static splash is
+  // detached, so the visual handoff is seamless (both render the
+  // identical `.jot-splash` markup).
+  //
+  // The body lives in `./static-splash-removal.ts` so the double-rAF
+  // behavior can be unit-tested in isolation, free of cross-spec rAF
+  // bleed (see #170 and `static-splash-removal.spec.ts`).
   private readonly _removeStaticSplash = afterNextRender(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        document.getElementById('jot-static-splash')?.remove();
-      });
-    });
+    scheduleStaticSplashRemoval();
   });
 
   ngOnInit(): void {
