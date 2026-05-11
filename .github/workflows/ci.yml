@@ -78,6 +78,13 @@ jobs:
           echo "::add-matcher::${GITHUB_WORKSPACE}/.github/problem-matchers/tsc.json"
           npm run lint:tsc
           echo "::remove-matcher owner=tsc-jotjson::"
+      - name: Lint - TypeScript (specs)
+        id: lint-tsc-spec
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: |
+          echo "::add-matcher::${GITHUB_WORKSPACE}/.github/problem-matchers/tsc.json"
+          npm run lint:tsc-spec
+          echo "::remove-matcher owner=tsc-jotjson::"
       - name: Lint - ASCII allowlist
         id: lint-ascii
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
@@ -118,7 +125,7 @@ jobs:
         # because failure() is job-wide and would fire for every later
         # gate once any earlier gate failed.
         #
-        # Covers the 7 lint gates plus the Script tests step, which sits
+        # Covers the 8 lint gates plus the Script tests step, which sits
         # in this same fast-check phase of the web job. Without wiring
         # test-scripts in here, a Script tests failure would still let
         # this summary print "all gates passed" because of the custom
@@ -126,6 +133,7 @@ jobs:
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         env:
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
+          OUTCOME_TSC_SPEC: ${{ steps.lint-tsc-spec.outcome }}
           OUTCOME_ASCII: ${{ steps.lint-ascii.outcome }}
           OUTCOME_SPEC: ${{ steps.lint-spec-patterns.outcome }}
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
@@ -152,6 +160,7 @@ jobs:
               fi
             }
             emit "TypeScript (tsc)"        "$OUTCOME_TSC"          "fix the type error reported above"
+            emit "TypeScript specs (tsc)"  "$OUTCOME_TSC_SPEC"     "fix the type error reported above"
             emit "ASCII allowlist"         "$OUTCOME_ASCII"        "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
             emit "Spec patterns"           "$OUTCOME_SPEC"         "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
             emit "Production patterns"     "$OUTCOME_PROD"         "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
@@ -163,7 +172,7 @@ jobs:
             if [ "$fail" -eq 1 ]; then
               echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 8 gates passed (7 lint + script tests)."
+              echo "All 9 gates passed (8 lint + script tests)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts

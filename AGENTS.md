@@ -58,7 +58,12 @@ Place new code in the correct bucket:
   with `any` - use `unknown` + narrowing.
 - Frontend `tsconfig.json` adds `noImplicitOverride`,
   `noPropertyAccessFromIndexSignature`, `noImplicitReturns`,
-  `noFallthroughCasesInSwitch`, plus Angular's `strictTemplates`.
+  `noFallthroughCasesInSwitch`, `noUnusedLocals`, `noUnusedParameters`,
+  plus Angular's `strictTemplates`. `noUnusedLocals` and
+  `noUnusedParameters` are also enabled in `api/tsconfig.json`
+  (standalone config, not extended from root). Parameters prefixed
+  with `_` are exempt from `noUnusedParameters`; class fields and
+  function locals must be deleted (no exemption).
 - `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are not yet
   on. Treat them as aspirational; do not introduce code that would break
   if they are turned on (e.g., always guard `arr[i]` for possible
@@ -654,7 +659,8 @@ Before finishing a task:
    runs root lint + api workspace lint, mirroring what CI lints across
    both workspaces. (You can still run them individually: root
    `npm run lint` and `npm --prefix api run lint`.) Frontend lint is
-   `tsc --noEmit -p tsconfig.app.json` + `check-ascii.mjs`,
+   `tsc --noEmit -p tsconfig.app.json` + `tsc --noEmit -p tsconfig.spec.json`
+   + `check-ascii.mjs`,
    `check-spec-patterns.mjs`, `check-prod-patterns.mjs`,
    `check-lockfile.mjs`, and `check-format.mjs` (the prettier
    annotation wrapper - `npm run format:check` is the equivalent for
@@ -664,7 +670,8 @@ Before finishing a task:
 
    Each gate also has its own per-script entry point. CI runs most
    of them as separate steps with inline annotations and a per-gate
-   summary: `npm run lint:tsc`, `npm run lint:ascii`,
+   summary: `npm run lint:tsc`, `npm run lint:tsc-spec`,
+   `npm run lint:ascii`,
    `npm run lint:spec-patterns`, `npm run lint:prod-patterns`,
    `npm run lint:format`. (The `lint:lockfile` gate is
    intentionally **not** a separate CI step: CI's job-level
