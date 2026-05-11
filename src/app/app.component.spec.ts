@@ -8,6 +8,7 @@ import { LoggerService } from './core/telemetry/logger.service';
 import { RouteTracker } from './core/telemetry/route-tracker';
 import { AppUpdateService } from './core/update/app-update.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
+import * as staticSplashRemoval from './static-splash-removal';
 
 function waitForDoubleAnimationFrame(): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -15,60 +16,6 @@ function waitForDoubleAnimationFrame(): Promise<void> {
       requestAnimationFrame(() => resolve());
     });
   });
-}
-
-interface RafController {
-  step: () => Promise<void>;
-  pendingCount: () => number;
-  waitForPending: (n: number, timeoutMs?: number) => Promise<void>;
-  restore: () => void;
-}
-
-// Replaces the real `window.requestAnimationFrame` with a manual queue
-// so tests can step rAF turns deterministically. AppComponent's static-
-// splash removal hook is `afterNextRender(() => rAF(() => rAF(remove)))`,
-// and the previous tests that timed real rAFs were intermittently flaky
-// in CI because Angular's afterNextRender outer rAF could land in the
-// same animation frame as the test's own rAF. The shim isolates the
-// two nested rAFs from any framework-side scheduling.
-//
-// Note: the shim does NOT control `afterNextRender` itself - that is
-// scheduled through Angular's after-render manager, not rAF. Use
-// `waitForPending(1)` after `whenStable()` to wait for the outer rAF
-// to land in the controlled queue before stepping.
-function installControlledRaf(): RafController {
-  const queue: FrameRequestCallback[] = [];
-  const original = window.requestAnimationFrame;
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
-    queue.push(cb);
-    return queue.length;
-  }) as typeof window.requestAnimationFrame;
-  return {
-    step: async () => {
-      const cb = queue.shift();
-      if (cb) {
-        cb(performance.now());
-      }
-      // Microtask flush so any work scheduled inside the callback
-      // settles before the next assertion.
-      await Promise.resolve();
-    },
-    pendingCount: () => queue.length,
-    waitForPending: async (n, timeoutMs = 1000) => {
-      const start = Date.now();
-      while (queue.length < n) {
-        if (Date.now() - start > timeoutMs) {
-          throw new Error(
-            `timed out waiting for ${n} pending rAF callback(s); have ${queue.length}`,
-          );
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1));
-      }
-    },
-    restore: () => {
-      window.requestAnimationFrame = original;
-    },
-  };
 }
 
 describe('AppComponent', () => {
@@ -226,50 +173,52 @@ describe('AppComponent', () => {
       return splash;
     }
 
-    it('removes #jot-static-splash after exactly two rAF turns (paint barrier)', async () => {
-      // This merged spec replaces the previous double-rAF + single-rAF
-      // sentinel pair. The intent of the sentinel ("guard against the
-      // removal hook regressing to single-rAF") is preserved as the
-      // intermediate `after 1 rAF the splash is still present`
-      // assertion + queue-count check below.
-      //
-      // Determinism: we install a controlled-rAF shim BEFORE creating
-      // the fixture so AppComponent's two nested rAFs are captured by
-      // the shim, then poll the queue to wait for Angular's
-      // afterNextRender to fire and queue the outer rAF.
-      const splash = setUpStaticSplash();
-      const raf = installControlledRaf();
-      let fixture: ReturnType<typeof TestBed.createComponent<AppComponent>> | undefined;
+    it("invokes scheduleStaticSplashRemoval exactly once from AppComponent's afterNextRender hook", async () => {
+      // Structural assertion: AppComponent must call the extracted
+      // helper exactly once per lifecycle. This catches regressions
+      // where someone removes the hook entirely or accidentally
+      // converts `afterNextRender` to `afterRender` (which fires on
+      // every change-detection cycle) without exercising real rAFs.
+      // The double-rAF / paint-barrier semantics are covered by
+      // static-splash-removal.spec.ts in isolation, free of
+      // cross-spec rAF bleed (see #170).
+      const spy = jasmine.createSpy<() => void>('scheduleStaticSplashRemoval');
+      staticSplashRemoval.__setScheduleStaticSplashRemovalImplForTesting(spy);
       try {
-        fixture = TestBed.createComponent(AppComponent);
+        const fixture = TestBed.createComponent(AppComponent);
         fixture.detectChanges();
         await fixture.whenStable();
+        // Flush one macrotask so any after-render callbacks scheduled
+        // by Angular's render manager have had a chance to fire.
+        // Mirrors the web-vitals init spy test above.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-        // afterNextRender runs through Angular's after-render manager,
-        // not rAF. Wait for it to fire and queue the outer rAF in the
-        // controlled queue before stepping.
-        await raf.waitForPending(1);
-        expect(raf.pendingCount()).toBe(1);
-
-        // Step 1: outer rAF runs and queues the inner rAF.
-        await raf.step();
-        expect(document.getElementById('jot-static-splash'))
-          .withContext('after 1 rAF the splash is still present (sentinel)')
-          .toBe(splash);
-        expect(raf.pendingCount())
-          .withContext('inner rAF must be queued after outer rAF runs')
-          .toBe(1);
-
-        // Step 2: inner rAF removes the splash.
-        await raf.step();
-        expect(document.getElementById('jot-static-splash'))
-          .withContext('after 2 rAFs the splash is removed')
-          .toBeNull();
-        expect(raf.pendingCount()).withContext('no further rAFs should be queued').toBe(0);
+        expect(spy).toHaveBeenCalledTimes(1);
       } finally {
-        fixture?.destroy();
-        raf.restore();
+        staticSplashRemoval.__resetScheduleStaticSplashRemovalImplForTesting();
       }
+    });
+
+    it('removes #jot-static-splash via the real scheduler after Angular renders (happy-path smoke)', async () => {
+      // Smoke test for the end-to-end wiring with the REAL
+      // scheduleStaticSplashRemoval impl. No rAF shim is installed, so
+      // all rAFs run on the native browser queue and this spec is
+      // immune to the cross-spec rAF bleed that motivated the
+      // isolated-spec extraction (#170). The assertion depends only
+      // on the splash being absent at the end, which is robust to
+      // foreign rAF interleavings: any foreign rAF callback that ran
+      // would either be unrelated (no-op for our assertion) or would
+      // itself remove the splash early (still satisfies the
+      // assertion).
+      const splash = setUpStaticSplash();
+      expect(document.getElementById('jot-static-splash')).toBe(splash);
+
+      const fixture = TestBed.createComponent(AppComponent);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await waitForDoubleAnimationFrame();
+
+      expect(document.getElementById('jot-static-splash')).toBeNull();
     });
 
     it('does not throw when #jot-static-splash is absent (e.g. shell.html serve path)', async () => {
