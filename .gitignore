@@ -75,8 +75,10 @@ Thumbs.db
 /output/
 
 # Perf measurement suite outputs and intermediate build dirs.
-# Inputs (perf/, perf-baselines/, perf-targets.json, tsconfig.perf.json)
-# ARE committed. Outputs are not.
+# Inputs (perf/, perf-targets.json, tsconfig.perf.json, the empty
+# perf-baselines/ dir) ARE committed. Per-machine baseline JSON files
+# in perf-baselines/ are gitignored (each developer keeps their own).
 /dist-perf/
 /perf-results/
+/perf-baselines/*.json
 
