@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertBaselineSchema, findLatestResultsDir, readRunRows } from './baseline.mjs';
 import { suggestMachineLabel } from './machine-label.mjs';
+import { perfRowKey } from './row-key.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BASELINES_DIR = join(REPO_ROOT, 'perf-baselines');
@@ -55,7 +56,7 @@ export function computeDiffs(baseline, currentRows) {
   /** @type {DiffRow[]} */
   const out = [];
   for (const row of currentRows) {
-    const key = `${row.layer}.${row.scenario}.${row.fixture}.${row.size}`;
+    const key = perfRowKey(row);
     const baselineEntry = baseline.rows[key];
     if (!baselineEntry) continue;
     const deltaPct =

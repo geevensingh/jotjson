@@ -34,6 +34,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { suggestMachineLabel } from './machine-label.mjs';
+import { perfRowKey } from './row-key.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RESULTS_DIR = join(REPO_ROOT, 'perf-results');
@@ -91,7 +92,7 @@ export function rowsToBaselineEntries(rows) {
   /** @type {Record<string, BaselineEntry>} */
   const out = {};
   for (const row of rows) {
-    const key = `${row.layer}.${row.scenario}.${row.fixture}.${row.size}`;
+    const key = perfRowKey(row);
     /** @type {BaselineEntry} */
     const entry = {
       wallNsMedian: row.wallNsMedian,
