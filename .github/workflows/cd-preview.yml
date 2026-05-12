@@ -184,17 +184,20 @@ jobs:
           skip_app_build: true
           skip_api_build: true
 
-      - name: Wire per-PR Cosmos DB into preview env settings
-        # The deployed Functions code reads COSMOS_DATABASE from app
-        # settings (see api/src/shared/cosmos.ts). Setting it
-        # per-environment scopes the override to this preview only;
-        # production settings on the prod env are untouched.
-        run: |
-          az staticwebapp appsettings set \
-            --name "$SWA_NAME" \
-            --resource-group "$NONPROD_RG" \
-            --environment-name "$PREVIEW_ENV" \
-            --setting-names "COSMOS_DATABASE=$PREVIEW_DB"
+      # NOTE: We do NOT wire `COSMOS_DATABASE` as a per-preview-env app
+      # setting here. The Azure CLI `az staticwebapp appsettings set
+      # --environment-name <preview>` surface returns "Not Found" for
+      # preview environments (only the default `production` environment
+      # supports overrides at present). The preview Cosmos database is
+      # still created/destroyed defensively to keep the cleanup story
+      # simple, but the preview SWA's Functions inherit the production
+      # `COSMOS_DATABASE` setting. Phase 2's anonymous smoke doesn't
+      # write to Cosmos so this is currently inert. When #68 (signed-in
+      # smoke) needs real isolation, revisit via either:
+      #   - a per-env override via the ARM Management API directly, or
+      #   - environment-name routing inside the Functions code itself,
+      #   - or by accepting cross-preview shared storage and using
+      #     unique partition keys per PR.
 
       - name: Azure logout
         if: ${{ always() }}
@@ -209,7 +212,7 @@ jobs:
 
             - URL: ${{ steps.swa-deploy.outputs.static_web_app_url }}
             - SWA env: `${{ env.PREVIEW_ENV }}` on `swa-jotjson-nonprod`
-            - Cosmos database: `${{ env.PREVIEW_DB }}` on `cosmos-jotjson-nonprod`
+            - Cosmos database: `${{ env.PREVIEW_DB }}` created on `cosmos-jotjson-nonprod` (defensive scaffolding for #68; not yet wired to Functions on this preview)
             - Commit: ${{ github.event.pull_request.head.sha }}
 
             **Limitations:**
