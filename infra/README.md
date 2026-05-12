@@ -238,6 +238,10 @@ will fail at `az deployment group create` if these aren't
 `Registered`. Run once per subscription:
 
 ```powershell
+# Each entry uses the exact casing Azure returns from `az provider show`.
+# Note `microsoft.insights` is genuinely lowercase in Azure's response -
+# the verify query below uses case-sensitive `contains(...)`, so the two
+# lists must match Azure's casing exactly.
 $providers = @(
   'Microsoft.Storage',
   'Microsoft.DocumentDB',
@@ -258,29 +262,28 @@ az provider list --subscription 5698b024-0e2d-4d8b-8db5-fd401ed0ba4a `
 Each provider must reach `registrationState=Registered` before
 Bicep apply succeeds.
 
-**1. Resource group + role assignment.** Created up front so the
-federated cred has somewhere to deploy to. The `Contributor` role at
-the RG scope is enough for Bicep + SWA + Cosmos + Storage. (App
-Insights diagnostic settings and Storage RBAC for the sourcemap upload
-are granted by Bicep on apply.)
+**1. Resource group.** Created up front so the federated cred has
+somewhere to deploy to. (App Insights diagnostic settings and Storage
+RBAC for the sourcemap upload are granted by Bicep on apply.)
 
 ```powershell
 az account set --subscription 5698b024-0e2d-4d8b-8db5-fd401ed0ba4a
 az group create --name rg-jotjson-nonprod --location eastus2
-# (Role assignment commands - see step 3 below.)
 ```
 
-**2. Service principal + federated credential.** A workload-identity
-SP authenticates the GitHub Actions runner to Azure via OIDC. Federate
-**both** the `cd-nonprod.yml` and `infra-nonprod.yml` workflow refs.
+**2. Federated credential on the existing `gh-actions-jotjson` SP.**
+JotJSON uses **one** service principal (`gh-actions-jotjson`) across
+prod and nonprod - **do not create a new SP for nonprod**. Add a new
+federated credential to that SP bound to the `nonprod` GitHub
+environment. The same `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` repo-level
+secrets are reused; only the subscription id differs per environment.
 
 ```powershell
-# Create the app
-$app = az ad app create --display-name 'github-jotjson-nonprod' `
-  --query '{id:id,appId:appId}' -o json | ConvertFrom-Json
-az ad sp create --id $app.appId | Out-Null
+# Look up the existing prod SP
+$app = az ad app list --display-name 'gh-actions-jotjson' `
+  --query '[0].{id:id,appId:appId}' -o json | ConvertFrom-Json
 
-# Federated credential bound to the 'nonprod' GH environment
+# Add a federated credential scoped to the 'nonprod' GH environment
 $fic = @{
   name='gh-jotjson-nonprod'
   issuer='https://token.actions.githubusercontent.com'
@@ -290,10 +293,12 @@ $fic = @{
 az ad app federated-credential create --id $app.id --parameters $fic
 ```
 
-**3. Role assignment on the RG.** `Contributor` on the RG. (For
-Storage Blob Data Contributor on the sourcemap container, see
-`cd-nonprod.yml` - the workflow itself grants Storage RBAC when it
-needs to.)
+The workflow files (`.github/workflows/infra-nonprod.yml`,
+`cd-nonprod.yml`) call this out in their header comments.
+
+**3. RG role assignment for the SP.** `Contributor` on the nonprod
+RG. (Storage Blob Data Contributor on the sourcemap container is
+granted by `cd-nonprod.yml` itself when it needs to.)
 
 ```powershell
 az role assignment create `
@@ -303,15 +308,19 @@ az role assignment create `
 ```
 
 **4. GitHub Actions environment + secrets.** Create the `nonprod`
-environment in repo settings and add OIDC + per-deploy secrets:
+environment in repo settings. Secrets split into **repo-level** (shared
+with prod, already exist if prod is set up) and **environment-level**
+(nonprod-only, suffixed `_NONPROD`):
 
-| Secret | Source |
-|---|---|
-| `AZURE_CLIENT_ID` | `$app.appId` from step 2 |
-| `AZURE_TENANT_ID` | `az account show --query tenantId -o tsv` |
-| `AZURE_SUBSCRIPTION_ID` | `5698b024-0e2d-4d8b-8db5-fd401ed0ba4a` |
-| `AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD` | `az staticwebapp secrets list --name swa-jotjson-nonprod --resource-group rg-jotjson-nonprod --query "properties.apiKey" -o tsv` (after the first infra deploy creates the SWA) |
-| `APP_INSIGHTS_CONNECTION_STRING_NONPROD` | from the App Insights resource in the portal, after the first infra deploy |
+| Scope | Secret | Source |
+|---|---|---|
+| Repo (shared with prod) | `AZURE_CLIENT_ID` | `$app.appId` from step 2 (same SP as prod) |
+| Repo (shared with prod) | `AZURE_TENANT_ID` | `az account show --query tenantId -o tsv` |
+| Repo (shared with prod) | `ENTRA_TENANT_ID`, `ENTRA_AUTHORITY`, `ENTRA_KNOWN_AUTHORITY`, `ENTRA_SPA_CLIENT_ID`, `ENTRA_API_CLIENT_ID`, `ENTRA_API_AUDIENCE`, `ENTRA_API_SCOPE` | Same External ID tenant as prod (see Auth setup above) |
+| `nonprod` env | `AZURE_SUBSCRIPTION_ID_NONPROD` | `5698b024-0e2d-4d8b-8db5-fd401ed0ba4a` |
+| `nonprod` env | `AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD` | `az staticwebapp secrets list --name swa-jotjson-nonprod --resource-group rg-jotjson-nonprod --query "properties.apiKey" -o tsv` (after the first infra deploy creates the SWA) |
+| `nonprod` env | `APP_INSIGHTS_CONNECTION_STRING_NONPROD` | from the App Insights resource in the portal, after the first infra deploy |
+| `nonprod` env | `AZURE_STORAGE_ACCOUNT_NONPROD` | `stjotjsonnonprod` (used by `cd-nonprod.yml` to upload sourcemaps) |
 
 > **PowerShell + `gh secret set` tip.** Setting a secret with
 > `gh secret set NAME --body "$var"` is fragile if `$var` was set in a

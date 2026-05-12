@@ -1501,8 +1501,11 @@ Cosmos + App Insights deployment without burning the production budget.
   driven from the Actions UI.
 - **Cost control:** a subscription-scoped Azure budget
   (`jotjson-nonprod-monthly`, $100/mo) with an 80%-actual email alert
-  to the project admin. SWA Free + serverless Cosmos + consumption
-  Functions keep idle cost at ~$0/mo.
+  to the project admin. SWA Standard has a ~$9/mo per-app base price;
+  Cosmos serverless and consumption Functions are pay-per-request and
+  idle near $0; Log Analytics, Storage, and App Insights ingestion
+  scale with traffic. Steady-state idle cost is dominated by the SWA
+  Standard base (well under the $100/mo ceiling).
 
 This replaces the original "staging slot for preview on PRs" promise
 (see CI/CD below); SWA preview environments are tracked separately in
