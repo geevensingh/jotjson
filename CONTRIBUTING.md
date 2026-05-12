@@ -70,7 +70,8 @@ frameworks, or cloud services without prior approval.
   feature is added, removed, or significantly altered. Keep entries
   terse - it is the public pitch doc, not engineering documentation.
 - CI (lint, test, build for both frontend and Functions) must be green.
-- At least one review approval required before merge.
+- On PRs you did not author yourself, a code-owner review is
+  auto-requested. Please respond to feedback before merging.
 
 ## Security & Privacy
 
