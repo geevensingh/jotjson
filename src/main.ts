@@ -3,7 +3,11 @@
 import { bootstrapApplication } from '@angular/platform-browser';
 import { AppComponent } from './app/app.component';
 import { appConfig } from './app/app.config';
-import { LoggerService, type PerfHarnessEvent } from './app/core/telemetry/logger.service';
+// Type-only import: erased at runtime so it does NOT pull
+// LoggerService (and the App Insights SDK) into the entry bundle.
+// LoggerService itself is loaded dynamically below, only when the
+// perf-harness shim is installed.
+import type { PerfHarnessEvent } from './app/core/telemetry/logger.service';
 
 declare global {
   interface Window {
@@ -33,8 +37,15 @@ bootstrapApplication(AppComponent, appConfig)
       if (typeof window !== 'undefined') {
         const harness = window.__jotjsonPerfHarness;
         if (harness && Array.isArray(harness.events)) {
+          // Dynamic import keeps LoggerService (and the App Insights
+          // SDK) out of the entry bundle in production, mirroring the
+          // lazy-load pattern in AppComponent.ngOnInit. The module URL
+          // is the same one AppComponent uses, so the ES module cache
+          // returns the same instance and `providedIn: 'root'` resolves
+          // to the same singleton from `appRef.injector.get(...)`.
+          const { LoggerService } = await import('./app/core/telemetry/logger.service');
           const logger = appRef.injector.get(LoggerService);
-          logger.__attachPerfHarnessForTesting((event) => {
+          logger.__attachPerfHarnessForTesting((event: PerfHarnessEvent) => {
             harness.events.push(event);
           });
           harness.attached = true;

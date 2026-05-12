@@ -70,17 +70,28 @@ for (const fixture of FIXTURES) {
         .first()
         .waitFor({ state: 'visible', timeout: 5 * 60 * 1000 });
 
-      // Try to expand all if a button exists; ignore if not.
+      // Engage Expand all so the scroll bench actually measures
+      // scrolling over an expanded tree. Mirror the fallback pattern
+      // from `expand-all.spec.ts`: click the toolbar button when it's
+      // visible, otherwise dispatch the keyboard shortcut so a minor
+      // UI tweak (button moved or temporarily hidden) does not skip
+      // expand-all silently. `assertExpandedTree` is the loud
+      // postcondition guard that fails the run with a descriptive
+      // error if neither path succeeds.
       const expandAll = page.getByRole('button', { name: /expand all/i }).first();
       if (await expandAll.isVisible().catch(() => false)) {
         await expandAll.click();
-        await page.evaluate(
-          () =>
-            new Promise<void>((resolve) =>
-              requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-            ),
-        );
+      } else {
+        await page.keyboard.press('Control+Shift+E');
       }
+      // Wait one frame for the layout pass to commit before the
+      // postcondition check.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
       await assertExpandedTree(page, { minVisibleTreeItems: 50, minExpandedNodes: 2 });
 
       const profiler = new CdpProfiler();
