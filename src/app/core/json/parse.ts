@@ -73,7 +73,13 @@ export function parse(text: string): JsonParseResult {
   // older file-exporting tools prefix JSON with a BOM, which jsonc-parser
   // reports as an InvalidSymbol error at offset 0. A BOM is a file-level
   // encoding artifact, not part of the JSON grammar, so we silently elide.
-  const stripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  //
+  // `bomShift` carries the original-vs-stripped offset delta. Any parse
+  // errors we report must be in ORIGINAL-text coordinates so Monaco
+  // markers and other consumers line up with the editor buffer.
+  const hadBom = text.charCodeAt(0) === 0xfeff;
+  const stripped = hadBom ? text.slice(1) : text;
+  const bomShift = hadBom ? 1 : 0;
 
   const rawErrors: ParseError[] = [];
   const ast = parseTree(stripped, rawErrors, {
@@ -81,7 +87,7 @@ export function parse(text: string): JsonParseResult {
     disallowComments: false,
   });
 
-  const errors = rawErrors.map((parseError) => toError(parseError, stripped));
+  const errors = rawErrors.map((parseError) => toError(parseError, text, bomShift));
   const value = ast ? nodeToValue(ast) : undefined;
   const { commentsByPath, commentCount } = harvestComments(stripped);
 
@@ -115,11 +121,12 @@ export function locationAt(text: string, offset: number): (string | number)[] {
   return [...loc.path];
 }
 
-function toError(parseError: ParseError, text: string): JsonParseError {
-  const { line, column } = offsetToPosition(text, parseError.offset);
+function toError(parseError: ParseError, originalText: string, bomShift: number): JsonParseError {
+  const offset = parseError.offset + bomShift;
+  const { line, column } = offsetToPosition(originalText, offset);
   return {
     message: printParseErrorCode(parseError.error),
-    offset: parseError.offset,
+    offset,
     length: parseError.length,
     line,
     column,

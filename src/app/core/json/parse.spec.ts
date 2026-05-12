@@ -84,6 +84,24 @@ describe('parse (pure)', () => {
       expect(result.errors[0].line).toBeGreaterThanOrEqual(1);
       expect(result.errors[0].column).toBeGreaterThanOrEqual(1);
     });
+
+    it('reports error offsets in original-text coords when a BOM is present', () => {
+      // BOM-prefixed input where the inner JSON has a parse error at the
+      // closing `}` (a missing value after `:`). The reported offset/column
+      // must reflect the ORIGINAL text (BOM at offset 0), not the stripped
+      // text -- otherwise Monaco markers land one character to the left.
+      const text = '\uFEFF{"x":}';
+      const result = parse(text);
+      expect(result.errors.length).toBeGreaterThan(0);
+      const error = result.errors[0];
+      // In the original text, `}` is at index 6 (BOM=0, {=1, "=2, x=3, "=4, :=5, }=6).
+      // In the stripped text, `}` would be at index 5. Verify we report the
+      // original-text offset.
+      expect(text.charAt(error.offset)).toBe('}');
+      expect(error.line).toBe(1);
+      // Column is 1-based: `}` is column 7 in original (BOM occupies column 1).
+      expect(error.column).toBe(7);
+    });
   });
 
   describe('offsetToPosition', () => {

@@ -7,7 +7,12 @@
 // glob actually appears in the file. We do NOT try to introspect ng
 // test's resolved file set -- that requires booting Angular CLI,
 // which is too expensive for a prestep.
+//
+// `tsconfig.spec.json` is JSONC (comments + trailing commas), so we
+// parse with `jsonc-parser` rather than `JSON.parse`. Per AGENTS.md s2,
+// jsonc-parser is the canonical JSON/JSONC reader in this repo.
 
+import { parse as parseJsonc } from 'jsonc-parser';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,59 +26,10 @@ const REQUIRED_EXCLUDE_GLOBS = ['src/**/*.perf.ts'];
  * @returns {string[]}
  */
 export function parseExcludeGlobs(text) {
-  // tsconfig.spec.json is JSONC. Strip comments but only OUTSIDE string
-  // literals -- otherwise globs like `src/**/*.perf.ts` look like
-  // block-comment delimiters.
-  const stripped = stripJsoncComments(text);
-  /** @type {{ exclude?: string[] }} */
-  const parsed = JSON.parse(stripped);
+  /** @type {{ exclude?: string[] } | undefined} */
+  const parsed = parseJsonc(text, [], { allowTrailingComma: true, disallowComments: false });
+  if (!parsed || typeof parsed !== 'object') return [];
   return parsed.exclude ?? [];
-}
-
-/**
- * Removes // and /* ... *\/ comments outside of double-quoted strings.
- *
- * @param {string} src
- * @returns {string}
- */
-export function stripJsoncComments(src) {
-  let out = '';
-  let i = 0;
-  const n = src.length;
-  while (i < n) {
-    const ch = src[i];
-    const next = i + 1 < n ? src[i + 1] : '';
-    if (ch === '"') {
-      // Copy a string literal verbatim, including escape sequences.
-      out += ch;
-      i++;
-      while (i < n) {
-        const c2 = src[i];
-        if (c2 === '\\' && i + 1 < n) {
-          out += c2 + src[i + 1];
-          i += 2;
-          continue;
-        }
-        out += c2;
-        i++;
-        if (c2 === '"') break;
-      }
-      continue;
-    }
-    if (ch === '/' && next === '/') {
-      while (i < n && src[i] !== '\n') i++;
-      continue;
-    }
-    if (ch === '/' && next === '*') {
-      i += 2;
-      while (i + 1 < n && !(src[i] === '*' && src[i + 1] === '/')) i++;
-      i += 2;
-      continue;
-    }
-    out += ch;
-    i++;
-  }
-  return out;
 }
 
 /**

@@ -20,6 +20,15 @@ test('parseExcludeGlobs strips block comments', () => {
   assert.deepEqual(parseExcludeGlobs(text), ['src/**/*.perf.ts']);
 });
 
+test('parseExcludeGlobs handles trailing commas (JSONC)', () => {
+  // tsconfig.spec.json is JSONC; trailing commas are legal and must not throw.
+  const text = `{
+    "include": ["src/**/*.spec.ts"],
+    "exclude": ["src/**/*.perf.ts",],
+  }`;
+  assert.deepEqual(parseExcludeGlobs(text), ['src/**/*.perf.ts']);
+});
+
 test('parseExcludeGlobs returns empty when exclude is missing', () => {
   const text = `{ "include": ["a"] }`;
   assert.deepEqual(parseExcludeGlobs(text), []);
