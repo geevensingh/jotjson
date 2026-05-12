@@ -90,7 +90,14 @@ async function main() {
     process.exit(exitCode);
   }
   if (rows.length === 0) {
-    process.stderr.write('perf:l2  WARN: no @@PERF_L2@@ rows captured. Did the perf specs run?\n');
+    const allowEmpty = process.env['PERF_ALLOW_EMPTY'] === '1';
+    const level = allowEmpty ? 'WARN' : 'ERROR';
+    process.stderr.write(
+      `perf:l2  ${level}: no @@PERF_L2@@ rows captured. Did the perf specs run?\n`,
+    );
+    if (!allowEmpty) {
+      process.exit(2);
+    }
   }
 }
 

@@ -193,6 +193,21 @@ under a perf-only Angular `test` configuration:
   call `globalThis.gc()` between iterations, and bumps the Jasmine
   per-test timeout (`timeoutInterval`) to 15 minutes.
 
+### L2 scenarios
+
+- `initial-render` -- mount `JsonTreeComponent` with a fresh fixture,
+  run `detectChanges()` + double-rAF, and time the lot. Runs at every
+  enabled fixture size (10K by default; 100K/1M opt-in).
+- `scroll-after-expand` -- initial-render, then call the component's
+  `expandAll()`, then drive 7 programmatic `scrollTop` steps through
+  the `.tree-body` container (each followed by a double-rAF). The
+  emitted `wallNs` covers the entire post-expand scroll session, not
+  the scroll alone; diff comparisons are still valid because every
+  iteration runs the same fixed sequence. **10K only** in L2 --
+  mat-tree is not virtualized in v1, so 100K/1M scroll would OOM
+  Karma. L3's `scroll-after-expand.spec.ts` runs the larger sizes in
+  a real browser.
+
 Default fixture matrix: deep25 + wide-aoo at 10K. Set
 `window.__perfL2Force100K = true` (or `?force100k=1`) to also bench
 at 100K, and `window.__perfL2Force1M = true` (or `?force1m=1`) to add
@@ -203,7 +218,9 @@ opt-in runs have room.
 
 The L2 spec writes rows to `console.log` with the sentinel
 `@@PERF_L2@@<json>@@END@@`; `scripts/perf/run-l2.mjs` harvests those
-into `perf-results/<utc>/layer-2.jsonl`.
+into `perf-results/<utc>/layer-2.jsonl`. If zero rows are captured,
+`run-l2.mjs` exits non-zero unless `PERF_ALLOW_EMPTY=1` is set
+(parity with `run-bench.mjs`).
 
 L2 is **never** in `verify:fast` / `npm test`. The
 `scripts/perf/check-perf-ts-excluded.mjs` script asserts
@@ -245,14 +262,41 @@ read back via the harness.
 
 ## Perf targets
 
-`perf-targets.json` records *operationalizable* NFR ceilings (not
-soft regressions). It currently has no active rows; F-2 tracks adding
-an NFR-faithful ~5 MB fixture before reintroducing a hard ceiling for
-DESIGN_SPEC NFR #1 (open a 5 MB JSON file without freezing).
+`perf-targets.json` records *operationalizable* NFR ceilings (not soft
+regressions). `perf:diff` enforces these ceilings on top of the baseline
+delta check: any current-run row whose value strictly exceeds a configured
+`ceiling_ms` adds to the non-zero exit count.
+
+The file is schema-validated on every read (`perf-targets.schema.json`,
+JSON Schema draft-07). `schemaVersion: 1` is mandatory; readers fail loud
+on mismatch.
+
+### NFR-anchor gap (v1)
+
+The only enforced row in v1 is `3.paste-large.wide-aoo.1m` with a
+500 ms ceiling on `longestTaskMsMedian`. This is a **v1 stress check**
+on the 24 MB synthetic wide-aoo fixture; it does **not** directly anchor
+the DESIGN_SPEC NFR #1 ("open a 5 MB JSON file without freezing").
+
+F-2 (filed as a follow-up issue) tracks adding the NFR-faithful ~5 MB
+fixture and a matching ceiling so the 5 MB no-freeze NFR is testable
+directly. Until then, the 1M row exercises the same paste/render stress
+path at a larger size and acts as a coarse proxy.
+
+### Missing-row contract (warn-only)
+
+If `perf-targets.json` references a row the current run did not capture
+(e.g., the contributor ran `perf:l1` only and skipped `perf:l3`),
+`perf:diff` prints a `WARN: perf-targets row "<key>" has no current-run
+data; skipping` line and proceeds with exit 0 for that row. SK-008 / F-3
+may revisit this contract once we have stable baselines, to decide
+whether CI should hard-fail instead.
+
+### Other deferred NFRs
 
 Other DESIGN_SPEC NFRs (TTI<2s on 4G; api/ p95<200ms) are deferred to
-follow-up issues; they require CI infra (4G throttling, api-side
-load testing) not in scope for v1.
+follow-up issues; they require CI infra (4G throttling, api-side load
+testing) not in scope for v1.
 
 ## Real fixtures
 

@@ -8,7 +8,10 @@
 //
 // What this exercises:
 //   1. Initial render of an N-node tree (deep25, wide-aoo).
-//   2. Scroll-after-expand: expand-all then dispatch wheel events.
+//   2. Scroll-after-expand: expand the tree, then scroll the
+//      `.tree-body` container through a short scroll session.
+//      Gated to 10K only (mat-tree is NOT virtualized in v1, so
+//      100K/1M scroll would OOM Karma -- those live in L3).
 //
 // Why measure here at all (vs L1 + L3):
 //   L1 measures the pure tree builder; L3 measures the full browser.
@@ -159,6 +162,36 @@ async function initialRender(fixture: ComponentFixture<JsonTreeComponent>): Prom
   await nextDoubleRaf();
 }
 
+const SCROLL_STEPS = 7;
+
+/**
+ * Renders the tree, expands all nodes, then walks the `.tree-body`
+ * scroll container through `SCROLL_STEPS` programmatic scrollTop
+ * positions (each followed by a double-rAF settle). The harness
+ * times the full callback, so the emitted `wallNs` covers
+ * "initial-render + expand-all + scroll session" -- not the scroll
+ * alone. Diff comparisons are still valid because every iteration
+ * executes the same fixed sequence.
+ *
+ * Gated to 10K only at the call site. 100K + 1M scroll lives in L3.
+ */
+async function scrollAfterExpand(fixture: ComponentFixture<JsonTreeComponent>): Promise<void> {
+  fixture.detectChanges();
+  await nextDoubleRaf();
+  fixture.componentInstance.expandAll();
+  fixture.detectChanges();
+  await nextDoubleRaf();
+  const treeBody = fixture.nativeElement.querySelector('.tree-body') as HTMLElement | null;
+  if (!treeBody) {
+    throw new Error('L2 scroll-after-expand: .tree-body element not found in fixture.');
+  }
+  const scrollHeight = treeBody.scrollHeight;
+  for (let step = 1; step <= SCROLL_STEPS; step++) {
+    treeBody.scrollTop = (scrollHeight * step) / (SCROLL_STEPS + 1);
+    await nextDoubleRaf();
+  }
+}
+
 function emitRow(row: PerfRow): void {
   // Sentinel format consumed by `scripts/perf/run-l2.mjs`.
   // eslint-disable-next-line no-console
@@ -171,6 +204,17 @@ describe('JsonTreeComponent perf (L2)', () => {
       const row = await measureOneFixture(`initial-render`, spec, initialRender);
       emitRow(row);
       // We don't assert thresholds here -- diff happens in `perf:diff`.
+      expect(row.iters).toBe(TIMED_ITERS);
+    });
+  }
+
+  // Scroll-after-expand: 10K only. 100K/1M scroll on a non-virtualized
+  // mat-tree would OOM Karma; L3's `scroll-after-expand.spec.ts` runs
+  // larger sizes in a real Playwright browser instead.
+  for (const spec of defaultFixtures().filter((fixture) => fixture.approxNodes === 10_000)) {
+    it(`scroll-after-expand: ${spec.shape} @ ${spec.size}`, async () => {
+      const row = await measureOneFixture(`scroll-after-expand`, spec, scrollAfterExpand);
+      emitRow(row);
       expect(row.iters).toBe(TIMED_ITERS);
     });
   }
