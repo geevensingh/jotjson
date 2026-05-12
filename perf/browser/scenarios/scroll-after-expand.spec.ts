@@ -11,6 +11,7 @@
 
 import { test } from '@playwright/test';
 import { join } from 'node:path';
+import { assertExpandedTree } from '../util/assert-expanded-tree';
 import { CdpProfiler } from '../util/cdp-profile';
 import {
   HEAP_SAMPLE_SCRIPT,
@@ -115,6 +116,7 @@ for (const fixture of FIXTURES) {
             ),
         );
       }
+      await assertExpandedTree(page, { minVisibleTreeItems: 50, minExpandedNodes: 2 });
 
       const profiler = new CdpProfiler();
       await profiler.attach(page);

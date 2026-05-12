@@ -8,6 +8,7 @@
 
 import { test } from '@playwright/test';
 import { join } from 'node:path';
+import { assertExpandedTree } from '../util/assert-expanded-tree';
 import { CdpProfiler } from '../util/cdp-profile';
 import {
   HEAP_SAMPLE_SCRIPT,
@@ -131,6 +132,7 @@ for (const fixture of FIXTURES) {
           ),
       );
       const wallMs = Date.now() - t0;
+      await assertExpandedTree(page, { minVisibleTreeItems: 50, minExpandedNodes: 2 });
 
       const longestTaskMs: number | null = await page.evaluate(LONGTASK_OBSERVER_STOP_SCRIPT);
       const heapAfter: number | null = await page.evaluate(HEAP_SAMPLE_SCRIPT);
