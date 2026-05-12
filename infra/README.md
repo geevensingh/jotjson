@@ -197,3 +197,223 @@ the zone to Azure nameservers.
 - `src/environments/environment.prod.ts` -> `redirectUri: 'https://jotjson.com/'` [x]
 - Entra SPA app registration -> Authentication -> redirect URI includes
   `https://jotjson.com/` [x]
+
+## Non-production environment
+
+A second, **dev/test-only** stack runs in a separate Azure subscription
+funded by Visual Studio Enterprise subscriber credits (~$150/mo,
+non-transferable). It mirrors prod at lower scale so we can exercise
+the deploy pipeline, validate Bicep changes, run anonymous e2e against
+a real deployed URL, and host per-PR previews (Phase 2 of issue #93)
+without spending production budget.
+
+**Constraint:** VS subscriber Azure credits are licensed for
+development and testing only. This stack has **no DNS, no marketing
+link, and must not be advertised to real users**.
+
+### Inventory
+
+| Item | Value |
+|---|---|
+| Subscription | `5698b024-0e2d-4d8b-8db5-fd401ed0ba4a` ("Visual Studio Enterprise Subscription") |
+| Resource group | `rg-jotjson-nonprod` (region: `eastus2`) |
+| SWA name | `swa-jotjson-nonprod` (Standard SKU - matches prod) |
+| SWA hostname | `calm-flower-01969880f.7.azurestaticapps.net` |
+| Cosmos account | `cosmos-jotjson-nonprod` (serverless) |
+| App Insights | `appi-jotjson-nonprod` (Log Analytics workspace: `appi-jotjson-nonprod-law`) |
+| Storage (sourcemaps) | `stjotjsonnonprod` |
+| Alerts | action group `ag-jotjson-nonprod`; alert rules `alert-jotjson-nonprod-{boot-failed,app-unhandled,auth-config,fn-5xx}` |
+| GH Actions environment | `nonprod` |
+| Workflows | `.github/workflows/infra-nonprod.yml`, `.github/workflows/cd-nonprod.yml` (both manual dispatch only) |
+| Cost budget | `jotjson-nonprod-monthly` ($100/mo, 80%-actual email alert) |
+
+### One-time bootstrap
+
+Done once per fresh subscription. Captured here so the next person (or
+a future Phase 3 third env) doesn't have to re-derive it.
+
+**0. Register required resource providers.** Fresh subscriptions have
+no resource providers registered. The first `infra-nonprod.yml` run
+will fail at `az deployment group create` if these aren't
+`Registered`. Run once per subscription:
+
+```powershell
+# Each entry uses the exact casing Azure returns from `az provider show`.
+# Note `microsoft.insights` is genuinely lowercase in Azure's response -
+# the verify query below uses case-sensitive `contains(...)`, so the two
+# lists must match Azure's casing exactly.
+$providers = @(
+  'Microsoft.Storage',
+  'Microsoft.DocumentDB',
+  'microsoft.insights',
+  'Microsoft.OperationalInsights',
+  'Microsoft.Web',
+  'Microsoft.AlertsManagement'
+)
+foreach ($ns in $providers) {
+  az provider register --namespace $ns --subscription 5698b024-0e2d-4d8b-8db5-fd401ed0ba4a --wait
+}
+# Verify
+az provider list --subscription 5698b024-0e2d-4d8b-8db5-fd401ed0ba4a `
+  --query "[?contains(['Microsoft.Storage','Microsoft.DocumentDB','microsoft.insights','Microsoft.OperationalInsights','Microsoft.Web','Microsoft.AlertsManagement'], namespace)].[namespace, registrationState]" `
+  -o table
+```
+
+Each provider must reach `registrationState=Registered` before
+Bicep apply succeeds.
+
+**1. Resource group.** Created up front so the federated cred has
+somewhere to deploy to. (App Insights diagnostic settings and Storage
+RBAC for the sourcemap upload are granted by Bicep on apply.)
+
+```powershell
+az account set --subscription 5698b024-0e2d-4d8b-8db5-fd401ed0ba4a
+az group create --name rg-jotjson-nonprod --location eastus2
+```
+
+**2. Federated credential on the existing `gh-actions-jotjson` SP.**
+JotJSON uses **one** service principal (`gh-actions-jotjson`) across
+prod and nonprod - **do not create a new SP for nonprod**. Add a new
+federated credential to that SP bound to the `nonprod` GitHub
+environment. The same `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` repo-level
+secrets are reused; only the subscription id differs per environment.
+
+```powershell
+# Look up the existing prod SP
+$app = az ad app list --display-name 'gh-actions-jotjson' `
+  --query '[0].{id:id,appId:appId}' -o json | ConvertFrom-Json
+
+# Add a federated credential scoped to the 'nonprod' GH environment
+$fic = @{
+  name='gh-jotjson-nonprod'
+  issuer='https://token.actions.githubusercontent.com'
+  subject='repo:geevensingh/jotjson:environment:nonprod'
+  audiences=@('api://AzureADTokenExchange')
+} | ConvertTo-Json -Compress
+az ad app federated-credential create --id $app.id --parameters $fic
+```
+
+The workflow files (`.github/workflows/infra-nonprod.yml`,
+`cd-nonprod.yml`) call this out in their header comments.
+
+**3. RG role assignment for the SP.** `Contributor` on the nonprod
+RG. (Storage Blob Data Contributor on the sourcemap container is
+granted by `cd-nonprod.yml` itself when it needs to.)
+
+```powershell
+az role assignment create `
+  --assignee $app.appId `
+  --role 'Contributor' `
+  --scope /subscriptions/5698b024-0e2d-4d8b-8db5-fd401ed0ba4a/resourceGroups/rg-jotjson-nonprod
+```
+
+**4. GitHub Actions environment + secrets.** Create the `nonprod`
+environment in repo settings. Secrets split into **repo-level** (shared
+with prod, already exist if prod is set up) and **environment-level**
+(nonprod-only, suffixed `_NONPROD`):
+
+| Scope | Secret | Source |
+|---|---|---|
+| Repo (shared with prod) | `AZURE_CLIENT_ID` | `$app.appId` from step 2 (same SP as prod) |
+| Repo (shared with prod) | `AZURE_TENANT_ID` | `az account show --query tenantId -o tsv` |
+| Repo (shared with prod) | `ENTRA_TENANT_ID`, `ENTRA_AUTHORITY`, `ENTRA_KNOWN_AUTHORITY`, `ENTRA_SPA_CLIENT_ID`, `ENTRA_API_CLIENT_ID`, `ENTRA_API_AUDIENCE`, `ENTRA_API_SCOPE` | Same External ID tenant as prod (see Auth setup above) |
+| `nonprod` env | `AZURE_SUBSCRIPTION_ID_NONPROD` | `5698b024-0e2d-4d8b-8db5-fd401ed0ba4a` |
+| `nonprod` env | `AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD` | `az staticwebapp secrets list --name swa-jotjson-nonprod --resource-group rg-jotjson-nonprod --query "properties.apiKey" -o tsv` (after the first infra deploy creates the SWA) |
+| `nonprod` env | `APP_INSIGHTS_CONNECTION_STRING_NONPROD` | from the App Insights resource in the portal, after the first infra deploy |
+| `nonprod` env | `AZURE_STORAGE_ACCOUNT_NONPROD` | `stjotjsonnonprod` (used by `cd-nonprod.yml` to upload sourcemaps) |
+
+> **PowerShell + `gh secret set` tip.** Setting a secret with
+> `gh secret set NAME --body "$var"` is fragile if `$var` was set in a
+> different shell scope. The reliable form is **stdin**:
+>
+> ```powershell
+> $token = az staticwebapp secrets list --name swa-jotjson-nonprod --resource-group rg-jotjson-nonprod --query "properties.apiKey" -o tsv
+> $token | gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD --repo geevensingh/jotjson
+> ```
+>
+> This avoids quoting hell and PowerShell's "empty arg makes `gh` block
+> on stdin" quirk.
+
+**5. Entra redirect URI.** Add `https://<nonprod-hostname>/` to the
+JotJSON SPA app registration's Single-page application redirect URIs
+in the same Entra External ID tenant used by prod. The
+`cd-nonprod.yml` deploy includes a strict-allowlist guard that fails
+if the SWA hostname doesn't match the expected value, so accidentally
+deploying to a different SWA won't silently break sign-in.
+
+### Manual deploy commands
+
+Both workflows are dispatch-only. From the Actions UI:
+
+- **`Infra (Bicep) - nonprod`** -> applies `main.bicep` with
+  `parameters/nonprod.bicepparam`.
+- **`Deploy (SWA) - nonprod`** -> deploys the SPA + Functions bundle
+  to the nonprod SWA. Runs the strict-allowlist redirect-URI guard
+  and the Storage-RBAC sourcemap upload.
+
+Manual local equivalents:
+
+```powershell
+# Infra
+az deployment group create `
+  --resource-group rg-jotjson-nonprod `
+  --template-file main.bicep `
+  --parameters parameters/nonprod.bicepparam
+
+# Deploy (the workflow path is the supported one - this is for break-glass only)
+# See cd-nonprod.yml for the full env-var bake step and SWA deploy invocation.
+```
+
+### Cost budget runbook
+
+Subscription-scoped budgets with notifications **cannot** be created
+via `az consumption budget create` - that command accepts no
+notification flags in current `az`. Use the Consumption REST API:
+
+```powershell
+$body = @{
+  properties = @{
+    category = 'Cost'
+    amount = 100
+    timeGrain = 'Monthly'
+    timePeriod = @{
+      startDate = '2026-05-01T00:00:00Z'  # first of current month, UTC
+      endDate   = '2030-05-01T00:00:00Z'
+    }
+    notifications = @{
+      Actual_GreaterThan_80_Percent = @{
+        enabled = $true
+        operator = 'GreaterThan'
+        threshold = 80
+        thresholdType = 'Actual'
+        contactEmails = @('jotjsonadmin@gmail.com')
+      }
+    }
+  }
+} | ConvertTo-Json -Depth 6 -Compress
+
+$body | Out-File -Encoding utf8 budget.json
+
+az rest --method put `
+  --url "https://management.azure.com/subscriptions/5698b024-0e2d-4d8b-8db5-fd401ed0ba4a/providers/Microsoft.Consumption/budgets/jotjson-nonprod-monthly?api-version=2024-08-01" `
+  --body '@budget.json'
+```
+
+Notes:
+- `startDate` **must** be the 1st of the month in UTC; the API rejects
+  back-dated values outside the current time-grain period.
+- `properties.notifications` is a dict keyed by an arbitrary
+  notification name. The Azure API echoes the key back with a
+  lowercased first letter (`actual_GreaterThan_80_Percent`) - harmless
+  cosmetic.
+
+To add additional thresholds (e.g., 100% Actual or Forecasted), add
+more entries to the `notifications` dict with distinct keys.
+
+### Pointer
+
+- Workflow files: `.github/workflows/infra-nonprod.yml`,
+  `.github/workflows/cd-nonprod.yml`.
+- Bicep parameters: `infra/parameters/nonprod.bicepparam`.
+- Spec section: DESIGN_SPEC.md -> Azure Infrastructure -> "Non-production environment".
+- Tracking issue: #93 (Phase 1 in this RG; Phase 2 wires per-PR previews into this same stack).
