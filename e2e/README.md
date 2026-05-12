@@ -85,6 +85,20 @@ If you already have a build server on port 4173, Playwright reuses
 it locally (`reuseExistingServer: !CI`). On CI it always starts a
 fresh server.
 
+### Targeting a deployed environment
+
+Set `PLAYWRIGHT_BASE_URL` to skip the local build/serve and run the
+suite against a deployed environment instead:
+
+```
+PLAYWRIGHT_BASE_URL=https://<host>.azurestaticapps.net/ npm run test:e2e
+```
+
+This is how Phase 1's manual verification against the `nonprod` SWA
+runs, and how `cd-preview.yml` (per-PR previews) will exercise the
+same suite against each PR's preview URL. Whitespace-only values are
+ignored; non-`http(s)` URLs fail config load.
+
 ## Debugging failures
 
 On failure, Playwright writes:
