@@ -1,15 +1,49 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isValidMachineLabel, requireMachineLabel, suggestMachineLabel } from './machine-label.mjs';
+import {
+  isValidMachineLabel,
+  requireMachineLabel,
+  sanitizeHostnameForLabel,
+  suggestMachineLabel,
+} from './machine-label.mjs';
 
-test('suggestMachineLabel returns a non-empty platform-arch-hash triplet', () => {
+test('suggestMachineLabel returns a platform-arch-hostname triplet that passes isValidMachineLabel', () => {
   const label = suggestMachineLabel();
-  assert.match(label, /^[a-z0-9]+-[a-z0-9]+-[a-f0-9]{6}$/);
+  // Shape: <platform>-<arch>-<sanitized-hostname>. The hostname segment
+  // is host-dependent so we assert the structural prefix and full-label
+  // validity, not the hostname text.
+  assert.match(label, /^[a-z0-9]+-[a-z0-9]+-[A-Za-z0-9_-]+$/, `unexpected shape: ${label}`);
   assert.ok(isValidMachineLabel(label), `suggested label should be valid: ${label}`);
 });
 
 test('suggestMachineLabel is deterministic across calls', () => {
   assert.equal(suggestMachineLabel(), suggestMachineLabel());
+});
+
+test('sanitizeHostnameForLabel replaces invalid chars with a single hyphen', () => {
+  assert.equal(sanitizeHostnameForLabel("Geeven's-MBP.local"), 'Geeven-s-MBP-local');
+  assert.equal(sanitizeHostnameForLabel('Build Runner 01'), 'Build-Runner-01');
+  assert.equal(sanitizeHostnameForLabel('alex@laptop'), 'alex-laptop');
+});
+
+test('sanitizeHostnameForLabel collapses runs of hyphens and trims edges', () => {
+  assert.equal(sanitizeHostnameForLabel('---foo---bar---'), 'foo-bar');
+  assert.equal(sanitizeHostnameForLabel('!!!'), 'unknown-host');
+});
+
+test('sanitizeHostnameForLabel returns unknown-host for empty input', () => {
+  assert.equal(sanitizeHostnameForLabel(''), 'unknown-host');
+  assert.equal(
+    sanitizeHostnameForLabel(/** @type {string} */ (/** @type {unknown} */ (null))),
+    'unknown-host',
+  );
+});
+
+test('sanitizeHostnameForLabel truncates to fit the 64-char budget', () => {
+  const raw = 'a'.repeat(100);
+  const result = sanitizeHostnameForLabel(raw, 14); // prefix "linux-x64-" is 10; pretend 14 for headroom
+  assert.equal(result.length, 50);
+  assert.match(result, /^a+$/);
 });
 
 test('isValidMachineLabel accepts ASCII letters, digits, hyphen, underscore, dot', () => {

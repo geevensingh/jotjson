@@ -77,8 +77,11 @@ Thumbs.db
 # Perf measurement suite outputs and intermediate build dirs.
 # Inputs (perf/, perf-targets.json, tsconfig.perf.json, the empty
 # perf-baselines/ dir) ARE committed. Per-machine baseline JSON files
-# in perf-baselines/ are gitignored (each developer keeps their own).
+# in perf-baselines/ are gitignored (each developer keeps their own),
+# EXCEPT the v1 reference baseline which is whitelisted below. See
+# docs/perf.md -> "v1 reference machine" for rationale.
 /dist-perf/
 /perf-results/
 /perf-baselines/*.json
+!/perf-baselines/win32-x64-CPC-geeve-YN4D4.json
 

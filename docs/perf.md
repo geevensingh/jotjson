@@ -9,9 +9,9 @@ per-machine baseline; CI does not yet enforce perf thresholds.
 ```bash
 # One-time setup: pick your machine label.
 node scripts/perf/machine-label.mjs --suggest
-# -> e.g., win32-x64-1f4d3a
-$env:PERF_MACHINE = "win32-x64-1f4d3a"   # PowerShell
-# export PERF_MACHINE=win32-x64-1f4d3a   # bash
+# -> e.g., win32-x64-geeven-laptop (uses your hostname by default)
+$env:PERF_MACHINE = "win32-x64-geeven-laptop"   # PowerShell
+# export PERF_MACHINE=win32-x64-geeven-laptop   # bash
 
 # First-time baseline:
 npm run perf:all
@@ -56,29 +56,33 @@ open directly in Chrome DevTools (`Performance` panel ->
 ## Per-machine baselines
 
 `PERF_MACHINE` is **optional**: if unset, the perf scripts fall back to
-the deterministic label produced by `suggestMachineLabel()` (same shape
-as `<platform>-<arch>-<6-char-cpu-hash>`). Set it explicitly when you
-want a stable name across machines with similar hardware fingerprints,
-or when you intentionally want to compare runs from different hosts
-against a single shared baseline file. Print the suggested label any
-time with:
+the deterministic label produced by `suggestMachineLabel()` (shape:
+`<platform>-<arch>-<sanitized-hostname>`, e.g.
+`win32-x64-geeven-laptop`). Hostnames are sanitized against the
+`[A-Za-z0-9_-]` character class so the label is filename-safe on every
+OS. Set `PERF_MACHINE` explicitly when you want a stable name across
+machines that share a hostname pattern, when you want anonymity
+(hostnames sometimes contain personal names), or when you intentionally
+want to compare runs from different hosts against a single shared
+baseline file. Print the suggested label any time with:
 
 ```bash
 node scripts/perf/machine-label.mjs --suggest
 ```
 
 Baselines live at `perf-baselines/<label>.json` and are gitignored by
-default (each machine's numbers are noise to other machines). Commit
-the file only if your team agrees on a shared "reference" machine for
-cross-PR comparison.
+default (each machine's numbers are noise to other machines). The
+**v1 reference baseline** for this repo is committed as a single
+whitelisted exception in `.gitignore`; see "v1 reference machine"
+below.
 
 ### Baseline file format
 
 ```jsonc
 {
-  "schemaVersion": 1,
-  "machineLabel": "win32-x64-1f4d3a",
-  "lastUpdatedUtc": "2026-05-11T19:00:00.000Z",
+  "schemaVersion": 2,
+  "machineLabel": "win32-x64-geeven-laptop",
+  "lastUpdatedUtc": "2026-05-12T19:00:00.000Z",
   "codeShaAtBaseline": "8c3d826",
   "rows": {
     "1.parse.deep25.10k": {
@@ -89,6 +93,15 @@ cross-PR comparison.
       "approxNodes": 10000,
       "heapRetainedDeltaMedian": 0,
       "heapWorkingSetMedian": 0
+    },
+    "3.paste-large.wide-aoo.10k": {
+      "wallNsMedian": 480000000,
+      "wallNsIqrLow": 460000000,
+      "wallNsIqrHigh": 510000000,
+      "iters": 7,
+      "approxNodes": 10000,
+      "longestTaskMsMedian": 42,
+      "pasteMethod": "keyboard"
     }
     // ... more rows ...
   }
@@ -97,7 +110,9 @@ cross-PR comparison.
 
 The `schemaVersion` field is mandatory; readers fail loud on mismatch.
 The L3-only `longestTaskMsMedian` field is present on rows captured by
-`scripts/perf/run-l3.mjs`. One canonical shape, used by both
+`scripts/perf/run-l3.mjs`. The `pasteMethod` field is present on L3
+`paste-large` rows only (added in schemaVersion 2). One canonical shape,
+used by both
 `perf:baseline` (writer) and `perf:diff` (reader). Per-row key is
 `<layer>.<scenario>.<fixture>.<size>`.
 
@@ -235,8 +250,23 @@ prestep of `perf:l2`.
 
 Three scenarios under `perf/browser/scenarios/`:
 
-1. `paste-large.spec.ts` -- programmatic Monaco `setValue` of 10K /
-   100K / 1M wide-aoo JSON; waits for first tree row.
+1. `paste-large.spec.ts` -- pastes 10K / 100K / 1M wide-aoo JSON into
+   the editor and waits for the first tree row. Paste mechanism varies
+   by size:
+   - **10K + 100K** use a real `Ctrl+V` keyboard paste against a
+     pre-loaded clipboard, exercising Monaco's `onPaste` handler and
+     the `home.onEditorPaste` pipeline end-to-end. The bench
+     pre-counts the harness event buffer and asserts `paste.handle.editor`
+     fires; missing the event indicates the keyboard branch silently
+     failed and the iter is hard-failed.
+   - **1M** uses programmatic `monaco.editor.setValue()`. The 24 MB
+     wide-aoo payload exceeds Chromium's silent clipboard cap;
+     keyboard paste would truncate. `setValue` is the stress-test
+     path and emits no `paste.handle.editor` event.
+   - Each row carries a `pasteMethod: "keyboard" | "setvalue"` field
+     so the baseline distinguishes the two paths. The field is
+     additive (not part of the 4-tuple rowKey); see
+     `scripts/perf/baseline.mjs` for the schema convention.
 2. `expand-all.spec.ts` -- 1M-node fixture, click "Expand all".
 3. `scroll-after-expand.spec.ts` -- 1M-node fixture, expand-all, then
    50 wheel events at ~60Hz over the tree pane.

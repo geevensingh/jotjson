@@ -4,28 +4,60 @@
 //     export PERF_MACHINE=$(node scripts/perf/machine-label.mjs --suggest)
 //     setx PERF_MACHINE (node scripts/perf/machine-label.mjs --suggest)   # PowerShell
 //
-// The suggested label is `<platform>-<arch>-<6-char-cpu-hash>` -- e.g.
-// `linux-x64-3f9c2a`, `win32-x64-1a2b3c`. The hash is computed over the
-// first CPU model string, so two machines with the same CPU model
-// produce the same label (typical for fleet machines). The label is
-// safe to include in filenames on every OS.
+// The suggested label is `<platform>-<arch>-<hostname>` -- e.g.
+// `linux-x64-build-runner-01`, `win32-x64-geeven-laptop`. The hostname
+// segment is sanitized (any char outside `[A-Za-z0-9_-]` is replaced
+// with `-`, runs of `-` are collapsed, leading/trailing `-` trimmed)
+// so the result always satisfies `isValidMachineLabel`'s character
+// class and 64-char cap.
+//
+// Privacy note: hostnames sometimes contain personal names ("GEEVENS-
+// LAPTOP", "alex-mbp"). The repo convention is that the suggested
+// label is a starting point, and contributors who want anonymity
+// override PERF_MACHINE with a non-PII value (a CPU-hash form, a
+// project-issued anonymous label, etc.) before running perf scripts.
 //
 // PERF_MACHINE is **optional** for `perf:diff` and `perf:baseline`.
 // If unset, the scripts fall back to `suggestMachineLabel()` (same
 // shape as below). Set PERF_MACHINE explicitly when running on a
 // known reference machine so the baseline filename is stable across
-// distinct CPU revisions of the same model. Failure messages link
-// `docs/perf.md` and suggest this command for that case.
+// distinct hosts. Failure messages link `docs/perf.md` and suggest
+// this command for that case.
 
-import { createHash } from 'node:crypto';
-import { arch, cpus, platform } from 'node:os';
+import { arch, hostname, platform } from 'node:os';
 import { fileURLToPath } from 'node:url';
+
+/**
+ * Sanitizes a raw hostname so it satisfies `isValidMachineLabel`.
+ * Replaces any character outside `[A-Za-z0-9_-]` with `-`, collapses
+ * runs of `-`, trims leading/trailing `-`, and truncates so that the
+ * final `<platform>-<arch>-<hostname>` label stays within the 64-char
+ * cap enforced by `isValidMachineLabel`. Returns `'unknown-host'` if
+ * the input is empty or sanitizes down to nothing.
+ *
+ * Exported for tests; not part of the public API.
+ *
+ * @param {string} raw
+ * @param {number} reservedPrefixLength how many chars `<platform>-<arch>-` will take
+ * @returns {string}
+ */
+export function sanitizeHostnameForLabel(raw, reservedPrefixLength = 0) {
+  if (typeof raw !== 'string' || raw.length === 0) return 'unknown-host';
+  let sanitized = raw
+    .replace(/[^A-Za-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (sanitized.length === 0) return 'unknown-host';
+  const budget = Math.max(1, 64 - reservedPrefixLength);
+  if (sanitized.length > budget) sanitized = sanitized.slice(0, budget).replace(/-+$/g, '');
+  return sanitized.length === 0 ? 'unknown-host' : sanitized;
+}
 
 /** @returns {string} */
 export function suggestMachineLabel() {
-  const cpuModel = cpus()[0]?.model ?? 'unknown-cpu';
-  const hash = createHash('sha256').update(cpuModel).digest('hex').slice(0, 6);
-  return `${platform()}-${arch()}-${hash}`;
+  const prefix = `${platform()}-${arch()}-`;
+  const host = sanitizeHostnameForLabel(hostname(), prefix.length);
+  return `${prefix}${host}`;
 }
 
 /**

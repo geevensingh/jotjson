@@ -8,7 +8,7 @@
 // perf-baselines/.gitkeep):
 //
 //   {
-//     "schemaVersion": 1,
+//     "schemaVersion": 2,
 //     "machineLabel": "<PERF_MACHINE>",
 //     "lastUpdatedUtc": "<iso>",
 //     "codeShaAtBaseline": "<short sha>",
@@ -21,7 +21,8 @@
 //         "approxNodes": number,
 //         "heapRetainedDeltaMedian"?: number,
 //         "heapWorkingSetMedian"?: number,
-//         "longestTaskMsMedian"?: number
+//         "longestTaskMsMedian"?: number,
+//         "pasteMethod"?: "keyboard" | "setvalue"
 //       },
 //       ...
 //     }
@@ -29,6 +30,18 @@
 //
 // `perf:diff` reads the same file. Architect r2 tech-debt #2: ONE
 // canonical baseline shape, no parallel `_reference-range.json`.
+//
+// Schema convention: test-harness variants (paste method, scroll
+// direction, etc.) live as OPTIONAL row fields on `BaselineEntry`,
+// NOT in the 4-tuple rowKey. The rowKey is reserved for the
+// `<layer>.<scenario>.<fixture>.<size>` identity tuple; overloading
+// any slot (e.g., `1m:paste-setvalue`) breaks the regex in
+// perf-targets.schema.json and the 4-part split in parsePerfRowKey.
+//
+// schemaVersion 1 -> 2 history:
+//   - v1 (PR #194):        the four base shape fields.
+//   - v2 (this PR / C5):   added optional `pasteMethod` to BaselineEntry
+//                           and JsonlRow; v1 readers fail-loud on a v2 file.
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -40,7 +53,10 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RESULTS_DIR = join(REPO_ROOT, 'perf-results');
 const BASELINES_DIR = join(REPO_ROOT, 'perf-baselines');
 
-export const BASELINE_SCHEMA_VERSION = 1;
+export const BASELINE_SCHEMA_VERSION = 2;
+
+/** @type {ReadonlyArray<'keyboard' | 'setvalue'>} */
+const PASTE_METHOD_VALUES = Object.freeze(['keyboard', 'setvalue']);
 
 /**
  * @typedef {Object} JsonlRow
@@ -57,6 +73,7 @@ export const BASELINE_SCHEMA_VERSION = 1;
  * @property {number} [heapWorkingSetMedian]
  * @property {number} [heapWorkingSetMax]
  * @property {number} [longestTaskMsMedian]
+ * @property {'keyboard' | 'setvalue'} [pasteMethod]
  * @property {string} codeSha
  */
 
@@ -71,6 +88,7 @@ export const BASELINE_SCHEMA_VERSION = 1;
  * @property {number} [heapWorkingSetMedian]
  * @property {number} [heapWorkingSetMax]
  * @property {number} [longestTaskMsMedian]
+ * @property {'keyboard' | 'setvalue'} [pasteMethod]
  */
 
 /**
@@ -113,6 +131,9 @@ export function rowsToBaselineEntries(rows) {
     if (typeof row.longestTaskMsMedian === 'number') {
       entry.longestTaskMsMedian = row.longestTaskMsMedian;
     }
+    if (typeof row.pasteMethod === 'string' && PASTE_METHOD_VALUES.includes(row.pasteMethod)) {
+      entry.pasteMethod = row.pasteMethod;
+    }
     out[key] = entry;
   }
   return out;
@@ -140,6 +161,22 @@ export function assertBaselineSchema(parsed, sourcePath) {
     throw new Error(
       `Baseline at ${sourcePath} has schemaVersion=${String(obj['schemaVersion'])}, expected ${BASELINE_SCHEMA_VERSION}. Recapture via \`npm run perf:baseline\`.`,
     );
+  }
+  const rows = obj['rows'];
+  if (rows && typeof rows === 'object' && !Array.isArray(rows)) {
+    for (const [rowKey, entry] of Object.entries(rows)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const pm = /** @type {Record<string, unknown>} */ (entry)['pasteMethod'];
+      if (pm === undefined) continue;
+      if (
+        typeof pm !== 'string' ||
+        !PASTE_METHOD_VALUES.includes(/** @type {'keyboard' | 'setvalue'} */ (pm))
+      ) {
+        throw new Error(
+          `Baseline at ${sourcePath} row "${rowKey}" has invalid pasteMethod=${JSON.stringify(pm)}. Allowed: "keyboard" | "setvalue".`,
+        );
+      }
+    }
   }
   return /** @type {BaselineFile} */ (parsed);
 }

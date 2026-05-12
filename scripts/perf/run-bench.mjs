@@ -19,6 +19,7 @@
 //     wallNsMedian, wallNsIqrLow, wallNsIqrHigh, wallNsStddev,
 //     heapRetainedDeltaMedian, heapRetainedDeltaIqrLow, heapRetainedDeltaIqrHigh,
 //     heapWorkingSetMedian, heapWorkingSetMax,
+//     pasteMethod?,    // "keyboard" | "setvalue" -- L3 paste-large only (PR follow-up to #194)
 //     machineLabel, codeSha, capturedAtUtc }
 
 import { spawnSync } from 'node:child_process';
