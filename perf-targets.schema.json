@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JotJSON perf-targets",
+  "description": "Operationalizable NFR ceilings for the perf measurement suite. Each row maps a perfRowKey (<layer>.<scenario>.<fixture>.<size>) to one or more metric ceilings.",
+  "type": "object",
+  "required": ["schemaVersion", "rows"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "_comment": { "type": "string" },
+    "rows": {
+      "type": "object",
+      "patternProperties": {
+        "^[0-9]+\\.[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["ceiling_ms", "reason"],
+            "properties": {
+              "ceiling_ms": { "type": "number", "minimum": 0 },
+              "reason": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
