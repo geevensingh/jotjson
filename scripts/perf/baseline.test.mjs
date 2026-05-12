@@ -105,6 +105,7 @@ test('snapshotBaseline writes a baseline file from latest results', () => {
     assert.equal(rowCount, 1);
     assert.ok(baselinePath.endsWith('win32-x64-abc123.json'));
     const written = JSON.parse(readFileSync(baselinePath, 'utf8'));
+    assert.equal(written.schemaVersion, 1);
     assert.equal(written.machineLabel, 'win32-x64-abc123');
     assert.equal(written.codeShaAtBaseline, 'deadbee');
     assert.ok(written.rows['1.parse.deep25.10K']);
@@ -115,5 +116,8 @@ test('snapshotBaseline writes a baseline file from latest results', () => {
 });
 
 test('snapshotBaseline rejects empty machineLabel', () => {
-  assert.throws(() => snapshotBaseline({ machineLabel: '' }), /PERF_MACHINE is required/);
+  assert.throws(
+    () => snapshotBaseline({ machineLabel: '' }),
+    /snapshotBaseline requires a machineLabel/,
+  );
 });

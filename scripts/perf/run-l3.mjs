@@ -6,7 +6,7 @@
 // Invoked as:
 //   npm run perf:l3
 
-import { spawn } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +21,6 @@ function utcStamp() {
 
 function codeSha() {
   try {
-    const { execSync } = require('node:child_process');
     return execSync('git rev-parse --short HEAD', { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
   } catch {
     return 'unknown';

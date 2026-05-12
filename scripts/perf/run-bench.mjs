@@ -17,7 +17,8 @@
 // JSONL row schema (also documented in docs/perf.md):
 //   { layer, scenario, fixture, size, approxNodes, bytes, iters,
 //     wallNsMedian, wallNsIqrLow, wallNsIqrHigh, wallNsStddev,
-//     bytesAllocMedian, bytesAllocIqrLow, bytesAllocIqrHigh,
+//     heapRetainedDeltaMedian, heapRetainedDeltaIqrLow, heapRetainedDeltaIqrHigh,
+//     heapWorkingSetMedian, heapWorkingSetMax,
 //     machineLabel, codeSha, capturedAtUtc }
 
 import { spawnSync } from 'node:child_process';

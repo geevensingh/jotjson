@@ -47,9 +47,10 @@ const EMPTY_COMMENT_MAP: ReadonlyMap<string, CommentBundle> = new Map();
  * Pure JSON/JSONC parser, extracted from `JsonParserService.parse` so it
  * can run in a Node bench harness with no Angular DI context.
  *
- * The function has zero repo-internal imports (only `jsonc-parser`), so
- * `tsc -p tsconfig.perf.json` produces a `.mjs` that Node ESM can resolve
- * without rewriting relative specifiers.
+ * The function's only repo-internal import is to `./json-path` (the
+ * shared `pathToString` helper). `tsc -p tsconfig.perf.json` emits a
+ * `.js` for this module, and `scripts/perf/build.mjs` rewrites the
+ * extensionless specifier to `.js` so Node ESM can resolve it.
  *
  * `JsonParserService.parse` is now a thin wrapper that calls this function
  * and emits `parse.slow` telemetry around it.
@@ -112,19 +113,8 @@ export function locationAt(text: string, offset: number): (string | number)[] {
   return [...loc.path];
 }
 
-export function pathToString(path: (string | number)[]): string {
-  let out = '$';
-  for (const seg of path) {
-    if (typeof seg === 'number') {
-      out += `[${seg}]`;
-    } else if (/^[A-Za-z_$][\w$]*$/.test(seg)) {
-      out += `.${seg}`;
-    } else {
-      out += `[${JSON.stringify(seg)}]`;
-    }
-  }
-  return out;
-}
+import { pathToString } from './json-path';
+export { pathToString };
 
 function toError(parseError: ParseError, text: string): JsonParseError {
   const { line, column } = offsetToPosition(text, parseError.offset);

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { assertBaselineSchema, BASELINE_SCHEMA_VERSION } from './baseline.mjs';
 import { computeDiffs, formatDiffTable, formatNs } from './diff.mjs';
 
 function makeBaseline(rows) {
   return {
+    schemaVersion: BASELINE_SCHEMA_VERSION,
     machineLabel: 'test',
     lastUpdatedUtc: '2025-01-01T00:00:00.000Z',
     codeShaAtBaseline: 'abc1234',
@@ -146,4 +148,24 @@ test('formatDiffTable returns an ASCII-only table sorted by largest delta', () =
 test('formatDiffTable handles empty input', () => {
   const out = formatDiffTable([]);
   assert.match(out, /no overlapping/);
+});
+
+test('assertBaselineSchema accepts current schemaVersion', () => {
+  const baseline = { schemaVersion: BASELINE_SCHEMA_VERSION, rows: {} };
+  const result = assertBaselineSchema(baseline, '/tmp/baseline.json');
+  assert.equal(result.schemaVersion, BASELINE_SCHEMA_VERSION);
+});
+
+test('assertBaselineSchema rejects missing schemaVersion', () => {
+  assert.throws(
+    () => assertBaselineSchema({ rows: {} }, '/tmp/old.json'),
+    /missing "schemaVersion"/,
+  );
+});
+
+test('assertBaselineSchema rejects mismatched schemaVersion', () => {
+  assert.throws(
+    () => assertBaselineSchema({ schemaVersion: 999, rows: {} }, '/tmp/future.json'),
+    /schemaVersion=999/,
+  );
 });

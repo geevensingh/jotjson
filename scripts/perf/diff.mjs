@@ -23,7 +23,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findLatestResultsDir, readRunRows } from './baseline.mjs';
+import { assertBaselineSchema, findLatestResultsDir, readRunRows } from './baseline.mjs';
+import { suggestMachineLabel } from './machine-label.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BASELINES_DIR = join(REPO_ROOT, 'perf-baselines');
@@ -127,8 +128,9 @@ export function diffLatestRun({ machineLabel, resultsDir, baselinesDir }) {
       `No baseline at ${baselinePath}. Run \`npm run perf:baseline\` after a clean run, then re-bench.`,
     );
   }
-  const baseline = /** @type {import('./baseline.mjs').BaselineFile} */ (
-    JSON.parse(readFileSync(baselinePath, 'utf8'))
+  const baseline = assertBaselineSchema(
+    JSON.parse(readFileSync(baselinePath, 'utf8')),
+    baselinePath,
   );
   const runDir = findLatestResultsDir(resultsDir);
   const currentRows = readRunRows(runDir);
@@ -139,13 +141,7 @@ export function diffLatestRun({ machineLabel, resultsDir, baselinesDir }) {
 }
 
 async function main() {
-  const machineLabel = process.env['PERF_MACHINE'];
-  if (!machineLabel) {
-    process.stderr.write(
-      'perf:diff FAILED\nPERF_MACHINE is unset. See docs/perf.md or run:\n  node scripts/perf/machine-label.mjs --suggest\n',
-    );
-    process.exit(1);
-  }
+  const machineLabel = process.env['PERF_MACHINE'] ?? suggestMachineLabel();
   const { output, flaggedCount, baselinePath } = diffLatestRun({ machineLabel });
   process.stdout.write(`perf:diff  comparing latest run vs ${baselinePath}\n`);
   process.stdout.write(output);

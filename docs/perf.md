@@ -40,23 +40,28 @@ open directly in Chrome DevTools (`Performance` panel ->
 
 ## Per-machine baselines
 
-`PERF_MACHINE` is **mandatory** for `perf:l1`, `perf:l2`, `perf:l3`,
-`perf:baseline`, and `perf:diff`. Use the canonical label format
-`<platform>-<arch>-<6-char-cpu-hash>` produced by:
+`PERF_MACHINE` is **optional**: if unset, the perf scripts fall back to
+the deterministic label produced by `suggestMachineLabel()` (same shape
+as `<platform>-<arch>-<6-char-cpu-hash>`). Set it explicitly when you
+want a stable name across machines with similar hardware fingerprints,
+or when you intentionally want to compare runs from different hosts
+against a single shared baseline file. Print the suggested label any
+time with:
 
 ```bash
 node scripts/perf/machine-label.mjs --suggest
 ```
 
-Baselines live at `perf-baselines/<PERF_MACHINE>.json` and are
-gitignored by default (each machine's numbers are noise to other
-machines). Commit the file only if your team agrees on a shared
-"reference" machine for cross-PR comparison.
+Baselines live at `perf-baselines/<label>.json` and are gitignored by
+default (each machine's numbers are noise to other machines). Commit
+the file only if your team agrees on a shared "reference" machine for
+cross-PR comparison.
 
 ### Baseline file format
 
 ```jsonc
 {
+  "schemaVersion": 1,
   "machineLabel": "win32-x64-1f4d3a",
   "lastUpdatedUtc": "2026-05-11T19:00:00.000Z",
   "codeShaAtBaseline": "8c3d826",
@@ -66,16 +71,42 @@ machines). Commit the file only if your team agrees on a shared
       "wallNsIqrLow": 12317350,
       "wallNsIqrHigh": 12750750,
       "iters": 20,
-      "approxNodes": 10000
+      "approxNodes": 10000,
+      "heapRetainedDeltaMedian": 0,
+      "heapWorkingSetMedian": 0
     }
     // ... more rows ...
   }
 }
 ```
 
-One canonical shape, used by both `perf:baseline` (writer) and
-`perf:diff` (reader). Per-row key is
+The `schemaVersion` field is mandatory; readers fail loud on mismatch.
+The L3-only `longestTaskMsMedian` field is present on rows captured by
+`scripts/perf/run-l3.mjs`. One canonical shape, used by both
+`perf:baseline` (writer) and `perf:diff` (reader). Per-row key is
 `<layer>.<scenario>.<fixture>.<size>`.
+
+### Heap memory semantics (L1 benches)
+
+The L1 benches capture two complementary heap deltas per timed
+iteration:
+
+- `heapRetainedDelta` = `heapUsed` after the second `gc()` minus
+  `heapUsed` before the first `gc()`. With both GCs honored this is
+  the **retained** allocation from one iteration to the next - the
+  closest thing Node exposes to "memory the bench leaks per call".
+  Should sit near zero for pure functions; large deltas signal
+  reference retention.
+- `heapWorkingSet` = `heapUsed` immediately after `doWork()` minus
+  `heapBefore`. This is the **working-set peak** that the function
+  needed during the run, before GC reclaims it. Useful for sizing
+  worst-case memory pressure (e.g., for the parse + tree-build path
+  on a 1M-node fixture).
+
+Both metrics are reported as median (and stddev/IQR where applicable)
+across the timed iterations. `bytesAlloc*` columns from earlier
+revisions are gone; readers should use `heapRetainedDelta*` and the
+new `heapWorkingSet*` columns.
 
 ### Freshness
 
@@ -100,7 +131,7 @@ The 5M variant is gated behind `os.totalmem() >= 8 GB || PERF_FORCE_5M=1`.
 
 Mechanics:
 
-- `tsc -p tsconfig.perf.json` compiles the pure modules + bench
+- `tsconfig.perf.json` compiles the pure modules + bench
   harness + fixture generator into `dist-perf/` as ESM.
 - `dist-perf/package.json` is dropped with `{ "type": "module" }` so
   Node ESM resolves the `.js` emit cleanly.
@@ -111,9 +142,12 @@ Mechanics:
   ```
   gc(); heapBefore = process.memoryUsage().heapUsed;
   doWork();
+  heapAfterWork = process.memoryUsage().heapUsed;
   gc(); heapAfter = process.memoryUsage().heapUsed;
   ```
-- Stats reported: median, IQR (25th/75th), stddev, bytesAlloc median.
+- Stats reported: median, IQR (25th/75th), stddev,
+  `heapRetainedDelta` (post-second-gc - pre-first-gc) and
+  `heapWorkingSet` (post-work - pre-first-gc) medians + maxes.
 
 ### Generator determinism
 
@@ -139,16 +173,16 @@ under a perf-only Angular `test` configuration:
 
 - `tsconfig.perf-l2.json` includes `*.perf.ts` and excludes `*.spec.ts`.
 - `karma.perf.conf.js` adds `--js-flags=--expose-gc` so the spec can
-  call `globalThis.gc()` between iterations, and bumps per-test
-  timeout to 5 minutes.
+  call `globalThis.gc()` between iterations, and bumps the Jasmine
+  per-test timeout (`timeoutInterval`) to 15 minutes.
 
 Default fixture matrix: deep25 + wide-aoo at 10K. Set
 `window.__perfL2Force100K = true` (or `?force100k=1`) to also bench
 at 100K, and `window.__perfL2Force1M = true` (or `?force1m=1`) to add
-1M. Each 100K iter is ~50s; the 1M iter is multiple minutes. Karma
-timeouts (`browserNoActivityTimeout`, `browserDisconnectTimeout`,
-Jasmine `timeoutInterval`) are bumped to 15 minutes so opt-in runs
-have room.
+1M. Each 100K iter is ~50s; the 1M iter is multiple minutes. Karma's
+watchdog timeouts (`browserNoActivityTimeout`,
+`browserDisconnectTimeout`) are likewise bumped to 15 minutes so
+opt-in runs have room.
 
 The L2 spec writes rows to `console.log` with the sentinel
 `@@PERF_L2@@<json>@@END@@`; `scripts/perf/run-l2.mjs` harvests those

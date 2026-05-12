@@ -1,5 +1,6 @@
 {
   "$schema": "./perf-targets.schema.json",
+  "schemaVersion": 1,
   "_comment": "Operationalizable NFR targets only. Each row is a hard ceiling that perf:diff flags as a regression even if the baseline drifts.",
   "rows": [
     {

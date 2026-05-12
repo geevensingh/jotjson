@@ -8,6 +8,7 @@
 // perf-baselines/.gitkeep):
 //
 //   {
+//     "schemaVersion": 1,
 //     "machineLabel": "<PERF_MACHINE>",
 //     "lastUpdatedUtc": "<iso>",
 //     "codeShaAtBaseline": "<short sha>",
@@ -17,7 +18,10 @@
 //         "wallNsIqrLow": number,
 //         "wallNsIqrHigh": number,
 //         "iters": number,
-//         "approxNodes": number
+//         "approxNodes": number,
+//         "heapRetainedDeltaMedian"?: number,
+//         "heapWorkingSetMedian"?: number,
+//         "longestTaskMsMedian"?: number
 //       },
 //       ...
 //     }
@@ -29,10 +33,13 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { suggestMachineLabel } from './machine-label.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RESULTS_DIR = join(REPO_ROOT, 'perf-results');
 const BASELINES_DIR = join(REPO_ROOT, 'perf-baselines');
+
+export const BASELINE_SCHEMA_VERSION = 1;
 
 /**
  * @typedef {Object} JsonlRow
@@ -45,6 +52,10 @@ const BASELINES_DIR = join(REPO_ROOT, 'perf-baselines');
  * @property {number} wallNsMedian
  * @property {number} wallNsIqrLow
  * @property {number} wallNsIqrHigh
+ * @property {number} [heapRetainedDeltaMedian]
+ * @property {number} [heapWorkingSetMedian]
+ * @property {number} [heapWorkingSetMax]
+ * @property {number} [longestTaskMsMedian]
  * @property {string} codeSha
  */
 
@@ -55,10 +66,15 @@ const BASELINES_DIR = join(REPO_ROOT, 'perf-baselines');
  * @property {number} wallNsIqrHigh
  * @property {number} iters
  * @property {number} approxNodes
+ * @property {number} [heapRetainedDeltaMedian]
+ * @property {number} [heapWorkingSetMedian]
+ * @property {number} [heapWorkingSetMax]
+ * @property {number} [longestTaskMsMedian]
  */
 
 /**
  * @typedef {Object} BaselineFile
+ * @property {number} schemaVersion
  * @property {string} machineLabel
  * @property {string} lastUpdatedUtc
  * @property {string} codeShaAtBaseline
@@ -76,15 +92,55 @@ export function rowsToBaselineEntries(rows) {
   const out = {};
   for (const row of rows) {
     const key = `${row.layer}.${row.scenario}.${row.fixture}.${row.size}`;
-    out[key] = {
+    /** @type {BaselineEntry} */
+    const entry = {
       wallNsMedian: row.wallNsMedian,
       wallNsIqrLow: row.wallNsIqrLow,
       wallNsIqrHigh: row.wallNsIqrHigh,
       iters: row.iters,
       approxNodes: row.approxNodes,
     };
+    if (typeof row.heapRetainedDeltaMedian === 'number') {
+      entry.heapRetainedDeltaMedian = row.heapRetainedDeltaMedian;
+    }
+    if (typeof row.heapWorkingSetMedian === 'number') {
+      entry.heapWorkingSetMedian = row.heapWorkingSetMedian;
+    }
+    if (typeof row.heapWorkingSetMax === 'number') {
+      entry.heapWorkingSetMax = row.heapWorkingSetMax;
+    }
+    if (typeof row.longestTaskMsMedian === 'number') {
+      entry.longestTaskMsMedian = row.longestTaskMsMedian;
+    }
+    out[key] = entry;
   }
   return out;
+}
+
+/**
+ * Validates a parsed baseline file against the schemaVersion contract.
+ * Throws with a clear message on mismatch or missing field.
+ *
+ * @param {unknown} parsed
+ * @param {string} sourcePath
+ * @returns {BaselineFile}
+ */
+export function assertBaselineSchema(parsed, sourcePath) {
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error(`Baseline at ${sourcePath} is not an object`);
+  }
+  const obj = /** @type {Record<string, unknown>} */ (parsed);
+  if (typeof obj['schemaVersion'] !== 'number') {
+    throw new Error(
+      `Baseline at ${sourcePath} is missing "schemaVersion". Expected ${BASELINE_SCHEMA_VERSION}. Recapture via \`npm run perf:baseline\`.`,
+    );
+  }
+  if (obj['schemaVersion'] !== BASELINE_SCHEMA_VERSION) {
+    throw new Error(
+      `Baseline at ${sourcePath} has schemaVersion=${String(obj['schemaVersion'])}, expected ${BASELINE_SCHEMA_VERSION}. Recapture via \`npm run perf:baseline\`.`,
+    );
+  }
+  return /** @type {BaselineFile} */ (parsed);
 }
 
 /**
@@ -149,7 +205,7 @@ export function readRunRows(runDir) {
 export function snapshotBaseline({ machineLabel, resultsDir, baselinesDir }) {
   if (!machineLabel) {
     throw new Error(
-      'PERF_MACHINE is required. See docs/perf.md or run `node scripts/perf/machine-label.mjs --suggest`.',
+      'snapshotBaseline requires a machineLabel. Pass it explicitly or set PERF_MACHINE; otherwise the CLI falls back to suggestMachineLabel().',
     );
   }
   const usedResultsDir = resultsDir ?? RESULTS_DIR;
@@ -162,6 +218,7 @@ export function snapshotBaseline({ machineLabel, resultsDir, baselinesDir }) {
   const codeSha = rows[0]?.codeSha ?? 'unknown';
   /** @type {BaselineFile} */
   const baseline = {
+    schemaVersion: BASELINE_SCHEMA_VERSION,
     machineLabel,
     lastUpdatedUtc: new Date().toISOString(),
     codeShaAtBaseline: codeSha,
@@ -178,13 +235,7 @@ export function snapshotBaseline({ machineLabel, resultsDir, baselinesDir }) {
 }
 
 async function main() {
-  const machineLabel = process.env['PERF_MACHINE'];
-  if (!machineLabel) {
-    process.stderr.write(
-      'perf:baseline FAILED\nPERF_MACHINE is unset. See docs/perf.md or run:\n  node scripts/perf/machine-label.mjs --suggest\n',
-    );
-    process.exit(1);
-  }
+  const machineLabel = process.env['PERF_MACHINE'] ?? suggestMachineLabel();
   const { baselinePath, rowCount, lastUpdatedUtc } = snapshotBaseline({ machineLabel });
   process.stdout.write(
     `perf:baseline  wrote ${rowCount} rows to ${baselinePath} (${lastUpdatedUtc})\n`,

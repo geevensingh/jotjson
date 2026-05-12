@@ -2,29 +2,25 @@
  * Pure tree builder, extracted from `JsonTreeComponent` so it can run
  * in a Node bench harness with no Angular DI context.
  *
- * The file has zero repo-internal imports (only stdlib types), so
- * `tsc -p tsconfig.perf.json` produces a `.mjs` that Node ESM can
- * resolve without rewriting relative specifiers. See
+ * The file's only repo-internal imports are to `json-value-type.ts` and
+ * `json-path.ts` (also import-isolated leaves), so `tsc -p
+ * tsconfig.perf.json` produces a `.mjs` that Node ESM can resolve
+ * without rewriting relative specifiers. See
  * `perf/bench/build-tree.bench.ts` and `docs/perf.md`.
  *
  * `JsonTreeComponent.buildRoot` is now a thin wrapper that calls
  * `buildTree` and emits `tree.build.slow` telemetry around it.
  *
- * `JsonValueType`, `jsonTypeOf`, and `formatPath` are intentionally
- * duplicated here from `src/app/shared/pipes/json-type.pipe.ts` and
- * `JsonParserService.pathToString` respectively to keep this file
- * import-isolated. The component imports `formatPath` back from this
- * module so its other ~8 callsites stay deduplicated.
+ * `JsonValueType`, `jsonTypeOf`, and `pathToString` are re-exported
+ * (with `pathToString` aliased as `formatPath` for the existing
+ * call-sites in `JsonTreeComponent` + specs) so external callers do
+ * not have to change import paths in lock-step with the consolidation.
  */
 
-export type JsonValueType =
-  | 'object'
-  | 'array'
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'null'
-  | 'undefined';
+import { pathToString } from '../../../core/json/json-path';
+import { jsonTypeOf, type JsonValueType } from '../../../core/json/json-value-type';
+
+export { pathToString as formatPath, jsonTypeOf, type JsonValueType };
 
 export interface TreeNode {
   segment: string | number | undefined;
@@ -97,7 +93,7 @@ export function buildNode(
   const node: TreeNode = {
     segment,
     path,
-    pathString: formatPath(path),
+    pathString: pathToString(path),
     value,
     type,
     depth: path.length,
@@ -106,45 +102,4 @@ export function buildNode(
     node.children = buildChildren(value, path, counter);
   }
   return node;
-}
-
-/**
- * Renders a canonical JSON path (e.g. `$.foo[0]["a.b"]`) for the given
- * segment array.
- *
- * This duplicates `JsonParserService.pathToString`. The duplication is
- * pre-existing; both produce identical output for all legal segment
- * arrays. Do not consolidate in this PR -- the pre-existing duplication
- * predates the extraction.
- */
-export function formatPath(path: (string | number)[]): string {
-  let out = '$';
-  for (const seg of path) {
-    if (typeof seg === 'number') {
-      out += `[${seg}]`;
-    } else if (/^[A-Za-z_$][\w$]*$/.test(seg)) {
-      out += `.${seg}`;
-    } else {
-      out += `[${JSON.stringify(seg)}]`;
-    }
-  }
-  return out;
-}
-
-/**
- * Returns the JSON-spec value-type discriminant for a parsed value.
- *
- * Duplicated from `src/app/shared/pipes/json-type.pipe.ts` to keep this
- * module import-isolated for the Node bench harness. The pipe is the
- * canonical surface for templates; this copy is for the tree-build
- * fast path only. Keep these in sync if either changes.
- */
-export function jsonTypeOf(value: unknown): JsonValueType {
-  if (value === null) return 'null';
-  if (value === undefined) return 'undefined';
-  if (Array.isArray(value)) return 'array';
-  if (typeof value === 'object') return 'object';
-  if (typeof value === 'number') return 'number';
-  if (typeof value === 'boolean') return 'boolean';
-  return 'string';
 }

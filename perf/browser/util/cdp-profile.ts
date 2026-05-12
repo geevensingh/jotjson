@@ -15,6 +15,7 @@ export class CdpProfiler {
   private profilerStarted = false;
   private tracingStarted = false;
   private tracePackets: unknown[] = [];
+  private tracingDataListener: ((event: { value: unknown[] }) => void) | null = null;
 
   async attach(page: Page): Promise<void> {
     this.session = await page.context().newCDPSession(page);
@@ -42,6 +43,7 @@ export class CdpProfiler {
     const onData = (event: { value: unknown[] }) => {
       for (const packet of event.value) this.tracePackets.push(packet);
     };
+    this.tracingDataListener = onData;
     this.session.on('Tracing.dataCollected', onData);
     await this.session.send('Tracing.start', {
       categories: 'devtools.timeline,blink.user_timing,disabled-by-default-devtools.timeline',
@@ -50,14 +52,32 @@ export class CdpProfiler {
     this.tracingStarted = true;
   }
 
+  // MUST register the Tracing.tracingComplete listener BEFORE sending
+  // Tracing.end: tracingComplete can fire synchronously from end's
+  // ack on small captures, and a late-registered listener silently
+  // hangs (Promise never resolves). The 30s race ceiling + zero-event
+  // assertion turn that silent failure into a loud, debuggable error.
   async stopTracingToFile(outPath: string): Promise<void> {
     if (!this.session || !this.tracingStarted) return;
-    await this.session.send('Tracing.end');
-    await new Promise<void>((resolve) => {
-      const onComplete = () => resolve();
-      this.session?.once('Tracing.tracingComplete', onComplete);
+    const session = this.session;
+    const completion = new Promise<void>((resolve) => {
+      session.once('Tracing.tracingComplete', () => resolve());
     });
+    const timeout = new Promise<void>((_, reject) => {
+      setTimeout(() => reject(new Error('CDP trace stop timeout (30s)')), 30_000);
+    });
+    await session.send('Tracing.end');
+    await Promise.race([completion, timeout]);
     this.tracingStarted = false;
+    if (this.tracingDataListener) {
+      session.off('Tracing.dataCollected', this.tracingDataListener);
+      this.tracingDataListener = null;
+    }
+    if (this.tracePackets.length === 0) {
+      throw new Error(
+        `CDP tracing collected zero events before completion. Trace file would be empty: ${outPath}`,
+      );
+    }
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, JSON.stringify({ traceEvents: this.tracePackets }), 'utf8');
   }

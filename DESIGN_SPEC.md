@@ -1516,11 +1516,15 @@ ID test tenant.
 | Cross-browser smoke | post-v1 | Playwright matrix on Firefox + WebKit, run nightly. Catches engine-specific issues. (WebKit on Linux is not Safari; iOS-Safari still needs manual verification.) Deferred post-v1 due to engine-flake risk and zero historical engine-specific shipped bugs. Tracked in issue #65. |
 | Accessibility smoke | v1 gate (active) | `@axe-core/playwright` invoked from each smoke flow, blocking on `serious` + `critical` impact only; pre-existing violations are allow-listed with dated review-by comments. Backs the WCAG 2.1 AA commitment in the Accessibility section (axe-green is necessary but not sufficient for WCAG-green - keyboard-only nav, screen-reader announcements, and dynamic focus order remain manual concerns). Tracked in issue #66. |
 | Visual regression | post-v1 | Pixel-diff of representative screens against a baseline. Post-v1 unless visual bugs become recurring. Tracked in issue #67. |
+| Perf L1 (Node bench) | local-only (v1) | Isolate `parse()` + `buildTree()` wall time and heap allocation on representative fixtures. Headless Node under `--expose-gc`; per-iteration GC bracketing. Documented in `docs/perf.md`. |
+| Perf L2 (Karma component bench) | local-only (v1) | Isolate Angular change-detection costs around `JsonTreeComponent` against the pure tree-build cost L1 measures. Karma + Chromium; opt-in 100K / 1M tiers. Documented in `docs/perf.md`. |
+| Perf L3 (Playwright + CDP) | local-only (v1) | End-to-end paste / expand-all / scroll-after-expand wall time + longest-task duration on the real SPA. Chromium DevTools Protocol captures CPU profile + tracing. Documented in `docs/perf.md`. |
 
 What this layer model deliberately does *not* claim:
 
 - The **browser integration** layer does not prove Monaco worker correctness. The JSON worker spawns from a runtime-built blob URL; this layer verifies editor mount + value behavior, not worker-specific diagnostics or branch behavior. Anonymous smoke e2e (#64, active) catches user-visible worker-load regressions on covered flows, but worker-specific correctness remains intentionally unasserted.
 - **Unit (api)** still uses mocked Cosmos / Blob clients. API integration (#63, active) covers the first real-Cosmos `BlobsService.createBlob` / `findBlobByIdOrSlug` happy path, including partition-key correctness and document-shape preservation against the production indexing policy. It does NOT yet claim full BlobsService CRUD coverage, integration coverage of other services (`MeService`, `HistoryService`, `RuleSets`), exhaustive indexing-policy validation, or continuation-token pagination correctness; those are tracked as follow-ups.
+- **Perf L1/L2/L3** are local-only in v1. The full runbook lives in `docs/perf.md`; the only enforced ceiling in `perf-targets.json` is a v1 stress check on a 24 MB `wide-aoo` fixture (not an NFR anchor; an NFR-faithful ~5 MB fixture is tracked as a follow-up). Baselines are per-machine and gitignored by default; commit a baseline only on an agreed reference machine.
 
 Layer names above are runner-neutral so this model survives runner migrations
 (see issue #47 - test-runner migration).

@@ -119,17 +119,29 @@ export const LONGTASK_OBSERVER_SCRIPT = `
       observer.observe({ entryTypes: ['longtask'] });
       window.__perfLongtaskObserver = observer;
       return true;
-    } catch (e) {
+    } catch (error) {
       window.__perfLongtaskMax = null;
       return false;
     }
   })();
 `;
 
+// Drain any buffered entries before disconnecting so longtasks that fire
+// between the last observer callback and the stop call are not silently
+// dropped (chromium buffers longtask entries; without takeRecords() the
+// long-tail max can be off by a full task duration on small samples).
 export const LONGTASK_OBSERVER_STOP_SCRIPT = `
   (function () {
     if (window.__perfLongtaskObserver) {
-      try { window.__perfLongtaskObserver.disconnect(); } catch (e) {}
+      try {
+        const pending = window.__perfLongtaskObserver.takeRecords();
+        for (const entry of pending) {
+          if (entry.duration > window.__perfLongtaskMax) {
+            window.__perfLongtaskMax = entry.duration;
+          }
+        }
+        window.__perfLongtaskObserver.disconnect();
+      } catch (error) {}
       delete window.__perfLongtaskObserver;
     }
     return window.__perfLongtaskMax;

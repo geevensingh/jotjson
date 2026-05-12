@@ -46,9 +46,11 @@ export interface BenchRow {
   wallNsIqrLow: number;
   wallNsIqrHigh: number;
   wallNsStddev: number;
-  bytesAllocMedian: number;
-  bytesAllocIqrLow: number;
-  bytesAllocIqrHigh: number;
+  heapRetainedDeltaMedian: number;
+  heapRetainedDeltaIqrLow: number;
+  heapRetainedDeltaIqrHigh: number;
+  heapWorkingSetMedian: number;
+  heapWorkingSetMax: number;
 }
 
 function quantile(sortedValues: number[], q: number): number {
@@ -88,20 +90,24 @@ function measure(
     buildTree(value);
   }
   const wallNs: number[] = [];
-  const bytesAlloc: number[] = [];
+  const heapRetainedDelta: number[] = [];
+  const heapWorkingSet: number[] = [];
   for (let i = 0; i < TIMED_ITERS; i++) {
     gc();
     const beforeHeap = process.memoryUsage().heapUsed;
     const t0 = process.hrtime.bigint();
     buildTree(value);
     const t1 = process.hrtime.bigint();
+    const afterWorkHeap = process.memoryUsage().heapUsed;
     gc();
     const afterHeap = process.memoryUsage().heapUsed;
     wallNs.push(Number(t1 - t0));
-    bytesAlloc.push(Math.max(0, afterHeap - beforeHeap));
+    heapRetainedDelta.push(Math.max(0, afterHeap - beforeHeap));
+    heapWorkingSet.push(Math.max(0, afterWorkHeap - beforeHeap));
   }
   const wallSorted = [...wallNs].sort((a, b) => a - b);
-  const bytesSorted = [...bytesAlloc].sort((a, b) => a - b);
+  const retainedSorted = [...heapRetainedDelta].sort((a, b) => a - b);
+  const workingSorted = [...heapWorkingSet].sort((a, b) => a - b);
   return {
     scenario,
     fixture,
@@ -113,9 +119,11 @@ function measure(
     wallNsIqrLow: quantile(wallSorted, 0.25),
     wallNsIqrHigh: quantile(wallSorted, 0.75),
     wallNsStddev: stddev(wallNs),
-    bytesAllocMedian: quantile(bytesSorted, 0.5),
-    bytesAllocIqrLow: quantile(bytesSorted, 0.25),
-    bytesAllocIqrHigh: quantile(bytesSorted, 0.75),
+    heapRetainedDeltaMedian: quantile(retainedSorted, 0.5),
+    heapRetainedDeltaIqrLow: quantile(retainedSorted, 0.25),
+    heapRetainedDeltaIqrHigh: quantile(retainedSorted, 0.75),
+    heapWorkingSetMedian: quantile(workingSorted, 0.5),
+    heapWorkingSetMax: workingSorted[workingSorted.length - 1] ?? 0,
   };
 }
 

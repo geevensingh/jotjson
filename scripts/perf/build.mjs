@@ -1,11 +1,25 @@
 // Builds the perf bench pipeline:
 //   1. Runs `tsc -p tsconfig.perf.json` to compile the pure modules,
 //      fixture generator, and bench harnesses to `dist-perf/`.
-//   2. Drops `dist-perf/package.json` with `{ "type": "module" }` so
+//   2. Rewrites extensionless relative imports in the emit to add a
+//      `.js` suffix, so Node ESM can resolve them.
+//   3. Drops `dist-perf/package.json` with `{ "type": "module" }` so
 //      Node ESM treats every emitted `.js` as a module.
-//   3. Runs a self-test: imports each compiled bench's `selfTest()`
+//   4. Runs a self-test: imports each compiled bench's `selfTest()`
 //      export and runs it once. Fails loud on import error, runtime
 //      error, or generator hash drift.
+//
+// Why the rewrite (step 2): the pure modules under `src/app/core/json/`
+// + `src/app/shared/components/json-tree/build-tree.ts` are shared
+// with the SPA build, which uses Webpack/esbuild and rejects
+// `.js`-suffix specifiers in source. They must therefore be
+// extensionless in source. Node ESM, however, requires explicit
+// suffixes on relative specifiers in `.js` files. We tried TS 5.7+
+// `rewriteRelativeImportExtensions` + `.ts`-suffix source on
+// 2026-04-XX, but Angular's Karma plugin re-rewrites the `.ts` -> `.js`
+// during its own compile step and Webpack's resolver does not reverse
+// it, so the spike broke `ng test`. The post-emit fixer below is the
+// resulting compromise.
 //
 // Invoked as:
 //   npm run perf:build
@@ -18,7 +32,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -76,6 +90,74 @@ function runTsc() {
 
 function writeDistPackageJson() {
   writeFileSync(join(DIST_DIR, 'package.json'), JSON.stringify({ type: 'module' }, null, 2) + '\n');
+}
+
+/**
+ * Source files use extensionless relative imports (SPA-friendly), but
+ * Node ESM requires explicit suffixes. This rewrites the emit by
+ * walking `dist-perf/` and adding `.js` to every relative specifier
+ * that doesn't already carry a recognized extension.
+ *
+ * Matched specifiers MUST start with `./` or `../`.
+ *
+ * Three rewrite forms are handled:
+ *   - `import x from './foo'`              (static, named/default)
+ *   - `import './foo'`                     (static, side-effect)
+ *   - `import('./foo')` / `await import('./foo')` (dynamic)
+ *
+ * Specifiers already ending in a known asset extension are skipped:
+ *   `.js`, `.mjs`, `.cjs`, `.json`, `.css`, `.wasm`, `.svg`. These are
+ *   either already valid for Node ESM or would be mangled into a
+ *   missing file by appending `.js`.
+ *
+ * Processing is line-by-line so the regex cannot accidentally bridge
+ * a JSDoc comment that mentions `import` with a real `from './x'`
+ * line below it. Lines whose first non-whitespace content is `//`,
+ * `/*`, or `*` (JSDoc continuation) are skipped entirely so doc text
+ * about imports is left alone.
+ */
+function fixRelativeImportExtensions() {
+  const skipExt = /\.(json|css|wasm|svg|[mc]?js)$/;
+  const staticPattern = /(\bfrom\s+|\bimport\s+)(['"])(\.{1,2}\/[^'"\r\n]+)(['"])/g;
+  const dynamicPattern = /(\bimport\s*\(\s*)(['"])(\.{1,2}\/[^'"\r\n]+)(['"])/g;
+
+  /** @param {string} line */
+  function rewriteLine(line) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+      return line;
+    }
+    const rewriter = (
+      /** @type {string} */ _match,
+      /** @type {string} */ leading,
+      /** @type {string} */ openQuote,
+      /** @type {string} */ specifier,
+      /** @type {string} */ closeQuote,
+    ) =>
+      skipExt.test(specifier)
+        ? `${leading}${openQuote}${specifier}${closeQuote}`
+        : `${leading}${openQuote}${specifier}.js${closeQuote}`;
+    return line.replace(staticPattern, rewriter).replace(dynamicPattern, rewriter);
+  }
+
+  /** @param {string} dir */
+  function walk(dir) {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      const stat = statSync(full);
+      if (stat.isDirectory()) {
+        walk(full);
+      } else if (full.endsWith('.js')) {
+        const original = readFileSync(full, 'utf8');
+        const next = original.split('\n').map(rewriteLine).join('\n');
+        if (next !== original) {
+          writeFileSync(full, next);
+        }
+      }
+    }
+  }
+
+  walk(DIST_DIR);
 }
 
 /**
@@ -145,11 +227,13 @@ async function selfTestBenches() {
 }
 
 async function main() {
-  process.stdout.write('perf:build  step 1/3  tsc -p tsconfig.perf.json\n');
+  process.stdout.write('perf:build  step 1/4  tsc -p tsconfig.perf.json\n');
   runTsc();
-  process.stdout.write('perf:build  step 2/3  dist-perf/package.json -> { type: module }\n');
+  process.stdout.write('perf:build  step 2/4  rewrite relative imports to add .js\n');
+  fixRelativeImportExtensions();
+  process.stdout.write('perf:build  step 3/4  dist-perf/package.json -> { type: module }\n');
   writeDistPackageJson();
-  process.stdout.write('perf:build  step 3/3  self-test\n');
+  process.stdout.write('perf:build  step 4/4  self-test\n');
   await selfTestGenerator();
   await selfTestBenches();
   process.stdout.write('perf:build  OK\n');
