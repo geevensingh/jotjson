@@ -1,0 +1,443 @@
+name: Deploy (SWA) - PR preview
+
+# ----------------------------------------------------------------------
+# Per-PR preview environment deploy on `swa-jotjson-nonprod` (Visual
+# Studio Enterprise sub). Phase 2 of issue #93 / #179.
+#
+# Trigger: `pull_request` (opened / synchronize / reopened / closed)
+# from the geevensingh/jotjson repository itself. Fork PRs are skipped
+# entirely (no OIDC, no secrets, no preview env).
+#
+# NOTE on path filters: there is intentionally NO workflow-level
+# `paths-ignore` here. Filtering at the trigger level would also
+# filter the `closed` event for a PR whose final diff is docs-only
+# (e.g., a code-then-revert sequence), which would silently skip the
+# teardown job and leak the preview env + per-PR Cosmos DB. Letting
+# docs-only PRs deploy a preview is the cheaper failure mode (one
+# ~3-minute deploy + ephemeral env auto-torn-down on close).
+#
+# Build profile: ANONYMOUS. Uses `environment.example.ts` directly -
+# the same harness the existing e2e/anonymous/ smoke suite uses. MSAL
+# is never initialised with real Entra config on a preview, so NO
+# Entra redirect URI registration is needed for preview hostnames.
+# Sign-in is intentionally non-functional on preview URLs; signed-in
+# coverage for previews is tracked separately in #68.
+#
+# Cosmos isolation: each preview env gets a dedicated Cosmos SQL
+# database `jotjson-pr-<number>` on the shared `cosmos-jotjson-nonprod`
+# account. The database is created on deploy and dropped on PR close
+# as defensive scaffolding for #68. NOTE: the database is NOT yet
+# wired into the preview SWA's Functions - Azure CLI's
+# `az staticwebapp appsettings set --environment-name <preview>`
+# returns Not Found for non-`production` envs, so per-preview overrides
+# aren't possible via that surface. Phase 2's anonymous smoke doesn't
+# write to Cosmos so this is currently inert; #68 will revisit.
+#
+# Auth (Azure): uses federated SP `gh-actions-jotjson` via
+# `environment: nonprod` matching the federated cred
+# `repo:geevensingh/jotjson:environment:nonprod`. Role: Contributor on
+# `rg-jotjson-nonprod` only.
+#
+# Auth (SWA): uses `AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD`
+# environment secret (same token cd-nonprod.yml uses; SWA scopes each
+# deploy to its `deployment_environment` automatically).
+#
+# E2E gate: `e2e-preview` job runs the anonymous Playwright suite
+# against the preview URL. Lands in SHADOW MODE for the first ~1 week
+# (`continue-on-error: true` on the test step) - red doesn't block
+# the PR. After a clean week, flip to required via a follow-up tiny
+# PR + branch-protection update.
+#
+# Teardown: on PR `closed`, the preview SWA env is removed via the
+# SWA action's `action: close` and the per-PR Cosmos DB is dropped.
+# Both calls are idempotent.
+# ----------------------------------------------------------------------
+
+run-name: >-
+  [preview pr-${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: cd-preview-pr-${{ github.event.pull_request.number }}
+  # Newer commits on the same PR cancel older runs. Teardown on `closed`
+  # is the final event for a PR, so collateral cancellation isn't a
+  # concern.
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write # OIDC to nonprod sub for per-PR Cosmos DB create/delete
+  pull-requests: write # sticky PR comment
+
+env:
+  COSMOS_ACCOUNT: cosmos-jotjson-nonprod
+  NONPROD_RG: rg-jotjson-nonprod
+  SWA_NAME: swa-jotjson-nonprod
+  PREVIEW_ENV: pr-${{ github.event.pull_request.number }}
+  PREVIEW_DB: jotjson-pr-${{ github.event.pull_request.number }}
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy preview (pr-${{ github.event.pull_request.number }})
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: nonprod
+    outputs:
+      preview_url: ${{ steps.swa-deploy.outputs.static_web_app_url }}
+    steps:
+      - name: Check for deploy token
+        env:
+          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
+        run: |
+          if [ -z "$SWA_TOKEN" ]; then
+            echo "::error::AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD not set - cannot deploy."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+          lfs: false
+          # Full history so the inline `npm run build` produces a real
+          # `buildNumber`. Mirrors cd-nonprod.yml.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install web deps
+        run: npm ci
+
+      - name: Materialize anonymous environment.{ts,prod.ts}
+        # Preview uses the same anonymous *credential* shape as the
+        # existing e2e/anonymous/ smoke - empty Entra config so MSAL
+        # never initialises with real values. The dev `environment.ts`
+        # is a verbatim copy of `environment.example.ts` (which has
+        # `production: false`, correct for ng serve / dev tooling).
+        # The `environment.prod.ts` is synthesized inline with
+        # `production: true` (Angular's fileReplacements swaps to this
+        # file under `--configuration=production`); otherwise the
+        # preview bundle would ship `production: false` and diverge
+        # from cd.yml / cd-nonprod.yml bundles for any future
+        # `environment.production`-gated code path.
+        run: |
+          cp src/environments/environment.example.ts src/environments/environment.ts
+          cat > src/environments/environment.prod.ts <<'EOF'
+          import { Environment } from './environment.interface';
+
+          export const environment: Environment = {
+            production: true,
+            apiBaseUrl: '/api',
+            auth: {
+              clientId: '',
+              authority: '',
+              knownAuthorities: [],
+              redirectUri: '',
+              postLogoutRedirectUri: '',
+              scopes: [],
+            },
+            appInsightsConnectionString: '',
+          };
+          EOF
+          sed -i 's/^          //' src/environments/environment.prod.ts
+
+      - name: Build SPA
+        run: npm run build -- --configuration=production
+
+      - name: Copy SWA config into bundle
+        run: cp staticwebapp.config.json dist/jotjson/browser/staticwebapp.config.json
+
+      - name: Sanity-check preview bundle
+        run: |
+          if [ ! -f dist/jotjson/browser/index.html ]; then
+            echo "::error::dist/jotjson/browser/index.html missing"
+            exit 1
+          fi
+          if [ ! -f dist/jotjson/browser/staticwebapp.config.json ]; then
+            echo "::error::dist/jotjson/browser/staticwebapp.config.json missing"
+            exit 1
+          fi
+          # Anonymous builds must NOT contain placeholders OR real Entra
+          # values - environment.example.ts uses inert sentinels.
+          if grep -r --include='*.js' '__ENTRA_\|__DEPLOY_REDIRECT_URI__' dist/jotjson/browser/; then
+            echo "::error::Bundle contains unbaked __ENTRA_* / __DEPLOY_REDIRECT_URI__ - environment.example.ts is malformed"
+            exit 1
+          fi
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_NONPROD }}
+
+      - name: Provision per-PR Cosmos database
+        # Idempotent: --throughput omitted (account-default serverless).
+        # If the database already exists, `az cosmosdb sql database create`
+        # is a no-op success.
+        run: |
+          az cosmosdb sql database create \
+            --account-name "$COSMOS_ACCOUNT" \
+            --resource-group "$NONPROD_RG" \
+            --name "$PREVIEW_DB"
+
+      - name: Install API full deps
+        working-directory: api
+        run: npm ci
+
+      - name: Build API
+        working-directory: api
+        run: npm run build
+
+      - name: Deploy to Azure Static Web Apps (preview env)
+        id: swa-deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          # SWA routes this to a per-PR preview environment under the
+          # `swa-jotjson-nonprod` resource. The preview hostname is
+          # surfaced as the action output `static_web_app_url`.
+          deployment_environment: ${{ env.PREVIEW_ENV }}
+          app_location: 'dist/jotjson/browser'
+          api_location: 'api'
+          skip_app_build: true
+          skip_api_build: true
+
+      # NOTE: We do NOT wire `COSMOS_DATABASE` as a per-preview-env app
+      # setting here. The Azure CLI `az staticwebapp appsettings set
+      # --environment-name <preview>` surface returns "Not Found" for
+      # preview environments (only the default `production` environment
+      # supports overrides at present). The preview Cosmos database is
+      # still created/destroyed defensively to keep the cleanup story
+      # simple, but the preview SWA's Functions inherit the production
+      # `COSMOS_DATABASE` setting. Phase 2's anonymous smoke doesn't
+      # write to Cosmos so this is currently inert. When #68 (signed-in
+      # smoke) needs real isolation, revisit via either:
+      #   - a per-env override via the ARM Management API directly, or
+      #   - environment-name routing inside the Functions code itself,
+      #   - or by accepting cross-preview shared storage and using
+      #     unique partition keys per PR.
+
+      - name: Azure logout
+        if: ${{ always() }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
+
+      - name: Post sticky preview comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: cd-preview
+          message: |
+            ### Preview environment deployed
+
+            - URL: ${{ steps.swa-deploy.outputs.static_web_app_url }}
+            - SWA env: `${{ env.PREVIEW_ENV }}` on `swa-jotjson-nonprod`
+            - Cosmos database: `${{ env.PREVIEW_DB }}` created on `cosmos-jotjson-nonprod` (defensive scaffolding for #68; not yet wired to Functions on this preview)
+            - Commit: ${{ github.event.pull_request.head.sha }}
+
+            **Limitations:**
+            - Anonymous build only - sign-in is non-functional on preview URLs (see #68 for the signed-in story).
+            - Preview env and per-PR database are torn down when this PR is closed.
+
+      - name: Summary
+        if: ${{ always() && !cancelled() }}
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            {
+              echo "## Preview deployed"
+              echo ""
+              echo "- URL: ${{ steps.swa-deploy.outputs.static_web_app_url }}"
+              echo "- SWA env: \`${{ env.PREVIEW_ENV }}\`"
+              echo "- Cosmos DB: \`${{ env.PREVIEW_DB }}\`"
+              echo "- Commit: ${{ github.event.pull_request.head.sha }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Preview deploy failed"
+              echo ""
+              echo "- SWA env: \`${{ env.PREVIEW_ENV }}\`"
+              echo "- Commit: ${{ github.event.pull_request.head.sha }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  e2e-preview:
+    name: Smoke e2e against preview (shadow)
+    needs: build-and-deploy
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Shadow mode: this job runs but does not gate the PR. The test step
+    # is allowed to fail (`continue-on-error: true`). After ~1 week of
+    # green runs, a follow-up PR will flip this off and the check will
+    # be added to required status checks in branch protection.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install web deps
+        run: npm ci
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run smoke e2e against preview URL
+        id: run-e2e-tests
+        # Shadow mode - red here does not block the PR. Flip to false
+        # after ~1 week of clean runs (and add to required checks in
+        # branch protection at the same time).
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ needs.build-and-deploy.outputs.preview_url }}
+        run: npm run test:e2e
+      - name: Upload Playwright HTML report
+        if: failure() || steps.run-e2e-tests.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-playwright-report-pr-${{ github.event.pull_request.number }}
+          path: playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload Playwright traces
+        if: failure() || steps.run-e2e-tests.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-playwright-results-pr-${{ github.event.pull_request.number }}
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  teardown:
+    name: Tear down preview env (pr-${{ github.event.pull_request.number }})
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: nonprod
+    steps:
+      - name: Check for deploy token
+        # Mirrors the build-and-deploy guard. Without this, a missing
+        # AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD would fail the SWA
+        # `close` step late and could leave the preview env behind.
+        env:
+          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
+        run: |
+          if [ -z "$SWA_TOKEN" ]; then
+            echo "::error::AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD not set - cannot tear down preview env."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Tear down SWA preview environment
+        # The SWA action's `action: close` mode removes the per-PR
+        # preview environment. Idempotent - succeeds quietly if the
+        # env was already removed. Marked continue-on-error so a
+        # transient failure here does not skip the Cosmos delete
+        # below; the final summary step re-fails the job if either
+        # provider call actually failed.
+        id: swa-close
+        continue-on-error: true
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: close
+          deployment_environment: ${{ env.PREVIEW_ENV }}
+
+      - name: Azure login (OIDC)
+        if: ${{ always() }}
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_NONPROD }}
+
+      - name: Drop per-PR Cosmos database
+        # Idempotent: --yes skips confirmation; we tolerate ResourceNotFound
+        # (already-deleted) but surface other errors. Runs regardless of
+        # the SWA close outcome so a transient SWA failure does not leak
+        # the per-PR database.
+        id: cosmos-delete
+        if: ${{ always() && steps.swa-close.conclusion != 'skipped' }}
+        continue-on-error: true
+        run: |
+          set +e
+          out=$(az cosmosdb sql database delete \
+            --account-name "$COSMOS_ACCOUNT" \
+            --resource-group "$NONPROD_RG" \
+            --name "$PREVIEW_DB" \
+            --yes 2>&1)
+          rc=$?
+          set -e
+          if [ $rc -eq 0 ]; then
+            echo "Deleted Cosmos database $PREVIEW_DB"
+            exit 0
+          fi
+          if echo "$out" | grep -qi 'not found\|notfound\|does not exist'; then
+            echo "Cosmos database $PREVIEW_DB already absent - nothing to do"
+            exit 0
+          fi
+          echo "::error::Failed to delete Cosmos database $PREVIEW_DB"
+          echo "$out"
+          exit $rc
+
+      - name: Azure logout
+        if: ${{ always() }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
+
+      - name: Update sticky comment (teardown)
+        if: ${{ always() }}
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: cd-preview
+          message: |
+            ### Preview environment torn down
+
+            - SWA env `${{ env.PREVIEW_ENV }}` close: `${{ steps.swa-close.outcome }}`
+            - Cosmos database `${{ env.PREVIEW_DB }}` delete: `${{ steps.cosmos-delete.outcome }}`
+
+      - name: Summary + fail on partial teardown
+        # Both SWA close and Cosmos delete use continue-on-error so they
+        # run independently. This final step re-fails the job if either
+        # actually failed, so a partial teardown surfaces as a red run
+        # rather than a silent leak.
+        if: ${{ always() && !cancelled() }}
+        run: |
+          swa='${{ steps.swa-close.outcome }}'
+          cosmos='${{ steps.cosmos-delete.outcome }}'
+          {
+            echo "## Preview torn down"
+            echo ""
+            echo "- SWA env: \`${{ env.PREVIEW_ENV }}\` (close: $swa)"
+            echo "- Cosmos DB: \`${{ env.PREVIEW_DB }}\` (delete: $cosmos)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$swa" = "failure" ] || [ "$cosmos" = "failure" ]; then
+            echo "::error::Partial teardown - swa=$swa cosmos=$cosmos. See preceding step logs."
+            exit 1
+          fi
