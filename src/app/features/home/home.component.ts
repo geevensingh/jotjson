@@ -1658,16 +1658,35 @@ export class HomeComponent implements OnInit, OnDestroy {
     postPasteContent: string;
     postPasteParses: boolean;
   }): void {
+    const handlerStartedAt = performance.now();
+    const sizeBytes = new Blob([event.pastedText]).size;
+    let parseMs = 0;
     if (event.postPasteParses) {
       this.replaceExtractedCandidate(null, null);
-      return;
-    }
-    const extracted = this.extractor.extractFromMixedText(event.pastedText);
-    if (extracted) {
-      this.replaceExtractedCandidate(extracted, 'editor.paste');
     } else {
-      this.replaceExtractedCandidate(null, null);
+      const parseStartedAt = performance.now();
+      const extracted = this.extractor.extractFromMixedText(event.pastedText);
+      parseMs = this.durationSince(parseStartedAt);
+      if (extracted) {
+        this.replaceExtractedCandidate(extracted, 'editor.paste');
+      } else {
+        this.replaceExtractedCandidate(null, null);
+      }
     }
+    const syncHandlerMs = this.durationSince(handlerStartedAt);
+    this.afterFirstPaint(handlerStartedAt, (firstPaintMs) => {
+      const measurements: TelemetryMeasurements = {
+        sizeBytes,
+        parseMs,
+        syncHandlerMs,
+        firstPaintMs,
+      };
+      this.logger.event(
+        'paste.handle.editor',
+        { sizeBytesBucket: bucketBytes(sizeBytes) },
+        measurements,
+      );
+    });
   }
 
   onExtractAccept(): void {
