@@ -1523,8 +1523,10 @@ production stack.
   - Angular SPA -> Azure Static Web Apps (using the `azure/static-web-apps-deploy` action).
   - Azure Functions -> deployed as Static Web Apps managed functions (bundled with the SPA in a single deployment).
   - Per-PR preview deploys land on the **nonprod** stack (Phase 2 of
-    issue #93), not the production SWA - see Azure Infrastructure ->
-    "Non-production environment" above.
+    issue #93), not the production SWA - driven by `cd-preview.yml`,
+    one preview SWA environment + dedicated per-PR Cosmos database
+    per open PR, torn down on PR `closed`. See Azure Infrastructure
+    -> "Non-production environment" above.
 - **Infrastructure** - Bicep templates applied via a separate workflow on changes to `/infra` directory.
 - **Workflow lint** - `actionlint` runs against `.github/workflows/` in CI.
 - **Spec-pattern lint** - `scripts/check-spec-patterns.mjs` runs in CI's lint job and fails on known-fragile testing idioms (e.g. `spyOnProperty(navigator, 'clipboard', ...)` which silently passes on Windows headless Chrome but throws on the Linux runner). New rules are added as we encounter cross-platform test failures.
@@ -1561,6 +1563,7 @@ ID test tenant.
 | Browser integration | yes | Real Monaco loaded once per suite via the project's loader. Verifies the loader, the asset path, and the editor's mount + value roundtrip with a real DOM. Lives alongside frontend unit specs but is named `*.integration.spec.ts`. |
 | API integration | v1 gate (active) | Functions + shared modules against a CI-only real Cosmos DB free-tier account (1000 RU/s + 25 GB free forever; per-run unique database name; secret-presence check skips fork PRs). Catches partition-key, query-shape, and continuation-token mistakes that mocks cannot. The `vnext-preview` Linux emulator is rejected as a harness due to acknowledged flakiness. Tracked in issue #63. |
 | Smoke e2e (anonymous) | v1 gate (active) | Playwright on critical anonymous user flows in Chromium, per-PR. Catches MSAL redirect, router lazy-load, service-worker, and CSP regressions that unit + browser-integration cannot. Tracked in issue #64. |
+| Preview-env smoke | shadow (active) | Same anonymous smoke harness, but pointed at a per-PR SWA preview environment on the nonprod stack (`pr-<N>` on `swa-jotjson-nonprod`) via `PLAYWRIGHT_BASE_URL`. Catches deploy-pipeline regressions (SWA config drift, CSP, service worker, redirect rules) that the locally-served-from-`dist` anonymous smoke cannot. Driven by `.github/workflows/cd-preview.yml`; lives under shadow mode (`continue-on-error: true` on the e2e job) for ~1 week from PR #210 merge, then flipped to required. Tracked in issue #93 (Phase 2) / #179. |
 | Smoke e2e (signed-in) | deferred | Same harness as anonymous smoke, but covers blob CRUD, share lifecycle, profile round-trip, and MSAL silent-token refresh. Requires an Entra External ID test tenant + ROPC users in CI; tenant setup is currently out of scope. Tracked in issue #68. |
 | Cross-browser smoke | post-v1 | Playwright matrix on Firefox + WebKit, run nightly. Catches engine-specific issues. (WebKit on Linux is not Safari; iOS-Safari still needs manual verification.) Deferred post-v1 due to engine-flake risk and zero historical engine-specific shipped bugs. Tracked in issue #65. |
 | Accessibility smoke | v1 gate (active) | `@axe-core/playwright` invoked from each smoke flow, blocking on `serious` + `critical` impact only; pre-existing violations are allow-listed with dated review-by comments. Backs the WCAG 2.1 AA commitment in the Accessibility section (axe-green is necessary but not sufficient for WCAG-green - keyboard-only nav, screen-reader announcements, and dynamic focus order remain manual concerns). Tracked in issue #66. |
