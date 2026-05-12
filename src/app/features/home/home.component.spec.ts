@@ -623,6 +623,75 @@ describe('HomeComponent (unit-level)', () => {
     expect(eventSpy).not.toHaveBeenCalled();
   });
 
+  it('onEditorPaste emits paste.handle.editor with parseMs=0 when postPasteParses is true', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const pastedText = '{"a":1}';
+    const sizeBytes = new Blob([pastedText]).size;
+
+    fixture.componentInstance.onEditorPaste({
+      pastedText,
+      postPasteContent: pastedText,
+      postPasteParses: true,
+    });
+    await waitForDoubleAnimationFrame();
+
+    const editorCalls = eventSpy.calls
+      .allArgs()
+      .filter((args) => args[0] === 'paste.handle.editor');
+    expect(editorCalls.length).toBe(1);
+    expect(editorCalls[0]).toEqual([
+      'paste.handle.editor',
+      { sizeBytesBucket: bucketBytes(sizeBytes) },
+      jasmine.objectContaining({
+        sizeBytes,
+        parseMs: 0,
+        syncHandlerMs: jasmine.any(Number),
+        firstPaintMs: jasmine.any(Number),
+      }),
+    ]);
+    // The toolbar-paste contract is untouched: editor path never emits paste.handle.
+    expect(eventSpy.calls.allArgs().some((args) => args[0] === 'paste.handle')).toBeFalse();
+  });
+
+  it('onEditorPaste emits paste.handle.editor with parseMs>=0 when postPasteParses is false', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const pastedText = 'INFO log {"a":1}';
+    const sizeBytes = new Blob([pastedText]).size;
+
+    fixture.componentInstance.onEditorPaste({
+      pastedText,
+      postPasteContent: pastedText,
+      postPasteParses: false,
+    });
+    await waitForDoubleAnimationFrame();
+
+    const editorCalls = eventSpy.calls
+      .allArgs()
+      .filter((args) => args[0] === 'paste.handle.editor');
+    expect(editorCalls.length).toBe(1);
+    const [, props, measurements] = editorCalls[0];
+    expect(props).toEqual({ sizeBytesBucket: bucketBytes(sizeBytes) });
+    expect(measurements).toEqual(
+      jasmine.objectContaining({
+        sizeBytes,
+        parseMs: jasmine.any(Number),
+        syncHandlerMs: jasmine.any(Number),
+        firstPaintMs: jasmine.any(Number),
+      }),
+    );
+    // parseMs is the duration of extractFromMixedText; must be non-negative.
+    const numericMeasurements = measurements as {
+      parseMs: number;
+      syncHandlerMs: number;
+      firstPaintMs: number;
+    };
+    expect(numericMeasurements.parseMs).toBeGreaterThanOrEqual(0);
+    expect(numericMeasurements.syncHandlerMs).toBeGreaterThanOrEqual(numericMeasurements.parseMs);
+    expect(eventSpy.calls.allArgs().some((args) => args[0] === 'paste.handle')).toBeFalse();
+  });
+
   describe('view reset on document replacement', () => {
     function flushHomeEffects(
       fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>,

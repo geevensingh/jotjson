@@ -1,0 +1,59 @@
+// Compiles the import-isolated pure-function modules and the Node bench
+// harness into `dist-perf/` as ESM. The compiled output is consumed by
+// `scripts/perf/run-bench.mjs`, which executes each bench under
+// `node --expose-gc`.
+//
+// Layout philosophy (see `docs/perf.md` and AGENTS.md Telemetry/Naming):
+//
+// - The pure modules (`src/app/core/json/json-value-type.ts`,
+//   `src/app/core/json/json-path.ts`, `src/app/core/json/parse.ts`,
+//   `src/app/shared/components/json-tree/build-tree.ts`) share one set
+//   of canonical definitions. Their relative imports between each
+//   other are written WITHOUT a file extension so the SPA build path
+//   (esbuild / Webpack) resolves them; `scripts/perf/build.mjs`
+//   rewrites those specifiers to add `.js` in the emitted output so
+//   Node ESM can resolve them at bench time. We tried TS 5.7+
+//   `rewriteRelativeImportExtensions` + `.ts`-suffix source (the
+//   "native" answer) on 2026-04-XX, but Angular's Karma plugin
+//   compiles TS in-place and Webpack's resolver does not reverse the
+//   `.ts -> .js` rewrite, so `.ts`-suffix source breaks `ng test`.
+// - Apart from those internal links, the pure modules only import
+//   `jsonc-parser`, which Node ESM resolves via `node_modules`.
+// - The bench sources (`perf/bench/*.bench.ts`) and fixture helpers
+//   (`perf/fixtures/*.ts`) use explicit `.js` extensions on relative
+//   imports so the emit can be loaded by Node ESM unchanged.
+// - `scripts/perf/build.mjs` runs `tsc -p tsconfig.perf.json` and then
+//   drops a `dist-perf/package.json` with `"type": "module"` so Node
+//   treats the emitted `.js` files as ESM.
+//
+// This keeps the perf pipeline free of esbuild/rollup/ts-node deps.
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "outDir": "./dist-perf",
+    "rootDir": ".",
+    "declaration": false,
+    "sourceMap": false,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/app/core/json/json-value-type.ts",
+    "src/app/core/json/json-path.ts",
+    "src/app/core/json/parse.ts",
+    "src/app/shared/components/json-tree/build-tree.ts",
+    "perf/bench/**/*.ts",
+    "perf/fixtures/**/*.ts"
+  ]
+}

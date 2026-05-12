@@ -74,3 +74,11 @@ Thumbs.db
 # pages produced by the visual-explainer skill, etc.). Never committed.
 /output/
 
+# Perf measurement suite outputs and intermediate build dirs.
+# Inputs (perf/, perf-targets.json, tsconfig.perf.json, the empty
+# perf-baselines/ dir) ARE committed. Per-machine baseline JSON files
+# in perf-baselines/ are gitignored (each developer keeps their own).
+/dist-perf/
+/perf-results/
+/perf-baselines/*.json
+

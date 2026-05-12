@@ -435,6 +435,33 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
+   * Fired by: `HomeComponent.onEditorPaste`
+   *           (`features/home/home.component.ts`) on every native
+   *           Monaco paste inside the editor. Distinct from
+   *           `paste.handle` (toolbar paste) - the editor path does
+   *           NOT read the clipboard (Monaco's `onDidPaste` fires
+   *           with the already-pasted text), so `clipboardReadMs`
+   *           is absent by design. Bounded-frequency: one event
+   *           per Monaco paste action regardless of whether the
+   *           post-paste buffer parses.
+   * Props: { sizeBytesBucket: SizeBucket } via `bucketBytes` over
+   *   the UTF-8 byte count of the pasted region only (NOT the full
+   *   post-paste buffer).
+   * Measurements: { sizeBytes: number; parseMs: number;
+   *   syncHandlerMs: number; firstPaintMs: number }.
+   *   - `parseMs`: synchronous time spent in
+   *     `JsonExtractorService.extractFromMixedText` over the pasted
+   *     region. 0 when `postPasteParses` is true (no extraction
+   *     attempted because the full buffer already parses).
+   *   - `syncHandlerMs`: T0 to end-of-synchronous-handler.
+   *   - `firstPaintMs`: T0 to first painted frame after the handler
+   *     completes, via double `requestAnimationFrame`. The
+   *     user-perceived end-to-end latency.
+   */
+  'paste.handle.editor',
+
+  /**
+   * Kind: event
    * Fired by: `HomeComponent.onFilesReceived` 'ok' branch
    *           (`features/home/home.component.ts`). Failure branches
    *           (`tooLarge`, `binary`, `readFailed`) keep their

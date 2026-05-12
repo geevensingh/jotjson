@@ -1,0 +1,13 @@
+{
+  "$schema": "./perf-targets.schema.json",
+  "schemaVersion": 1,
+  "_comment": "Operationalizable NFR targets. v1 row is a stress check on the 24MB wide-aoo fixture; F-2 tracks an NFR-faithful ~5MB target.",
+  "rows": {
+    "3.paste-large.wide-aoo.1m": {
+      "longestTaskMsMedian": {
+        "ceiling_ms": 500,
+        "reason": "v1 stress check on 24 MB wide-aoo; NFR-faithful ~5MB target tracked in F-2"
+      }
+    }
+  }
+}
