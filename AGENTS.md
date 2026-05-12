@@ -855,6 +855,83 @@ runtimes (e.g., Copilot Coding Agent) have different session-ID
 semantics and are out of scope for this rule until added
 explicitly.
 
+### CODEOWNERS routing
+
+`.github/CODEOWNERS` is the **routing** source for human review on
+this repo. The single wildcard rule `* @geevensingh` lists
+`@geevensingh` as the default code owner for every path; GitHub
+auto-requests review from any listed code owner on every PR
+matching the rule, subject to the **PR-author exclusion** (a PR
+author is never auto-requested on their own PR).
+
+**Asymmetric routing in this single-maintainer repo:**
+
+- **Bot-identity PRs** (Dependabot, future Cloud Copilot coding
+  agent, future background agents that auth as their own GitHub
+  App or bot user, future external human contributors) - author
+  is not `@geevensingh` -> `@geevensingh` is auto-requested.
+  Routing fires. This is the motivating workflow.
+- **Owner-authored PRs (including Copilot CLI / interactive
+  sessions running under `gh auth` as `@geevensingh`)** - author
+  is `@geevensingh` -> no auto-request -> routing does NOT fire.
+  This currently covers the majority of recent PRs.
+
+`Co-authored-by:` trailers in commit messages do **not** change
+the GitHub PR-author identity. An agent-opened PR with a
+`Co-authored-by: @geevensingh` trailer still has the agent as PR
+author at the GitHub-API level and still triggers CODEOWNERS
+auto-request.
+
+**Branch protection is unchanged by CODEOWNERS.** Classic
+protection still has `required_approving_review_count: 0` and
+`require_code_owner_reviews: false`. The merge gate against agent
+self-merge remains §8 policy ("surface blocks and wait for human
+approval"), not platform enforcement. Phase 2 (welding the gate
+to the platform via `require_code_owner_reviews: true`) is
+deliberately deferred.
+
+**No new agent-behavior rule is introduced.** Existing
+`### Auto-merge` rules below continue to govern when an agent may
+enable auto-merge - CODEOWNERS adds routing visibility, not a new
+restriction.
+
+**Tripwires that would re-open Phase 2.** Phase 2 is deferred, not
+abandoned. Re-open the discussion if any of the following occurs:
+
+- A second code owner is added (Phase 2 becomes viable because a
+  second owner can approve `@geevensingh`'s PRs without forcing
+  Admin bypass).
+- A compromised-session incident or near-miss involving Admin scope.
+- An agent, workflow, or fine-grained PAT is granted
+  `contents: write` or `pull_requests: write` on this repo beyond
+  `@geevensingh`'s interactive session. (The repo is currently
+  user-owned, not org-owned; if it is ever transferred to an org,
+  broaden this tripwire to include org-level grants.)
+- A new GitHub App or Action beyond Copilot/Mergify/Dependabot is
+  installed with write scope.
+- The `copilot_code_review` ruleset rule is disabled or deprecated
+  by GitHub.
+- The first PR opened by a non-`@geevensingh`, non-bot human
+  contributor (changes the trust profile of the repo; revisit the
+  "single maintainer" assumption that underlies Phase-1-only).
+- Any addition to CODEOWNERS beyond `@geevensingh` (especially a
+  bot/App identity or a team containing one) warrants threat-model
+  re-review - GitHub Apps can submit `APPROVE` reviews via REST,
+  and if the App identity is a code owner, that approval counts.
+
+**CODEOWNERS syntax watchouts** (relevant if anyone edits the file):
+
+- The wildcard catches every path. To exempt a sub-path, list it
+  below the wildcard with **no owners** (the empty-owners idiom is
+  supported; last-match-wins makes the empty line clear the
+  inherited owner).
+- CODEOWNERS does NOT support `.gitignore`-style `!` negation.
+- Multiple owners for the same rule must be space-separated on one
+  line. Separate lines for the same path do NOT union - only the
+  last line's owners apply.
+- Rules are read from the **base branch**, so the PR introducing a
+  CODEOWNERS change does not trigger its own routing.
+
 ### Responding to PR review feedback
 
 Review comments -- from humans **and** from bots
