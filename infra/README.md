@@ -375,10 +375,10 @@ plus a dedicated Cosmos database, both automatically torn down on PR
 |---|---|
 | Workflow | `.github/workflows/cd-preview.yml` |
 | Trigger | `pull_request` (`opened`, `synchronize`, `reopened`, `closed`); fork PRs skipped |
-| SWA preview env | `pr-<N>` on `swa-jotjson-nonprod` (hostname pattern: `<swa-shortname>-<N>.<region>.azurestaticapps.net`) |
+| SWA preview env | `pr-<N>` on `swa-jotjson-nonprod` (hostname pattern: roughly `<swa-default-hostname>-<N>.<region>.<dns-suffix>.azurestaticapps.net` - e.g. `calm-flower-01969880f-210.eastus2.7.azurestaticapps.net`; the `<dns-suffix>` segment can change without notice per Azure, so the canonical source is the `static_web_app_url` output of `Azure/static-web-apps-deploy@v1`, exposed as the `preview_url` job output and pasted into the sticky comment). |
 | Per-PR Cosmos DB | `jotjson-pr-<N>` on `cosmos-jotjson-nonprod` (defensive scaffolding for #68; created and torn down but **not yet wired** into preview Functions - see "Known limitations" below) |
 | Sign-in | **anonymous build only** - MSAL is initialised with inert config; sign-in is non-functional on preview URLs. #68 tracks the signed-in story. |
-| e2e | The existing anonymous smoke (`e2e/anonymous/`) is replayed against the preview URL via `PLAYWRIGHT_BASE_URL`. Shadow mode (`continue-on-error: true`) for ~1 week from #210 merge, then flipped to required. |
+| e2e | The existing anonymous smoke (`e2e/anonymous/`) is replayed against the preview URL via `PLAYWRIGHT_BASE_URL`. Shadow mode (`continue-on-error: true` on the `Run Playwright tests` **step**, not the whole job) for ~1 week from #210 merge, then flipped to required. |
 | Sticky comment | `marocchino/sticky-pull-request-comment@v2`, header `cd-preview`; updates in-place across deploy / re-deploy / teardown so each PR carries exactly one preview status comment. |
 | Concurrency | `cd-preview-pr-<N>` with `cancel-in-progress: true` - newer commits on the same PR cancel older builds. |
 
