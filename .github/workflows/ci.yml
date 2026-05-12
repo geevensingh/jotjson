@@ -118,6 +118,17 @@ jobs:
         id: test-scripts
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run test:scripts
+      - name: Perf script tests
+        # Determinism tests for perf/fixtures/**/*.test.mjs. Separate from
+        # test:scripts because the determinism test imports a tsc-built
+        # artifact (dist-perf/perf/fixtures/generate.js) and auto-runs
+        # `npm run perf:build` (~20s) when dist-perf is missing. Keeping
+        # this out of test:scripts prevents that build from coupling into
+        # `verify:fast`. The cross-machine determinism check is precisely
+        # what CI is for, so it runs here as its own gate.
+        id: test-perf-scripts
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run test:perf-scripts
       - name: Lint summary
         # Inspects each gate's outcome and writes a single
         # $GITHUB_STEP_SUMMARY block listing every failing gate and its
@@ -141,6 +152,7 @@ jobs:
           OUTCOME_SWA_CONFIG: ${{ steps.lint-swa-config.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
           OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
+          OUTCOME_TEST_PERF_SCRIPTS: ${{ steps.test-perf-scripts.outcome }}
         run: |
           fail=0
           {
@@ -168,11 +180,12 @@ jobs:
             emit "SWA config"              "$OUTCOME_SWA_CONFIG"   "npm run lint:swa-config - fix the assertion failure printed above; see scripts/check-swa-config.mjs"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
             emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
+            emit "Perf script tests"       "$OUTCOME_TEST_PERF_SCRIPTS" "npm run test:perf-scripts - then fix the failing assertion in perf/fixtures/*.test.mjs"
             echo ""
             if [ "$fail" -eq 1 ]; then
               echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 9 gates passed (8 lint + script tests)."
+              echo "All 10 gates passed (8 lint + script tests + perf script tests)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts

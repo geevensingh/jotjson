@@ -171,7 +171,11 @@ Mechanics:
 build script asserts SHA-256 hashes of generator output for
 `approxNodes=1000` on both shapes (see `GENERATOR_GOLDEN_HASHES` in
 `scripts/perf/build.mjs`), and `perf/fixtures/generate.test.mjs`
-asserts the wide-aoo 10K + 100K hashes under `npm run test:scripts`.
+asserts the wide-aoo 10K + 100K hashes under `npm run test:perf-scripts`
+(a dedicated script kept out of `verify:fast` because it auto-runs
+`npm run perf:build` -- a ~20s tsc compile -- when `dist-perf/` is
+missing). CI runs it as the "Perf script tests" gate alongside the
+lint chain.
 
 When you intentionally change the generator:
 
