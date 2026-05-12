@@ -18,6 +18,7 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { bucketCount } from '../../../core/telemetry/buckets';
 import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
 import { LoggerService } from '../../../core/telemetry/logger.service';
+import { formatPath } from './build-tree';
 import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
 import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
 
@@ -3787,7 +3788,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectByPathString('$.a');
       const writes: (string | null)[] = [];
       cmp.selectionChange.subscribe((path) => {
-        writes.push(path === null ? null : cmp['formatPath']([...path]));
+        writes.push(path === null ? null : formatPath([...path]));
       });
       cmp.selectByPathString('$.a');
       // Effect did not re-fire since selectedPath stayed the same.

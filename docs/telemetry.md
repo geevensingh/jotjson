@@ -149,6 +149,15 @@ customEvents
 | summarize count() by tostring(customDimensions.sizeBytesBucket)
 ```
 
+There are two related paste events with distinct measurement
+contracts: `paste.handle` covers the toolbar-driven paste path
+(includes `clipboardReadMs`), and `paste.handle.editor` covers the
+native Monaco paste path (no `clipboardReadMs` -- Monaco's
+`onDidPaste` delivers the already-pasted text). Queries that want
+to see both should `union` over the names rather than treat them
+as one event, e.g.
+`customEvents | where name in ('paste.handle', 'paste.handle.editor')`.
+
 ---
 
 ## Bucketing conventions
