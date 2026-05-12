@@ -25,10 +25,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertBaselineSchema, findLatestResultsDir, readRunRows } from './baseline.mjs';
 import { suggestMachineLabel } from './machine-label.mjs';
+import { readPerfTargets } from './perf-targets.mjs';
 import { perfRowKey } from './row-key.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BASELINES_DIR = join(REPO_ROOT, 'perf-baselines');
+const PERF_TARGETS_PATH = join(REPO_ROOT, 'perf-targets.json');
 const TOP_K = 20;
 
 /**
@@ -118,11 +120,60 @@ export function formatDiffTable(diffs) {
 }
 
 /**
- * @param {{ machineLabel: string, resultsDir?: string, baselinesDir?: string }} opts
- * @returns {{ diffs: DiffRow[], output: string, flaggedCount: number, baselinePath: string }}
+ * Checks current-run rows against the perf-targets.json ceilings.
+ *
+ * Contract:
+ * - Each target row references a perfRowKey + metric. If the current
+ *   run has no row for that key, emit a `WARN:` message and skip
+ *   (no flag). SK-008 may revisit this once baselines are stable.
+ * - If the row exists but the named metric is missing or non-numeric,
+ *   warn and skip.
+ * - Otherwise compare `metric_value` against `ceiling_ms`. Strictly
+ *   greater is a flag; equal-or-less is a pass. `longestTaskMsMedian`
+ *   is already in milliseconds, matching `ceiling_ms` directly.
+ *
+ * @param {import('./baseline.mjs').JsonlRow[]} currentRows
+ * @param {import('./perf-targets.mjs').PerfTargetsFile} targets
+ * @param {(row: import('./baseline.mjs').JsonlRow) => string} [rowKeyFn]
+ * @returns {{ flaggedCount: number, messages: string[] }}
  */
-export function diffLatestRun({ machineLabel, resultsDir, baselinesDir }) {
+export function checkAgainstTargets(currentRows, targets, rowKeyFn = perfRowKey) {
+  const byKey = new Map(currentRows.map((row) => [rowKeyFn(row), row]));
+  /** @type {string[]} */
+  const messages = [];
+  let flaggedCount = 0;
+  for (const [targetKey, metricMap] of Object.entries(targets.rows)) {
+    const row = byKey.get(targetKey);
+    if (!row) {
+      messages.push(`WARN: perf-targets row "${targetKey}" has no current-run data; skipping`);
+      continue;
+    }
+    for (const [metric, spec] of Object.entries(metricMap)) {
+      const rawValue = /** @type {Record<string, unknown>} */ (row)[metric];
+      if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) {
+        messages.push(
+          `WARN: perf-targets row "${targetKey}" metric "${metric}" has no numeric value in current run; skipping`,
+        );
+        continue;
+      }
+      if (rawValue > spec.ceiling_ms) {
+        flaggedCount += 1;
+        messages.push(
+          `[!] perf-targets row "${targetKey}" metric "${metric}" = ${rawValue.toFixed(1)} ms exceeds ceiling ${spec.ceiling_ms} ms (${spec.reason})`,
+        );
+      }
+    }
+  }
+  return { flaggedCount, messages };
+}
+
+/**
+ * @param {{ machineLabel: string, resultsDir?: string, baselinesDir?: string, targetsPath?: string }} opts
+ * @returns {{ diffs: DiffRow[], output: string, flaggedCount: number, targetFlaggedCount: number, targetMessages: string[], baselinePath: string, targetsPath: string }}
+ */
+export function diffLatestRun({ machineLabel, resultsDir, baselinesDir, targetsPath }) {
   const usedBaselinesDir = baselinesDir ?? BASELINES_DIR;
+  const usedTargetsPath = targetsPath ?? PERF_TARGETS_PATH;
   const baselinePath = join(usedBaselinesDir, `${machineLabel}.json`);
   if (!existsSync(baselinePath)) {
     throw new Error(
@@ -138,16 +189,44 @@ export function diffLatestRun({ machineLabel, resultsDir, baselinesDir }) {
   const diffs = computeDiffs(baseline, currentRows);
   const output = formatDiffTable(diffs);
   const flaggedCount = diffs.filter((diff) => diff.flagged).length;
-  return { diffs, output, flaggedCount, baselinePath };
+  const targets = readPerfTargets(usedTargetsPath);
+  const { flaggedCount: targetFlaggedCount, messages: targetMessages } = checkAgainstTargets(
+    currentRows,
+    targets,
+  );
+  return {
+    diffs,
+    output,
+    flaggedCount,
+    targetFlaggedCount,
+    targetMessages,
+    baselinePath,
+    targetsPath: usedTargetsPath,
+  };
 }
 
 async function main() {
   const machineLabel = process.env['PERF_MACHINE'] ?? suggestMachineLabel();
-  const { output, flaggedCount, baselinePath } = diffLatestRun({ machineLabel });
+  const { output, flaggedCount, targetFlaggedCount, targetMessages, baselinePath, targetsPath } =
+    diffLatestRun({ machineLabel });
   process.stdout.write(`perf:diff  comparing latest run vs ${baselinePath}\n`);
   process.stdout.write(output);
-  if (flaggedCount > 0) {
-    process.stderr.write(`perf:diff  ${flaggedCount} flagged row(s) exceeded threshold\n`);
+  if (targetMessages.length > 0) {
+    process.stdout.write(`perf:diff  checking perf-targets at ${targetsPath}\n`);
+    for (const msg of targetMessages) {
+      process.stdout.write(`${msg}\n`);
+    }
+  }
+  const totalFlagged = flaggedCount + targetFlaggedCount;
+  if (totalFlagged > 0) {
+    if (flaggedCount > 0) {
+      process.stderr.write(`perf:diff  ${flaggedCount} flagged row(s) exceeded threshold\n`);
+    }
+    if (targetFlaggedCount > 0) {
+      process.stderr.write(
+        `perf:diff  ${targetFlaggedCount} perf-targets row(s) exceeded ceiling\n`,
+      );
+    }
     process.exit(2);
   }
   process.stdout.write('perf:diff  OK (no flagged rows)\n');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assertBaselineSchema, BASELINE_SCHEMA_VERSION } from './baseline.mjs';
-import { computeDiffs, formatDiffTable, formatNs } from './diff.mjs';
+import { checkAgainstTargets, computeDiffs, formatDiffTable, formatNs } from './diff.mjs';
 
 function makeBaseline(rows) {
   return {
@@ -168,4 +168,94 @@ test('assertBaselineSchema rejects mismatched schemaVersion', () => {
     () => assertBaselineSchema({ schemaVersion: 999, rows: {} }, '/tmp/future.json'),
     /schemaVersion=999/,
   );
+});
+
+function makeL3Row(overrides = {}) {
+  return {
+    layer: 3,
+    scenario: 'paste-large',
+    fixture: 'wide-aoo',
+    size: '1m',
+    approxNodes: 1_000_000,
+    iters: 7,
+    wallNsMedian: 1_000_000_000,
+    wallNsIqrLow: 0,
+    wallNsIqrHigh: 0,
+    codeSha: 'x',
+    longestTaskMsMedian: 250,
+    ...overrides,
+  };
+}
+
+function makeTargets(rows) {
+  return { schemaVersion: 1, rows };
+}
+
+test('checkAgainstTargets returns 0 flags when metric is within ceiling', () => {
+  const targets = makeTargets({
+    '3.paste-large.wide-aoo.1m': {
+      longestTaskMsMedian: { ceiling_ms: 500, reason: 'within ceiling' },
+    },
+  });
+  const { flaggedCount, messages } = checkAgainstTargets([makeL3Row()], targets);
+  assert.equal(flaggedCount, 0);
+  assert.deepEqual(messages, []);
+});
+
+test('checkAgainstTargets flags rows whose metric exceeds ceiling', () => {
+  const targets = makeTargets({
+    '3.paste-large.wide-aoo.1m': {
+      longestTaskMsMedian: { ceiling_ms: 200, reason: 'too low ceiling' },
+    },
+  });
+  const { flaggedCount, messages } = checkAgainstTargets(
+    [makeL3Row({ longestTaskMsMedian: 250 })],
+    targets,
+  );
+  assert.equal(flaggedCount, 1);
+  assert.equal(messages.length, 1);
+  assert.match(
+    messages[0],
+    /\[!\] perf-targets row "3\.paste-large\.wide-aoo\.1m" metric "longestTaskMsMedian" = 250\.0 ms exceeds ceiling 200 ms/,
+  );
+});
+
+test('checkAgainstTargets warns (no flag) when current run lacks the targeted row', () => {
+  const targets = makeTargets({
+    '3.paste-large.wide-aoo.1m': {
+      longestTaskMsMedian: { ceiling_ms: 500, reason: 'present in targets, absent in run' },
+    },
+  });
+  const { flaggedCount, messages } = checkAgainstTargets([], targets);
+  assert.equal(flaggedCount, 0);
+  assert.equal(messages.length, 1);
+  assert.match(
+    messages[0],
+    /^WARN: perf-targets row "3\.paste-large\.wide-aoo\.1m" has no current-run data; skipping$/,
+  );
+});
+
+test('checkAgainstTargets warns (no flag) when the named metric is not numeric on the row', () => {
+  const targets = makeTargets({
+    '3.paste-large.wide-aoo.1m': {
+      longestTaskMsMedian: { ceiling_ms: 500, reason: 'metric missing' },
+    },
+  });
+  const { flaggedCount, messages } = checkAgainstTargets(
+    [makeL3Row({ longestTaskMsMedian: null })],
+    targets,
+  );
+  assert.equal(flaggedCount, 0);
+  assert.equal(messages.length, 1);
+  assert.match(
+    messages[0],
+    /metric "longestTaskMsMedian" has no numeric value in current run; skipping/,
+  );
+});
+
+test('checkAgainstTargets returns 0 flags for an empty rows map', () => {
+  const targets = makeTargets({});
+  const { flaggedCount, messages } = checkAgainstTargets([makeL3Row()], targets);
+  assert.equal(flaggedCount, 0);
+  assert.deepEqual(messages, []);
 });
