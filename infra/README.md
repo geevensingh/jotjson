@@ -364,6 +364,82 @@ az deployment group create `
 # See cd-nonprod.yml for the full env-var bake step and SWA deploy invocation.
 ```
 
+### Preview environments
+
+Per-PR preview deploys land on this same nonprod stack (Phase 2 of
+issue #93 / #179). Each open PR gets its own SWA preview environment
+plus a dedicated Cosmos database, both automatically torn down on PR
+`closed`.
+
+| Item | Value |
+|---|---|
+| Workflow | `.github/workflows/cd-preview.yml` |
+| Trigger | `pull_request` (`opened`, `synchronize`, `reopened`, `closed`); fork PRs skipped |
+| SWA preview env | `pr-<N>` on `swa-jotjson-nonprod` (hostname pattern: roughly `<swa-default-hostname>-<N>.<region>.<dns-suffix>.azurestaticapps.net` - e.g. `calm-flower-01969880f-210.eastus2.7.azurestaticapps.net`; the `<dns-suffix>` segment can change without notice per Azure, so the canonical source is the `static_web_app_url` output of `Azure/static-web-apps-deploy@v1`, exposed as the `preview_url` job output and pasted into the sticky comment). |
+| Per-PR Cosmos DB | `jotjson-pr-<N>` on `cosmos-jotjson-nonprod` (defensive scaffolding for #68; created and torn down but **not yet wired** into preview Functions - see "Known limitations" below) |
+| Sign-in | **anonymous build only** - MSAL is initialised with inert config; sign-in is non-functional on preview URLs. #68 tracks the signed-in story. |
+| e2e | The existing anonymous smoke (`e2e/anonymous/`) is replayed against the preview URL via `PLAYWRIGHT_BASE_URL`. Shadow mode (`continue-on-error: true` on the `Run Playwright tests` **step**, not the whole job) for ~1 week from #210 merge, then flipped to required. |
+| Sticky comment | `marocchino/sticky-pull-request-comment@v2`, header `cd-preview`; updates in-place across deploy / re-deploy / teardown so each PR carries exactly one preview status comment. |
+| Concurrency | `cd-preview-pr-<N>` with `cancel-in-progress: true` - newer commits on the same PR cancel older builds. |
+
+#### Known limitations
+
+- **No per-preview app-setting overrides via Azure CLI.**
+  `az staticwebapp appsettings set --environment-name <preview>`
+  returns `Operation returned an invalid status 'Not Found'` for any
+  environment other than the default `production`. This means the
+  per-PR Cosmos database is created but not wired into the preview
+  Functions; Functions running on a preview see whatever app settings
+  the default `production` env has. The three alternative paths for
+  signed-in / write-bearing preview coverage are documented in the
+  inline comment block at the top of `cd-preview.yml`:
+  1. Use the ARM Management API
+     (`Microsoft.Web/staticSites/builds/{env}/config/appsettings`)
+     directly via `az rest`.
+  2. Route at runtime inside the Functions code based on a header /
+     env name extracted from the SWA hostname.
+  3. Share the default Cosmos database and partition by a per-PR
+     ownerId prefix.
+  These are out of scope for Phase 2 (anonymous smoke only) and will
+  be revisited when #68 lights up.
+- **Docs-only PRs still deploy a preview** (~3 minutes). The
+  workflow deliberately omits trigger-level `paths-ignore` so the
+  `closed` event always reaches the teardown job - this prevents
+  preview-env / Cosmos-DB leaks for PRs that end up docs-only after a
+  code revert. The cost of one wasted deploy per docs-only PR is
+  preferable to silent leaks.
+- **Preview teardown is partial-failure-resilient.** SWA close and
+  Cosmos DB delete run independently (`continue-on-error: true` +
+  `if: always()`); a final summary step re-fails the job loudly if
+  either provider call failed, so a partial teardown surfaces as a
+  red workflow run rather than a silent leak.
+
+#### Useful KQL / Azure queries
+
+```kusto
+// Preview deploys in the last 7 days (Application Insights)
+requests
+| where timestamp > ago(7d)
+| where cloud_RoleName == "swa-jotjson-nonprod"
+| where customDimensions has "pr-"
+| summarize count() by tostring(customDimensions["EnvironmentName"]), bin(timestamp, 1d)
+| order by timestamp desc
+```
+
+```powershell
+# List currently-open preview SWA environments
+az staticwebapp environment list `
+  --name swa-jotjson-nonprod `
+  --resource-group rg-jotjson-nonprod `
+  --query "[?name != 'default'].{name:name, hostname:hostname, status:status}" -o table
+
+# List currently-open per-PR Cosmos databases
+az cosmosdb sql database list `
+  --account-name cosmos-jotjson-nonprod `
+  --resource-group rg-jotjson-nonprod `
+  --query "[?starts_with(name, 'jotjson-pr-')].{name:name}" -o table
+```
+
 ### Cost budget runbook
 
 Subscription-scoped budgets with notifications **cannot** be created
@@ -413,7 +489,10 @@ more entries to the `notifications` dict with distinct keys.
 ### Pointer
 
 - Workflow files: `.github/workflows/infra-nonprod.yml`,
-  `.github/workflows/cd-nonprod.yml`.
+  `.github/workflows/cd-nonprod.yml`,
+  `.github/workflows/cd-preview.yml`.
 - Bicep parameters: `infra/parameters/nonprod.bicepparam`.
 - Spec section: DESIGN_SPEC.md -> Azure Infrastructure -> "Non-production environment".
-- Tracking issue: #93 (Phase 1 in this RG; Phase 2 wires per-PR previews into this same stack).
+- Tracking issues: #93 (Phase 1 in this RG, complete); #179 (Phase 2
+  per-PR previews, in shadow mode); #68 (deferred: signed-in preview
+  coverage); #211 (follow-up: status-bar channel chip).
