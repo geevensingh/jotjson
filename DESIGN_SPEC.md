@@ -1465,6 +1465,50 @@ machinery is retained in Bicep for the day JotJSON moves off managed Functions
 (e.g., to a bring-your-own Function App or Container App), at which point the
 key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 
+### Non-production environment (VS Enterprise subscription)
+
+A second, **dev/test-only** stack runs in a separate Azure subscription
+funded by non-transferable Visual Studio Enterprise subscriber credits
+(~$150/mo). It mirrors the production stack at lower scale so PRs and
+infrastructure changes can be validated end-to-end against a real SWA +
+Cosmos + App Insights deployment without burning the production budget.
+
+- **Purpose:** dev/test only - exercise the deploy pipeline, validate
+  infra changes, run anonymous e2e against a real deployed URL, support
+  per-PR previews (Phase 2 of issue #93). **Not a public env.** VS
+  subscriber benefits are licensed for development and testing only, so
+  this stack has no DNS, no marketing link, and is not advertised to
+  real users.
+- **Resources:** own resource group (`rg-jotjson-nonprod`), SWA
+  (Standard SKU - matches prod so the deploy pipeline exercises the
+  same surface; the apex custom-domain binding that requires Standard
+  in prod is intentionally not used here), Cosmos DB (serverless,
+  separate account), App Insights + Log Analytics, and a Storage
+  account (sourcemap container). Provisioned by the same
+  `infra/main.bicep` with `parameters/nonprod.bicepparam`, gated by
+  the `@allowed` env parameter so misconfigured deploys fail at
+  template-load.
+- **Auth:** the nonprod SWA hostname is registered as one of the SPA
+  app's redirect URIs in the **same** Entra External ID tenant; sign-in
+  works there for testing only. The hostname is pinned in
+  `cd-nonprod.yml` via a strict-allowlist guard so the deploy fails if
+  somebody points it elsewhere.
+- **CI/CD:** `infra-nonprod.yml` (manual dispatch only, applies Bicep)
+  and `cd-nonprod.yml` (manual dispatch only, deploys the SPA +
+  Functions bundle) both use a dedicated repo environment with its own
+  OIDC federated credential, SWA deploy token secret, and App Insights
+  connection-string secret. **No automatic deploys** - this env is
+  driven from the Actions UI.
+- **Cost control:** a subscription-scoped Azure budget
+  (`jotjson-nonprod-monthly`, $100/mo) with an 80%-actual email alert
+  to the project admin. SWA Free + serverless Cosmos + consumption
+  Functions keep idle cost at ~$0/mo.
+
+This replaces the original "staging slot for preview on PRs" promise
+(see CI/CD below); SWA preview environments are tracked separately in
+Phase 2 of issue #93 and target this nonprod stack rather than the
+production stack.
+
 ---
 
 ## CI/CD (GitHub Actions)
@@ -1475,7 +1519,9 @@ key fallback can be removed. Local `func start` also uses `COSMOS_KEY`.
 - **CD pipeline** - deploys on merge to `main`:
   - Angular SPA -> Azure Static Web Apps (using the `azure/static-web-apps-deploy` action).
   - Azure Functions -> deployed as Static Web Apps managed functions (bundled with the SPA in a single deployment).
-  - Staging slot for preview on PRs (Static Web Apps preview environments).
+  - Per-PR preview deploys land on the **nonprod** stack (Phase 2 of
+    issue #93), not the production SWA - see Azure Infrastructure ->
+    "Non-production environment" above.
 - **Infrastructure** - Bicep templates applied via a separate workflow on changes to `/infra` directory.
 - **Workflow lint** - `actionlint` runs against `.github/workflows/` in CI.
 - **Spec-pattern lint** - `scripts/check-spec-patterns.mjs` runs in CI's lint job and fails on known-fragile testing idioms (e.g. `spyOnProperty(navigator, 'clipboard', ...)` which silently passes on Windows headless Chrome but throws on the Linux runner). New rules are added as we encounter cross-platform test failures.
