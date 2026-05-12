@@ -357,7 +357,12 @@ jobs:
       - name: Tear down SWA preview environment
         # The SWA action's `action: close` mode removes the per-PR
         # preview environment. Idempotent - succeeds quietly if the
-        # env was already removed.
+        # env was already removed. Marked continue-on-error so a
+        # transient failure here does not skip the Cosmos delete
+        # below; the final summary step re-fails the job if either
+        # provider call actually failed.
+        id: swa-close
+        continue-on-error: true
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
@@ -366,6 +371,7 @@ jobs:
           deployment_environment: ${{ env.PREVIEW_ENV }}
 
       - name: Azure login (OIDC)
+        if: ${{ always() }}
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -374,7 +380,12 @@ jobs:
 
       - name: Drop per-PR Cosmos database
         # Idempotent: --yes skips confirmation; we tolerate ResourceNotFound
-        # (already-deleted) but surface other errors.
+        # (already-deleted) but surface other errors. Runs regardless of
+        # the SWA close outcome so a transient SWA failure does not leak
+        # the per-PR database.
+        id: cosmos-delete
+        if: ${{ always() && steps.swa-close.conclusion != 'skipped' }}
+        continue-on-error: true
         run: |
           set +e
           out=$(az cosmosdb sql database delete \
@@ -401,21 +412,32 @@ jobs:
         run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
 
       - name: Update sticky comment (teardown)
+        if: ${{ always() }}
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: cd-preview
           message: |
             ### Preview environment torn down
 
-            - SWA env `${{ env.PREVIEW_ENV }}` and Cosmos database `${{ env.PREVIEW_DB }}` have been removed.
+            - SWA env `${{ env.PREVIEW_ENV }}` close: `${{ steps.swa-close.outcome }}`
+            - Cosmos database `${{ env.PREVIEW_DB }}` delete: `${{ steps.cosmos-delete.outcome }}`
 
-      - name: Summary
+      - name: Summary + fail on partial teardown
+        # Both SWA close and Cosmos delete use continue-on-error so they
+        # run independently. This final step re-fails the job if either
+        # actually failed, so a partial teardown surfaces as a red run
+        # rather than a silent leak.
         if: ${{ always() && !cancelled() }}
         run: |
+          swa='${{ steps.swa-close.outcome }}'
+          cosmos='${{ steps.cosmos-delete.outcome }}'
           {
             echo "## Preview torn down"
             echo ""
-            echo "- SWA env: \`${{ env.PREVIEW_ENV }}\`"
-            echo "- Cosmos DB: \`${{ env.PREVIEW_DB }}\`"
-            echo "- Status: ${{ job.status }}"
+            echo "- SWA env: \`${{ env.PREVIEW_ENV }}\` (close: $swa)"
+            echo "- Cosmos DB: \`${{ env.PREVIEW_DB }}\` (delete: $cosmos)"
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$swa" = "failure" ] || [ "$cosmos" = "failure" ]; then
+            echo "::error::Partial teardown - swa=$swa cosmos=$cosmos. See preceding step logs."
+            exit 1
+          fi
