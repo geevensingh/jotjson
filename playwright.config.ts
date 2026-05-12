@@ -11,6 +11,8 @@ import { defineConfig, devices } from '@playwright/test';
  * `https://<host>.azurestaticapps.net/`) to skip the local build/serve and
  * target an already-deployed environment instead. Used by Phase 1's manual
  * verification against `nonprod` and by Phase 2's per-PR preview smoke.
+ * Empty or whitespace-only values are treated as unset; the value must
+ * be an absolute http(s) URL or config load fails fast.
  *
  * Determinism guardrails (per zero-flake-tolerance norm):
  * - retries: 0 - any flake is a P0 bug, not absorbed by retries.
@@ -23,7 +25,20 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * See e2e/README.md for how to add a spec, run locally, and debug failures.
  */
-const previewBaseUrl = process.env['PLAYWRIGHT_BASE_URL']?.replace(/\/$/, '');
+function readPreviewBaseUrl(): string | undefined {
+  const raw = process.env['PLAYWRIGHT_BASE_URL']?.trim();
+  if (!raw) {
+    return undefined;
+  }
+  if (!/^https?:\/\//i.test(raw)) {
+    throw new Error(
+      `PLAYWRIGHT_BASE_URL must be an absolute http(s) URL, got: ${JSON.stringify(raw)}`,
+    );
+  }
+  return raw.replace(/\/$/, '');
+}
+
+const previewBaseUrl = readPreviewBaseUrl();
 
 export default defineConfig({
   testDir: './e2e',
