@@ -23,14 +23,13 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { suggestMachineLabel } from './machine-label.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DIST_DIR = join(REPO_ROOT, 'dist-perf');
 const BENCH_DIR = join(DIST_DIR, 'perf', 'bench');
-const RESULTS_DIR = join(REPO_ROOT, 'perf-results');
 
 function utcStamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -107,7 +106,10 @@ async function main() {
   const machineLabel = process.env['PERF_MACHINE'] ?? suggestMachineLabel();
   const sha = codeSha();
   const capturedAtUtc = new Date().toISOString();
-  const outDir = join(RESULTS_DIR, utcStamp());
+  const outDir = resolve(
+    REPO_ROOT,
+    process.env['PERF_RESULTS_DIR'] ?? join('perf-results', utcStamp()),
+  );
   mkdirSync(outDir, { recursive: true });
   const outFile = join(outDir, 'layer-1.jsonl');
   const benches = discoverBenches();

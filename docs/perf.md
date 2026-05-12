@@ -24,6 +24,21 @@ npm run perf:diff
 
 `perf:diff` exits non-zero on flagged rows.
 
+## Running the full suite
+
+`npm run perf:all` runs the three layers into a single results dir:
+
+```text
+perf-results/<utc>/layer-1.jsonl
+perf-results/<utc>/layer-2.jsonl
+perf-results/<utc>/layer-3.jsonl
+```
+
+The orchestrator generates one UTC stamp and exports it as
+`PERF_RESULTS_DIR` so each layer writes into the same dir. Standalone
+`npm run perf:l1` (or `perf:l2` / `perf:l3`) still works -- each layer
+falls back to its own UTC stamp when `PERF_RESULTS_DIR` is unset.
+
 ## Why three layers
 
 | Layer | What it measures           | Tooling                                          | Output                                             |

@@ -27,7 +27,7 @@
     "perf:l1": "node scripts/perf/run-bench.mjs",
     "perf:l2": "node scripts/perf/run-l2.mjs",
     "perf:l3": "node scripts/perf/run-l3.mjs",
-    "perf:all": "npm run perf:build && npm run perf:l1 && npm run perf:l2 && npm run perf:l3",
+    "perf:all": "node scripts/perf/run-all.mjs",
     "perf:baseline": "node scripts/perf/baseline.mjs",
     "perf:diff": "node scripts/perf/diff.mjs",
     "perf:clean": "node scripts/perf/clean.mjs",
