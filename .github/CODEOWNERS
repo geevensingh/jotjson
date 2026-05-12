@@ -1,0 +1,40 @@
+# Default code owner for all paths. GitHub auto-requests review from
+# @geevensingh on every PR matching the rule below, subject to the
+# PR-author exclusion (a PR author is never auto-requested on their
+# own PR).
+#
+# Concrete behaviors:
+# - PRs opened by a bot identity (Dependabot, future Cloud Copilot
+#   coding agent, future background agents that auth as their own
+#   GitHub App or bot user, future external human contributors) get
+#   @geevensingh auto-requested. This is the motivating workflow.
+# - PRs opened by Copilot CLI or any interactive agent session that
+#   runs under `gh auth` as @geevensingh have @geevensingh as the
+#   PR author. The PR-author exclusion suppresses auto-request, so
+#   CODEOWNERS provides NO routing benefit for these PRs. (This is
+#   currently the most common pattern in this repo.)
+# - `Co-authored-by:` trailers in commit messages do NOT change the
+#   GitHub PR-author identity. An agent-opened PR with a
+#   `Co-authored-by: @geevensingh` trailer still has the agent as
+#   PR author at the GitHub-API level and still triggers
+#   auto-request.
+# - The wildcard catches every file -- including auto-generated
+#   diffs like messages.xlf and grouped Dependabot lockfile bumps.
+#
+# Syntax notes:
+# - CODEOWNERS does NOT support .gitignore-style `!` negation.
+# - CODEOWNERS DOES support a "leave ownerless" idiom: list a path
+#   on its own line with NO owners after it. Last-match-wins makes
+#   the empty-owners line clear the inherited owner for that path.
+#   See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners#example-of-a-codeowners-file
+# - Multiple owners on the same rule are space-separated on the
+#   same line (e.g. `*.spec.ts @geevensingh @second-owner`). If
+#   two owners appear on separate lines for the same path, only
+#   the LAST line's owners apply -- not the union.
+#
+# Precedence: for paths matched by multiple lines, the LAST
+# matching line wins -- not the more-specific one. Put any
+# future path-scoped carve-outs BELOW the wildcard, not above.
+# To exempt a sub-path from this wildcard, list it below with no
+# owners (see syntax notes).
+*    @geevensingh
