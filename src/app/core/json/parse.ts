@@ -6,6 +6,8 @@ import {
   printParseErrorCode,
   visit,
 } from 'jsonc-parser';
+import { pathToString } from './json-path';
+export { pathToString };
 
 export interface JsonParseError {
   message: string;
@@ -112,9 +114,6 @@ export function locationAt(text: string, offset: number): (string | number)[] {
   const loc = getLocation(text, offset);
   return [...loc.path];
 }
-
-import { pathToString } from './json-path';
-export { pathToString };
 
 function toError(parseError: ParseError, text: string): JsonParseError {
   const { line, column } = offsetToPosition(text, parseError.offset);

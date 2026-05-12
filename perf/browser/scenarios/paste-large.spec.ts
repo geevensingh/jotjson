@@ -48,10 +48,8 @@ for (const fixture of FIXTURES) {
   test(`paste-large: ${fixture.shape} @ ${fixture.size}`, async ({ page }) => {
     test.setTimeout(10 * 60 * 1000);
 
-    // Pre-generate the JSON ONCE outside the timed loop so per-iter
-    // wall-clock is paste+render only.
     const json = generate({ shape: fixture.shape, approxNodes: fixture.approxNodes });
-    const bytes = json.length;
+    const bytes = Buffer.byteLength(json, 'utf8');
 
     await page.addInitScript({ content: perfHarnessInitScript() });
 

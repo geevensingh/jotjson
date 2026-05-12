@@ -108,7 +108,7 @@ function measure(
     fixture,
     size,
     approxNodes,
-    bytes: input.length,
+    bytes: Buffer.byteLength(input, 'utf8'),
     iters: TIMED_ITERS,
     wallNsMedian: quantile(wallSorted, 0.5),
     wallNsIqrLow: quantile(wallSorted, 0.25),

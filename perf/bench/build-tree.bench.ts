@@ -112,7 +112,14 @@ export async function run(): Promise<BenchRow[]> {
     const json = generate({ shape: entry.shape, approxNodes: entry.approxNodes });
     const value: unknown = JSON.parse(json);
     rows.push(
-      measure('build-tree', entry.shape, entry.size, entry.approxNodes, value, json.length),
+      measure(
+        'build-tree',
+        entry.shape,
+        entry.size,
+        entry.approxNodes,
+        value,
+        Buffer.byteLength(json, 'utf8'),
+      ),
     );
   }
   return rows;

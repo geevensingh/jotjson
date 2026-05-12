@@ -10,8 +10,12 @@
 // produce the same label (typical for fleet machines). The label is
 // safe to include in filenames on every OS.
 //
-// PERF_MACHINE is MANDATORY for `perf:diff` and `perf:baseline`.
-// Failure messages link `docs/perf.md` and suggest this command.
+// PERF_MACHINE is **optional** for `perf:diff` and `perf:baseline`.
+// If unset, the scripts fall back to `suggestMachineLabel()` (same
+// shape as below). Set PERF_MACHINE explicitly when running on a
+// known reference machine so the baseline filename is stable across
+// distinct CPU revisions of the same model. Failure messages link
+// `docs/perf.md` and suggest this command for that case.
 
 import { createHash } from 'node:crypto';
 import { arch, cpus, platform } from 'node:os';
