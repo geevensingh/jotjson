@@ -1,4 +1,4 @@
-name: "CodeQL"
+name: "CodeQL (Advanced)"
 
 # CodeQL Advanced Setup: replaces the auto-managed Default Setup so we
 # can use .github/codeql/codeql-config.yml to scope paths and exclude
