@@ -3,9 +3,16 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright configuration for JotJSON's anonymous-flow smoke e2e suite.
  *
- * Runs Chromium-only against an anonymous-config production-built bundle.
- * The webServer command builds the SPA and serves it with `serve --single`
- * so SPA fallback routing works for nested routes like `/profile`.
+ * Default: builds the SPA and serves it locally with `serve --single` so
+ * SPA fallback routing works for nested routes like `/profile`, then runs
+ * Chromium against `http://localhost:4173`.
+ *
+ * Deployed-URL override: set `PLAYWRIGHT_BASE_URL` (e.g.
+ * `https://<host>.azurestaticapps.net/`) to skip the local build/serve and
+ * target an already-deployed environment instead. Used by Phase 1's manual
+ * verification against `nonprod` and by Phase 2's per-PR preview smoke.
+ * Empty or whitespace-only values are treated as unset; the value must
+ * be an absolute http(s) URL or config load fails fast.
  *
  * Determinism guardrails (per zero-flake-tolerance norm):
  * - retries: 0 - any flake is a P0 bug, not absorbed by retries.
@@ -18,6 +25,21 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * See e2e/README.md for how to add a spec, run locally, and debug failures.
  */
+function readPreviewBaseUrl(): string | undefined {
+  const raw = process.env['PLAYWRIGHT_BASE_URL']?.trim();
+  if (!raw) {
+    return undefined;
+  }
+  if (!/^https?:\/\//i.test(raw)) {
+    throw new Error(
+      `PLAYWRIGHT_BASE_URL must be an absolute http(s) URL, got: ${JSON.stringify(raw)}`,
+    );
+  }
+  return raw.replace(/\/$/, '');
+}
+
+const previewBaseUrl = readPreviewBaseUrl();
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -36,7 +58,7 @@ export default defineConfig({
     timeout: 10_000,
   },
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: previewBaseUrl ?? 'http://localhost:4173',
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
     reducedMotion: 'reduce',
@@ -50,12 +72,17 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npm run build && npx serve --single dist/jotjson/browser -l 4173',
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env['CI'],
-    timeout: 180_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
+  // When PLAYWRIGHT_BASE_URL is set we are targeting a deployed environment
+  // (nonprod, preview env, etc.) and must NOT spin up a local serve - doing
+  // so would race against the build cache and possibly serve stale assets.
+  webServer: previewBaseUrl
+    ? undefined
+    : {
+        command: 'npm run build && npx serve --single dist/jotjson/browser -l 4173',
+        url: 'http://localhost:4173',
+        reuseExistingServer: !process.env['CI'],
+        timeout: 180_000,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
 });
