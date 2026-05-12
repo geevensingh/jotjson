@@ -6,8 +6,15 @@ name: Deploy (SWA) - PR preview
 #
 # Trigger: `pull_request` (opened / synchronize / reopened / closed)
 # from the geevensingh/jotjson repository itself. Fork PRs are skipped
-# entirely (no OIDC, no secrets, no preview env). Docs-only PRs are
-# skipped via `paths-ignore` at the workflow level.
+# entirely (no OIDC, no secrets, no preview env).
+#
+# NOTE on path filters: there is intentionally NO workflow-level
+# `paths-ignore` here. Filtering at the trigger level would also
+# filter the `closed` event for a PR whose final diff is docs-only
+# (e.g., a code-then-revert sequence), which would silently skip the
+# teardown job and leak the preview env + per-PR Cosmos DB. Letting
+# docs-only PRs deploy a preview is the cheaper failure mode (one
+# ~3-minute deploy + ephemeral env auto-torn-down on close).
 #
 # Build profile: ANONYMOUS. Uses `environment.example.ts` directly -
 # the same harness the existing e2e/anonymous/ smoke suite uses. MSAL
@@ -18,10 +25,13 @@ name: Deploy (SWA) - PR preview
 #
 # Cosmos isolation: each preview env gets a dedicated Cosmos SQL
 # database `jotjson-pr-<number>` on the shared `cosmos-jotjson-nonprod`
-# account. Wired via a per-environment app-setting override
-# (`COSMOS_DATABASE`) on the preview SWA env. The Phase 2 anonymous
-# smoke doesn't write to Cosmos, but this shape unblocks #68 without
-# re-architecting.
+# account. The database is created on deploy and dropped on PR close
+# as defensive scaffolding for #68. NOTE: the database is NOT yet
+# wired into the preview SWA's Functions - Azure CLI's
+# `az staticwebapp appsettings set --environment-name <preview>`
+# returns Not Found for non-`production` envs, so per-preview overrides
+# aren't possible via that surface. Phase 2's anonymous smoke doesn't
+# write to Cosmos so this is currently inert; #68 will revisit.
 #
 # Auth (Azure): uses federated SP `gh-actions-jotjson` via
 # `environment: nonprod` matching the federated cred
@@ -49,11 +59,6 @@ run-name: >-
 on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
-    paths-ignore:
-      - '**/*.md'
-      - '.gitignore'
-      - '.gitattributes'
-      - 'LICENSE'
 
 concurrency:
   group: cd-preview-pr-${{ github.event.pull_request.number }}
@@ -64,7 +69,7 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write # OIDC to nonprod sub for Cosmos + appsettings calls
+  id-token: write # OIDC to nonprod sub for per-PR Cosmos DB create/delete
   pull-requests: write # sticky PR comment
 
 env:
@@ -111,14 +116,38 @@ jobs:
       - name: Install web deps
         run: npm ci
 
-      - name: Materialize anonymous environment.ts
-        # Preview uses the same anonymous build as the existing
-        # e2e/anonymous/ smoke. No Entra secrets baked in - MSAL is
-        # never initialised with real config on preview, so sign-in
-        # is intentionally non-functional. See header comment.
+      - name: Materialize anonymous environment.{ts,prod.ts}
+        # Preview uses the same anonymous *credential* shape as the
+        # existing e2e/anonymous/ smoke - empty Entra config so MSAL
+        # never initialises with real values. The dev `environment.ts`
+        # is a verbatim copy of `environment.example.ts` (which has
+        # `production: false`, correct for ng serve / dev tooling).
+        # The `environment.prod.ts` is synthesized inline with
+        # `production: true` (Angular's fileReplacements swaps to this
+        # file under `--configuration=production`); otherwise the
+        # preview bundle would ship `production: false` and diverge
+        # from cd.yml / cd-nonprod.yml bundles for any future
+        # `environment.production`-gated code path.
         run: |
           cp src/environments/environment.example.ts src/environments/environment.ts
-          cp src/environments/environment.example.ts src/environments/environment.prod.ts
+          cat > src/environments/environment.prod.ts <<'EOF'
+          import { Environment } from './environment.interface';
+
+          export const environment: Environment = {
+            production: true,
+            apiBaseUrl: '/api',
+            auth: {
+              clientId: '',
+              authority: '',
+              knownAuthorities: [],
+              redirectUri: '',
+              postLogoutRedirectUri: '',
+              scopes: [],
+            },
+            appInsightsConnectionString: '',
+          };
+          EOF
+          sed -i 's/^          //' src/environments/environment.prod.ts
 
       - name: Build SPA
         run: npm run build -- --configuration=production
@@ -309,6 +338,18 @@ jobs:
     timeout-minutes: 10
     environment: nonprod
     steps:
+      - name: Check for deploy token
+        # Mirrors the build-and-deploy guard. Without this, a missing
+        # AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD would fail the SWA
+        # `close` step late and could leave the preview env behind.
+        env:
+          SWA_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
+        run: |
+          if [ -z "$SWA_TOKEN" ]; then
+            echo "::error::AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD not set - cannot tear down preview env."
+            exit 1
+          fi
+
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
