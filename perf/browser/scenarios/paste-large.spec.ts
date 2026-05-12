@@ -56,7 +56,8 @@ for (const fixture of FIXTURES) {
     await page.addInitScript({ content: perfHarnessInitScript() });
 
     const iters: IterMetrics[] = [];
-    let captureTraceForIter = 0; // capture .cpuprofile + .trace.json on the first timed iter only.
+    // Capture .cpuprofile + .trace.json on the first warmup iter so
+    // profiler/tracing overhead does not bias the timed iters' stats.
 
     for (let i = 0; i < WARMUP_ITERS + TIMED_ITERS; i++) {
       const isTimed = i >= WARMUP_ITERS;
@@ -70,7 +71,7 @@ for (const fixture of FIXTURES) {
       const heapBefore: number | null = await page.evaluate(HEAP_SAMPLE_SCRIPT);
       await profiler.collectGarbage();
 
-      const captureFlame = isTimed && i - WARMUP_ITERS === captureTraceForIter;
+      const captureFlame = !isTimed && i === 0;
       if (captureFlame) {
         await profiler.startProfiler();
         await profiler.startTracing();
@@ -119,7 +120,7 @@ for (const fixture of FIXTURES) {
       const heapDelta = heapBefore !== null && heapAfter !== null ? heapAfter - heapBefore : null;
 
       if (captureFlame) {
-        const tag = `paste-large-${fixture.shape}-${fixture.size}-iter${i - WARMUP_ITERS}`;
+        const tag = `paste-large-${fixture.shape}-${fixture.size}-warmup`;
         await profiler.stopProfilerToFile(join(TRACES_DIR, `${tag}.cpuprofile`));
         await profiler.stopTracingToFile(join(TRACES_DIR, `${tag}.trace.json`));
       }

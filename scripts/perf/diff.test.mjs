@@ -22,7 +22,7 @@ test('formatNs uses ASCII-only unit suffixes', () => {
 
 test('computeDiffs flags rows over the layer-specific threshold', () => {
   const baseline = makeBaseline({
-    '1.parse.deep25.10K': {
+    '1.parse.deep25.10k': {
       wallNsMedian: 1_000_000,
       wallNsIqrLow: 950_000,
       wallNsIqrHigh: 1_050_000,
@@ -42,7 +42,7 @@ test('computeDiffs flags rows over the layer-specific threshold', () => {
       layer: 1,
       scenario: 'parse',
       fixture: 'deep25',
-      size: '10K',
+      size: '10k',
       approxNodes: 10000,
       iters: 20,
       wallNsMedian: 1_200_000,
@@ -66,7 +66,7 @@ test('computeDiffs flags rows over the layer-specific threshold', () => {
   const diffs = computeDiffs(baseline, currentRows);
   const byKey = new Map(diffs.map((diff) => [diff.key, diff]));
   // Layer 1: 20% > 15% threshold -> flagged.
-  assert.equal(byKey.get('1.parse.deep25.10K').flagged, true);
+  assert.equal(byKey.get('1.parse.deep25.10k').flagged, true);
   // Layer 3: 18% < 20% threshold -> not flagged.
   assert.equal(byKey.get('3.paste-large.wide-aoo.1m').flagged, false);
 });
@@ -78,7 +78,7 @@ test('computeDiffs skips rows with no baseline entry', () => {
       layer: 1,
       scenario: 'parse',
       fixture: 'deep25',
-      size: '10K',
+      size: '10k',
       approxNodes: 0,
       iters: 0,
       wallNsMedian: 100,
@@ -92,14 +92,14 @@ test('computeDiffs skips rows with no baseline entry', () => {
 
 test('formatDiffTable returns an ASCII-only table sorted by largest delta', () => {
   const baseline = makeBaseline({
-    '1.a.b.10K': {
+    '1.a.b.10k': {
       wallNsMedian: 1000,
       wallNsIqrLow: 0,
       wallNsIqrHigh: 0,
       iters: 1,
       approxNodes: 0,
     },
-    '1.c.d.10K': {
+    '1.c.d.10k': {
       wallNsMedian: 1000,
       wallNsIqrLow: 0,
       wallNsIqrHigh: 0,
@@ -112,7 +112,7 @@ test('formatDiffTable returns an ASCII-only table sorted by largest delta', () =
       layer: 1,
       scenario: 'a',
       fixture: 'b',
-      size: '10K',
+      size: '10k',
       approxNodes: 0,
       iters: 1,
       wallNsMedian: 1100,
@@ -124,7 +124,7 @@ test('formatDiffTable returns an ASCII-only table sorted by largest delta', () =
       layer: 1,
       scenario: 'c',
       fixture: 'd',
-      size: '10K',
+      size: '10k',
       approxNodes: 0,
       iters: 1,
       wallNsMedian: 1500,

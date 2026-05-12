@@ -3,9 +3,10 @@
  * in a Node bench harness with no Angular DI context.
  *
  * The file's only repo-internal imports are to `json-value-type.ts` and
- * `json-path.ts` (also import-isolated leaves), so `tsc -p
- * tsconfig.perf.json` produces a `.mjs` that Node ESM can resolve
- * without rewriting relative specifiers. See
+ * `json-path.ts` (also import-isolated leaves). `tsc -p
+ * tsconfig.perf.json` emits a `.js` for each module, and
+ * `scripts/perf/build.mjs` rewrites the extensionless specifiers to
+ * `.js` so Node ESM can resolve them. See
  * `perf/bench/build-tree.bench.ts` and `docs/perf.md`.
  *
  * `JsonTreeComponent.buildRoot` is now a thin wrapper that calls

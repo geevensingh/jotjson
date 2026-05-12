@@ -16,9 +16,7 @@ function makeRow(overrides) {
     layer: 1,
     scenario: 'parse',
     fixture: 'deep25',
-    size: '10K',
-    approxNodes: 10000,
-    iters: 20,
+    size: '10k',
     wallNsMedian: 1_000_000,
     wallNsIqrLow: 950_000,
     wallNsIqrHigh: 1_050_000,
@@ -35,12 +33,12 @@ test('parseJsonl ignores blank lines and parses each as JSON', () => {
 
 test('rowsToBaselineEntries collapses by composite key', () => {
   const rows = [
-    makeRow({ scenario: 'parse', size: '10K', wallNsMedian: 1 }),
-    makeRow({ scenario: 'parse', size: '100K', wallNsMedian: 2 }),
+    makeRow({ scenario: 'parse', size: '10k', wallNsMedian: 1 }),
+    makeRow({ scenario: 'parse', size: '100k', wallNsMedian: 2 }),
   ];
   const entries = rowsToBaselineEntries(rows);
-  assert.equal(entries['1.parse.deep25.10K'].wallNsMedian, 1);
-  assert.equal(entries['1.parse.deep25.100K'].wallNsMedian, 2);
+  assert.equal(entries['1.parse.deep25.10k'].wallNsMedian, 1);
+  assert.equal(entries['1.parse.deep25.100k'].wallNsMedian, 2);
 });
 
 test('findLatestResultsDir returns the last sorted directory', () => {
@@ -108,7 +106,7 @@ test('snapshotBaseline writes a baseline file from latest results', () => {
     assert.equal(written.schemaVersion, 1);
     assert.equal(written.machineLabel, 'win32-x64-abc123');
     assert.equal(written.codeShaAtBaseline, 'deadbee');
-    assert.ok(written.rows['1.parse.deep25.10K']);
+    assert.ok(written.rows['1.parse.deep25.10k']);
   } finally {
     rmSync(tmpResults, { recursive: true, force: true });
     rmSync(tmpBaselines, { recursive: true, force: true });

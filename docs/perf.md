@@ -254,11 +254,14 @@ right-click the timeline area -> `Load profile...`. Select the
 
 L3 specs install a window-attached harness shim
 (`window.__jotjsonPerfHarness = { events: [] }`) via
-`page.addInitScript`. The `LoggerService` honors it via
-`__attachPerfHarnessForTesting`, which is null-op in production. We
-never add new DOM markers; existing telemetry events
-(`paste.handle`, `monaco.loaded`) carry the relevant timing and are
-read back via the harness.
+`page.addInitScript` BEFORE the SPA loads. After
+`bootstrapApplication` resolves, `src/main.ts` checks for the shim
+and, if present, calls `LoggerService.__attachPerfHarnessForTesting`
+with it. This is the only path that ever attaches a perf sink; in
+normal production (no shim) the sink stays `null` and the harness
+seam is a no-op. We never add new DOM markers; existing telemetry
+events (`paste.handle`, `paste.handle.editor`, `monaco.loaded`)
+carry the relevant timing and are read back via the harness.
 
 ## Perf targets
 
@@ -336,7 +339,7 @@ npm run perf:clean -- --dry-run
   virtualized) takes ~50s per iteration synchronously, and the
   browser thread is blocked during the timed loop so Karma's
   socket-ping watchdog disconnects before completion at the default
-  5-min timeouts. The L2 spec gates 100K behind `?force100k=1` (the
+  timeouts. The L2 spec gates 100K behind `?force100k=1` (the
   Karma config sets a 15-min watchdog so the opt-in still works).
   1M is gated similarly behind `?force1m=1`.
 - **NFR-faithful ~5 MB fixture deferred**: the 1M synthetic wide-aoo

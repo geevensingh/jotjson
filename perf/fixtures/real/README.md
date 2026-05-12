@@ -16,8 +16,9 @@ being derived from any actual document. No real document content
 appears in this file.
 
 If you later want to derive a fixture from an actual private document,
-follow the **anonymization recipe** below and run the
-`lint:fixture-redaction` helper (see below) before committing.
+follow the **anonymization recipe** below and run the verifier helper
+(`node scripts/perf/check-fixture-redaction.mjs <path-to-fixture>`,
+shown in full below) before committing.
 
 ## Anonymization recipe
 

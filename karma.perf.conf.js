@@ -18,7 +18,7 @@
 // Output:
 //   perf-results/<utc>/layer-2.jsonl  (the spec writes via console.log
 //   sentinel parsed by the wrapper script; see the spec for the
-//   `@@PERF_ROW@@<json>@@END@@` sentinel format).
+//   `@@PERF_L2@@<json>@@END@@` sentinel format).
 
 module.exports = function (config) {
   config.set({

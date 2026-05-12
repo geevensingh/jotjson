@@ -253,9 +253,12 @@ export class LoggerService {
    * without spying or adding production DOM markers.
    *
    * The seam is named per AGENTS.md `__<verb>ForTesting` convention.
-   * Production code MUST NOT call this method. The harness is only
-   * attached by the Playwright perf config when running with
-   * `JOTJSON_PERF_HARNESS=1` in the perf browser context.
+   * Production code MUST NOT call this method. The wiring lives in
+   * `src/main.ts`: after `bootstrapApplication` resolves, if the
+   * L3 spec has installed the `window.__jotjsonPerfHarness` shim via
+   * `page.addInitScript`, the bootstrap calls this method with that
+   * shim. In normal production (no shim present), this method is
+   * never called and `perfSink` stays `null`.
    */
   __attachPerfHarnessForTesting(sink: PerfHarnessSink): void {
     this.perfSink = sink;

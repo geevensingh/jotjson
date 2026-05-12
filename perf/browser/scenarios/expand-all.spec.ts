@@ -74,12 +74,11 @@ for (const fixture of FIXTURES) {
       const heapBefore: number | null = await page.evaluate(HEAP_SAMPLE_SCRIPT);
       await profiler.collectGarbage();
 
-      const captureFlame = isTimed && i - WARMUP_ITERS === 0;
+      const captureFlame = !isTimed && i === 0;
       if (captureFlame) {
         await profiler.startProfiler();
         await profiler.startTracing();
       }
-
       const expandAll = page.getByRole('button', { name: /expand all/i }).first();
       const t0 = Date.now();
       if (await expandAll.isVisible().catch(() => false)) {
@@ -104,7 +103,7 @@ for (const fixture of FIXTURES) {
       const heapDelta = heapBefore !== null && heapAfter !== null ? heapAfter - heapBefore : null;
 
       if (captureFlame) {
-        const tag = `expand-all-${fixture.shape}-${fixture.size}-iter${i - WARMUP_ITERS}`;
+        const tag = `expand-all-${fixture.shape}-${fixture.size}-warmup`;
         await profiler.stopProfilerToFile(join(TRACES_DIR, `${tag}.cpuprofile`));
         await profiler.stopTracingToFile(join(TRACES_DIR, `${tag}.trace.json`));
       }

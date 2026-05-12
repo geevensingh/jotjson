@@ -1,6 +1,8 @@
 // Informational baseline-freshness check (skeptic r2 #10): warns but
-// does NOT fail when the per-machine baseline is older than 30 days
-// or when the current branch touches files in the perf-sensitive set.
+// does NOT fail when the per-machine baseline is older than 30 days.
+// Does NOT inspect git history or the working tree for perf-sensitive
+// file changes; freshness is purely an age check against the baseline
+// `lastUpdatedUtc` timestamp.
 //
 // Exit code is 0 in all cases. This script is documented in
 // docs/perf.md as a contributor-norm reminder, not a CI gate.
