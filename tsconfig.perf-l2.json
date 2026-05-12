@@ -2,6 +2,7 @@
  *
  * Differs from `tsconfig.spec.json` ONLY by include/exclude:
  *   - INCLUDES `src/`*`*`/`*.perf.ts` (the perf-bench files).
+ *   - INCLUDES `perf/fixtures/`*`*`/`*.ts` (shared generator helpers).
  *   - EXCLUDES `src/`*`*`/`*.spec.ts` (the regular unit specs).
  *
  * Used by `ng test --configuration perf` (see angular.json -> test ->
@@ -16,6 +17,6 @@
     "outDir": "./out-tsc/perf-l2",
     "types": ["jasmine", "@angular/localize"]
   },
-  "include": ["src/**/*.perf.ts", "src/**/*.d.ts"],
+  "include": ["src/**/*.perf.ts", "src/**/*.d.ts", "perf/fixtures/**/*.ts"],
   "exclude": ["src/**/*.spec.ts"]
 }

@@ -23,14 +23,15 @@
 
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import {
+  FIXTURE_CATALOG,
+  type FixtureSpec as CatalogFixtureSpec,
+} from '../../../../../perf/fixtures/catalog';
+import { generate } from '../../../../../perf/fixtures/generate';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { JsonTreeComponent } from './json-tree.component';
 
-interface FixtureSpec {
-  shape: 'deep25' | 'wide-aoo';
-  approxNodes: number;
-  label: string;
-}
+type FixtureSpec = CatalogFixtureSpec;
 
 interface PerfRow {
   layer: 2;
@@ -65,60 +66,14 @@ function defaultFixtures(): FixtureSpec[] {
   const win = window as ForceWindow;
   const force1M = win.__perfL2Force1M === true || location.search.includes('force1m=1');
   const force100K = win.__perfL2Force100K === true || location.search.includes('force100k=1');
-  const sizes: { approxNodes: number; label: string }[] = [{ approxNodes: 10_000, label: '10K' }];
-  if (force100K || force1M) sizes.push({ approxNodes: 100_000, label: '100K' });
-  if (force1M) sizes.push({ approxNodes: 1_000_000, label: '1M' });
-  const fixtures: FixtureSpec[] = [];
-  for (const size of sizes) {
-    fixtures.push({ shape: 'deep25', ...size });
-    fixtures.push({ shape: 'wide-aoo', ...size });
-  }
-  return fixtures;
-}
-
-// Inline mulberry32 + generator (kept in-spec to avoid a
-// build-toolchain dependency from `perf/fixtures/generate.ts` into
-// the Karma file set, which would require additional include globs).
-function mulberry32(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6d2b79f5) >>> 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const KEY_POOL = ['k0', 'k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8', 'k9'];
-
-function buildDeep25(approxNodes: number): unknown {
-  const DEPTH = 25;
-  const leafCount = Math.max(0, approxNodes - DEPTH);
-  const rng = mulberry32(0xc0ffee);
-  const leaves: unknown[] = [];
-  for (let i = 0; i < leafCount; i++) leaves.push(Math.floor(rng() * 1e9));
-  let cursor: Record<string, unknown> | unknown = leaves;
-  for (let d = DEPTH - 1; d >= 0; d--) {
-    cursor = { [`level_${d}`]: cursor };
-  }
-  return cursor;
-}
-
-function buildWideAoo(approxNodes: number): unknown {
-  const itemCount = Math.max(0, Math.floor((approxNodes - 1) / 11));
-  const rng = mulberry32(0xc0ffee);
-  const out: unknown[] = [];
-  for (let i = 0; i < itemCount; i++) {
-    const item: Record<string, unknown> = {};
-    for (let k = 0; k < 10; k++) item[KEY_POOL[k]!] = Math.floor(rng() * 1e9);
-    out.push(item);
-  }
-  return out;
+  const enabledNodeCounts = new Set<number>([10_000]);
+  if (force100K || force1M) enabledNodeCounts.add(100_000);
+  if (force1M) enabledNodeCounts.add(1_000_000);
+  return FIXTURE_CATALOG.filter((fixture) => enabledNodeCounts.has(fixture.approxNodes));
 }
 
 function generateValue(spec: FixtureSpec): unknown {
-  return spec.shape === 'deep25' ? buildDeep25(spec.approxNodes) : buildWideAoo(spec.approxNodes);
+  return JSON.parse(generate({ shape: spec.shape, approxNodes: spec.approxNodes }));
 }
 
 function quantile(sorted: number[], q: number): number {
@@ -189,7 +144,7 @@ async function measureOneFixture(
     layer: 2,
     scenario,
     fixture: spec.shape,
-    size: spec.label,
+    size: spec.size,
     approxNodes: spec.approxNodes,
     iters: TIMED_ITERS,
     wallNsMedian: quantile(sorted, 0.5),
@@ -212,7 +167,7 @@ function emitRow(row: PerfRow): void {
 
 describe('JsonTreeComponent perf (L2)', () => {
   for (const spec of defaultFixtures()) {
-    it(`initial render: ${spec.shape} @ ${spec.label}`, async () => {
+    it(`initial render: ${spec.shape} @ ${spec.size}`, async () => {
       const row = await measureOneFixture(`initial-render`, spec, initialRender);
       emitRow(row);
       // We don't assert thresholds here -- diff happens in `perf:diff`.

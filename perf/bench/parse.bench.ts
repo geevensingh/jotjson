@@ -21,32 +21,11 @@
 //     for run-bench.mjs to aggregate into median + IQR.
 
 import { parse } from '../../src/app/core/json/parse.js';
-import { generate, type FixtureShape } from '../fixtures/generate.js';
+import { FIXTURE_CATALOG } from '../fixtures/catalog.js';
+import { generate } from '../fixtures/generate.js';
 
 const WARMUP_ITERS = 3;
 const TIMED_ITERS = 20;
-
-interface FixtureEntry {
-  shape: FixtureShape;
-  approxNodes: number;
-  label: string;
-}
-
-const FIXTURE_MATRIX: readonly FixtureEntry[] = [
-  { shape: 'deep25', approxNodes: 10_000, label: '10K' },
-  { shape: 'deep25', approxNodes: 100_000, label: '100K' },
-  { shape: 'deep25', approxNodes: 1_000_000, label: '1M' },
-  { shape: 'wide-aoo', approxNodes: 10_000, label: '10K' },
-  { shape: 'wide-aoo', approxNodes: 100_000, label: '100K' },
-  { shape: 'wide-aoo', approxNodes: 1_000_000, label: '1M' },
-];
-
-const FIVE_M_FIXTURES: readonly FixtureEntry[] = [
-  { shape: 'deep25', approxNodes: 5_000_000, label: '5M' },
-  { shape: 'wide-aoo', approxNodes: 5_000_000, label: '5M' },
-];
-
-const MIN_5M_TOTAL_MEM_BYTES = 8 * 1024 * 1024 * 1024;
 
 export interface BenchRow {
   scenario: string;
@@ -97,7 +76,7 @@ function requireGc(): () => void {
 function measure(
   scenario: string,
   fixture: string,
-  label: string,
+  size: string,
   approxNodes: number,
   input: string,
 ): BenchRow {
@@ -127,7 +106,7 @@ function measure(
   return {
     scenario,
     fixture,
-    size: label,
+    size,
     approxNodes,
     bytes: input.length,
     iters: TIMED_ITERS,
@@ -145,26 +124,13 @@ function measure(
 
 /**
  * Bench entrypoint. Invoked by `scripts/perf/run-bench.mjs`. Returns
- * one row per (fixture, size). 5M-node fixtures are skipped on hosts
- * with < 8 GB total memory unless `PERF_FORCE_5M=1`.
+ * one row per catalog fixture.
  */
 export async function run(): Promise<BenchRow[]> {
-  const os = await import('node:os');
   const rows: BenchRow[] = [];
-  for (const entry of FIXTURE_MATRIX) {
+  for (const entry of FIXTURE_CATALOG) {
     const input = generate({ shape: entry.shape, approxNodes: entry.approxNodes });
-    rows.push(measure('parse', entry.shape, entry.label, entry.approxNodes, input));
-  }
-  const force5m = process.env['PERF_FORCE_5M'] === '1';
-  if (os.totalmem() >= MIN_5M_TOTAL_MEM_BYTES || force5m) {
-    for (const entry of FIVE_M_FIXTURES) {
-      const input = generate({ shape: entry.shape, approxNodes: entry.approxNodes });
-      rows.push(measure('parse', entry.shape, entry.label, entry.approxNodes, input));
-    }
-  } else {
-    process.stdout.write(
-      'parse.bench: skipping 5M-node fixtures (totalmem < 8 GB; set PERF_FORCE_5M=1 to override)\n',
-    );
+    rows.push(measure('parse', entry.shape, entry.size, entry.approxNodes, input));
   }
   return rows;
 }

@@ -6,12 +6,11 @@
 //
 // Determinism: every fixture is generated with a `mulberry32(seed)`
 // PRNG, with the seed baked in at module load. The generator
-// `generate.spec.ts` asserts a golden SHA-256 hash for each variant so
+// `generate.test.mjs` asserts golden SHA-256 hashes for key variants so
 // drift across machines and CI is loud, not silent.
 //
 // Sizes are expressed in NODE COUNTS (not bytes). 1M nodes is the
-// canonical "user pain" stress; 5M is only run for L1 in v1 (it's
-// cheap in Node; expensive in DOM).
+// canonical "user pain" stress.
 
 export type FixtureShape = 'deep25' | 'wide-aoo';
 

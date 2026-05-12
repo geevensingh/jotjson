@@ -29,12 +29,12 @@ test('computeDiffs flags rows over the layer-specific threshold', () => {
       iters: 20,
       approxNodes: 10000,
     },
-    '3.paste-large.cosmos-doc-sample.5m': {
+    '3.paste-large.wide-aoo.1m': {
       wallNsMedian: 1_000_000_000,
       wallNsIqrLow: 950_000_000,
       wallNsIqrHigh: 1_050_000_000,
       iters: 7,
-      approxNodes: 5_000_000,
+      approxNodes: 1_000_000,
     },
   });
   const currentRows = [
@@ -53,9 +53,9 @@ test('computeDiffs flags rows over the layer-specific threshold', () => {
     {
       layer: 3,
       scenario: 'paste-large',
-      fixture: 'cosmos-doc-sample',
-      size: '5m',
-      approxNodes: 5_000_000,
+      fixture: 'wide-aoo',
+      size: '1m',
+      approxNodes: 1_000_000,
       iters: 7,
       wallNsMedian: 1_180_000_000,
       wallNsIqrLow: 0,
@@ -68,7 +68,7 @@ test('computeDiffs flags rows over the layer-specific threshold', () => {
   // Layer 1: 20% > 15% threshold -> flagged.
   assert.equal(byKey.get('1.parse.deep25.10K').flagged, true);
   // Layer 3: 18% < 20% threshold -> not flagged.
-  assert.equal(byKey.get('3.paste-large.cosmos-doc-sample.5m').flagged, false);
+  assert.equal(byKey.get('3.paste-large.wide-aoo.1m').flagged, false);
 });
 
 test('computeDiffs skips rows with no baseline entry', () => {

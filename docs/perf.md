@@ -81,7 +81,7 @@ cross-PR comparison.
   "lastUpdatedUtc": "2026-05-11T19:00:00.000Z",
   "codeShaAtBaseline": "8c3d826",
   "rows": {
-    "1.parse.deep25.10K": {
+    "1.parse.deep25.10k": {
       "wallNsMedian": 12387700,
       "wallNsIqrLow": 12317350,
       "wallNsIqrHigh": 12750750,
@@ -141,8 +141,8 @@ Two benches run today:
   `buildTree()` function in
   `src/app/shared/components/json-tree/build-tree.ts`.
 
-Both run against deep25 + wide-aoo fixtures at 10K, 100K, 1M nodes.
-The 5M variant is gated behind `os.totalmem() >= 8 GB || PERF_FORCE_5M=1`.
+Both run against the catalog matrix in `perf/fixtures/catalog.ts`:
+deep25 + wide-aoo fixtures at 10K, 100K, and 1M nodes.
 
 Mechanics:
 
@@ -166,10 +166,12 @@ Mechanics:
 
 ### Generator determinism
 
+`perf/fixtures/catalog.ts` defines the canonical fixture matrix.
 `perf/fixtures/generate.ts` exports a mulberry32-seeded generator. The
 build script asserts SHA-256 hashes of generator output for
 `approxNodes=1000` on both shapes (see `GENERATOR_GOLDEN_HASHES` in
-`scripts/perf/build.mjs`).
+`scripts/perf/build.mjs`), and `perf/fixtures/generate.test.mjs`
+asserts the wide-aoo 10K + 100K hashes under `npm run test:scripts`.
 
 When you intentionally change the generator:
 
@@ -213,7 +215,7 @@ prestep of `perf:l2`.
 Three scenarios under `perf/browser/scenarios/`:
 
 1. `paste-large.spec.ts` -- programmatic Monaco `setValue` of 10K /
-   100K / 1M / (5M, opt-in) wide-aoo JSON; waits for first tree row.
+   100K / 1M wide-aoo JSON; waits for first tree row.
 2. `expand-all.spec.ts` -- 1M-node fixture, click "Expand all".
 3. `scroll-after-expand.spec.ts` -- 1M-node fixture, expand-all, then
    50 wheel events at ~60Hz over the tree pane.
@@ -244,16 +246,9 @@ read back via the harness.
 ## Perf targets
 
 `perf-targets.json` records *operationalizable* NFR ceilings (not
-soft regressions). Today the only enforced row is:
-
-```jsonc
-{
-  "key": "l3.paste-large.cosmos-doc-sample.5m.longestTaskMs",
-  "ceiling": 200,
-  "ceilingUnit": "ms",
-  "anchorsNfr": "DESIGN_SPEC.md NFR #1 (open a 5 MB JSON file without freezing)"
-}
-```
+soft regressions). It currently has no active rows; F-2 tracks adding
+an NFR-faithful ~5 MB fixture before reintroducing a hard ceiling for
+DESIGN_SPEC NFR #1 (open a 5 MB JSON file without freezing).
 
 Other DESIGN_SPEC NFRs (TTI<2s on 4G; api/ p95<200ms) are deferred to
 follow-up issues; they require CI infra (4G throttling, api-side
@@ -300,9 +295,9 @@ npm run perf:clean -- --dry-run
   5-min timeouts. The L2 spec gates 100K behind `?force100k=1` (the
   Karma config sets a 15-min watchdog so the opt-in still works).
   1M is gated similarly behind `?force1m=1`.
-- **L1 5M fixtures are gated** by `os.totalmem() >= 8 GB ||
-  PERF_FORCE_5M=1`; the run-bench worker uses
-  `--max-old-space-size=12288` to keep 1M deep25 stable.
+- **NFR-faithful ~5 MB fixture deferred**: the 1M synthetic wide-aoo
+  case exercises the same paste/render stress path, while F-2 tracks a
+  fixture that maps directly to DESIGN_SPEC NFR #1.
 
 See `plan.md` -> "Out of scope" in the session for the full
 follow-up issue list.

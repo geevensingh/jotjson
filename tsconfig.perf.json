@@ -19,9 +19,9 @@
 //   `.ts -> .js` rewrite, so `.ts`-suffix source breaks `ng test`.
 // - Apart from those internal links, the pure modules only import
 //   `jsonc-parser`, which Node ESM resolves via `node_modules`.
-// - The bench sources (`perf/bench/*.bench.ts`) and fixture generator
-//   (`perf/fixtures/generate.ts`) use explicit `.js` extensions on
-//   relative imports so the emit can be loaded by Node ESM unchanged.
+// - The bench sources (`perf/bench/*.bench.ts`) and fixture helpers
+//   (`perf/fixtures/*.ts`) use explicit `.js` extensions on relative
+//   imports so the emit can be loaded by Node ESM unchanged.
 // - `scripts/perf/build.mjs` runs `tsc -p tsconfig.perf.json` and then
 //   drops a `dist-perf/package.json` with `"type": "module"` so Node
 //   treats the emitted `.js` files as ESM.
@@ -54,6 +54,6 @@
     "src/app/core/json/parse.ts",
     "src/app/shared/components/json-tree/build-tree.ts",
     "perf/bench/**/*.ts",
-    "perf/fixtures/generate.ts"
+    "perf/fixtures/**/*.ts"
   ]
 }

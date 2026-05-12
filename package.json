@@ -22,7 +22,7 @@
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\" \"perf/fixtures/**/*.test.mjs\"",
     "perf:build": "node scripts/perf/build.mjs",
     "perf:l1": "node scripts/perf/run-bench.mjs",
     "perf:l2": "node scripts/perf/run-l2.mjs",
