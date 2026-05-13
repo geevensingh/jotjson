@@ -9,9 +9,9 @@ per-machine baseline; CI does not yet enforce perf thresholds.
 ```bash
 # One-time setup: pick your machine label.
 node scripts/perf/machine-label.mjs --suggest
-# -> e.g., win32-x64-geeven-laptop (uses your hostname by default)
-$env:PERF_MACHINE = "win32-x64-geeven-laptop"   # PowerShell
-# export PERF_MACHINE=win32-x64-geeven-laptop   # bash
+# -> e.g., win32-x64-h7c1d05ef (hashed hostname; PII-safe by default)
+$env:PERF_MACHINE = "win32-x64-h7c1d05ef"   # PowerShell
+# export PERF_MACHINE=win32-x64-h7c1d05ef   # bash
 
 # First-time baseline:
 npm run perf:all
@@ -57,14 +57,17 @@ open directly in Chrome DevTools (`Performance` panel ->
 
 `PERF_MACHINE` is **optional**: if unset, the perf scripts fall back to
 the deterministic label produced by `suggestMachineLabel()` (shape:
-`<platform>-<arch>-<sanitized-hostname>`, e.g.
-`win32-x64-geeven-laptop`). Hostnames are sanitized against the
-`[A-Za-z0-9_-]` character class so the label is filename-safe on every
-OS. Set `PERF_MACHINE` explicitly when you want a stable name across
-machines that share a hostname pattern, when you want anonymity
-(hostnames sometimes contain personal names), or when you intentionally
-want to compare runs from different hosts against a single shared
-baseline file. Print the suggested label any time with:
+`<platform>-<arch>-h<8 hex>`, e.g. `win32-x64-h7c1d05ef`). The hex
+segment is the first 8 chars of `SHA-256(os.hostname())` so the label
+is (a) stable for a given machine, (b) different across machines with
+overwhelming probability, and (c) PII-safe -- the hostname itself
+never appears in the label, only its hash. Set `PERF_MACHINE`
+explicitly when you want a self-documenting filename
+(e.g. `win32-x64-team-runner-01`), when you want to share a single
+baseline file across machines that should be treated as equivalent, or
+when you want to diff against the repo's committed reference
+(`PERF_MACHINE=win32-x64-v1-reference`). Print the suggested label any
+time with:
 
 ```bash
 node scripts/perf/machine-label.mjs --suggest
@@ -81,7 +84,7 @@ below.
 ```jsonc
 {
   "schemaVersion": 2,
-  "machineLabel": "win32-x64-geeven-laptop",
+  "machineLabel": "win32-x64-h7c1d05ef",
   "lastUpdatedUtc": "2026-05-12T19:00:00.000Z",
   "codeShaAtBaseline": "8c3d826",
   "rows": {
@@ -141,7 +144,7 @@ new `heapWorkingSet*` columns.
 ### v1 reference machine
 
 The repository commits one whitelisted baseline at
-`perf-baselines/win32-x64-CPC-geeve-YN4D4.json` as the **v1 reference
+`perf-baselines/win32-x64-v1-reference.json` as the **v1 reference
 baseline**. This is the only `perf-baselines/*.json` file tracked in
 git; every other machine's baseline stays gitignored.
 
@@ -155,7 +158,7 @@ Hardware snapshot (the machine that produced the v1 reference baseline):
 | OS | Windows 11 Enterprise (10.0.26200) |
 | Node | v24.15.0 |
 | Chrome | 148.0.7778.96 |
-| Machine label | `win32-x64-CPC-geeve-YN4D4` |
+| Machine label | `win32-x64-v1-reference` |
 
 The reference baseline is **CI-dormant**: `npm run perf:all` does not
 run in CI today, so the committed numbers are referenced only by local

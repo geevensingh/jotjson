@@ -4,26 +4,33 @@
 //     export PERF_MACHINE=$(node scripts/perf/machine-label.mjs --suggest)
 //     setx PERF_MACHINE (node scripts/perf/machine-label.mjs --suggest)   # PowerShell
 //
-// The suggested label is `<platform>-<arch>-<hostname>` -- e.g.
-// `linux-x64-build-runner-01`, `win32-x64-geeven-laptop`. The hostname
-// segment is sanitized (any char outside `[A-Za-z0-9_-]` is replaced
-// with `-`, runs of `-` are collapsed, leading/trailing `-` trimmed)
-// so the result always satisfies `isValidMachineLabel`'s character
-// class and 64-char cap.
+// Default shape is `<platform>-<arch>-h<8 hex>` -- e.g.,
+// `linux-x64-h3f7a92b1`, `win32-x64-h7c1d05ef`. The hex segment is the
+// first 8 chars of SHA-256(hostname), so:
+// - Same machine -> same label across runs (stable for baseline lookup).
+// - Different machines -> different labels with overwhelming probability
+//   (8 hex = 4.3B buckets).
+// - No personal data in the label: the hostname itself does not appear.
 //
-// Privacy note: hostnames sometimes contain personal names ("GEEVENS-
-// LAPTOP", "alex-mbp"). The repo convention is that the suggested
-// label is a starting point, and contributors who want anonymity
-// override PERF_MACHINE with a non-PII value (a CPU-hash form, a
-// project-issued anonymous label, etc.) before running perf scripts.
+// Privacy note: this default is PII-safe by construction. Earlier
+// revisions embedded the raw sanitized hostname (e.g.
+// `win32-x64-GEEVENS-LAPTOP`); that leaked names into baseline
+// filenames and committed JSON. The hashed form avoids that without
+// losing the per-machine uniqueness baseline lookup needs.
+//
+// Hostname-based labels are still available as opt-in: set PERF_MACHINE
+// explicitly to a self-documenting value -- e.g.
+// `PERF_MACHINE=win32-x64-team-runner-01` -- when you want a
+// recognizable filename. Run a hostname through `sanitizeHostnameForLabel`
+// (still exported below) if you need help shaping it.
 //
 // PERF_MACHINE is **optional** for `perf:diff` and `perf:baseline`.
-// If unset, the scripts fall back to `suggestMachineLabel()` (same
-// shape as below). Set PERF_MACHINE explicitly when running on a
-// known reference machine so the baseline filename is stable across
-// distinct hosts. Failure messages link `docs/perf.md` and suggest
-// this command for that case.
+// If unset, the scripts fall back to `suggestMachineLabel()`. Set
+// PERF_MACHINE explicitly to point at a specific baseline file (e.g.
+// `PERF_MACHINE=win32-x64-v1-reference` to diff against the repo's
+// committed reference baseline). Failure messages link `docs/perf.md`.
 
+import { createHash } from 'node:crypto';
 import { arch, hostname, platform } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -56,8 +63,8 @@ export function sanitizeHostnameForLabel(raw, reservedPrefixLength = 0) {
 /** @returns {string} */
 export function suggestMachineLabel() {
   const prefix = `${platform()}-${arch()}-`;
-  const host = sanitizeHostnameForLabel(hostname(), prefix.length);
-  return `${prefix}${host}`;
+  const hash = createHash('sha256').update(hostname()).digest('hex').slice(0, 8);
+  return `${prefix}h${hash}`;
 }
 
 /**

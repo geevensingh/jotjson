@@ -7,12 +7,12 @@ import {
   suggestMachineLabel,
 } from './machine-label.mjs';
 
-test('suggestMachineLabel returns a platform-arch-hostname triplet that passes isValidMachineLabel', () => {
+test('suggestMachineLabel returns a platform-arch-hashedHostname triplet that passes isValidMachineLabel', () => {
   const label = suggestMachineLabel();
-  // Shape: <platform>-<arch>-<sanitized-hostname>. The hostname segment
-  // is host-dependent so we assert the structural prefix and full-label
-  // validity, not the hostname text.
-  assert.match(label, /^[a-z0-9]+-[a-z0-9]+-[A-Za-z0-9_-]+$/, `unexpected shape: ${label}`);
+  // Shape: <platform>-<arch>-h<8 hex of SHA-256(hostname)>. The hash
+  // segment is host-dependent so we assert the structural prefix and
+  // full-label validity, not the hash digits.
+  assert.match(label, /^[a-z0-9]+-[a-z0-9]+-h[a-f0-9]{8}$/, `unexpected shape: ${label}`);
   assert.ok(isValidMachineLabel(label), `suggested label should be valid: ${label}`);
 });
 

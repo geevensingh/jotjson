@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assertBaselineSchema, BASELINE_SCHEMA_VERSION } from './baseline.mjs';
-import { checkAgainstTargets, computeDiffs, formatDiffTable, formatNs } from './diff.mjs';
+import {
+  checkAgainstTargets,
+  computeDiffs,
+  findPasteMethodMismatches,
+  formatDiffTable,
+  formatNs,
+} from './diff.mjs';
 
 function makeBaseline(rows) {
   return {
@@ -202,6 +208,121 @@ test('computeDiffs skips rows when only one side carries pasteMethod', () => {
     },
   ]);
   assert.equal(diffs.length, 0);
+});
+
+test('findPasteMethodMismatches reports rows where current and baseline pasteMethod disagree', () => {
+  const baseline = makeBaseline({
+    '3.paste-large.wide-aoo.10k': {
+      wallNsMedian: 1_000_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      iters: 7,
+      approxNodes: 10000,
+      pasteMethod: 'setvalue',
+    },
+  });
+  const mismatches = findPasteMethodMismatches(baseline, [
+    {
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      approxNodes: 10000,
+      iters: 7,
+      wallNsMedian: 1_200_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      pasteMethod: 'keyboard',
+      codeSha: 'x',
+    },
+  ]);
+  assert.equal(mismatches.length, 1);
+  assert.equal(mismatches[0].key, '3.paste-large.wide-aoo.10k');
+  assert.equal(mismatches[0].currentPasteMethod, 'keyboard');
+  assert.equal(mismatches[0].baselinePasteMethod, 'setvalue');
+});
+
+test('findPasteMethodMismatches returns no entries when pasteMethod matches on both sides', () => {
+  const baseline = makeBaseline({
+    '3.paste-large.wide-aoo.10k': {
+      wallNsMedian: 1_000_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      iters: 7,
+      approxNodes: 10000,
+      pasteMethod: 'setvalue',
+    },
+  });
+  const mismatches = findPasteMethodMismatches(baseline, [
+    {
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      approxNodes: 10000,
+      iters: 7,
+      wallNsMedian: 1_200_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      pasteMethod: 'setvalue',
+      codeSha: 'x',
+    },
+  ]);
+  assert.equal(mismatches.length, 0);
+});
+
+test('findPasteMethodMismatches ignores rows that have no baseline entry at all', () => {
+  // No baseline entry means there is nothing to compare pasteMethod
+  // against; the row is simply missing from the diff. Mismatch
+  // reporting is reserved for the case where the keys overlap but
+  // pasteMethod disagrees.
+  const baseline = makeBaseline({});
+  const mismatches = findPasteMethodMismatches(baseline, [
+    {
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      approxNodes: 10000,
+      iters: 7,
+      wallNsMedian: 1_200_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      pasteMethod: 'keyboard',
+      codeSha: 'x',
+    },
+  ]);
+  assert.equal(mismatches.length, 0);
+});
+
+test('findPasteMethodMismatches treats one-sided pasteMethod as a mismatch (current set, baseline omitted)', () => {
+  const baseline = makeBaseline({
+    '3.paste-large.wide-aoo.10k': {
+      wallNsMedian: 1_000_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      iters: 7,
+      approxNodes: 10000,
+    },
+  });
+  const mismatches = findPasteMethodMismatches(baseline, [
+    {
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      approxNodes: 10000,
+      iters: 7,
+      wallNsMedian: 1_200_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      pasteMethod: 'setvalue',
+      codeSha: 'x',
+    },
+  ]);
+  assert.equal(mismatches.length, 1);
+  assert.equal(mismatches[0].currentPasteMethod, 'setvalue');
+  assert.equal(mismatches[0].baselinePasteMethod, undefined);
 });
 
 test('formatDiffTable returns an ASCII-only table sorted by largest delta', () => {

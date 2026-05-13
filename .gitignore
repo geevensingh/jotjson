@@ -83,5 +83,5 @@ Thumbs.db
 /dist-perf/
 /perf-results/
 /perf-baselines/*.json
-!/perf-baselines/win32-x64-CPC-geeve-YN4D4.json
+!/perf-baselines/win32-x64-v1-reference.json
 

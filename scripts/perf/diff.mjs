@@ -43,8 +43,51 @@ const TOP_K = 20;
  * @property {boolean} flagged
  */
 
+/**
+ * @typedef {Object} PasteMethodMismatch
+ * @property {string} key
+ * @property {('keyboard'|'setvalue'|undefined)} currentPasteMethod
+ * @property {('keyboard'|'setvalue'|undefined)} baselinePasteMethod
+ */
+
 function thresholdPctFor(layer) {
   return layer === 3 ? 20 : 15;
+}
+
+/**
+ * Finds rows whose key matches a baseline entry but whose `pasteMethod`
+ * disagrees. `computeDiffs` silently drops these rows so it never
+ * compares keyboard-vs-setvalue measurements as if they were the same
+ * row; that silence can mask harness changes (e.g. an accidental
+ * `pickPasteMethod` tweak that wipes out an entire L3 paste-large
+ * stratum from the diff). This function surfaces the dropped rows so
+ * the CLI can print explicit WARN lines.
+ *
+ * Conservative semantics: a mismatch is informational only -- it does
+ * NOT flag the row as a regression and does NOT change `perf:diff`'s
+ * exit code. Mirrors the missing-row WARN style used by
+ * `checkAgainstTargets`.
+ *
+ * @param {import('./baseline.mjs').BaselineFile} baseline
+ * @param {import('./baseline.mjs').JsonlRow[]} currentRows
+ * @returns {PasteMethodMismatch[]}
+ */
+export function findPasteMethodMismatches(baseline, currentRows) {
+  /** @type {PasteMethodMismatch[]} */
+  const out = [];
+  for (const row of currentRows) {
+    const key = perfRowKey(row);
+    const baselineEntry = baseline.rows[key];
+    if (!baselineEntry) continue;
+    if (row.pasteMethod !== baselineEntry.pasteMethod) {
+      out.push({
+        key,
+        currentPasteMethod: row.pasteMethod,
+        baselinePasteMethod: baselineEntry.pasteMethod,
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -175,7 +218,7 @@ export function checkAgainstTargets(currentRows, targets, rowKeyFn = perfRowKey)
 
 /**
  * @param {{ machineLabel: string, resultsDir?: string, baselinesDir?: string, targetsPath?: string }} opts
- * @returns {{ diffs: DiffRow[], output: string, flaggedCount: number, targetFlaggedCount: number, targetMessages: string[], baselinePath: string, targetsPath: string }}
+ * @returns {{ diffs: DiffRow[], output: string, flaggedCount: number, targetFlaggedCount: number, targetMessages: string[], methodMismatches: PasteMethodMismatch[], baselinePath: string, targetsPath: string }}
  */
 export function diffLatestRun({ machineLabel, resultsDir, baselinesDir, targetsPath }) {
   const usedBaselinesDir = baselinesDir ?? BASELINES_DIR;
@@ -193,6 +236,7 @@ export function diffLatestRun({ machineLabel, resultsDir, baselinesDir, targetsP
   const runDir = findLatestResultsDir(resultsDir);
   const currentRows = readRunRows(runDir);
   const diffs = computeDiffs(baseline, currentRows);
+  const methodMismatches = findPasteMethodMismatches(baseline, currentRows);
   const output = formatDiffTable(diffs);
   const flaggedCount = diffs.filter((diff) => diff.flagged).length;
   const targets = readPerfTargets(usedTargetsPath);
@@ -206,6 +250,7 @@ export function diffLatestRun({ machineLabel, resultsDir, baselinesDir, targetsP
     flaggedCount,
     targetFlaggedCount,
     targetMessages,
+    methodMismatches,
     baselinePath,
     targetsPath: usedTargetsPath,
   };
@@ -213,10 +258,27 @@ export function diffLatestRun({ machineLabel, resultsDir, baselinesDir, targetsP
 
 async function main() {
   const machineLabel = process.env['PERF_MACHINE'] ?? suggestMachineLabel();
-  const { output, flaggedCount, targetFlaggedCount, targetMessages, baselinePath, targetsPath } =
-    diffLatestRun({ machineLabel });
+  const {
+    output,
+    flaggedCount,
+    targetFlaggedCount,
+    targetMessages,
+    methodMismatches,
+    baselinePath,
+    targetsPath,
+  } = diffLatestRun({ machineLabel });
   process.stdout.write(`perf:diff  comparing latest run vs ${baselinePath}\n`);
   process.stdout.write(output);
+  if (methodMismatches.length > 0) {
+    process.stdout.write(
+      `perf:diff  ${methodMismatches.length} row(s) dropped from diff due to pasteMethod mismatch (harness change?):\n`,
+    );
+    for (const mm of methodMismatches) {
+      process.stdout.write(
+        `WARN: row "${mm.key}" dropped: current pasteMethod=${JSON.stringify(mm.currentPasteMethod)}, baseline pasteMethod=${JSON.stringify(mm.baselinePasteMethod)}\n`,
+      );
+    }
+  }
   if (targetMessages.length > 0) {
     process.stdout.write(`perf:diff  checking perf-targets at ${targetsPath}\n`);
     for (const msg of targetMessages) {
