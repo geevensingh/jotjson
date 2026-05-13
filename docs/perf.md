@@ -177,24 +177,30 @@ contributor work, a non-reference contributor:
 ### Paste mechanism (L3 paste-large)
 
 `paste-large.spec.ts` varies the paste path by fixture size to balance
-realism against Chromium's clipboard limits:
+realism against Chromium's clipboard limits. **v1 ships setvalue-only**
+for all sizes (see `pickPasteMethod()` in the spec); the table below
+reflects v1 reality, and the `pasteMethod` row field plus the right-most
+column document the forward-compat plan for re-enabling keyboard paste
+at the smaller sizes.
 
-| Size | Bytes (~) | Path | Why |
+| Size | Bytes (~) | v1 path | Forward-compat plan |
 |---|---|---|---|
-| 10K | 240 KB | `Ctrl+V` against pre-loaded clipboard | Exercises Monaco's onPaste handler + `home.onEditorPaste` end-to-end. |
-| 100K | 2.4 MB | `Ctrl+V` against pre-loaded clipboard | Same as 10K. Bench reads back `navigator.clipboard.readText().length` to catch silent truncation. |
-| 1M | 24 MB | `monaco.editor.setValue()` | Exceeds Chromium's silent clipboard cap; keyboard paste would truncate. setValue is the stress-test path and emits no `paste.handle.editor` event. |
+| 10K | 240 KB | `monaco.editor.setValue()` | Switch to `Ctrl+V` against pre-loaded clipboard to exercise Monaco's `onPaste` handler + `home.onEditorPaste` end-to-end. |
+| 100K | 2.4 MB | `monaco.editor.setValue()` | Same as 10K, contingent on #218 (cross-iter cliff) being resolved. Will require a readback assertion (`navigator.clipboard.readText().length === json.length`) to catch silent truncation. |
+| 1M | 24 MB | `monaco.editor.setValue()` | Stays on `setValue()` permanently: 24 MB exceeds Chromium's silent clipboard cap; keyboard paste would truncate. The stress-test path emits no `paste.handle.editor` event. |
 
 Each row carries an additive `pasteMethod: "keyboard" | "setvalue"`
-field so `perf:diff` knows not to cross-compare them. The field lives
-on the JSONL row + `BaselineEntry`, NOT in the 4-tuple rowKey: the
-rowKey convention is `<layer>.<scenario>.<fixture>.<size>` and harness
-variants live as optional row fields per the schema convention
-documented in `scripts/perf/baseline.mjs`.
+field so `perf:diff` can match like-with-like across runs. `computeDiffs`
+treats two rows as comparable only when both have the same `pasteMethod`
+value (or both omit it, for the legacy v1 case). The field lives on the
+JSONL row + `BaselineEntry`, NOT in the 4-tuple rowKey: the rowKey
+convention is `<layer>.<scenario>.<fixture>.<size>` and harness variants
+live as optional row fields per the schema convention documented in
+`scripts/perf/baseline.mjs`.
 
-If the 100K keyboard tier flakes consistently on your hardware, see
-F-5 in the follow-ups list (options range from longer timeouts to
-dropping 100K from the keyboard path).
+If the 100K keyboard tier is ever re-enabled and flakes consistently
+on your hardware, see F-5 (#218) for the follow-up plan (options
+range from longer timeouts to leaving 100K on `setValue` indefinitely).
 
 ### Freshness
 

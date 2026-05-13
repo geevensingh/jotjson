@@ -149,11 +149,11 @@ async function performKeyboardPaste(page: Page, json: string, size: string): Pro
 for (const fixture of FIXTURES) {
   test(`paste-large: ${fixture.shape} @ ${fixture.size}`, async ({ page }) => {
     test.skip(
-      fixture.size === '1m' && !process.env['PERF_FORCE_1M'],
+      fixture.size === '1m' && process.env['PERF_FORCE_1M'] !== '1',
       'L3 1m tier gated behind PERF_FORCE_1M=1 (issue #217)',
     );
     test.skip(
-      fixture.size === '100k' && !process.env['PERF_FORCE_100K'],
+      fixture.size === '100k' && process.env['PERF_FORCE_100K'] !== '1',
       'L3 100k tier gated behind PERF_FORCE_100K=1 (issue #218)',
     );
     test.setTimeout(10 * 60 * 1000);

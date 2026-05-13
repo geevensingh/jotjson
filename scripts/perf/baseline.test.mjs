@@ -166,7 +166,7 @@ test('BASELINE_SCHEMA_VERSION is 2 after C5 (pasteMethod field added)', () => {
   assert.equal(BASELINE_SCHEMA_VERSION, 2);
 });
 
-test('assertBaselineSchema rejects schemaVersion=1 (v1 readers must fail loud on v2 files)', () => {
+test('assertBaselineSchema rejects schemaVersion=1 (current v2 reader rejects older shapes)', () => {
   const v1File = {
     schemaVersion: 1,
     machineLabel: 'win32-x64-test',

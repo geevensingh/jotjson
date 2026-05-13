@@ -90,6 +90,120 @@ test('computeDiffs skips rows with no baseline entry', () => {
   assert.equal(diffs.length, 0);
 });
 
+test('computeDiffs skips rows whose pasteMethod differs from the baseline entry', () => {
+  const baseline = makeBaseline({
+    '3.paste-large.wide-aoo.10k': {
+      wallNsMedian: 1_000_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      iters: 7,
+      approxNodes: 10000,
+      pasteMethod: 'setvalue',
+    },
+  });
+  const diffs = computeDiffs(baseline, [
+    {
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      approxNodes: 10000,
+      iters: 7,
+      wallNsMedian: 1_200_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      pasteMethod: 'keyboard',
+      codeSha: 'x',
+    },
+  ]);
+  assert.equal(diffs.length, 0);
+});
+
+test('computeDiffs matches rows when pasteMethod is identical on both sides', () => {
+  const baseline = makeBaseline({
+    '3.paste-large.wide-aoo.10k': {
+      wallNsMedian: 1_000_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      iters: 7,
+      approxNodes: 10000,
+      pasteMethod: 'setvalue',
+    },
+  });
+  const diffs = computeDiffs(baseline, [
+    {
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      approxNodes: 10000,
+      iters: 7,
+      wallNsMedian: 1_200_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      pasteMethod: 'setvalue',
+      codeSha: 'x',
+    },
+  ]);
+  assert.equal(diffs.length, 1);
+  assert.equal(diffs[0].key, '3.paste-large.wide-aoo.10k');
+});
+
+test('computeDiffs matches rows when pasteMethod is omitted on both sides (legacy v1)', () => {
+  const baseline = makeBaseline({
+    '1.parse.deep25.10k': {
+      wallNsMedian: 1_000_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      iters: 20,
+      approxNodes: 10000,
+    },
+  });
+  const diffs = computeDiffs(baseline, [
+    {
+      layer: 1,
+      scenario: 'parse',
+      fixture: 'deep25',
+      size: '10k',
+      approxNodes: 10000,
+      iters: 20,
+      wallNsMedian: 1_100_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      codeSha: 'x',
+    },
+  ]);
+  assert.equal(diffs.length, 1);
+});
+
+test('computeDiffs skips rows when only one side carries pasteMethod', () => {
+  const baseline = makeBaseline({
+    '3.paste-large.wide-aoo.10k': {
+      wallNsMedian: 1_000_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      iters: 7,
+      approxNodes: 10000,
+      pasteMethod: 'setvalue',
+    },
+  });
+  const diffs = computeDiffs(baseline, [
+    {
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      approxNodes: 10000,
+      iters: 7,
+      wallNsMedian: 1_100_000,
+      wallNsIqrLow: 0,
+      wallNsIqrHigh: 0,
+      codeSha: 'x',
+    },
+  ]);
+  assert.equal(diffs.length, 0);
+});
+
 test('formatDiffTable returns an ASCII-only table sorted by largest delta', () => {
   const baseline = makeBaseline({
     '1.a.b.10k': {

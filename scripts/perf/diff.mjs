@@ -61,6 +61,12 @@ export function computeDiffs(baseline, currentRows) {
     const key = perfRowKey(row);
     const baselineEntry = baseline.rows[key];
     if (!baselineEntry) continue;
+    // Harness-variant matching: drop the row when the current run and
+    // baseline differ on `pasteMethod` (both must be the same value,
+    // or both must be omitted for the legacy v1 case). Conservative:
+    // a dropped row is not flagged as a regression -- it just doesn't
+    // appear in the diff. Per the convention documented in baseline.mjs.
+    if (row.pasteMethod !== baselineEntry.pasteMethod) continue;
     const deltaPct =
       baselineEntry.wallNsMedian === 0
         ? 0

@@ -38,6 +38,12 @@
 // any slot (e.g., `1m:paste-setvalue`) breaks the regex in
 // perf-targets.schema.json and the 4-part split in parsePerfRowKey.
 //
+// `computeDiffs` (in `diff.mjs`) enforces this convention: rows are
+// considered comparable only when their `pasteMethod` values are
+// identical (both `'keyboard'`, both `'setvalue'`, or both `undefined`
+// for the legacy v1 case). Differing-method rows are dropped from the
+// diff output (not flagged as regressions).
+//
 // schemaVersion 1 -> 2 history:
 //   - v1 (PR #194):        the four base shape fields.
 //   - v2 (this PR / C5):   added optional `pasteMethod` to BaselineEntry

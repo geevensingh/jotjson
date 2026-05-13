@@ -86,7 +86,12 @@ export function requireMachineLabel(env = process.env) {
     const suggestion = suggestMachineLabel();
     throw new Error(
       [
-        'PERF_MACHINE env var is required for perf:diff and perf:baseline.',
+        'PERF_MACHINE env var is required when --require is used.',
+        '',
+        '(The perf:diff and perf:baseline scripts do NOT call this',
+        'function; they fall back to suggestMachineLabel() when',
+        'PERF_MACHINE is unset. This stricter form is for callers that',
+        'want a fail-loud guarantee, e.g. future CI workflows.)',
         '',
         'Run one of:',
         `  PowerShell:  $env:PERF_MACHINE = "${suggestion}"`,
