@@ -406,6 +406,8 @@ function makeStructDirectives(overrides = {}) {
       ...(overrides.scriptSrcExtra ?? []),
     ],
     'font-src': ["'self'", 'data:', ...(overrides.fontSrcExtra ?? [])],
+    'frame-src': overrides.frameSrc ?? ["'self'", 'https://*.ciamlogin.com'],
+    'frame-ancestors': overrides.frameAncestors ?? ["'self'"],
     ...(overrides.extra ?? {}),
   };
 }
@@ -473,6 +475,42 @@ test("checkPolicyStructure fails when font-src lacks 'data:'", () => {
   );
 });
 
+test("checkPolicyStructure fails when frame-src lacks 'self' (MSAL silent refresh)", () => {
+  // Regression guard for the bug shipped in PR #102: enforced CSP carried
+  // `frame-src https://*.ciamlogin.com https://login.microsoftonline.com`
+  // with no `'self'`. The IdP's 302 redirect back to jotjson.com inside
+  // the silent-refresh iframe was blocked by the browser, MSAL threw
+  // InteractionRequiredAuthError, and `/api/*` 401'd. Restored in 0.19.8.
+  const directives = makeStructDirectives({
+    frameSrc: ['https://*.ciamlogin.com', 'https://login.microsoftonline.com'],
+  });
+  const result = checkPolicyStructure({
+    directives,
+    headerName: 'Content-Security-Policy',
+  });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.errors.some((e) => e.includes('frame-src') && e.includes('silent-refresh')),
+    `expected a frame-src silent-refresh error, got: ${JSON.stringify(result.errors)}`,
+  );
+});
+
+test("checkPolicyStructure fails when frame-ancestors lacks 'self' (MSAL silent refresh)", () => {
+  // Regression guard for the 0.14.7 fix: `frame-ancestors 'none'` (the
+  // pre-0.14.7 value) blocked MSAL's silent-refresh iframe from being a
+  // same-origin nested browsing context, sibling to X-Frame-Options: DENY.
+  const directives = makeStructDirectives({ frameAncestors: ["'none'"] });
+  const result = checkPolicyStructure({
+    directives,
+    headerName: 'Content-Security-Policy',
+  });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.errors.some((e) => e.includes('frame-ancestors') && e.includes('SAMEORIGIN')),
+    `expected a frame-ancestors SAMEORIGIN error, got: ${JSON.stringify(result.errors)}`,
+  );
+});
+
 test('checkPolicyStructure fails when no CSP header is configured', () => {
   const result = checkPolicyStructure({ directives: {}, headerName: null });
   assert.equal(result.ok, false);
@@ -520,6 +558,8 @@ function makeFullDirectives({ extraScriptSrc = [], includeUnsafeHashes = true } 
       ...extraScriptSrc,
     ],
     'font-src': ["'self'", 'data:'],
+    'frame-src': ["'self'", 'https://*.ciamlogin.com'],
+    'frame-ancestors': ["'self'"],
   };
 }
 
