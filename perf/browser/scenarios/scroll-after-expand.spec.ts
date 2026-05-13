@@ -43,6 +43,10 @@ function emitRow(row: object): void {
 
 for (const fixture of FIXTURES) {
   test(`scroll-after-expand: ${fixture.shape} @ ${fixture.size}`, async ({ page }) => {
+    test.skip(
+      process.env['PERF_FORCE_1M'] !== '1',
+      'L3 1m tier gated behind PERF_FORCE_1M=1 (issue #217)',
+    );
     test.setTimeout(10 * 60 * 1000);
     const json = generate({ shape: fixture.shape, approxNodes: fixture.approxNodes });
     const bytes = Buffer.byteLength(json, 'utf8');

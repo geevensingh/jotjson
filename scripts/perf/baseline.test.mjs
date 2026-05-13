@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import {
+  assertBaselineSchema,
+  BASELINE_SCHEMA_VERSION,
   findLatestResultsDir,
   parseJsonl,
   readRunRows,
@@ -103,7 +105,7 @@ test('snapshotBaseline writes a baseline file from latest results', () => {
     assert.equal(rowCount, 1);
     assert.ok(baselinePath.endsWith('win32-x64-abc123.json'));
     const written = JSON.parse(readFileSync(baselinePath, 'utf8'));
-    assert.equal(written.schemaVersion, 1);
+    assert.equal(written.schemaVersion, 2);
     assert.equal(written.machineLabel, 'win32-x64-abc123');
     assert.equal(written.codeShaAtBaseline, 'deadbee');
     assert.ok(written.rows['1.parse.deep25.10k']);
@@ -118,4 +120,151 @@ test('snapshotBaseline rejects empty machineLabel', () => {
     () => snapshotBaseline({ machineLabel: '' }),
     /snapshotBaseline requires a machineLabel/,
   );
+});
+
+test('rowsToBaselineEntries preserves pasteMethod when present', () => {
+  const rows = [
+    makeRow({
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      pasteMethod: 'keyboard',
+    }),
+    makeRow({
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '1m',
+      pasteMethod: 'setvalue',
+    }),
+    // sentinel: L1 rows have no pasteMethod -- field stays absent.
+    makeRow({ layer: 1, scenario: 'parse', fixture: 'deep25', size: '10k' }),
+  ];
+  const entries = rowsToBaselineEntries(rows);
+  assert.equal(entries['3.paste-large.wide-aoo.10k'].pasteMethod, 'keyboard');
+  assert.equal(entries['3.paste-large.wide-aoo.1m'].pasteMethod, 'setvalue');
+  assert.equal(entries['1.parse.deep25.10k'].pasteMethod, undefined);
+});
+
+test('rowsToBaselineEntries drops unknown pasteMethod values silently', () => {
+  // Defensive: an unknown value should NOT be copied through.
+  const rows = [
+    makeRow({
+      layer: 3,
+      scenario: 'paste-large',
+      fixture: 'wide-aoo',
+      size: '10k',
+      pasteMethod: 'bogus',
+    }),
+  ];
+  const entries = rowsToBaselineEntries(rows);
+  assert.equal(entries['3.paste-large.wide-aoo.10k'].pasteMethod, undefined);
+});
+
+test('BASELINE_SCHEMA_VERSION is 2 after C5 (pasteMethod field added)', () => {
+  assert.equal(BASELINE_SCHEMA_VERSION, 2);
+});
+
+test('assertBaselineSchema rejects schemaVersion=1 (current v2 reader rejects older shapes)', () => {
+  const v1File = {
+    schemaVersion: 1,
+    machineLabel: 'win32-x64-test',
+    lastUpdatedUtc: '2026-05-12T00:00:00.000Z',
+    codeShaAtBaseline: 'abc',
+    rows: {},
+  };
+  assert.throws(
+    () => assertBaselineSchema(v1File, '/fake/path.json'),
+    /schemaVersion=1.*expected 2/,
+  );
+});
+
+test('assertBaselineSchema accepts a v2 file with valid pasteMethod', () => {
+  const v2File = {
+    schemaVersion: 2,
+    machineLabel: 'win32-x64-test',
+    lastUpdatedUtc: '2026-05-12T00:00:00.000Z',
+    codeShaAtBaseline: 'abc',
+    rows: {
+      '3.paste-large.wide-aoo.10k': {
+        wallNsMedian: 1,
+        wallNsIqrLow: 0,
+        wallNsIqrHigh: 2,
+        iters: 7,
+        approxNodes: 10000,
+        pasteMethod: 'keyboard',
+      },
+    },
+  };
+  const result = assertBaselineSchema(v2File, '/fake/path.json');
+  assert.equal(result.schemaVersion, 2);
+});
+
+test('assertBaselineSchema rejects unknown pasteMethod values', () => {
+  const badFile = {
+    schemaVersion: 2,
+    machineLabel: 'win32-x64-test',
+    lastUpdatedUtc: '2026-05-12T00:00:00.000Z',
+    codeShaAtBaseline: 'abc',
+    rows: {
+      '3.paste-large.wide-aoo.10k': {
+        wallNsMedian: 1,
+        wallNsIqrLow: 0,
+        wallNsIqrHigh: 2,
+        iters: 7,
+        approxNodes: 10000,
+        pasteMethod: 'not-a-real-method',
+      },
+    },
+  };
+  assert.throws(
+    () => assertBaselineSchema(badFile, '/fake/path.json'),
+    /invalid pasteMethod=.*"not-a-real-method"/,
+  );
+});
+
+test('round-trip: snapshotBaseline -> parse -> assertBaselineSchema preserves pasteMethod', () => {
+  const tmpResults = mkdtempSync(join(tmpdir(), 'baseline-roundtrip-'));
+  const tmpBaselines = mkdtempSync(join(tmpdir(), 'baseline-roundtrip-out-'));
+  try {
+    const runDir = join(tmpResults, '2026-05-12T00-00-00-000Z');
+    mkdirSync(runDir);
+    writeFileSync(
+      join(runDir, 'layer-3.jsonl'),
+      [
+        JSON.stringify(
+          makeRow({
+            layer: 3,
+            scenario: 'paste-large',
+            fixture: 'wide-aoo',
+            size: '10k',
+            pasteMethod: 'keyboard',
+          }),
+        ),
+        JSON.stringify(
+          makeRow({
+            layer: 3,
+            scenario: 'paste-large',
+            fixture: 'wide-aoo',
+            size: '1m',
+            pasteMethod: 'setvalue',
+          }),
+        ),
+      ].join('\n') + '\n',
+    );
+    const { baselinePath } = snapshotBaseline({
+      machineLabel: 'win32-x64-test',
+      resultsDir: tmpResults,
+      baselinesDir: tmpBaselines,
+    });
+    const written = JSON.parse(readFileSync(baselinePath, 'utf8'));
+    const validated = assertBaselineSchema(written, baselinePath);
+    assert.equal(validated.schemaVersion, 2);
+    assert.equal(validated.rows['3.paste-large.wide-aoo.10k'].pasteMethod, 'keyboard');
+    assert.equal(validated.rows['3.paste-large.wide-aoo.1m'].pasteMethod, 'setvalue');
+  } finally {
+    rmSync(tmpResults, { recursive: true, force: true });
+    rmSync(tmpBaselines, { recursive: true, force: true });
+  }
 });

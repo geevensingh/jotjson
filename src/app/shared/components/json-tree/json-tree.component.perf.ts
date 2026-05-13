@@ -211,7 +211,23 @@ describe('JsonTreeComponent perf (L2)', () => {
   // Scroll-after-expand: 10K only. 100K/1M scroll on a non-virtualized
   // mat-tree would OOM Karma; L3's `scroll-after-expand.spec.ts` runs
   // larger sizes in a real Playwright browser instead.
-  for (const spec of defaultFixtures().filter((fixture) => fixture.approxNodes === 10_000)) {
+  //
+  // wide-aoo is additionally gated behind `window.__perfL2ForceWideAooScroll
+  // = true` (or `?forcewideaooscroll=1`). On a 910-node depth-1 fan-out,
+  // `expandAll` materializes all siblings synchronously and each iter
+  // takes ~12 minutes; the default `npm run perf:all` would hit Karma's
+  // 15-min Jasmine timeout. Tracked in issue #219 -- the workaround keeps
+  // baseline capture unblocked while mat-tree virtualization is
+  // investigated. `scroll-after-expand: deep25 @ 10k` continues to run
+  // by default (same 10k node count spread across 25 depth levels).
+  const forceWideAooScroll =
+    (window as Window & { __perfL2ForceWideAooScroll?: boolean }).__perfL2ForceWideAooScroll ===
+      true || location.search.includes('forcewideaooscroll=1');
+  for (const spec of defaultFixtures().filter((fixture) => {
+    if (fixture.approxNodes !== 10_000) return false;
+    if (fixture.shape === 'wide-aoo' && !forceWideAooScroll) return false;
+    return true;
+  })) {
     it(`scroll-after-expand: ${spec.shape} @ ${spec.size}`, async () => {
       const row = await measureOneFixture(`scroll-after-expand`, spec, scrollAfterExpand);
       emitRow(row);
