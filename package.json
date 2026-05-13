@@ -1,6 +1,6 @@
 {
   "name": "jotjson",
-  "version": "0.19.6",
+  "version": "0.19.7",
   "description": "JotJSON - input, store, and display JSON (Angular SPA).",
   "private": true,
   "repository": {
@@ -14,9 +14,9 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
-    "postbuild": "node scripts/postbuild-seo.mjs",
+    "postbuild": "node scripts/write-ngsw-appdata.mjs && node scripts/postbuild-seo.mjs",
     "build:prod": "ng build --configuration production",
-    "postbuild:prod": "node scripts/postbuild-seo.mjs",
+    "postbuild:prod": "node scripts/write-ngsw-appdata.mjs && node scripts/postbuild-seo.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
     "test:ci": "ng test --watch=false --browsers=ChromeHeadlessCI --code-coverage",
@@ -48,6 +48,7 @@
     "lint:lockfile": "node scripts/check-lockfile.mjs",
     "lint:format": "node scripts/check-format.mjs",
     "lint:all": "npm run lint && npm run lint:reduced-motion && npm --prefix api run lint",
+    "check:deploy-freshness": "node scripts/check-deploy-freshness.mjs",
     "check:prerender": "node scripts/check-prerender.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

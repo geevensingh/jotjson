@@ -302,6 +302,71 @@ export const TELEMETRY_MESSAGE_IDS = [
   // Service worker / updates
 
   /**
+   * Severity: event
+   * Fired by: `AppUpdateService.onVersionReady`
+   *           (`core/update/app-update.service.ts`) immediately after
+   *           choosing the silent-apply vs snackbar branch for a
+   *           `VERSION_READY` service-worker event.
+   * Props: { userInteracted: 'true' | 'false';
+   *   guardClaimed: 'true' | 'false';
+   *   pathTaken: 'silentApply' | 'snackbar';
+   *   fromSha: string; toSha: string }.
+   *   `fromSha` and `toSha` come from Angular SW `appData.buildSha`;
+   *   empty string is used when older manifests lack `appData`. Build
+   *   SHA dimensions use the build-metadata cardinality carve-out in
+   *   the preamble / AGENTS.md telemetry rules.
+   * Measurements: { msSinceBoot: number }. Raw `performance.now()`
+   *   elapsed time when the branch decision is made.
+   * Bounded-frequency: one per detected new version (typically one per
+   *   active-user session).
+   */
+  'update.versionReady',
+
+  /**
+   * Severity: event
+   * Fired by: `AppUpdateService.maybeCheck`
+   *           (`core/update/app-update.service.ts`) after
+   *           `swUpdate.checkForUpdate()` resolves or rejects, or when
+   *           the check short-circuits because the service worker is not
+   *           ready.
+   * Props: { reason: 'init' | 'visibility' | 'focus';
+   *   result: 'noChange' | 'newVersion' | 'error' | 'swNotReady' }.
+   * Measurements: { durationMs: number }. Raw wall-clock duration from
+   *   check start to settle / short-circuit.
+   * Bounded-frequency: at most one per 30s rate-limited check plus
+   *   visibility / focus events that pass the rate limit.
+   */
+  'update.check.result',
+
+  /**
+   * Severity: event
+   * Fired by: `AppUpdateService`'s `swUpdate.unrecoverable` subscriber
+   *           (`core/update/app-update.service.ts`) immediately before
+   *           `hardReload()`.
+   * Props: { reasonBucket: 'hashMismatch' | 'fetchFailed' | 'other' }.
+   *   The bucket is switch-mapped from Angular SW's free-form
+   *   `UnrecoverableStateEvent.reason`; the existing
+   *   `update.unrecoverable` warn token preserves the raw diagnostic
+   *   reason in traces.
+   * Measurements: none.
+   * Bounded-frequency: at most once per session because `hardReload()`
+   *   immediately follows and ends the current page lifecycle.
+   */
+  'update.unrecoverable.event',
+
+  /**
+   * Severity: event
+   * Fired by: `AppUpdateService` constructor
+   *           (`core/update/app-update.service.ts`) once on the browser
+   *           platform when the eager root service is created.
+   * Props: { swEnabled: 'true' | 'false';
+   *   swHasController: 'true' | 'false' }.
+   * Measurements: none.
+   * Bounded-frequency: exactly one per service init.
+   */
+  'update.swState',
+
+  /**
    * Severity: warn
    * Fired by: `AppUpdateService.activateAndReload`
    *           (`core/update/app-update.service.ts`)
