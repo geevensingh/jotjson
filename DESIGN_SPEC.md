@@ -2284,6 +2284,43 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.19.8**: MSAL silent token refresh fix (continuation of 0.14.7
+  precedent) - add `'self'` to the enforced CSP `frame-src` directive
+  in `staticwebapp.config.json`. The CSP value was byte-identical
+  between `Content-Security-Policy-Report-Only` (added 2026-04-25) and
+  the enforced `Content-Security-Policy` it ships in today; the
+  regression went live with PR #102 (2026-05-10) which flipped the
+  header from report-only to enforced. In Report-Only mode the missing
+  `'self'` was a harmless console-violation report. In enforcing mode
+  the browser actually blocks the silent-refresh iframe's 302
+  redirect-back from the IdP to `https://jotjson.com/#code=...`. MSAL
+  then throws `InteractionRequiredAuthError`,
+  `AuthService.acquireTokenSilent()` returns null, the auth
+  interceptor sends the `/api/*` request without
+  `X-Jotjson-Authorization`, and the backend returns 401. Symptom:
+  signed-in users see the rule-sets toolbar stuck on "Loading..." and
+  the blobs page failing to load saved blobs (with save also failing)
+  once the cached access token expires (~1h). The 24h Report-Only
+  observation window in PR #102 caught interactive sign-in (which uses
+  redirect, not the silent iframe) but not the silent-refresh path
+  (which only fires after a cached access token expires).
+  `'self'` was chosen over a literal origin so the policy survives a
+  hostname change. **Security trade-off**: relaxing `frame-src 'self'`
+  permits any same-origin URL to be iframed from the SPA. In practice
+  the SPA's XSS posture (Angular interpolation only, no `innerHTML`,
+  JSON-only API responses, no user-controlled HTML rendering) keeps
+  practical exposure low; `frame-ancestors 'self'` already permits
+  same-origin framing of jotjson.com itself (complementary direction)
+  and this change adds the matching child-side allowance. New regression
+  guard: `scripts/check-csp-hashes.mjs` `checkPolicyStructure` now
+  enforces both `frame-src 'self'` and `frame-ancestors 'self'` so a
+  future contributor cannot silently drop either token. New deployed-
+  headers e2e assertion: `e2e/preview/security-headers.spec.ts` parses
+  the served CSP value and asserts both invariants survive the SWA /
+  AFD / CDN delivery path. Pure SWA-config + lint-script + e2e + docs
+  change; no SPA or backend code touched. Affected users may need to
+  sign out and sign back in once to clear the broken cached MSAL state
+  from before the fix shipped.
 - **0.19.5**: Tree row context-menu single-option elevation
   (v0.19.4 follow-up to the v0.19.0 Path Y overhaul). Two fixes:
   (1) `maxDescendantDepth` now counts only **container** descendants
