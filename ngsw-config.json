@@ -1,6 +1,10 @@
 {
   "$schema": "./node_modules/@angular/service-worker/config/schema.json",
   "index": "/shell.html",
+  "appData": {
+    "buildSha": "__BUILD_SHA__",
+    "buildNumber": "__BUILD_NUMBER__"
+  },
   "assetGroups": [
     {
       "name": "app",
