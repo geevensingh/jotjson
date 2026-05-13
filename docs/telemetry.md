@@ -547,14 +547,28 @@ signals.
 
 ```kusto
 // Are users stuck on old builds?
+//
+// Inner: collect each toSha seen by `update.versionReady` (the SW
+// telling us "I have detected a newer build with this toSha"). Note
+// we deliberately do NOT include `update.applied` here: that event
+// only carries `{ trigger }`, not `toSha`, so joining on it would
+// collapse all its rows into an empty-string bucket.
+//
+// Outer: every recent `app.boot` sha. Left-join finds the latest
+// time we saw a `versionReady` toSha matching the user's bootSha.
+// `bootSha`s with no recent matching `versionReady` indicate users
+// who may be running a build no live SW has detected as the target.
 customEvents
 | where name == "app.boot"
 | extend bootSha = tostring(customDimensions.sha)
+| where isnotempty(bootSha)
 | summarize lastSeen=max(timestamp), bootCount=count() by bootSha
 | join kind=leftouter (
     customEvents
-    | where name == "update.versionReady" or name == "update.applied"
-    | summarize lastUpdate=max(timestamp) by toSha=tostring(customDimensions.toSha)
+    | where name == "update.versionReady"
+    | extend toSha = tostring(customDimensions.toSha)
+    | where isnotempty(toSha)
+    | summarize lastUpdate=max(timestamp) by toSha
   ) on $left.bootSha == $right.toSha
 | where lastSeen > ago(7d)
 | order by lastSeen desc

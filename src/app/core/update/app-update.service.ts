@@ -87,9 +87,15 @@ function bucketUnrecoverableReason(reason: string): UnrecoverableReasonBucket {
  * bypasses any cached shell and the SW re-registers against the
  * current build.
  *
- * Update side effects are a no-op when the SW is disabled (dev mode,
- * server prerender, or browsers without SW support) so unit /
- * integration tests don't need extra wiring.
+ * Update *actions and UI* (snackbar prompts, hard reload, and
+ * `activateUpdate` calls) are a no-op when the SW is disabled - dev
+ * mode, server prerender, or browsers without SW support - so unit /
+ * integration tests don't need extra wiring. Observability telemetry
+ * still fires on the **browser path**: `update.swState` once per
+ * service construction and a single `update.check.result` with
+ * `result='swNotReady'` from `initialize()`, so the SW-disabled cohort
+ * is measurable in Application Insights. Server prerender short-circuits
+ * all telemetry via the `isPlatformBrowser` gate.
  *
  * See `DESIGN_SPEC.md` -> Progressive Web App -> Update prompt.
  */
