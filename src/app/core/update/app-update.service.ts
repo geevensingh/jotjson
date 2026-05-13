@@ -9,7 +9,33 @@ import { TelemetryService } from '../telemetry/telemetry.service';
 const MIN_CHECK_INTERVAL_MS = 30_000;
 const AUTO_APPLIED_STORAGE_KEY = 'jotjson.update.autoApplied';
 
+type BooleanTelemetryValue = 'true' | 'false';
+type UpdateCheckReason = 'init' | 'visibility' | 'focus';
+type UpdateCheckResult = 'noChange' | 'newVersion' | 'error' | 'swNotReady';
 type UpdateTrigger = 'snackbar' | 'autoApply';
+type VersionReadyPath = 'silentApply' | 'snackbar';
+type UnrecoverableReasonBucket = 'hashMismatch' | 'fetchFailed' | 'other';
+
+function toTelemetryBoolean(value: boolean): BooleanTelemetryValue {
+  return value ? 'true' : 'false';
+}
+
+function buildShaFromAppData(appData: object | undefined): string {
+  if (!appData || !('buildSha' in appData)) {
+    return '';
+  }
+  const buildSha = appData.buildSha;
+  return typeof buildSha === 'string' ? buildSha : '';
+}
+
+function bucketUnrecoverableReason(reason: string): UnrecoverableReasonBucket {
+  const normalizedReason = reason.toLowerCase();
+  return normalizedReason.includes('hash')
+    ? 'hashMismatch'
+    : normalizedReason.includes('fetch') || normalizedReason.includes('network')
+      ? 'fetchFailed'
+      : 'other';
+}
 
 /**
  * Reacts to Angular service worker events so that a deploy-in-progress
@@ -26,9 +52,9 @@ type UpdateTrigger = 'snackbar' | 'autoApply';
  *   must exist before the SPA can yield to the microtask queue. This
  *   is why `AppComponent` injects this service *eagerly* (as a
  *   normal field), not via a lazy `import()` from inside `ngOnInit`.
- *   The constructor is server-platform safe: it touches only
- *   injection and observable subscription, no `window` / `document` /
- *   `sessionStorage`.
+ *   The constructor is server-platform safe: browser-only state
+ *   telemetry is gated behind `isPlatformBrowser`, and the update
+ *   subscriptions touch no `window` / `document` / `sessionStorage`.
  *
  * - `initialize()`, called once from `AppComponent.ngOnInit` after
  *   the `isPlatformBrowser` gate, attaches the browser-only side
@@ -61,9 +87,15 @@ type UpdateTrigger = 'snackbar' | 'autoApply';
  * bypasses any cached shell and the SW re-registers against the
  * current build.
  *
- * The service is a no-op when the SW is disabled (dev mode, server
- * prerender, or browsers without SW support) so unit / integration
- * tests don't need extra wiring.
+ * Update *actions and UI* (snackbar prompts, hard reload, and
+ * `activateUpdate` calls) are a no-op when the SW is disabled - dev
+ * mode, server prerender, or browsers without SW support - so unit /
+ * integration tests don't need extra wiring. Observability telemetry
+ * still fires on the **browser path**: `update.swState` once per
+ * service construction and a single `update.check.result` with
+ * `result='swNotReady'` from `initialize()`, so the SW-disabled cohort
+ * is measurable in Application Insights. Server prerender short-circuits
+ * all telemetry via the `isPlatformBrowser` gate.
  *
  * See `DESIGN_SPEC.md` -> Progressive Web App -> Update prompt.
  */
@@ -85,20 +117,32 @@ export class AppUpdateService {
     // bootstrap (`app.config.server.ts`) deliberately omits it. Inject
     // optionally so the eagerly-constructed service can no-op cleanly
     // during prerender.
+    this.emitSwState();
     if (!this.swUpdate?.isEnabled) return;
     this.swUpdate.versionUpdates
-      .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
-      .subscribe(() => this.onVersionReady());
+      .pipe(filter((event): event is VersionReadyEvent => event.type === 'VERSION_READY'))
+      .subscribe((event) => this.onVersionReady(event));
     this.swUpdate.unrecoverable.subscribe((event) => {
       this.logger.warn('update.unrecoverable', { reason: event.reason });
-      if (this.isBrowser) this.hardReload();
+      if (this.isBrowser) {
+        this.logger.event(
+          'update.unrecoverable.event',
+          { reasonBucket: bucketUnrecoverableReason(event.reason) },
+          undefined,
+        );
+        this.hardReload();
+      }
     });
   }
 
   initialize(): void {
     if (this.initialized) return;
     this.initialized = true;
-    if (!this.isBrowser || !this.swUpdate?.isEnabled) return;
+    if (!this.isBrowser) return;
+    if (!this.swUpdate?.isEnabled) {
+      void this.maybeCheck('init');
+      return;
+    }
 
     this.listenerAbort = new AbortController();
     const { signal } = this.listenerAbort;
@@ -146,9 +190,22 @@ export class AppUpdateService {
     this.initialized = false;
   }
 
-  private onVersionReady(): void {
+  private onVersionReady(event: VersionReadyEvent): void {
     if (!this.isBrowser) return;
-    if (this.userInteracted || !this.tryClaimAutoApplyGuard()) {
+    const guardClaimed = !this.userInteracted && this.tryClaimAutoApplyGuard();
+    const pathTaken: VersionReadyPath = guardClaimed ? 'silentApply' : 'snackbar';
+    this.logger.event(
+      'update.versionReady',
+      {
+        userInteracted: toTelemetryBoolean(this.userInteracted),
+        guardClaimed: toTelemetryBoolean(guardClaimed),
+        pathTaken,
+        fromSha: buildShaFromAppData(event.currentVersion.appData),
+        toSha: buildShaFromAppData(event.latestVersion.appData),
+      },
+      { msSinceBoot: this.nowSinceBootMs() },
+    );
+    if (pathTaken === 'snackbar') {
       this.promptReload();
       return;
     }
@@ -183,9 +240,12 @@ export class AppUpdateService {
     this.reload();
   }
 
-  private async maybeCheck(reason: 'init' | 'visibility' | 'focus'): Promise<void> {
-    void reason;
-    if (!this.swUpdate) return;
+  private async maybeCheck(reason: UpdateCheckReason): Promise<void> {
+    const startedAt = this.nowSinceBootMs();
+    if (!this.swUpdate?.isEnabled) {
+      this.emitCheckResult(reason, 'swNotReady', startedAt);
+      return;
+    }
     const now = Date.now();
     if (now - this.lastCheckStartedAt < MIN_CHECK_INTERVAL_MS) return;
     // Set the timestamp BEFORE awaiting so concurrent triggers (e.g.
@@ -193,13 +253,50 @@ export class AppUpdateService {
     // PWA window restore) can't race two in-flight checks.
     this.lastCheckStartedAt = now;
     try {
-      await this.swUpdate.checkForUpdate();
+      const hasNewVersion = await this.swUpdate.checkForUpdate();
+      this.emitCheckResult(reason, hasNewVersion ? 'newVersion' : 'noChange', startedAt);
     } catch (error) {
       // Network errors are transient and self-recovering: the next
-      // visibility / focus event retries. No telemetry id - this is a
-      // probe, not an actionable failure.
+      // visibility / focus event retries.
+      this.emitCheckResult(reason, 'error', startedAt);
       void error;
     }
+  }
+
+  private emitSwState(): void {
+    if (!this.isBrowser) return;
+    this.logger.event(
+      'update.swState',
+      {
+        swEnabled: toTelemetryBoolean(this.swUpdate?.isEnabled === true),
+        swHasController: toTelemetryBoolean(navigator.serviceWorker?.controller != null),
+      },
+      undefined,
+    );
+  }
+
+  private emitCheckResult(
+    reason: UpdateCheckReason,
+    result: UpdateCheckResult,
+    startedAt: number,
+  ): void {
+    this.logger.event(
+      'update.check.result',
+      { reason, result },
+      {
+        durationMs: this.elapsedMsSince(startedAt),
+      },
+    );
+  }
+
+  private nowSinceBootMs(): number {
+    const now = performance.now();
+    return Number.isFinite(now) && now >= 0 ? now : 0;
+  }
+
+  private elapsedMsSince(startedAt: number): number {
+    const elapsed = this.nowSinceBootMs() - startedAt;
+    return Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : 0;
   }
 
   /**

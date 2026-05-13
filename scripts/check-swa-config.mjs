@@ -3,7 +3,7 @@
 // CSP scope of `scripts/check-csp-hashes.mjs`. Catches regression classes
 // like the `5c4c937` `X-Frame-Options` drift that shipped to prod and
 // broke MSAL silent SSO, plus the stale-SW class from #167 (someone
-// dropping a `Cache-Control: no-cache, must-revalidate` rule).
+// dropping or weakening a required Cache-Control route rule).
 //
 // Tracks issue #134's Option 3. The structural ceiling of this gate is
 // "what the config file says," not "what the deployed CDN serves" -
@@ -75,17 +75,23 @@ export const REQUIRED_ASSET_EXTENSIONS = Object.freeze([
   'webmanifest',
 ]);
 
-// Stale-SW prevention layer (#167). Browsers must revalidate these on
-// every load. The corresponding spec entry at DESIGN_SPEC.md:1286 is
-// updated in the same change so the spec matches the actual config.
-export const MUST_REVALIDATE_PATHS = Object.freeze([
-  '/index.html',
-  '/shell.html',
-  '/404/index.html',
-  '/ngsw.json',
-]);
+// Service worker gateway: the manifest and the worker script itself.
+// These MUST be `no-store` (not `no-cache, must-revalidate`) because
+// Azure SWA returns a stuck ETag ("20260402") that makes conditional
+// GETs perpetually return 304, freezing the Angular SW update flow.
+// See issue #167 and DESIGN_SPEC.md cache-header rationale.
+export const SW_GATEWAY_PATHS = Object.freeze(['/ngsw.json', '/ngsw-worker.js']);
 
-export const REQUIRED_CACHE_CONTROL = 'no-cache, must-revalidate';
+export const SW_GATEWAY_CACHE_CONTROL = 'no-store';
+
+// HTML shell paths: must revalidate but stay on `no-cache, must-revalidate`
+// (not `no-store`) to preserve bfcache eligibility on the prerendered `/`
+// route. The shells are downstream of the SW manifest decision -- if the
+// manifest is fresh, the shell choice is moot; if the manifest is stale,
+// no shell header can fix it.
+export const SHELL_PATHS = Object.freeze(['/index.html', '/shell.html', '/404/index.html']);
+
+export const SHELL_CACHE_CONTROL = 'no-cache, must-revalidate';
 
 // Allowlist (not a regex floor) because SWA's supported Functions runtime
 // set is small and explicit. A regex like `^node:\d+$` would silently
@@ -162,7 +168,7 @@ export function getExcludedExtensions(excludeEntries) {
 // single `*` so a contributor writing `/**` cannot silently bypass the
 // route-order shadowing check by leaning on a non-SWA token.
 // Other regex metacharacters in the literal prefix are escaped. Used to
-// detect whether a wildcard route preceding the must-revalidate exact
+// detect whether a wildcard route preceding the exact cache-controlled
 // paths would shadow them.
 export function routePatternToRegex(pattern) {
   const collapsed = pattern.replace(/\*\*+/g, '*');
@@ -342,47 +348,72 @@ export function checkRoutes(config) {
     }
   }
 
+  const cacheControlRouteGroups = [
+    {
+      groupName: 'service worker gateway',
+      paths: SW_GATEWAY_PATHS,
+      requiredCacheControl: SW_GATEWAY_CACHE_CONTROL,
+    },
+    {
+      groupName: 'HTML shell',
+      paths: SHELL_PATHS,
+      requiredCacheControl: SHELL_CACHE_CONTROL,
+    },
+  ];
+
   // Route-order shadowing: any wildcard route that precedes one of the
-  // must-revalidate exact paths AND whose pattern matches that path would
+  // exact cache-controlled paths AND whose pattern matches that path would
   // hijack the Cache-Control header for that path without deleting the
   // explicit rule. Catch the bug class even when the rules themselves
   // are still in the file.
-  const mustRevalidateIndices = new Map();
-  for (const path of MUST_REVALIDATE_PATHS) {
-    const index = routes.findIndex((route) => route?.route === path);
-    if (index >= 0) mustRevalidateIndices.set(path, index);
+  const cacheControlledRouteEntries = new Map();
+  for (const group of cacheControlRouteGroups) {
+    for (const path of group.paths) {
+      const routeIndex = routes.findIndex((route) => route?.route === path);
+      if (routeIndex >= 0) {
+        cacheControlledRouteEntries.set(path, {
+          groupName: group.groupName,
+          routeIndex,
+        });
+      }
+    }
   }
-  for (const [path, mrIndex] of mustRevalidateIndices) {
-    for (let priorIndex = 0; priorIndex < mrIndex; priorIndex++) {
+  for (const [path, routeEntry] of cacheControlledRouteEntries) {
+    for (let priorIndex = 0; priorIndex < routeEntry.routeIndex; priorIndex++) {
       const priorRoute = routes[priorIndex]?.route;
       if (typeof priorRoute !== 'string') continue;
       if (priorRoute === path) continue;
       if (!priorRoute.includes('*')) continue;
       if (routeMatchesPath(priorRoute, path)) {
         errors.push(
-          `routes[${priorIndex}].route '${priorRoute}' precedes the must-revalidate ` +
-            `rule at routes[${mrIndex}] for '${path}' and its pattern matches that path. ` +
-            `SWA processes routes top-to-bottom, so the wildcard would shadow the ` +
-            `Cache-Control header on '${path}'.`,
+          `routes[${priorIndex}].route '${priorRoute}' precedes the ${routeEntry.groupName} ` +
+            `Cache-Control rule at routes[${routeEntry.routeIndex}] for '${path}' and its ` +
+            `pattern matches that path. SWA processes routes top-to-bottom, so the wildcard ` +
+            `would shadow the Cache-Control header on '${path}' and re-open the stale-SW ` +
+            `class tracked in issue #167.`,
         );
       }
     }
   }
 
-  // Cache-Control on each of the four must-revalidate paths.
-  for (const path of MUST_REVALIDATE_PATHS) {
-    const route = routes.find((entry) => entry?.route === path);
-    if (!route) {
-      errors.push(`routes is missing the '${path}' Cache-Control rule.`);
-      continue;
-    }
-    const cacheControl = route?.headers?.['Cache-Control'];
-    if (cacheControl !== REQUIRED_CACHE_CONTROL) {
-      errors.push(
-        `routes['${path}'].headers['Cache-Control'] must be '${REQUIRED_CACHE_CONTROL}' ` +
-          `(got: ${JSON.stringify(cacheControl)}). Dropping this re-opens the stale-SW ` +
-          `class tracked in issue #167.`,
-      );
+  for (const group of cacheControlRouteGroups) {
+    for (const path of group.paths) {
+      const route = routes.find((entry) => entry?.route === path);
+      if (!route) {
+        errors.push(
+          `routes is missing the '${path}' ${group.groupName} Cache-Control rule. ` +
+            `The issue #167 cache-header split requires this path to be present.`,
+        );
+        continue;
+      }
+      const cacheControl = route?.headers?.['Cache-Control'];
+      if (cacheControl !== group.requiredCacheControl) {
+        errors.push(
+          `routes['${path}'].headers['Cache-Control'] must be '${group.requiredCacheControl}' ` +
+            `for ${group.groupName} paths (got: ${JSON.stringify(cacheControl)}). ` +
+            `Drift re-opens the stale-SW class tracked in issue #167.`,
+        );
+      }
     }
   }
 

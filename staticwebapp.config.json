@@ -33,7 +33,13 @@
     {
       "route": "/ngsw.json",
       "headers": {
-        "Cache-Control": "no-cache, must-revalidate"
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "route": "/ngsw-worker.js",
+      "headers": {
+        "Cache-Control": "no-store"
       }
     }
   ],

@@ -373,6 +373,7 @@ jobs:
           echo "OK: known devDeps absent from node_modules/."
 
       - name: Deploy to Azure Static Web Apps
+        id: deploy_swa
         if: steps.check.outputs.have_token == 'true'
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -388,4 +389,9 @@ jobs:
           api_location: 'api'
           skip_app_build: true
           skip_api_build: true
+
+      - name: Check deploy freshness
+        if: ${{ success() && steps.deploy_swa.outcome == 'success' }}
+        timeout-minutes: 10
+        run: npm run check:deploy-freshness -- --expected-sha=${{ github.sha }} --origin=https://jotjson.com
 
