@@ -63,7 +63,14 @@ export const appConfig: ApplicationConfig = {
     ...sharedProviders,
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
-      registrationStrategy: 'registerWhenStable:30000',
+      // SSR-heavy apps commonly leave the stable-registration timeout at
+      // 30000ms, which delayed the first checkForUpdate() long enough that
+      // users closing the tab inside that window never saw new builds. Use
+      // 5000ms to close that gap while still waiting for ApplicationRef
+      // stability so SW registration does not race initial rendering. This is
+      // defense in depth; the primary stale-version fix is no-store on
+      // /ngsw.json (see staticwebapp.config.json, issue #167, and plan.md).
+      registrationStrategy: 'registerWhenStable:5000',
     }),
     // MSAL wiring - deliberately NOT using `MsalRedirectComponent` or the
     // `MSAL_GUARD_CONFIG`/`MSAL_INTERCEPTOR_CONFIG` bundles, which assume an

@@ -321,6 +321,88 @@ land in the `customEvents` (classic AI) / `AppEvents` (LAW) table.
 
 ### Event catalog
 
+#### `update.versionReady`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired when Angular's service worker reports a new version is ready and
+`AppUpdateService` chooses the silent-apply vs snackbar path. This is
+the main funnel event for verifying that users recover from stale
+service-worker manifests after the issue #167 fix.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| userInteracted | string | `true` or `false`; whether the user interacted before the ready event. |
+| guardClaimed | string | `true` or `false`; whether the session auto-apply guard was claimed. |
+| pathTaken | string | `silentApply` or `snackbar`. |
+| fromSha | string | Current Angular service-worker `appData.buildSha`; may be empty for older manifests. |
+| toSha | string | Latest Angular service-worker `appData.buildSha`; may be empty for older manifests. |
+
+**Measurements:**
+
+| name | type | meaning |
+| --- | --- | --- |
+| msSinceBoot | number | Raw `performance.now()` elapsed time when the branch decision is made. |
+
+#### `update.check.result`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fires on every `checkForUpdate()` settle or short-circuit through the
+single `AppUpdateService.maybeCheck()` funnel. The `result` enum shows
+whether the check saw no change, found a new version, failed, or skipped
+because the service worker was not ready.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| reason | string | `init`, `visibility`, or `focus`. |
+| result | string | `noChange`, `newVersion`, `error`, or `swNotReady`. |
+
+**Measurements:**
+
+| name | type | meaning |
+| --- | --- | --- |
+| durationMs | number | Raw wall-clock duration from check start to settle or short-circuit. |
+
+#### `update.unrecoverable.event`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fires before `hardReload()` when Angular reports an unrecoverable
+service-worker state. The event keeps the analytics path closed-enum by
+bucketizing Angular's free-form reason into `reasonBucket`; the separate
+`update.unrecoverable` warning trace keeps the raw diagnostic text.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| reasonBucket | string | `hashMismatch`, `fetchFailed`, or `other`. |
+
+**Measurements:** none.
+
+#### `update.swState`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fires once per browser-side `AppUpdateService` init. It records whether
+Angular service-worker support is enabled and whether the page already
+has a controlling service worker, which helps distinguish fresh users
+from stale controlled sessions.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| swEnabled | string | `true` or `false`. |
+| swHasController | string | `true` or `false`. |
+
+**Measurements:** none.
+
 #### `tree.expand.autoFit`
 
 **Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
@@ -454,6 +536,28 @@ customEvents
             p90 = percentile(durationMs, 90),
             p99 = percentile(durationMs, 99),
             count_ = count()
+```
+
+### Stale version diagnostics
+
+After the "jotjson.com shows old version on new tab" fix shipped
+(issue #167), this query helps detect any residual stuck-user
+population by comparing recent boot SHAs with service-worker update
+signals.
+
+```kusto
+// Are users stuck on old builds?
+customEvents
+| where name == "app.boot"
+| extend bootSha = tostring(customDimensions.sha)
+| summarize lastSeen=max(timestamp), bootCount=count() by bootSha
+| join kind=leftouter (
+    customEvents
+    | where name == "update.versionReady" or name == "update.applied"
+    | summarize lastUpdate=max(timestamp) by toSha=tostring(customDimensions.toSha)
+  ) on $left.bootSha == $right.toSha
+| where lastSeen > ago(7d)
+| order by lastSeen desc
 ```
 
 ---

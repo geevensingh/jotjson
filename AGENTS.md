@@ -639,10 +639,13 @@ for the iteration loop.
   static-asset extensions, with brace-group expansion so contributors
   can split `*.{js,css}` without tripping the gate), the `/api/*`
   `allowedRoles` (must include `anonymous`), route-order shadowing (no
-  wildcard route may precede the must-revalidate Cache-Control rules),
-  the four `Cache-Control: no-cache, must-revalidate` rules
-  (`/index.html`, `/shell.html`, `/404/index.html`, `/ngsw.json`),
-  `platform.apiRuntime` (must be in the small allowlist of currently-
+  wildcard route may precede the deployment Cache-Control rules),
+  the two issue #167 Cache-Control header groups: `Cache-Control: no-store`
+  on the service-worker gateway pair (`/ngsw.json`, `/ngsw-worker.js`) and
+  `Cache-Control: no-cache, must-revalidate` on the HTML shells
+  (`/index.html`, `/shell.html`, `/404/index.html`), the split linter
+  constants (`SW_GATEWAY_PATHS` + `SW_GATEWAY_CACHE_CONTROL`,
+  `SHELL_PATHS` + `SHELL_CACHE_CONTROL`), `platform.apiRuntime` (must be in the small allowlist of currently-
   supported Node versions), and the `.webmanifest` MIME type. The
   validator works against the source file; it does NOT prove the CDN
   serves what the file describes - that's tracked under issue #179
