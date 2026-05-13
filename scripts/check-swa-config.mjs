@@ -201,6 +201,17 @@ export function routeMatchesPath(routePattern, path) {
 // Assertion blocks (pure, each returns string[] of errors)
 // ---------------------------------------------------------------------------
 
+// NOTE: When adding, removing, or renaming a header in
+// `staticwebapp.config.json` `globalHeaders`, three places must be kept in
+// sync (per Phase 2 cleanup #220):
+//   1. `staticwebapp.config.json` `globalHeaders` (the source of truth).
+//   2. `checkGlobalHeaders()` below (this source-level lint).
+//   3. `e2e/preview/security-headers.spec.ts` (deployed-response check
+//      against an Azure SWA preview host; runs only when
+//      `PLAYWRIGHT_BASE_URL` is set).
+// The source lint asserts the config file declares the header; the
+// deployed-response spec proves no platform/edge layer strips or
+// rewrites it between SWA and the browser. Both gates are needed.
 export function checkGlobalHeaders(config) {
   const errors = [];
   const headers = config?.globalHeaders ?? {};
