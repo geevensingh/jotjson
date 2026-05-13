@@ -1,0 +1,24 @@
+<h2 mat-dialog-title class="decoded-title">
+  <span class="decoded-title__label">{{ titleLabel }}</span>
+  <span class="decoded-title__path" [matTooltip]="data.pathString">{{ data.pathString }}</span>
+</h2>
+<mat-dialog-content class="decoded-content">
+  <pre
+    class="decoded-pre"
+  ><code class="decoded-code">@for (line of lines(); track line.index) {<span class="decoded-line"><span class="decoded-line__no" aria-hidden="true">{{ line.index }}</span><span class="decoded-line__text">{{ line.text }}</span></span>}</code></pre>
+</mat-dialog-content>
+<mat-dialog-actions align="end" class="decoded-actions">
+  <button mat-button type="button" class="decoded-actions__copy" (click)="copy()">
+    <jj-icon name="copy" [size]="18" />
+    <span i18n="@@tree.decoded.dialog.copy">Copy decoded value</span>
+  </button>
+  <button
+    mat-flat-button
+    type="button"
+    color="primary"
+    (click)="ref.close()"
+    i18n="@@tree.decoded.dialog.close"
+  >
+    Close
+  </button>
+</mat-dialog-actions>

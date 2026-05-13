@@ -453,32 +453,40 @@ If p90 or p99 is consistently > 200%, the tolerance is too aggressive
 and we should consider reducing it or adding a corrective
 measure-after-expand pass.
 
-#### `tree.decoded.click`
+#### `tree.decoded.viewerOpened`
 
 **Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
 
-Fired every time the user toggles the per-row "decoded view" pill on a
-string leaf. Toggling on AND off both emit one event each. Display-only
-toggle: does not mutate the value, copy text, search results, or any
-persisted state. The event lets us see how often the affordance is
-used and at what payload size, without ever logging the string itself.
+Fired each time the user opens the dedicated decoded-value viewer
+dialog from a string leaf - either by clicking the row's decoded pill
+or by selecting `Open decoded value` in the row's context menu. The
+dialog renders the raw string with line numbers and a Copy button;
+this event lets us see how often the affordance is used, by which
+entry-point, and at what payload size, without ever logging the
+string itself or its path.
+
+Replaces the prior `tree.decoded.click`,
+`tree.contextMenu.decodeShow`, and `tree.contextMenu.decodeHide`
+events (retired in v0.20.0 along with the inline pre-wrap render
+toggle).
 
 **Properties:**
 
 | name | type | values |
 | --- | --- | --- |
 | source | string | `rowButton` (clicked the pill) or `contextMenu` (clicked the kebab-menu item). |
-| direction | string | `on` (entered the decoded view) or `off` (returned to the JSON-escaped view). |
-| lineCountBucket | string | Bucketed line count of the string at click time: `1`, `2-5`, `6-20`, `21-100`, `100+`. CRLF counts as one line break. |
+| reason | string | `escape` (value matches the pre-existing predicate: contains a newline / carriage return / tab / embedded `"` / `\`) or `long` (value matches the new length-only predicate: `length > 256`). Lets us see how often the long-only widening is what makes the dialog reachable. |
+| pathDepth | string | Bucketed depth (number of path segments) of the originating row: `1`, `2-5`, `6-20`, `21-100`, `100+`. Bucketed via the shared `bucketCount` helper. |
+| lineCountBucket | string | Bucketed line count of the string at open time: `1`, `2-5`, `6-20`, `21-100`, `100+`. CRLF counts as one line break. Preserved from the prior `tree.decoded.click` event. |
 
-**Measurements:** none (line count is reported as a closed-enum bucket
-in `lineCountBucket` to keep the schema small).
+**Measurements:** none (line count and path depth are reported as
+closed-enum buckets to keep the schema small).
 
 **Example: split between row pill and context menu**
 
 ```kusto
 customEvents
-| where name == "tree.decoded.click"
+| where name == "tree.decoded.viewerOpened"
 | summarize count() by tostring(customDimensions.source)
 ```
 

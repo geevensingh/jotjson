@@ -1112,23 +1112,35 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
-   * Fired by: `JsonTreeComponent.onDecodedButtonClick` /
-   *           `onDecodedMenuClick`
+   * Fired by: `JsonTreeComponent.openDecodedDialog`
    *           (`shared/components/json-tree/json-tree.component.ts`)
-   *           when the user toggles the per-row "decoded" view on a
-   *           string leaf whose parsed value contains escaped JSON
-   *           string control characters (newline, tab, carriage
-   *           return, embedded quote, or backslash). Display-only:
-   *           does NOT mutate the underlying value, copy semantics, or
-   *           search behavior.
+   *           when the user opens the dedicated decoded-value viewer
+   *           dialog for a string leaf. The dialog renders the raw
+   *           string with line numbers and a copy button; the row
+   *           itself stays one line tall. Replaces the prior in-row
+   *           toggle (issue #95 Phase 0): tree-row virtualization
+   *           requires uniform row height, so the inline "show as
+   *           decoded text" affordance was promoted to a dialog. The
+   *           three earlier tokens (`tree.decoded.click`,
+   *           `tree.contextMenu.decodeShow`,
+   *           `tree.contextMenu.decodeHide`) were retired in the same
+   *           change; this token consolidates their signal.
+   * Volume control: bounded-frequency. Fires once per dialog open
+   * (one user click on the row pill or the kebab-menu item). No
+   * "close" companion event - close is implicit (Esc, backdrop, or
+   * the Close button) and carries no analytic value.
    * Props: { source: 'rowButton' | 'contextMenu';
-   *          direction: 'on' | 'off';
+   *          reason: 'escape' | 'long';
+   *          pathDepth: '<100' | '100-1K' | '1K-10K' | '>10K';
    *          lineCountBucket: '1' | '2-5' | '6-20' | '21-100' | '100+' }.
-   *          `lineCountBucket` is the line count of the decoded
-   *          payload at click time (independent of direction); user
-   *          string contents are never logged.
+   *          `source` distinguishes the in-row pill from the kebab
+   *          context-menu entry; `reason` says whether the predicate
+   *          matched escape characters (`escape`) or only the
+   *          length > 256 fallback (`long`); `pathDepth` is the
+   *          bucketed depth of the originating row's path; user
+   *          string contents and raw paths are never logged.
    */
-  'tree.decoded.click',
+  'tree.decoded.viewerOpened',
 
   /**
    * Kind: event
@@ -1378,32 +1390,6 @@ export const TELEMETRY_MESSAGE_IDS = [
    *        buckets when the extraction succeeds.
    */
   'tree.contextMenu.extract',
-
-  /**
-   * Severity: info
-   * Fired by: `JsonTreeComponent.onDecodedMenuClick` (when the row
-   *           is currently in the JSON-escaped view and the click
-   *           reveals decoded text)
-   *           (`shared/components/json-tree/json-tree.component.ts`).
-   *           The Decode toggle has two states (show / hide) wired
-   *           through `tree.decoded.click` (which carries
-   *           `direction: 'on' | 'off'`); these context-menu events
-   *           are counts-only markers of the menu-driven entry
-   *           point per scope (show vs hide answer different
-   *           questions: discovery vs muscle-memory toggle).
-   * Props: none.
-   */
-  'tree.contextMenu.decodeShow',
-
-  /**
-   * Severity: info
-   * Fired by: `JsonTreeComponent.onDecodedMenuClick` (when the row
-   *           is currently in the decoded view and the click
-   *           hides it back to the JSON-escaped form)
-   *           (`shared/components/json-tree/json-tree.component.ts`).
-   * Props: none.
-   */
-  'tree.contextMenu.decodeHide',
 
   /**
    * Severity: info

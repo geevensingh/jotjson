@@ -1,0 +1,113 @@
+// Decoded-value viewer dialog. Replaces the old per-row inline
+// pre-wrap toggle so virtual-scroll rows can stay uniform-height
+// (issue #95 Phase 0). Layout intent: title bar + scrollable
+// monospace body with a left gutter for line numbers + action row.
+
+:host {
+  display: block;
+  // The dialog hosts its own scroller in `.decoded-content`; the
+  // mat-dialog default would let the host overflow.
+  min-width: 0;
+}
+
+.decoded-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  // Material's default mat-dialog-title has a generous bottom margin;
+  // tighten so the path can sit right under the label.
+  margin-bottom: 4px;
+}
+
+.decoded-title__label {
+  flex: 0 0 auto;
+}
+
+.decoded-title__path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant, #aeb6c2);
+}
+
+.decoded-content {
+  display: block;
+  // Cap dialog body so very long decoded payloads scroll instead of
+  // pushing the viewport off the screen. 70vh leaves room for the
+  // title and action rows on most viewports.
+  max-height: 70vh;
+  min-width: 0;
+  // mat-dialog-content already has overflow:auto, but be explicit so
+  // the scroller is unambiguous when style cascade changes.
+  overflow: auto;
+}
+
+.decoded-pre {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  // Slightly larger than tree-row monospace so dense decoded payloads
+  // (logs, escape-laden strings) read comfortably in the dialog.
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--mat-sys-on-surface, inherit);
+  background: var(--surface-1, rgba(127, 127, 127, 0.06));
+  border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
+  border-radius: 6px;
+}
+
+.decoded-code {
+  display: block;
+  // The browser default `<code>` font would leak through if we did
+  // not pin it here; keep the mono stack consistent with the `<pre>`.
+  font: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.decoded-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.decoded-line__no {
+  flex: 0 0 auto;
+  width: 3.5ch;
+  padding: 0 8px 0 10px;
+  text-align: right;
+  user-select: none;
+  color: var(--mat-sys-on-surface-variant, #aeb6c2);
+  border-right: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
+}
+
+.decoded-line__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  // Preserve internal whitespace (tabs, leading spaces) but allow
+  // long unbroken tokens to wrap so the row never overflows the
+  // dialog viewport horizontally.
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-right: 10px;
+}
+
+.decoded-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  // mat-dialog-actions defaults align="end" pushes everything right;
+  // pull the copy button left so it does not crowd the close button.
+  justify-content: flex-end;
+}
+
+.decoded-actions__copy {
+  // Inline icon + label spacing matches the row context-menu items.
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

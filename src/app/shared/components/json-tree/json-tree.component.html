@@ -262,9 +262,7 @@
           }
           @switch (node.type) {
             @case ('string') {
-              <span class="tree-value-string" [class.tree-value-decoded]="isDecoded(node)">{{
-                displayLeaf(node)
-              }}</span>
+              <span class="tree-value-string">{{ displayLeaf(node) }}</span>
               @if (showDateAnnotations()) {
                 @let ann = dateAnnotation(node);
                 @if (ann) {
@@ -339,9 +337,8 @@
                 <button
                   type="button"
                   class="tree-decoded-pill"
-                  [attr.aria-pressed]="isDecoded(node)"
-                  [attr.title]="isDecoded(node) ? decodedHideTitleLabel : decodedShowTitleLabel"
-                  [attr.aria-label]="isDecoded(node) ? decodedHideAriaLabel : decodedShowAriaLabel"
+                  [attr.title]="decodedOpenDialogTitleLabel"
+                  [attr.aria-label]="decodedOpenDialogAriaLabel"
                   (click)="onDecodedButtonClick(node, $event)"
                 >
                   <jj-icon name="decoded" [size]="'auto'" />
@@ -388,9 +385,8 @@
                 <button
                   type="button"
                   class="tree-decoded-pill"
-                  [attr.aria-pressed]="isDecoded(node)"
-                  [attr.title]="isDecoded(node) ? decodedHideTitleLabel : decodedShowTitleLabel"
-                  [attr.aria-label]="isDecoded(node) ? decodedHideAriaLabel : decodedShowAriaLabel"
+                  [attr.title]="decodedOpenDialogTitleLabel"
+                  [attr.aria-label]="decodedOpenDialogAriaLabel"
                   (click)="onDecodedButtonClick(node, $event)"
                 >
                   <jj-icon name="decoded" [size]="'auto'" />
@@ -639,7 +635,7 @@
     @if (decodedCandidate(cn)) {
       <button mat-menu-item type="button" (click)="onDecodedMenuClick(cn)">
         <jj-icon name="decoded" [size]="18" />
-        <span>{{ isDecoded(cn) ? decodedHideMenuLabel : decodedShowMenuLabel }}</span>
+        <span>{{ decodedOpenDialogMenuLabel }}</span>
       </button>
     }
     <!-- Mark section: single-row Highlight + Remove highlight.
