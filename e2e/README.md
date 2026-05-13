@@ -18,14 +18,36 @@ cannot:
 
 ## What this suite is NOT for
 
-- **SWA-applied response headers** (CSP, X-Frame-Options) - those live
-  in `staticwebapp.config.json` and only take effect on a deployed SWA
-  host. Validating them needs a separate post-deploy smoke layer.
+- **SWA-applied response headers** (CSP, X-Frame-Options, HSTS, etc.) -
+  those live in `staticwebapp.config.json` and only take effect on a
+  deployed SWA host. Source-level coverage lives in
+  `scripts/check-swa-config.mjs` (`lint:swa-config` gate); end-to-end
+  deployed-response coverage lives in
+  [`e2e/preview/security-headers.spec.ts`](./preview/security-headers.spec.ts)
+  and runs only when `PLAYWRIGHT_BASE_URL` is set (cd-preview's
+  `e2e-preview` job).
 - **Real MSAL config behavior** - the e2e bundle is built against
   `environment.example.ts` (anonymous), not the secret-baked
   `environment.prod.ts`. Signed-in coverage is tracked in issue #68.
 - **Cross-browser** (Firefox, WebKit) - issue #65, post-v1.
 - **Visual regression** - issue #67, post-v1.
+
+## Folders
+
+This suite is split into two top-level folders. Both are auto-
+discovered by `playwright.config.ts`'s `testDir: './e2e'`.
+
+- **`e2e/anonymous/`** - app-behavior specs that pass against either
+  the local `dist/` serve or a deployed SWA host. The default `npm run
+  test:e2e` and the CI `e2e` job run these against the local serve;
+  cd-preview's `e2e-preview` job re-runs them against the per-PR
+  preview URL.
+- **`e2e/preview/`** - deploy-behavior specs that only make sense
+  against a deployed SWA host (e.g., asserting SWA-applied response
+  headers reach the browser). Specs here skip at module load when
+  `PLAYWRIGHT_BASE_URL` is unset, so the CI `e2e` job stays green
+  without them and cd-preview's `e2e-preview` job picks them up
+  automatically. See [`e2e/preview/README.md`](./preview/README.md).
 
 ## Anonymous routes only
 
