@@ -1,5 +1,6 @@
 import { EnvironmentProviders, inject, provideAppInitializer } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { SwRegistrationOptions } from '@angular/service-worker';
 import { FakeMsalClient, provideFakeAuth } from '../testing/auth.testing';
 import { appConfig } from './app.config';
 import { AuthService } from './core/auth/auth.service';
@@ -17,6 +18,20 @@ describe('appConfig', () => {
   it('declares at least one provideAppInitializer entry', () => {
     const initializerCount = appConfig.providers.filter(isEnvironmentProviders).length;
     expect(initializerCount).toBeGreaterThan(0);
+  });
+
+  it('uses registerWhenStable:5000 for SW registration (issue #167)', () => {
+    const serviceWorkerOptionsProvider = flattenProviders(appConfig.providers).find(
+      (provider) => isProviderRecord(provider) && provider.provide === SwRegistrationOptions,
+    );
+
+    expect(serviceWorkerOptionsProvider).toBeDefined();
+    expect(isProviderRecord(serviceWorkerOptionsProvider)).toBeTrue();
+    if (!isProviderRecord(serviceWorkerOptionsProvider)) return;
+
+    expect(serviceWorkerOptionsProvider.useValue).toEqual(
+      jasmine.objectContaining({ registrationStrategy: 'registerWhenStable:5000' }),
+    );
   });
 
   it('runs AuthService.initializeFromRedirect via APP_INITIALIZER', async () => {
@@ -48,8 +63,41 @@ describe('appConfig', () => {
  * runtime brand is the internal providers array on the returned object;
  * treat any object that exposes one as an `EnvironmentProviders` blob.
  */
-function isEnvironmentProviders(p: unknown): p is EnvironmentProviders {
-  if (!p || typeof p !== 'object') return false;
-  const keys = Object.keys(p as Record<string, unknown>);
-  return keys.some((k) => k.toLowerCase().includes('providers'));
+function isEnvironmentProviders(provider: unknown): provider is EnvironmentProviders {
+  if (!provider || typeof provider !== 'object') return false;
+  const keys = Object.keys(provider as Record<string, unknown>);
+  return keys.some((key) => key.toLowerCase().includes('providers'));
+}
+
+function flattenProviders(providers: readonly unknown[]): unknown[] {
+  const flattenedProviders: unknown[] = [];
+
+  for (const provider of providers) {
+    if (isEnvironmentProviders(provider)) {
+      flattenedProviders.push(...readEnvironmentProviders(provider));
+      continue;
+    }
+
+    flattenedProviders.push(provider);
+  }
+
+  return flattenedProviders;
+}
+
+function readEnvironmentProviders(provider: EnvironmentProviders): readonly unknown[] {
+  const providerRecord = provider as Record<string, unknown>;
+  const providersKey = Object.keys(providerRecord).find((key) =>
+    key.toLowerCase().includes('providers'),
+  );
+  const providersValue = providersKey ? providerRecord[providersKey] : undefined;
+  return Array.isArray(providersValue) ? providersValue : [];
+}
+
+interface ProviderRecord {
+  provide: unknown;
+  useValue?: unknown;
+}
+
+function isProviderRecord(provider: unknown): provider is ProviderRecord {
+  return provider !== null && typeof provider === 'object' && 'provide' in provider;
 }

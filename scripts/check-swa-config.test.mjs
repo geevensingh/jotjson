@@ -25,11 +25,13 @@ import {
   checkRoutes,
   expandBraceGlob,
   getExcludedExtensions,
-  MUST_REVALIDATE_PATHS,
   readConfig,
-  REQUIRED_CACHE_CONTROL,
   routeMatchesPath,
+  SHELL_CACHE_CONTROL,
+  SHELL_PATHS,
   SUPPORTED_API_RUNTIMES,
+  SW_GATEWAY_CACHE_CONTROL,
+  SW_GATEWAY_PATHS,
 } from './check-swa-config.mjs';
 
 // Deep-clones via JSON. Sufficient for our config shape (plain JSON,
@@ -94,7 +96,13 @@ test('routePatternToRegex single * matches across segments (SWA semantics)', () 
 });
 
 test('routePatternToRegex /* matches every absolute path', () => {
-  for (const path of ['/index.html', '/404/index.html', '/shell.html', '/ngsw.json']) {
+  for (const path of [
+    '/index.html',
+    '/404/index.html',
+    '/shell.html',
+    '/ngsw.json',
+    '/ngsw-worker.js',
+  ]) {
     assert.equal(routeMatchesPath('/*', path), true, `expected '/*' to match '${path}'`);
   }
 });
@@ -107,6 +115,7 @@ test('routePatternToRegex *.{ext,ext} respects the extension filter', () => {
 
 test('routePatternToRegex *.ext respects the extension filter', () => {
   assert.equal(routeMatchesPath('/*.json', '/ngsw.json'), true);
+  assert.equal(routeMatchesPath('/*.js', '/ngsw-worker.js'), true);
   assert.equal(routeMatchesPath('/*.json', '/index.html'), false);
 });
 
@@ -262,45 +271,96 @@ test('/api/* allowedRoles missing anonymous fails', () => {
   assertHasErrorMatching(checkRoutes(config), /anonymous/);
 });
 
-// --- Negative: route-order shadowing --------------------------------------
+// --- Positive: split Cache-Control shape ----------------------------------
 
-test('wildcard route preceding must-revalidate rules fails', () => {
+test('checkRoutes accepts SW gateway no-store and HTML shell revalidation split', () => {
   const config = cloneConfig();
-  // `/*` is the canonical SWA pattern that matches every absolute path.
-  // (`/**` is not valid SWA syntax; we exercise the defensive collapse in
-  // a dedicated routePatternToRegex test above.)
-  config.routes = [
-    { route: '/*', headers: { 'Cache-Control': 'public, max-age=31536000' } },
-    ...config.routes,
-  ];
-  assertHasErrorMatching(checkRoutes(config), /shadow|precedes/);
+  assert.deepEqual(checkRoutes(config), []);
+
+  for (const path of SW_GATEWAY_PATHS) {
+    const route = config.routes.find((entry) => entry.route === path);
+    assert.ok(route, `expected base config to contain a '${path}' route`);
+    assert.equal(route.headers?.['Cache-Control'], SW_GATEWAY_CACHE_CONTROL);
+  }
+
+  for (const path of SHELL_PATHS) {
+    const route = config.routes.find((entry) => entry.route === path);
+    assert.ok(route, `expected base config to contain a '${path}' route`);
+    assert.equal(route.headers?.['Cache-Control'], SHELL_CACHE_CONTROL);
+  }
 });
 
-// --- Negative: Cache-Control per must-revalidate path ---------------------
+// --- Negative: route-order shadowing --------------------------------------
 
-for (const path of MUST_REVALIDATE_PATHS) {
-  test(`Cache-Control rule for ${path} removed fails`, () => {
+test('wildcard route preceding service worker gateway rules fails', () => {
+  const config = cloneConfig();
+  config.routes.splice(1, 0, {
+    route: '/*.{json,js}',
+    headers: { 'Cache-Control': 'public, max-age=31536000' },
+  });
+  assertHasErrorMatching(
+    checkRoutes(config),
+    /service worker gateway.*issue #167|issue #167.*service worker gateway/,
+  );
+});
+
+test('wildcard route preceding HTML shell rules fails', () => {
+  const config = cloneConfig();
+  config.routes.splice(1, 0, {
+    route: '/*.html',
+    headers: { 'Cache-Control': 'public, max-age=31536000' },
+  });
+  assertHasErrorMatching(checkRoutes(config), /HTML shell.*issue #167|issue #167.*HTML shell/);
+});
+
+// --- Negative: Cache-Control per grouped path -----------------------------
+
+for (const path of SW_GATEWAY_PATHS) {
+  test(`service worker gateway Cache-Control rule for ${path} removed fails`, () => {
     const config = cloneConfig();
     config.routes = config.routes.filter((entry) => entry.route !== path);
-    assertHasErrorMatching(checkRoutes(config), path);
+    assertHasErrorMatching(checkRoutes(config), new RegExp(`${path}.*service worker gateway`));
+  });
+
+  test(`service worker gateway Cache-Control value drift on ${path} fails`, () => {
+    const config = cloneConfig();
+    const route = config.routes.find((entry) => entry.route === path);
+    assert.ok(route, `expected base config to contain a '${path}' route`);
+    assert.ok(route.headers, `expected '${path}' route to have a headers object`);
+    route.headers['Cache-Control'] = 'no-cache, must-revalidate';
+    assertHasErrorMatching(
+      checkRoutes(config),
+      new RegExp(`${path}.*service worker gateway.*issue #167`),
+    );
+    route.headers['Cache-Control'] = SW_GATEWAY_CACHE_CONTROL;
+    const routeErrors = checkRoutes(config).filter((message) =>
+      message.includes(`routes['${path}']`),
+    );
+    assert.deepEqual(routeErrors, []);
   });
 }
 
-test('Cache-Control value drift on /index.html fails', () => {
-  const config = cloneConfig();
-  const route = config.routes.find((entry) => entry.route === '/index.html');
-  assert.ok(route, "expected base config to contain a '/index.html' route");
-  assert.ok(route.headers, "expected '/index.html' route to have a headers object");
-  route.headers['Cache-Control'] = 'public, max-age=300';
-  assertHasErrorMatching(checkRoutes(config), /Cache-Control/);
-  // Sanity check: REQUIRED_CACHE_CONTROL itself is the value we want;
-  // restoring it should make the gate green.
-  route.headers['Cache-Control'] = REQUIRED_CACHE_CONTROL;
-  const routeErrors = checkRoutes(config).filter((message) =>
-    message.includes("routes['/index.html']"),
-  );
-  assert.deepEqual(routeErrors, []);
-});
+for (const path of SHELL_PATHS) {
+  test(`HTML shell Cache-Control rule for ${path} removed fails`, () => {
+    const config = cloneConfig();
+    config.routes = config.routes.filter((entry) => entry.route !== path);
+    assertHasErrorMatching(checkRoutes(config), new RegExp(`${path}.*HTML shell`));
+  });
+
+  test(`HTML shell Cache-Control value drift on ${path} fails`, () => {
+    const config = cloneConfig();
+    const route = config.routes.find((entry) => entry.route === path);
+    assert.ok(route, `expected base config to contain a '${path}' route`);
+    assert.ok(route.headers, `expected '${path}' route to have a headers object`);
+    route.headers['Cache-Control'] = 'no-store';
+    assertHasErrorMatching(checkRoutes(config), new RegExp(`${path}.*HTML shell.*issue #167`));
+    route.headers['Cache-Control'] = SHELL_CACHE_CONTROL;
+    const routeErrors = checkRoutes(config).filter((message) =>
+      message.includes(`routes['${path}']`),
+    );
+    assert.deepEqual(routeErrors, []);
+  });
+}
 
 // --- Negative: platform.apiRuntime ----------------------------------------
 
