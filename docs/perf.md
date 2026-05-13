@@ -104,7 +104,7 @@ below.
       "iters": 7,
       "approxNodes": 10000,
       "longestTaskMsMedian": 42,
-      "pasteMethod": "keyboard"
+      "pasteMethod": "setvalue"
     }
     // ... more rows ...
   }

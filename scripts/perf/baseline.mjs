@@ -47,7 +47,10 @@
 // schemaVersion 1 -> 2 history:
 //   - v1 (PR #194):        the four base shape fields.
 //   - v2 (this PR / C5):   added optional `pasteMethod` to BaselineEntry
-//                           and JsonlRow; v1 readers fail-loud on a v2 file.
+//                           and JsonlRow. Incompatibility is bidirectional:
+//                           v1 readers fail-loud on v2 files (forward), and
+//                           v2 readers reject v1 files via assertBaselineSchema
+//                           (backward); contributors recapture on bump.
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
