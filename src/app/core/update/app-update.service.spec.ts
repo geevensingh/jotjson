@@ -59,6 +59,7 @@ function makeSnackHarness(): SnackHarness {
 interface SetupOptions {
   enabled: boolean;
   platform?: 'browser' | 'server';
+  keepConstructorTelemetry?: boolean;
 }
 
 interface SetupResult {
@@ -87,6 +88,9 @@ function setup(opts: SetupOptions): SetupResult {
     ],
   });
   const service = TestBed.inject(AppUpdateService);
+  if (!opts.keepConstructorTelemetry) {
+    logger.event.calls.reset();
+  }
   const reload = spyOn(service as unknown as { reload: () => void }, 'reload');
   return { service, sw, snack, logger, telemetry, reload };
 }
@@ -131,12 +135,48 @@ function dispatchWindowFocus(): void {
   window.dispatchEvent(new FocusEvent('focus'));
 }
 
-function makeVersionReady(): VersionReadyEvent {
+function makeVersionReady(fromSha = 'from-sha', toSha = 'to-sha'): VersionReadyEvent {
   return {
     type: 'VERSION_READY',
-    currentVersion: { hash: 'a' },
-    latestVersion: { hash: 'b' },
+    currentVersion: { hash: 'a', appData: { buildSha: fromSha } },
+    latestVersion: { hash: 'b', appData: { buildSha: toSha } },
   } as VersionReadyEvent;
+}
+
+function expectLoggerEvent(
+  logger: jasmine.SpyObj<LoggerService>,
+  messageId: Parameters<LoggerService['event']>[0],
+  props: Parameters<LoggerService['event']>[1],
+  measurements: Parameters<LoggerService['event']>[2],
+): void {
+  expect(logger.event).toHaveBeenCalledWith(messageId, props, measurements);
+}
+
+function loggerEventCalls(
+  logger: jasmine.SpyObj<LoggerService>,
+  messageId: Parameters<LoggerService['event']>[0],
+): Parameters<LoggerService['event']>[] {
+  return logger.event.calls.allArgs().filter((call) => call[0] === messageId);
+}
+
+function withServiceWorkerController<T>(hasController: boolean, action: () => T): T {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
+  const serviceWorker = {
+    controller: hasController ? ({} as ServiceWorker) : null,
+  } as unknown as ServiceWorkerContainer;
+  Object.defineProperty(navigator, 'serviceWorker', {
+    configurable: true,
+    get: () => serviceWorker,
+  });
+  try {
+    return action();
+  } finally {
+    if (originalDescriptor) {
+      Object.defineProperty(navigator, 'serviceWorker', originalDescriptor);
+    } else {
+      Reflect.deleteProperty(navigator, 'serviceWorker');
+    }
+  }
 }
 
 describe('AppUpdateService', () => {
@@ -146,6 +186,32 @@ describe('AppUpdateService', () => {
     activeService?.__disposeForTesting();
     activeService = undefined;
     sessionStorage.removeItem(AUTO_APPLIED_STORAGE_KEY);
+  });
+
+  describe('service worker state telemetry', () => {
+    it('emits update.swState once when SwUpdate is enabled', () => {
+      withServiceWorkerController(true, () => {
+        const { service, logger } = setup({ enabled: true, keepConstructorTelemetry: true });
+        activeService = service;
+        expect(logger.event).toHaveBeenCalledOnceWith(
+          'update.swState',
+          { swEnabled: 'true', swHasController: 'true' },
+          undefined,
+        );
+      });
+    });
+
+    it('emits update.swState once when SwUpdate is disabled', () => {
+      withServiceWorkerController(false, () => {
+        const { service, logger } = setup({ enabled: false, keepConstructorTelemetry: true });
+        activeService = service;
+        expect(logger.event).toHaveBeenCalledOnceWith(
+          'update.swState',
+          { swEnabled: 'false', swHasController: 'false' },
+          undefined,
+        );
+      });
+    });
   });
 
   describe('disabled SW', () => {
@@ -209,9 +275,32 @@ describe('AppUpdateService', () => {
       expect(logger.warn).toHaveBeenCalledWith('update.unrecoverable', {
         reason: 'manifest mismatch',
       });
+      expectLoggerEvent(logger, 'update.unrecoverable.event', { reasonBucket: 'other' }, undefined);
       expect(replace).toHaveBeenCalledTimes(1);
       const target = replace.calls.mostRecent().args[0] as string;
       expect(target).toContain('_swreload=');
+    });
+
+    [
+      { reason: 'hash mismatch while reading manifest', reasonBucket: 'hashMismatch' },
+      { reason: 'network fetch failed', reasonBucket: 'fetchFailed' },
+      { reason: 'unexpected cache state', reasonBucket: 'other' },
+    ].forEach((testCase) => {
+      it(`emits update.unrecoverable.event reasonBucket=${testCase.reasonBucket}`, () => {
+        const { service, sw, logger } = setup({ enabled: true });
+        activeService = service;
+        spyOn(service as unknown as { replaceLocation: (url: string) => void }, 'replaceLocation');
+        sw.unrecoverable$.next({
+          type: 'UNRECOVERABLE_STATE',
+          reason: testCase.reason,
+        } as UnrecoverableStateEvent);
+        expectLoggerEvent(
+          logger,
+          'update.unrecoverable.event',
+          { reasonBucket: testCase.reasonBucket },
+          undefined,
+        );
+      });
     });
   });
 
@@ -329,9 +418,80 @@ describe('AppUpdateService', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(logger.warn).not.toHaveBeenCalled();
     });
+
+    it('emits update.check.result result=noChange when the init check resolves false', async () => {
+      const { service, sw, logger } = setup({ enabled: true });
+      activeService = service;
+      sw.check.and.returnValue(Promise.resolve(false));
+      service.initialize();
+      await Promise.resolve();
+      expect(logger.event).toHaveBeenCalledWith(
+        'update.check.result',
+        { reason: 'init', result: 'noChange' },
+        { durationMs: jasmine.any(Number) },
+      );
+    });
+
+    it('emits update.check.result result=newVersion when the init check resolves true', async () => {
+      const { service, sw, logger } = setup({ enabled: true });
+      activeService = service;
+      sw.check.and.returnValue(Promise.resolve(true));
+      service.initialize();
+      await Promise.resolve();
+      expect(logger.event).toHaveBeenCalledWith(
+        'update.check.result',
+        { reason: 'init', result: 'newVersion' },
+        { durationMs: jasmine.any(Number) },
+      );
+    });
+
+    it('emits update.check.result result=error when the init check rejects', async () => {
+      const { service, sw, logger } = setup({ enabled: true });
+      activeService = service;
+      sw.check.and.returnValue(Promise.reject(new Error('offline')));
+      service.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(logger.event).toHaveBeenCalledWith(
+        'update.check.result',
+        { reason: 'init', result: 'error' },
+        { durationMs: jasmine.any(Number) },
+      );
+    });
+
+    it('emits update.check.result result=swNotReady when SwUpdate is disabled', () => {
+      const { service, logger } = setup({ enabled: false });
+      activeService = service;
+      service.initialize();
+      expect(logger.event).toHaveBeenCalledWith(
+        'update.check.result',
+        { reason: 'init', result: 'swNotReady' },
+        { durationMs: jasmine.any(Number) },
+      );
+    });
   });
 
   describe('cold-launch silent auto-apply', () => {
+    it('emits update.versionReady with pathTaken=silentApply before auto-apply', () => {
+      const { service, sw, logger } = setup({ enabled: true });
+      activeService = service;
+      sw.check.and.returnValue(new Promise<boolean>(() => undefined));
+      sw.activate.and.returnValue(new Promise<boolean>(() => undefined));
+      service.initialize();
+      logger.event.calls.reset();
+      sw.versions$.next(makeVersionReady('current-build', 'next-build'));
+      expect(logger.event).toHaveBeenCalledWith(
+        'update.versionReady',
+        {
+          userInteracted: 'false',
+          guardClaimed: 'true',
+          pathTaken: 'silentApply',
+          fromSha: 'current-build',
+          toSha: 'next-build',
+        },
+        { msSinceBoot: jasmine.any(Number) },
+      );
+    });
+
     it('silently applies + emits update.applied with trigger=autoApply on a pre-interaction VERSION_READY', async () => {
       const { service, sw, snack, logger, telemetry, reload } = setup({ enabled: true });
       activeService = service;
@@ -342,11 +502,8 @@ describe('AppUpdateService', () => {
       await Promise.resolve();
       expect(snack.open).not.toHaveBeenCalled();
       expect(sw.activate).toHaveBeenCalledTimes(1);
-      expect(logger.event).toHaveBeenCalledOnceWith(
-        'update.applied',
-        { trigger: 'autoApply' },
-        undefined,
-      );
+      expectLoggerEvent(logger, 'update.applied', { trigger: 'autoApply' }, undefined);
+      expect(loggerEventCalls(logger, 'update.applied')).toHaveSize(1);
       expect(telemetry.flush).toHaveBeenCalledTimes(1);
       expect(reload).toHaveBeenCalledTimes(1);
       // Loop-guard claimed.
@@ -391,6 +548,28 @@ describe('AppUpdateService', () => {
   });
 
   describe('mid-session snackbar path', () => {
+    it('emits update.versionReady with pathTaken=snackbar after user interaction', () => {
+      const { service, sw, snack, logger } = setup({ enabled: true });
+      activeService = service;
+      sw.check.and.returnValue(new Promise<boolean>(() => undefined));
+      service.initialize();
+      logger.event.calls.reset();
+      dispatchPointerDown();
+      sw.versions$.next(makeVersionReady('current-build', 'next-build'));
+      expect(snack.open).toHaveBeenCalledTimes(1);
+      expect(logger.event).toHaveBeenCalledWith(
+        'update.versionReady',
+        {
+          userInteracted: 'true',
+          guardClaimed: 'false',
+          pathTaken: 'snackbar',
+          fromSha: 'current-build',
+          toSha: 'next-build',
+        },
+        { msSinceBoot: jasmine.any(Number) },
+      );
+    });
+
     it('shows the snackbar after a pointerdown has flipped userInteracted', () => {
       const { service, sw, snack } = setup({ enabled: true });
       activeService = service;
@@ -426,11 +605,8 @@ describe('AppUpdateService', () => {
       snack.action.next();
       await Promise.resolve();
       expect(sw.activate).toHaveBeenCalledTimes(1);
-      expect(logger.event).toHaveBeenCalledOnceWith(
-        'update.applied',
-        { trigger: 'snackbar' },
-        undefined,
-      );
+      expectLoggerEvent(logger, 'update.applied', { trigger: 'snackbar' }, undefined);
+      expect(loggerEventCalls(logger, 'update.applied')).toHaveSize(1);
       expect(telemetry.flush).toHaveBeenCalledTimes(1);
       expect(reload).not.toHaveBeenCalled();
       if (!resolveFlush) {
@@ -455,7 +631,7 @@ describe('AppUpdateService', () => {
       snack.action.next();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(logger.warn).toHaveBeenCalledWith('update.activate.failed');
-      expect(logger.event).not.toHaveBeenCalled();
+      expect(loggerEventCalls(logger, 'update.applied')).toHaveSize(0);
       expect(telemetry.flush).not.toHaveBeenCalled();
       expect(reload).toHaveBeenCalledTimes(1);
     });
