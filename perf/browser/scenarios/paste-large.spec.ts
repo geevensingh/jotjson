@@ -10,19 +10,38 @@
 //   7. CDP `Tracing.start/end` writes a `.trace.json`.
 //
 // Paste mechanism (chosen by `pickPasteMethod(size)`):
-//   - `10k` + `100k`: REAL keyboard paste (Ctrl+V against a clipboard
-//     preloaded via `navigator.clipboard.writeText`). Exercises the
-//     production paste pipeline end-to-end, including Monaco's
-//     onPaste handler and `home.onEditorPaste`.
-//   - `1m`: programmatic `monaco.editor.setValue()`. The 24 MB
-//     wide-aoo.1m payload exceeds Chromium's silent clipboard cap;
-//     keyboard paste would either truncate or throw. setValue is the
-//     stress-test path (R-A) and emits no paste.handle.editor event.
+//   - All sizes (10k, 100k, 1m): programmatic `monaco.editor.setValue()`.
+//     v1 attempted real Ctrl+V at 10k + 100k; the 10k path proved flaky
+//     against the `paste.handle.editor` harness assertion and the 100k
+//     path timed out the editor `waitFor` even at 60s on the v1
+//     reference machine. Issue #218 tracks bringing the real keyboard
+//     pipeline online; until then, every row carries `pasteMethod:
+//     "setvalue"` and the bench measures the post-paste render path
+//     (Monaco model update -> Angular detection -> tree render),
+//     not the editor's onDidPaste handler.
+//   - `1m`: same as above; 24 MB wide-aoo also exceeds Chromium's
+//     silent clipboard cap, so setValue would be the only option even
+//     if #218 lands.
+//
+// Size gates (v1):
+//   - `1m`: gated behind `PERF_FORCE_1M=1` (issue #217). Each timed
+//     iter at this size can exceed Playwright's 10-min per-test
+//     timeout.
+//   - `100k`: gated behind `PERF_FORCE_100K=1` (issue #218). The
+//     bench runs 8 page.goto -> 100k-render iters per fixture, and
+//     the renderer accumulates state across iters until the
+//     post-`goto` `editor.waitFor` exceeds even 60s. This affects
+//     both `keyboard` and `setvalue` paths equally (the failure is
+//     pre-paste, at editor-load time). The default `paste-large`
+//     matrix is 10k only; flip the env var for centerpiece /
+//     on-demand 100k captures.
 //
 // `pasteMethod` is recorded as an additive row field (per the schema
 // convention documented in `scripts/perf/baseline.mjs`), NOT as a
 // suffix on the 4-tuple `rowKey`. This keeps `perfRowKey` /
 // `parsePerfRowKey` / `perf-targets.schema.json` regex parity intact.
+// The field accepts `"keyboard"` for forward compatibility when #218
+// brings the real-paste path online.
 //
 // Output: rows emitted via console.log sentinel `@@PERF_L3@@<json>@@END@@`,
 // captured by `scripts/perf/run-l3.mjs` into `perf-results/<utc>/layer-3.jsonl`,
@@ -62,12 +81,13 @@ function emitRow(row: object): void {
 }
 
 /**
- * Selects the paste mechanism for each size tier. 10k + 100k exercise
- * the real Ctrl+V pipeline; 1m falls back to programmatic setValue
- * because the 24 MB wide-aoo payload exceeds Chromium's clipboard cap.
+ * Selects the paste mechanism for each size tier. v1 uses programmatic
+ * setValue at every size; see file-header comment + issue #218 for the
+ * keyboard-pipeline status. The function intentionally retains its
+ * size-based shape so re-enabling keyboard at smaller tiers (once #218
+ * lands) is a one-line change.
  */
-function pickPasteMethod(size: string): PasteMethod {
-  if (size === '10k' || size === '100k') return 'keyboard';
+function pickPasteMethod(_size: string): PasteMethod {
   return 'setvalue';
 }
 
@@ -91,10 +111,16 @@ async function performSetValuePaste(page: Page, json: string): Promise<void> {
   }, json);
 }
 
+// Dormant in v1: real Ctrl+V flow is wired but `pickPasteMethod` returns
+// `'setvalue'` for every size pending issue #218. Keeping the code here
+// (vs deleting it) makes re-enabling a one-line change in
+// `pickPasteMethod` and preserves the schema convention (the row
+// `pasteMethod` field stays defined for both literal values).
 async function performKeyboardPaste(page: Page, json: string, size: string): Promise<void> {
-  // Preload the clipboard. The page must have clipboard permission;
-  // Playwright grants it automatically when `navigator.clipboard` is
-  // used from an `evaluate` callback.
+  // Preload the clipboard. Re-enabling requires granting clipboard
+  // permission via `test.use({ permissions: ['clipboard-read',
+  // 'clipboard-write'] })` near the top of this file; without it
+  // Chromium throws `NotAllowedError: Write permission denied`.
   await page.evaluate(async (text) => {
     await navigator.clipboard.writeText(text);
   }, json);
@@ -122,6 +148,14 @@ async function performKeyboardPaste(page: Page, json: string, size: string): Pro
 
 for (const fixture of FIXTURES) {
   test(`paste-large: ${fixture.shape} @ ${fixture.size}`, async ({ page }) => {
+    test.skip(
+      fixture.size === '1m' && !process.env['PERF_FORCE_1M'],
+      'L3 1m tier gated behind PERF_FORCE_1M=1 (issue #217)',
+    );
+    test.skip(
+      fixture.size === '100k' && !process.env['PERF_FORCE_100K'],
+      'L3 100k tier gated behind PERF_FORCE_100K=1 (issue #218)',
+    );
     test.setTimeout(10 * 60 * 1000);
 
     const json = generate({ shape: fixture.shape, approxNodes: fixture.approxNodes });

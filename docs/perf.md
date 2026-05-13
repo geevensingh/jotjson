@@ -138,6 +138,64 @@ across the timed iterations. `bytesAlloc*` columns from earlier
 revisions are gone; readers should use `heapRetainedDelta*` and the
 new `heapWorkingSet*` columns.
 
+### v1 reference machine
+
+The repository commits one whitelisted baseline at
+`perf-baselines/win32-x64-CPC-geeve-YN4D4.json` as the **v1 reference
+baseline**. This is the only `perf-baselines/*.json` file tracked in
+git; every other machine's baseline stays gitignored.
+
+Hardware snapshot (the machine that produced the v1 reference baseline):
+
+| Component | Value |
+|---|---|
+| CPU | AMD EPYC 7763 64-Core Processor |
+| Cores | 8 physical, 16 logical |
+| RAM | 64 GB |
+| OS | Windows 11 Enterprise (10.0.26200) |
+| Node | v24.15.0 |
+| Chrome | 148.0.7778.96 |
+| Machine label | `win32-x64-CPC-geeve-YN4D4` |
+
+The reference baseline is **CI-dormant**: `npm run perf:all` does not
+run in CI today, so the committed numbers are referenced only by local
+invocations of `npm run perf:diff`. Expect drift between your local
+runs and the reference (different CPU model + thermals + background
+load); the +/-15% delta threshold absorbs most of that. F-3 tracks the
+CI-enforcement decision.
+
+The reference baseline is regenerated when the v1 hardware ages out or
+the schema shifts (next bump after schemaVersion 2). For routine
+contributor work, a non-reference contributor:
+
+1. Captures their own local baseline with their own `PERF_MACHINE`.
+2. Tracks regressions vs. their own baseline (gitignored, not
+   committed).
+3. Cross-references the committed reference baseline only to sanity-check
+   "is my machine in the same ballpark as the reference."
+
+### Paste mechanism (L3 paste-large)
+
+`paste-large.spec.ts` varies the paste path by fixture size to balance
+realism against Chromium's clipboard limits:
+
+| Size | Bytes (~) | Path | Why |
+|---|---|---|---|
+| 10K | 240 KB | `Ctrl+V` against pre-loaded clipboard | Exercises Monaco's onPaste handler + `home.onEditorPaste` end-to-end. |
+| 100K | 2.4 MB | `Ctrl+V` against pre-loaded clipboard | Same as 10K. Bench reads back `navigator.clipboard.readText().length` to catch silent truncation. |
+| 1M | 24 MB | `monaco.editor.setValue()` | Exceeds Chromium's silent clipboard cap; keyboard paste would truncate. setValue is the stress-test path and emits no `paste.handle.editor` event. |
+
+Each row carries an additive `pasteMethod: "keyboard" | "setvalue"`
+field so `perf:diff` knows not to cross-compare them. The field lives
+on the JSONL row + `BaselineEntry`, NOT in the 4-tuple rowKey: the
+rowKey convention is `<layer>.<scenario>.<fixture>.<size>` and harness
+variants live as optional row fields per the schema convention
+documented in `scripts/perf/baseline.mjs`.
+
+If the 100K keyboard tier flakes consistently on your hardware, see
+F-5 in the follow-ups list (options range from longer timeouts to
+dropping 100K from the keyboard path).
+
 ### Freshness
 
 `perf:check-fresh` warns when your baseline is more than 30 days old.
@@ -235,6 +293,15 @@ watchdog timeouts (`browserNoActivityTimeout`,
 `browserDisconnectTimeout`) are likewise bumped to 15 minutes so
 opt-in runs have room.
 
+`scroll-after-expand: wide-aoo @ 10k` is additionally gated behind
+`window.__perfL2ForceWideAooScroll = true` (or `?forcewideaooscroll=1`).
+`expandAll` materializes all 910 sibling nodes at depth 1
+synchronously and each iter takes ~12 minutes on the v1 reference
+machine; without the gate, default `npm run perf:all` would hit the
+15-min Jasmine timeout. `initial-render: wide-aoo @ 10k` and
+`scroll-after-expand: deep25 @ 10k` continue to run by default.
+Tracked in issue #219; the underlying fix is mat-tree virtualization.
+
 The L2 spec writes rows to `console.log` with the sentinel
 `@@PERF_L2@@<json>@@END@@`; `scripts/perf/run-l2.mjs` harvests those
 into `perf-results/<utc>/layer-2.jsonl`. If zero rows are captured,
@@ -251,25 +318,39 @@ prestep of `perf:l2`.
 Three scenarios under `perf/browser/scenarios/`:
 
 1. `paste-large.spec.ts` -- pastes 10K / 100K / 1M wide-aoo JSON into
-   the editor and waits for the first tree row. Paste mechanism varies
-   by size:
-   - **10K + 100K** use a real `Ctrl+V` keyboard paste against a
-     pre-loaded clipboard, exercising Monaco's `onPaste` handler and
-     the `home.onEditorPaste` pipeline end-to-end. The bench
-     pre-counts the harness event buffer and asserts `paste.handle.editor`
-     fires; missing the event indicates the keyboard branch silently
-     failed and the iter is hard-failed.
-   - **1M** uses programmatic `monaco.editor.setValue()`. The 24 MB
-     wide-aoo payload exceeds Chromium's silent clipboard cap;
-     keyboard paste would truncate. `setValue` is the stress-test
-     path and emits no `paste.handle.editor` event.
-   - Each row carries a `pasteMethod: "keyboard" | "setvalue"` field
-     so the baseline distinguishes the two paths. The field is
-     additive (not part of the 4-tuple rowKey); see
-     `scripts/perf/baseline.mjs` for the schema convention.
+   the editor and waits for the first tree row. Paste mechanism in v1:
+   - **All sizes** use programmatic `monaco.editor.setValue()`. The
+     spec is wired for real `Ctrl+V` keyboard paste at 10K + 100K, but
+     v1 commits to `setvalue` everywhere pending issue #218: 10K hit
+     intermittent `paste.handle.editor` harness-event misses and 100K
+     timed out the editor `waitFor` on the v1 reference machine. The
+     keyboard helper (`performKeyboardPaste`) is intentionally retained
+     in the spec; re-enabling it once #218 lands is a one-line change
+     in `pickPasteMethod`.
+   - The 24 MB 1M payload also exceeds Chromium's silent clipboard cap,
+     so it would stay on the `setvalue` path even after #218.
+   - Each row carries a `pasteMethod: "keyboard" | "setvalue"` field.
+     v1 baseline rows all read `setvalue`; the field exists so future
+     keyboard rows can coexist without changing the rowKey shape. See
+     `scripts/perf/baseline.mjs` for the additive-field convention.
 2. `expand-all.spec.ts` -- 1M-node fixture, click "Expand all".
 3. `scroll-after-expand.spec.ts` -- 1M-node fixture, expand-all, then
    50 wheel events at ~60Hz over the tree pane.
+
+**L3 1m + 100k tiers gated by default**: `paste-large @ 1m`, all
+`expand-all` tests, and all `scroll-after-expand` tests skip themselves
+unless `PERF_FORCE_1M=1` is set. `paste-large @ 100k` skips itself
+unless `PERF_FORCE_100K=1` is set. Each Playwright test has a 10-min
+timeout; 1m wide-aoo paths frequently exceed that on the v1 reference
+machine, and at 100k the cross-iteration renderer state accumulates
+across the 8 `page.goto` -> 100k-render iters until the
+`editor.waitFor` post-`goto` exceeds even a 60s timeout. Opt in with
+`$env:PERF_FORCE_1M = "1"` / `$env:PERF_FORCE_100K = "1"` (PowerShell)
+or `PERF_FORCE_1M=1` / `PERF_FORCE_100K=1` (bash) before invoking
+`npm run perf:l3` or `npm run perf:all`. Tracked in issues #217 (1m)
+and #218 (100k). The default `paste-large` matrix is 10k only;
+`expand-all`, `scroll-after-expand`, and `paste-large @ 100k` produce
+no rows by default.
 
 Each scenario runs N=7 timed (1 warmup) with the FIRST timed
 iteration captured to:
@@ -376,6 +457,38 @@ npm run perf:clean -- --dry-run
   timeouts. The L2 spec gates 100K behind `?force100k=1` (the
   Karma config sets a 15-min watchdog so the opt-in still works).
   1M is gated similarly behind `?force1m=1`.
+- **L2 `scroll-after-expand: wide-aoo` gated by default**: on a
+  910-node depth-1 fan-out, `JsonTreeComponent.expandAll` triggers
+  one synchronous CD cycle that materializes every sibling at once,
+  taking ~12 minutes per iter on the v1 reference machine. Opt in
+  with `?forcewideaooscroll=1` or `window.__perfL2ForceWideAooScroll
+  = true`. Tracked in issue #219; the long-term fix is mat-tree
+  virtualization or chunked `expandAll`.
+- **L3 1m tier gated behind `PERF_FORCE_1M=1`**: `paste-large @ 1m`,
+  all `expand-all` tests, and all `scroll-after-expand` tests skip
+  themselves by default. The Playwright per-test timeout is 10 min;
+  1m wide-aoo `expand-all` ran 10.1 min on the v1 reference machine
+  and timed out. The bypass env var lets contributors run the full
+  matrix on faster hardware. Tracked in issue #217.
+- **L3 100k tier gated behind `PERF_FORCE_100K=1`**: `paste-large @
+  100k` skips itself by default. The bench runs 8 iters per fixture
+  (1 warmup + 7 timed) with a fresh `page.goto('/')` per iter. At
+  100k the renderer accumulates state across iters until the
+  post-`goto` `editor.waitFor` exceeds even a 60s timeout (observed
+  at iter 7-8 of 8 on the v1 reference machine, both keyboard and
+  setvalue paths). The bypass env var lets contributors run the
+  100k tier on faster hardware or for one-off centerpiece snapshots.
+  Tracked in issue #218; the long-term fix is per-iter
+  fresh-context isolation or CDP `HeapProfiler.collectGarbage`
+  between iters.
+- **L3 paste path uses `setValue` at every size in v1**: the
+  `paste-large.spec.ts` keyboard helper is wired but disabled in
+  `pickPasteMethod` -- 10K hit intermittent `paste.handle.editor`
+  harness misses and 100K timed out the editor `waitFor` on the v1
+  reference machine. The bench measures the post-paste render path
+  (model update -> Angular CD -> tree render), not Monaco's
+  `onDidPaste`. Tracked in issue #218; re-enabling is a one-line
+  change in `pickPasteMethod` once #218 lands.
 - **NFR-faithful ~5 MB fixture deferred**: the 1M synthetic wide-aoo
   case exercises the same paste/render stress path, while F-2 tracks a
   fixture that maps directly to DESIGN_SPEC NFR #1.
