@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 2,
+  "machineLabel": "win32-x64-CPC-geeve-YN4D4",
+  "lastUpdatedUtc": "2026-05-13T01:11:28.129Z",
+  "codeShaAtBaseline": "d380114",
+  "rows": {
+    "1.build-tree.deep25.10k": {
+      "wallNsMedian": 13036750,
+      "wallNsIqrLow": 12748100,
+      "wallNsIqrHigh": 13244200,
+      "iters": 20,
+      "approxNodes": 10000,
+      "heapRetainedDeltaMedian": 2296,
+      "heapWorkingSetMedian": 38060952,
+      "heapWorkingSetMax": 38111672
+    },
+    "1.build-tree.wide-aoo.10k": {
+      "wallNsMedian": 2051500,
+      "wallNsIqrLow": 1888450,
+      "wallNsIqrHigh": 2398225,
+      "iters": 20,
+      "approxNodes": 10000,
+      "heapRetainedDeltaMedian": 144,
+      "heapWorkingSetMedian": 5113804,
+      "heapWorkingSetMax": 5267600
+    },
+    "1.build-tree.deep25.100k": {
+      "wallNsMedian": 269572500,
+      "wallNsIqrLow": 265946175,
+      "wallNsIqrHigh": 276230600,
+      "iters": 20,
+      "approxNodes": 100000,
+      "heapRetainedDeltaMedian": 0,
+      "heapWorkingSetMedian": 213266092,
+      "heapWorkingSetMax": 213558048
+    },
+    "1.build-tree.wide-aoo.100k": {
+      "wallNsMedian": 18523300,
+      "wallNsIqrLow": 16812900,
+      "wallNsIqrHigh": 20247750,
+      "iters": 20,
+      "approxNodes": 100000,
+      "heapRetainedDeltaMedian": 2808,
+      "heapWorkingSetMedian": 51163548,
+      "heapWorkingSetMax": 51279016
+    },
+    "1.build-tree.deep25.1m": {
+      "wallNsMedian": 2869274700,
+      "wallNsIqrLow": 2832422225,
+      "wallNsIqrHigh": 2936685450,
+      "iters": 20,
+      "approxNodes": 1000000,
+      "heapRetainedDeltaMedian": 0,
+      "heapWorkingSetMedian": 2134982244,
+      "heapWorkingSetMax": 2135247880
+    },
+    "1.build-tree.wide-aoo.1m": {
+      "wallNsMedian": 374470400,
+      "wallNsIqrLow": 367227875,
+      "wallNsIqrHigh": 411539900,
+      "iters": 20,
+      "approxNodes": 1000000,
+      "heapRetainedDeltaMedian": 144,
+      "heapWorkingSetMedian": 360671536,
+      "heapWorkingSetMax": 360780208
+    },
+    "1.parse.deep25.10k": {
+      "wallNsMedian": 3247750,
+      "wallNsIqrLow": 2891200,
+      "wallNsIqrHigh": 7630575,
+      "iters": 20,
+      "approxNodes": 10000,
+      "heapRetainedDeltaMedian": 7324,
+      "heapWorkingSetMedian": 1953340,
+      "heapWorkingSetMax": 2087656
+    },
+    "1.parse.wide-aoo.10k": {
+      "wallNsMedian": 7278000,
+      "wallNsIqrLow": 5492950,
+      "wallNsIqrHigh": 11981125,
+      "iters": 20,
+      "approxNodes": 10000,
+      "heapRetainedDeltaMedian": 16656,
+      "heapWorkingSetMedian": 5958544,
+      "heapWorkingSetMax": 8027896
+    },
+    "1.parse.deep25.100k": {
+      "wallNsMedian": 32482900,
+      "wallNsIqrLow": 31293000,
+      "wallNsIqrHigh": 33370775,
+      "iters": 20,
+      "approxNodes": 100000,
+      "heapRetainedDeltaMedian": 0,
+      "heapWorkingSetMedian": 18754732,
+      "heapWorkingSetMax": 18790128
+    },
+    "1.parse.wide-aoo.100k": {
+      "wallNsMedian": 82577350,
+      "wallNsIqrLow": 67776225,
+      "wallNsIqrHigh": 98323700,
+      "iters": 20,
+      "approxNodes": 100000,
+      "heapRetainedDeltaMedian": 4920,
+      "heapWorkingSetMedian": 52305196,
+      "heapWorkingSetMax": 58709352
+    },
+    "1.parse.deep25.1m": {
+      "wallNsMedian": 302715200,
+      "wallNsIqrLow": 298957475,
+      "wallNsIqrHigh": 314099400,
+      "iters": 20,
+      "approxNodes": 1000000,
+      "heapRetainedDeltaMedian": 1740,
+      "heapWorkingSetMedian": 112349188,
+      "heapWorkingSetMax": 112381152
+    },
+    "1.parse.wide-aoo.1m": {
+      "wallNsMedian": 762551400,
+      "wallNsIqrLow": 754213600,
+      "wallNsIqrHigh": 778584850,
+      "iters": 20,
+      "approxNodes": 1000000,
+      "heapRetainedDeltaMedian": 304,
+      "heapWorkingSetMedian": 466836368,
+      "heapWorkingSetMax": 467233136
+    },
+    "2.scroll-after-expand.deep25.10k": {
+      "wallNsMedian": 7915500000,
+      "wallNsIqrLow": 7882099999.904633,
+      "wallNsIqrHigh": 8101299999.952316,
+      "iters": 5,
+      "approxNodes": 10000
+    },
+    "2.initial-render.deep25.10k": {
+      "wallNsMedian": 4998700000.047684,
+      "wallNsIqrLow": 4970799999.952316,
+      "wallNsIqrHigh": 5037100000.143051,
+      "iters": 5,
+      "approxNodes": 10000
+    },
+    "2.initial-render.wide-aoo.10k": {
+      "wallNsMedian": 4488399999.856949,
+      "wallNsIqrLow": 4475299999.952316,
+      "wallNsIqrHigh": 4556799999.952316,
+      "iters": 5,
+      "approxNodes": 10000
+    },
+    "3.paste-large.wide-aoo.10k": {
+      "wallNsMedian": 440000000,
+      "wallNsIqrLow": 433000000,
+      "wallNsIqrHigh": 489000000,
+      "iters": 7,
+      "approxNodes": 10000,
+      "longestTaskMsMedian": 102,
+      "pasteMethod": "setvalue"
+    }
+  }
+}
