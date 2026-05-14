@@ -86,7 +86,7 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    # dorny/paths-filter@v3 uses the GitHub REST API to list changed
+    # dorny/paths-filter@v4 uses the GitHub REST API to list changed
     # files on pull_request events, which requires `pull-requests: read`
     # per its README. Base-repo PRs work with `contents: read` alone via
     # the default token's implicit allowances, but fork PRs or future
@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # dorny/paths-filter@v3 uses git commands (not the API) on
+          # dorny/paths-filter@v4 uses git commands (not the API) on
           # `push` events where the pushed branch equals `base`, which
           # is our `push: main` case. It diffs against "the most recent
           # commit on the same branch before the push" -- needing local
@@ -111,7 +111,7 @@ jobs:
           # harmless.)
           fetch-depth: 0
       - id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           # paths-filter treats triggers other than pull_request /
           # pull_request_target / push / merge_group as "all paths
