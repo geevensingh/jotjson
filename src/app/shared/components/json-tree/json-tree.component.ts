@@ -1014,7 +1014,7 @@ export class JsonTreeComponent {
     let regex: RegExp | undefined;
     if (query && regexMode) {
       try {
-        regex = new RegExp(query, caseSensitive ? '' : 'i');
+        regex = new RegExp(query, (caseSensitive ? '' : 'i') + 'm');
       } catch {
         return { set: new Set(), order: [] };
       }
@@ -1055,7 +1055,8 @@ export class JsonTreeComponent {
           }
           if (scope === 'values' || scope === 'both') {
             if (node.type !== 'object' && node.type !== 'array') {
-              if (test(this.renderLeaf(node.value, node.type))) record(node.pathString);
+              if (test(this.valueHaystack(node, { rawForStrings: regexMode })))
+                record(node.pathString);
             }
           }
         }
@@ -2823,9 +2824,14 @@ export class JsonTreeComponent {
       return;
     }
     this.logger.info('tree.contextMenu.searchByValue');
-    // Strings need to be unquoted: renderLeaf wraps them in JSON quotes
-    // for display, but the search engine matches against the raw value,
-    // so we feed it the raw string here too.
+    // findByValue writes to the substring-mode search query (regex is
+    // forced off below). Substring mode's haystack for string leaves is
+    // the JSON-escaped form (see `valueHaystack` JSDoc), so the raw
+    // string here matches as a substring inside the quoted hay -
+    // e.g. query `hello` finds within hay `"hello"`. Pre-existing
+    // limitation: values containing JSON-escape characters (`"`, `\`,
+    // `\n`, `\t`, ...) do NOT round-trip correctly through this path -
+    // tracked separately; do not extend the workaround here.
     const query =
       node.type === 'string' ? (node.value as string) : this.renderLeaf(node.value, node.type);
     this.prefs.update({
@@ -3665,6 +3671,39 @@ export class JsonTreeComponent {
       default:
         return '';
     }
+  }
+
+  /**
+   * Returns the haystack text used by tree-search when matching a node's
+   * value. Mode-dependent for string leaves only:
+   *
+   * - `rawForStrings: false` (default, substring mode): returns the
+   *   canonical JSON-escaped display form via `renderLeaf` -
+   *   e.g. value `hello` -> `"hello"` (with quotes), value `a\nb` (real
+   *   newline) -> `"a\\nb"` (JSON escape `\n`). This preserves the
+   *   long-standing substring contract that typing what you see in the
+   *   tree finds what you see (issue #95 Phase 0).
+   * - `rawForStrings: true` (regex mode, and the planned `exact` /
+   *   `starts_with` / `ends_with` modes in plan #3): returns the raw
+   *   string value with no JSON wrapping - e.g. value `hello` -> `hello`,
+   *   value `a\nb` -> `a<LF>b`. Regex anchors `^/$` and escape-sequence
+   *   metachars like `\n` then behave as users typing native regex
+   *   expect.
+   *
+   * Non-string types always pass through `renderLeaf` because their
+   * display form has no JSON wrapping (numbers `42`, booleans `true`,
+   * `null`); the mode flag is a no-op for them. Containers return `''`
+   * via `renderLeaf` and are excluded by the caller before reaching
+   * here.
+   *
+   * See `DESIGN_SPEC.md:498` and the §Search highlight match-semantics
+   * note for the full mode x type contract.
+   */
+  private valueHaystack(node: TreeNode, opts: { rawForStrings: boolean }): string {
+    if (opts.rawForStrings && node.type === 'string') {
+      return String(node.value);
+    }
+    return this.renderLeaf(node.value, node.type);
   }
 
   /**
