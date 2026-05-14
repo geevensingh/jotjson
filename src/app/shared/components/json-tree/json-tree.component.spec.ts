@@ -847,6 +847,48 @@ describe('JsonTreeComponent', () => {
     });
   });
 
+  describe('searchHits regex mode value haystack', () => {
+    it('regex anchors match the raw string value (^hello$ matches "hello")', async () => {
+      await createWith({ alpha: 'hello' });
+      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      cmp.search.set('^hello$');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.alpha')).toBeTrue();
+    });
+
+    it('regex \\n metachar matches a real newline in the raw value', async () => {
+      await createWith({ note: 'first\nsecond' });
+      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      cmp.search.set('first\\nsecond');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.note')).toBeTrue();
+    });
+
+    it('regex compiles with m flag: ^hello$ matches mid-line in a multi-line value', async () => {
+      await createWith({ note: 'line1\nhello\nline2' });
+      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      cmp.search.set('^hello$');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.note')).toBeTrue();
+    });
+
+    it('regex anchors match a value containing an embedded quote (^a"b$ matches a"b)', async () => {
+      await createWith({ q: 'a"b' });
+      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      cmp.search.set('^a"b$');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.q')).toBeTrue();
+    });
+
+    it('regex ^$ matches an empty string value', async () => {
+      await createWith({ blank: '' });
+      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      cmp.search.set('^$');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.blank')).toBeTrue();
+    });
+  });
+
   describe('search by value type', () => {
     beforeEach(async () => {
       // Mix of types so each filter has a distinguishable target:
@@ -4560,7 +4602,7 @@ describe('JsonTreeComponent', () => {
         expect(cmp.displayLeaf(node)).toBe('"a\\nb"');
       });
 
-      it('renderLeaf is unchanged by the pill (search uses the JSON-escaped form)', async () => {
+      it('renderLeaf is unchanged by the pill (substring search uses the JSON-escaped form)', async () => {
         await createWith({ note: 'a\nb' });
         cmp.expandAll();
         fixture.detectChanges();
@@ -4572,7 +4614,7 @@ describe('JsonTreeComponent', () => {
         expect(cmp.renderLeaf(node.value, node.type)).toBe('"a\\nb"');
       });
 
-      it('search continues to match the JSON-escaped substring after the pill click', async () => {
+      it('substring search continues to match the JSON-escaped form after the pill click', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
