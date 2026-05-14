@@ -18,11 +18,13 @@ import {
   viewChildren,
   type WritableSignal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuTrigger } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { filter, finalize, take, timeout } from 'rxjs';
 import type { BlobHighlight, FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation.service';
@@ -357,6 +359,30 @@ export class JsonTreeComponent {
    * window after user scroll.
    */
   private readonly renderedRange = signal<{ start: number; end: number }>({ start: 0, end: 0 });
+
+  /**
+   * Phase 2 (issue #95), round 2 PR-feedback follow-up -- guard
+   * against the snap effect chasing a programmatic scroll. `moveFocusTo`
+   * sets this to `true` when it starts a `viewport.scrollToIndex` for
+   * an unmounted target row; the snap effect short-circuits while
+   * the flag is `true` so it doesn't clobber `focusedPath` to a
+   * mid-flight intermediate row before the target lands in the
+   * rendered range. Cleared via `finalize()` on the renderedRangeStream
+   * subscription so success, error/timeout, and viewport-destroy all
+   * converge on the same clear; gated on `moveFocusToken` so stale
+   * subscriptions from prior calls cannot clear the flag during a
+   * later in-flight move.
+   */
+  private readonly focusingProgrammatically = signal(false);
+
+  /**
+   * Phase 2 (issue #95), round 2 PR-feedback follow-up -- monotonic
+   * token for coalescing back-to-back `moveFocusTo` calls (key-repeat
+   * scenario). Each call increments the token; subsequent rAF /
+   * subscription callbacks check `myToken === this.moveFocusToken`
+   * before acting so only the most-recent call commits focus.
+   */
+  private moveFocusToken = 0;
 
   /**
    * Phase 2 (issue #95) -- authoritative expansion state, replacing
@@ -1483,7 +1509,7 @@ export class JsonTreeComponent {
     });
 
     // Phase 2 (issue #95) -- snap `focusedPath` into the rendered range
-    // when the user scrolls the focused row out of the viewport. With
+    // when the focused row goes out of the rendered window. With
     // `<mat-tree>` every row was in the DOM, so `tabindex="0"` on the
     // focused row was always present and Tab-into-tree-from-outside
     // always worked. With CDK virtual scroll, only rows in the rendered
@@ -1491,21 +1517,34 @@ export class JsonTreeComponent {
     // row no element has `tabindex="0"` and Tab skips the tree
     // entirely (broken roving-tabindex invariant per WAI-ARIA Tree).
     //
-    // The fix: when `renderedRange` changes such that the index for
-    // `focusedPath` falls outside `[start, end)`, snap `focusedPath`
-    // to the first non-close row at the top of the rendered window.
-    // We do NOT call DOM `focus()` or `scrollIntoView` -- user scroll
-    // is the trigger, so we follow the user rather than fighting them.
+    // The effect fires on changes to `flatList`, `renderedRange`, or
+    // `visibleIndexByPath` -- the three signals that can move the
+    // focused row's index relative to the rendered window:
+    //   (a) user scroll -> `renderedRange` changes
+    //   (b) expansion/collapse -> `flatList` (and derived
+    //       `visibleIndexByPath`) changes; focused row's index shifts
+    //       even though `scrollTop` is unchanged
+    // The `focusedPath` READ is `untracked` so this effect does NOT
+    // fire on programmatic or keyboard-driven `focusedPath` writes;
+    // that responsibility belongs to the keyboard handler / moveFocusTo
+    // path (which scrolls the viewport when the target row is unmounted).
+    // `focusingProgrammatically` short-circuits the snap while
+    // `moveFocusTo` (or the existing smooth-scroll paths in
+    // `expandAndScroll`) is mid-flight, so the snap effect doesn't
+    // chase intermediate `renderedRange` emissions and clobber focus
+    // before the target row lands in the rendered window.
     //
-    // Bailouts handle the synchronous-flatList vs microtask-rendered-range
-    // race (collapseAll + flatList shrink can leave `range.start >=
-    // list.length` for one tick) and let the existing recovery effect
-    // above own ancestor-collapse / re-parse cases.
+    // Edge case: if every row in `[range.start, range.end)` is a
+    // synthetic close-brace row, the loop falls through without
+    // setting `focusedPath`. The existing recovery effect above
+    // (which tracks `focusedPath`) acts as a backstop on the next
+    // `map.has(path) === false` evaluation.
     effect(() => {
       const list = this.flatList();
       const range = this.renderedRange();
-      const path = this.focusedPath();
       const map = this.visibleIndexByPath();
+      if (untracked(() => this.focusingProgrammatically())) return;
+      const path = untracked(() => this.focusedPath());
       if (path === null || list.length === 0) return;
       const focusedIndex = map.get(path);
       if (focusedIndex === undefined) return;
@@ -1531,8 +1570,9 @@ export class JsonTreeComponent {
     // first emission and leave `renderedRange` stuck at `{0, 0}` until
     // the user scrolls. Seed from `getRenderedRange()` synchronously so
     // the snap effect sees a non-empty range from the first tick.
-    // `untracked` around the seed + subscribe avoids re-tracking the
-    // stream emissions (we only depend on the viewport reference identity).
+    // `untracked` around the writes avoids re-tracking the stream
+    // emissions; the `getRenderedRange()` read is a plain getter (no
+    // signal access) so it does not need wrapping.
     effect((onCleanup) => {
       const vp = this.viewport();
       if (!vp) return;
@@ -1626,19 +1666,101 @@ export class JsonTreeComponent {
 
   /**
    * M7g-3b. Updates `focusedPath` and DOM-focuses the matching row
-   * after Angular renders the new `tabindex=0`. Defers to
-   * `requestAnimationFrame` so the tabindex flip is committed before
-   * we call `focus()`.
+   * after Angular renders the new `tabindex=0`.
+   *
+   * Defers to `requestAnimationFrame` so the tabindex flip is
+   * committed before we call `focus()`. With CDK virtual scroll
+   * (Phase 2, issue #95), the target row may be **unmounted** when
+   * `focusedPath` points outside the rendered window. In that case
+   * the synchronous `querySelector` returns `null`, so we fall back
+   * to scrolling the viewport to the target index and waiting for
+   * the next `renderedRangeStream` emission that contains the target
+   * before focusing.
+   *
+   * The fallback flow:
+   *   1. `focusingProgrammatically.set(true)` so the snap effect
+   *      short-circuits while we scroll (otherwise it would chase
+   *      the in-flight scroll and clobber `focusedPath`).
+   *   2. `viewport.scrollToIndex(index, 'auto')` -- `'auto'` not
+   *      `'smooth'` so the rendered range arrives in one emission
+   *      instead of over many frames.
+   *   3. Subscribe to `renderedRangeStream` filtered for
+   *      `target index in [start, end)`, take(1), timeout(1000),
+   *      takeUntilDestroyed. The `finalize()` clears the flag,
+   *      gated on the move-token so a stale subscription from a
+   *      prior call cannot clear the flag during a later in-flight
+   *      move.
+   *   4. On `next`, inner rAF runs `querySelector` again (CD flushes
+   *      in microtasks between the renderedRange emission and this
+   *      rAF, so the row is materialized) and calls `focus()`.
+   *   5. On `error` (timeout because `scrollToIndex` was a silent
+   *      no-op -- e.g., the requested offset equals the current
+   *      `scrollTop`), fall back to snapping `focusedPath` into
+   *      whatever is currently in the rendered range so we never
+   *      leave focus pinned to an unmounted row.
    */
   private moveFocusTo(path: string | null): void {
     if (path === null) return;
     this.focusedPath.set(path);
+    const myToken = ++this.moveFocusToken;
     requestAnimationFrame(() => {
+      if (myToken !== this.moveFocusToken) return;
       const el = this.host.nativeElement.querySelector(
         `[data-path="${cssEscape(path)}"]`,
       ) as HTMLElement | null;
-      el?.focus({ preventScroll: false });
-      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (el) {
+        el.focus({ preventScroll: true });
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
+      const vp = this.viewport();
+      const index = this.visibleIndexByPath().get(path);
+      if (!vp || index === undefined) return;
+      this.focusingProgrammatically.set(true);
+      vp.scrollToIndex(index, 'auto');
+      vp.renderedRangeStream
+        .pipe(
+          filter(({ start, end }) => index >= start && index < end),
+          take(1),
+          timeout(1000),
+          takeUntilDestroyed(this.destroyRef),
+          finalize(() => {
+            if (myToken === this.moveFocusToken) {
+              this.focusingProgrammatically.set(false);
+            }
+          }),
+        )
+        .subscribe({
+          next: () => {
+            // CD flushes in microtasks between this rAF and the next,
+            // so `cdkVirtualFor` has materialized the row by the
+            // time the inner rAF fires.
+            requestAnimationFrame(() => {
+              if (myToken !== this.moveFocusToken) return;
+              const targetEl = this.host.nativeElement.querySelector(
+                `[data-path="${cssEscape(path)}"]`,
+              ) as HTMLElement | null;
+              targetEl?.focus({ preventScroll: true });
+            });
+          },
+          error: () => {
+            // `scrollToIndex` was a silent no-op (offset already
+            // matched, or browser clamped). Re-snap into whatever
+            // IS in the current rendered range so we don't leave
+            // `focusedPath` pinned to an unmounted row.
+            if (myToken !== this.moveFocusToken) return;
+            const range = untracked(() => this.renderedRange());
+            const list = untracked(() => this.flatList());
+            const upper = Math.min(range.end, list.length);
+            for (let i = range.start; i < upper; i++) {
+              const item = list[i]!;
+              if (item.kind !== 'close') {
+                this.focusedPath.set(item.node.pathString);
+                break;
+              }
+            }
+          },
+        });
     });
   }
 

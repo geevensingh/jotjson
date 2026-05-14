@@ -214,6 +214,241 @@ describe('JsonTreeComponent (a11y)', () => {
       .toContain(snappedPath);
   });
 
+  it('snaps focusedPath into the rendered range when a programmatic expansion shifts the focused row past renderedRange.end', async () => {
+    // Phase 2 round 2 (issue #95, PR #236 follow-up) -- the snap
+    // effect must fire on flatList / visibleIndexByPath changes
+    // (not just renderedRange changes) to defend the roving-tabindex
+    // invariant when expansion shifts the focused row's index past
+    // the rendered window without scrolling.
+    //
+    // Round 1's plan would have untracked all three deps; the
+    // skeptic flagged that this would silently regress this case
+    // (expansion above the focused row leaves scrollTop unchanged,
+    // so the renderedRange-only snap from round 1 would never fire).
+    // The locked fix keeps flatList / renderedRange / visibleIndexByPath
+    // tracked and only untracks the focusedPath READ.
+
+    // Build a tree where one container at the top alphabetically
+    // precedes a long list of leaves. We expandAll(), then collapse
+    // aaa_container explicitly so flatList = [root, aaa_container,
+    // leaf_001, ..., leaf_100]. Re-expanding aaa_container later
+    // pushes every leaf forward by ~100 rows.
+    const largeValue: Record<string, unknown> = {};
+    largeValue['aaa_container'] = {};
+    const container = largeValue['aaa_container'] as Record<string, number>;
+    for (let i = 0; i < 100; i++) container[`child_${String(i).padStart(3, '0')}`] = i;
+    for (let i = 0; i < 100; i++) largeValue[`leaf_${String(i).padStart(3, '0')}`] = i;
+
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [JsonTreeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideNoopAnimations(),
+        { provide: MatSnackBar, useValue: { open: jasmine.createSpy('snackOpen') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(JsonTreeComponent);
+    fixture.componentRef.setInput('value', largeValue);
+    const host = fixture.nativeElement as HTMLElement;
+    host.style.height = '600px';
+    host.style.width = '1000px';
+    teardown = attachFixtureToBody(fixture, 'dark');
+
+    // expandAll() so every node is in flatList, then collapse the
+    // big container explicitly so its 100 children are NOT in flatList.
+    await drainViewport(fixture);
+    const cmp = fixture.componentInstance;
+    const helpers = cmp.__getHelpersForTesting();
+
+    const containerNode = helpers.findNode((n) => n.pathString === '$.aaa_container');
+    expect(containerNode).withContext('aaa_container should exist after expandAll').toBeTruthy();
+    helpers.setExpanded(containerNode!, false);
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    // Focus a leaf that is currently in the rendered window.
+    const targetPath = '$.leaf_005';
+    const targetNode = helpers.findNode((n) => n.pathString === targetPath);
+    expect(targetNode).withContext('leaf_005 should exist in the tree').toBeTruthy();
+    // `onSelect` early-returns when `event.target` is not an Element.
+    // Use a real MouseEvent with the row element as target so the
+    // click flow exercises `focusedPath.set(node.pathString)`.
+    const leafRow = host.querySelector(
+      `.tree-row[data-path="${targetPath.replace(/\./g, '\\.').replace(/\$/g, '\\$')}"]`,
+    );
+    expect(leafRow).withContext('leaf_005 row should be rendered before we click it').toBeTruthy();
+    const fakeClick = new MouseEvent('click', { bubbles: true });
+    Object.defineProperty(fakeClick, 'target', { value: leafRow, configurable: true });
+    cmp.onSelect(targetNode!, fakeClick);
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const beforeExpansionFocused = host.querySelector('.tree-row[tabindex="0"]');
+    expect(beforeExpansionFocused?.getAttribute('data-path'))
+      .withContext('focusedPath should be on leaf_005 after onSelect')
+      .toBe(targetPath);
+
+    // Re-expand aaa_container. flatList grows by 100 rows inserted
+    // BEFORE leaf_005, pushing leaf_005's flat index outside the
+    // rendered range. scrollTop is unchanged, so renderedRange stays
+    // anchored at the top; the snap effect must move focusedPath
+    // back into the visible window.
+    helpers.setExpanded(containerNode!, true);
+
+    const nextDoubleRaf = (): Promise<void> =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+
+    await nextDoubleRaf();
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+    await nextDoubleRaf();
+    fixture.detectChanges();
+
+    // Snap invariant: exactly one tabindex=0 in the DOM after expansion.
+    const afterExpansionFocused = host.querySelectorAll('.tree-row[tabindex="0"]');
+    expect(afterExpansionFocused.length)
+      .withContext(
+        'exactly one tabindex=0 should still live in the DOM after a programmatic expansion shifts the focused row past renderedRange.end',
+      )
+      .toBe(1);
+
+    // The snapped focused path must point to a row that is currently
+    // in the rendered range -- NOT the original leaf_005 (now offscreen).
+    const snappedPath = afterExpansionFocused[0]!.getAttribute('data-path');
+    expect(snappedPath)
+      .withContext(
+        'focused path must change when the original row is pushed offscreen by expansion',
+      )
+      .not.toBe(targetPath);
+    const allRenderedPaths = Array.from(host.querySelectorAll('.tree-row[role="treeitem"]')).map(
+      (el) => el.getAttribute('data-path'),
+    );
+    expect(allRenderedPaths)
+      .withContext('snapped focusedPath must point to a row currently in the rendered range')
+      .toContain(snappedPath);
+  });
+
+  it('scrolls the viewport and focuses the target when keyboard nav targets an unmounted row', async () => {
+    // Phase 2 round 2 (issue #95, PR #236 follow-up) -- moveFocusTo
+    // must scroll the viewport when the target row is unmounted, then
+    // focus the row after CDK materializes it. With `<mat-tree>`,
+    // `el?.scrollIntoView({behavior:'smooth'})` worked because every
+    // row was in the DOM; with CDK virtual scroll, `el` is `null` when
+    // the row is outside the rendered window, and the no-op silently
+    // breaks keyboard nav (e.g., End key past the rendered range).
+    //
+    // The fix: when the row is unmounted, call `viewport.scrollToIndex`
+    // and subscribe to `renderedRangeStream` for the target index to
+    // land in range, then focus inside an inner rAF.
+
+    const largeValue: Record<string, number> = {};
+    for (let i = 0; i < 150; i++) largeValue[`key_${String(i).padStart(3, '0')}`] = i;
+
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [JsonTreeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideNoopAnimations(),
+        { provide: MatSnackBar, useValue: { open: jasmine.createSpy('snackOpen') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(JsonTreeComponent);
+    fixture.componentRef.setInput('value', largeValue);
+    const host = fixture.nativeElement as HTMLElement;
+    host.style.height = '600px';
+    host.style.width = '1000px';
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const cmp = fixture.componentInstance;
+    const helpers = cmp.__getHelpersForTesting();
+    const viewport = helpers.getViewport();
+    expect(viewport).withContext('viewport view-child should be resolved').toBeTruthy();
+
+    const initialScrollOffset = viewport!.measureScrollOffset();
+    expect(initialScrollOffset)
+      .withContext('test pre-condition: viewport should start scrolled to the top')
+      .toBe(0);
+
+    // Confirm the last key is currently NOT rendered (virtualization
+    // is actually limiting the DOM to a window).
+    const lastKeyPath = '$.key_149';
+    const renderedBefore = Array.from(host.querySelectorAll('.tree-row[role="treeitem"]')).map(
+      (el) => el.getAttribute('data-path'),
+    );
+    expect(renderedBefore)
+      .withContext('test pre-condition: last key should not be rendered before End is pressed')
+      .not.toContain(lastKeyPath);
+
+    // Get the currently-focused node (whichever row has tabindex=0,
+    // which `drainViewport` left at the first visible row).
+    const initialFocused = host.querySelector('.tree-row[tabindex="0"]');
+    expect(initialFocused)
+      .withContext('a row should hold focus before End is pressed')
+      .toBeTruthy();
+    const initialFocusedPath = initialFocused!.getAttribute('data-path')!;
+    const initialFocusedNode = helpers.findNode((n) => n.pathString === initialFocusedPath);
+    expect(initialFocusedNode)
+      .withContext('initial focused node should resolve via findNode')
+      .toBeTruthy();
+
+    // Dispatch the End key by calling the row-level keydown handler
+    // directly. We can't `host.dispatchEvent` because the @HostBinding
+    // is per-row (the template wires `(keydown)="onTreeKeydown($event, node)"`
+    // on each `.tree-row`, not on the component host).
+    const endEvent = new KeyboardEvent('keydown', { key: 'End', bubbles: true });
+    cmp.onTreeKeydown(endEvent, initialFocusedNode!);
+
+    const nextDoubleRaf = (): Promise<void> =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+
+    // Drain the moveFocusTo flow:
+    //   1. The outer rAF in moveFocusTo runs (querySelector returns null
+    //      because the target row is unmounted).
+    //   2. viewport.scrollToIndex fires; CDK schedules a synthetic scroll.
+    //   3. The renderedRangeStream emits with the target index in range.
+    //   4. The inner rAF runs; querySelector now finds the row; focus().
+    // Belt + suspenders: dispatch a synthetic scroll event so the strategy
+    // recomputes its range deterministically in headless Karma.
+    await nextDoubleRaf();
+    viewport!.elementRef.nativeElement.dispatchEvent(new Event('scroll'));
+    viewport!.checkViewportSize();
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+    await nextDoubleRaf();
+    fixture.detectChanges();
+    await nextDoubleRaf();
+    fixture.detectChanges();
+
+    // Viewport actually scrolled.
+    const afterScrollOffset = viewport!.measureScrollOffset();
+    expect(afterScrollOffset)
+      .withContext('viewport.scrollToIndex should have moved scrollTop past zero')
+      .toBeGreaterThan(0);
+
+    // The previously-unmounted last key is now rendered AND has tabindex="0".
+    const focusedRows = host.querySelectorAll('.tree-row[tabindex="0"]');
+    expect(focusedRows.length)
+      .withContext('exactly one tabindex=0 after End targets an unmounted row')
+      .toBe(1);
+    expect(focusedRows[0]!.getAttribute('data-path'))
+      .withContext('focused row should be the End-key target (last visible row)')
+      .toBe(lastKeyPath);
+  });
+
   it('has no critical or serious WCAG 2.1 AA violations (dark theme)', async () => {
     const fixture = await configure();
     teardown = attachFixtureToBody(fixture, 'dark');
