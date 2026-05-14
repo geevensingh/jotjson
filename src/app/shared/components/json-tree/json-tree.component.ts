@@ -520,6 +520,54 @@ export class JsonTreeComponent {
   });
   readonly dataSource = new MatTreeNestedDataSource<TreeNode>();
 
+  // Phase 0.5 -- Expansion-state helpers (issue #95).
+  //
+  // These wrap `treeControl.*` for the duration of Phase 0.5 with no
+  // behavior change. Phase 2 (atomic virtualization landing) swaps the
+  // implementation to read / write `expandedPaths` instead of MatTree's
+  // expansion model. The component-internal callers (and, via the
+  // `__getHelpersForTesting()` seam below, the unit specs) call these
+  // helpers exclusively so Phase 2 is a one-swap rewrite of the bodies.
+  //
+  // Kept private so they don't leak into the component's public API
+  // consumed by `home.component.ts`. The HTML template continues to
+  // read `treeControl.isExpanded(node)` directly until Phase 2 removes
+  // `treeControl` entirely; the template change ships in the same
+  // commit as the data-model swap.
+
+  private isExpanded(node: TreeNode): boolean {
+    return this.treeControl.isExpanded(node);
+  }
+
+  private setExpanded(node: TreeNode, on: boolean): void {
+    if (on) this.treeControl.expand(node);
+    else this.treeControl.collapse(node);
+  }
+
+  private toggleExpanded(node: TreeNode): void {
+    this.treeControl.toggle(node);
+  }
+
+  private collapseAllNodes(): void {
+    this.treeControl.collapseAll();
+  }
+
+  // Test seam exposing the private expansion helpers + an indexed
+  // node lookup (replacing the one `treeControl.dataNodes` spec
+  // access site). Spec calls go through this seam so the production
+  // helpers stay private. Phase 2 keeps this seam identical even
+  // though the implementations swap underneath.
+  __getHelpersForTesting() {
+    return {
+      isExpanded: (node: TreeNode): boolean => this.isExpanded(node),
+      setExpanded: (node: TreeNode, on: boolean): void => this.setExpanded(node, on),
+      toggleExpanded: (node: TreeNode): void => this.toggleExpanded(node),
+      collapseAllNodes: (): void => this.collapseAllNodes(),
+      findNode: (predicate: (n: TreeNode) => boolean): TreeNode | null =>
+        this.treeControl.dataNodes?.find(predicate) ?? null,
+    };
+  }
+
   /**
    * Last build's node count feeds render-slow telemetry after the
    * double-rAF paint window; it is set only when the memoized root build
@@ -711,7 +759,7 @@ export class JsonTreeComponent {
     // (rare but possible if user keyboards through).
     this.expansionVersion();
     if ((cn.type === 'object' || cn.type === 'array') && cn.children?.length) {
-      return this.treeControl.isExpanded(cn) ? 'collapseRow' : 'expandRow';
+      return this.isExpanded(cn) ? 'collapseRow' : 'expandRow';
     }
     return 'copyValue';
   });
@@ -919,7 +967,7 @@ export class JsonTreeComponent {
     const out: TreeNode[] = [];
     const walk = (node: TreeNode): void => {
       out.push(node);
-      if (node.children?.length && this.treeControl.isExpanded(node)) {
+      if (node.children?.length && this.isExpanded(node)) {
         for (const child of node.children) walk(child);
       }
     };
@@ -1424,7 +1472,7 @@ export class JsonTreeComponent {
     const visible = this.visibleRowsInOrder();
     const currentIndex = visible.findIndex((n) => n.pathString === node.pathString);
     const isContainer = !!node.children && node.children.length > 0;
-    const isExpanded = isContainer && this.treeControl.isExpanded(node);
+    const isExpanded = isContainer && this.isExpanded(node);
 
     switch (event.key) {
       case 'ArrowDown': {
@@ -1458,7 +1506,7 @@ export class JsonTreeComponent {
       case 'ArrowRight': {
         event.preventDefault();
         if (isContainer && !isExpanded) {
-          this.treeControl.expand(node);
+          this.setExpanded(node, true);
         } else if (isContainer && isExpanded && node.children && node.children.length > 0) {
           this.moveFocusTo(node.children[0]!.pathString);
         }
@@ -1468,7 +1516,7 @@ export class JsonTreeComponent {
       case 'ArrowLeft': {
         event.preventDefault();
         if (isContainer && isExpanded) {
-          this.treeControl.collapse(node);
+          this.setExpanded(node, false);
         } else {
           const parent = this.parentOf(node);
           if (parent) this.moveFocusTo(parent.pathString);
@@ -1688,7 +1736,7 @@ export class JsonTreeComponent {
   expandNodeAtPath(path: (string | number)[]): void {
     const node = this.nodeIndex().get(formatPath(path));
     if (!node) return;
-    this.treeControl.expand(node);
+    this.setExpanded(node, true);
   }
 
   /**
@@ -1749,7 +1797,7 @@ export class JsonTreeComponent {
     for (let i = 0; i < node.path.length - 1; i++) {
       partial.push(node.path[i] as string | number);
       const ancestor = this.nodeIndex().get(formatPath(partial));
-      if (ancestor) this.treeControl.expand(ancestor);
+      if (ancestor) this.setExpanded(ancestor, true);
     }
     // Defer scroll until after Angular renders the expansion.
     queueMicrotask(() => {
@@ -1776,7 +1824,7 @@ export class JsonTreeComponent {
       if (!node || !node.children) return;
       nodeCount += 1;
       maxDepth = Math.max(maxDepth, relativeDepth);
-      this.treeControl.expand(node);
+      this.setExpanded(node, true);
       for (const child of node.children) walk(child, relativeDepth + 1);
     };
     walk(this.root(), 0);
@@ -1784,18 +1832,18 @@ export class JsonTreeComponent {
   }
 
   collapseAll(): void {
-    this.treeControl.collapseAll();
+    this.collapseAllNodes();
   }
 
   expandToLevel(depth: number, internal = false): void {
     const start = performance.now();
     let nodeCount = 0;
-    this.treeControl.collapseAll();
+    this.collapseAllNodes();
     const walk = (node: TreeNode | undefined): void => {
       if (!node || !node.children) return;
       nodeCount += 1;
       if (node.depth < depth) {
-        this.treeControl.expand(node);
+        this.setExpanded(node, true);
         for (const child of node.children) walk(child);
       }
     };
@@ -2118,8 +2166,8 @@ export class JsonTreeComponent {
       return;
     }
     if ((node.type === 'object' || node.type === 'array') && node.children?.length) {
-      const wasExpanded = this.treeControl.isExpanded(node);
-      this.treeControl.toggle(node);
+      const wasExpanded = this.isExpanded(node);
+      this.toggleExpanded(node);
       this.logger.info('tree.row.doubleClickToggle', {
         action: wasExpanded ? 'collapse' : 'expand',
       });
@@ -2766,7 +2814,7 @@ export class JsonTreeComponent {
   collapseFromHere(node: TreeNode, source: 'top' | 'submenu' = 'submenu'): void {
     if (!node.children?.length) return;
     this.logger.info('tree.contextMenu.collapse', { source });
-    this.treeControl.collapse(node);
+    this.setExpanded(node, false);
   }
 
   /**
@@ -2789,7 +2837,7 @@ export class JsonTreeComponent {
       if (!currentNode.children?.length) return;
       nodeCount += 1;
       maxDepth = Math.max(maxDepth, relativeDepth);
-      this.treeControl.expand(currentNode);
+      this.setExpanded(currentNode, true);
       for (const child of currentNode.children) walk(child, relativeDepth + 1);
     };
     walk(node, 0);
@@ -2826,8 +2874,8 @@ export class JsonTreeComponent {
       if (!currentNode.children?.length) return;
       if (currentDepth >= relativeDepth) return;
       nodeCount += 1;
-      if (!this.treeControl.isExpanded(currentNode)) {
-        this.treeControl.expand(currentNode);
+      if (!this.isExpanded(currentNode)) {
+        this.setExpanded(currentNode, true);
       }
       for (const child of currentNode.children) walk(child, currentDepth + 1);
     };
@@ -2860,7 +2908,7 @@ export class JsonTreeComponent {
   }
 
   showCollapse(node: TreeNode): boolean {
-    return !!node.children?.length && this.treeControl.isExpanded(node);
+    return !!node.children?.length && this.isExpanded(node);
   }
 
   showExpandAllFromHere(node: TreeNode): boolean {
@@ -2928,10 +2976,10 @@ export class JsonTreeComponent {
     const result = this.resolveChainAndSets(node);
     if (!result) return;
     for (const child of result.narrowSet) {
-      this.treeControl.collapse(child);
+      this.setExpanded(child, false);
     }
     for (const child of result.widerSet) {
-      this.treeControl.collapse(child);
+      this.setExpanded(child, false);
     }
     this.logger.info(
       source === 'wide' ? 'tree.contextMenu.isolateWide' : 'tree.contextMenu.isolate',
@@ -2947,7 +2995,7 @@ export class JsonTreeComponent {
     const result = this.resolveChainAndSets(node);
     if (!result) return;
     for (const child of result.narrowSet) {
-      this.treeControl.collapse(child);
+      this.setExpanded(child, false);
     }
     this.logger.info('tree.contextMenu.isolateNarrow');
   }
@@ -2994,7 +3042,7 @@ export class JsonTreeComponent {
       const nextSegment = nextChainNode.segment;
       for (const child of ancestor.children ?? []) {
         if (child.segment === nextSegment) continue;
-        if (!this.treeControl.isExpanded(child)) continue;
+        if (!this.isExpanded(child)) continue;
         if (i === parentIndex) {
           narrowSet.push(child);
         } else {
@@ -3061,7 +3109,7 @@ export class JsonTreeComponent {
     const walk = (c: TreeNode): void => {
       if (!allExpanded) return;
       if (!c.children?.length) return;
-      if (!this.treeControl.isExpanded(c)) {
+      if (!this.isExpanded(c)) {
         allExpanded = false;
         return;
       }
@@ -3118,7 +3166,7 @@ export class JsonTreeComponent {
     const walk = (c: TreeNode, d: number): void => {
       if (found) return;
       if (!c.children?.length) return;
-      if (d < relativeDepth && !this.treeControl.isExpanded(c)) {
+      if (d < relativeDepth && !this.isExpanded(c)) {
         found = true;
         return;
       }
@@ -3370,7 +3418,7 @@ export class JsonTreeComponent {
    */
   ancestorBeaconIcons(node: TreeNode): readonly FormattingIcon[] {
     if (!node.children?.length) return EMPTY_ICONS;
-    if (this.treeControl.isExpanded(node)) return EMPTY_ICONS;
+    if (this.isExpanded(node)) return EMPTY_ICONS;
     const subtreeIcons = this.beaconIndex().descendantIconsByPath.get(node.pathString);
     if (!subtreeIcons || subtreeIcons.size === 0) return EMPTY_ICONS;
     const selfIcons = new Set<FormattingIcon>([...this.keyIcons(node), ...this.valueIcons(node)]);

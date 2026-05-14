@@ -959,7 +959,7 @@ describe('JsonTreeComponent', () => {
       const root = cmp.root()!;
       const walk = (n: typeof root): void => {
         if (!n.children) return;
-        expect(cmp.treeControl.isExpanded(n)).withContext(n.pathString).toBeTrue();
+        expect(cmp.__getHelpersForTesting().isExpanded(n)).withContext(n.pathString).toBeTrue();
         n.children.forEach(walk);
       };
       walk(root);
@@ -969,18 +969,18 @@ describe('JsonTreeComponent', () => {
       cmp.expandAll();
       cmp.collapseAll();
       const root = cmp.root()!;
-      expect(cmp.treeControl.isExpanded(root)).toBeFalse();
+      expect(cmp.__getHelpersForTesting().isExpanded(root)).toBeFalse();
     });
 
     it('expandToLevel(n) expands only nodes with depth < n', () => {
       cmp.expandAll();
       cmp.expandToLevel(2);
       const root = cmp.root()!;
-      expect(cmp.treeControl.isExpanded(root)).toBeTrue(); // depth 0
+      expect(cmp.__getHelpersForTesting().isExpanded(root)).toBeTrue(); // depth 0
       const a = root.children!.find((c) => c.segment === 'a')!;
-      expect(cmp.treeControl.isExpanded(a)).toBeTrue(); // depth 1
+      expect(cmp.__getHelpersForTesting().isExpanded(a)).toBeTrue(); // depth 1
       const b = a.children!.find((c) => c.segment === 'b')!;
-      expect(cmp.treeControl.isExpanded(b)).toBeFalse(); // depth 2 should NOT be expanded
+      expect(cmp.__getHelpersForTesting().isExpanded(b)).toBeFalse(); // depth 2 should NOT be expanded
     });
   });
 
@@ -1668,7 +1668,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set(path);
       fixture.detectChanges();
       const selected = (fixture.nativeElement as HTMLElement).querySelector(
-        'mat-nested-tree-node[aria-selected="true"] .tree-row',
+        '.tree-row.is-selected',
       ) as HTMLElement | null;
       cmp.selectedPath.set(null);
       fixture.detectChanges();
@@ -1688,7 +1688,7 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       expect(cmp.selectedPath()).toBe('$.a');
       const stillSelected = (fixture.nativeElement as HTMLElement).querySelector(
-        'mat-nested-tree-node[aria-selected="true"] .tree-row.is-selected',
+        '.tree-row.is-selected',
       );
       expect(stillSelected).toBeTruthy();
     });
@@ -1882,7 +1882,7 @@ describe('JsonTreeComponent', () => {
       cmp.selectedPath.set('$.a.x');
       fixture.detectChanges();
       const xRow = (fixture.nativeElement as HTMLElement).querySelector(
-        'mat-nested-tree-node[aria-selected="true"] .tree-row',
+        '.tree-row.is-selected',
       ) as HTMLElement;
       expect(xRow.classList.contains('is-selected')).toBeTrue();
       expect(xRow.classList.contains('is-search-hit')).toBeTrue();
@@ -3241,14 +3241,14 @@ describe('JsonTreeComponent', () => {
         // the path from root through `outer` and `inner`.
         c.goToNextMatch();
         c.goToNextMatch(); // wrap (single hit)
-        const outer = c.treeControl.dataNodes?.find((n) => n.segment === 'outer') ?? null;
+        const outer = c.__getHelpersForTesting().findNode((n) => n.segment === 'outer');
         // dataNodes may be undefined for nested control; fall back to
         // direct lookup via the index.
         const root = c.root();
         const outerNode = root?.children?.[0];
         const innerNode = outerNode?.children?.[0];
-        expect(outerNode && c.treeControl.isExpanded(outerNode)).toBe(true);
-        expect(innerNode && c.treeControl.isExpanded(innerNode)).toBe(true);
+        expect(outerNode && c.__getHelpersForTesting().isExpanded(outerNode)).toBe(true);
+        expect(innerNode && c.__getHelpersForTesting().isExpanded(innerNode)).toBe(true);
         // Silence unused-variable warning for the dataNodes lookup.
         void outer;
       });
@@ -3821,11 +3821,11 @@ describe('JsonTreeComponent', () => {
       const rootNode = cmp.root()!;
       const aNode = rootNode.children!.find((child) => child.segment === 'a')!;
       const bNode = aNode.children!.find((child) => child.segment === 'b')!;
-      expect(cmp.treeControl.isExpanded(aNode)).toBeFalse();
-      expect(cmp.treeControl.isExpanded(bNode)).toBeFalse();
+      expect(cmp.__getHelpersForTesting().isExpanded(aNode)).toBeFalse();
+      expect(cmp.__getHelpersForTesting().isExpanded(bNode)).toBeFalse();
       cmp.selectByPathString('$.a.b.c');
-      expect(cmp.treeControl.isExpanded(aNode)).toBeTrue();
-      expect(cmp.treeControl.isExpanded(bNode)).toBeTrue();
+      expect(cmp.__getHelpersForTesting().isExpanded(aNode)).toBeTrue();
+      expect(cmp.__getHelpersForTesting().isExpanded(bNode)).toBeTrue();
     });
 
     it('expandNodeAtPath expands exactly the named node (no descendants, no ancestors)', async () => {
@@ -3839,11 +3839,13 @@ describe('JsonTreeComponent', () => {
 
       cmp.expandNodeAtPath(['outer', 'target']);
 
-      expect(cmp.treeControl.isExpanded(targetNode)).withContext('target expanded').toBeTrue();
-      expect(cmp.treeControl.isExpanded(outerNode))
+      expect(cmp.__getHelpersForTesting().isExpanded(targetNode))
+        .withContext('target expanded')
+        .toBeTrue();
+      expect(cmp.__getHelpersForTesting().isExpanded(outerNode))
         .withContext('outer (ancestor) NOT expanded')
         .toBeFalse();
-      expect(cmp.treeControl.isExpanded(innerNode))
+      expect(cmp.__getHelpersForTesting().isExpanded(innerNode))
         .withContext('inner (descendant) NOT expanded')
         .toBeFalse();
     });
@@ -3855,7 +3857,7 @@ describe('JsonTreeComponent', () => {
       const aNode = cmp.root()!.children!.find((child) => child.segment === 'a')!;
 
       expect(() => cmp.expandNodeAtPath(['does', 'not', 'exist'])).not.toThrow();
-      expect(cmp.treeControl.isExpanded(aNode)).toBeFalse();
+      expect(cmp.__getHelpersForTesting().isExpanded(aNode)).toBeFalse();
     });
 
     it('expandNodeAtPath persists across re-parse via pathString trackBy', async () => {
@@ -3879,7 +3881,7 @@ describe('JsonTreeComponent', () => {
       const newRootNode = cmp.root()!;
       const newANode = newRootNode.children!.find((child) => child.segment === 'a')!;
       expect(newANode.children?.length).toBeGreaterThan(0);
-      expect(cmp.treeControl.isExpanded(newANode))
+      expect(cmp.__getHelpersForTesting().isExpanded(newANode))
         .withContext('post-mutation node honors pre-mutation expand call')
         .toBeTrue();
     });
@@ -5187,14 +5189,16 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
         const mid = nodeAt('$.outer.mid');
-        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
-        expect(cmp.treeControl.isExpanded(mid)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(outer)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(mid)).toBe(true);
         cmp.collapseFromHere(outer);
-        expect(cmp.treeControl.isExpanded(outer)).withContext('clicked row collapses').toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(outer))
+          .withContext('clicked row collapses')
+          .toBe(false);
         // mid stays in the expansionModel because we only collapsed
         // outer; CDK preserves its state. Re-expanding outer would
         // make mid visible again.
-        expect(cmp.treeControl.isExpanded(mid))
+        expect(cmp.__getHelpersForTesting().isExpanded(mid))
           .withContext("descendant's expansion state preserved")
           .toBe(true);
       });
@@ -5207,8 +5211,8 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
         cmp.expandAllFromHere(outer);
-        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(outer)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.outer.mid'))).toBe(true);
       });
     });
 
@@ -5219,8 +5223,8 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
         cmp.expandToDepthFromHere(outer, 1);
-        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(outer)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.outer.mid'))).toBe(false);
       });
 
       it('+N expands every collapsed container at relative depth < N (including hidden ones)', async () => {
@@ -5229,9 +5233,9 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
         cmp.expandToDepthFromHere(outer, 3);
-        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid'))).toBe(true);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid.inner'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(outer)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.outer.mid'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.outer.mid.inner'))).toBe(true);
       });
 
       it('+N never collapses a container at relative depth >= N (expand-only)', async () => {
@@ -5241,8 +5245,8 @@ describe('JsonTreeComponent', () => {
         const outer = nodeAt('$.outer');
         cmp.expandToDepthFromHere(outer, 1);
         // +1 only acts on depth 0; deeper containers stay expanded.
-        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.outer.mid'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(outer)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.outer.mid'))).toBe(true);
       });
 
       it('is idempotent on an already-fully-expanded subtree', async () => {
@@ -5253,8 +5257,8 @@ describe('JsonTreeComponent', () => {
         const mid = nodeAt('$.outer.mid');
         cmp.expandToDepthFromHere(outer, 3);
         cmp.expandToDepthFromHere(outer, 3);
-        expect(cmp.treeControl.isExpanded(outer)).toBe(true);
-        expect(cmp.treeControl.isExpanded(mid)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(outer)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(mid)).toBe(true);
       });
     });
 
@@ -5270,9 +5274,9 @@ describe('JsonTreeComponent', () => {
         expect(cmp.showIsolatePair(a2)).toBe(false);
         const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
         cmp.isolateRow(a2, 'single');
-        expect(cmp.treeControl.isExpanded(a3)).toBe(false);
-        expect(cmp.treeControl.isExpanded(a)).toBe(true);
-        expect(cmp.treeControl.isExpanded(a2)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(a3)).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(a)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(a2)).toBe(true);
         expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolate');
       });
 
@@ -5287,8 +5291,8 @@ describe('JsonTreeComponent', () => {
         expect(cmp.showIsolatePair(a2)).toBe(false);
         const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
         cmp.isolateRow(a2, 'single');
-        expect(cmp.treeControl.isExpanded(b)).toBe(false);
-        expect(cmp.treeControl.isExpanded(a)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(b)).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(a)).toBe(true);
         expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolate');
       });
 
@@ -5306,14 +5310,14 @@ describe('JsonTreeComponent', () => {
 
         const infoSpy = spyOn(TestBed.inject(LoggerService), 'info').and.callThrough();
         cmp.collapseSiblings(a2);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a3'))).toBe(false);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(true);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.c'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a.a3'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.c'))).toBe(true);
         expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolateNarrow');
 
         cmp.isolateRow(a2, 'wide');
-        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.c'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.c'))).toBe(false);
         expect(infoSpy).toHaveBeenCalledWith('tree.contextMenu.isolateWide');
       });
 
@@ -5333,7 +5337,7 @@ describe('JsonTreeComponent', () => {
         const a1 = nodeAt('$.a.a1');
         expect(cmp.showIsolateSingle(a1)).toBe(true);
         cmp.isolateRow(a1, 'single');
-        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b'))).toBe(false);
       });
 
       it('empty container click does not throw and still collapses off-chain branches', async () => {
@@ -5342,7 +5346,7 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const empty = nodeAt('$.a.empty');
         expect(() => cmp.isolateRow(empty, 'single')).not.toThrow();
-        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b'))).toBe(false);
       });
 
       it('array-segment path: lock-step walk handles numeric indices and collapses higher off-chain branches', async () => {
@@ -5355,9 +5359,9 @@ describe('JsonTreeComponent', () => {
         expect(cmp.showIsolateSingle(x)).toBe(true);
         expect(cmp.showIsolatePair(x)).toBe(false);
         cmp.isolateRow(x, 'single');
-        expect(cmp.treeControl.isExpanded(nodeAt('$.arr[0]'))).toBe(false);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.other'))).toBe(false);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.arr[1]'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.arr[0]'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.other'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.arr[1]'))).toBe(true);
       });
 
       it('clicked-row already collapsed: hidden subtree expansion state is preserved', async () => {
@@ -5365,16 +5369,16 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         // Collapse only $.a.a2 (so $.a.a2.x stays expanded in CDK state but hidden).
-        cmp.treeControl.collapse(nodeAt('$.a.a2'));
-        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a2'))).toBe(false);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a2.x'))).toBe(true);
+        cmp.__getHelpersForTesting().setExpanded(nodeAt('$.a.a2'), false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a.a2'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a.a2.x'))).toBe(true);
 
         cmp.isolateRow(nodeAt('$.a.a2'), 'single');
         // Off-chain collapse happened.
-        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b'))).toBe(false);
         // Clicked row and its hidden subtree state are untouched.
-        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a2'))).toBe(false);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a2.x'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a.a2'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a.a2.x'))).toBe(true);
       });
 
       it('stale-path no-op: predicates return false and actions do nothing when path no longer resolves', async () => {
@@ -5400,16 +5404,16 @@ describe('JsonTreeComponent', () => {
         const a2 = nodeAt('$.a.a2');
         cmp.isolateRow(a2, 'wide');
         const stateAfterFirst = {
-          a: cmp.treeControl.isExpanded(nodeAt('$.a')),
-          a2: cmp.treeControl.isExpanded(a2),
-          a3: cmp.treeControl.isExpanded(nodeAt('$.a.a3')),
-          b: cmp.treeControl.isExpanded(nodeAt('$.b')),
+          a: cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a')),
+          a2: cmp.__getHelpersForTesting().isExpanded(a2),
+          a3: cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a.a3')),
+          b: cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b')),
         };
         cmp.isolateRow(a2, 'wide');
-        expect(cmp.treeControl.isExpanded(nodeAt('$.a'))).toBe(stateAfterFirst.a);
-        expect(cmp.treeControl.isExpanded(a2)).toBe(stateAfterFirst.a2);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.a.a3'))).toBe(stateAfterFirst.a3);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(stateAfterFirst.b);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a'))).toBe(stateAfterFirst.a);
+        expect(cmp.__getHelpersForTesting().isExpanded(a2)).toBe(stateAfterFirst.a2);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a.a3'))).toBe(stateAfterFirst.a3);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b'))).toBe(stateAfterFirst.b);
       });
 
       it('telemetry: each ID is emitted with no payload (no user content)', async () => {
@@ -5442,8 +5446,8 @@ describe('JsonTreeComponent', () => {
         cmp.isolateRow(root, 'single');
         cmp.collapseSiblings(root);
         expect(infoSpy).not.toHaveBeenCalled();
-        expect(cmp.treeControl.isExpanded(nodeAt('$.a'))).toBe(true);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.a'))).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b'))).toBe(true);
       });
 
       it('direct child of root: widerSet is empty by definition; pair never appears', async () => {
@@ -5456,8 +5460,8 @@ describe('JsonTreeComponent', () => {
         expect(cmp.showIsolateSingle(a)).toBe(true);
         expect(cmp.showIsolatePair(a)).toBe(false);
         cmp.isolateRow(a, 'single');
-        expect(cmp.treeControl.isExpanded(nodeAt('$.b'))).toBe(false);
-        expect(cmp.treeControl.isExpanded(nodeAt('$.c'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.b'))).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.c'))).toBe(false);
       });
     });
 
@@ -5561,7 +5565,7 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
         const mid = nodeAt('$.outer.mid');
-        cmp.treeControl.collapse(mid);
+        cmp.__getHelpersForTesting().setExpanded(mid, false);
         fixture.detectChanges();
         // Collapsed at d=1 (mid). Hidden under it: inner at d=2 still
         // expanded (we did expandAll first, then only collapsed mid).
@@ -5591,8 +5595,8 @@ describe('JsonTreeComponent', () => {
         const altThird = nodeAt('$["top-level"]["alt-second-level"]["third-level"]');
         // Collapse only alt-second-level and its (now hidden) third-level
         // so the partial-expansion shape matches the user's scenario.
-        cmp.treeControl.collapse(altThird);
-        cmp.treeControl.collapse(altSecond);
+        cmp.__getHelpersForTesting().setExpanded(altThird, false);
+        cmp.__getHelpersForTesting().setExpanded(altSecond, false);
         fixture.detectChanges();
         expect(cmp.showExpandToDepth(top, 1)).toBe(false);
         expect(cmp.showExpandToDepth(top, 2)).toBe(true);
@@ -5621,11 +5625,15 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.obj');
-        expect(cmp.treeControl.isExpanded(node)).withContext('starts collapsed').toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(node))
+          .withContext('starts collapsed')
+          .toBe(false);
         withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
         await Promise.resolve();
         await Promise.resolve();
-        expect(cmp.treeControl.isExpanded(node)).withContext('expanded after dblclick').toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(node))
+          .withContext('expanded after dblclick')
+          .toBe(true);
         expect(writeText).not.toHaveBeenCalled();
       });
 
@@ -5635,11 +5643,13 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.obj');
-        expect(cmp.treeControl.isExpanded(node)).withContext('starts expanded').toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(node))
+          .withContext('starts expanded')
+          .toBe(true);
         withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
         await Promise.resolve();
         await Promise.resolve();
-        expect(cmp.treeControl.isExpanded(node))
+        expect(cmp.__getHelpersForTesting().isExpanded(node))
           .withContext('collapsed after dblclick')
           .toBe(false);
         expect(writeText).not.toHaveBeenCalled();
@@ -5656,7 +5666,7 @@ describe('JsonTreeComponent', () => {
         );
         await Promise.resolve();
         await Promise.resolve();
-        expect(cmp.treeControl.isExpanded(node))
+        expect(cmp.__getHelpersForTesting().isExpanded(node))
           .withContext('Alt does not suppress toggle')
           .toBe(true);
         expect(writeText).not.toHaveBeenCalled();
@@ -5690,12 +5700,12 @@ describe('JsonTreeComponent', () => {
         const logger = await createWithLoggerSpy({ empty: {} });
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
         const node = nodeAt('$.empty');
-        const wasExpanded = cmp.treeControl.isExpanded(node);
+        const wasExpanded = cmp.__getHelpersForTesting().isExpanded(node);
         withCtxClipboard({ writeText }, () => cmp.onRowDblClick(new MouseEvent('dblclick'), node));
         await Promise.resolve();
         await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith('{}');
-        expect(cmp.treeControl.isExpanded(node))
+        expect(cmp.__getHelpersForTesting().isExpanded(node))
           .withContext('expansion state unchanged on empty container')
           .toBe(wasExpanded);
         expect(logger.info).toHaveBeenCalledWith('tree.row.doubleClickCopyValue', {
@@ -5746,7 +5756,7 @@ describe('JsonTreeComponent', () => {
         cmp.collapseAll();
         fixture.detectChanges();
         const node = nodeAt('$.obj');
-        const wasExpanded = cmp.treeControl.isExpanded(node);
+        const wasExpanded = cmp.__getHelpersForTesting().isExpanded(node);
         const chevron = (fixture.nativeElement as HTMLElement).querySelector(
           '.tree-row[data-path="$.obj"] .tree-twisty[mattreenodetoggle], .tree-row[data-path="$.obj"] button[mattreenodetoggle]',
         ) as HTMLButtonElement | null;
@@ -5759,7 +5769,7 @@ describe('JsonTreeComponent', () => {
         // matTreeNodeToggle click handler is what flips state on click;
         // this guard ensures dblclick on the chevron does not _also_
         // toggle from the row handler.
-        expect(cmp.treeControl.isExpanded(node)).toBe(wasExpanded);
+        expect(cmp.__getHelpersForTesting().isExpanded(node)).toBe(wasExpanded);
         expect(logger.info).not.toHaveBeenCalledWith(
           'tree.row.doubleClickToggle',
           jasmine.anything(),
@@ -5886,9 +5896,9 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const node = nodeAt('$.obj');
         cmp.contextNode.set(node);
-        expect(cmp.treeControl.isExpanded(node)).toBe(false);
+        expect(cmp.__getHelpersForTesting().isExpanded(node)).toBe(false);
         cmp.onSurfacedShortcutClick(node);
-        expect(cmp.treeControl.isExpanded(node))
+        expect(cmp.__getHelpersForTesting().isExpanded(node))
           .withContext('expanded after surfaced shortcut click')
           .toBe(true);
       });
@@ -5899,9 +5909,9 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const node = nodeAt('$.obj');
         cmp.contextNode.set(node);
-        expect(cmp.treeControl.isExpanded(node)).toBe(true);
+        expect(cmp.__getHelpersForTesting().isExpanded(node)).toBe(true);
         cmp.onSurfacedShortcutClick(node);
-        expect(cmp.treeControl.isExpanded(node))
+        expect(cmp.__getHelpersForTesting().isExpanded(node))
           .withContext('collapsed after surfaced shortcut click')
           .toBe(false);
       });
@@ -6396,7 +6406,9 @@ describe('JsonTreeComponent', () => {
         }
         throw new Error('no $.obj node');
       })();
-      expect(cmp.treeControl.isExpanded(node)).withContext('starts collapsed').toBe(false);
+      expect(cmp.__getHelpersForTesting().isExpanded(node))
+        .withContext('starts collapsed')
+        .toBe(false);
 
       withClipboard({ writeText }, () => {
         objRow().dispatchEvent(
@@ -6407,7 +6419,7 @@ describe('JsonTreeComponent', () => {
       await Promise.resolve();
       fixture.detectChanges();
 
-      expect(cmp.treeControl.isExpanded(node))
+      expect(cmp.__getHelpersForTesting().isExpanded(node))
         .withContext('expanded after real dblclick')
         .toBe(true);
       expect(writeText).not.toHaveBeenCalled();
@@ -6426,7 +6438,7 @@ describe('JsonTreeComponent', () => {
       await Promise.resolve();
       fixture.detectChanges();
 
-      expect(cmp.treeControl.isExpanded(node))
+      expect(cmp.__getHelpersForTesting().isExpanded(node))
         .withContext('collapsed after second real dblclick')
         .toBe(false);
       expect(writeText).not.toHaveBeenCalled();
@@ -6669,11 +6681,11 @@ describe('JsonTreeComponent', () => {
     it('aria-expanded flips when the container is toggled', async () => {
       await createWith({ a: { x: 1 } });
       const a = cmp['nodeIndex']().get('$.a')!;
-      cmp.treeControl.expand(a);
+      cmp.__getHelpersForTesting().setExpanded(a, true);
       fixture.detectChanges();
       expect(nodeEl('$.a').getAttribute('aria-expanded')).toBe('true');
 
-      cmp.treeControl.collapse(a);
+      cmp.__getHelpersForTesting().setExpanded(a, false);
       fixture.detectChanges();
       expect(nodeEl('$.a').getAttribute('aria-expanded')).toBe('false');
     });
@@ -6745,13 +6757,13 @@ describe('JsonTreeComponent', () => {
     it('ArrowRight on a collapsed container expands without moving focus', async () => {
       await createWith({ a: { x: 1 } });
       const aNode = cmp['nodeIndex']().get('$.a')!;
-      cmp.treeControl.collapse(aNode);
+      cmp.__getHelpersForTesting().setExpanded(aNode, false);
       fixture.detectChanges();
       cmp.focusedPath.set('$.a');
       fixture.detectChanges();
 
       dispatchKey(nodeEl('$.a'), 'ArrowRight');
-      expect(cmp.treeControl.isExpanded(aNode)).toBeTrue();
+      expect(cmp.__getHelpersForTesting().isExpanded(aNode)).toBeTrue();
       expect(cmp.focusedPath()).toBe('$.a');
     });
 
@@ -6780,20 +6792,20 @@ describe('JsonTreeComponent', () => {
     it('ArrowLeft on an expanded container collapses without moving focus', async () => {
       await createWith({ a: { x: 1 } });
       const aNode = cmp['nodeIndex']().get('$.a')!;
-      cmp.treeControl.expand(aNode);
+      cmp.__getHelpersForTesting().setExpanded(aNode, true);
       fixture.detectChanges();
       cmp.focusedPath.set('$.a');
       fixture.detectChanges();
 
       dispatchKey(nodeEl('$.a'), 'ArrowLeft');
-      expect(cmp.treeControl.isExpanded(aNode)).toBeFalse();
+      expect(cmp.__getHelpersForTesting().isExpanded(aNode)).toBeFalse();
       expect(cmp.focusedPath()).toBe('$.a');
     });
 
     it('ArrowLeft on a collapsed container moves focus to parent', async () => {
       await createWith({ a: { x: 1 } });
       const aNode = cmp['nodeIndex']().get('$.a')!;
-      cmp.treeControl.collapse(aNode);
+      cmp.__getHelpersForTesting().setExpanded(aNode, false);
       fixture.detectChanges();
       cmp.focusedPath.set('$.a');
       fixture.detectChanges();
@@ -6898,7 +6910,7 @@ describe('JsonTreeComponent', () => {
       // Collapsing $.a hides $.a.x; the lifecycle effect should
       // recover focus to $.a (the nearest visible ancestor).
       const aNode = cmp['nodeIndex']().get('$.a')!;
-      cmp.treeControl.collapse(aNode);
+      cmp.__getHelpersForTesting().setExpanded(aNode, false);
       fixture.detectChanges();
       expect(cmp.focusedPath()).toBe('$.a');
     });
@@ -7049,7 +7061,7 @@ describe('JsonTreeComponent', () => {
       cmp.collapseAll();
       fixture.detectChanges();
       const node = nodeAt('$.obj');
-      const wasExpanded = cmp.treeControl.isExpanded(node);
+      const wasExpanded = cmp.__getHelpersForTesting().isExpanded(node);
       cmp.focusedPath.set('$.obj');
       fixture.detectChanges();
 
@@ -7062,7 +7074,7 @@ describe('JsonTreeComponent', () => {
 
       const expected = JSON.stringify({ a: 1, b: 2 }, null, 2);
       expect(writeText).toHaveBeenCalledWith(expected);
-      expect(cmp.treeControl.isExpanded(node))
+      expect(cmp.__getHelpersForTesting().isExpanded(node))
         .withContext('expansion state unchanged by keyboard copy')
         .toBe(wasExpanded);
     });
@@ -7072,7 +7084,9 @@ describe('JsonTreeComponent', () => {
       cmp.expandAll();
       fixture.detectChanges();
       const node = nodeAt('$.obj');
-      expect(cmp.treeControl.isExpanded(node)).withContext('starts expanded').toBe(true);
+      expect(cmp.__getHelpersForTesting().isExpanded(node))
+        .withContext('starts expanded')
+        .toBe(true);
       cmp.focusedPath.set('$.obj');
       fixture.detectChanges();
 
@@ -7084,7 +7098,7 @@ describe('JsonTreeComponent', () => {
       await Promise.resolve();
 
       expect(writeText).toHaveBeenCalledWith(JSON.stringify({ a: 1 }, null, 2));
-      expect(cmp.treeControl.isExpanded(node))
+      expect(cmp.__getHelpersForTesting().isExpanded(node))
         .withContext('still expanded after keyboard copy')
         .toBe(true);
     });
