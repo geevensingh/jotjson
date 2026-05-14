@@ -1,5 +1,6 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
@@ -19,6 +20,10 @@ import { bucketCount } from '../../../core/telemetry/buckets';
 import { __resetColdFlagsForTesting } from '../../../core/telemetry/cold-flag';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { formatPath } from './build-tree';
+import {
+  DecodedValueDialogComponent,
+  type DecodedValueDialogData,
+} from './decoded-value-dialog/decoded-value-dialog.component';
 import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
 import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
 
@@ -4294,16 +4299,15 @@ describe('JsonTreeComponent', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Decoded view toggle (per-row pill on string leaves)
+  // Decoded view dialog (per-row pill on string leaves)
   //
-  // Display-only sibling of the Extract pill. Toggles a string leaf
-  // between its single-line JSON-escaped rendering and its decoded
-  // multi-line form (real \n / \t / unescaped quotes). State is purely
-  // ephemeral: a `Set<pathString>` cleared on `viewResetToken` bump,
-  // never persisted. Does NOT mutate the underlying value, copy
-  // semantics, search, or rule evaluation.
+  // Display-only sibling of the Extract pill. Clicking the pill (or the
+  // "Open decoded value" entry in the row kebab menu) opens a MatDialog
+  // viewer showing the raw string with line numbers and a copy button.
+  // The pill carries no per-row state - row height stays uniform.
+  // Replaces the prior in-row `pre-wrap` toggle (issue #95 Phase 0).
   // ---------------------------------------------------------------------------
-  describe('decoded view toggle', () => {
+  describe('decoded view dialog', () => {
     function decodedButtonFor(pathString: string): HTMLButtonElement | null {
       return (fixture.nativeElement as HTMLElement).querySelector(
         `.tree-row[data-path="${pathString}"] .tree-decoded-pill`,
@@ -4331,7 +4335,7 @@ describe('JsonTreeComponent', () => {
       return (
         Array.from(
           document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
-        ).find((item) => /decoded text|JSON-escaped string/.test(item.textContent ?? '')) ?? null
+        ).find((item) => /Open decoded value/.test(item.textContent ?? '')) ?? null
       );
     }
 
@@ -4340,6 +4344,15 @@ describe('JsonTreeComponent', () => {
         .querySelectorAll('.cdk-overlay-backdrop')
         .forEach((backdrop) => (backdrop as HTMLElement).click());
       fixture.detectChanges();
+    }
+
+    function spyOnDialogOpen(): jasmine.Spy {
+      const dialog = TestBed.inject(MatDialog);
+      const spy = spyOn(dialog, 'open').and.returnValue({
+        afterClosed: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }),
+        close: () => {},
+      } as unknown as MatDialogRef<unknown>);
+      return spy;
     }
 
     describe('decodedCandidate predicate', () => {
@@ -4380,14 +4393,38 @@ describe('JsonTreeComponent', () => {
         expect(cmp.decodedCandidate(root.children![1]!)).toBe(false);
         expect(cmp.decodedCandidate(root.children![2]!)).toBe(false);
       });
+
+      it('is false at the boundary of length === 256 (no escapes)', async () => {
+        await createWith({ id: 'x'.repeat(256) });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(false);
+      });
+
+      it('is true at the boundary of length === 257 (no escapes, long fallback)', async () => {
+        await createWith({ id: 'x'.repeat(257) });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(true);
+      });
+
+      it('is true for a long single-line URL with no escapes', async () => {
+        const url = 'https://example.com/' + 'a'.repeat(300);
+        await createWith({ href: url });
+        expect(cmp.decodedCandidate(cmp.root()!.children![0]!)).toBe(true);
+      });
     });
 
-    describe('pill rendering and click handling', () => {
-      it('renders the decoded pill on candidate string leaves', async () => {
+    describe('pill rendering', () => {
+      it('renders the decoded pill on candidate string leaves with embedded escapes', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
         expect(decodedButtonFor('$.note')).not.toBeNull();
+      });
+
+      it('renders the decoded pill on long single-line strings (widened predicate)', async () => {
+        const url = 'https://example.com/' + 'a'.repeat(300);
+        await createWith({ href: url });
+        cmp.expandAll();
+        fixture.detectChanges();
+        expect(decodedButtonFor('$.href')).not.toBeNull();
       });
 
       it('does not render the decoded pill on plain string leaves', async () => {
@@ -4404,45 +4441,48 @@ describe('JsonTreeComponent', () => {
         expect(decodedButtonFor('$.count')).toBeNull();
       });
 
-      it('starts in the off state (aria-pressed=false)', async () => {
+      it('does not carry aria-pressed (the pill is stateless)', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
         const button = decodedButtonFor('$.note');
-        expect(button!.getAttribute('aria-pressed')).toBe('false');
+        expect(button!.hasAttribute('aria-pressed')).toBe(false);
       });
 
-      it('toggles aria-pressed and the value span class on click', async () => {
+      it('inline value span never carries the legacy tree-value-decoded class', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
-        const button = decodedButtonFor('$.note');
         const span = valueSpanFor('$.note');
         expect(span!.classList.contains('tree-value-decoded')).toBe(false);
-
-        button!.click();
+        decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
-        expect(button!.getAttribute('aria-pressed')).toBe('true');
-        expect(valueSpanFor('$.note')!.classList.contains('tree-value-decoded')).toBe(true);
-      });
-
-      it('a second click returns to the off state (idempotent toggle)', async () => {
-        await createWith({ note: 'first\nsecond' });
-        cmp.expandAll();
-        fixture.detectChanges();
-        const button = decodedButtonFor('$.note');
-        button!.click();
-        fixture.detectChanges();
-        button!.click();
-        fixture.detectChanges();
-        expect(decodedButtonFor('$.note')!.getAttribute('aria-pressed')).toBe('false');
+        // Pill click opens a dialog; the inline span is unaffected.
         expect(valueSpanFor('$.note')!.classList.contains('tree-value-decoded')).toBe(false);
       });
+    });
 
-      it('click does not propagate to the row (row selection unchanged)', async () => {
+    describe('opening the dialog', () => {
+      it('pill click opens the DecodedValueDialog with the raw value and path', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
+        const open = spyOnDialogOpen();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(open).toHaveBeenCalledTimes(1);
+        const args = open.calls.mostRecent().args;
+        expect(args[0]).toBe(DecodedValueDialogComponent);
+        const config = args[1] as { data: DecodedValueDialogData };
+        expect(config.data.value).toBe('first\nsecond');
+        expect(config.data.pathString).toBe('$.note');
+      });
+
+      it('pill click stops propagation so the row is not selected', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        spyOnDialogOpen();
         const button = decodedButtonFor('$.note');
         const event = new MouseEvent('click', { bubbles: true, cancelable: true });
         const stopSpy = spyOn(event, 'stopPropagation').and.callThrough();
@@ -4452,49 +4492,89 @@ describe('JsonTreeComponent', () => {
         expect(cmp.selectedPath()).toBeNull();
       });
 
-      it('renders the decoded value with embedded newlines (no JSON escape)', async () => {
+      it('kebab "Open decoded value" entry opens the same dialog', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
-        decodedButtonFor('$.note')!.click();
+        const open = spyOnDialogOpen();
+        try {
+          await openMenuFor('$.note');
+          const item = decodedMenuItem();
+          expect(item).withContext('decoded menu item should be present').toBeTruthy();
+          item!.click();
+          fixture.detectChanges();
+          expect(open).toHaveBeenCalledTimes(1);
+          const args = open.calls.mostRecent().args;
+          expect(args[0]).toBe(DecodedValueDialogComponent);
+        } finally {
+          closeOpenMenus();
+        }
+      });
+
+      it('kebab entry shows a single label "Open decoded value" (no show/hide flip)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
         fixture.detectChanges();
-        const span = valueSpanFor('$.note');
-        expect(span!.textContent).toBe('"first\nsecond"');
+        try {
+          await openMenuFor('$.note');
+          const item = decodedMenuItem();
+          expect(item).toBeTruthy();
+          expect(item!.textContent).toMatch(/Open decoded value/);
+          expect(item!.textContent).not.toMatch(/JSON-escaped string/);
+          expect(item!.textContent).not.toMatch(/Show as decoded text/);
+        } finally {
+          closeOpenMenus();
+        }
+      });
+
+      it('does not open the dialog when the node is no longer a candidate (defensive guard)', async () => {
+        await createWith({ note: 'first\nsecond' });
+        const node = cmp.root()!.children![0]!;
+        const open = spyOnDialogOpen();
+        // Simulate a stale node reference by mutating the underlying value.
+        fixture.componentRef.setInput('value', { note: 42 });
+        fixture.detectChanges();
+        // Calling onDecodedButtonClick with the stale node aborts.
+        cmp.onDecodedButtonClick(node, new MouseEvent('click'));
+        expect(open).not.toHaveBeenCalled();
       });
     });
 
-    describe('display vs renderLeaf vs copy', () => {
-      it('displayLeaf returns the JSON-escaped form when toggle is off', async () => {
+    describe('displayLeaf and renderLeaf (always JSON-escaped, no per-row state)', () => {
+      it('displayLeaf returns the JSON-escaped form for string leaves', async () => {
         await createWith({ note: 'a\nb' });
         const node = cmp.root()!.children![0]!;
         expect(cmp.displayLeaf(node)).toBe('"a\\nb"');
       });
 
-      it('displayLeaf returns the decoded form when toggle is on', async () => {
+      it('displayLeaf is unchanged after pill click (dialog opens; row unchanged)', async () => {
         await createWith({ note: 'a\nb' });
         cmp.expandAll();
         fixture.detectChanges();
+        spyOnDialogOpen();
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
         const node = cmp.root()!.children![0]!;
-        expect(cmp.displayLeaf(node)).toBe('"a\nb"');
+        expect(cmp.displayLeaf(node)).toBe('"a\\nb"');
       });
 
-      it('renderLeaf is unchanged by the toggle (search uses the JSON-escaped form)', async () => {
+      it('renderLeaf is unchanged by the pill (search uses the JSON-escaped form)', async () => {
         await createWith({ note: 'a\nb' });
         cmp.expandAll();
         fixture.detectChanges();
         const node = cmp.root()!.children![0]!;
         expect(cmp.renderLeaf(node.value, node.type)).toBe('"a\\nb"');
+        spyOnDialogOpen();
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
         expect(cmp.renderLeaf(node.value, node.type)).toBe('"a\\nb"');
       });
 
-      it('search continues to match the JSON-escaped substring after toggling on', async () => {
+      it('search continues to match the JSON-escaped substring after the pill click', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
+        spyOnDialogOpen();
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
         prefs.update({ searchScope: 'values' });
@@ -4502,156 +4582,60 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         expect(cmp.searchHits().has('$.note')).toBe(true);
       });
-
-      it('copyValue still copies the raw string (no JSON quotes) regardless of toggle state', async () => {
-        await createWith({ note: 'first\nsecond' });
-        cmp.expandAll();
-        fixture.detectChanges();
-        decodedButtonFor('$.note')!.click();
-        fixture.detectChanges();
-        const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
-        const node = cmp.root()!.children![0]!;
-        const original = (navigator as { clipboard?: Clipboard }).clipboard;
-        const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
-        Object.defineProperty(navigator, 'clipboard', {
-          configurable: true,
-          value: { writeText },
-        });
-        try {
-          cmp.copyValue(node, 'menu');
-          await Promise.resolve();
-          await Promise.resolve();
-          expect(writeText).toHaveBeenCalledWith('first\nsecond');
-        } finally {
-          if (hadOwn && original) {
-            Object.defineProperty(navigator, 'clipboard', {
-              configurable: true,
-              value: original,
-            });
-          } else {
-            delete (navigator as { clipboard?: Clipboard }).clipboard;
-          }
-        }
-      });
     });
 
     describe('telemetry', () => {
-      it('logs tree.decoded.click with rowButton source and correct direction', async () => {
+      it('logs tree.decoded.viewerOpened with rowButton source for embedded-escape strings', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
         const event = spyOn(TestBed.inject(LoggerService), 'event');
-
+        spyOnDialogOpen();
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
-        expect(event).toHaveBeenCalledWith('tree.decoded.click', {
+        expect(event).toHaveBeenCalledWith('tree.decoded.viewerOpened', {
           source: 'rowButton',
-          direction: 'on',
-          lineCountBucket: '2-5',
-        });
-
-        decodedButtonFor('$.note')!.click();
-        fixture.detectChanges();
-        expect(event).toHaveBeenCalledWith('tree.decoded.click', {
-          source: 'rowButton',
-          direction: 'off',
+          reason: 'escape',
+          pathDepth: bucketCount(2),
           lineCountBucket: '2-5',
         });
       });
 
-      it('logs tree.decoded.click with contextMenu source from the kebab menu', async () => {
+      it('logs tree.decoded.viewerOpened with reason="long" for long single-line strings', async () => {
+        const url = 'https://example.com/' + 'a'.repeat(300);
+        await createWith({ href: url });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const event = spyOn(TestBed.inject(LoggerService), 'event');
+        spyOnDialogOpen();
+        decodedButtonFor('$.href')!.click();
+        fixture.detectChanges();
+        expect(event).toHaveBeenCalledWith('tree.decoded.viewerOpened', {
+          source: 'rowButton',
+          reason: 'long',
+          pathDepth: bucketCount(2),
+          lineCountBucket: '1',
+        });
+      });
+
+      it('logs tree.decoded.viewerOpened with contextMenu source from the kebab', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
         const event = spyOn(TestBed.inject(LoggerService), 'event');
-
-        try {
-          await openMenuFor('$.note');
-          const item = decodedMenuItem();
-          expect(item).withContext('decoded menu item should be present').toBeTruthy();
-          item!.click();
-          fixture.detectChanges();
-          expect(event).toHaveBeenCalledWith('tree.decoded.click', {
-            source: 'contextMenu',
-            direction: 'on',
-            lineCountBucket: '2-5',
-          });
-        } finally {
-          closeOpenMenus();
-        }
-      });
-    });
-
-    describe('reset semantics', () => {
-      it('clears decoded state when viewResetToken bumps (blob change)', async () => {
-        await createWith({ note: 'first\nsecond' });
-        cmp.expandAll();
-        fixture.detectChanges();
-        decodedButtonFor('$.note')!.click();
-        fixture.detectChanges();
-        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(true);
-
-        fixture.componentRef.setInput('viewResetToken', 1);
-        fixture.detectChanges();
-
-        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(false);
-      });
-
-      it('preserves decoded state when only the value reference changes (format/minify reparse)', async () => {
-        await createWith({ note: 'first\nsecond' });
-        cmp.expandAll();
-        fixture.detectChanges();
-        decodedButtonFor('$.note')!.click();
-        fixture.detectChanges();
-        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(true);
-
-        // Reparse: same shape and same string at $.note, but a new
-        // top-level reference. viewResetToken stays at 0, so the
-        // decoded set must NOT be cleared.
-        fixture.componentRef.setInput('value', { note: 'first\nsecond' });
-        fixture.detectChanges();
-
-        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(true);
-      });
-
-      it('isDecoded is false when the path no longer resolves to a candidate (stale entry)', async () => {
-        await createWith({ note: 'first\nsecond' });
-        cmp.expandAll();
-        fixture.detectChanges();
-        decodedButtonFor('$.note')!.click();
-        fixture.detectChanges();
-        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(true);
-
-        // Same path, but value type changed to a non-candidate. The
-        // entry remains in the set (not cleared on reparse), but
-        // isDecoded must still report false because the predicate
-        // gates on decodedCandidate.
-        fixture.componentRef.setInput('value', { note: 42 });
-        fixture.detectChanges();
-
-        expect(cmp.isDecoded(cmp.root()!.children![0]!)).toBe(false);
-      });
-    });
-
-    describe('menu label flips with state', () => {
-      it("shows 'Show as decoded text' when off and 'Show as JSON-escaped string' when on", async () => {
-        await createWith({ note: 'first\nsecond' });
-        cmp.expandAll();
-        fixture.detectChanges();
-
+        spyOnDialogOpen();
         try {
           await openMenuFor('$.note');
           const item = decodedMenuItem();
           expect(item).toBeTruthy();
-          expect(item!.textContent).toMatch(/Show as decoded text/);
           item!.click();
           fixture.detectChanges();
-          closeOpenMenus();
-
-          await openMenuFor('$.note');
-          const item2 = decodedMenuItem();
-          expect(item2).toBeTruthy();
-          expect(item2!.textContent).toMatch(/Show as JSON-escaped string/);
+          expect(event).toHaveBeenCalledWith('tree.decoded.viewerOpened', {
+            source: 'contextMenu',
+            reason: 'escape',
+            pathDepth: bucketCount(2),
+            lineCountBucket: '2-5',
+          });
         } finally {
           closeOpenMenus();
         }
@@ -6338,20 +6322,6 @@ describe('JsonTreeComponent', () => {
         // so spy on the call.
         cmp.onExtractMenuClick(nodeAt('$.payload'));
         expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.extract');
-      });
-
-      it('emits tree.contextMenu.decodeShow when toggling on, decodeHide when toggling off', async () => {
-        const logger = await createWithLoggerSpy({ note: 'first\nsecond' });
-        const node = nodeAt('$.note');
-        // First menu click: toggles ON. Pre-toggle state isDecoded=false
-        // so we expect decodeShow.
-        cmp.onDecodedMenuClick(node);
-        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.decodeShow');
-        logger.info.calls.reset();
-        // Second menu click: toggles OFF. Pre-toggle state isDecoded=true
-        // so we expect decodeHide.
-        cmp.onDecodedMenuClick(node);
-        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.decodeHide');
       });
     });
 

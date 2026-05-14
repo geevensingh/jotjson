@@ -495,7 +495,7 @@ The primary page. Available to **all users** (anonymous + registered).
   - **JSONC comment surfacing.** When the input is JSONC (line `//` or block `/* */` comments), the parser harvests every comment in a second pass and attaches it to the nearest tree node. Comments render as dimmed inline annotations on the same row as the value they document - a *trailing* slot when the comment sits on the same source line as the value's end-token (or on the same line as a container's close brace), a *leading* slot before the next value when the comment introduces it. Comment-only or empty containers carry their internal comment on the close row. The slot is single-line + ellipsis; the full text (including multi-line block comments) is exposed via tooltip. Comments do not participate in formatting-rules matching or in tree search. Toggleable via the `treeShowComments` user preference (default true); turning it off hides the slots without re-parsing.
   - **Extract embedded JSON from string leaves.** After a clean parse settles, the Home page waits 1000 ms, walks the parsed tree for string leaves, and sends the unique strings through a Web Worker-backed scanner. The scanner pre-screens for object/array delimiters, batches work in chunks of 50, and keeps a 10000-entry LRU cache so repeated values do not rescan. Rows whose raw string value contains extractable embedded JSON show a small extract pill and a matching context-menu item. Clicking either affordance splices the extractor's formatted JSONC text over only the selected value token using `jsonc-parser` node offsets and `applyEdits`; comments outside the target value and comments inside the extracted payload are preserved literally. Source-version tokens drop stale clicks after the tree changes, and telemetry records only counts/source enums - never string values or paths.
     M7t adds prose-preserving wrapper output: when embedded JSON in a string is surrounded by non-JSON text, clicking extract replaces the string value with an object that preserves both. A single JSON block appears under `json`, and prefix/suffix prose is stored under `prefix` and `suffix`; for multiple JSON blocks the values use `json1`, `json2`, etc., with inter-block text under `between_<i>_and_<j>` keys. Segments containing only whitespace after trim are omitted from the wrapper. This differs from the simple case: a single JSON block with no surrounding text still produces a bare value. See milestone M7t.
-  - **Decoded view toggle on string leaves.** String values whose JSON-escaped form is hard to read at a glance (anything containing a newline, carriage return, tab, embedded `"`, or `\`) get a second small pill next to the Extract pill, plus a matching context-menu item. Toggling the pill flips the row's value rendering between the canonical JSON-escaped single-line form (`"first\nsecond"`) and the decoded multi-line form (`first` / `second` on separate lines, with `pre-wrap` so embedded tabs and quotes render literally). The toggle is purely a display affordance: it does NOT mutate the underlying value, change copy semantics (Copy still yields the raw string), affect tree search (which always matches the JSON-escaped form so escape sequences in the query stay literal), or persist anywhere. State is per-row, in-memory, and cleared whenever the active blob changes; toggling Format/Minify is treated as a non-resetting reparse and preserves the user's per-row state. Each click logs `tree.decoded.click` with `source` (`rowButton` / `contextMenu`), `direction` (`on` / `off`), and a `lineCountBucket` enum - never the string contents.
+  - **Decoded value viewer for string leaves.** String values whose JSON-escaped form is hard to read at a glance (anything containing a newline, carriage return, tab, embedded `"`, or `\`, OR any string longer than 256 characters) get a small pill next to the Extract pill, plus a matching `Open decoded value` entry in the row's context menu. Clicking either affordance opens a dedicated viewer dialog that renders the raw string with line numbers, a Copy button, and a larger monospace font - mobile-friendly for long payloads. The pill is stateless: row height stays uniform whether the dialog is open or not. The viewer does NOT mutate the underlying value, change copy semantics (the dialog's Copy button writes the raw string), or affect tree search (which always matches the canonical JSON-escaped form). Inline string rendering in the tree is always the JSON-escaped single-line form; multi-line `pre-wrap` rendering is reserved for the dialog viewer. Each open logs `tree.decoded.viewerOpened` with `source` (`rowButton` / `contextMenu`), `reason` (`escape` for character-driven matches; `long` for length-only matches), `pathDepth` (bucketed), and `lineCountBucket` - never the string contents or raw paths.
   - **Selection highlighting** - clicking a row in the tree activates three highlight layers (colors below reference the active theme's values from `TreeHighlightColors`):
     - **Selected row** - highlighted in the user's **primary selection color**. Only one row is selected at a time.
     - **Matching value rows** - all other rows whose value is identical to the selected row's value are highlighted in the **secondary color**. Matching compares the raw JSON value (type-aware: `"1"` != `1`). A small badge icon appears on each matching row to make them easy to spot.
@@ -2284,6 +2284,28 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.20.0**: Decoded value viewer dialog (issue #95 Phase 0). The
+  per-row "Show as decoded text" toggle on string leaves is replaced
+  with a dedicated `MatDialog` viewer reached from the same row
+  pill (and from a new `Open decoded value` entry in the row's
+  context menu). The viewer renders the raw string with line
+  numbers, a Copy button, larger monospace text, and is friendly
+  to mobile / narrow viewports. The pill is now stateless: row
+  height stays uniform whether the dialog is open or not. Inline
+  string rendering in the tree is always the canonical
+  JSON-escaped single-line form. The `decodedCandidate`
+  predicate widens to also catch any string longer than 256
+  characters, so long single-line URLs / GUIDs / base64 payloads
+  are reachable through the viewer too. Telemetry event renames
+  in the same change: the prior `tree.decoded.click`,
+  `tree.contextMenu.decodeShow`, and `tree.contextMenu.decodeHide`
+  events are retired and replaced with a single
+  `tree.decoded.viewerOpened` event carrying `source`
+  (`rowButton` / `contextMenu`), `reason` (`escape` / `long`),
+  bucketed `pathDepth`, and bucketed `lineCountBucket` properties.
+  Precursor commit for the tree-virtualization landing - uniform
+  row height is a hard prerequisite for the planned
+  `cdk-virtual-scroll-viewport` migration.
 - **0.19.5**: Tree row context-menu single-option elevation
   (v0.19.4 follow-up to the v0.19.0 Path Y overhaul). Two fixes:
   (1) `maxDescendantDepth` now counts only **container** descendants
