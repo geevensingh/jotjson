@@ -154,6 +154,45 @@ describe('LoggerService', () => {
     expect(bootCall).toBeDefined();
   });
 
+  it('reads and clears sessionStorage msal bridge error on connect', async () => {
+    sessionStorage.setItem(
+      'jotjson.msalBridgeErr',
+      JSON.stringify({ name: 'AuthError', message: 'No payload found in URL' }),
+    );
+    const log = makeWithFakeTelemetry(false);
+    await log.connect();
+    expect(sessionStorage.getItem('jotjson.msalBridgeErr')).toBeNull();
+    const calls = trackException.calls.allArgs();
+    const bridgeCall = calls.find((args) => {
+      const props = args[1] as Record<string, unknown>;
+      return props && props['messageId'] === 'auth.msalBridge.failed';
+    });
+    expect(bridgeCall).toBeDefined();
+    const [normalized] = bridgeCall ?? [];
+    expect((normalized as { name?: string }).name).toBe('AuthError');
+    expect((normalized as { message?: string }).message).toBe('No payload found in URL');
+  });
+
+  it('replays bridge error even when boot error slot is empty', async () => {
+    // Regression guard: an early `return` in flushSessionStorage's
+    // boot-error block must not skip the bridge-error block when no
+    // boot error is queued.
+    sessionStorage.removeItem('jotjson.bootErr');
+    sessionStorage.setItem(
+      'jotjson.msalBridgeErr',
+      JSON.stringify({ name: 'AuthError', message: 'bridge failed' }),
+    );
+    const log = makeWithFakeTelemetry(false);
+    await log.connect();
+    expect(sessionStorage.getItem('jotjson.msalBridgeErr')).toBeNull();
+    const calls = trackException.calls.allArgs();
+    const bridgeCall = calls.find((args) => {
+      const props = args[1] as Record<string, unknown>;
+      return props && props['messageId'] === 'auth.msalBridge.failed';
+    });
+    expect(bridgeCall).toBeDefined();
+  });
+
   it('produces normalized HttpError when given HTTP context', async () => {
     const { HttpErrorResponse } = await import('@angular/common/http');
     const err = new HttpErrorResponse({ url: '/api/x?secret', status: 500 });
