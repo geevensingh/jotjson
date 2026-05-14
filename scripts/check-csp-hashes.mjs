@@ -249,6 +249,34 @@ export function checkPolicyStructure({ directives, headerName }) {
     );
   }
 
+  // MSAL silent refresh: the IdP issues a 302 redirect back to the SPA's
+  // own origin into the silent-refresh iframe (`https://jotjson.com/#code=...`).
+  // Without 'self' in frame-src the browser blocks the iframe navigation
+  // per CSP3 section 6.2.4 and `acquireTokenSilent()` throws
+  // InteractionRequiredAuthError, which the auth interceptor maps to an
+  // unauthenticated request and a 401 from `/api/*`. Sibling: frame-ancestors
+  // 'self' (added in 0.14.7) protects the inbound-framing direction; the
+  // same iframe also requires it. X-Frame-Options: SAMEORIGIN is the
+  // corresponding response-header guard (enforced separately by
+  // scripts/check-swa-config.mjs).
+  const frameSrc = directives['frame-src'] ?? [];
+  if (!frameSrc.includes("'self'")) {
+    errors.push(
+      `frame-src is missing 'self'. Required for the MSAL silent-refresh ` +
+        `iframe to receive the IdP's 302 redirect back to the SPA's own ` +
+        `origin; without it the browser blocks the navigation and ` +
+        `acquireTokenSilent() returns null.`,
+    );
+  }
+  const frameAncestors = directives['frame-ancestors'] ?? [];
+  if (!frameAncestors.includes("'self'")) {
+    errors.push(
+      `frame-ancestors is missing 'self'. Required so the MSAL ` +
+        `silent-refresh iframe (a same-origin nested browsing context) ` +
+        `is permitted; matches X-Frame-Options: SAMEORIGIN.`,
+    );
+  }
+
   return { ok: errors.length === 0, errors };
 }
 
