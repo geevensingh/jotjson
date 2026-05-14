@@ -2293,10 +2293,15 @@ Out of scope (for v1):
   header from report-only to enforced. In Report-Only mode the missing
   `'self'` was a harmless console-violation report. In enforcing mode
   the browser actually blocks the silent-refresh iframe's 302
-  redirect-back from the IdP to `https://jotjson.com/#code=...`. MSAL
-  then throws `InteractionRequiredAuthError`,
-  `AuthService.acquireTokenSilent()` returns null, the auth
-  interceptor sends the `/api/*` request without
+  redirect-back from the IdP to `https://jotjson.com/#code=...`. The
+  iframe never reaches our origin, so the MSAL parent's
+  `BroadcastChannel` listener - the v5 contract for iframe -> parent
+  auth-code transfer (see `waitForBridgeResponse` in
+  `node_modules/@azure/msal-browser/dist/utils/BrowserUtils.mjs`) -
+  never receives a message and times out after `iframeBridgeTimeout`
+  (10s default), surfacing `BrowserAuthError("redirect_bridge_timeout")`.
+  `AuthService.acquireTokenSilent()` catches the error, returns null,
+  the auth interceptor sends the `/api/*` request without
   `X-Jotjson-Authorization`, and the backend returns 401. Symptom:
   signed-in users see the rule-sets toolbar stuck on "Loading..." and
   the blobs page failing to load saved blobs (with save also failing)
