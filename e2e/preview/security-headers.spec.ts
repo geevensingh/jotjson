@@ -71,5 +71,31 @@ test.describe('Deployed SWA globalHeaders reach the browser', () => {
     );
 
     expect(headers['content-security-policy'], 'Content-Security-Policy present').toBeTruthy();
+
+    // CSP value invariants for MSAL silent token refresh. The structural
+    // lint at `scripts/check-csp-hashes.mjs` `checkPolicyStructure`
+    // enforces these against the source `staticwebapp.config.json`, but
+    // cannot prove SWA / Azure Front Door / any CDN edge in between is
+    // not stripping or rewriting the CSP value on the way to the browser.
+    // Both tokens are required for the silent-refresh iframe to load and
+    // to receive the IdP's 302 redirect back to the SPA's own origin.
+    const csp = headers['content-security-policy'] ?? '';
+    const cspDirectives = Object.fromEntries(
+      csp
+        .split(';')
+        .map((segment) => segment.trim())
+        .filter(Boolean)
+        .map((segment) => {
+          const parts = segment.split(/\s+/);
+          return [parts[0].toLowerCase(), parts.slice(1)];
+        }),
+    );
+    expect(cspDirectives['frame-src'] ?? [], "deployed CSP frame-src includes 'self'").toContain(
+      "'self'",
+    );
+    expect(
+      cspDirectives['frame-ancestors'] ?? [],
+      "deployed CSP frame-ancestors includes 'self'",
+    ).toContain("'self'");
   });
 });

@@ -1193,7 +1193,7 @@ tripwires together make IfMatch protection the default for every
   - `Strict-Transport-Security: max-age=31536000; includeSubDomains` - tells browsers to upgrade `http://` to `https://` for jotjson.com and its subdomains for one year, protecting against SSL-stripping MITM attacks on a returning user's first request. The `preload` directive is intentionally omitted; preload is a one-way commitment.
   - `Referrer-Policy: strict-origin-when-cross-origin`
   - `Permissions-Policy: clipboard-read=(self), clipboard-write=(self)` - scopes the Clipboard API to the site's own origin so the Smart Paste polling (Home page §1) can read the clipboard without cross-origin leakage.
-  - **Content Security Policy** - the full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader, a SHA-256 hash for the inline splash script, plus `'unsafe-hashes'` and a SHA-256 hash for the inline `onload="this.media='all'"` event handler Angular's `optimization.styles.inlineCritical` build pass injects into prerendered HTML for deferred-print-CSS preloading; `script-src-attr` is intentionally omitted so legacy browsers fall back to `script-src`'s hash list per CSP3), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights (`*.in.applicationinsights.azure.com` ingestion, `*.livediagnostics.monitor.azure.com` live metrics, `js.monitor.azure.com` SDK runtime config CDN), `font-src 'self' data:` (the `data:` source is required because Monaco's `vs/editor/editor.main.css` ships its codicon icon font inline as a `data:font/ttf;base64,...` URL inside an `@font-face` block), plus `frame-ancestors 'self'` (matches `X-Frame-Options: SAMEORIGIN` so MSAL silent refresh continues to work), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights hosts - including the SDK config CDN - are still covered by the policy). The `--src` and `--dist` modes additionally assert the structural shape of the policy itself: that `'unsafe-hashes'` and the inline-handler hash are still present on `script-src`, that `script-src-attr` has not been re-added, and that `font-src` still carries `data:` - so a future contributor cannot quietly drop one of these tokens and ship a broken policy. The `--dist` mode hashes all three production HTML files (`index.html`, `404/index.html`, `shell.html` - the SPA navigation fallback served on every non-prerendered route) and detects stale (unused) hashes in `script-src` so the policy does not bit-rot. See "CSP allowlist" further down for the App Insights origin rationale. See the PWA section for the post-deploy noise behavior that installed service workers can exhibit after a CSP-only deploy (tracked in issue #167). Sibling gate: `scripts/check-swa-config.mjs` covers the non-CSP globalHeaders entries above, the navigation-fallback rewrite, the route-order shadowing class, the deployment Cache-Control rule groups, `platform.apiRuntime`, and the `.webmanifest` MIME type.
+  - **Content Security Policy** - the full policy is checked in to `staticwebapp.config.json` and covers `script-src` (with `'unsafe-eval'` for Monaco's AMD loader, a SHA-256 hash for the inline splash script, plus `'unsafe-hashes'` and a SHA-256 hash for the inline `onload="this.media='all'"` event handler Angular's `optimization.styles.inlineCritical` build pass injects into prerendered HTML for deferred-print-CSS preloading; `script-src-attr` is intentionally omitted so legacy browsers fall back to `script-src`'s hash list per CSP3), `style-src` / `style-src-elem` / `style-src-attr` (with `'unsafe-inline'` because Angular and Material inject runtime styles and SWA cannot mint per-request nonces), `worker-src 'self' blob:` (Monaco + the JSON tree extractor worker), `connect-src` and `frame-src` for Entra (`*.ciamlogin.com`, `login.microsoftonline.com`) and App Insights (`*.in.applicationinsights.azure.com` ingestion, `*.livediagnostics.monitor.azure.com` live metrics, `js.monitor.azure.com` SDK runtime config CDN), `font-src 'self' data:` (the `data:` source is required because Monaco's `vs/editor/editor.main.css` ships its codicon icon font inline as a `data:font/ttf;base64,...` URL inside an `@font-face` block), plus `frame-ancestors 'self'` (matches `X-Frame-Options: SAMEORIGIN` so MSAL silent refresh continues to work), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and `upgrade-insecure-requests`. `scripts/check-csp-hashes.mjs` is wired into the lint chain (`--src`), the production build (`--dist`), and CI (`--ci-origins`, which validates that the secret-baked authority and App Insights hosts - including the SDK config CDN - are still covered by the policy). The `--src` and `--dist` modes additionally assert the structural shape of the policy itself: that `'unsafe-hashes'` and the inline-handler hash are still present on `script-src`, that `script-src-attr` has not been re-added, that `font-src` still carries `data:`, and that `frame-src` and `frame-ancestors` both still carry `'self'` (required for the MSAL silent-refresh iframe's 302 redirect-back from the IdP to the SPA's own origin; sibling to `X-Frame-Options: SAMEORIGIN`) - so a future contributor cannot quietly drop one of these tokens and ship a broken policy. The deployed-headers e2e spec at `e2e/preview/security-headers.spec.ts` additionally parses the actually-served CSP value and asserts the same `frame-src 'self'` / `frame-ancestors 'self'` invariants survive the SWA / Azure Front Door / CDN delivery path. The `--dist` mode hashes all three production HTML files (`index.html`, `404/index.html`, `shell.html` - the SPA navigation fallback served on every non-prerendered route) and detects stale (unused) hashes in `script-src` so the policy does not bit-rot. See "CSP allowlist" further down for the App Insights origin rationale. See the PWA section for the post-deploy noise behavior that installed service workers can exhibit after a CSP-only deploy (tracked in issue #167). Sibling gate: `scripts/check-swa-config.mjs` covers the non-CSP globalHeaders entries above, the navigation-fallback rewrite, the route-order shadowing class, the deployment Cache-Control rule groups, `platform.apiRuntime`, and the `.webmanifest` MIME type.
 
 ### Scalability
 - Cosmos DB serverless scales automatically.
@@ -2284,6 +2284,52 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.20.1**: MSAL silent token refresh fix (continuation of 0.14.7
+  precedent) - add `'self'` to the enforced CSP `frame-src` directive
+  in `staticwebapp.config.json`. The CSP value was byte-identical
+  between `Content-Security-Policy-Report-Only` (added 2026-04-25) and
+  the enforced `Content-Security-Policy` it ships in today; the
+  regression went live with PR #102 (2026-05-10) which flipped the
+  header from report-only to enforced. In Report-Only mode the missing
+  `'self'` was a harmless console-violation report. In enforcing mode
+  the browser actually blocks the silent-refresh iframe's 302
+  redirect-back from the IdP to `https://jotjson.com/#code=...`. The
+  iframe never reaches our origin, so the MSAL parent's
+  `BroadcastChannel` listener - the v5 contract for iframe -> parent
+  auth-code transfer (see `waitForBridgeResponse` in
+  `node_modules/@azure/msal-browser/dist/utils/BrowserUtils.mjs`) -
+  never receives a message and times out after `iframeBridgeTimeout`
+  (10s default), surfacing `BrowserAuthError("redirect_bridge_timeout")`.
+  `AuthService.acquireTokenSilent()` catches the error, returns null,
+  the auth interceptor sends the `/api/*` request without
+  `X-Jotjson-Authorization`, and the backend returns 401. Symptom:
+  signed-in users see the rule-sets toolbar stuck on "Loading..." and
+  the blobs page failing to load saved blobs (with save also failing)
+  once the cached access token expires (~1h). The 24h Report-Only
+  observation window in PR #102 caught interactive sign-in (which uses
+  redirect, not the silent iframe) but not the silent-refresh path
+  (which only fires after a cached access token expires).
+  `'self'` was chosen over a literal origin so the policy survives a
+  hostname change. **Security trade-off**: relaxing `frame-src 'self'`
+  permits any same-origin URL to be iframed from the SPA. In practice
+  the SPA's XSS posture (Angular interpolation only, no `innerHTML`,
+  JSON-only API responses, no user-controlled HTML rendering) keeps
+  practical exposure low; `frame-ancestors 'self'` already permits
+  same-origin framing of jotjson.com itself (complementary direction)
+  and this change adds the matching child-side allowance. New regression
+  guard: `scripts/check-csp-hashes.mjs` `checkPolicyStructure` now
+  enforces both `frame-src 'self'` and `frame-ancestors 'self'` so a
+  future contributor cannot silently drop either token. New deployed-
+  headers e2e assertion: `e2e/preview/security-headers.spec.ts` parses
+  the served CSP value and asserts both invariants survive the SWA /
+  AFD / CDN delivery path. Pure SWA-config + lint-script + e2e + docs
+  change; no SPA or backend code touched. Affected users may need to
+  sign out and sign back in once to clear the broken cached MSAL state
+  from before the fix shipped. **Known follow-up**: this fix unblocks
+  the silent-refresh iframe at the CSP layer; a separate change is
+  needed in `main.ts` to actually post the auth code back to the
+  parent via `@azure/msal-browser/redirect-bridge` (tracked
+  separately).
 - **0.20.0**: Decoded value viewer dialog (issue #95 Phase 0). The
   per-row "Show as decoded text" toggle on string leaves is replaced
   with a dedicated `MatDialog` viewer reached from the same row
