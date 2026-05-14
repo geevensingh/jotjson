@@ -887,6 +887,34 @@ export const TELEMETRY_MESSAGE_IDS = [
   'auth.devMode.misconfigured',
 
   /**
+   * Severity: warn
+   * Fired by: `LoggerService.flushSessionStorage` via direct
+   *           `telemetry.trackException(..., {messageId})` in
+   *           `core/telemetry/logger.service.ts` (does NOT route
+   *           through `logger.warn`). Replays a `{name, message}`
+   *           shape persisted to `sessionStorage` by
+   *           `postAuthResponseToParent` in
+   *           `core/auth/msal-iframe-bridge.ts` when the
+   *           silent-refresh iframe's call to
+   *           `broadcastResponseToMainFrame()` (from the
+   *           `@azure/msal-browser/redirect-bridge` subpath export)
+   *           rejected. The parent surfaces `redirect_bridge_timeout`
+   *           independently; this event is the diagnostic channel
+   *           telling us *why* the iframe-side bridge call failed
+   *           (parse error, missing state, missing id/meta, etc.).
+   * Props: none. (The `messageId` tag is attached to the
+   * `trackException` envelope, not as `props`. The `{name, message}`
+   * shape lands in the exception body.)
+   * Exception: a `{name, message}` shape reconstructed from
+   * `sessionStorage[BRIDGE_FAIL_KEY]`.
+   *
+   * LEGACY: removed when the `/blank.html` redirect URI migration
+   * (issue #230) ships and the compensating code in
+   * `msal-iframe-bridge.ts` is deleted.
+   */
+  'auth.msalBridge.failed',
+
+  /**
    * Kind: event
    * Fired by: `AuthService.setCurrentUser` on every null -> user
    *           transition (`core/auth/auth.service.ts`). Covers BOTH

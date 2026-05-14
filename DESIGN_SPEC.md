@@ -2284,6 +2284,45 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.20.2**: MSAL silent token refresh fix, part 2 of 2 (0.20.1 was
+  part 1). Adds the iframe-side bridge call required for the silent-
+  refresh flow to actually complete after the CSP layer was unblocked
+  in 0.20.1. New helper `src/app/core/auth/msal-iframe-bridge.ts`
+  exports `isInMsalSilentIframe(win?)` (predicate: `win.self !==
+  win.top` AND URL hash/query carries an MSAL-shaped
+  `state=<base64url-20+>` plus `code=` or `error=`) and
+  `postAuthResponseToParent(loader?)` (dynamic-imports
+  `@azure/msal-browser/redirect-bridge` and awaits
+  `broadcastResponseToMainFrame()`, persisting `{name, message}` to
+  `sessionStorage['jotjson.msalBridgeErr']` on failure). `src/main.ts`
+  wraps `bootstrapApplication(...)` in an `if (isInMsalSilentIframe())
+  { void postAuthResponseToParent(); } else { bootstrap... }` so the
+  silent-refresh iframe never bootstraps the full SPA - it just posts
+  the auth code over `BroadcastChannel(libraryState.id)` and lets the
+  parent's `waitForBridgeResponse` listener resolve. The
+  `auth.msalBridge.failed` telemetry message id (severity warn) is
+  registered and `LoggerService.flushSessionStorage` replays the
+  `jotjson.msalBridgeErr` slot as a `trackException` envelope on the
+  parent's next bootstrap, mirroring the existing `boot.failed` /
+  `jotjson.bootErr` pattern. The bridge is a dynamic import so it
+  stays out of the entry chunk on top-level page loads (the iframe
+  pays the chunk fetch but never bootstraps Angular). **Caveat**: the
+  early-return skips `bootstrapApplication` and the provider tree,
+  but it does NOT skip parse of `AppComponent`, `appConfig`, and
+  their transitive imports - those static imports at the top of
+  `main.ts` evaluate on every load including in the iframe. If
+  measured impact warrants it, a pre-bootstrap inline script in
+  `index.html` could push detection earlier; deferred until measured.
+  **Why a compensating helper instead of the MS-recommended
+  `/blank.html` redirect URI?** Migrating `redirectUri` requires an
+  Entra app registration change (operational coordination), a SWA
+  config update, and a lockstep deploy plan - more risk surface than
+  this firefight allows. The migration is tracked at issue #230 as
+  `priority:medium`; when it ships, both the helper file and the
+  `main.ts` LEGACY branch are deleted, and `auth.msalBridge.failed`
+  is removed. Backend, infrastructure, and the existing
+  CSP/redirect-uri config are untouched.
+
 - **0.20.1**: MSAL silent token refresh fix (continuation of 0.14.7
   precedent) - add `'self'` to the enforced CSP `frame-src` directive
   in `staticwebapp.config.json`. The CSP value was byte-identical
@@ -2326,10 +2365,9 @@ Out of scope (for v1):
   change; no SPA or backend code touched. Affected users may need to
   sign out and sign back in once to clear the broken cached MSAL state
   from before the fix shipped. **Known follow-up**: this fix unblocks
-  the silent-refresh iframe at the CSP layer; a separate change is
-  needed in `main.ts` to actually post the auth code back to the
-  parent via `@azure/msal-browser/redirect-bridge` (tracked
-  separately).
+  the silent-refresh iframe at the CSP layer; the matching change to
+  actually post the auth code back to the parent via
+  `@azure/msal-browser/redirect-bridge` ships in 0.20.2 (above).
 - **0.20.0**: Decoded value viewer dialog (issue #95 Phase 0). The
   per-row "Show as decoded text" toggle on string leaves is replaced
   with a dedicated `MatDialog` viewer reached from the same row
