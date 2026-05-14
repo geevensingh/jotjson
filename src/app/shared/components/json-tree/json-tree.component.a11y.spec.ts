@@ -113,6 +113,107 @@ describe('JsonTreeComponent (a11y)', () => {
     expect(focused.length).toBe(1);
   });
 
+  it('snaps focusedPath into the rendered range when the user scrolls the focused row offscreen', async () => {
+    // Phase 2 (issue #95) -- with `<mat-tree>` every row was in the
+    // DOM, so the focused row always had `tabindex="0"`. With CDK
+    // virtual scroll, only rows in the rendered window are in the
+    // DOM; if `focusedPath` points to an offscreen row, no element
+    // has `tabindex="0"` and Tab-into-tree-from-outside skips the
+    // tree entirely. The component subscribes to the viewport's
+    // `renderedRangeStream` and snaps `focusedPath` to the top of
+    // the rendered window when the focused row falls outside it.
+    //
+    // Use a large enough value that the viewport can't render every
+    // row at once (600px host height, ~24px row height -> ~25 rows
+    // can fit; we build a 150-key object so scroll definitely moves
+    // rows out of the rendered range).
+    const largeValue: Record<string, number> = {};
+    for (let i = 0; i < 150; i++) largeValue[`key_${String(i).padStart(3, '0')}`] = i;
+
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [JsonTreeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideNoopAnimations(),
+        { provide: MatSnackBar, useValue: { open: jasmine.createSpy('snackOpen') } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(JsonTreeComponent);
+    fixture.componentRef.setInput('value', largeValue);
+    const host = fixture.nativeElement as HTMLElement;
+    host.style.height = '600px';
+    host.style.width = '1000px';
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    // Confirm only a window is rendered (virtualization is actually on).
+    const renderedRows = host.querySelectorAll('.tree-row[role="treeitem"]');
+    expect(renderedRows.length)
+      .withContext('virtualization should render fewer rows than the 150-key object')
+      .toBeLessThan(150);
+
+    // Sanity: a single tabindex=0 lives on the first visible row.
+    const initialFocused = host.querySelector('.tree-row[tabindex="0"]');
+    expect(initialFocused)
+      .withContext('roving-tabindex invariant: exactly one tabindex=0 on mount')
+      .toBeTruthy();
+    const initialFocusedPath = initialFocused?.getAttribute('data-path') ?? null;
+    expect(initialFocusedPath).withContext('focused row should have a data-path').toBeTruthy();
+
+    // Scroll far enough that the originally-focused row leaves the rendered window.
+    const cmp = fixture.componentInstance;
+    const viewport = cmp.__getHelpersForTesting().getViewport();
+    expect(viewport).withContext('viewport view-child should be resolved').toBeTruthy();
+    viewport!.scrollToOffset(2000, 'auto');
+    // Belt + suspenders: in some test orderings the scroll-listener
+    // attached by CDK's `FixedSizeVirtualScrollStrategy` doesn't fire
+    // a synthetic scroll event when `scrollToOffset` mutates scrollTop
+    // synchronously. Dispatching an explicit `scroll` event on the
+    // viewport's scrollable host kicks the strategy into recomputing
+    // its range so `renderedRangeStream` fires reliably in headless
+    // Karma runs.
+    viewport!.elementRef.nativeElement.dispatchEvent(new Event('scroll'));
+    viewport!.checkViewportSize();
+
+    const nextDoubleRaf = (): Promise<void> =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+
+    // Drain: two double-rAFs + microtasks + change detection to let
+    // CDK's scroll-strategy compute a new `renderedRangeStream` value,
+    // the component's subscribe write `renderedRange`, the effect fire,
+    // and the resulting `focusedPath` change paint the DOM tabindex.
+    await nextDoubleRaf();
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+    await nextDoubleRaf();
+    fixture.detectChanges();
+
+    // After scroll: focusedPath should have snapped to a row that is
+    // currently rendered (otherwise no element has tabindex=0).
+    const afterScrollFocused = host.querySelectorAll('.tree-row[tabindex="0"]');
+    expect(afterScrollFocused.length)
+      .withContext('exactly one tabindex=0 should still live in the DOM after scroll')
+      .toBe(1);
+
+    // The snapped path should NOT be the originally-focused row's path
+    // (it's offscreen now), and it MUST appear among the currently-rendered rows.
+    const snappedPath = afterScrollFocused[0]!.getAttribute('data-path');
+    expect(snappedPath)
+      .withContext('focused path must change when the original row is scrolled out')
+      .not.toBe(initialFocusedPath);
+    const allRenderedPaths = Array.from(host.querySelectorAll('.tree-row[role="treeitem"]')).map(
+      (el) => el.getAttribute('data-path'),
+    );
+    expect(allRenderedPaths)
+      .withContext('snapped focusedPath must point to a row currently in the rendered range')
+      .toContain(snappedPath);
+  });
+
   it('has no critical or serious WCAG 2.1 AA violations (dark theme)', async () => {
     const fixture = await configure();
     teardown = attachFixtureToBody(fixture, 'dark');

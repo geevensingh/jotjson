@@ -237,9 +237,7 @@
       role="tree"
     >
       @if (flatList().length > 0) {
-        <ng-container
-          *cdkVirtualFor="let item of flatList(); trackBy: trackByFlatItem; templateCacheSize: 0"
-        >
+        <ng-container *cdkVirtualFor="let item of flatList(); trackBy: trackByFlatItem">
           @switch (item.kind) {
             @case ('leaf') {
               @let leafNode = item.node;

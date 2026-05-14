@@ -121,19 +121,16 @@
 // the tree's row rendering. Owns the scroll surface (the host `.tree-body`
 // no longer scrolls). `contain: strict` is required by CdkFixedSizeVirtualScroll
 // for predictable layout; the parent flex sizing supplies the explicit
-// height contain requires. The `--measuring` variant is the placeholder
-// rendered for one frame between viewport-mount and the first
-// `measuredRowHeightPx()` write so we never bind `[itemSize]="0"`.
+// height contain requires. We never bind `[itemSize]="0"` -- the viewport
+// uses `effectiveRowHeightPx()` which falls back to a font-size-derived
+// default (`ceil(treeFontSize * 1.6)`) until the probe row's real
+// measurement lands.
 .tree-viewport {
   display: block;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
   contain: strict;
-}
-
-.tree-viewport--measuring {
-  min-height: 0;
 }
 
 .tree-empty {

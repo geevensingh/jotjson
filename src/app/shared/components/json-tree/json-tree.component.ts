@@ -53,7 +53,7 @@ import {
   DecodedValueDialogComponent,
   type DecodedValueDialogData,
 } from './decoded-value-dialog/decoded-value-dialog.component';
-import { flatten, type FlatItem } from './flatten';
+import { buildVisibleIndexMap, flatten, type FlatItem } from './flatten';
 import { EMPTY_BEACON_INDEX, buildBeaconIndex, type BeaconIndex } from './formatting-beacons-index';
 import {
   EMPTY_RULE_RESULT,
@@ -347,6 +347,16 @@ export class JsonTreeComponent {
    * input keeps focus so repeated Enter / Shift+Enter cycle hits).
    */
   readonly focusedPath = signal<string | null>(null);
+
+  /**
+   * Phase 2 (issue #95) -- mirror of the CDK virtual scroll viewport's
+   * `renderedRangeStream` so the focus-snap effect can react. Half-open
+   * range `[start, end)` over `flatList()` indices. Written from a
+   * subscribe in the constructor once `viewport()` mounts; read by
+   * the snap effect that keeps `tabindex="0"` inside the rendered
+   * window after user scroll.
+   */
+  private readonly renderedRange = signal<{ start: number; end: number }>({ start: 0, end: 0 });
 
   /**
    * Phase 2 (issue #95) -- authoritative expansion state, replacing
@@ -1066,18 +1076,16 @@ export class JsonTreeComponent {
   /**
    * Path -> visible-row-index lookup over `flatList()`, skipping
    * `'close'` rows so containers map to their canonical `'open'`
-   * index. Used by `expandAndScroll` to compute pixel offsets.
+   * index. Used by `expandAndScroll` to compute pixel offsets and
+   * by the focus-recovery effects to test whether `focusedPath`
+   * still maps to a row in the flattened render order. Delegates
+   * to the shared `buildVisibleIndexMap` helper in `flatten.ts`
+   * so the "skip close rows" rule has a single home and is covered
+   * by `flatten.spec.ts`.
    */
-  private readonly visibleIndexByPath = computed<ReadonlyMap<string, number>>(() => {
-    const list = this.flatList();
-    const map = new Map<string, number>();
-    for (let i = 0; i < list.length; i++) {
-      const item = list[i]!;
-      if (item.kind === 'close') continue;
-      if (!map.has(item.node.pathString)) map.set(item.node.pathString, i);
-    }
-    return map;
-  });
+  private readonly visibleIndexByPath = computed<ReadonlyMap<string, number>>(() =>
+    buildVisibleIndexMap(this.flatList()),
+  );
 
   /**
    * Phase 2 (issue #95) -- visible rows in document order, with
@@ -1253,10 +1261,12 @@ export class JsonTreeComponent {
     // carries every height-contributing element (twisty, key, value,
     // date annotation, comment, kebab pill, extract pill, decoded
     // pill), so its bounding-rect height is an upper bound on the
-    // tallest row that could render. The measurement gates the
-    // `<cdk-virtual-scroll-viewport>` `[itemSize]` binding (rendered
-    // only when `measuredRowHeightPx() > 0`) and preserves the
-    // user's logical scroll position across font-size changes.
+    // tallest row that could render. The measurement drives the
+    // `<cdk-virtual-scroll-viewport>` `[itemSize]` binding via
+    // `effectiveRowHeightPx()` (which falls back to a font-size-derived
+    // default before the first measurement lands so the viewport
+    // never sees `[itemSize]="0"`) and preserves the user's logical
+    // scroll position across font-size changes.
     effect(() => {
       this.treeFontSize();
       this.prefs.prefs().treeShowTypeLabels;
@@ -1427,6 +1437,7 @@ export class JsonTreeComponent {
     effect(() => {
       const visible = this.visibleRowsInOrder();
       const path = this.focusedPath();
+      const map = this.visibleIndexByPath();
 
       if (visible.length === 0) {
         if (path !== null) untracked(() => this.focusedPath.set(null));
@@ -1439,8 +1450,13 @@ export class JsonTreeComponent {
         return;
       }
 
-      const visibleSet = new Set(visible.map((n) => n.pathString));
-      if (visibleSet.has(path)) return;
+      // O(1) membership check via `visibleIndexByPath`. Both `visibleRowsInOrder`
+      // and `visibleIndexByPath` skip `'close'` rows, so they share the same
+      // key set; the index map gives us a hash lookup instead of an O(N)
+      // `Set` build on every effect run (matters when `flatList` is 100K
+      // and this effect fires on every snap from the scroll-out handler
+      // below).
+      if (map.has(path)) return;
 
       // Walk up the path of the (possibly hidden) node to find the
       // nearest currently-visible ancestor.
@@ -1451,10 +1467,10 @@ export class JsonTreeComponent {
         for (let i = 0; i < node.path.length; i++) {
           parts.push(node.path[i]!);
           const ancestorPath = formatPath(parts);
-          if (visibleSet.has(ancestorPath)) recovered = ancestorPath;
+          if (map.has(ancestorPath)) recovered = ancestorPath;
         }
         // Root may also be the recovery target (path === '$').
-        if (recovered === null && visibleSet.has('$')) recovered = '$';
+        if (recovered === null && map.has('$')) recovered = '$';
         if (recovered !== null) {
           const finalRecovered = recovered;
           untracked(() => this.focusedPath.set(finalRecovered));
@@ -1464,6 +1480,68 @@ export class JsonTreeComponent {
 
       // Path no longer exists in the index at all -- reset to first.
       untracked(() => this.focusedPath.set(visible[0]!.pathString));
+    });
+
+    // Phase 2 (issue #95) -- snap `focusedPath` into the rendered range
+    // when the user scrolls the focused row out of the viewport. With
+    // `<mat-tree>` every row was in the DOM, so `tabindex="0"` on the
+    // focused row was always present and Tab-into-tree-from-outside
+    // always worked. With CDK virtual scroll, only rows in the rendered
+    // window are in the DOM; if `focusedPath` points to an unmounted
+    // row no element has `tabindex="0"` and Tab skips the tree
+    // entirely (broken roving-tabindex invariant per WAI-ARIA Tree).
+    //
+    // The fix: when `renderedRange` changes such that the index for
+    // `focusedPath` falls outside `[start, end)`, snap `focusedPath`
+    // to the first non-close row at the top of the rendered window.
+    // We do NOT call DOM `focus()` or `scrollIntoView` -- user scroll
+    // is the trigger, so we follow the user rather than fighting them.
+    //
+    // Bailouts handle the synchronous-flatList vs microtask-rendered-range
+    // race (collapseAll + flatList shrink can leave `range.start >=
+    // list.length` for one tick) and let the existing recovery effect
+    // above own ancestor-collapse / re-parse cases.
+    effect(() => {
+      const list = this.flatList();
+      const range = this.renderedRange();
+      const path = this.focusedPath();
+      const map = this.visibleIndexByPath();
+      if (path === null || list.length === 0) return;
+      const focusedIndex = map.get(path);
+      if (focusedIndex === undefined) return;
+      if (focusedIndex >= range.start && focusedIndex < range.end) return;
+      const upper = Math.min(range.end, list.length);
+      for (let i = range.start; i < upper; i++) {
+        const item = list[i]!;
+        if (item.kind !== 'close') {
+          const snappedPath = item.node.pathString;
+          untracked(() => this.focusedPath.set(snappedPath));
+          return;
+        }
+      }
+    });
+
+    // Subscribe to the viewport's rendered-range stream the moment the
+    // viewport view-child mounts. The effect re-runs if the viewport
+    // ever unmounts and remounts (e.g., root() -> null -> root() again);
+    // `onCleanup` tears down the prior subscription so we never leak.
+    //
+    // `renderedRangeStream` is a plain `Subject` (not a `BehaviorSubject`),
+    // so subscribing after the viewport's initial layout would miss the
+    // first emission and leave `renderedRange` stuck at `{0, 0}` until
+    // the user scrolls. Seed from `getRenderedRange()` synchronously so
+    // the snap effect sees a non-empty range from the first tick.
+    // `untracked` around the seed + subscribe avoids re-tracking the
+    // stream emissions (we only depend on the viewport reference identity).
+    effect((onCleanup) => {
+      const vp = this.viewport();
+      if (!vp) return;
+      const initial = vp.getRenderedRange();
+      untracked(() => this.renderedRange.set({ start: initial.start, end: initial.end }));
+      const sub = vp.renderedRangeStream.subscribe((range) => {
+        untracked(() => this.renderedRange.set({ start: range.start, end: range.end }));
+      });
+      onCleanup(() => sub.unsubscribe());
     });
   }
 
