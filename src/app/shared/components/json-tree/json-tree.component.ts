@@ -202,16 +202,6 @@ const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
 const DECODED_LONG_THRESHOLD_CHARS = 256;
 
 /**
- * Maximum string length included verbatim in `matTooltip` content.
- * Tooltip overlays are unbounded by default; clamping protects
- * against multi-MB string payloads dragging the layout pipeline. By
- * construction every value over this cap is also a
- * {@link JsonTreeComponent.decodedCandidate}, so the truncation
- * suffix can honestly point at the dialog-viewer affordance.
- */
-const MAX_TOOLTIP_LEN_CHARS = 1024;
-
-/**
  * Frozen empty-array sentinel returned by `keyIcons` / `valueIcons`
  * when the engine projects no icons. Identity-shared so `OnPush`
  * change detection treats unchanged rows as equal.
@@ -2257,22 +2247,6 @@ export class JsonTreeComponent {
       pathDepth: bucketCount(node.path.length),
       lineCountBucket: bucketLineCount(value),
     });
-  }
-
-  /**
-   * Clamps an arbitrarily-long string for use as a `matTooltip` body
-   * so the tooltip overlay never grows unbounded on long values.
-   * Strings at or below {@link MAX_TOOLTIP_LEN_CHARS} are returned
-   * verbatim; longer values are sliced and given a localized
-   * truncation suffix that names the "open the pill" affordance,
-   * which is guaranteed to be present (every value over the cap is
-   * also a {@link decodedCandidate}).
-   */
-  clampTooltip(value: string): string {
-    if (value.length <= MAX_TOOLTIP_LEN_CHARS) return value;
-    const remaining = value.length - MAX_TOOLTIP_LEN_CHARS;
-    const suffix = $localize`:@@tree.decoded.tooltipTruncated:... (${remaining}:INTERPOLATION: more characters; open the pill to view full value)`;
-    return value.slice(0, MAX_TOOLTIP_LEN_CHARS) + suffix;
   }
 
   /**

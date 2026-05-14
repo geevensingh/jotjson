@@ -4641,24 +4641,6 @@ describe('JsonTreeComponent', () => {
         }
       });
     });
-
-    describe('clampTooltip helper', () => {
-      it('returns the input verbatim when length <= 1024', async () => {
-        await createWith({ note: 'x' });
-        expect(cmp.clampTooltip('hello')).toBe('hello');
-        expect(cmp.clampTooltip('x'.repeat(1024))).toBe('x'.repeat(1024));
-      });
-
-      it('truncates and appends a localized suffix when length > 1024', async () => {
-        await createWith({ note: 'x' });
-        const input = 'a'.repeat(2000);
-        const output = cmp.clampTooltip(input);
-        expect(output.startsWith('a'.repeat(1024))).toBe(true);
-        expect(output.length).toBeGreaterThan(1024);
-        expect(output.length).toBeLessThan(input.length);
-        expect(output).toContain('976');
-      });
-    });
   });
 
   // ---------------------------------------------------------------------------

@@ -129,10 +129,11 @@ describe('DecodedValueDialogComponent', () => {
   describe('close', () => {
     it('closes via MatDialogRef when the close button is clicked', () => {
       const fixture = createWith({ value: 'a', pathString: '$.x' });
-      const buttons = (fixture.nativeElement as HTMLElement).querySelectorAll('button');
-      // The close button is the last action button.
-      const closeBtn = buttons[buttons.length - 1] as HTMLButtonElement;
-      closeBtn.click();
+      const closeBtn = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '.decoded-actions__close',
+      );
+      expect(closeBtn).toBeTruthy();
+      closeBtn!.click();
       expect(close).toHaveBeenCalledTimes(1);
     });
   });
