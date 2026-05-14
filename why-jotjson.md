@@ -48,12 +48,17 @@ Ctrl+Z gets you back the raw paste. The inverse - **Copy as escaped
 string** - is available with Alt+click on any copy action, completing the
 round-trip you usually have to do by hand.
 
-### Decoded view for escaped strings
+### Decoded value viewer for escaped strings
 
 Strings with embedded `\n`, `\t`, or `\"` are hard to read in their
-JSON-escaped form. JotJSON adds a pill on those rows that flips the value
-between escaped one-liner and decoded multi-line view. Purely visual: copy
-still gives you the literal raw string.
+JSON-escaped form, and very long single-line values (URLs, base64
+payloads, GUIDs) are awkward in any tree. JotJSON marks those rows
+with a small pill (and a matching `Open decoded value` entry in the
+row's right-click menu); one click opens a dedicated viewer dialog
+that shows the raw string with line numbers, a Copy button, and a
+larger monospace font - mobile-friendly even for long payloads. The
+tree row itself stays one line tall: the dialog never shifts the
+layout. Purely visual; copy still gives you the literal raw string.
 
 ### JSONC as a first-class input
 

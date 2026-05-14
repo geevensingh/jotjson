@@ -17,6 +17,7 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuTrigger } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -46,6 +47,10 @@ import {
 } from '../json-breadcrumb/json-breadcrumb.component';
 import { computeAutoFitDepth } from './auto-fit-depth';
 import { buildTree, formatPath, type TreeNode } from './build-tree';
+import {
+  DecodedValueDialogComponent,
+  type DecodedValueDialogData,
+} from './decoded-value-dialog/decoded-value-dialog.component';
 import { EMPTY_BEACON_INDEX, buildBeaconIndex, type BeaconIndex } from './formatting-beacons-index';
 import {
   EMPTY_RULE_RESULT,
@@ -188,6 +193,15 @@ const TREE_RENDER_SLOW_THRESHOLD_MS = 200;
 const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
 
 /**
+ * String length above which a string leaf is considered a "decoded
+ * candidate" even when it carries no JSON-escape-worthy characters.
+ * Roughly two desktop screen widths at default tree font size, so
+ * any value beyond this is hard to read in a single ellipsised row
+ * and is reachable through the dialog viewer pill.
+ */
+const DECODED_LONG_THRESHOLD_CHARS = 256;
+
+/**
  * Frozen empty-array sentinel returned by `keyIcons` / `valueIcons`
  * when the engine projects no icons. Identity-shared so `OnPush`
  * change detection treats unchanged rows as equal.
@@ -223,6 +237,7 @@ export class JsonTreeComponent {
   private readonly ruleSets = inject(RuleSetsService);
   private readonly logger = inject(LoggerService);
   private readonly beaconNav = inject(BeaconNavigationService);
+  private readonly dialog = inject(MatDialog);
 
   readonly value = input<unknown>(undefined);
   readonly viewResetToken = input<number>(0);
@@ -471,15 +486,16 @@ export class JsonTreeComponent {
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
 
-  // Decoded toggle (per-row): mirrors the Extract pill but is purely
-  // display-only - it does not mutate the underlying value, copy
-  // semantics, or search behavior.
-  readonly decodedShowTitleLabel = $localize`:@@tree.decoded.button.title.show:Show as decoded text`;
-  readonly decodedHideTitleLabel = $localize`:@@tree.decoded.button.title.hide:Show as JSON-escaped string`;
-  readonly decodedShowAriaLabel = $localize`:@@tree.decoded.button.aria.show:Show this string as decoded multi-line text`;
-  readonly decodedHideAriaLabel = $localize`:@@tree.decoded.button.aria.hide:Show this string as a JSON-escaped single-line string`;
-  readonly decodedShowMenuLabel = $localize`:@@tree.decoded.menu.label.show:Show as decoded text`;
-  readonly decodedHideMenuLabel = $localize`:@@tree.decoded.menu.label.hide:Show as JSON-escaped string`;
+  // Decoded viewer (per-row): mirrors the Extract pill but is purely
+  // a display affordance - clicking it opens the dedicated decoded
+  // value dialog rather than mutating any per-row state. Inline
+  // string rendering stays in the JSON-escaped form so every tree
+  // row is uniform-height (issue #95 Phase 0). The single label
+  // covers both the row-pill and kebab-menu entry points; the prior
+  // show/hide pair was retired alongside the inline toggle.
+  readonly decodedOpenDialogTitleLabel = $localize`:@@tree.decoded.pill.openDialog.title:Open decoded value`;
+  readonly decodedOpenDialogAriaLabel = $localize`:@@tree.decoded.pill.openDialog.aria:Open decoded value in a viewer`;
+  readonly decodedOpenDialogMenuLabel = $localize`:@@tree.decoded.menu.openDialog:Open decoded value`;
 
   // Breadcrumb labels (Phase 2). Stable English source strings; i18n
   // IDs feed through the standard pipeline (extract-i18n).
@@ -1018,20 +1034,6 @@ export class JsonTreeComponent {
   private cancelledRender = false;
 
   /**
-   * Per-row "show as decoded text" toggle state. A path is in this set
-   * iff the user has explicitly opted that row into decoded display.
-   * Membership alone is not authoritative: {@link isDecoded} also
-   * requires {@link decodedCandidate} to return true, so stale entries
-   * for rows whose value has since changed render harmlessly as the
-   * normal JSON-escaped form.
-   *
-   * Cleared on every {@link viewResetToken} bump (blob change). NOT
-   * cleared on format-driven reparse so toggling Format/Minify keeps
-   * the user's per-row toggle state stable.
-   */
-  private readonly decodedExpandedPaths = signal<ReadonlySet<string>>(new Set<string>());
-
-  /**
    * Cached probe row height keyed by `treeFontSize`. Invalidated
    * when the user changes the font size. Cheap microreflow once
    * per font size; repeated calls re-use the cached value.
@@ -1088,11 +1090,6 @@ export class JsonTreeComponent {
       if (token > 0 && token !== this.lastObservedResetToken) {
         this.lastObservedResetToken = token;
         this.hasInitializedExpansion = false;
-        // Blob-change reset: drop any per-row decoded toggle state so
-        // a fresh blob never inherits the prior blob's UI mode.
-        // Format/Minify reparse does NOT bump viewResetToken, so the
-        // user's toggle state is preserved across formatting changes.
-        untracked(() => this.decodedExpandedPaths.set(new Set<string>()));
       }
       // Fires for every root or token change; invalidates any in-flight
       // prior-run auto-fit rAF before it can emit stale telemetry.
@@ -2177,79 +2174,77 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Returns true when this node is a string leaf whose parsed value
-   * benefits from a "show as decoded text" pill. The predicate is
-   * intentionally broad: any control character that JSON would have
-   * escaped (\n, \r, \t), plus embedded quotes (") or backslashes (\),
-   * makes the JSON-escaped single-line rendering harder to read than
-   * the raw string. A string with only printable ASCII and no embedded
-   * quotes/backslashes shows fine as-is and gets no pill.
+   * Returns true when this node is a string leaf whose JSON-escaped
+   * single-line rendering is hard to read at a glance, so the row
+   * exposes a "decoded value" pill that opens the dedicated viewer
+   * dialog. The predicate is intentionally broad:
+   *
+   * - any control character that JSON would have escaped (`\n`, `\r`,
+   *   `\t`), plus embedded quotes (`"`) or backslashes (`\`), OR
+   * - any string longer than {@link DECODED_LONG_THRESHOLD_CHARS}
+   *   characters (roughly two desktop screen widths at default font),
+   *   so long single-line URLs / GUIDs / base64 IDs / large numeric
+   *   IDs as strings are also reachable through the dialog viewer.
+   *
+   * A short, plain ASCII string with no escape-worthy characters
+   * shows fine as-is and gets no pill.
    */
   decodedCandidate(node: TreeNode): boolean {
     if (node.type !== 'string' || typeof node.value !== 'string') return false;
-    return /[\n\r\t"\\]/.test(node.value);
+    return node.value.length > DECODED_LONG_THRESHOLD_CHARS || /[\n\r\t"\\]/.test(node.value);
   }
 
   /**
-   * True iff the user has explicitly toggled this row into the decoded
-   * view AND the node is still a decoded candidate. Gating on the
-   * predicate makes stale entries (e.g. value type changed under the
-   * same path) render as the normal JSON-escaped form.
-   */
-  isDecoded(node: TreeNode): boolean {
-    if (!this.decodedCandidate(node)) return false;
-    return this.decodedExpandedPaths().has(node.pathString);
-  }
-
-  /**
-   * Template-only renderer for value text. For string leaves in the
-   * decoded view, returns the raw string wrapped in JSON quotes so the
-   * row still reads as a string (just with real newlines and a
-   * `pre-wrap` whitespace style). For everything else delegates to
-   * {@link renderLeaf} so search (which calls renderLeaf directly)
-   * remains the canonical "what does this row show" source of truth.
+   * Template-only renderer for value text. Always returns the
+   * canonical JSON-escaped form via {@link renderLeaf} so every tree
+   * row is uniform-height (issue #95 Phase 0). Decoded multi-line
+   * content is shown via {@link openDecodedDialog} instead.
    */
   displayLeaf(node: TreeNode): string {
-    if (node.type === 'string' && typeof node.value === 'string' && this.isDecoded(node)) {
-      return `"${node.value}"`;
-    }
     return this.renderLeaf(node.value, node.type);
   }
 
+  /**
+   * Pill-button click handler. Opens the decoded value dialog and
+   * stops the click from bubbling up to the row, which would
+   * otherwise change selection.
+   */
   onDecodedButtonClick(node: TreeNode, event: MouseEvent): void {
     event.stopPropagation();
-    this.toggleDecoded(node, 'rowButton');
+    this.openDecodedDialog(node, 'rowButton');
   }
 
+  /**
+   * Kebab "Open decoded value" entry-point handler. Same dialog as
+   * the row pill; the source prop disambiguates the entry point in
+   * telemetry.
+   */
   onDecodedMenuClick(node: TreeNode): void {
-    if (this.decodedCandidate(node)) {
-      // Phase 4 (tree-menu overhaul): split show vs hide into
-      // separate counts-only events so analytics can answer "is
-      // Decode used as a one-shot inspection or as a sticky
-      // setting?". Fire BEFORE `toggleDecoded` so we read the
-      // pre-toggle state directly from `isDecoded`.
-      this.logger.info(
-        this.isDecoded(node) ? 'tree.contextMenu.decodeHide' : 'tree.contextMenu.decodeShow',
-      );
-    }
-    this.toggleDecoded(node, 'contextMenu');
+    this.openDecodedDialog(node, 'contextMenu');
   }
 
-  private toggleDecoded(node: TreeNode, source: 'rowButton' | 'contextMenu'): void {
+  /**
+   * Opens {@link DecodedValueDialogComponent} for `node` and emits
+   * one `tree.decoded.viewerOpened` event with bucketed properties
+   * (see the catalog entry in `telemetry-message-ids.ts`). Aborts
+   * silently when the node is not a current decoded candidate so a
+   * stale row click after the value type changed is a no-op.
+   */
+  private openDecodedDialog(node: TreeNode, source: 'rowButton' | 'contextMenu'): void {
+    const current = this.nodeIndex().get(node.pathString);
+    if (current !== node) return;
     if (!this.decodedCandidate(node)) return;
     const value = node.value as string;
-    const current = this.decodedExpandedPaths();
-    const next = new Set(current);
-    const wasOn = next.has(node.pathString);
-    if (wasOn) {
-      next.delete(node.pathString);
-    } else {
-      next.add(node.pathString);
-    }
-    this.decodedExpandedPaths.set(next);
-    this.logger.event('tree.decoded.click', {
+    const reason: 'escape' | 'long' = /[\n\r\t"\\]/.test(value) ? 'escape' : 'long';
+    const data: DecodedValueDialogData = { value, pathString: node.pathString };
+    this.dialog.open<DecodedValueDialogComponent, DecodedValueDialogData, void>(
+      DecodedValueDialogComponent,
+      { data, width: '720px', maxWidth: '95vw', autoFocus: 'dialog' },
+    );
+    this.logger.event('tree.decoded.viewerOpened', {
       source,
-      direction: wasOn ? 'off' : 'on',
+      reason,
+      pathDepth: bucketCount(node.path.length),
       lineCountBucket: bucketLineCount(value),
     });
   }

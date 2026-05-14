@@ -480,7 +480,7 @@ test("checkPolicyStructure fails when frame-src lacks 'self' (MSAL silent refres
   // `frame-src https://*.ciamlogin.com https://login.microsoftonline.com`
   // with no `'self'`. The IdP's 302 redirect back to jotjson.com inside
   // the silent-refresh iframe was blocked by the browser, MSAL threw
-  // InteractionRequiredAuthError, and `/api/*` 401'd. Restored in 0.19.8.
+  // InteractionRequiredAuthError, and `/api/*` 401'd. Restored in 0.20.1.
   const directives = makeStructDirectives({
     frameSrc: ['https://*.ciamlogin.com', 'https://login.microsoftonline.com'],
   });
