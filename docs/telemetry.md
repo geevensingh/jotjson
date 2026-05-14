@@ -992,9 +992,12 @@ directory at sign-in.
 - [App Insights component `appi-jotjson-dev` (overview)](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev/overview)
   -- entry point for Live Metrics, Failures, Performance, App Map, Logs.
 - [App Insights -> Workbooks gallery](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.insights/components/appi-jotjson-dev/workbooks)
-  -- open the workbook named **`JotJSON monitoring (dev)`**. (If the gallery
-  subpath ever changes, fall back to the App Insights overview link above
-  and click **Workbooks** in the left nav.)
+  -- open the workbook named **`JotJSON operator monitoring`** for app
+  health / perf / auth / API / quotas, or **`JotJSON product analytics`**
+  for feature usage (right-click menu, double-click, keyboard, breadcrumb,
+  highlight, decoded viewer, extract). The same gallery hosts both. If
+  the gallery subpath ever changes, fall back to the App Insights
+  overview link above and click **Workbooks** in the left nav.
 - [Log Analytics workspace `appi-jotjson-dev-law` (overview)](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.operationalinsights/workspaces/appi-jotjson-dev-law/overview)
 - [Log Analytics -> Alerts](https://portal.azure.com/#@68fa6d3c-ab3e-4eea-97bb-f0376ea54cba/resource/subscriptions/db5e75e4-b980-486d-a11e-fe9327a52031/resourceGroups/rg-jotjson-dev/providers/microsoft.operationalinsights/workspaces/appi-jotjson-dev-law/alerts)
   -- alerts blade scoped to the workspace. (Fallback: open the LAW overview
@@ -1006,10 +1009,25 @@ If you hit a `wrong issuer` token error after sign-in, see
 
 ### Overview
 
-An operator-facing monitoring layer sits on top of the instrumentation
-documented earlier in this file: a workbook with five sections (Health,
-Performance, Auth & Access, API, Quotas) and four scheduled-query-rule alerts
-wired to a single action group.
+An operator-facing monitoring layer and a PM-facing product-analytics
+layer both sit on top of the instrumentation documented earlier in this
+file. They ship as two App Insights workbooks plus four scheduled-query-
+rule alerts wired to a single action group:
+
+- **`JotJSON operator monitoring`** -- five sections (Health, Performance,
+  Auth & Access, API, Quotas). Audience: anyone investigating service
+  health, perf regressions, auth/access failures, API issues, or quota
+  pressure. No workbook-level time picker; each tile is tuned to an
+  operator-relevant window (1h-7d).
+- **`JotJSON product analytics`** -- six sections (Leading conversion +
+  top 20; Context menu; Subtree submenu; Tree row interactions;
+  Breadcrumb; Highlight; Decoded viewer & Extract). Audience: PM /
+  founder asking "which features are getting used, and at what rate?".
+  Workbook-level `TimeRange` picker (default 30d, options 24h / 7d /
+  30d / 90d).
+
+Both workbooks deploy via the generic `infra/modules/workbook.bicep`
+module with content in `infra/workbooks/{monitoring,product-analytics}.json`.
 
 The action group is wired to `jotjsonadmin@gmail.com` in
 `infra/parameters/dev.bicepparam`. Override at deploy time by
@@ -1042,6 +1060,8 @@ silently breaks evaluation; queries return 0 rows or fail.
 
 ### Workbook sections
 
+#### Operator monitoring sections
+
 - **Health** -- overall request volume / failure rate, top exception types,
   `app.boot` version distribution from `customDimensions.appVersion` on the
   `app.boot` event.
@@ -1052,6 +1072,80 @@ silently breaks evaluation; queries return 0 rows or fail.
 - **API** -- Functions request rate, 4xx/5xx breakdown, p95 duration by
   operation.
 - **Quotas** -- `quota.exceeded` event volume, top quota types.
+
+#### Product analytics sections
+
+- **0. Leading** -- two tiles: the menu conversion ratio (opens vs.
+  actions taken) and the top-20 user actions across all surfaces
+  (context menu, double-click, keyboard, breadcrumb, highlight,
+  decoded viewer, extract).
+- **1. Context menu** -- top actions (excluding the menu-open
+  impression), trigger-source mix (row vs. breadcrumb vs. kebab) over
+  time, `expandToDepth` relative-depth distribution (submenu only),
+  copy-action mix across all six copy surfaces.
+- **2. Subtree submenu** -- raw counts for the subtree submenu's six
+  actions, including plain `isolate`. Note: `isolateNarrow` and
+  `isolateWide` carry no `source` prop, so the subtree-vs-top-level
+  split is not telemetrically observable.
+- **3. Tree row interactions** -- double-click and keyboard copy /
+  toggle paths.
+- **4. Breadcrumb** -- breadcrumb click and copy path.
+- **5. Highlight** -- combined view of menu-dispatched highlight
+  (`tree.contextMenu.highlight*`) and applied-highlight signal
+  (`tree.highlight.apply` / `remove` / `swatchOpened`); plus color
+  mix from the 7-value swatch enum.
+- **6. Decoded viewer & Extract** -- mixed-table section unioning
+  `customEvents` (extract.shown / extract.click / decoded.viewerOpened)
+  with `traces` (`tree.contextMenu.extract`, mis-tagged Severity:info
+  pending issue #241 migration).
+
+#### Per-feature usage tile convention
+
+Each `<feature>.*` namespace in the product-analytics workbook gets at
+minimum:
+
+1. A "top events" bar chart for that namespace, time-range bound to the
+   workbook's `TimeRange` parameter.
+2. A source/variant split if the feature has multiple entry points
+   (e.g., context menu's `row | breadcrumb | kebab`).
+
+Conventions:
+
+- **Time range:** all KQL tiles bind to the workbook-level `TimeRange`
+  parameter (default 30d). Time-series tiles use plain
+  `summarize ... by bin(timestamp, ...)` so the workbook filter applies.
+  **Do not use `make-series`** -- it hardcodes a window via
+  `from ago(...) to now()` and breaks the picker.
+- **TimeRange asymmetry:** the operator-monitoring workbook does not
+  currently expose a TimeRange parameter; its tiles are tuned to
+  operator-relevant windows (1h-7d). The product-analytics workbook
+  does, because product-analytics tiles answer different questions
+  across 24h-90d. Aligning the two is a separate plan.
+- **Section ordering:** the leading conversion + top-20 tiles stay at
+  the top. Per-feature sections grow below. Order roughly by traffic
+  volume (highest first), then by product centrality.
+- **Near-zero traffic (`top event < 5 over 30d`):** keep the tile; an
+  empty-ish chart is informative for catalog hygiene.
+- **Retired events:** drop the event from the tile after one full 30d
+  window has elapsed since retirement. Catalog comment in
+  `telemetry-message-ids.ts` is the source of truth.
+- **`severityLevel == 1` filter:** queries that read `traces` filter on
+  `severityLevel == 1` (Information). This excludes `warn` / `error`
+  traces. If future telemetry adds an `Information`-level diagnostic
+  trace that shares a name with a user-action message (none today), the
+  filter would need to tighten further. Catalog JSDoc is the source of
+  truth for the user-action vs diagnostic distinction.
+- **DisplayName collision after prod carve-out:** when prod becomes a
+  separate Azure subscription, both subscriptions will host workbooks
+  named `JotJSON operator monitoring` and `JotJSON product analytics`
+  in their respective App Insights galleries. The gallery is scoped
+  per component, so the names are unambiguous in their context. The
+  env name renders in the workbook header markdown.
+
+Issue #242 covers a third workbook -- `JotJSON telemetry hygiene` --
+that surfaces catalog drift, table-split smells, and cardinality
+outliers. Issue #240 covers a CI gate that schema-validates workbook
+JSON and lints KQL time-binding.
 
 ### Alerts
 
@@ -1117,8 +1211,8 @@ Issue #92 covers expanding to SMS / Teams / webhook receivers.
 
 ### Tuning thresholds
 
-1. Open the workbook; pick a relevant section (for example, "API" for
-   `fn-5xx`).
+1. Open the **operator monitoring** workbook; pick a relevant section
+   (for example, "API" for `fn-5xx`).
 2. Look at the actual baseline rate over the last 7-30 days.
 3. Edit the relevant alert resource in `infra/modules/alerts.bicep`. Update the
    `threshold` value or the underlying KQL.
