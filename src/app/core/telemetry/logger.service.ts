@@ -11,6 +11,7 @@ import {
 
 const BUFFER_CAP = 100;
 const BOOT_FAIL_KEY = 'jotjson.bootErr';
+const BRIDGE_FAIL_KEY = 'jotjson.msalBridgeErr';
 
 type Severity = 'info' | 'warn' | 'error';
 
@@ -225,19 +226,35 @@ export class LoggerService {
   private flushSessionStorage(): void {
     try {
       const raw = sessionStorage.getItem(BOOT_FAIL_KEY);
-      if (!raw) {
-        return;
+      if (raw) {
+        sessionStorage.removeItem(BOOT_FAIL_KEY);
+        const parsed = JSON.parse(raw) as { name?: string; message?: string };
+        this.telemetry.trackException(
+          {
+            kind: 'error',
+            name: parsed.name ?? 'BootError',
+            message: parsed.message ?? '<no message>',
+          },
+          { messageId: 'boot.failed' },
+        );
       }
-      sessionStorage.removeItem(BOOT_FAIL_KEY);
-      const parsed = JSON.parse(raw) as { name?: string; message?: string };
-      this.telemetry.trackException(
-        {
-          kind: 'error',
-          name: parsed.name ?? 'BootError',
-          message: parsed.message ?? '<no message>',
-        },
-        { messageId: 'boot.failed' },
-      );
+    } catch {
+      // ignore
+    }
+    try {
+      const raw = sessionStorage.getItem(BRIDGE_FAIL_KEY);
+      if (raw) {
+        sessionStorage.removeItem(BRIDGE_FAIL_KEY);
+        const parsed = JSON.parse(raw) as { name?: string; message?: string };
+        this.telemetry.trackException(
+          {
+            kind: 'error',
+            name: parsed.name ?? 'BridgeError',
+            message: parsed.message ?? '<no message>',
+          },
+          { messageId: 'auth.msalBridge.failed' },
+        );
+      }
     } catch {
       // ignore
     }
