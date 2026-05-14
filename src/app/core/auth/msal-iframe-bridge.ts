@@ -35,22 +35,25 @@ const CODE_OR_ERROR = /[?&#](?:code|error)=/;
  * detection must be extended. Same-origin only by virtue of CSP
  * `frame-ancestors 'self'`.
  *
- * Returns false in non-browser contexts (SSR safety) and when the
- * cross-origin check on `window.top` throws (defense in depth -
- * CSP frame-ancestors 'self' makes this impossible today but we
- * fail-closed regardless).
+ * Returns false in non-browser contexts (no global `window`) and
+ * when the cross-origin check on `window.top` throws (defense in
+ * depth - CSP frame-ancestors 'self' makes this impossible today
+ * but we fail-closed regardless).
  *
- * @param win - test seam; defaults to the global `window`.
+ * @param win - test seam; when omitted, resolves to the global
+ *   `window` if defined, else `undefined` (which causes the function
+ *   to return false without attempting any property access).
  */
-export function isInMsalSilentIframe(win: Window = window): boolean {
+export function isInMsalSilentIframe(win?: Window): boolean {
+  const w = win ?? (typeof window !== 'undefined' ? window : undefined);
+  if (!w) return false;
   try {
-    if (typeof win === 'undefined') return false;
-    if (win.self === win.top) return false;
+    if (w.self === w.top) return false;
   } catch {
     return false;
   }
-  const hash = win.location.hash;
-  const search = win.location.search;
+  const hash = w.location.hash;
+  const search = w.location.search;
   const looksLikeMsalResponse = (urlPart: string): boolean =>
     RESPONSE_MARKERS.test(urlPart) && CODE_OR_ERROR.test(urlPart);
   return looksLikeMsalResponse(hash) || looksLikeMsalResponse(search);

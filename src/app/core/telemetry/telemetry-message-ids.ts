@@ -887,11 +887,11 @@ export const TELEMETRY_MESSAGE_IDS = [
   'auth.devMode.misconfigured',
 
   /**
-   * Severity: warn
+   * Severity: error
    * Fired by: `LoggerService.flushSessionStorage` via direct
    *           `telemetry.trackException(..., {messageId})` in
    *           `core/telemetry/logger.service.ts` (does NOT route
-   *           through `logger.warn`). Replays a `{name, message}`
+   *           through `logger.error`). Replays a `{name, message}`
    *           shape persisted to `sessionStorage` by
    *           `postAuthResponseToParent` in
    *           `core/auth/msal-iframe-bridge.ts` when the

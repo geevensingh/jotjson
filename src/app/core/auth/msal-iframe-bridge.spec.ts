@@ -80,6 +80,14 @@ describe('isInMsalSilentIframe', () => {
     const win = makeWinStub({ topThrows: true, hash: `#code=abc&state=${VALID_STATE}` });
     expect(isInMsalSilentIframe(win)).toBe(false);
   });
+
+  it('returns false when called with no arguments at top-level (default-resolution path)', () => {
+    // Regression guard for the default-parameter fix: ensures the
+    // signature default expression evaluates without throwing even
+    // when no arg is passed. In Karma's top-level browsing context,
+    // `window.self === window.top`, so the result is false.
+    expect(isInMsalSilentIframe()).toBe(false);
+  });
 });
 
 describe('postAuthResponseToParent', () => {

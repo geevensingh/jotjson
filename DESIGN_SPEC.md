@@ -2300,7 +2300,7 @@ Out of scope (for v1):
   silent-refresh iframe never bootstraps the full SPA - it just posts
   the auth code over `BroadcastChannel(libraryState.id)` and lets the
   parent's `waitForBridgeResponse` listener resolve. The
-  `auth.msalBridge.failed` telemetry message id (severity warn) is
+  `auth.msalBridge.failed` telemetry message id (severity error) is
   registered and `LoggerService.flushSessionStorage` replays the
   `jotjson.msalBridgeErr` slot as a `trackException` envelope on the
   parent's next bootstrap, mirroring the existing `boot.failed` /
