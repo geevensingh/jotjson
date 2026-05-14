@@ -1,10 +1,12 @@
-import { NestedTreeControl } from '@angular/cdk/tree';
+import { ScrollingModule, type CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
   HostListener,
+  Injector,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -21,7 +23,6 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuTrigger } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import type { BlobHighlight, FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation.service';
@@ -33,6 +34,7 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
 import { isColdAndMark } from '../../../core/telemetry/cold-flag';
 import { LoggerService } from '../../../core/telemetry/logger.service';
+import { OverflowDetectorDirective } from '../../directives/overflow-detector.directive';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import { JsonValueType } from '../../pipes/json-type.pipe';
 import { ParsedDate, formatDateAnnotation, parseAsDate } from '../../utils/date-detect';
@@ -51,6 +53,7 @@ import {
   DecodedValueDialogComponent,
   type DecodedValueDialogData,
 } from './decoded-value-dialog/decoded-value-dialog.component';
+import { flatten, type FlatItem } from './flatten';
 import { EMPTY_BEACON_INDEX, buildBeaconIndex, type BeaconIndex } from './formatting-beacons-index';
 import {
   EMPTY_RULE_RESULT,
@@ -189,8 +192,12 @@ function cssEscape(value: string): string {
  */
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
 const TREE_BUILD_SLOW_THRESHOLD_MS = 100;
-const TREE_RENDER_SLOW_THRESHOLD_MS = 200;
-const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
+// Phase 2 (issue #95) tightened the render-slow ceiling once virtualization
+// dropped the render-time floor from ~5,000 ms (mat-tree, wide-aoo @ 10k) to
+// the new O(viewport-size) regime. The placeholder lives here until Phase 3
+// re-anchors it on 2 * P95 of a fresh post-Phase-2 baseline.
+const TREE_RENDER_SLOW_THRESHOLD_MS = 30;
+const TREE_EXPAND_SLOW_THRESHOLD_MS = 10;
 
 /**
  * String length above which a string leaf is considered a "decoded
@@ -202,6 +209,17 @@ const TREE_EXPAND_SLOW_THRESHOLD_MS = 50;
 const DECODED_LONG_THRESHOLD_CHARS = 256;
 
 /**
+ * Maximum number of source characters embedded in a `matTooltip`
+ * popup. Long string values (URLs, base64 IDs, multi-line decoded
+ * payloads) are clamped before being shown so the tooltip remains
+ * a glance affordance, not a wall of text. Values exceeding this
+ * cap are always reachable in full through the decoded value
+ * viewer dialog because `decodedCandidate()` widens to include
+ * `length > DECODED_LONG_THRESHOLD_CHARS`.
+ */
+const MAX_TOOLTIP_LEN_CHARS = 1024;
+
+/**
  * Frozen empty-array sentinel returned by `keyIcons` / `valueIcons`
  * when the engine projects no icons. Identity-shared so `OnPush`
  * change detection treats unchanged rows as equal.
@@ -209,8 +227,13 @@ const DECODED_LONG_THRESHOLD_CHARS = 256;
 const EMPTY_ICONS: readonly FormattingIcon[] = Object.freeze([]);
 
 /**
- * Interactive tree viewer for parsed JSON, built on Angular Material's
- * mat-tree (nested variant). JsonParserService is the source of the value.
+ * Interactive tree viewer for parsed JSON, built on
+ * `@angular/cdk/scrolling`'s `<cdk-virtual-scroll-viewport>` with
+ * fixed-size items. The component flattens the parsed `TreeNode`
+ * graph (DFS, honoring `expandedPaths`) into a `FlatItem[]` and
+ * renders only the rows visible in the viewport, so a multi-MB
+ * blob renders without freezing the UI (issue #95 Phase 2).
+ * JsonParserService is the source of the value.
  */
 @Component({
   selector: 'jj-json-tree',
@@ -219,10 +242,11 @@ const EMPTY_ICONS: readonly FormattingIcon[] = Object.freeze([]);
     FormsModule,
     ...JJ_MENU_IMPORTS,
     MatTooltipModule,
-    MatTreeModule,
+    ScrollingModule,
     MatDividerModule,
     IconComponent,
     JsonBreadcrumbComponent,
+    OverflowDetectorDirective,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
@@ -230,8 +254,9 @@ const EMPTY_ICONS: readonly FormattingIcon[] = Object.freeze([]);
 })
 export class JsonTreeComponent {
   private readonly prefs = inject(PreferencesService);
-  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly jsonParser = inject(JsonParserService);
   private readonly ruleSets = inject(RuleSetsService);
@@ -324,15 +349,45 @@ export class JsonTreeComponent {
   readonly focusedPath = signal<string | null>(null);
 
   /**
-   * M7g-3b. Bumped on every `treeControl.expansionModel.changed`
-   * emission so `computed()` signals can register a dependency on
-   * "any expand/collapse occurred" without subscribing themselves.
-   * Catches every expansion path (direct `treeControl.toggle`,
-   * `matTreeNodeToggle` clicks, `expandAll` / `collapseAll` /
-   * `expandToLevel` / `expandAndScroll`, and the initial auto-fit
-   * expansion) because they all flow through `expansionModel`.
+   * Phase 2 (issue #95) -- authoritative expansion state, replacing
+   * the previous `treeControl.expansionModel` mirror. Path-keyed
+   * over `TreeNode.pathString`. Not reset on `root()` change
+   * (Locked decision 7) so user expansions survive editor edits.
+   *
+   * Mutation rules:
+   *  - User toggles (chevron click, keyboard, dblclick) go through
+   *    `setExpanded(node, on)` which clones the Set once per click.
+   *  - Bulk ops (`expandAll`, `expandToLevel`, `collapseAll`, etc.)
+   *    go through `setExpandedBulk(next)` so one bulk op writes the
+   *    signal exactly once.
    */
-  private readonly expansionVersion = signal(0);
+  private readonly expandedPaths = signal<ReadonlySet<string>>(new Set());
+
+  /**
+   * Phase 2 (issue #95) -- the row pixel height measured from the
+   * offscreen probe row. `0` until the first probe measurement
+   * lands. Consumers should read `effectiveRowHeightPx()` instead
+   * (which falls back to a font-size-derived default before the
+   * probe has measured), since `CdkFixedSizeVirtualScroll` treats
+   * `[itemSize]="0"` as undefined behavior. Updated reactively
+   * whenever `treeFontSize` / `showTypeLabels` /
+   * `showDateAnnotations` change.
+   */
+  readonly measuredRowHeightPx = signal(0);
+
+  /**
+   * Phase 2 (issue #95) -- the row pixel height the
+   * `<cdk-virtual-scroll-viewport>` actually binds to via
+   * `[itemSize]`. Falls back to a font-size-derived default
+   * (`ceil(fontSize * 1.6)`) before the probe row has rendered so
+   * the viewport can paint from frame 1 without flashing. Once the
+   * real measurement lands the signal switches to it. Tests that
+   * never attach the fixture to `document.body` still get a
+   * non-zero `[itemSize]` via this path.
+   */
+  readonly effectiveRowHeightPx = computed(
+    () => this.measuredRowHeightPx() || Math.ceil(this.treeFontSize() * 1.6),
+  );
 
   /**
    * Context-menu state (M7q). `contextNode` is the row whose menu is
@@ -373,12 +428,24 @@ export class JsonTreeComponent {
 
   /**
    * Hidden offscreen probe row used to measure the rendered row
-   * height for the auto-fit-to-window initial expansion. Sits inside
-   * `.tree-body` so it inherits the same `--tree-font-size` and base
-   * row CSS as real rows. Required only when
-   * `treeAutoFitToWindow` is on; harmless otherwise.
+   * height. Carries every height-driving element (twisty, key,
+   * value, date-annotation, comment, kebab pill, extract pill,
+   * decoded pill) so the measured height is an upper bound across
+   * any row that may render. Consumed by BOTH
+   * `runAutoFitInitialExpansion` (capacity calc) and the virtual
+   * scroll viewport's `[itemSize]` binding via
+   * `measuredRowHeightPx()`.
    */
-  private readonly autoFitProbe = viewChild<ElementRef<HTMLElement>>('autoFitProbe');
+  private readonly rowHeightProbe = viewChild<ElementRef<HTMLElement>>('rowHeightProbe');
+
+  /**
+   * Reference to the `<cdk-virtual-scroll-viewport>` element, used
+   * by `expandAndScroll` to scroll the minimum amount needed to
+   * reveal a path (true `'nearest'`-equivalent semantics) and by
+   * `measureAndUpdate` to preserve the user's logical scroll
+   * position across font-size changes.
+   */
+  private readonly viewport = viewChild<CdkVirtualScrollViewport>('viewport');
 
   /**
    * Emits the structural path of the currently-selected row, or `null`
@@ -515,56 +582,87 @@ export class JsonTreeComponent {
   readonly closeLeadingCommentTooltipPrefix = $localize`:@@tree.comment.closeLeading.tooltipPrefix:Internal comment: `;
   readonly closeTrailingCommentTooltipPrefix = $localize`:@@tree.comment.closeTrailing.tooltipPrefix:End-of-block comment: `;
 
-  readonly treeControl = new NestedTreeControl<TreeNode, string>((n) => n.children ?? [], {
-    trackBy: (n) => n.pathString,
-  });
-  readonly dataSource = new MatTreeNestedDataSource<TreeNode>();
-
-  // Phase 0.5 -- Expansion-state helpers (issue #95).
+  // Phase 2 (issue #95) -- expansion-state helpers.
   //
-  // These wrap `treeControl.*` for the duration of Phase 0.5 with no
-  // behavior change. Phase 2 (atomic virtualization landing) swaps the
-  // implementation to read / write `expandedPaths` instead of MatTree's
-  // expansion model. The component-internal callers (and, via the
-  // `__getHelpersForTesting()` seam below, the unit specs) call these
-  // helpers exclusively so Phase 2 is a one-swap rewrite of the bodies.
+  // The helper shape was introduced in Phase 0.5 against MatTree's
+  // `treeControl`; Phase 2 swaps the bodies to read / write the
+  // authoritative `expandedPaths` signal directly. The
+  // `__getHelpersForTesting()` seam keeps the same surface so the ~96
+  // spec callsites that migrated in Phase 0.5 continue to work.
   //
-  // Kept private so they don't leak into the component's public API
-  // consumed by `home.component.ts`. The HTML template continues to
-  // read `treeControl.isExpanded(node)` directly until Phase 2 removes
-  // `treeControl` entirely; the template change ships in the same
-  // commit as the data-model swap.
+  // Single-node setters clone the Set once per call (signal write
+  // semantics demand a fresh reference for change detection); bulk
+  // operations route through `setExpandedBulk` so an N-node bulk op
+  // produces exactly one signal write.
 
-  private isExpanded(node: TreeNode): boolean {
-    return this.treeControl.isExpanded(node);
+  protected isExpanded(node: TreeNode): boolean {
+    return this.expandedPaths().has(node.pathString);
   }
 
   private setExpanded(node: TreeNode, on: boolean): void {
-    if (on) this.treeControl.expand(node);
-    else this.treeControl.collapse(node);
+    const current = this.expandedPaths();
+    if (on === current.has(node.pathString)) return;
+    const next = new Set(current);
+    if (on) next.add(node.pathString);
+    else next.delete(node.pathString);
+    this.expandedPaths.set(next);
   }
 
   private toggleExpanded(node: TreeNode): void {
-    this.treeControl.toggle(node);
+    this.setExpanded(node, !this.isExpanded(node));
   }
 
   private collapseAllNodes(): void {
-    this.treeControl.collapseAll();
+    if (this.expandedPaths().size === 0) return;
+    this.expandedPaths.set(new Set());
   }
 
-  // Test seam exposing the private expansion helpers + an indexed
-  // node lookup (replacing the one `treeControl.dataNodes` spec
-  // access site). Spec calls go through this seam so the production
-  // helpers stay private. Phase 2 keeps this seam identical even
-  // though the implementations swap underneath.
+  /**
+   * Phase 2 (issue #95) -- one signal write per bulk expansion change.
+   * Callers (e.g. `expandAll`, `expandToLevel`, `expandAllFromHere`,
+   * `expandAndScroll` ancestor walk) build the next Set in one pass
+   * and hand it off here. Skip the write entirely if nothing changed
+   * to keep change detection quiet.
+   */
+  private setExpandedBulk(next: ReadonlySet<string>): void {
+    const current = this.expandedPaths();
+    if (next === current) return;
+    if (next.size === current.size) {
+      let equal = true;
+      for (const path of next) {
+        if (!current.has(path)) {
+          equal = false;
+          break;
+        }
+      }
+      if (equal) return;
+    }
+    this.expandedPaths.set(next);
+  }
+
+  // Test seam exposing the private expansion helpers + a flat-list-
+  // backed node lookup (replacing the prior `treeControl.dataNodes`
+  // spec access). Spec calls go through this seam so the production
+  // helpers stay private. `expandedPaths` is exposed read-only so the
+  // Phase 2 invariant spec can audit the authoritative state directly
+  // without poking at private fields.
   __getHelpersForTesting() {
     return {
       isExpanded: (node: TreeNode): boolean => this.isExpanded(node),
       setExpanded: (node: TreeNode, on: boolean): void => this.setExpanded(node, on),
       toggleExpanded: (node: TreeNode): void => this.toggleExpanded(node),
       collapseAllNodes: (): void => this.collapseAllNodes(),
-      findNode: (predicate: (n: TreeNode) => boolean): TreeNode | null =>
-        this.treeControl.dataNodes?.find(predicate) ?? null,
+      findNode: (predicate: (n: TreeNode) => boolean): TreeNode | null => {
+        const item = this.flatList().find((row) => row.kind !== 'close' && predicate(row.node));
+        return item?.node ?? null;
+      },
+      readExpandedPaths: (): ReadonlySet<string> => this.expandedPaths(),
+      // Perf-bench accessor: the L2 bench needs to drive
+      // `viewport.scrollToOffset()` directly to simulate user scroll
+      // after the Phase 2 (issue #95) virtualization landed. Kept here
+      // rather than exposing `viewport` publicly so the production API
+      // surface stays narrow.
+      getViewport: (): CdkVirtualScrollViewport | undefined => this.viewport(),
     };
   }
 
@@ -746,18 +844,14 @@ export class JsonTreeComponent {
    *     `Subtree >` trigger and gets the bold treatment.
    *   - `'none'`: no `contextNode` set yet (menu is closed).
    *
-   * The computed reads `expansionVersion()` so any
-   * `treeControl.toggle/expand/collapse/expandAll/collapseAll` flow
-   * re-evaluates the bolding without requiring components to track
-   * the expansionModel directly.
+   * The computed reads `expandedPaths()` (through `this.isExpanded`)
+   * so any toggle / expand / collapse flow re-evaluates the bolding
+   * without requiring components to track the expansion set
+   * directly.
    */
   readonly defaultActionKind = computed<'copyValue' | 'collapseRow' | 'expandRow' | 'none'>(() => {
     const cn = this.contextNode();
     if (!cn) return 'none';
-    // Subscribe to expand/collapse changes so the bolded item flips
-    // when the row's expansion state changes while the menu is open
-    // (rare but possible if user keyboards through).
-    this.expansionVersion();
     if ((cn.type === 'object' || cn.type === 'array') && cn.children?.length) {
       return this.isExpanded(cn) ? 'collapseRow' : 'expandRow';
     }
@@ -954,25 +1048,47 @@ export class JsonTreeComponent {
   });
 
   /**
-   * M7g-3b. Visible rows in document order (depth-first walk skipping
-   * collapsed subtrees). Drives ArrowUp / ArrowDown / Home / End
-   * navigation and the focus-recovery lifecycle effect. Re-evaluates
-   * whenever `root()` rebuilds OR `expansionVersion` increments
-   * (i.e., any expand/collapse).
+   * Phase 2 (issue #95) -- flattened render-order list of every row
+   * the viewport should draw. Each non-empty container produces an
+   * `'open'` row at entry and a `'close'` row when the walk
+   * returns past its last child; primitives and empty containers
+   * produce a single `'leaf'` row. Drives `*cdkVirtualFor` and is
+   * recomputed whenever `root()` or `expandedPaths()` changes.
    */
-  private readonly visibleRowsInOrder = computed<readonly TreeNode[]>(() => {
-    this.expansionVersion();
+  readonly flatList = computed<readonly FlatItem[]>(() => {
     const rootNode = this.root();
     if (!rootNode) return [];
-    const out: TreeNode[] = [];
-    const walk = (node: TreeNode): void => {
-      out.push(node);
-      if (node.children?.length && this.isExpanded(node)) {
-        for (const child of node.children) walk(child);
-      }
-    };
-    walk(rootNode);
+    const out: FlatItem[] = [];
+    flatten(rootNode, 0, this.expandedPaths(), out);
     return out;
+  });
+
+  /**
+   * Path -> visible-row-index lookup over `flatList()`, skipping
+   * `'close'` rows so containers map to their canonical `'open'`
+   * index. Used by `expandAndScroll` to compute pixel offsets.
+   */
+  private readonly visibleIndexByPath = computed<ReadonlyMap<string, number>>(() => {
+    const list = this.flatList();
+    const map = new Map<string, number>();
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i]!;
+      if (item.kind === 'close') continue;
+      if (!map.has(item.node.pathString)) map.set(item.node.pathString, i);
+    }
+    return map;
+  });
+
+  /**
+   * Phase 2 (issue #95) -- visible rows in document order, with
+   * synthetic `'close'` rows filtered out. Drives keyboard
+   * navigation (Arrow keys, Home / End) and the focus-recovery
+   * lifecycle effect.
+   */
+  private readonly visibleRowsInOrder = computed<readonly TreeNode[]>(() => {
+    return this.flatList()
+      .filter((item) => item.kind !== 'close')
+      .map((item) => item.node);
   });
 
   /**
@@ -1132,36 +1248,53 @@ export class JsonTreeComponent {
       this.cancelledRender = true;
     });
 
+    // Phase 2 (issue #95) -- measure the probe row whenever any
+    // height-driving preference changes. The probe is offscreen and
+    // carries every height-contributing element (twisty, key, value,
+    // date annotation, comment, kebab pill, extract pill, decoded
+    // pill), so its bounding-rect height is an upper bound on the
+    // tallest row that could render. The measurement gates the
+    // `<cdk-virtual-scroll-viewport>` `[itemSize]` binding (rendered
+    // only when `measuredRowHeightPx() > 0`) and preserves the
+    // user's logical scroll position across font-size changes.
+    effect(() => {
+      this.treeFontSize();
+      this.prefs.prefs().treeShowTypeLabels;
+      this.prefs.prefs().treeShowDateAnnotations;
+      afterNextRender(() => this.measureAndUpdate(), { injector: this.injector });
+    });
+
     effect(() => {
       const token = this.viewResetToken();
       const rootNode = this.root();
-      if (token > 0 && token !== this.lastObservedResetToken) {
-        this.lastObservedResetToken = token;
-        this.hasInitializedExpansion = false;
-      }
-      // Fires for every root or token change; invalidates any in-flight
-      // prior-run auto-fit rAF before it can emit stale telemetry.
-      this.autoFitGeneration += 1;
-      this.dataSource.data = rootNode ? [rootNode] : [];
-      if (!rootNode) {
-        this.hasInitializedExpansion = false;
-        // Use untracked to avoid creating a dependency on selectedPath
-        // here - we only want to react to value or token changes.
-        untracked(() => this.selectedPath.set(null));
-        return;
-      }
-      if (!this.hasInitializedExpansion) {
-        this.hasInitializedExpansion = true;
-        if (this.prefs.prefs().treeAutoFitToWindow) {
-          this.runAutoFitInitialExpansion();
-        } else {
-          this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth, true);
+      untracked(() => {
+        if (token > 0 && token !== this.lastObservedResetToken) {
+          this.lastObservedResetToken = token;
+          this.hasInitializedExpansion = false;
         }
-      }
-      // Whenever the underlying value or reset token changes (and the
-      // resulting tree root re-renders), drop any stale selection.
-      // Predictable, no zombie state.
-      untracked(() => this.selectedPath.set(null));
+        // Fires for every root or token change; invalidates any in-flight
+        // prior-run auto-fit rAF before it can emit stale telemetry.
+        this.autoFitGeneration += 1;
+        // Phase 2 (issue #95) -- no `dataSource.data` write needed;
+        // `flatList` is computed off `root()` directly.
+        if (!rootNode) {
+          this.hasInitializedExpansion = false;
+          this.selectedPath.set(null);
+          return;
+        }
+        if (!this.hasInitializedExpansion) {
+          this.hasInitializedExpansion = true;
+          if (this.prefs.prefs().treeAutoFitToWindow) {
+            this.runAutoFitInitialExpansion();
+          } else {
+            this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth, true);
+          }
+        }
+        // Whenever the underlying value or reset token changes (and the
+        // resulting tree root re-renders), drop any stale selection.
+        // Predictable, no zombie state.
+        this.selectedPath.set(null);
+      });
     });
 
     // Double-rAF waits until the browser has had a chance to commit
@@ -1276,16 +1409,10 @@ export class JsonTreeComponent {
       });
     });
 
-    // M7g-3b. Track CDK expansion-model changes via a counter signal so
-    // computed() (notably visibleRowsInOrder) can register a clean
-    // dependency on "any expand/collapse occurred". The subscription
-    // lives for the component's lifetime; expansionModel is owned by
-    // treeControl (which is owned by this component), so we don't need
-    // takeUntilDestroyed - the model is GC'd with the component.
-    const expansionSub = this.treeControl.expansionModel.changed.subscribe(() => {
-      this.expansionVersion.update((v) => v + 1);
-    });
-    this.destroyRef.onDestroy(() => expansionSub.unsubscribe());
+    // Phase 2 (issue #95) -- `expandedPaths` is now the authoritative
+    // expansion state; computed signals such as `visibleRowsInOrder`
+    // depend on it directly, so no expansion-version counter or
+    // expansionModel subscription is needed.
 
     // M7g-3b. Lifecycle effect for `focusedPath` recovery. Handles five
     // cases in one place:
@@ -1343,6 +1470,14 @@ export class JsonTreeComponent {
   hasChild = (_: number, node: TreeNode): boolean => !!node.children && node.children.length > 0;
 
   /**
+   * `trackBy` for `*cdkVirtualFor` over `flatList()`. Uses
+   * `path + kind` so the OPEN and CLOSE rows of the same container
+   * keep distinct identities and the virtual scroll viewport
+   * recycles correctly when a container expands/collapses.
+   */
+  trackByFlatItem = (_: number, item: FlatItem): string => `${item.kind}:${item.node.pathString}`;
+
+  /**
    * Click handler for `.tree-row`. Selects the row unless the click
    * target is an interactive child (twisty toggle, kebab button,
    * etc.) in which case the child's own handler takes precedence.
@@ -1356,7 +1491,7 @@ export class JsonTreeComponent {
   onSelect(node: TreeNode, event: Event): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')) {
+    if (target.closest('button, a, input, [role="button"]')) {
       return;
     }
     this.selectedPath.set(node.pathString);
@@ -1422,7 +1557,7 @@ export class JsonTreeComponent {
     this.focusedPath.set(path);
     requestAnimationFrame(() => {
       const el = this.host.nativeElement.querySelector(
-        `mat-nested-tree-node[data-tree-node-path="${cssEscape(path)}"]`,
+        `[data-path="${cssEscape(path)}"]`,
       ) as HTMLElement | null;
       el?.focus({ preventScroll: false });
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1430,9 +1565,11 @@ export class JsonTreeComponent {
   }
 
   /**
-   * M7g-3b. Keyboard handler bound on `<mat-nested-tree-node>` (both
-   * leaf and container variants). Implements the WAI-ARIA Tree
-   * pattern minus type-ahead (deferred to issue #108):
+   * M7g-3b. Keyboard handler bound on `.tree-row` (both leaf and
+   * container variants). Implements the WAI-ARIA Tree pattern minus
+   * type-ahead (deferred to issue #108). Phase 2 (issue #95) moved
+   * this from `<mat-nested-tree-node>` when virtualization replaced
+   * the Material tree with `<cdk-virtual-scroll-viewport>`.
    *
    *  - Arrow Up / Down / Home / End: roving focus through visible
    *    rows.
@@ -1574,7 +1711,7 @@ export class JsonTreeComponent {
    */
   private openRowContextMenuFromKeyboard(node: TreeNode): void {
     const el = this.host.nativeElement.querySelector(
-      `mat-nested-tree-node[data-tree-node-path="${cssEscape(node.pathString)}"] > .tree-row`,
+      `.tree-row[data-path="${cssEscape(node.pathString)}"]`,
     ) as HTMLElement | null;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -1792,20 +1929,48 @@ export class JsonTreeComponent {
   private expandAndScroll(path: string): void {
     const node = this.nodeIndex().get(path);
     if (!node) return;
-    // Walk up the path to expand each ancestor container.
-    const partial: (string | number)[] = [];
-    for (let i = 0; i < node.path.length - 1; i++) {
-      partial.push(node.path[i] as string | number);
-      const ancestor = this.nodeIndex().get(formatPath(partial));
-      if (ancestor) this.setExpanded(ancestor, true);
+    // Build the ancestor expansion set in one pass, then write the
+    // signal exactly once via setExpandedBulk (issue #95 Phase 2).
+    if (node.path.length > 1) {
+      const current = this.expandedPaths();
+      let next: Set<string> | null = null;
+      const partial: (string | number)[] = [];
+      for (let i = 0; i < node.path.length - 1; i++) {
+        partial.push(node.path[i] as string | number);
+        const ancestorPath = formatPath(partial);
+        if (!current.has(ancestorPath) && this.nodeIndex().has(ancestorPath)) {
+          if (next === null) next = new Set(current);
+          next.add(ancestorPath);
+        }
+      }
+      if (next !== null) this.setExpandedBulk(next);
     }
-    // Defer scroll until after Angular renders the expansion.
-    queueMicrotask(() => {
-      const el = this.host.nativeElement.querySelector(
-        `[data-path="${cssEscape(path)}"]`,
-      ) as HTMLElement | null;
-      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    });
+    // Defer scroll until after Angular renders the expansion. True
+    // 'nearest'-equivalent semantics: scroll the minimum amount
+    // needed to reveal the row. Locked decision 10 (round 2).
+    afterNextRender(
+      () => {
+        const viewport = this.viewport();
+        const rowHeight = this.measuredRowHeightPx();
+        const index = this.visibleIndexByPath().get(path);
+        if (!viewport || rowHeight <= 0 || index === undefined) {
+          // Fallback for the rule-preview path or pre-measure window.
+          const el = this.host.nativeElement.querySelector(
+            `[data-path="${cssEscape(path)}"]`,
+          ) as HTMLElement | null;
+          el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          return;
+        }
+        const top = index * rowHeight;
+        const bottom = top + rowHeight;
+        const scroll = viewport.measureScrollOffset();
+        const view = viewport.getViewportSize();
+        if (top < scroll) viewport.scrollToOffset(top, 'smooth');
+        else if (bottom > scroll + view) viewport.scrollToOffset(bottom - view, 'smooth');
+        // else: fully visible, skip.
+      },
+      { injector: this.injector },
+    );
   }
 
   /**
@@ -1820,14 +1985,16 @@ export class JsonTreeComponent {
     const start = performance.now();
     let nodeCount = 0;
     let maxDepth = 0;
+    const next = new Set(this.expandedPaths());
     const walk = (node: TreeNode | undefined, relativeDepth: number): void => {
-      if (!node || !node.children) return;
+      if (!node || !node.children?.length) return;
       nodeCount += 1;
       maxDepth = Math.max(maxDepth, relativeDepth);
-      this.setExpanded(node, true);
+      next.add(node.pathString);
       for (const child of node.children) walk(child, relativeDepth + 1);
     };
     walk(this.root(), 0);
+    this.setExpandedBulk(next);
     this.emitSlowExpandIfNeeded(performance.now() - start, maxDepth, nodeCount);
   }
 
@@ -1838,16 +2005,17 @@ export class JsonTreeComponent {
   expandToLevel(depth: number, internal = false): void {
     const start = performance.now();
     let nodeCount = 0;
-    this.collapseAllNodes();
+    const next = new Set<string>();
     const walk = (node: TreeNode | undefined): void => {
-      if (!node || !node.children) return;
+      if (!node || !node.children?.length) return;
       nodeCount += 1;
       if (node.depth < depth) {
-        this.setExpanded(node, true);
+        next.add(node.pathString);
         for (const child of node.children) walk(child);
       }
     };
     walk(this.root());
+    this.setExpandedBulk(next);
     const timeMs = performance.now() - start;
     if (!internal) {
       this.emitSlowExpandIfNeeded(timeMs, depth, nodeCount);
@@ -1957,7 +2125,7 @@ export class JsonTreeComponent {
     if (this.probeRowHeightCache !== null && this.probeRowHeightCache.fontSize === fontSize) {
       return this.probeRowHeightCache.heightPx;
     }
-    const probeRef = this.autoFitProbe();
+    const probeRef = this.rowHeightProbe();
     if (!probeRef) {
       return 0;
     }
@@ -1967,6 +2135,45 @@ export class JsonTreeComponent {
     }
     this.probeRowHeightCache = { fontSize, heightPx };
     return heightPx;
+  }
+
+  /**
+   * Phase 2 (issue #95) -- reads the probe row's current height and
+   * writes the result into `measuredRowHeightPx` so the virtual
+   * scroll viewport's `[itemSize]` binding reflects it. Skips the
+   * write when nothing changed. Preserves the user's logical scroll
+   * position across font-size changes by scaling the pre-change
+   * pixel offset to the new row height.
+   *
+   * The probe-height cache is invalidated first so the new height
+   * is measured (the cache key is `treeFontSize` but other prefs
+   * such as `showTypeLabels` can change height too).
+   */
+  private measureAndUpdate(): void {
+    const probe = this.rowHeightProbe()?.nativeElement;
+    if (!probe) return;
+    const newH = Math.ceil(probe.getBoundingClientRect().height);
+    if (newH <= 0 || newH === this.measuredRowHeightPx()) return;
+    const oldH = this.measuredRowHeightPx();
+    const viewport = this.viewport();
+    const oldOffset = viewport?.measureScrollOffset() ?? 0;
+    // Invalidate the auto-fit probe cache so the next auto-fit run
+    // re-measures against the same height we just wrote.
+    this.probeRowHeightCache = null;
+    this.measuredRowHeightPx.set(newH);
+    queueMicrotask(() => {
+      const vp = this.viewport();
+      if (!vp) return;
+      vp.checkViewportSize();
+      // Scroll-position preservation: scale the prior pixel offset to
+      // the new row height so the user's logical position is
+      // preserved. Skip on the initial 0 -> first measurement to
+      // avoid a NaN scroll.
+      if (oldH > 0) {
+        const offsetRows = oldOffset / oldH;
+        vp.scrollToOffset(offsetRows * newH, 'auto');
+      }
+    });
   }
 
   onSearchInput(ev: Event): void {
@@ -2031,10 +2238,7 @@ export class JsonTreeComponent {
   onRowContextMenu(event: MouseEvent, node: TreeNode): void {
     if (event.clientX === 0 && event.clientY === 0) return;
     const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')
-    ) {
+    if (target instanceof Element && target.closest('button, a, input, [role="button"]')) {
       return;
     }
     this.openContextMenuAt(event, node, 'row', false);
@@ -2043,10 +2247,7 @@ export class JsonTreeComponent {
   onCloseRowContextMenu(event: MouseEvent, node: TreeNode): void {
     if (event.clientX === 0 && event.clientY === 0) return;
     const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')
-    ) {
+    if (target instanceof Element && target.closest('button, a, input, [role="button"]')) {
       return;
     }
     this.openContextMenuAt(event, node, 'row', true);
@@ -2159,10 +2360,7 @@ export class JsonTreeComponent {
    */
   onRowDblClick(event: MouseEvent, node: TreeNode): void {
     const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest('button, [matTreeNodeToggle], a, input, [role="button"]')
-    ) {
+    if (target instanceof Element && target.closest('button, a, input, [role="button"]')) {
       return;
     }
     if ((node.type === 'object' || node.type === 'array') && node.children?.length) {
@@ -2192,6 +2390,35 @@ export class JsonTreeComponent {
     this.contextIsCloseRow.set(false);
     this.selectedPath.set(node.pathString);
     this.logger.info('tree.contextMenu.opened', { source: 'kebab' });
+  }
+
+  /**
+   * Click handler for the container twisty button. Toggles expansion
+   * and stops propagation so the row-level `onSelect` does not also
+   * fire on the same click. Phase 2 (issue #95) replaces the
+   * `matTreeNodeToggle` directive that previously handled this.
+   */
+  onTwistyClick(node: TreeNode, event: MouseEvent): void {
+    event.stopPropagation();
+    this.toggleExpanded(node);
+  }
+
+  /**
+   * Clamp a tooltip source string at {@link MAX_TOOLTIP_LEN_CHARS}
+   * characters, appending a localized truncation suffix when the
+   * cap is exceeded. The full value is always reachable through the
+   * decoded value viewer dialog (the `tree-decoded-pill` becomes
+   * visible for `length > DECODED_LONG_THRESHOLD_CHARS` per
+   * `decodedCandidate`).
+   */
+  clampTooltip(value: string): string {
+    if (value.length <= MAX_TOOLTIP_LEN_CHARS) return value;
+    const head = value.slice(0, MAX_TOOLTIP_LEN_CHARS);
+    const remaining = value.length - MAX_TOOLTIP_LEN_CHARS;
+    return (
+      head +
+      $localize`:@@tree.decoded.tooltipTruncated:... (${remaining} more characters; open the pill to view full value)`
+    );
   }
 
   extractCandidate(node: TreeNode): ExtractedJson | null {
@@ -2833,14 +3060,16 @@ export class JsonTreeComponent {
     this.logger.info('tree.contextMenu.expandAllFromHere', { source });
     let nodeCount = 0;
     let maxDepth = 0;
+    const next = new Set(this.expandedPaths());
     const walk = (currentNode: TreeNode, relativeDepth: number): void => {
       if (!currentNode.children?.length) return;
       nodeCount += 1;
       maxDepth = Math.max(maxDepth, relativeDepth);
-      this.setExpanded(currentNode, true);
+      next.add(currentNode.pathString);
       for (const child of currentNode.children) walk(child, relativeDepth + 1);
     };
     walk(node, 0);
+    this.setExpandedBulk(next);
     this.emitSlowExpandIfNeeded(performance.now() - start, maxDepth, nodeCount);
   }
 
@@ -2870,16 +3099,16 @@ export class JsonTreeComponent {
     if (!node.children?.length) return;
     this.logger.info('tree.contextMenu.expandToDepth', { relativeDepth, source });
     let nodeCount = 0;
+    const next = new Set(this.expandedPaths());
     const walk = (currentNode: TreeNode, currentDepth: number): void => {
       if (!currentNode.children?.length) return;
       if (currentDepth >= relativeDepth) return;
       nodeCount += 1;
-      if (!this.isExpanded(currentNode)) {
-        this.setExpanded(currentNode, true);
-      }
+      next.add(currentNode.pathString);
       for (const child of currentNode.children) walk(child, currentDepth + 1);
     };
     walk(node, 0);
+    this.setExpandedBulk(next);
     this.emitSlowExpandIfNeeded(performance.now() - start, relativeDepth, nodeCount);
   }
 
@@ -2975,12 +3204,21 @@ export class JsonTreeComponent {
   isolateRow(node: TreeNode, source: 'single' | 'wide'): void {
     const result = this.resolveChainAndSets(node);
     if (!result) return;
+    const current = this.expandedPaths();
+    let next: Set<string> | null = null;
     for (const child of result.narrowSet) {
-      this.setExpanded(child, false);
+      if (current.has(child.pathString)) {
+        if (next === null) next = new Set(current);
+        next.delete(child.pathString);
+      }
     }
     for (const child of result.widerSet) {
-      this.setExpanded(child, false);
+      if (current.has(child.pathString)) {
+        if (next === null) next = new Set(current);
+        next.delete(child.pathString);
+      }
     }
+    if (next !== null) this.setExpandedBulk(next);
     this.logger.info(
       source === 'wide' ? 'tree.contextMenu.isolateWide' : 'tree.contextMenu.isolate',
     );
@@ -2994,9 +3232,15 @@ export class JsonTreeComponent {
   collapseSiblings(node: TreeNode): void {
     const result = this.resolveChainAndSets(node);
     if (!result) return;
+    const current = this.expandedPaths();
+    let next: Set<string> | null = null;
     for (const child of result.narrowSet) {
-      this.setExpanded(child, false);
+      if (current.has(child.pathString)) {
+        if (next === null) next = new Set(current);
+        next.delete(child.pathString);
+      }
     }
+    if (next !== null) this.setExpandedBulk(next);
     this.logger.info('tree.contextMenu.isolateNarrow');
   }
 

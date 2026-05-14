@@ -10,13 +10,12 @@ import { JsonTreeComponent } from './json-tree.component';
  *
  * Covers the WAI-ARIA Tree pattern that Wave 3b lands (audit findings
  * F2.1-F2.3):
- *   - role="tree" on <mat-tree> (CDK default) plus aria-label;
- *   - role="treeitem" on every <mat-nested-tree-node> (CDK default);
+ *   - role="tree" on the `<cdk-virtual-scroll-viewport>` plus aria-label;
+ *   - role="treeitem" on every `.tree-row` (Phase 2 issue #95 moved
+ *     this from `<mat-nested-tree-node>` when virtualization replaced
+ *     the Material tree); close-brace rows stay role="presentation";
  *   - aria-level / aria-posinset / aria-setsize / aria-expanded on
  *     each tree node;
- *   - role="presentation" on the visual `.tree-row` chrome and the
- *     decorative `.tree-row--close` brace;
- *   - role="group" on `.tree-children`;
  *   - roving tabindex (exactly one node tabindex="0").
  *
  * Wave 3d re-enables the strict axe gate in both themes after the tree
@@ -46,7 +45,32 @@ describe('JsonTreeComponent (a11y)', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(JsonTreeComponent);
     fixture.componentRef.setInput('value', REPRESENTATIVE_VALUE);
+    // Phase 2 (issue #95) -- the CDK virtual scroll viewport needs an
+    // explicitly-sized parent (it queries `clientHeight` synchronously
+    // during `ngAfterViewInit` to compute the rendered row range).
+    // `attachFixtureToBody` wraps the host in `min-height: 100vh` which
+    // does NOT propagate as a definite height to the JsonTree host's
+    // flex children; without explicit pixel dimensions the viewport
+    // measures as zero and renders zero rows.
+    const host = fixture.nativeElement as HTMLElement;
+    host.style.height = '600px';
+    host.style.width = '1000px';
     return fixture;
+  }
+
+  /**
+   * Drains the CDK virtual scroll viewport's measurement + render
+   * microtask chain. The viewport schedules its initial `_setRenderedRange`
+   * via `Promise.resolve().then(...)`; two microtask awaits + a final
+   * `detectChanges` is the minimum to surface the rendered rows in the DOM.
+   */
+  async function drainViewport(fixture: ComponentFixture<JsonTreeComponent>): Promise<void> {
+    fixture.detectChanges();
+    fixture.componentInstance.expandAll();
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
   }
 
   afterEach(() => {
@@ -57,48 +81,34 @@ describe('JsonTreeComponent (a11y)', () => {
   it('exposes the WAI-ARIA Tree role chain (tree -> treeitem -> group)', async () => {
     const fixture = await configure();
     teardown = attachFixtureToBody(fixture, 'dark');
-    fixture.detectChanges();
-    fixture.componentInstance.expandAll();
-    fixture.detectChanges();
+    await drainViewport(fixture);
 
     const host = fixture.nativeElement as HTMLElement;
-    const tree = host.querySelector('mat-tree');
-    expect(tree?.getAttribute('role'))
-      .withContext('CDK should set role="tree" on <mat-tree>')
-      .toBe('tree');
+    const tree = host.querySelector('cdk-virtual-scroll-viewport[role="tree"]');
+    expect(tree).withContext('the virtual scroll viewport should carry role="tree"').toBeTruthy();
     expect(tree?.getAttribute('aria-label'))
       .withContext('the tree must have an aria-label so AT can announce it')
       .toBeTruthy();
 
-    const treeitems = host.querySelectorAll('mat-nested-tree-node[role="treeitem"]');
+    const treeitems = host.querySelectorAll('.tree-row[role="treeitem"]');
     expect(treeitems.length)
-      .withContext('every <mat-nested-tree-node> should carry role="treeitem"')
+      .withContext('every `.tree-row` (open + leaf) should carry role="treeitem"')
       .toBeGreaterThan(0);
 
-    const groups = host.querySelectorAll('.tree-children[role="group"]');
-    expect(groups.length)
-      .withContext('every container should expose role="group" for its children')
-      .toBeGreaterThan(0);
-
-    // .tree-row is presentational chrome; the treeitem role lives on
-    // its mat-nested-tree-node ancestor instead.
-    const rows = host.querySelectorAll('.tree-row[role="presentation"]');
-    expect(rows.length)
-      .withContext('the visual .tree-row chrome should be role="presentation"')
+    // The synthetic close-brace row stays role="presentation".
+    const closeRows = host.querySelectorAll('.tree-row--close[role="presentation"]');
+    expect(closeRows.length)
+      .withContext('every close-brace row should be role="presentation"')
       .toBeGreaterThan(0);
   });
 
   it('has exactly one tabindex="0" tree node (roving focus invariant)', async () => {
     const fixture = await configure();
     teardown = attachFixtureToBody(fixture, 'dark');
-    fixture.detectChanges();
-    fixture.componentInstance.expandAll();
-    fixture.detectChanges();
-    await Promise.resolve();
-    fixture.detectChanges();
+    await drainViewport(fixture);
 
     const focused = (fixture.nativeElement as HTMLElement).querySelectorAll(
-      'mat-nested-tree-node[tabindex="0"]',
+      '.tree-row[tabindex="0"]',
     );
     expect(focused.length).toBe(1);
   });
@@ -106,9 +116,7 @@ describe('JsonTreeComponent (a11y)', () => {
   it('has no critical or serious WCAG 2.1 AA violations (dark theme)', async () => {
     const fixture = await configure();
     teardown = attachFixtureToBody(fixture, 'dark');
-    fixture.detectChanges();
-    fixture.componentInstance.expandAll();
-    fixture.detectChanges();
+    await drainViewport(fixture);
 
     await expectNoStrictA11yViolations(fixture, { skipWhenStable: true });
   });
@@ -116,9 +124,7 @@ describe('JsonTreeComponent (a11y)', () => {
   it('has no critical or serious WCAG 2.1 AA violations (light theme)', async () => {
     const fixture = await configure();
     teardown = attachFixtureToBody(fixture, 'light');
-    fixture.detectChanges();
-    fixture.componentInstance.expandAll();
-    fixture.detectChanges();
+    await drainViewport(fixture);
 
     await expectNoStrictA11yViolations(fixture, { skipWhenStable: true });
   });

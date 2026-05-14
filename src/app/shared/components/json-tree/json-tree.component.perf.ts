@@ -8,16 +8,18 @@
 //
 // What this exercises:
 //   1. Initial render of an N-node tree (deep25, wide-aoo).
-//   2. Scroll-after-expand: expand the tree, then scroll the
-//      `.tree-body` container through a short scroll session.
-//      Gated to 10K only (mat-tree is NOT virtualized in v1, so
-//      100K/1M scroll would OOM Karma -- those live in L3).
+//   2. Scroll-after-expand: expand the tree, then walk the
+//      `<cdk-virtual-scroll-viewport>` through a short scroll session
+//      via `viewport.scrollToOffset()` (issue #95 Phase 2: tree is
+//      virtualized; the prior `.tree-body.scrollTop` path only scrolled
+//      the outer wrapper, not the virtual viewport's internal offset).
 //
 // Why measure here at all (vs L1 + L3):
 //   L1 measures the pure tree builder; L3 measures the full browser.
 //   L2 measures the Angular component lifecycle: detectChanges,
-//   ChangeDetection, mat-tree (NOT virtualized in v1), template
-//   evaluation. This is the "rehearsal" layer for L3 user pain.
+//   ChangeDetection, virtualized rendering through
+//   `<cdk-virtual-scroll-viewport>`, template evaluation. This is the
+//   "rehearsal" layer for L3 user pain.
 //
 // Output:
 //   `console.log` rows with the sentinel `@@PERF_L2@@<json>@@END@@`,
@@ -53,24 +55,21 @@ const WARMUP_ITERS = 2;
 const TIMED_ITERS = 5;
 
 function defaultFixtures(): FixtureSpec[] {
-  // Size gating:
-  //   - 10K is the default (each iter ~5s; full N=5 spec finishes in ~35s).
-  //   - 100K is opt-in via `window.__perfL2Force100K = true` or
-  //     `?force100k=1`. Each iter is ~50s; full spec ~7 minutes; needs
-  //     karma.perf.conf.js timeouts bumped accordingly.
+  // Size gating (post-Phase 2 virtualization; issue #95):
+  //   - 10K + 100K are enabled by default. Virtualization made 100K
+  //     viable inside Karma; each iter is now bounded by the viewport
+  //     window, not the full node count.
   //   - 1M is opt-in via `window.__perfL2Force1M = true` or `?force1m=1`.
-  //     Each iter is many minutes; reserve for deliberate diagnostic runs.
-  // Defaults intentionally cap at 10K so unattended `npm run perf:l2`
+  //     Each iter is many minutes (build/expand traversal dominates);
+  //     reserve for deliberate diagnostic runs.
+  // Defaults intentionally cap at 100K so unattended `npm run perf:l2`
   // stays well under the Karma browserNoActivityTimeout watchdog.
   type ForceWindow = Window & {
-    __perfL2Force100K?: boolean;
     __perfL2Force1M?: boolean;
   };
   const win = window as ForceWindow;
   const force1M = win.__perfL2Force1M === true || location.search.includes('force1m=1');
-  const force100K = win.__perfL2Force100K === true || location.search.includes('force100k=1');
-  const enabledNodeCounts = new Set<number>([10_000]);
-  if (force100K || force1M) enabledNodeCounts.add(100_000);
+  const enabledNodeCounts = new Set<number>([10_000, 100_000]);
   if (force1M) enabledNodeCounts.add(1_000_000);
   return FIXTURE_CATALOG.filter((fixture) => enabledNodeCounts.has(fixture.approxNodes));
 }
@@ -165,15 +164,17 @@ async function initialRender(fixture: ComponentFixture<JsonTreeComponent>): Prom
 const SCROLL_STEPS = 7;
 
 /**
- * Renders the tree, expands all nodes, then walks the `.tree-body`
- * scroll container through `SCROLL_STEPS` programmatic scrollTop
- * positions (each followed by a double-rAF settle). The harness
- * times the full callback, so the emitted `wallNs` covers
+ * Renders the tree, expands all nodes, then walks the
+ * `<cdk-virtual-scroll-viewport>` through `SCROLL_STEPS` programmatic
+ * `scrollToOffset()` positions (each followed by a double-rAF settle).
+ * The harness times the full callback, so the emitted `wallNs` covers
  * "initial-render + expand-all + scroll session" -- not the scroll
  * alone. Diff comparisons are still valid because every iteration
  * executes the same fixed sequence.
  *
- * Gated to 10K only at the call site. 100K + 1M scroll lives in L3.
+ * Post-Phase 2 (issue #95): the tree is virtualized; we drive the
+ * inner viewport offset directly rather than the outer wrapper's
+ * `scrollTop`, which is what users perceive when scrolling.
  */
 async function scrollAfterExpand(fixture: ComponentFixture<JsonTreeComponent>): Promise<void> {
   fixture.detectChanges();
@@ -181,13 +182,15 @@ async function scrollAfterExpand(fixture: ComponentFixture<JsonTreeComponent>): 
   fixture.componentInstance.expandAll();
   fixture.detectChanges();
   await nextDoubleRaf();
-  const treeBody = fixture.nativeElement.querySelector('.tree-body') as HTMLElement | null;
-  if (!treeBody) {
-    throw new Error('L2 scroll-after-expand: .tree-body element not found in fixture.');
+  const viewport = fixture.componentInstance.__getHelpersForTesting().getViewport();
+  if (!viewport) {
+    throw new Error('L2 scroll-after-expand: <cdk-virtual-scroll-viewport> not found in fixture.');
   }
-  const scrollHeight = treeBody.scrollHeight;
+  const dataLength = viewport.getDataLength();
+  const itemSize = viewport.measureRangeSize({ start: 0, end: 1 }) || 1;
+  const totalContentPx = dataLength * itemSize;
   for (let step = 1; step <= SCROLL_STEPS; step++) {
-    treeBody.scrollTop = (scrollHeight * step) / (SCROLL_STEPS + 1);
+    viewport.scrollToOffset((totalContentPx * step) / (SCROLL_STEPS + 1), 'auto');
     await nextDoubleRaf();
   }
 }
@@ -208,26 +211,20 @@ describe('JsonTreeComponent perf (L2)', () => {
     });
   }
 
-  // Scroll-after-expand: 10K only. 100K/1M scroll on a non-virtualized
-  // mat-tree would OOM Karma; L3's `scroll-after-expand.spec.ts` runs
-  // larger sizes in a real Playwright browser instead.
+  // Scroll-after-expand: enabled for 10K + 100K post-virtualization
+  // (issue #95 Phase 2). The viewport's scroll work is now O(viewport
+  // window), not O(visibleNodes), so larger fixtures stay in budget.
+  // 1M continues to live in L3 where a real Playwright browser is the
+  // more honest measurement surface.
   //
-  // wide-aoo is additionally gated behind `window.__perfL2ForceWideAooScroll
-  // = true` (or `?forcewideaooscroll=1`). On a 910-node depth-1 fan-out,
-  // `expandAll` materializes all siblings synchronously and each iter
-  // takes ~12 minutes; the default `npm run perf:all` would hit Karma's
-  // 15-min Jasmine timeout. Tracked in issue #219 -- the workaround keeps
-  // baseline capture unblocked while mat-tree virtualization is
-  // investigated. `scroll-after-expand: deep25 @ 10k` continues to run
-  // by default (same 10k node count spread across 25 depth levels).
-  const forceWideAooScroll =
-    (window as Window & { __perfL2ForceWideAooScroll?: boolean }).__perfL2ForceWideAooScroll ===
-      true || location.search.includes('forcewideaooscroll=1');
-  for (const spec of defaultFixtures().filter((fixture) => {
-    if (fixture.approxNodes !== 10_000) return false;
-    if (fixture.shape === 'wide-aoo' && !forceWideAooScroll) return false;
-    return true;
-  })) {
+  // wide-aoo @ 10K previously needed a force-flag because `expandAll`
+  // materialized all siblings synchronously on the non-virtualized
+  // mat-tree and tripped Karma's Jasmine timeout (#219).
+  // Virtualization replaced the DOM-materialization cost with a single
+  // `setExpandedBulk` Set write, so the gate is no longer needed.
+  for (const spec of defaultFixtures().filter(
+    (fixture) => fixture.approxNodes === 10_000 || fixture.approxNodes === 100_000,
+  )) {
     it(`scroll-after-expand: ${spec.shape} @ ${spec.size}`, async () => {
       const row = await measureOneFixture(`scroll-after-expand`, spec, scrollAfterExpand);
       emitRow(row);

@@ -195,9 +195,16 @@ export const TELEMETRY_MESSAGE_IDS = [
    * thrashed in the meantime, the older measurement is dropped
    * silently to avoid double-emitting for transient inputs.
    *
-   * Emitted only when wallclock exceeds 200 ms. Strict `>`:
-   * `timeMs > 200` emits. Skipped entirely when `value()` is
+   * Emitted only when wallclock exceeds 30 ms. Strict `>`:
+   * `timeMs > 30` emits. Skipped entirely when `value()` is
    * undefined (empty tree).
+   *
+   * Threshold note: Phase 2 (issue #95) virtualization rewrote the
+   * render path to be O(viewport) rather than O(visibleNodes), so
+   * the 200 ms threshold inherited from `<mat-tree>` is no longer
+   * meaningful. The 30 ms value is a placeholder until Phase 3
+   * measures a fresh post-virtualization P95 on `wide-aoo @ 100K`
+   * and anchors the threshold at 2 * P95.
    *
    * Props:
    *   { cold: boolean;
@@ -220,8 +227,15 @@ export const TELEMETRY_MESSAGE_IDS = [
    * (controlled by the `hasInitializedExpansion` flag) so first
    * paint isn't double-counted with `tree.render.slow`.
    *
-   * Emitted only when wallclock exceeds 50 ms. Strict `>`:
-   * `timeMs > 50` emits.
+   * Emitted only when wallclock exceeds 10 ms. Strict `>`:
+   * `timeMs > 10` emits.
+   *
+   * Threshold note: Phase 2 (issue #95) virtualization made bulk
+   * expand a Set-mutation cost (one `setExpandedBulk` write) rather
+   * than a DOM-render-of-every-node cost, so the prior 50 ms threshold
+   * is no longer meaningful. The 10 ms value is a placeholder until
+   * Phase 3 measures a fresh post-virtualization P95 on
+   * `wide-aoo @ 100K expand-all` and anchors the threshold at 2 * P95.
    *
    * Props:
    *   { cold: boolean }

@@ -73,8 +73,18 @@ describe('JsonTreeComponent', () => {
     prefs = TestBed.inject(PreferencesService);
     beforeDetectChanges?.();
     fixture.componentRef.setInput('value', value);
+    attachFixtureForViewport(fixture);
     fixture.detectChanges();
     cmp = fixture.componentInstance;
+    fixture.detectChanges();
+    // CDK virtual scroll measures viewport size in `ngAfterViewInit` and
+    // schedules `_setRenderedRange` via `Promise.resolve().then(...)`. Drain
+    // microtasks (twice; one for measurement, one for the data emit) and
+    // run another change-detection pass so rows are in the DOM by the time
+    // the test runs.
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
   }
 
   async function createWithEventSpy(value: unknown): Promise<jasmine.Spy> {
@@ -138,7 +148,66 @@ describe('JsonTreeComponent', () => {
   afterEach(() => {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TREE_SEARCH_STORAGE_KEY);
+    detachAllFixtureWrappers();
   });
+
+  // Phase 2 (issue #95) -- `<cdk-virtual-scroll-viewport>` reads
+  // `getBoundingClientRect()` to compute its size; a fixture that
+  // isn't attached to `document.body` (or attached but inside a
+  // zero-height parent) sees a 0-height viewport and renders zero
+  // rows, breaking every spec that queries `.tree-row` or reads
+  // `fixture.nativeElement.textContent`. We attach every fixture to
+  // a sized wrapper so the viewport can render rows. `afterEach`
+  // tears wrappers down. Tests are free to detach + re-attach the
+  // fixture host themselves -- our wrapper just provides a parent
+  // with explicit dimensions, not a transactional contract.
+  const fixtureWrappers: HTMLDivElement[] = [];
+
+  function attachFixtureForViewport(f: ComponentFixture<JsonTreeComponent>): void {
+    const host = f.nativeElement as HTMLElement;
+    host.style.height = '600px';
+    host.style.width = '1000px';
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText =
+      'position: fixed; left: 0; top: 0; width: 1000px; height: 600px; ' +
+      'display: flex; flex-direction: column; overflow: hidden;';
+    wrapper.appendChild(host);
+    document.body.appendChild(wrapper);
+    fixtureWrappers.push(wrapper);
+  }
+
+  function detachAllFixtureWrappers(): void {
+    while (fixtureWrappers.length > 0) {
+      const wrapper = fixtureWrappers.pop()!;
+      if (wrapper.parentNode) {
+        wrapper.parentNode.removeChild(wrapper);
+      }
+    }
+  }
+
+  // Phase 2 (issue #95) -- `<mat-tree>` rendered every node's
+  // `<mat-nested-tree-node>` DOM element regardless of expansion state
+  // (children just stayed hidden when their parent was collapsed).
+  // `cdk-virtual-scroll-viewport` only renders rows for `FlatItem`s
+  // that flatten emits, and `flatten` stops recursion the moment a
+  // container isn't in `expandedPaths`. Tests that called
+  // `cmp.collapseAll()` and then poked at descendant rows in the DOM
+  // need the root row's children visible (so e.g. `$.obj` is a
+  // collapsed container row, not "no row at all"). This helper
+  // mirrors the legacy effective state: root expanded, every
+  // descendant collapsed.
+  async function collapseAllExceptRoot(): Promise<void> {
+    const helpers = cmp.__getHelpersForTesting();
+    const rootNode = cmp.root();
+    helpers.collapseAllNodes();
+    if (rootNode) {
+      helpers.setExpanded(rootNode, true);
+    }
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
 
   it('does not warn about mixed flat/nested tree node types', async () => {
     const warn = spyOn(console, 'warn').and.callThrough();
@@ -185,9 +254,9 @@ describe('JsonTreeComponent', () => {
     document.body.appendChild(fixture.nativeElement);
     try {
       const node = (fixture.nativeElement as HTMLElement).querySelector(
-        'mat-nested-tree-node, .mat-nested-tree-node',
+        '.tree-row[data-path]',
       ) as HTMLElement;
-      expect(node).withContext('expected a mat-nested-tree-node to be rendered').toBeTruthy();
+      expect(node).withContext('expected a tree row to be rendered').toBeTruthy();
       const fs = Number.parseFloat(getComputedStyle(node).fontSize);
       expect(fs).toBe(28);
       expect(getComputedStyle(node).fontFamily).toMatch(/JetBrains Mono/i);
@@ -441,7 +510,7 @@ describe('JsonTreeComponent', () => {
   describe('tree render slow telemetry', () => {
     it('does not emit tree.render.slow below the threshold', async () => {
       const callbacks = installAnimationFrameQueue();
-      spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0, 199);
+      spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0, 29);
       const eventSpy = await createWithEventSpy({ a: 1 });
       runQueuedAnimationFrames(callbacks);
       expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow')).toBeFalse();
@@ -490,7 +559,22 @@ describe('JsonTreeComponent', () => {
       spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0);
       const eventSpy = await createWithEventSpy({ a: 1 });
       fixture.destroy();
-      runQueuedAnimationFrames(callbacks);
+      // Drain manually with per-callback try/catch: CDK's virtual scroll
+      // viewport uses rxjs's AnimationFrameScheduler internally, whose actions
+      // are unsubscribed by fixture.destroy() but whose pending rAF callbacks
+      // remain in our spy-captured queue. Invoking those callbacks after
+      // destroy can throw inside rxjs (flush() shifts an empty actions array
+      // and calls .execute on undefined). The assertion only cares whether
+      // OUR production render-slow guard fired, so swallow per-callback errors.
+      while (callbacks.length > 0) {
+        const callback = callbacks.shift();
+        if (!callback) break;
+        try {
+          callback(0);
+        } catch {
+          // Ignore: rxjs scheduler internal teardown race; see comment above.
+        }
+      }
       expect(eventSpy.calls.allArgs().some((args) => args[0] === 'tree.render.slow')).toBeFalse();
     });
   });
@@ -1025,7 +1109,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit for expandAll below the threshold', async () => {
       await createExpandFixture();
       const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
-      spyOn(performance, 'now').and.returnValues(0, 49);
+      spyOn(performance, 'now').and.returnValues(0, 9);
       cmp.expandAll();
       expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
     });
@@ -1045,7 +1129,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit for expandToLevel below the threshold', async () => {
       await createExpandFixture();
       const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
-      spyOn(performance, 'now').and.returnValues(0, 49);
+      spyOn(performance, 'now').and.returnValues(0, 9);
       cmp.expandToLevel(2);
       expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
     });
@@ -1065,7 +1149,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit for expandAllFromHere below the threshold', async () => {
       await createExpandFixture();
       const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
-      spyOn(performance, 'now').and.returnValues(0, 49);
+      spyOn(performance, 'now').and.returnValues(0, 9);
       cmp.expandAllFromHere(nodeAt('$.a'));
       expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
     });
@@ -1086,7 +1170,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit for expandToDepthFromHere below the threshold', async () => {
       await createExpandFixture();
       const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
-      spyOn(performance, 'now').and.returnValues(0, 49);
+      spyOn(performance, 'now').and.returnValues(0, 9);
       cmp.expandToDepthFromHere(nodeAt('$.a'), 2);
       expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
     });
@@ -1111,10 +1195,10 @@ describe('JsonTreeComponent', () => {
       expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
     });
 
-    it('does not emit at exactly 50 ms', async () => {
+    it('does not emit at exactly the threshold (10 ms)', async () => {
       await createExpandFixture();
       const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
-      spyOn(performance, 'now').and.returnValues(0, 50);
+      spyOn(performance, 'now').and.returnValues(0, 10);
       cmp.expandAll();
       expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
     });
@@ -1205,15 +1289,20 @@ describe('JsonTreeComponent', () => {
 
     function commentTexts(selector: string): string[] {
       const host = fixture.nativeElement as HTMLElement;
-      return Array.from(host.querySelectorAll<HTMLElement>(selector)).map(
-        (el) => el.textContent?.trim() ?? '',
-      );
+      const probe = host.querySelector('.tree-row--probe');
+      return Array.from(host.querySelectorAll<HTMLElement>(selector))
+        .filter((el) => !probe?.contains(el))
+        .map((el) => el.textContent?.trim() ?? '');
     }
 
     it('renders no comment slots when commentsByPath is null (default)', async () => {
       await createWith({ name: 'Alice' });
       const host = fixture.nativeElement as HTMLElement;
-      expect(host.querySelectorAll('.tree-comment').length).toBe(0);
+      const probe = host.querySelector('.tree-row--probe');
+      const comments = Array.from(host.querySelectorAll('.tree-comment')).filter(
+        (el) => !probe?.contains(el),
+      );
+      expect(comments.length).toBe(0);
     });
 
     it('renders a leading comment before the key on a leaf row', async () => {
@@ -1406,17 +1495,22 @@ describe('JsonTreeComponent', () => {
         makeMap([['$.foo', makeBundle(undefined, undefined, 'tail', 'hello')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
-      const trailing = host.querySelector('.tree-comment-trailing') as HTMLElement | null;
+      const probe = host.querySelector('.tree-row--probe');
+      const trailing = Array.from(
+        host.querySelectorAll<HTMLElement>('.tree-comment-trailing'),
+      ).find((el) => !probe?.contains(el));
       expect(trailing)
         .withContext('merged trailing slot should render on empty container')
-        .not.toBeNull();
+        .toBeDefined();
       // In-row text is single-line + ellipsis (first line); tooltip
       // carries the full multi-line merged text in source order.
       expect(trailing!.textContent?.trim()).toBe('hello');
       const debugEl = fixture.debugElement
         .queryAll(By.directive(MatTooltip))
-        .find((de) =>
-          (de.nativeElement as HTMLElement).classList.contains('tree-comment-trailing'),
+        .find(
+          (de) =>
+            (de.nativeElement as HTMLElement).classList.contains('tree-comment-trailing') &&
+            !probe?.contains(de.nativeElement as HTMLElement),
         );
       expect(debugEl).withContext('trailing-comment tooltip directive').toBeDefined();
       const tooltipMessage = debugEl!.injector.get(MatTooltip).message;
@@ -1432,13 +1526,18 @@ describe('JsonTreeComponent', () => {
         makeMap([['$.foo', makeBundle(undefined, 'open', 'tail', 'mid')]]),
       );
       const host = fixture.nativeElement as HTMLElement;
-      const trailing = host.querySelector('.tree-comment-trailing') as HTMLElement | null;
-      expect(trailing).not.toBeNull();
+      const probe = host.querySelector('.tree-row--probe');
+      const trailing = Array.from(
+        host.querySelectorAll<HTMLElement>('.tree-comment-trailing'),
+      ).find((el) => !probe?.contains(el));
+      expect(trailing).toBeDefined();
       expect(trailing!.textContent?.trim()).toBe('open');
       const debugEl = fixture.debugElement
         .queryAll(By.directive(MatTooltip))
-        .find((de) =>
-          (de.nativeElement as HTMLElement).classList.contains('tree-comment-trailing'),
+        .find(
+          (de) =>
+            (de.nativeElement as HTMLElement).classList.contains('tree-comment-trailing') &&
+            !probe?.contains(de.nativeElement as HTMLElement),
         );
       expect(debugEl).toBeDefined();
       const tooltipMessage = debugEl!.injector.get(MatTooltip).message;
@@ -1670,6 +1769,17 @@ describe('JsonTreeComponent', () => {
       const selected = (fixture.nativeElement as HTMLElement).querySelector(
         '.tree-row.is-selected',
       ) as HTMLElement | null;
+      // The Phase 0.5 migration moved the selected-row CSS selector from
+      // `mat-nested-tree-node[aria-selected="true"] .tree-row` to
+      // `.tree-row.is-selected`. Phase 2's template rewrite drops the
+      // wrapping `<mat-nested-tree-node>` entirely and binds
+      // `aria-selected` directly on `.tree-row`. Assert it explicitly so
+      // the a11y contract is not silently lost again.
+      if (selected) {
+        expect(selected.getAttribute('aria-selected'))
+          .withContext(`aria-selected on selected row for ${path}`)
+          .toBe('true');
+      }
       cmp.selectedPath.set(null);
       fixture.detectChanges();
       if (!selected) {
@@ -1689,8 +1799,11 @@ describe('JsonTreeComponent', () => {
       expect(cmp.selectedPath()).toBe('$.a');
       const stillSelected = (fixture.nativeElement as HTMLElement).querySelector(
         '.tree-row.is-selected',
-      );
+      ) as HTMLElement | null;
       expect(stillSelected).toBeTruthy();
+      // a11y carry-over from PR #229: aria-selected must still attach to
+      // the selected row after Phase 2's template rewrite.
+      expect(stillSelected!.getAttribute('aria-selected')).toBe('true');
     });
 
     it('selecting the root yields no ancestor highlights anywhere', async () => {
@@ -1802,7 +1915,7 @@ describe('JsonTreeComponent', () => {
       cmp.expandAll();
       fixture.detectChanges();
       const twisty = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-twisty[matTreeNodeToggle], button.tree-twisty',
+        'button.tree-twisty',
       ) as HTMLElement;
       expect(twisty).withContext('expected a twisty toggle button').toBeTruthy();
       twisty.click();
@@ -1886,6 +1999,9 @@ describe('JsonTreeComponent', () => {
       ) as HTMLElement;
       expect(xRow.classList.contains('is-selected')).toBeTrue();
       expect(xRow.classList.contains('is-search-hit')).toBeTrue();
+      // a11y carry-over from PR #229: aria-selected must still attach to
+      // the selected row after Phase 2's template rewrite.
+      expect(xRow.getAttribute('aria-selected')).toBe('true');
     });
   });
 
@@ -2763,8 +2879,10 @@ describe('JsonTreeComponent', () => {
 
   describe('date annotations', () => {
     function getAnnotationSpans(): HTMLElement[] {
-      return Array.from(
-        (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-date-annotation'),
+      const host = fixture.nativeElement as HTMLElement;
+      const probe = host.querySelector('.tree-row--probe');
+      return Array.from(host.querySelectorAll<HTMLElement>('.tree-date-annotation')).filter(
+        (el) => !probe?.contains(el),
       );
     }
 
@@ -2777,22 +2895,24 @@ describe('JsonTreeComponent', () => {
       expect(spans[0].textContent ?? '').toContain(')');
     });
 
-    it('lets the annotation wrap when space is tight (parity with the original value)', async () => {
+    it('shares the nowrap+ellipsis wrap posture with the original value (Phase 2)', async () => {
       await createWith({ created: '2024-11-05T18:30:00Z' });
-      const valueSpan = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-value-string',
-      ) as HTMLElement | null;
+      const host = fixture.nativeElement as HTMLElement;
+      const probe = host.querySelector('.tree-row--probe');
+      const valueSpan = Array.from(host.querySelectorAll<HTMLElement>('.tree-value-string')).find(
+        (el) => !probe?.contains(el),
+      );
       const annotationSpan = getAnnotationSpans()[0];
       expect(valueSpan).toBeTruthy();
       expect(annotationSpan).toBeTruthy();
-      // The original value already wraps via `word-break: break-word`.
-      // The annotation must not be glued to one line - otherwise it
-      // claims full intrinsic width as a flex item and squeezes the
-      // value asymmetrically. Both spans should share the same wrap
-      // posture.
+      // Phase 2 (issue #95) replaces `word-break: break-word` on
+      // value spans with `white-space: nowrap; text-overflow: ellipsis`.
+      // The annotation must share the same wrap posture so it does
+      // not claim full intrinsic width as a flex item and squeeze
+      // the value asymmetrically.
       const valueWhiteSpace = getComputedStyle(valueSpan as HTMLElement).whiteSpace;
       const annotationWhiteSpace = getComputedStyle(annotationSpan as HTMLElement).whiteSpace;
-      expect(annotationWhiteSpace).not.toBe('nowrap');
+      expect(annotationWhiteSpace).toBe('nowrap');
       expect(annotationWhiteSpace).toBe(valueWhiteSpace);
     });
 
@@ -2946,9 +3066,11 @@ describe('JsonTreeComponent', () => {
 
   describe('type badge labels', () => {
     function badges(): string[] {
-      return Array.from(
-        (fixture.nativeElement as HTMLElement).querySelectorAll('.tree-type-badge'),
-      ).map((el) => (el.textContent ?? '').trim());
+      const host = fixture.nativeElement as HTMLElement;
+      const probe = host.querySelector('.tree-row--probe');
+      return Array.from(host.querySelectorAll('.tree-type-badge'))
+        .filter((el) => !probe?.contains(el))
+        .map((el) => (el.textContent ?? '').trim());
     }
 
     it('renders date/time for an ISO date+time string', async () => {
@@ -5753,12 +5875,11 @@ describe('JsonTreeComponent', () => {
 
       it('skips when the dblclick target is the chevron toggle button (regression for issue #109)', async () => {
         const logger = await createWithLoggerSpy({ obj: { a: 1 } });
-        cmp.collapseAll();
-        fixture.detectChanges();
+        await collapseAllExceptRoot();
         const node = nodeAt('$.obj');
         const wasExpanded = cmp.__getHelpersForTesting().isExpanded(node);
         const chevron = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-row[data-path="$.obj"] .tree-twisty[mattreenodetoggle], .tree-row[data-path="$.obj"] button[mattreenodetoggle]',
+          '.tree-row[data-path="$.obj"] button.tree-twisty',
         ) as HTMLButtonElement | null;
         expect(chevron).withContext('found the chevron toggle button on $.obj').toBeTruthy();
         const ev = new MouseEvent('dblclick', { bubbles: true });
@@ -5766,9 +5887,9 @@ describe('JsonTreeComponent', () => {
         cmp.onRowDblClick(ev, node);
         // The interactive-descendant guard should short-circuit before
         // any toggle / telemetry happens here. The chevron's own
-        // matTreeNodeToggle click handler is what flips state on click;
-        // this guard ensures dblclick on the chevron does not _also_
-        // toggle from the row handler.
+        // (click) handler is what flips state on click; this guard
+        // ensures dblclick on the chevron does not _also_ toggle from
+        // the row handler.
         expect(cmp.__getHelpersForTesting().isExpanded(node)).toBe(wasExpanded);
         expect(logger.info).not.toHaveBeenCalledWith(
           'tree.row.doubleClickToggle',
@@ -5892,8 +6013,7 @@ describe('JsonTreeComponent', () => {
 
       it('clicking the surfaced "Expand 1 level" row expands the clicked container', async () => {
         await createWith({ obj: { a: 1 } });
-        cmp.collapseAll();
-        fixture.detectChanges();
+        await collapseAllExceptRoot();
         const node = nodeAt('$.obj');
         cmp.contextNode.set(node);
         expect(cmp.__getHelpersForTesting().isExpanded(node)).toBe(false);
@@ -5922,8 +6042,7 @@ describe('JsonTreeComponent', () => {
         // the v0.19.0 matTooltip that was dropped in v0.19.1 because
         // the overlay obscured the next menu item.
         await createWith({ obj: { a: 1 } });
-        cmp.collapseAll();
-        fixture.detectChanges();
+        await collapseAllExceptRoot();
         await openMenuFor('$.obj');
         const items = Array.from(
           document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
@@ -6386,7 +6505,7 @@ describe('JsonTreeComponent', () => {
 
     function objChevron(): HTMLButtonElement {
       const chevron = (fixture.nativeElement as HTMLElement).querySelector(
-        '.tree-row[data-path="$.obj"] button[mattreenodetoggle]',
+        '.tree-row[data-path="$.obj"] button.tree-twisty',
       ) as HTMLButtonElement | null;
       expect(chevron).withContext('found the $.obj chevron toggle').toBeTruthy();
       return chevron!;
@@ -6394,8 +6513,7 @@ describe('JsonTreeComponent', () => {
 
     it('real dblclick on container row toggles expansion and does not copy', async () => {
       const logger = await createWithLoggerSpy({ obj: { a: 1, b: 2 } });
-      cmp.collapseAll();
-      fixture.detectChanges();
+      await collapseAllExceptRoot();
       const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
       const node = (() => {
         const stack = [cmp.root()!];
@@ -6449,8 +6567,7 @@ describe('JsonTreeComponent', () => {
 
     it('dblclick on the chevron does not invoke row dblclick behavior', async () => {
       const logger = await createWithLoggerSpy({ obj: { a: 1 } });
-      cmp.collapseAll();
-      fixture.detectChanges();
+      await collapseAllExceptRoot();
 
       // The chevron button's own click handler (matTreeNodeToggle) runs
       // on each click. A real `dblclick` issued on the chevron is two
@@ -6620,19 +6737,21 @@ describe('JsonTreeComponent', () => {
 
   describe('M7g-3b: keyboard navigation and ARIA attributes', () => {
     /**
-     * Resolve the rendered <mat-nested-tree-node> for a given pathString.
-     * Throws if no node is rendered for that path (caller should
+     * Resolve the rendered `.tree-row` for a given pathString.
+     * Throws if no row is rendered for that path (caller should
      * `expandAll()` first when the row sits below the auto-fit depth).
+     * Phase 2 (issue #95) migrated the focusable element from
+     * `<mat-nested-tree-node>` to `.tree-row` when `<mat-tree>` was
+     * replaced by the CDK virtual scroll viewport.
      */
     function nodeEl(pathString: string): HTMLElement {
       const candidates = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
-        'mat-nested-tree-node[data-tree-node-path]',
+        '.tree-row[data-path]',
       );
       const el =
-        Array.from(candidates).find((n) => n.getAttribute('data-tree-node-path') === pathString) ??
-        null;
+        Array.from(candidates).find((n) => n.getAttribute('data-path') === pathString) ?? null;
       if (!el) {
-        throw new Error(`No mat-nested-tree-node rendered for path ${pathString}`);
+        throw new Error(`No .tree-row rendered for path ${pathString}`);
       }
       return el;
     }
@@ -6673,7 +6792,7 @@ describe('JsonTreeComponent', () => {
       expect(c.getAttribute('aria-setsize')).toBe('3');
 
       const focused = (fixture.nativeElement as HTMLElement).querySelectorAll(
-        'mat-nested-tree-node[tabindex="0"]',
+        '.tree-row[tabindex="0"]',
       );
       expect(focused.length).toBe(1);
     });
@@ -6853,11 +6972,14 @@ describe('JsonTreeComponent', () => {
       await createWith({ a: 1, b: 2 });
       cmp.expandAll();
       fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
       // Reset initial focus so we can verify the click moves it.
       cmp.focusedPath.set('$');
       fixture.detectChanges();
 
-      const aRow = nodeEl('$.a').querySelector('.tree-row') as HTMLElement;
+      const aRow = nodeEl('$.a');
       aRow.click();
       fixture.detectChanges();
 
@@ -7017,13 +7139,12 @@ describe('JsonTreeComponent', () => {
 
     function rowNodeEl(pathString: string): HTMLElement {
       const candidates = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
-        'mat-nested-tree-node[data-tree-node-path]',
+        '.tree-row[data-path]',
       );
       const el =
-        Array.from(candidates).find((n) => n.getAttribute('data-tree-node-path') === pathString) ??
-        null;
+        Array.from(candidates).find((n) => n.getAttribute('data-path') === pathString) ?? null;
       if (!el) {
-        throw new Error(`No mat-nested-tree-node rendered for path ${pathString}`);
+        throw new Error(`No .tree-row rendered for path ${pathString}`);
       }
       return el;
     }
@@ -7058,8 +7179,7 @@ describe('JsonTreeComponent', () => {
 
     it('Ctrl+C on a focused container row copies pretty JSON without changing expansion', async () => {
       await createWith({ obj: { a: 1, b: 2 } });
-      cmp.collapseAll();
-      fixture.detectChanges();
+      await collapseAllExceptRoot();
       const node = nodeAt('$.obj');
       const wasExpanded = cmp.__getHelpersForTesting().isExpanded(node);
       cmp.focusedPath.set('$.obj');
@@ -7237,8 +7357,7 @@ describe('JsonTreeComponent', () => {
 
     it('emits tree.keyboard.copyValue with escaped: false', async () => {
       const logger = await createWithLoggerSpy({ obj: { a: 1 } });
-      cmp.collapseAll();
-      fixture.detectChanges();
+      await collapseAllExceptRoot();
       cmp.focusedPath.set('$.obj');
       fixture.detectChanges();
 
@@ -7263,17 +7382,16 @@ describe('JsonTreeComponent', () => {
 
     it('does not fire when the keydown originates from a descendant of the row', async () => {
       await createWith({ obj: { a: 1 } });
-      cmp.collapseAll();
-      fixture.detectChanges();
+      await collapseAllExceptRoot();
       cmp.focusedPath.set('$.obj');
       fixture.detectChanges();
 
       // Pick the chevron toggle button: a real descendant of the
-      // mat-nested-tree-node. A Ctrl+C dispatched from the chevron
+      // `.tree-row`. A Ctrl+C dispatched from the chevron
       // bubbles up to the row, where currentTarget !== target causes
       // the handler to short-circuit before our switch case runs.
       const chevron = (fixture.nativeElement as HTMLElement).querySelector(
-        'mat-nested-tree-node[data-tree-node-path="$.obj"] button[mattreenodetoggle]',
+        '.tree-row[data-path="$.obj"] button.tree-twisty',
       ) as HTMLButtonElement | null;
       expect(chevron).withContext('found the $.obj chevron button').toBeTruthy();
 
@@ -7299,8 +7417,7 @@ describe('JsonTreeComponent', () => {
 
     it('Ctrl+C on a real focused container row copies its value (DOM-level)', async () => {
       await createWith({ obj: { a: 1, b: 2, c: 3 } });
-      cmp.collapseAll();
-      fixture.detectChanges();
+      await collapseAllExceptRoot();
       cmp.focusedPath.set('$.obj');
       fixture.detectChanges();
 

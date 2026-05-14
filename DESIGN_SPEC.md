@@ -2284,6 +2284,45 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.21.0**: Tree view virtualization (issue #95 Phase 2). The
+  `<mat-tree>` + `<mat-nested-tree-node>` render path is replaced
+  with `<cdk-virtual-scroll-viewport>` + `*cdkVirtualFor` from
+  `@angular/cdk/scrolling`. The component DFS-flattens the
+  `TreeNode` graph into a `FlatItem[]` (`kind: 'leaf' | 'open' |
+  'close'`) and renders only the rows visible in the viewport, so
+  a 100K-node blob spends time proportional to the viewport size
+  rather than the tree size. Every real row is exactly
+  `var(--tree-row-height)` tall, measured once per font-size epoch
+  off a single hidden probe row (shared with `computeAutoFitDepth`
+  for capacity calc). `expandedPaths: signal<ReadonlySet<string>>`
+  becomes the authoritative expansion state; `treeControl` /
+  `MatTreeNestedDataSource` / `NestedTreeControl` /
+  `@angular/material/tree` are removed entirely. The new
+  `OverflowDetectorDirective` (under `src/app/shared/directives/`)
+  enables `matTooltip` on tree value / key cells only when the
+  text is actually clipped by `text-overflow: ellipsis`; all
+  measurements batch through a shared `OverflowMeasurementQueue`
+  rAF service with a two-phase (read-all / write-all) API to
+  defeat layout thrash when N rows mount at once. SCSS swaps
+  `word-break: break-word` for `white-space: nowrap; overflow:
+  hidden; text-overflow: ellipsis` on every text cell, fixes
+  `.tree-row { height: var(--tree-row-height); }`, and adds
+  `.tree-viewport { contain: strict; }` and a `.tree-empty`
+  placeholder for empty documents. Slow-path telemetry thresholds
+  recalibrate to the new render budget:
+  `TREE_RENDER_SLOW_THRESHOLD_MS` 200 -> 30, and
+  `TREE_EXPAND_SLOW_THRESHOLD_MS` 50 -> 10 (final values anchored
+  on the fresh L2 baseline). The L2 perf bench lifts its 10K cap
+  (the prior `<mat-tree>` OOMed Karma at 100K) and gains
+  `wide-aoo @ 100K` and `expandAll @ 100K` scenarios; `scrollAfterExpand`
+  now drives `viewport.scrollToOffset` rather than `treeBody.scrollTop`.
+  User-visible: the tree renders large blobs without freezing
+  (`DESIGN_SPEC.md` S1176 NFR), long values truncate with an
+  ellipsis and reveal the full string on hover instead of
+  wrapping, and search-jump / breadcrumb-click scroll the
+  minimum amount to reveal the target row (`scrollIntoView({block:
+  'nearest'})`-equivalent semantics, computed off the viewport's
+  actual scroll offset rather than CDK's buffered rendered range).
 - **0.20.1**: MSAL silent token refresh fix (continuation of 0.14.7
   precedent) - add `'self'` to the enforced CSP `frame-src` directive
   in `staticwebapp.config.json`. The CSP value was byte-identical
