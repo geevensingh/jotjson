@@ -1019,12 +1019,12 @@ rule alerts wired to a single action group:
   health, perf regressions, auth/access failures, API issues, or quota
   pressure. No workbook-level time picker; each tile is tuned to an
   operator-relevant window (1h-7d).
-- **`JotJSON product analytics`** -- six sections (Leading conversion +
-  top 20; Context menu; Subtree submenu; Tree row interactions;
-  Breadcrumb; Highlight; Decoded viewer & Extract). Audience: PM /
-  founder asking "which features are getting used, and at what rate?".
-  Workbook-level `TimeRange` picker (default 30d, options 24h / 7d /
-  30d / 90d).
+- **`JotJSON product analytics`** -- seven sections (Leading
+  conversion + top 20; Context menu; Subtree submenu; Tree row
+  interactions; Breadcrumb; Highlight; Decoded viewer & Extract).
+  Audience: PM / founder asking "which features are getting used, and
+  at what rate?". Workbook-level `TimeRange` picker (default 30d,
+  options 24h / 7d / 30d / 90d).
 
 Both workbooks deploy via the generic `infra/modules/workbook.bicep`
 module with content in `infra/workbooks/{monitoring,product-analytics}.json`.

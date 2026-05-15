@@ -44,7 +44,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "let opens = toscalar(\n  traces\n  | where severityLevel == 1\n  | where message == 'tree.contextMenu.opened'\n  | count);\nlet actions = toscalar(\n  traces\n  | where severityLevel == 1\n  | where message startswith 'tree.contextMenu.'\n  | where message !in ('tree.contextMenu.opened', 'tree.contextMenu.subtreeOpened')\n  | count);\ndatatable (label: string, value: real, sort: int)\n[\n  'Menu opens',       opens,                                                                                  1,\n  'Actions taken',    actions,                                                                                2,\n  'Follow-through %', iff(opens == 0, real(0), round(100.0 * todouble(actions) / todouble(opens), 1)),         3\n]\n| order by sort asc\n| project label, value",
+        "query": "let opens = toscalar(\n  traces\n  | where severityLevel == 1\n  | where message == 'tree.contextMenu.opened'\n  | count);\nlet actions = toscalar(\n  traces\n  | where severityLevel == 1\n  | where message startswith 'tree.contextMenu.'\n  | where message !in ('tree.contextMenu.opened', 'tree.contextMenu.subtreeOpened')\n  | count);\nunion\n  (print label = 'Menu opens',             value = todouble(opens),  sort = 1),\n  (print label = 'Actions taken',          value = todouble(actions), sort = 2),\n  (print label = 'Actions per 100 opens',  value = iff(opens == 0, real(null), round(100.0 * todouble(actions) / todouble(opens), 1)), sort = 3)\n| order by sort asc\n| project label, value",
         "size": 1,
         "queryType": 0,
         "resourceType": "microsoft.insights/components",
@@ -121,7 +121,7 @@
     {
       "type": 1,
       "content": {
-        "json": "Note: Tile 1.2 uses `summarize ... by bin(timestamp, 1d)` (not `make-series`) so the TimeRange picker applies cleanly across 24h-90d. Days with zero opens don't render as zero-valued points; for total volume / conversion see Tile 0.1."
+        "json": "Note: Tile 1.2 uses `summarize ... by bin(timestamp, 1d)` (not `make-series`) so the TimeRange picker applies cleanly. **Best viewed at 7d+;** at 24h the chart collapses to 1-2 bins by design -- the conversion ratio for a 24h window lives in Tile 0.1. Days with zero opens don't render as zero-valued points."
       }
     },
     {
