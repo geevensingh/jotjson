@@ -170,7 +170,7 @@ describe('JsonTreeComponent expandedPaths invariant', () => {
     cmp.collapseAll();
     fixture.detectChanges();
     const aNode = findNodeByPath('$.a');
-    cmp.expandAllFromHere(aNode);
+    cmp.expandAllFromHere(aNode, 'topRow');
     fixture.detectChanges();
     const expanded = readExpanded();
     expect(expanded.has('$.a')).toBeTrue();
