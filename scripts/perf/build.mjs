@@ -62,6 +62,11 @@ const GENERATOR_GOLDEN_HASHES = [
     approxNodes: 1000,
     hash: '9731a3439a0f1ade92c2d83355fc9ae5ed2b25b46a8c89bd727489b85ce1b22f',
   },
+  {
+    shape: 'mixed-d10',
+    approxNodes: 1000,
+    hash: '6e681d878b13ea9b5d2e55efee79952e9f6ff1005337fb1a0ff1a6e279ea8052',
+  },
 ];
 
 const SEED_HASHES = process.env['PERF_BUILD_SEED_HASHES'] === '1';

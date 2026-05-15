@@ -17,6 +17,11 @@
 // JSONL row schema (also documented in docs/perf.md):
 //   { layer, scenario, fixture, size, approxNodes, bytes, iters,
 //     wallNsMedian, wallNsIqrLow, wallNsIqrHigh, wallNsStddev,
+//     wallMsMedian,    // derived: wallNsMedian / 1e6; consumed by
+//                      // `perf-targets.json` ceiling enforcement (the
+//                      // diff script does direct unit-naive numeric
+//                      // comparison against `ceiling_ms` so a ms-named
+//                      // metric is required for L1 NFR ceilings).
 //     heapRetainedDeltaMedian, heapRetainedDeltaIqrLow, heapRetainedDeltaIqrHigh,
 //     heapWorkingSetMedian, heapWorkingSetMax,
 //     pasteMethod?,    // "keyboard" | "setvalue" -- L3 paste-large only (PR follow-up to #194)
@@ -123,12 +128,19 @@ async function main() {
     process.stdout.write(`perf:l1  ${benchPath}\n`);
     const rows = runBenchWorker(benchPath);
     for (const row of rows) {
+      const typedRow = /** @type {Record<string, unknown>} */ (row);
+      const wallNsMedian = typedRow['wallNsMedian'];
       const enriched = {
         layer: 1,
         machineLabel,
         codeSha: sha,
         capturedAtUtc,
-        .../** @type {Record<string, unknown>} */ (row),
+        ...typedRow,
+        // Derived ms field: used by `perf-targets.json` ceiling
+        // enforcement (`scripts/perf/diff.mjs`'s metric lookup is
+        // unit-naive, so an `*Ms*` metric name needs an `*Ms*` field
+        // to actually exist on the row).
+        ...(typeof wallNsMedian === 'number' ? { wallMsMedian: wallNsMedian / 1e6 } : {}),
       };
       lines.push(JSON.stringify(enriched));
     }

@@ -62,15 +62,24 @@ function defaultFixtures(): FixtureSpec[] {
   //   - 1M is opt-in via `window.__perfL2Force1M = true` or `?force1m=1`.
   //     Each iter is many minutes (build/expand traversal dominates);
   //     reserve for deliberate diagnostic runs.
-  // Defaults intentionally cap at 100K so unattended `npm run perf:l2`
+  //   - `mixed-d10 @ 380k` (the ~5 MB NFR-anchor fixture from F-2)
+  //     is opt-in via `window.__perfL2Force5MB = true` or
+  //     `?force5mb=1`. Per skeptic #4: at default settings a 380K-
+  //     node fixture extrapolated linearly from 100K's ~50 s/iter
+  //     risks Karma's browserNoActivityTimeout watchdog. The flag
+  //     mirrors the existing `?force1m=1` pattern.
+  // Defaults intentionally cap so unattended `npm run perf:l2`
   // stays well under the Karma browserNoActivityTimeout watchdog.
   type ForceWindow = Window & {
     __perfL2Force1M?: boolean;
+    __perfL2Force5MB?: boolean;
   };
   const win = window as ForceWindow;
   const force1M = win.__perfL2Force1M === true || location.search.includes('force1m=1');
+  const force5MB = win.__perfL2Force5MB === true || location.search.includes('force5mb=1');
   const enabledNodeCounts = new Set<number>([10_000, 100_000]);
   if (force1M) enabledNodeCounts.add(1_000_000);
+  if (force5MB) enabledNodeCounts.add(380_000);
   return FIXTURE_CATALOG.filter((fixture) => enabledNodeCounts.has(fixture.approxNodes));
 }
 
@@ -222,8 +231,17 @@ describe('JsonTreeComponent perf (L2)', () => {
   // mat-tree and tripped Karma's Jasmine timeout (#219).
   // Virtualization replaced the DOM-materialization cost with a single
   // `setExpandedBulk` Set write, so the gate is no longer needed.
+  //
+  // The ~5 MB `mixed-d10 @ 380k` NFR-anchor fixture (F-2) is also
+  // exercised here when the `?force5mb=1` opt-in is set: it surfaces
+  // through `defaultFixtures()` only under that flag, and the
+  // scroll-after-expand path is a faithful read of "the user opened
+  // a 5 MB blob and scrolled" -- the literal NFR pain point.
   for (const spec of defaultFixtures().filter(
-    (fixture) => fixture.approxNodes === 10_000 || fixture.approxNodes === 100_000,
+    (fixture) =>
+      fixture.approxNodes === 10_000 ||
+      fixture.approxNodes === 100_000 ||
+      fixture.approxNodes === 380_000,
   )) {
     it(`scroll-after-expand: ${spec.shape} @ ${spec.size}`, async () => {
       const row = await measureOneFixture(`scroll-after-expand`, spec, scrollAfterExpand);
