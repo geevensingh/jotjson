@@ -1,0 +1,14 @@
+{
+  "Method": "POST",
+  "Url": "/api/billing/subscriptions/abc-123/invoke",
+  "Parameters": [
+    {
+      "Name": "RequestBody",
+      "Value": "POST /commerceapi/billing/subscriptions/abc-123/invoke?api-version=2024-01-01&detailLevel=full HTTP/1.1\r\nHost: billingservice.cp.microsoft.com\r\nAuthorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6Ijl3YXNzdW1lZHRva2VuanNvbndlYnRva2VueWVzaXRpc3JlYWxseWxvbmcifQ.eyJhdWQiOiJodHRwczovL2JpbGxpbmdzZXJ2aWNlLmNwLm1pY3Jvc29mdC5jb20vL2Fic3RyYWN0bG9uZ2F1ZGllbmNlc3RyaW5nIn0.signature\r\nContent-Type: application/json\r\nx-correlation-id: 11111111-2222-3333-4444-555555555555\r\nUser-Agent: BillingClient/2.4.7-internal+build.20260415\r\n\r\n{\"action\":\"renew\",\"plan\":\"enterprise-yearly\",\"seatCount\":150}"
+    },
+    {
+      "Name": "ExpectedStatus",
+      "Value": 200
+    }
+  ]
+}
