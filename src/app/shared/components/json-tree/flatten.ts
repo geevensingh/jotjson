@@ -4,12 +4,16 @@
  * order, honoring an `expandedPaths` set, and emits one
  * `FlatItem` per row the viewport should draw.
  *
- * Each container produces an `'open'` row at the moment of entry
- * and a `'close'` row when the walk returns past its last child.
- * Empty containers (`children?.length === 0` or
- * `children === undefined`) produce **no** synthetic `'close'`
- * row -- they render as a single leaf-style row with the empty
- * literal in the value cell.
+ * Row-kind contract:
+ * - **Primitives** (string, number, boolean, null): one `'leaf'` row.
+ * - **Empty containers** (`children` absent or empty): one `'leaf'`
+ *   row showing the empty literal (`{}` / `[]`) in the value cell;
+ *   no `'open'`/`'close'` brackets, since there are no children to
+ *   delimit.
+ * - **Expanded non-empty containers**: an `'open'` row, then the
+ *   recursively-flattened children, then a matching `'close'` row.
+ * - **Collapsed non-empty containers**: only an `'open'` row;
+ *   children and the matching `'close'` are skipped.
  *
  * Pure / DI-free so it can also run in the Node perf bench (see
  * `scripts/perf/build.mjs` rewriter notes in `build-tree.ts`).
@@ -20,9 +24,9 @@ import type { TreeNode } from './build-tree';
 export type FlatItemKind = 'leaf' | 'open' | 'close';
 
 export interface FlatItem {
-  /** `'leaf'` for primitives + empty containers; `'open'` / `'close'` bracket non-empty containers. */
+  /** `'leaf'` for primitives and empty containers; `'open'`/`'close'` bracket expanded non-empty containers; collapsed non-empty containers emit a lone `'open'` (no `'close'`). */
   readonly kind: FlatItemKind;
-  /** Source node. The same node appears twice for non-empty containers (once for `'open'`, once for `'close'`). */
+  /** Source node. The same node appears twice for expanded non-empty containers (once for `'open'`, once for `'close'`). */
   readonly node: TreeNode;
   /** Indent level from the root. `0` for root, `depth + 1` for direct children. */
   readonly level: number;
@@ -38,9 +42,10 @@ function isExpandable(node: TreeNode): boolean {
  * Append `FlatItem` rows for `node` and its visible descendants to `out`.
  *
  * `level` is the indent level for `node` itself (callers start at 0
- * for the root). `expanded` decides which non-empty containers
- * recurse; nodes whose `pathString` is not in the set render as a
- * single `'leaf'`-kind row showing the placeholder summary.
+ * for the root). Per the row-kind contract in the file header:
+ * primitives and empty containers emit a single `'leaf'`; non-empty
+ * containers always emit an `'open'`; expanded ones additionally
+ * recurse into children and emit the matching `'close'`.
  */
 export function flatten(
   node: TreeNode,

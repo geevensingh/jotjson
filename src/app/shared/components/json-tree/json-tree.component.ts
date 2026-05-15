@@ -1586,8 +1586,6 @@ export class JsonTreeComponent {
     });
   }
 
-  hasChild = (_: number, node: TreeNode): boolean => !!node.children && node.children.length > 0;
-
   /**
    * `trackBy` for `*cdkVirtualFor` over `flatList()`. Uses
    * `path + kind` so the OPEN and CLOSE rows of the same container

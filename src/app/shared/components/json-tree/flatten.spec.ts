@@ -29,8 +29,9 @@ describe('flatten', () => {
   it('returns a single leaf-style row for an empty object root', () => {
     const { root } = buildTree({});
     const items = flattenTree(root, new Set());
-    // Per locked decision: empty containers emit one 'open' row with no
-    // matching 'close' row (they render as a single leaf-style row).
+    // Per locked decision: empty containers emit a single 'leaf' row
+    // (no 'open'/'close' brackets, since there are no children to
+    // delimit).
     expect(items).toHaveSize(1);
     expect(items[0]!.kind).toBe('leaf');
     expect(items[0]!.expandable).toBe(false);

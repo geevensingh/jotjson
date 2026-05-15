@@ -13,17 +13,19 @@ import { OverflowMeasurementQueue } from './overflow-measurement-queue.service';
 
 /**
  * Detects horizontal overflow on the host element and exposes the
- * result as a signal. Used to gate `matTooltip` on tree value /
- * key cells so the tooltip only appears when the text is actually
- * clipped by `text-overflow: ellipsis`.
+ * result as a signal. v0.21.0 wires this to gate `matTooltip` on
+ * tree string-value cells so the tooltip only appears when the text
+ * is actually clipped by `text-overflow: ellipsis`. The directive
+ * itself is generic (any text cell that may overflow); key cells
+ * and other primitive value cells are planned extensions.
  *
  * The directive takes the cell's text content as a required input
  * (`[jjOverflowDetector]`) so the effect re-measures whenever the
  * displayed string changes across `*cdkVirtualFor` recycling. A
  * `ResizeObserver` on the host catches box-size changes (font-size
- * pref, viewport resize). All measurements go through the shared
- * `OverflowMeasurementQueue` to batch reads into one rAF per frame
- * and avoid the layout-thrash storm that synchronous
+ * pref, viewport resize). All measurements batch through the shared
+ * `OverflowMeasurementQueue` to coalesce reads into one rAF per
+ * frame and avoid the layout-thrash storm that synchronous
  * `scrollWidth` reads would cause when N rows mount at once.
  *
  * Locked decisions referenced from the Phase 2 plan: 12, 13, 17

@@ -2315,9 +2315,11 @@ Out of scope (for v1):
   `TREE_RENDER_SLOW_THRESHOLD_MS` 200 -> 30, and
   `TREE_EXPAND_SLOW_THRESHOLD_MS` 50 -> 10 (final values anchored
   on the fresh L2 baseline). The L2 perf bench lifts its 10K cap
-  (the prior `<mat-tree>` OOMed Karma at 100K) and gains
-  `wide-aoo @ 100K` and `expandAll @ 100K` scenarios; `scrollAfterExpand`
-  now drives `viewport.scrollToOffset` rather than `treeBody.scrollTop`.
+  (the prior `<mat-tree>` OOMed Karma at 100K) to include 100K-node
+  fixtures (`deep25`, `wide-aoo`, `pathological`) across both the
+  `initial-render` and `scroll-after-expand` scenarios; the latter
+  internally calls `expandAll()` before driving
+  `viewport.scrollToOffset` rather than `treeBody.scrollTop`.
   User-visible: the tree renders large blobs without freezing
   (`DESIGN_SPEC.md` S1176 NFR), long values truncate with an
   ellipsis and reveal the full string on hover instead of
