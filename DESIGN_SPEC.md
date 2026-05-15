@@ -2367,6 +2367,26 @@ Out of scope (for v1):
   minimum amount to reveal the target row (`scrollIntoView({block:
   'nearest'})`-equivalent semantics, computed off the viewport's
   actual scroll offset rather than CDK's buffered rendered range).
+- **0.21.1**: Tree row width hotfix on long string values
+  (regression discovered post-0.21.0 ship). The Phase-2 ellipsify
+  cascade on `.tree-value-string` (`white-space: nowrap; overflow:
+  hidden; text-overflow: ellipsis; min-width: 0`) was correct but
+  never fired for rows whose value's natural single-line render
+  exceeded the panel width. Root cause: CDK's
+  `cdk-virtual-scroll-content-wrapper` ships as `position: absolute;
+  min-width: 100%; width: auto` (vertical orientation), so it
+  shrink-to-fits to row max-content and `.tree-row` sees an
+  effectively-unbounded containing block. Fix: a single
+  `:host ::ng-deep .tree-viewport .cdk-virtual-scroll-content-wrapper
+  { width: 100%; box-sizing: border-box; }` rule in the json-tree
+  SCSS that pins the wrapper at exactly viewport width, letting the
+  cell-level ellipsify cascade do its job. Pure presentation fix --
+  no TS, HTML, or directive changes; the `OverflowDetectorDirective`
+  / `OverflowMeasurementQueue` machinery shipped in 0.21.0 already
+  handles the tooltip gating once ellipsis fires. Out-of-scope
+  follow-ups: long object keys (`.tree-key` has `flex-shrink: 0`),
+  type-badge / pill-cluster width, and deep-nesting invisible
+  clipping at depth >= 25 are tracked as separate issues.
 - **0.20.2**: MSAL silent token refresh fix, part 2 of 2 (0.20.1 was
   part 1). Adds the iframe-side bridge call required for the silent-
   refresh flow to actually complete after the CSP layer was unblocked

@@ -140,6 +140,46 @@
   contain: strict;
 }
 
+// Phase 2 (issue #95) hotfix v0.21.1 -- pin the CDK-internal
+// `cdk-virtual-scroll-content-wrapper` to viewport width so the
+// `.tree-value-string` ellipsify cascade
+// (`white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+// min-width: 0` on the cell + `min-width: 0` on every row child) can
+// actually fire.
+//
+// Why this is necessary: CDK's vertical-orientation styles set the
+// wrapper to `position: absolute; min-width: 100%; width: auto`
+// (see `@angular/cdk/scrolling` viewport styles, e.g.
+// `node_modules/@angular/cdk/fesm2022/scrolling.mjs`). With
+// `width: auto` on an absolutely-positioned element the wrapper is
+// shrink-to-fit: when row max-content exceeds the panel (e.g., a
+// long string value past ~160 monospace chars at 13px on a 1200px
+// panel), the wrapper grows above 100% and `.tree-row` sees an
+// effectively-unbounded containing block. Flex then gives
+// `.tree-value-string` all the space it wants and the ellipsis
+// never fires.
+//
+// Why `width: 100%` (not `min-width: 100%`): CDK already supplies
+// `min-width: 100%`. We need an upper bound. `width: 100%`
+// overrides `auto` and pins the wrapper at exactly the viewport's
+// width. A future contributor tempted to "simplify" this to
+// `min-width: 100%` would re-introduce the bug -- the duplicate
+// rule is a no-op against CDK's own.
+//
+// Why scoped to `.tree-viewport` (not bare
+// `cdk-virtual-scroll-viewport`): keeps the override isolated to
+// this component's instances if a second virtualized list ever
+// lands in the SPA.
+//
+// `box-sizing: border-box` is defensive -- the wrapper has no
+// padding or border today, but a future CDK upgrade or downstream
+// rule could add one and `content-box` would push the wrapper one
+// box wider than the viewport, re-introducing the overflow.
+:host ::ng-deep .tree-viewport .cdk-virtual-scroll-content-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .tree-empty {
   color: var(--tree-muted-color);
   padding: 20px;
