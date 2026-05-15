@@ -61,6 +61,13 @@
   }
 }
 
+.tree-search-matchmode {
+  &.is-active {
+    background: rgba(127, 127, 127, 0.18);
+    border-color: var(--color-primary);
+  }
+}
+
 .tree-search-nav {
   min-width: 28px;
   padding-left: 8px;
