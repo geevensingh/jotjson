@@ -598,16 +598,36 @@
         <div class="pref-row">
           <span
             class="pref-label"
-            id="pref-search-regex-mode-label"
-            i18n="@@profile.prefs.search.regexMode"
-            >Regular expression mode</span
+            id="pref-search-match-mode-label"
+            i18n="@@profile.prefs.search.matchMode.label"
+            >Match mode for tree search</span
           >
-          <mat-slide-toggle
-            aria-labelledby="pref-search-regex-mode-label"
-            [checked]="searchRegexMode()"
-            (change)="onSearchRegexModeChange($event.checked)"
-          ></mat-slide-toggle>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="pref-form-field">
+            <mat-select
+              id="pref-search-match-mode"
+              aria-labelledby="pref-search-match-mode-label"
+              [value]="searchMatchMode()"
+              (selectionChange)="onSearchMatchModeChange($event.value)"
+            >
+              <mat-option value="contains" i18n="@@tree.search.matchMode.contains"
+                >Contains</mat-option
+              >
+              <mat-option value="starts_with" i18n="@@tree.search.matchMode.startsWith"
+                >Starts with</mat-option
+              >
+              <mat-option value="ends_with" i18n="@@tree.search.matchMode.endsWith"
+                >Ends with</mat-option
+              >
+              <mat-option value="exact" i18n="@@tree.search.matchMode.exact"
+                >Exact match</mat-option
+              >
+              <mat-option value="regex" i18n="@@tree.search.matchMode.regex">Regex (.*)</mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
+        <p class="pref-help-line" i18n="@@profile.prefs.search.matchMode.help">
+          How tree search compares the query against keys and values.
+        </p>
       </section>
 
       <section class="prefs-group" aria-labelledby="prefs-history">

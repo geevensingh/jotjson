@@ -16,6 +16,13 @@ export interface ThemeColorSet {
   manualHighlightColor: string;
 }
 
+/**
+ * Match-mode union for the tree search feature. Parallels
+ * `SearchMatchMode` in `src/app/core/api/models.ts` (cannot import
+ * across workspaces). Tokens must stay in lockstep with that file.
+ */
+export type SearchMatchMode = 'exact' | 'contains' | 'starts_with' | 'ends_with' | 'regex';
+
 export interface TreeHighlightColors {
   dark: ThemeColorSet;
   light: ThemeColorSet;
@@ -100,7 +107,21 @@ export interface UserPreferences {
    */
   treeAutoFitToWindow: boolean;
   searchCaseSensitive: boolean;
-  searchRegexMode: boolean;
+  /**
+   * How tree search compares the query against keys and values. The
+   * four anchored modes (`exact`, `contains`, `starts_with`,
+   * `ends_with`) are intentionally shared with the FormattingRule
+   * match types declared in `src/app/core/api/models.ts:229` so the
+   * two surfaces speak the same vocabulary. Tree search can include
+   * `'regex'` today because the pattern is compiled per-keystroke
+   * against the local in-memory tree and is never persisted or shared
+   * with other users; the safe-evaluation concern that deferred
+   * `'regex'` for `FormattingRuleMatchType` (persisted, user-shared
+   * rules) does not apply here. Default `'contains'`. Renamed from
+   * the legacy boolean `searchRegexMode` - see DESIGN_SPEC.md ->
+   * Versioning -> Schema evolution.
+   */
+  searchMatchMode: SearchMatchMode;
   searchScope: 'keys' | 'values' | 'both';
   /**
    * When not `'all'`, the tree search restricts candidate nodes to
@@ -196,7 +217,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeEditorSelectionSync: true,
   treeAutoFitToWindow: true,
   searchCaseSensitive: false,
-  searchRegexMode: false,
+  searchMatchMode: 'contains',
   searchScope: 'both',
   searchValueType: 'all',
   blobQuotaStrategy: 'auto_fifo',
@@ -241,6 +262,13 @@ const SEARCH_SCOPES: readonly UserPreferences['searchScope'][] = [
   'keys',
   'values',
   'both',
+] as const;
+const SEARCH_MATCH_MODES: readonly SearchMatchMode[] = [
+  'exact',
+  'contains',
+  'starts_with',
+  'ends_with',
+  'regex',
 ] as const;
 const SEARCH_VALUE_TYPES: readonly UserPreferences['searchValueType'][] = [
   'all',
@@ -309,7 +337,7 @@ const TOP_LEVEL_KEYS: readonly (keyof UserPreferences)[] = [
   'treeEditorSelectionSync',
   'treeAutoFitToWindow',
   'searchCaseSensitive',
-  'searchRegexMode',
+  'searchMatchMode',
   'searchScope',
   'searchValueType',
   'blobQuotaStrategy',
@@ -346,10 +374,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * See DESIGN_SPEC.md -> Versioning -> Schema evolution for the playbook.
  */
 export function normalizeStoredPreferences(prefs: UserPreferences): UserPreferences {
-  // Stored docs may include a legacy `historyTrackingMode` key that's
-  // not part of the current `UserPreferences` shape. Use an extended
-  // view to read and then strip it.
-  const view: UserPreferences & { historyTrackingMode?: unknown } = { ...prefs };
+  // Stored docs may include legacy keys (`historyTrackingMode`,
+  // `searchRegexMode`, `defaultRuleSetIds`, `defaultRuleSetId`) that
+  // are not part of the current `UserPreferences` shape. Use an
+  // extended view to read and then strip them.
+  const view: UserPreferences & {
+    historyTrackingMode?: unknown;
+    searchRegexMode?: unknown;
+  } = { ...prefs };
   if (typeof view.recentlyViewedEnabled !== 'boolean') {
     // Both legacy `historyTrackingMode` values, missing values, and any
     // malformed value all fall back to the new default of true. This is
@@ -384,6 +416,20 @@ export function normalizeStoredPreferences(prefs: UserPreferences): UserPreferen
   }
   view.treeDateAnnotationUnits = normalizeStoredAnnotationUnits(view.treeDateAnnotationUnits);
   view.treeHighlightColors = normalizeStoredHighlightColors(view.treeHighlightColors);
+  // searchMatchMode fold: rename + reshape from the legacy boolean
+  // `searchRegexMode`. Precedence: if `searchMatchMode` is already a
+  // valid enum value, take it as-is (covers the both-keys-present case
+  // where a buggy or partial write left both fields). Otherwise fold
+  // from `searchRegexMode === true` (strict bool check so a stringly
+  // legacy value like `"true"` falls back to `'contains'`, the safest
+  // default).
+  if (
+    typeof view.searchMatchMode !== 'string' ||
+    !(SEARCH_MATCH_MODES as readonly string[]).includes(view.searchMatchMode)
+  ) {
+    view.searchMatchMode = view.searchRegexMode === true ? 'regex' : 'contains';
+  }
+  delete view.searchRegexMode;
   delete view.historyTrackingMode;
   // Stored docs written before issue #83 may carry `defaultRuleSetIds`
   // (the M6f-5 name) or, even earlier, the singular `defaultRuleSetId`.
@@ -594,7 +640,7 @@ export function normalizePreferences(raw: unknown): UserPreferences {
         ? assertBool(raw['treeAutoFitToWindow'], 'treeAutoFitToWindow')
         : DEFAULT_PREFERENCES.treeAutoFitToWindow,
     searchCaseSensitive: assertBool(raw['searchCaseSensitive'], 'searchCaseSensitive'),
-    searchRegexMode: assertBool(raw['searchRegexMode'], 'searchRegexMode'),
+    searchMatchMode: assertEnum(raw['searchMatchMode'], SEARCH_MATCH_MODES, 'searchMatchMode'),
     searchScope: assertEnum(raw['searchScope'], SEARCH_SCOPES, 'searchScope'),
     searchValueType: assertEnum(raw['searchValueType'], SEARCH_VALUE_TYPES, 'searchValueType'),
     blobQuotaStrategy: assertEnum(raw['blobQuotaStrategy'], QUOTA_STRATEGIES, 'blobQuotaStrategy'),

@@ -14,6 +14,7 @@
       (keydown.escape)="onSearchEsc($event)"
       (keydown.enter)="onSearchEnter($event)"
       (keydown.shift.enter)="onSearchEnter($event)"
+      (keydown.alt.r)="onMatchModeShortcut($event)"
     />
     <button
       type="button"
@@ -28,15 +29,28 @@
     </button>
     <button
       type="button"
-      class="tree-select tree-search-toggle"
-      [class.is-active]="searchRegexMode()"
-      [attr.aria-pressed]="searchRegexMode()"
-      [title]="searchRegexTooltip"
-      [attr.aria-label]="searchRegexTooltip"
-      (click)="toggleSearchRegexMode()"
+      class="tree-select tree-search-matchmode"
+      [class.is-active]="searchMatchMode() !== 'contains'"
+      [matMenuTriggerFor]="matchModeMenu"
+      [title]="searchMatchModeTooltip"
+      [attr.aria-label]="searchMatchModeTooltip"
+      aria-haspopup="menu"
     >
-      {{ searchRegexLabel }}
+      {{ searchMatchModeButtonLabel() }}
     </button>
+    <mat-menu #matchModeMenu="matMenu" class="jj-menu">
+      @for (item of matchModes; track item.mode) {
+        <button
+          type="button"
+          mat-menu-item
+          [attr.aria-checked]="searchMatchMode() === item.mode"
+          role="menuitemradio"
+          (click)="setSearchMatchMode(item.mode)"
+        >
+          {{ item.label() }}
+        </button>
+      }
+    </mat-menu>
     <button
       type="button"
       class="tree-select tree-search-scope"

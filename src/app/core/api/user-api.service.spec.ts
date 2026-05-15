@@ -33,7 +33,7 @@ function fakePreferences(): UserPreferences {
     treeEditorSelectionSync: true,
     treeAutoFitToWindow: true,
     searchCaseSensitive: false,
-    searchRegexMode: false,
+    searchMatchMode: 'contains',
     searchScope: 'both',
     searchValueType: 'all',
     blobQuotaStrategy: 'auto_fifo',

@@ -118,7 +118,17 @@ export interface UserPreferences {
    */
   treeAutoFitToWindow: boolean;
   searchCaseSensitive: boolean;
-  searchRegexMode: boolean;
+  /**
+   * How tree search compares the query against keys and values. The
+   * four anchored modes (`exact`, `contains`, `starts_with`,
+   * `ends_with`) are shared with formatting-rule match types via the
+   * `SearchMatchMode = FormattingRuleMatchType | 'regex'` alias - see
+   * the `SearchMatchMode` declaration below and `FormattingRuleMatchType`
+   * further down in this file. Default `'contains'`. Renamed from the
+   * legacy boolean `searchRegexMode` (see DESIGN_SPEC.md -> Versioning
+   * -> Schema evolution).
+   */
+  searchMatchMode: SearchMatchMode;
   searchScope: 'keys' | 'values' | 'both';
   /**
    * Restricts tree search to nodes whose classified value type matches.
@@ -227,6 +237,19 @@ export interface FormattingStyle {
  * "Regex policy"). Add `'regex'` back here when M6+ ships it.
  */
 export type FormattingRuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
+
+/**
+ * Match-mode union for the tree search feature. Extends
+ * `FormattingRuleMatchType` with `'regex'`; the four anchored tokens
+ * are intentionally shared so both surfaces speak the same vocabulary.
+ * Tree search can include `'regex'` today because the pattern is
+ * compiled per-keystroke against the local in-memory tree and is never
+ * persisted or shared with other users; the safe-evaluation concern
+ * that deferred `'regex'` for `FormattingRuleMatchType` (persisted,
+ * user-shared rules) does not apply here. See
+ * `UserPreferences.searchMatchMode`.
+ */
+export type SearchMatchMode = FormattingRuleMatchType | 'regex';
 
 export interface FormattingRuleSimple {
   id: string;

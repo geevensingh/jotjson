@@ -163,7 +163,7 @@ strings are read as UTC or local.
 - Drag-and-drop file upload (up to 5 MB) with binary-file rejection
 - Download as `.json` / `.jsonc` (extension auto-picked from content)
 - Live validation with line + column on parse errors
-- Find across keys, values, or both, with case-sensitive and regex toggles
+- Find across keys, values, or both, with case-sensitive matching and a 5-way mode picker (contains / starts-with / ends-with / exact / regex)
 - Collapse all / expand all / expand to level 1-10, with keyboard shortcuts
 - Selection breadcrumb with **Copy JSON path** and a configurable root prefix
   (`$`, lodash-style, `root.`, `Data.`, or none)

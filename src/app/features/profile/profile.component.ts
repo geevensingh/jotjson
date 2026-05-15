@@ -16,7 +16,12 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSliderModule } from '@angular/material/slider';
-import { FormattingRuleSet, ThemeColorSet, UserPreferences } from '../../core/api/models';
+import {
+  FormattingRuleSet,
+  SearchMatchMode,
+  ThemeColorSet,
+  UserPreferences,
+} from '../../core/api/models';
 import { RuleSetsService } from '../../core/api/rule-sets.service';
 import { AuthService } from '../../core/auth/auth.service';
 import {
@@ -120,8 +125,16 @@ export class ProfileComponent implements OnInit {
   readonly treePathRoot = computed(() => this.prefs().treePathRoot);
 
   readonly searchCaseSensitive = computed(() => this.prefs().searchCaseSensitive);
-  readonly searchRegexMode = computed(() => this.prefs().searchRegexMode);
+  readonly searchMatchMode = computed(() => this.prefs().searchMatchMode);
   readonly searchScope = computed(() => this.prefs().searchScope);
+
+  readonly searchMatchModes: readonly SearchMatchMode[] = [
+    'contains',
+    'starts_with',
+    'ends_with',
+    'exact',
+    'regex',
+  ];
 
   readonly recentlyViewedEnabled = computed(() => this.prefs().recentlyViewedEnabled);
   readonly treeEditorSelectionSync = computed(() => this.prefs().treeEditorSelectionSync);
@@ -263,8 +276,16 @@ export class ProfileComponent implements OnInit {
     this.prefsService.update({ searchCaseSensitive: value });
   }
 
-  onSearchRegexModeChange(value: boolean): void {
-    this.prefsService.update({ searchRegexMode: value });
+  onSearchMatchModeChange(value: string): void {
+    if (
+      value === 'contains' ||
+      value === 'starts_with' ||
+      value === 'ends_with' ||
+      value === 'exact' ||
+      value === 'regex'
+    ) {
+      this.prefsService.update({ searchMatchMode: value });
+    }
   }
 
   onSearchScopeChange(value: string): void {

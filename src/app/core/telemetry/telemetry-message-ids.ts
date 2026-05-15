@@ -1048,8 +1048,8 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Props by kind (one of):
    *   kind = 'string'  : { value: <closed-enum from schema> } e.g.
    *                      theme, layoutOrientation, searchScope,
-   *                      searchValueType, blobQuotaStrategy,
-   *                      treePathRoot.
+   *                      searchValueType, searchMatchMode,
+   *                      blobQuotaStrategy, treePathRoot.
    *   kind = 'boolean' : { value: 'true' | 'false' }.
    *   kind = 'number'  : { valueBucket: <bounded bucket string> };
    *                      measurement { value: number }.

@@ -830,8 +830,59 @@ describe('JsonTreeComponent', () => {
       expect(hits.has('$.alpha')).toBeFalse();
     });
 
+    it('starts_with mode anchors at the beginning of a key', () => {
+      prefs.update({ searchScope: 'keys', searchMatchMode: 'starts_with' });
+      cmp.search.set('alp');
+      const hits = cmp.searchHits();
+      expect(hits.has('$.alpha')).toBeTrue();
+      cmp.search.set('lpha');
+      expect(cmp.searchHits().has('$.alpha')).toBeFalse();
+    });
+
+    it('ends_with mode anchors at the end of a key', () => {
+      prefs.update({ searchScope: 'keys', searchMatchMode: 'ends_with' });
+      cmp.search.set('pha');
+      expect(cmp.searchHits().has('$.alpha')).toBeTrue();
+      cmp.search.set('alp');
+      expect(cmp.searchHits().has('$.alpha')).toBeFalse();
+    });
+
+    it('exact mode requires whole-key equality', () => {
+      prefs.update({ searchScope: 'keys', searchMatchMode: 'exact' });
+      cmp.search.set('alpha');
+      expect(cmp.searchHits().has('$.alpha')).toBeTrue();
+      cmp.search.set('alph');
+      expect(cmp.searchHits().has('$.alpha')).toBeFalse();
+    });
+
+    it('pins the contains-vs-exact haystack asymmetry for string values', async () => {
+      // Architect / skeptic finding: contains mode matches the
+      // JSON-escaped form (so typing `"hello"` with quotes works);
+      // the other 4 modes match the raw string value. This pins
+      // both halves so the next person doesn't accidentally invert
+      // it. See `valueHaystackOpts` and DESIGN_SPEC mode table.
+      await createWith({ a: 'hello' });
+      prefs.update({ searchScope: 'values' });
+
+      // contains: JSON-escaped haystack -> `"hello"` query (with
+      // quotes) matches.
+      prefs.update({ searchMatchMode: 'contains' });
+      cmp.search.set('"hello"');
+      expect(cmp.searchHits().has('$.a')).toBeTrue();
+      cmp.search.set('hello');
+      expect(cmp.searchHits().has('$.a')).toBeTrue();
+
+      // exact: raw haystack -> bare `hello` matches; `"hello"`
+      // (with quotes) does NOT.
+      prefs.update({ searchMatchMode: 'exact' });
+      cmp.search.set('hello');
+      expect(cmp.searchHits().has('$.a')).toBeTrue();
+      cmp.search.set('"hello"');
+      expect(cmp.searchHits().has('$.a')).toBeFalse();
+    });
+
     it('matches regex in regex mode', () => {
-      prefs.update({ searchScope: 'keys', searchRegexMode: true });
+      prefs.update({ searchScope: 'keys', searchMatchMode: 'regex' });
       cmp.search.set('^(alpha|gamma)$');
       const hits = cmp.searchHits();
       expect(hits.has('$.alpha')).toBeTrue();
@@ -840,7 +891,7 @@ describe('JsonTreeComponent', () => {
     });
 
     it('returns empty set (does not throw) on invalid regex', () => {
-      prefs.update({ searchRegexMode: true });
+      prefs.update({ searchMatchMode: 'regex' });
       cmp.search.set('[unclosed');
       expect(() => cmp.searchHits()).not.toThrow();
       expect(cmp.searchHits().size).toBe(0);
@@ -850,7 +901,7 @@ describe('JsonTreeComponent', () => {
   describe('searchHits regex mode value haystack', () => {
     it('regex anchors match the raw string value (^hello$ matches "hello")', async () => {
       await createWith({ alpha: 'hello' });
-      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      prefs.update({ searchScope: 'values', searchMatchMode: 'regex' });
       cmp.search.set('^hello$');
       const hits = cmp.searchHits();
       expect(hits.has('$.alpha')).toBeTrue();
@@ -858,7 +909,7 @@ describe('JsonTreeComponent', () => {
 
     it('regex \\n metachar matches a real newline in the raw value', async () => {
       await createWith({ note: 'first\nsecond' });
-      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      prefs.update({ searchScope: 'values', searchMatchMode: 'regex' });
       cmp.search.set('first\\nsecond');
       const hits = cmp.searchHits();
       expect(hits.has('$.note')).toBeTrue();
@@ -866,7 +917,7 @@ describe('JsonTreeComponent', () => {
 
     it('regex compiles with m flag: ^hello$ matches mid-line in a multi-line value', async () => {
       await createWith({ note: 'line1\nhello\nline2' });
-      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      prefs.update({ searchScope: 'values', searchMatchMode: 'regex' });
       cmp.search.set('^hello$');
       const hits = cmp.searchHits();
       expect(hits.has('$.note')).toBeTrue();
@@ -874,7 +925,7 @@ describe('JsonTreeComponent', () => {
 
     it('regex anchors match a value containing an embedded quote (^a"b$ matches a"b)', async () => {
       await createWith({ q: 'a"b' });
-      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      prefs.update({ searchScope: 'values', searchMatchMode: 'regex' });
       cmp.search.set('^a"b$');
       const hits = cmp.searchHits();
       expect(hits.has('$.q')).toBeTrue();
@@ -882,7 +933,7 @@ describe('JsonTreeComponent', () => {
 
     it('regex ^$ matches an empty string value', async () => {
       await createWith({ blank: '' });
-      prefs.update({ searchScope: 'values', searchRegexMode: true });
+      prefs.update({ searchScope: 'values', searchMatchMode: 'regex' });
       cmp.search.set('^$');
       const hits = cmp.searchHits();
       expect(hits.has('$.blank')).toBeTrue();
@@ -3179,7 +3230,7 @@ describe('JsonTreeComponent', () => {
       });
     });
 
-    describe('case sensitive / regex / scope toggles', () => {
+    describe('case sensitive / match mode / scope toggles', () => {
       it('toggles case-sensitive preference and updates aria-pressed', async () => {
         await createWith({ a: 1 });
         const btn = fixture.nativeElement.querySelectorAll(
@@ -3192,14 +3243,37 @@ describe('JsonTreeComponent', () => {
         expect(btn.getAttribute('aria-pressed')).toBe('true');
       });
 
-      it('toggles regex-mode preference', async () => {
+      it('setSearchMatchMode updates the preference', async () => {
         await createWith({ a: 1 });
-        const btn = fixture.nativeElement.querySelectorAll(
-          '.tree-search-toggle',
-        )[1] as HTMLButtonElement;
-        btn.click();
+        fixture.componentInstance.setSearchMatchMode('regex');
         fixture.detectChanges();
-        expect(prefs.prefs().searchRegexMode).toBe(true);
+        expect(prefs.prefs().searchMatchMode).toBe('regex');
+      });
+
+      it('Alt+R cycles through match modes in order', async () => {
+        await createWith({ a: 1 });
+        // Start at the default 'contains'.
+        expect(prefs.prefs().searchMatchMode).toBe('contains');
+        const fire = () => {
+          const ev = new KeyboardEvent('keydown', {
+            key: 'r',
+            altKey: true,
+            cancelable: true,
+            bubbles: true,
+          });
+          input().dispatchEvent(ev);
+          fixture.detectChanges();
+        };
+        fire();
+        expect(prefs.prefs().searchMatchMode).toBe('starts_with');
+        fire();
+        expect(prefs.prefs().searchMatchMode).toBe('ends_with');
+        fire();
+        expect(prefs.prefs().searchMatchMode).toBe('exact');
+        fire();
+        expect(prefs.prefs().searchMatchMode).toBe('regex');
+        fire();
+        expect(prefs.prefs().searchMatchMode).toBe('contains');
       });
 
       it('setSearchScope updates the preference', async () => {
@@ -3211,7 +3285,7 @@ describe('JsonTreeComponent', () => {
 
       it('marks the search input invalid when regex mode + uncompilable pattern', async () => {
         await createWith({ a: 1 });
-        prefs.update({ searchRegexMode: true });
+        prefs.update({ searchMatchMode: 'regex' });
         setSearch('[unclosed');
         expect(fixture.componentInstance.searchRegexInvalid()).toBe(true);
         expect(input().classList.contains('tree-search--invalid')).toBe(true);
@@ -5115,11 +5189,11 @@ describe('JsonTreeComponent', () => {
     });
 
     describe('findByKey', () => {
-      it('sets scope=keys, regex=false, valueType=all and queries the segment', async () => {
+      it('sets scope=keys, matchMode=contains, valueType=all and queries the segment', async () => {
         await createWith({ alpha: 1, beta: 2 });
         prefs.update({
           searchScope: 'values',
-          searchRegexMode: true,
+          searchMatchMode: 'regex',
           searchValueType: 'string',
         });
         cmp.expandAll();
@@ -5127,7 +5201,7 @@ describe('JsonTreeComponent', () => {
         const node = nodeAt('$.alpha');
         cmp.findByKey(node);
         expect(prefs.prefs().searchScope).toBe('keys');
-        expect(prefs.prefs().searchRegexMode).toBe(false);
+        expect(prefs.prefs().searchMatchMode).toBe('contains');
         expect(prefs.prefs().searchValueType).toBe('all');
         expect(cmp.search()).toBe('alpha');
       });
@@ -5153,7 +5227,7 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         // Manually invoke activateClickedHitOrFirst with a path that
         // isn't in the hit set after we set search to 'beta'.
-        prefs.update({ searchScope: 'keys', searchRegexMode: false, searchValueType: 'all' });
+        prefs.update({ searchScope: 'keys', searchMatchMode: 'contains', searchValueType: 'all' });
         cmp.search.set('beta');
         // call private helper indirectly: searchByKey on `$.alpha` with
         // current search='beta' would write 'alpha' to search, but we
@@ -5188,7 +5262,7 @@ describe('JsonTreeComponent', () => {
         await Promise.resolve();
         await Promise.resolve();
         expect(prefs.prefs().searchScope).toBe('values');
-        expect(prefs.prefs().searchRegexMode).toBe(false);
+        expect(prefs.prefs().searchMatchMode).toBe('contains');
         expect(prefs.prefs().searchValueType).toBe('all');
         expect(cmp.search()).toBe('needle');
         const idx = cmp.activeHitIndex();

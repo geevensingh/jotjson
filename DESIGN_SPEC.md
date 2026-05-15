@@ -120,7 +120,7 @@ are not 6-digit hex.
   treeAssumeUtcForIsoDateOnly: boolean (default: true - YYYY-MM-DD strings are interpreted as UTC midnight instead of local midnight),
   recentlyViewedEnabled: boolean (default: true - records `viewed` history entries when signed-in users open shared blobs they don't own; controls the `/history` "Recently viewed" timeline),
   searchCaseSensitive: boolean (default: false),
-  searchRegexMode: boolean (default: false),
+  searchMatchMode: "contains" | "starts_with" | "ends_with" | "exact" | "regex" (default: "contains" - the four anchored modes share token names with FormattingRuleMatchType for source-of-truth consistency; `regex` compiles the query as a JS RegExp with the `m` flag; default `contains` is the only mode that matches against the JSON-escaped haystack for string values - see §Search highlight),
   searchScope: "keys" | "values" | "both" (default: "both"),
   searchValueType: "all" | "date" | "date/time" | "uuid" | "url" | "email" | "path" | "ipv4" | "ipv6" | "integer" | "number" | "string" | "boolean" | "null" | "array" | "object" (default: "all" - when set to a specific type, the tree search restricts candidate nodes to those whose classified value type matches; the existing searchScope rules then decide whether key text and/or value text are eligible for the text match. Empty query + non-"all" lists every node of that type as a navigator),
   blobQuotaStrategy: "auto_fifo" | "manual" (default: "auto_fifo" - delete oldest blob when 100-blob cap reached; "manual" blocks the save with a prompt instead),
@@ -584,8 +584,16 @@ The primary page. Available to **all users** (anonymous + registered).
     - A match count is displayed next to the search field (e.g., "12 matches").
     - **Previous / Next** navigation buttons (and `Enter` / `Shift+Enter` shortcuts) jump between matches, auto-expanding collapsed parent nodes as needed and scrolling the match into view.
     - **Highlight priority**: row backgrounds resolve from highest to lowest as selection highlight -> matching-value highlight -> ancestor highlight -> search highlight -> manual highlight -> formatting rules. Higher-priority highlights suppress lower-priority ones on the same row.
-    - Options available via small toggles next to the search field: **case sensitive**, **regex mode**, **keys only / values only / both**.
-    - **Match semantics for tree search**: For string leaf values, substring mode matches against the JSON-escaped display form (e.g. value `hello` -> hay `"hello"` with quotes; value `a<LF>b` with a real newline -> hay `"a\nb"` with a literal backslash-n), preserving the "what you see is what you find" contract for users typing what's rendered in the tree. Regex mode matches against the raw string value (no JSON wrapping) and the pattern is compiled with the JS `m` (multi-line) flag so anchors `^/$` match per line - aligning with VS Code / Sublime / Atom regex find UX. Non-string leaves (numbers, booleans, `null`) always use their rendered display form in either mode; their display has no JSON wrapping so the mode flag is a no-op for them. The same raw-value haystack rule will apply to the planned `exact` / `starts_with` / `ends_with` match modes (v1.x); `contains` (today's substring) remains the only mode that matches against the JSON-escaped form.
+    - Options available via small toggles next to the search field: **case sensitive**, **match mode** (5-way dropdown: Contains / Starts with / Ends with / Exact / Regex), **keys only / values only / both**. The match-mode picker replaces the prior `.*` boolean regex toggle - `Regex` is one of the five mode choices. `Alt+R` while the search input is focused cycles to the next mode.
+    - **Match semantics for tree search**: each mode resolves against a `(rendered haystack, query)` pair as defined below. For string leaf values, `contains` matches against the JSON-escaped display form (e.g. value `hello` -> hay `"hello"` with quotes; value `a<LF>b` with a real newline -> hay `"a\nb"` with a literal backslash-n), preserving the "what you see is what you find" contract for users typing what's rendered in the tree. The other four modes (`starts_with`, `ends_with`, `exact`, `regex`) match against the raw string value (no JSON wrapping); `regex` is compiled with the JS `m` (multi-line) flag so anchors `^/$` match per line, aligning with VS Code / Sublime / Atom regex find UX. Non-string leaves (numbers, booleans, `null`) always use their rendered display form in every mode; their display has no JSON wrapping so the haystack rule is a no-op for them.
+
+      | mode          | semantics                          | empty query | string-value haystack |
+      | ---           | ---                                | ---         | ---                   |
+      | `contains`    | hay contains needle as substring   | no hits     | JSON-escaped form     |
+      | `starts_with` | hay starts with needle             | no hits     | raw value             |
+      | `ends_with`   | hay ends with needle               | no hits     | raw value             |
+      | `exact`       | hay equals needle exactly          | no hits     | raw value             |
+      | `regex`       | needle compiled as RegExp (`m` flag) | no hits   | raw value             |
     - Clearing the search field (or pressing `Escape` while focused in it) removes all search highlights.
     - The search field is always visible - it does not need to be toggled open.
     - Keyboard shortcut: `Ctrl+F` is **context-aware** - when the editor panel is focused, it triggers Monaco's built-in find; when the tree panel is focused (or no panel is focused), it focuses the tree search field.
@@ -806,7 +814,7 @@ Available to **registered users** only.
     spamming 400s.
 
 - **Match semantics:**
-  - This section describes the **formatting-rules engine**. Tree-search text matching follows a similar "rendered text" philosophy in substring mode but diverges in regex mode for string leaves (raw value, multi-line anchors) - see §Search highlight above for the mode x type haystack rule.
+  - This section describes the **formatting-rules engine**. Tree-search text matching follows a similar "rendered text" philosophy in `contains` mode but diverges in the other four modes (`starts_with`, `ends_with`, `exact`, `regex`) for string leaves: those four match the raw value, and `regex` additionally compiles with multi-line anchors - see §Search highlight above for the mode x type haystack table. The four anchored mode tokens (`exact`, `contains`, `starts_with`, `ends_with`) intentionally share names with `FormattingRuleMatchType` so users learn one vocabulary and we have one source of truth.
   - Simple text rules (`kind` missing or `kind: "simple"`) match the
     **rendered text** the user sees in the tree, not the underlying
     JSON literal. So a `value contains "200"` rule matches the JSON
@@ -2286,6 +2294,35 @@ Out of scope (for v1):
   aria-valuenow + arrow-key resize (issue #125) are post-V1; the
   toolbar pane-toggle provides the practical keyboard alternative
   for switching between panes.
+- **0.21.0**: Tree search match-mode picker. The boolean
+  `searchRegexMode` preference is replaced by a 5-value enum
+  `searchMatchMode: 'contains' | 'starts_with' | 'ends_with' | 'exact' | 'regex'`
+  (default `'contains'`). The toolbar `.*` regex toggle is replaced
+  with a `mat-menu` dropdown listing the five modes; the active mode
+  label appears on the trigger button and the dropdown checkmark
+  shows the current selection. `Alt+R` while the search input is
+  focused cycles to the next mode. The four anchored mode tokens
+  intentionally share names with `FormattingRuleMatchType` so users
+  learn one vocabulary; the wire type is
+  `SearchMatchMode = FormattingRuleMatchType | 'regex'`. The
+  Profile page's "Regular expression mode" slide-toggle is replaced
+  by a matching `mat-select`. Schema evolution per
+  §Versioning -> Schema evolution: rename + reshape. Read-side fold
+  in both `api/normalizeStoredPreferences` and the frontend
+  `mergeWithDefaults` translates legacy `searchRegexMode: true` ->
+  `searchMatchMode: 'regex'` and anything else -> `'contains'`,
+  then strips the legacy key. A valid new `searchMatchMode` always
+  wins over the legacy field (covers partial writes). Strict wire
+  validator (`normalizePreferences`) rejects `searchRegexMode`. The
+  context-menu actions "Find by key" / "Find by value" force
+  `searchMatchMode: 'contains'` to defend against regex metachars
+  in keys/values - this intentionally overrides a user's other mode
+  choice for these one-shot actions. New telemetry rides the
+  existing `pref.changed` event via the `kind: 'string'` arm; no
+  new event. In-flight client compat: a tab running the pre-deploy
+  bundle will fail `PUT /api/me` with the legacy field until
+  refresh - same trade-off as the `historyTrackingMode ->
+  recentlyViewedEnabled` precedent.
 - **0.20.2**: MSAL silent token refresh fix, part 2 of 2 (0.20.1 was
   part 1). Adds the iframe-side bridge call required for the silent-
   refresh flow to actually complete after the CSP layer was unblocked

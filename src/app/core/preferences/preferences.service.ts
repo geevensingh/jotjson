@@ -22,6 +22,20 @@ const STORAGE_KEY = 'jotjson.preferences.v1';
 const FLUSH_DEBOUNCE_MS = 500;
 
 /**
+ * Closed set of valid `searchMatchMode` values. Lives at module scope
+ * so the legacy fold in `mergeWithDefaults` doesn't rebuild it per
+ * call. Mirrors `SEARCH_MATCH_MODES` in
+ * `api/src/shared/preferences.ts`; tokens must stay in lockstep.
+ */
+const SEARCH_MATCH_MODES_FOR_FOLD = new Set<string>([
+  'exact',
+  'contains',
+  'starts_with',
+  'ends_with',
+  'regex',
+]);
+
+/**
  * Hex color values for the two `<meta name="theme-color">` tags in
  * `src/index.html`. Mirrors `$color-bg-dark` / `$color-bg-light` in
  * `src/styles/_variables.scss`. Used by `applyThemeColorMeta()` to
@@ -79,7 +93,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   treeEditorSelectionSync: true,
   treeAutoFitToWindow: true,
   searchCaseSensitive: false,
-  searchRegexMode: false,
+  searchMatchMode: 'contains',
   searchScope: 'both',
   searchValueType: 'all',
   blobQuotaStrategy: 'auto_fifo',
@@ -142,6 +156,20 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
       remoteRecord['activeRuleSetIds'] = [remoteRecord['defaultRuleSetId']];
     }
   }
+  // searchMatchMode fold: rename + reshape from the legacy boolean
+  // `searchRegexMode`. Must run BEFORE the `for (const key of allowed)`
+  // loop below because `Object.keys(DEFAULT_PREFERENCES)` no longer
+  // includes `searchRegexMode`, so the loop would silently drop the
+  // legacy value before we get to read it. Precedence: a valid new
+  // value wins (covers buggy/partial writes that left both fields).
+  if (
+    typeof remoteRecord['searchMatchMode'] !== 'string' ||
+    !SEARCH_MATCH_MODES_FOR_FOLD.has(remoteRecord['searchMatchMode'] as string)
+  ) {
+    remoteRecord['searchMatchMode'] =
+      remoteRecord['searchRegexMode'] === true ? 'regex' : 'contains';
+  }
+  delete remoteRecord['searchRegexMode'];
   const filtered: Partial<UserPreferences> = {};
   for (const key of allowed) {
     if (key === 'treeHighlightColors' || key === 'treeDateAnnotationUnits') continue;
@@ -213,7 +241,7 @@ const PREFERENCE_KEYS = [
   'treeEditorSelectionSync',
   'treeAutoFitToWindow',
   'searchCaseSensitive',
-  'searchRegexMode',
+  'searchMatchMode',
   'searchScope',
   'searchValueType',
   'blobQuotaStrategy',
@@ -608,8 +636,8 @@ export class PreferencesService {
       case 'searchCaseSensitive':
         this.emitBooleanPreferenceChange(key, preferences.searchCaseSensitive, source);
         return;
-      case 'searchRegexMode':
-        this.emitBooleanPreferenceChange(key, preferences.searchRegexMode, source);
+      case 'searchMatchMode':
+        this.emitStringPreferenceChange(key, preferences.searchMatchMode, source);
         return;
       case 'seenBlobQuotaModal':
         this.emitBooleanPreferenceChange(key, preferences.seenBlobQuotaModal, source);

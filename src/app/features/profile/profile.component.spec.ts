@@ -485,15 +485,27 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().searchCaseSensitive).toBe(false);
   });
 
-  it('writes searchRegexMode when toggled', async () => {
+  it('writes searchMatchMode when changed via mat-select', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
       isConfigured: true,
     });
-    fixture.componentInstance.onSearchRegexModeChange(true);
-    expect(prefs.prefs().searchRegexMode).toBe(true);
-    fixture.componentInstance.onSearchRegexModeChange(false);
-    expect(prefs.prefs().searchRegexMode).toBe(false);
+    fixture.componentInstance.onSearchMatchModeChange('regex');
+    expect(prefs.prefs().searchMatchMode).toBe('regex');
+    fixture.componentInstance.onSearchMatchModeChange('starts_with');
+    expect(prefs.prefs().searchMatchMode).toBe('starts_with');
+    fixture.componentInstance.onSearchMatchModeChange('contains');
+    expect(prefs.prefs().searchMatchMode).toBe('contains');
+  });
+
+  it('ignores invalid searchMatchMode values', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true,
+    });
+    const before = prefs.prefs().searchMatchMode;
+    fixture.componentInstance.onSearchMatchModeChange('bogus');
+    expect(prefs.prefs().searchMatchMode).toBe(before);
   });
 
   it('writes searchScope for valid values and ignores invalid ones', async () => {
