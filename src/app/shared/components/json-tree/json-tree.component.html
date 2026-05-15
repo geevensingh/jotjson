@@ -702,12 +702,23 @@
         <span>{{ ctxFindByValueLabel }}</span>
       </button>
     }
-    <!-- Reshape section: surfaced default-shortcut + Subtree submenu.
+    <!-- Reshape section: surfaced default-shortcut + new top-level
+         `Expand all from here` row (v0.23.0) + Subtree submenu.
          The surfaced row carries the .ctx-default-action class only
          here (not at the top Copy value row) when the dblclick action
          is collapse / expand-1-level. For primitives and empty
-         containers the bolding lives on Copy value at the top. -->
-    @if (surfacedShortcutLabel() || showSubtreeMenu(cn)) {
+         containers the bolding lives on Copy value at the top. The
+         new `Expand all from here` row is non-bolded so the dblclick
+         mirror remains visually unique (DESIGN_SPEC.md §Tree View
+         Panel -- dblclick-mirror mandate). It is gated on
+         `hasContainerDescendants(cn)` so primitives-only containers
+         (where `expandAll` produces the same end state as the bolded
+         `Expand 1 level`) fall through to the surfaced shortcut alone. -->
+    @if (
+      surfacedShortcutLabel() ||
+      (showExpandAllFromHere(cn) && hasContainerDescendants(cn)) ||
+      showSubtreeMenu(cn)
+    ) {
       <mat-divider />
     }
     @if (surfacedShortcutLabel(); as label) {
@@ -722,6 +733,11 @@
         }
         <span>{{ label }}</span>
         <span class="sr-only">{{ defaultActionA11yHint }}</span>
+      </button>
+    }
+    @if (showExpandAllFromHere(cn) && hasContainerDescendants(cn)) {
+      <button mat-menu-item type="button" (click)="expandAllFromHere(cn, 'topRow')">
+        <span>{{ ctxExpandAllFromHereElevatedLabel }}</span>
       </button>
     }
     @if (showSubtreeMenu(cn)) {
@@ -740,9 +756,12 @@
         submenu would only contain one visible action, that action
         is rendered directly in the row menu instead of nested
         behind a `Subtree >` flyout. Eliminates the "open submenu
-        with only one option" UX. `'collapseSame'` and `'expandSame'`
-        sentinels suppress entirely (the action is already on the
-        surfaced default-shortcut row).
+        with only one option" UX. The `'collapseSame'` sentinel
+        suppresses entirely (the action is already on the surfaced
+        default-shortcut row). v0.23.0 retired the `'expandSame'`
+        sentinel: the equivalent suppression for the lone-+1 Expand
+        case is now handled upstream by
+        `isLoneDepth1RedundantWithSurfaced`.
       -->
       @switch (elevated.kind) {
         @case ('highlightTree') {
@@ -877,8 +896,17 @@
         when the Expand sub-submenu would only contain one item,
         that item renders inline within Subtree instead of nested
         behind another `Expand >` flyout. Label uses the elevated
-        form (e.g. "Expand all from here") because the submenu's
-        scope is no longer carried by an "Expand" name.
+        form (e.g. "Expand 2 levels from here") because the
+        submenu's scope is no longer carried by an "Expand" name.
+        v0.23.0: this elevation no longer fires for `expandAll`
+        (the new top-level `Expand all from here` row covers it
+        directly) nor for the lone-+1 case under `expandRow`
+        defaults (suppressed by
+        `isLoneDepth1RedundantWithSurfaced` so the bolded
+        surfaced shortcut is not duplicated). Reaches here only
+        for lone-+N depth-only cases with N>=2 OR N=1 under
+        `collapseRow` defaults (rare; e.g., expanded outer +
+        collapsed deep descendant).
       -->
       <button mat-menu-item type="button" (click)="onExpandSingleElevatedClick(cn, single)">
         <jj-icon name="expand-subtree" [size]="18" />
@@ -892,27 +920,16 @@
   Expand-from-here sub-submenu (inside Subtree). Per DESIGN_SPEC.md
   §516, depth labels carry "+N" prefix to distinguish relative
   expand-only semantics from the toolbar's absolute "Expand to Level"
-  dropdown. "All" reuses the existing @@tree.contextMenu.expandAllFromHere
-  i18n ID with new source text "All" (the longer "Expand all from
-  here" reading would duplicate the parent submenu name).
+  dropdown. v0.23.0 retired the leading `All` leaf -- the new
+  top-level `Expand all from here` row in the row menu covers the
+  same action with one fewer click. The depth range extended from
+  `+1..+5` to `+1..+9` to mirror the toolbar's `Expand to Level`
+  range. `showExpandToDepth` hides entries beyond the subtree's
+  reachable container depth, so `+6..+9` only render for subtrees
+  deep enough to need them.
 -->
 <mat-menu #expandFromHereMenu="matMenu" class="jj-menu tree-row-menu">
   @if (contextNode(); as cn) {
-    @if (showExpandAllFromHere(cn)) {
-      <button mat-menu-item type="button" (click)="expandAllFromHere(cn)">
-        {{ ctxSubtreeExpandAllLabel }}
-      </button>
-    }
-    @if (
-      showExpandAllFromHere(cn) &&
-      (showExpandToDepth(cn, 1) ||
-        showExpandToDepth(cn, 2) ||
-        showExpandToDepth(cn, 3) ||
-        showExpandToDepth(cn, 4) ||
-        showExpandToDepth(cn, 5))
-    ) {
-      <mat-divider />
-    }
     @if (showExpandToDepth(cn, 1)) {
       <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 1)">
         {{ ctxExpandToDepth1Label }}
@@ -936,6 +953,26 @@
     @if (showExpandToDepth(cn, 5)) {
       <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 5)">
         {{ ctxExpandToDepth5Label }}
+      </button>
+    }
+    @if (showExpandToDepth(cn, 6)) {
+      <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 6)">
+        {{ ctxExpandToDepth6Label }}
+      </button>
+    }
+    @if (showExpandToDepth(cn, 7)) {
+      <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 7)">
+        {{ ctxExpandToDepth7Label }}
+      </button>
+    }
+    @if (showExpandToDepth(cn, 8)) {
+      <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 8)">
+        {{ ctxExpandToDepth8Label }}
+      </button>
+    }
+    @if (showExpandToDepth(cn, 9)) {
+      <button mat-menu-item type="button" (click)="expandToDepthFromHere(cn, 9)">
+        {{ ctxExpandToDepth9Label }}
       </button>
     }
   }

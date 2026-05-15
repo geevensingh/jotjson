@@ -1318,13 +1318,31 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Severity: info
    * Fired by: `JsonTreeComponent.expandAllFromHere`
    *           (`shared/components/json-tree/json-tree.component.ts`).
-   *           Reachable only via the in-Subtree submenu's `Expand >
-   *           All` leaf after Path Y; the surfaced top-level shortcut
-   *           never fires this event (it routes through
-   *           `expandToDepth` with `relativeDepth: 1`).
-   * Props: { source: 'top' | 'submenu' }. Always `'submenu'` after
-   * Path Y; the prop is present for symmetry with `collapse` /
-   * `expandToDepth` so KQL filters can apply uniformly.
+   *           v0.23.0+: single entry point -- the new top-level
+   *           `Expand all from here` row in the row/kebab menu.
+   *           The deep `Subtree > Expand > All` leaf and the
+   *           in-Subtree `expandAll` elevation were both retired
+   *           in v0.23.0. Gated on `showExpandAllFromHere(node) &&
+   *           hasContainerDescendants(node)` so primitives-only
+   *           containers (where `expandAll` produces the same end
+   *           state as the bolded `Expand 1 level` surfaced
+   *           shortcut) fall through to the surfaced row alone.
+   * Props: { source: 'topRow' }. Always `'topRow'` post-v0.23.0
+   * (the only callable enum value; if a future change re-elevates
+   * `expandAll` from another location it must add a new enum value
+   * here with documentation).
+   *
+   * **Sink:** `traces` (via `logger.info()`) until issue #241
+   * migrates `tree.*` events to `customEvents`.
+   *
+   * **Note for KQL authors:** unlike sibling events
+   * `tree.contextMenu.collapse` and `tree.contextMenu.expandToDepth`
+   * which use `source: 'top'` for their bolded surfaced shortcut
+   * callers, this event uses `source: 'topRow'` because the new
+   * top-level item is **non-bolded**. A naive cross-event filter
+   * `where customDimensions.source == 'top'` will silently miss
+   * the expandAll signal. Use `where customDimensions.source in
+   * ('top', 'topRow')` for unioned queries.
    */
   'tree.contextMenu.expandAllFromHere',
 
@@ -1335,12 +1353,20 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           Wired to the surfaced top-level "Expand 1 level"
    *           shortcut row (which routes here with `relativeDepth: 1`
    *           and `source: 'top'`) AND to the in-Subtree submenu's
-   *           per-depth items (`+1, +2, +3, +4, +5`).
+   *           per-depth items (`+1, +2, ..., +9`). The in-Subtree
+   *           range extended from `+1..+5` to `+1..+9` in v0.23.0
+   *           to mirror the toolbar's `Expand to Level` dropdown.
    * Props: { relativeDepth: number, source: 'top' | 'submenu' }.
-   * `relativeDepth` is the N in "expand N levels from here"; lets us
-   * see which depths users invoke most often. `source` disambiguates
-   * the surfaced top-level shortcut from the in-Subtree item the
-   * same way as `collapse`.
+   * `relativeDepth` is the N in "expand N levels from here";
+   * post-v0.23.0 it ranges over `1..9` for `source === 'submenu'`
+   * and is always `1` for `source === 'top'`. Lets us see which
+   * depths users invoke most often.
+   *
+   * **Workbook caveat:** any time-bucketed query that filters
+   * `relativeDepth in (1,2,3,4,5)` will silently drop the new
+   * `6..9` values introduced in v0.23.0. Widen any such filter
+   * to `relativeDepth in (1,2,3,4,5,6,7,8,9)` or drop the IN
+   * filter entirely.
    */
   'tree.contextMenu.expandToDepth',
 

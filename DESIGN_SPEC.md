@@ -513,7 +513,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Collapse** - hides itself when the row is already collapsed.
     - **Isolate** / **Collapse siblings** - smart-visibility action(s) that fold the tree to focus on the clicked branch. Both leave the ancestor chain (root..clicked row) and the clicked row's own subtree expansion state untouched. Define `narrowSet` = visibly-expanded peers under the clicked row's immediate parent; `widerSet` = visibly-expanded peers at every higher ancestor (grandparent up to root). **Isolate** collapses `narrowSet U widerSet`; **Collapse siblings** collapses `narrowSet` only. Hidden expanded state under newly-collapsed off-chain branches is preserved (standard CDK FlatTree behavior). Visibility (when the clicked row resolves to a current, non-root node): show neither when both sets are empty; show single **Isolate** when `widerSet` is empty (wide and narrow produce identical end states) or when `narrowSet` is empty (narrow would be a no-op and wide is the only meaningful action); show **both Collapse siblings and Isolate** only when both sets are non-empty (the two actions produce distinct end states). Right-clicking the root row never offers Isolate items, and the actions are no-ops if the path no longer resolves in the current model.
     - **Expand all from here** - hides itself when every container in the subtree is already expanded.
-    - **Expand to depth +1..+5 from here** - **expand-only** semantics: each container in the subtree at relative depth `< N` is expanded if it is currently collapsed, and nothing is ever collapsed (the action is purely additive and idempotent). An entry is shown only when (a) `N` does not exceed the deepest descendant's relative depth from the clicked node, and (b) at least one container at relative depth `< N` somewhere in the subtree (including hidden under a collapsed ancestor) is currently collapsed - i.e., the action would actually expand something. Together these hide redundant entries deeper than the subtree (`+4`/`+5` on a 3-level subtree) and entries that have nothing left to do (everything `+1..+N` on a fully-expanded subtree). Trade-off: there is no per-row "collapse to depth +N" - to reset a partially-expanded subtree the user invokes **Collapse** then re-expands. The toolbar's global **Expand to Level** dropdown still uses snap-to-exact semantics across the whole tree; only the per-row context menu is expand-only.
+    - **Expand to depth +1..+9 from here** - **expand-only** semantics: each container in the subtree at relative depth `< N` is expanded if it is currently collapsed, and nothing is ever collapsed (the action is purely additive and idempotent). An entry is shown only when (a) `N` does not exceed the deepest descendant's relative depth from the clicked node, and (b) at least one container at relative depth `< N` somewhere in the subtree (including hidden under a collapsed ancestor) is currently collapsed - i.e., the action would actually expand something. Together these hide redundant entries deeper than the subtree (`+4`/`+5`/`+6`/.../`+9` on a 3-level subtree) and entries that have nothing left to do (everything `+1..+N` on a fully-expanded subtree). Trade-off: there is no per-row "collapse to depth +N" - to reset a partially-expanded subtree the user invokes **Collapse** then re-expands. The toolbar's global **Expand to Level** dropdown still uses snap-to-exact semantics across the whole tree; only the per-row context menu is expand-only. The per-row range mirrors the toolbar's range (both cover 1-9); the per-row `Expand all from here` lives at the top level of the row menu (v0.23.0+) rather than inside the depth flyout, since it is a more-clicked entry point that benefits from one-click access.
     - The right-click flow positions the menu at the cursor; the kebab self-anchors at its own location. Re-right-clicking a different row while the menu is open repositions it. Keyboard-fired contextmenu (`clientX/Y === 0`) is ignored in v1; full keyboard support is a follow-up. Each invoked action emits an info-level telemetry event under `tree.contextMenu.*`; no user content is logged.
   - **Manual highlights** - owners can persist row-background marks on saved blobs so recipients can see the author's focus.
     - The per-row context menu (right-click or kebab) adds, in order:
@@ -576,6 +576,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - **Container rows with children** (`object` / `array`): toggle the row's expansion state (expand if collapsed, collapse if expanded). Alt is ignored on container dblclick; right-click "Copy value" remains the way to copy a container's pretty-printed JSON. Emits the `tree.row.doubleClickToggle` telemetry event with `{ action: 'expand' | 'collapse' }` (post-toggle state).
     - **Empty containers** (`{}` / `[]`): copy the literal `{}` or `[]` to the clipboard, routing through the same `copyValue` path as primitives (raw text, with Alt wrapping as a JSON-string literal per §443). They render via the leaf template since `hasChild` is false, so they have no expansion to toggle. The tree-menu overhaul relaxed issue #109's "objects and arrays should expand/collapse instead of copying" wording for this edge case, where there is no expand/collapse to do; the surfaced default-shortcut row in the right-click menu also bolds "Copy value" for empty containers to match. Emits the `tree.row.doubleClickCopyValue` telemetry event.
     - In all cases the dblclick path excludes the kebab pill and twisty toggle the same way single-click selection does, so clicking those buttons twice never triggers the row dblclick handler.
+  - **Right-click context menu - dblclick-mirror mandate**: the right-click and kebab context menus always surface the row's current double-click action with bold styling (`.ctx-default-action`) and a `.sr-only` "same as double-clicking the row" hint. The bolded rendering site depends on row type: for primitives and empty containers the **top `Copy value` row** is bolded (since dblclick copies); for **containers with children** a separate row near the bottom of the Reshape section is bolded (since dblclick toggles expansion). Other top-level items added later (e.g., the `Expand all from here` row introduced in v0.23.0) must be **non-bolded** so the dblclick mirror remains visually unique - the bolded surfaced shortcut is the only menu item that carries `.ctx-default-action` and the "same as double-clicking" affordance.
   - **Keyboard copy (Ctrl+C / Cmd+C with tree focus)**: when a tree row has DOM focus, pressing `Ctrl+C` (Windows / Linux) or `Cmd+C` (macOS) copies that row's value to the clipboard with the same extraction semantics as the menu's **Copy value** action (raw text for primitives, pretty-printed JSON for containers). Unlike dblclick, the keyboard shortcut works on **every row, including empty containers** (`{}` / `[]`) - the user explicitly asked for "parent or leaf" parity, and keyboard copy has no expand/collapse alternative meaning to disambiguate. Expansion state is never altered. Modifier matching is strict: `Ctrl+Shift+C` (devtools) and `Ctrl+Alt+C` (AltGr on international layouts) are intentional no-ops; Alt is not honored, so this path always emits the raw (un-escaped) variant. Emits the `tree.keyboard.copyValue` telemetry event with `{ escaped: false }`.
   - **Search highlight** - a persistent search field is positioned above the tree view panel (on its own row, full-width, above the expansion controls):
     - User types arbitrary text into the search field; matching is **live** as they type (debounced ~150ms).
@@ -2327,6 +2328,57 @@ Out of scope (for v1):
   bundle will fail `PUT /api/me` with the legacy field until
   refresh - same trade-off as the `historyTrackingMode ->
   recentlyViewedEnabled` precedent.
+- **0.23.0**: Tree row context-menu UX overhaul -- single entry
+  point for "Expand all from here" + depth-submenu range mirrors
+  the toolbar + dblclick-mirror mandate documented. Three coupled
+  changes: (1) New top-level **Expand all from here** row in the
+  per-row right-click / kebab context menu (between the bolded
+  surfaced dblclick-mirror row and the `Subtree >` submenu),
+  gated on the existing `showExpandAllFromHere(node)` predicate
+  AND the new `hasContainerDescendants(node)` predicate (so
+  primitives-only containers, where `expandAll` produces the same
+  end state as the bolded `Expand 1 level` surfaced shortcut,
+  fall through to the surfaced row alone -- no cross-row
+  duplication). Telemetry: `tree.contextMenu.expandAllFromHere`
+  emits `{ source: 'topRow' }` (non-bolded; distinct from sibling
+  events' `'top'`). The deep `Subtree > Expand > All` leaf is
+  retired alongside the in-Subtree `'expandAll'` elevation; the
+  `ExpandSingleAction` type union drops its `{ kind: 'expandAll' }`
+  variant entirely so the dead arms in `expandSingleElevatedLabel`
+  / `onExpandSingleElevatedClick` are removed under type
+  pressure. (2) Per-row `Subtree > Expand` sub-submenu range
+  extended from `+1..+5` to `+1..+9` to mirror the toolbar's
+  `Expand to Level` dropdown range; the existing
+  `showExpandToDepth(node, N)` predicate continues to hide depths
+  the subtree cannot reach, so the new `+6..+9` entries are
+  visible only on subtrees deep enough to need them.
+  `tree.contextMenu.expandToDepth` now ranges `relativeDepth: 1..9`
+  for `source === 'submenu'`. (3) Right-click context menu
+  **dblclick-mirror mandate** documented in §Tree View Panel:
+  the bolded `.ctx-default-action` surfaced row always mirrors
+  the row's current double-click action (Copy value for
+  primitives / empty containers; expand-1-level or collapse for
+  containers with children); new top-level items added later
+  must be non-bolded so the dblclick mirror remains visually
+  unique. Also retires the now-unreachable `'expandSame'`
+  sentinel from the `SubtreeElevatedAction` union and the
+  matching arm in `subtreeElevatedAction`: the same suppression
+  is now handled upstream by the new private
+  `isLoneDepth1RedundantWithSurfaced` predicate, which returns
+  `true` when `maxDescendantDepth(node) === 1 AND
+  defaultActionKind() === 'expandRow'`, propagating zero through
+  `expandFromHereItemCount` / null through
+  `expandFromHereSingleAction` / false through
+  `showExpandFromHereMenu`. Reconciles the v0.19.5 entry's
+  prose: the `'expandSame'` sentinel originally introduced in
+  v0.19.5 is removed in v0.23.0 because its sole firing
+  condition is now covered by the new predicate earlier in the
+  pipeline. Click-cost change: `Expand all from here` was 2-4
+  clicks (depending on Subtree contribution mix), now uniformly
+  2 clicks via the new top-level row whenever the action is
+  reachable. The `+1..+5` paths are unchanged at 3 clicks; the
+  new `+6..+9` paths arrive at 3 clicks (previously unreachable
+  from the per-row menu).
 - **0.21.0**: Tree view virtualization (issue #95 Phase 2). The
   `<mat-tree>` + `<mat-nested-tree-node>` render path is replaced
   with `<cdk-virtual-scroll-viewport>` + `*cdkVirtualFor` from
