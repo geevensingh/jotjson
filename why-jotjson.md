@@ -60,6 +60,20 @@ larger monospace font - mobile-friendly even for long payloads. The
 tree row itself stays one line tall: the dialog never shifts the
 layout. Purely visual; copy still gives you the literal raw string.
 
+### Tree view that doesn't freeze on multi-MB blobs
+
+Most online JSON tools fall over on a 5 MB document - the tree pane
+hangs the browser tab and you reach for a different tool. JotJSON's
+tree view is virtualized: only the rows visible in the scroll
+viewport are in the DOM, so a 100,000-node blob scrolls and expands
+at viewport-sized cost rather than tree-sized cost. Long values
+truncate cleanly with an ellipsis and reveal the full string on
+hover instead of wrapping into a multi-line row; container open /
+close rows stay aligned even when a sibling has a wall-of-text
+value. Search jumps and breadcrumb clicks scroll the **minimum**
+amount to bring the target into view, never re-centering when the
+row is already visible.
+
 ### JSONC as a first-class input
 
 Paste configs with `//` or `/* */` comments and trailing commas - JotJSON

@@ -2767,6 +2767,11 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
   afterEach(() => {
     closeOpenTreeMenus();
     clearHomeStorage();
+    // Detach any HomeComponent host appended by openTreeMenuForPath.
+    // The spec leaves the host attached so cdk-virtual-scroll-viewport
+    // can measure dimensions; this afterEach cleans the body between
+    // specs to avoid cross-test DOM pollution.
+    document.body.querySelectorAll('jj-home').forEach((node) => node.remove());
   });
 
   function getTree(
@@ -2787,12 +2792,26 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     path: string,
   ): Promise<void> {
     closeOpenTreeMenus();
+    // The Phase 2 (issue #95) virtualization of `JsonTreeComponent`
+    // requires the host element be attached to the DOM with explicit
+    // dimensions; otherwise `<cdk-virtual-scroll-viewport>` renders no
+    // rows and queries for `.tree-row[data-path="..."]` return null.
+    const host = fixture.nativeElement as HTMLElement;
+    if (!host.isConnected) {
+      host.style.height = '600px';
+      host.style.width = '1000px';
+      document.body.appendChild(host);
+    }
     fixture.detectChanges();
     const tree = getTree(fixture);
     tree.expandAll();
     fixture.detectChanges();
+    // Two microtask drains let cdk-virtual-scroll-viewport's deferred
+    // _setRenderedRange Promise.resolve().then(...) settle before the
+    // querySelector below runs.
     await Promise.resolve();
-    const host = fixture.nativeElement as HTMLElement;
+    await Promise.resolve();
+    fixture.detectChanges();
     const kebab = host.querySelector<HTMLButtonElement>(
       `.tree-row[data-path="${path}"] .tree-kebab-pill`,
     );
