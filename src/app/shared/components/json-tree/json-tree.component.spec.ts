@@ -1262,7 +1262,7 @@ describe('JsonTreeComponent', () => {
       await createExpandFixture();
       const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
       spyOn(performance, 'now').and.returnValues(0, 9);
-      cmp.expandAllFromHere(nodeAt('$.a'));
+      cmp.expandAllFromHere(nodeAt('$.a'), 'topRow');
       expect(hasExpandSlowEvent(eventSpy)).toBeFalse();
     });
 
@@ -1271,8 +1271,8 @@ describe('JsonTreeComponent', () => {
       const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
       spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
       const startNode = nodeAt('$.a');
-      cmp.expandAllFromHere(startNode);
-      cmp.expandAllFromHere(startNode);
+      cmp.expandAllFromHere(startNode, 'topRow');
+      cmp.expandAllFromHere(startNode, 'topRow');
       expect(eventSpy.calls.allArgs().filter((args) => args[0] === 'tree.expand.slow')).toEqual([
         ['tree.expand.slow', { cold: true }, { timeMs: 51, depth: 1, nodeCount: 2 }],
         ['tree.expand.slow', { cold: false }, { timeMs: 52, depth: 1, nodeCount: 2 }],
@@ -5691,7 +5691,7 @@ describe('JsonTreeComponent', () => {
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
-        cmp.expandAllFromHere(outer);
+        cmp.expandAllFromHere(outer, 'topRow');
         expect(cmp.__getHelpersForTesting().isExpanded(outer)).toBe(true);
         expect(cmp.__getHelpersForTesting().isExpanded(nodeAt('$.outer.mid'))).toBe(true);
       });
@@ -6559,25 +6559,30 @@ describe('JsonTreeComponent', () => {
     });
 
     describe('single-item elevation (v0.19.4)', () => {
-      it('expandFromHereSingleAction returns expandAll when only Expand all is visible', async () => {
-        // Container with only primitive children: maxDescendantDepth=0
-        // (no container descendants), so +N predicates all hide. Expand
-        // all is the lone Expand contribution, ready to elevate.
+      it('expandFromHereSingleAction returns null when Expand from here has zero depth options', async () => {
+        // v0.23.0: container with only primitive children
+        // (maxDescendantDepth=0). No +N predicates fire and the
+        // deep `All` leaf was retired (covered by the new
+        // top-level `Expand all from here` row); the per-row
+        // Expand-from-here flyout has nothing to show, so
+        // expandFromHereSingleAction returns null and the
+        // Expand-from-here sub-submenu is hidden.
         await createWith({ outer: { x: 1, y: 2 } });
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
-        const single = cmp.expandFromHereSingleAction(outer);
-        expect(single).toEqual({ kind: 'expandAll' });
+        expect(cmp.expandFromHereSingleAction(outer)).toBeNull();
         expect(cmp.showExpandFromHereSubmenu(outer))
-          .withContext('Expand sub-submenu hides for single item')
+          .withContext('Expand sub-submenu hides when zero depths reachable')
           .toBeFalse();
       });
 
       it('expandFromHereSingleAction returns null when 2+ items are visible', async () => {
-        // Two-level nesting with container descendants: +1 and All
-        // both visible (different end states). No single elevation.
-        await createWith({ outer: { mid: { inner: 1 } } });
+        // Three-level nesting with container descendants:
+        // maxDescendantDepth=2 so +1 AND +2 are both visible
+        // (different end states), and isLoneDepth1RedundantWithSurfaced
+        // is false. Two items reachable -> no single elevation.
+        await createWith({ outer: { mid: { inner: { leaf: 1 } } } });
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
@@ -6613,36 +6618,48 @@ describe('JsonTreeComponent', () => {
           .toBeFalse();
       });
 
-      it('subtreeElevatedAction returns expandSingle for collapsed container with only primitives', async () => {
-        // A collapsed container with only primitive children:
-        //   - showCollapse: false (not expanded)
-        //   - showIsolate*: false (no peers expanded)
-        //   - showHighlight*: false (canEditHighlights false)
-        //   - showExpandFromHereMenu: true (Expand all is meaningful)
-        //   - expandFromHereSingleAction: { kind: 'expandAll' }
-        // Surfaced shortcut = Expand 1 level (expandRow), single
-        // Expand action is expandAll (NOT depth=1) -> elevate as
-        // 'expandSingle' (no expandSame suppression).
+      it('subtreeElevatedAction returns null for collapsed container with only primitives (v0.23.0)', async () => {
+        // v0.23.0: a collapsed container with only primitive
+        // children (maxDescendantDepth=0):
+        //   - expandFromHereItemCount=0 (no +N reachable, deep
+        //     `All` leaf retired)
+        //   - showExpandFromHereMenu=false
+        //   - no other Subtree contributors (canEditHighlights=false)
+        // -> subtreeItemCount=0, subtreeElevatedAction=null,
+        //    showSubtreeMenu=false. The new top-level `Expand
+        //    all from here` row is hidden too (gated on
+        //    hasContainerDescendants), so the bolded surfaced
+        //    `Expand 1 level` row is the sole expand entry.
         await createWith({ obj: { a: 1, b: 2 } });
         cmp.collapseAll();
         fixture.detectChanges();
         const obj = nodeAt('$.obj');
         cmp.contextNode.set(obj);
         expect(cmp.defaultActionKind()).toBe('expandRow');
-        const elevated = cmp.subtreeElevatedAction(obj);
-        expect(elevated?.kind).toBe('expandSingle');
-        if (elevated?.kind === 'expandSingle') {
-          expect(elevated.single).toEqual({ kind: 'expandAll' });
-        }
+        expect(cmp.subtreeElevatedAction(obj)).toBeNull();
+        expect(cmp.showSubtreeMenu(obj))
+          .withContext(
+            'Subtree submenu hides when only Expand-from-here was contributing and it has nothing to show',
+          )
+          .toBeFalse();
+        expect(cmp.showExpandAllFromHere(obj))
+          .withContext('Expand all from here remains conceptually reachable')
+          .toBeTrue();
+        expect(cmp.hasContainerDescendants(obj))
+          .withContext(
+            'No container descendants -> new top-level row also hides (avoids duplication with surfaced shortcut)',
+          )
+          .toBeFalse();
       });
 
       it('subtreeElevatedAction returns expandSubmenu when Expand has 2+ items as the lone Subtree contribution', async () => {
-        // Collapsed container with nested containers: showCollapse
-        // false (not expanded), no isolate / highlight, but Expand
-        // has both +1 and All visible -> 2 items. Subtree count
-        // is 1 (the whole Expand "section" counts as one), so
-        // Subtree elevates the Expand submenu trigger to row level.
-        await createWith({ outer: { mid: { inner: 1 } } });
+        // v0.23.0: with the lone-+1 suppression (isLoneDepth1Redundant-
+        // WithSurfaced), the {outer:{mid:{inner:1}}} fixture would
+        // now collapse to subtreeItemCount=0 and showSubtreeMenu=false.
+        // Swap to {outer:{mid:{inner:{leaf:1}}}} so maxDescendantDepth=2,
+        // count=2 (+1 and +2), exercising the original `expandSubmenu`
+        // arm as intended.
+        await createWith({ outer: { mid: { inner: { leaf: 1 } } } });
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
@@ -6669,6 +6686,272 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const child = nodeAt('$.parent.child');
         expect(cmp.subtreeElevatedAction(child)).toEqual({ kind: 'removeTreeHighlight' });
+      });
+
+      // ---- v0.23.0: top-level `Expand all from here` row ----
+
+      it('top-level Expand all row renders when subtree has container descendants', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.contextNode.set(outer);
+        expect(cmp.showExpandAllFromHere(outer))
+          .withContext('showExpandAllFromHere true: subtree has collapsed container descendant')
+          .toBeTrue();
+        expect(cmp.hasContainerDescendants(outer))
+          .withContext('hasContainerDescendants true: mid is a container descendant')
+          .toBeTrue();
+      });
+
+      it('top-level Expand all row hides for primitives-only collapsed containers', async () => {
+        await createWith({ outer: { x: 1, y: 2 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.contextNode.set(outer);
+        expect(cmp.showExpandAllFromHere(outer))
+          .withContext('Expand all still conceptually meaningful (outer is collapsed)')
+          .toBeTrue();
+        expect(cmp.hasContainerDescendants(outer))
+          .withContext(
+            'No container descendants -> top-level row hides (avoids duplicating surfaced shortcut)',
+          )
+          .toBeFalse();
+      });
+
+      it('top-level Expand all row hides for primitive leaves and empty containers', async () => {
+        await createWith({ alpha: 1, empty: {} });
+        fixture.detectChanges();
+        const alpha = nodeAt('$.alpha');
+        const empty = nodeAt('$.empty');
+        expect(cmp.showExpandAllFromHere(alpha)).toBeFalse();
+        expect(cmp.showExpandAllFromHere(empty)).toBeFalse();
+      });
+
+      it('top-level Expand all row hides when subtree is fully expanded', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        expect(cmp.showExpandAllFromHere(outer))
+          .withContext('Nothing collapsed downstream -> nothing to expand')
+          .toBeFalse();
+      });
+
+      it('top-level Expand all click fires expandAllFromHere with source=topRow', async () => {
+        const logger = await createWithLoggerSpy({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.expandAllFromHere(outer, 'topRow');
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandAllFromHere', {
+          source: 'topRow',
+        });
+      });
+
+      it('top-level Expand all row is not bolded (dblclick-mirror mandate guardrail)', async () => {
+        // Setup: expand the root so $.outer is rendered, then
+        // collapse from $.outer so showExpandAllFromHere(outer) is
+        // true (subtree is not fully expanded).
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.collapseFromHere(outer);
+        fixture.detectChanges();
+        // Precondition: the new top-level row must render under
+        // this fixture or the guardrail test is meaningless.
+        expect(cmp.showExpandAllFromHere(outer))
+          .withContext('precondition: row must be visible')
+          .toBeTrue();
+        expect(cmp.hasContainerDescendants(outer))
+          .withContext('precondition: row must be visible')
+          .toBeTrue();
+        await openMenuFor('$.outer');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const expandAllRow = items.find(
+          (el) => (el.textContent ?? '').trim() === cmp.ctxExpandAllFromHereElevatedLabel,
+        );
+        // Hard assertion: the row MUST be in the rendered menu. A
+        // missing row would be a regression in the gating predicate
+        // or the template, not an acceptable test soft-pass.
+        expect(expandAllRow)
+          .withContext('Top-level Expand all from here row must render')
+          .toBeTruthy();
+        expect(expandAllRow!.classList.contains('ctx-default-action'))
+          .withContext('Top-level Expand all row must NOT carry .ctx-default-action')
+          .toBeFalse();
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
+      // ---- v0.23.0: deep `All` leaf retired ----
+
+      it('Subtree > Expand sub-submenu no longer contains an All leaf', async () => {
+        // Pre-v0.23.0, this primitives-only fixture would have made
+        // expandFromHereSingleAction return { kind: 'expandAll' }
+        // (the deep `All` leaf was the lone count contribution).
+        // Post-v0.23.0 the leaf is retired: count = 0, single = null,
+        // and the new top-level row is hidden too (hasContainerDescendants
+        // is false). The bolded surfaced shortcut covers the action.
+        await createWith({ outer: { x: 1, y: 2 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.contextNode.set(outer);
+        expect(cmp.expandFromHereSingleAction(outer)).toBeNull();
+        expect(cmp.showExpandFromHereMenu(outer)).toBeFalse();
+        expect(cmp.hasContainerDescendants(outer)).toBeFalse();
+      });
+
+      // ---- v0.23.0: lone-+1 in-Subtree elevation suppression ----
+
+      it('lone-+1 in-Subtree elevation is suppressed under expandRow defaults (no duplication with surfaced row)', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        // Cascade highlight to give Subtree a second contributor so it
+        // would render but for the v7 predicate.
+        fixture.componentRef.setInput('canEditHighlights', true);
+        fixture.componentRef.setInput('highlights', [
+          { path: '$.outer', color: '#7e6500', cascade: true },
+        ]);
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.contextNode.set(outer);
+        expect(cmp.defaultActionKind()).toBe('expandRow');
+        // Indirect maxDescendantDepth=1 check: +1 would be visible
+        // (clause-2 satisfies via outer being collapsed) but +2 is
+        // not (mid has only a primitive child, no container at
+        // relative depth 1 within mid).
+        expect(cmp.hasContainerDescendants(outer))
+          .withContext('mid is a container descendant')
+          .toBeTrue();
+        // Predicate fires -> Expand-from-here disappears entirely
+        // (no items, no single elevation, submenu hides).
+        expect(cmp.expandFromHereSingleAction(outer)).toBeNull();
+        expect(cmp.showExpandFromHereSubmenu(outer)).toBeFalse();
+        expect(cmp.showExpandFromHereMenu(outer)).toBeFalse();
+      });
+
+      it('lone-+N in-Subtree elevation still fires for non-expandRow defaults', async () => {
+        // Fixture: deep subtree where the clicked node is already
+        // expanded (so defaultActionKind === 'collapseRow') but two
+        // descendant containers remain collapsed at relative depth 1
+        // and 2. Only `+2` satisfies the showExpandToDepth predicate
+        // for the clicked node (since +1 requires a collapsed
+        // container at relative depth < 1, i.e. the clicked node
+        // itself, which is expanded; +3+ fail clause 1 because
+        // maxDescendantDepth(outer)=2). Result: count=1, single is
+        // `{ kind: 'expandToDepth', depth: 2 }`.
+        await createWith({ outer: { mid: { inner: { leaf: 1 } } } });
+        fixture.componentRef.setInput('canEditHighlights', true);
+        fixture.componentRef.setInput('highlights', [
+          { path: '$.outer', color: '#7e6500', cascade: true },
+        ]);
+        cmp.collapseAll();
+        fixture.detectChanges();
+        // Expand only outer; leave mid and inner collapsed.
+        const outer = nodeAt('$.outer');
+        cmp.expandToDepthFromHere(outer, 1);
+        fixture.detectChanges();
+        cmp.contextNode.set(outer);
+        expect(cmp.defaultActionKind())
+          .withContext('Outer is expanded -> default is collapseRow')
+          .toBe('collapseRow');
+        // +1 hides (outer expanded), +2 visible (mid collapsed at d=1),
+        // +3..+9 hide (clause 1 fails when maxDescendantDepth=2).
+        expect(cmp.showExpandToDepth(outer, 1)).toBeFalse();
+        expect(cmp.showExpandToDepth(outer, 2)).toBeTrue();
+        expect(cmp.showExpandToDepth(outer, 3)).toBeFalse();
+        // Single elevation should fire with depth=2 (count=1 implies
+        // showExpandFromHereSubmenu=false but showExpandFromHereMenu=true).
+        expect(cmp.showExpandFromHereSubmenu(outer)).toBeFalse();
+        expect(cmp.showExpandFromHereMenu(outer)).toBeTrue();
+        expect(cmp.expandFromHereSingleAction(outer)).toEqual({
+          kind: 'expandToDepth',
+          depth: 2,
+        });
+      });
+
+      // ---- v0.23.0: depth +6..+9 visibility + telemetry ----
+
+      it('Expand from here +6..+9 are visible on deep enough subtrees', async () => {
+        // Build a 9-level deep nesting.
+        const deep: Record<string, unknown> = { v: 1 };
+        let depth = 9;
+        let cursor: Record<string, unknown> = deep;
+        while (depth > 0) {
+          const next: Record<string, unknown> = { v: 1 };
+          cursor['n'] = next;
+          cursor = next;
+          depth -= 1;
+        }
+        await createWith({ root: deep });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const root = nodeAt('$.root');
+        // Each level should be reachable from root.
+        for (let n = 1; n <= 9; n++) {
+          expect(cmp.showExpandToDepth(root, n))
+            .withContext(`+${n} should be visible on a 9-deep subtree`)
+            .toBeTrue();
+        }
+      });
+
+      it('Expand from here +6..+9 are hidden on shallow subtrees', async () => {
+        await createWith({ outer: { mid: { inner: { leaf: 1 } } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        // Indirect maxDescendantDepth=2 check: +2 visible, +3 hidden.
+        expect(cmp.showExpandToDepth(outer, 2))
+          .withContext('+2 visible (maxDescendantDepth >= 2)')
+          .toBeTrue();
+        expect(cmp.showExpandToDepth(outer, 3))
+          .withContext('+3 hidden (maxDescendantDepth < 3)')
+          .toBeFalse();
+        for (let n = 3; n <= 9; n++) {
+          expect(cmp.showExpandToDepth(outer, n))
+            .withContext(`+${n} must hide on a 2-deep subtree`)
+            .toBeFalse();
+        }
+      });
+
+      it('Expand from here +6..+9 emit relativeDepth in telemetry', async () => {
+        const deep: Record<string, unknown> = { v: 1 };
+        let depth = 9;
+        let cursor: Record<string, unknown> = deep;
+        while (depth > 0) {
+          const next: Record<string, unknown> = { v: 1 };
+          cursor['n'] = next;
+          cursor = next;
+          depth -= 1;
+        }
+        const logger = await createWithLoggerSpy({ root: deep });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const root = nodeAt('$.root');
+        for (let n = 6; n <= 9; n++) {
+          (logger.info as jasmine.Spy).calls.reset();
+          cmp.expandToDepthFromHere(root, n);
+          expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandToDepth', {
+            relativeDepth: n,
+            source: 'submenu',
+          });
+        }
+      });
+
+      it('expandSingleElevatedLabel returns depth-N elevated label for depth 1..9', async () => {
+        await createWith({ outer: { x: 1 } });
+        for (let depth = 1; depth <= 9; depth++) {
+          const label = cmp.expandSingleElevatedLabel({ kind: 'expandToDepth', depth });
+          expect(label).withContext(`depth=${depth}`).toBeTruthy();
+        }
       });
     });
 
@@ -6767,13 +7050,13 @@ describe('JsonTreeComponent', () => {
         });
       });
 
-      it('emits tree.contextMenu.expandAllFromHere with source=submenu', async () => {
+      it('emits tree.contextMenu.expandAllFromHere with source=topRow', async () => {
         const logger = await createWithLoggerSpy({ outer: { a: { x: 1 } } });
         cmp.collapseAll();
         fixture.detectChanges();
-        cmp.expandAllFromHere(nodeAt('$.outer'));
+        cmp.expandAllFromHere(nodeAt('$.outer'), 'topRow');
         expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandAllFromHere', {
-          source: 'submenu',
+          source: 'topRow',
         });
       });
 

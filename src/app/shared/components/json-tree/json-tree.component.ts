@@ -213,9 +213,11 @@ interface ManualHighlightRows {
  * - `'expandSingle'`: the only Subtree contribution is the Expand
  *   section, AND that section has exactly one visible item, AND that
  *   item is not already on the surfaced shortcut. The single Expand
- *   action also elevates past the (would-be) Expand flyout.
- * - `'expandSame'`: same as `'collapseSame'` for the Expand-1-level
- *   case. Suppress.
+ *   action also elevates past the (would-be) Expand flyout. The
+ *   `expandRow`-default + `maxDescendantDepth === 1` case (lone +1
+ *   redundant with the bolded surfaced shortcut) is suppressed
+ *   upstream by `isLoneDepth1RedundantWithSurfaced`, so that
+ *   condition never reaches this elevation arm in v0.23.0+.
  * - `'expandSubmenu'`: the only Subtree contribution is the Expand
  *   section with 2+ items. The Expand flyout itself is elevated
  *   (renders directly off the row menu instead of nested inside
@@ -228,7 +230,6 @@ type SubtreeElevatedAction =
   | { kind: 'collapseSame' }
   | { kind: 'isolate'; mode: 'single' }
   | { kind: 'expandSingle'; single: ExpandSingleAction }
-  | { kind: 'expandSame' }
   | { kind: 'expandSubmenu' };
 
 /**
@@ -236,8 +237,13 @@ type SubtreeElevatedAction =
  * Expand sub-submenu (v0.19.4). When the Expand sub-submenu would
  * only contain one visible item, that item elevates one level up
  * (into the Subtree submenu, or further if Subtree itself elevates).
+ *
+ * In v0.23.0 the deep `Expand > All` leaf was retired in favour of a
+ * dedicated top-level `Expand all from here` row, so the
+ * `{ kind: 'expandAll' }` variant was removed: the Expand sub-submenu
+ * (and its single-item elevation) is now purely depth-based.
  */
-export type ExpandSingleAction = { kind: 'expandAll' } | { kind: 'expandToDepth'; depth: number };
+export type ExpandSingleAction = { kind: 'expandToDepth'; depth: number };
 
 /**
  * Escapes a value for use in a CSS attribute selector. Falls back to
@@ -617,15 +623,22 @@ export class JsonTreeComponent {
   readonly ctxSubtreeMenuLabel = $localize`:@@tree.contextMenu.subtreeMenu:Subtree`;
   readonly ctxSubtreeCollapseLabel = $localize`:@@tree.contextMenu.subtreeCollapse:Collapse`;
   readonly ctxSubtreeExpandMenuLabel = $localize`:@@tree.contextMenu.subtreeExpandMenu:Expand`;
-  readonly ctxSubtreeExpandAllLabel = $localize`:@@tree.contextMenu.expandAllFromHere:All`;
   // Per-depth labels inside the Subtree -> Expand submenu. Source text
   // uses the "+N level(s)" form per DESIGN_SPEC.md §516 (relative,
   // expand-only) -- distinct from the toolbar's snap-to-exact dropdown.
+  // Depths 1-9 mirror the toolbar's `Expand to Level` dropdown range
+  // (v0.23.0). `showExpandToDepth` hides entries that exceed the
+  // subtree's reachable container depth, so depths 6-9 only render
+  // for subtrees deep enough to need them.
   readonly ctxExpandToDepth1Label = $localize`:@@tree.contextMenu.expandToDepth.1:+1 level`;
   readonly ctxExpandToDepth2Label = $localize`:@@tree.contextMenu.expandToDepth.2:+2 levels`;
   readonly ctxExpandToDepth3Label = $localize`:@@tree.contextMenu.expandToDepth.3:+3 levels`;
   readonly ctxExpandToDepth4Label = $localize`:@@tree.contextMenu.expandToDepth.4:+4 levels`;
   readonly ctxExpandToDepth5Label = $localize`:@@tree.contextMenu.expandToDepth.5:+5 levels`;
+  readonly ctxExpandToDepth6Label = $localize`:@@tree.contextMenu.expandToDepth.6:+6 levels`;
+  readonly ctxExpandToDepth7Label = $localize`:@@tree.contextMenu.expandToDepth.7:+7 levels`;
+  readonly ctxExpandToDepth8Label = $localize`:@@tree.contextMenu.expandToDepth.8:+8 levels`;
+  readonly ctxExpandToDepth9Label = $localize`:@@tree.contextMenu.expandToDepth.9:+9 levels`;
   // Spec terms preserved per DESIGN_SPEC.md §514. Renaming would lose
   // the precise `narrowSet` / `widerSet` semantics.
   readonly ctxIsolateLabel = $localize`:@@tree.contextMenu.isolate:Isolate`;
@@ -652,6 +665,10 @@ export class JsonTreeComponent {
   readonly ctxExpandToDepth3ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.3.elevated:Expand 3 levels from here`;
   readonly ctxExpandToDepth4ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.4.elevated:Expand 4 levels from here`;
   readonly ctxExpandToDepth5ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.5.elevated:Expand 5 levels from here`;
+  readonly ctxExpandToDepth6ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.6.elevated:Expand 6 levels from here`;
+  readonly ctxExpandToDepth7ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.7.elevated:Expand 7 levels from here`;
+  readonly ctxExpandToDepth8ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.8.elevated:Expand 8 levels from here`;
+  readonly ctxExpandToDepth9ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.9.elevated:Expand 9 levels from here`;
   readonly preferredHighlightLabel = $localize`:@@tree.highlight.swatch.preferred:Preferred`;
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
@@ -3345,20 +3362,13 @@ export class JsonTreeComponent {
       // The whole Expand contribution is the single Subtree item.
       // It either elevates (single Expand action) or stays a
       // flyout (multiple Expand actions), but either way it is
-      // the lone Subtree item.
+      // the lone Subtree item. v0.23.0 retired the `'expandSame'`
+      // sentinel: when the lone Expand action would be `+1` with
+      // an `expandRow` default, `isLoneDepth1RedundantWithSurfaced`
+      // suppresses the whole Expand contribution upstream so this
+      // arm only ever fires for non-redundant cases.
       const expandSingle = this.expandFromHereSingleAction(node);
       if (expandSingle) {
-        // Suppress when the elevated single Expand action is the
-        // same as the surfaced shortcut (e.g. only `+1` available
-        // on a collapsed container, and surfaced row is `Expand
-        // 1 level`).
-        if (
-          expandSingle.kind === 'expandToDepth' &&
-          expandSingle.depth === 1 &&
-          this.defaultActionKind() === 'expandRow'
-        ) {
-          return { kind: 'expandSame' };
-        }
         return { kind: 'expandSingle', single: expandSingle };
       }
       // Multiple Expand options -- elevate the whole Expand
@@ -3416,24 +3426,24 @@ export class JsonTreeComponent {
    * item, returns metadata for elevating that item; otherwise
    * null. Cases:
    *
-   *   - `{ kind: 'expandAll' }`: only Expand all is visible (e.g.
-   *     fully-shallow subtree with all leaves; depth +N entries
-   *     hide because `maxDescendantDepth === 0`, but the clicked
-   *     container itself is collapsed so Expand all is meaningful).
    *   - `{ kind: 'expandToDepth', depth: N }`: only one specific
    *     depth +N is visible (e.g. partial-expand state where
    *     +1 is hidden because top-level is expanded, only +2 has
-   *     a collapsed container reachable, and +3..+5 exceed
+   *     a collapsed container reachable, and +3..+9 exceed
    *     subtree depth).
    *
-   * Returns null when 0 or >= 2 items are visible.
+   * Returns null when 0 or >= 2 items are visible, OR when
+   * `isLoneDepth1RedundantWithSurfaced` fires (the lone +1
+   * case where the bolded surfaced shortcut already covers the
+   * action).
+   *
+   * v0.23.0: the `{ kind: 'expandAll' }` case was retired; the
+   * top-level `Expand all from here` row covers it directly.
    */
   expandFromHereSingleAction(node: TreeNode): ExpandSingleAction | null {
+    if (this.isLoneDepth1RedundantWithSurfaced(node)) return null;
     if (this.expandFromHereItemCount(node) !== 1) return null;
-    if (this.showExpandAllFromHere(node)) {
-      return { kind: 'expandAll' };
-    }
-    for (let depth = 1; depth <= 5; depth++) {
+    for (let depth = 1; depth <= 9; depth++) {
       if (this.showExpandToDepth(node, depth)) {
         return { kind: 'expandToDepth', depth };
       }
@@ -3442,23 +3452,52 @@ export class JsonTreeComponent {
   }
 
   private expandFromHereItemCount(node: TreeNode): number {
+    if (this.isLoneDepth1RedundantWithSurfaced(node)) return 0;
     let count = 0;
-    if (this.showExpandAllFromHere(node)) count += 1;
-    for (let depth = 1; depth <= 5; depth++) {
+    for (let depth = 1; depth <= 9; depth++) {
       if (this.showExpandToDepth(node, depth)) count += 1;
     }
     return count;
   }
 
   /**
+   * Suppresses the `Expand >` sub-submenu's lone `+1` entry (and
+   * the in-Subtree single-item elevation that would otherwise
+   * render it) when the bolded surfaced shortcut row already
+   * fires the identical `expandToDepthFromHere(_, 1)` action.
+   *
+   * Fires iff (a) the subtree has exactly one container descendant
+   * level (`maxDescendantDepth === 1`) AND (b) the row's
+   * `defaultActionKind` is `'expandRow'` (the bolded surfaced
+   * shortcut is "Expand 1 level"). Cascades through
+   * `expandFromHereItemCount` (returns 0) ->
+   * `expandFromHereSingleAction` (returns null) ->
+   * `showExpandFromHereMenu` (returns false) ->
+   * `subtreeItemCount` (drops the Expand contribution) ->
+   * `showSubtreeMenu` (may become false if Expand was the lone
+   * Subtree contributor) -- keeping all downstream accounting
+   * consistent with the visible suppression.
+   *
+   * Same shape as `hasContainerDescendants`-gated suppression of
+   * the new top-level row in v0.23.0: both eliminate cross-row
+   * duplication with the bolded surfaced shortcut.
+   */
+  private isLoneDepth1RedundantWithSurfaced(node: TreeNode): boolean {
+    return this.maxDescendantDepth(node) === 1 && this.defaultActionKind() === 'expandRow';
+  }
+
+  /**
    * Maps an `ExpandSingleAction` to its elevated label (the
    * row-level form, where the menu name no longer carries the
    * "from here" scope and the label has to restore it).
+   *
+   * v0.23.0: the `'expandAll'` arm was deleted alongside the type
+   * variant. The switch covers `depth: 1..9`; the `default` arm
+   * is unreachable given the predicate loop bound (matches the
+   * `expandFromHereSingleAction` range) but is retained as
+   * defense-in-depth.
    */
   expandSingleElevatedLabel(action: ExpandSingleAction): string {
-    if (action.kind === 'expandAll') {
-      return this.ctxExpandAllFromHereElevatedLabel;
-    }
     switch (action.depth) {
       case 1:
         return this.ctxExpandToDepth1ElevatedLabel;
@@ -3470,8 +3509,16 @@ export class JsonTreeComponent {
         return this.ctxExpandToDepth4ElevatedLabel;
       case 5:
         return this.ctxExpandToDepth5ElevatedLabel;
+      case 6:
+        return this.ctxExpandToDepth6ElevatedLabel;
+      case 7:
+        return this.ctxExpandToDepth7ElevatedLabel;
+      case 8:
+        return this.ctxExpandToDepth8ElevatedLabel;
+      case 9:
+        return this.ctxExpandToDepth9ElevatedLabel;
       default:
-        return this.ctxExpandAllFromHereElevatedLabel;
+        return this.ctxExpandToDepth1ElevatedLabel;
     }
   }
 
@@ -3479,12 +3526,11 @@ export class JsonTreeComponent {
    * Click handler for an elevated Expand single action (when the
    * Expand sub-submenu would have only one item, that item renders
    * directly at the Subtree or row level).
+   *
+   * v0.23.0: the `'expandAll'` arm was deleted; the elevated
+   * Expand single action is now always depth-based.
    */
   onExpandSingleElevatedClick(node: TreeNode, action: ExpandSingleAction): void {
-    if (action.kind === 'expandAll') {
-      this.expandAllFromHere(node);
-      return;
-    }
     this.expandToDepthFromHere(node, action.depth);
   }
 
@@ -3552,15 +3598,23 @@ export class JsonTreeComponent {
 
   /**
    * Expands the clicked node and every container in its subtree.
-   * Caller should guard with `showExpandAllFromHere(node)`.
+   * Caller should guard with `showExpandAllFromHere(node)` AND
+   * `hasContainerDescendants(node)` (the new top-level row in
+   * v0.23.0 includes both gates; primitives-only containers fall
+   * through to the bolded `Expand 1 level` surfaced shortcut).
    *
-   * `source` is reserved for symmetry with `collapseFromHere` /
-   * `expandToDepthFromHere`. After Path Y the only menu entry point
-   * for "Expand all" is inside the in-Subtree `Expand >` sub-submenu
-   * (`'submenu'`); the surfaced top-level shortcut routes through
-   * `expandToDepthFromHere` with `relativeDepth: 1` instead.
+   * `source` is `'topRow'` for the new top-level `Expand all from
+   * here` row (the only menu entry point in v0.23.0+ -- the deep
+   * `Subtree > Expand > All` leaf and the in-Subtree `expandAll`
+   * elevation were both retired). The value is intentionally
+   * non-`'top'` because the new row is non-bolded; sibling events
+   * `tree.contextMenu.collapse` and `tree.contextMenu.expandToDepth`
+   * use `'top'` for their bolded surfaced shortcuts. KQL queries
+   * that cross-filter on `source` must use
+   * `where customDimensions.source in ('top', 'topRow')` to union
+   * both styles.
    */
-  expandAllFromHere(node: TreeNode, source: 'top' | 'submenu' = 'submenu'): void {
+  expandAllFromHere(node: TreeNode, source: 'topRow' = 'topRow'): void {
     const start = performance.now();
     if (!node.children?.length) return;
     this.logger.info('tree.contextMenu.expandAllFromHere', { source });
@@ -3593,8 +3647,10 @@ export class JsonTreeComponent {
    * surfaced top-level shortcut row (`'top'`, always `relativeDepth: 1`
    * since the surfaced row mirrors a single-level dblclick expand)
    * from the in-Subtree submenu's per-depth items (`'submenu'`).
-   * Defaults to `'submenu'` for backward compatibility with existing
-   * call sites.
+   * The in-Subtree per-depth items cover `relativeDepth: 1..9`
+   * (extended from 1..5 in v0.23.0 to mirror the toolbar's
+   * `Expand to Level` dropdown range). Defaults to `'submenu'` for
+   * backward compatibility with existing call sites.
    */
   expandToDepthFromHere(
     node: TreeNode,
@@ -3867,6 +3923,22 @@ export class JsonTreeComponent {
     };
     walk(node);
     return allExpanded;
+  }
+
+  /**
+   * Public wrapper around `maxDescendantDepth` for template-side
+   * gating under `strictTemplates`. True iff `node` has at least
+   * one container descendant (`maxDescendantDepth > 0`); false for
+   * primitives-only containers and leaves.
+   *
+   * Used to gate the v0.23.0 top-level `Expand all from here` row:
+   * when the subtree has no container descendants, `expandAll`
+   * produces the same visible state change as the bolded `Expand
+   * 1 level` surfaced shortcut, so rendering both adjacent rows
+   * would be cross-row duplication.
+   */
+  hasContainerDescendants(node: TreeNode): boolean {
+    return this.maxDescendantDepth(node) > 0;
   }
 
   /**
