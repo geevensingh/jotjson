@@ -1,26 +1,10 @@
-@description('Environment short name for the displayName, e.g. dev.')
-param environmentName string
-
-@description('Stable suffix used to derive a deterministic GUID for the workbook resource name, e.g. jotjson-dev-monitoring.')
-param resourceNameSeed string
-
-@description('Azure region for the workbook resource.')
-param location string
-
-@description('Resource ID of the Application Insights component the workbook queries.')
-param componentId string
-
-@description('Tags applied to the resource.')
-param tags object = {}
-
-var workbookContentTemplate = '''
 {
   "version": "Notebook/1.0",
   "items": [
     {
       "type": 1,
       "content": {
-        "json": "# JotJSON monitoring (__ENVIRONMENT_NAME__)\n\nFirst-look dashboard for app health, performance, auth, API, and quotas. See `docs/telemetry.md` for KQL conventions and the full event catalog."
+        "json": "# JotJSON operator monitoring\n\nFirst-look dashboard for app health, performance, auth, API, and quotas. See `docs/telemetry.md` for KQL conventions and the full event catalog. Environment: __ENVIRONMENT_NAME__."
       }
     },
     {
@@ -211,23 +195,3 @@ var workbookContentTemplate = '''
   "fallbackResourceIds": ["__COMPONENT_ID__"],
   "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
 }
-'''
-
-var workbookContent = replace(replace(workbookContentTemplate, '__ENVIRONMENT_NAME__', environmentName), '__COMPONENT_ID__', componentId)
-
-resource workbook 'Microsoft.Insights/workbooks@2022-04-01' = {
-  name: guid(resourceNameSeed)
-  location: location
-  tags: tags
-  kind: 'shared'
-  properties: {
-    displayName: 'JotJSON monitoring (${environmentName})'
-    serializedData: workbookContent
-    version: 'Notebook/1.0'
-    sourceId: componentId
-    category: 'workbook'
-  }
-}
-
-output id string = workbook.id
-output displayName string = workbook.properties.displayName

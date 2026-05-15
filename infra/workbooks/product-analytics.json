@@ -1,0 +1,260 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# JotJSON product analytics\n\nWhich tree-row, context-menu, keyboard, breadcrumb, highlight, decoded-viewer, and extract actions are getting used, and at what rate. See `docs/telemetry.md` for KQL conventions, the per-feature usage tile convention, and the full event catalog. Environment: __ENVIRONMENT_NAME__."
+      }
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "time-range",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 2592000000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 },
+                { "durationMs": 7776000000 }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 0. Leading\n\nThe headline answer: how often is the right-click menu opened, and how often does opening turn into an action?"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let opens = toscalar(\n  traces\n  | where severityLevel == 1\n  | where message == 'tree.contextMenu.opened'\n  | count);\nlet actions = toscalar(\n  traces\n  | where severityLevel == 1\n  | where message startswith 'tree.contextMenu.'\n  | where message !in ('tree.contextMenu.opened', 'tree.contextMenu.subtreeOpened')\n  | count);\nunion\n  (print label = 'Menu opens',             value = todouble(opens),  sort = 1),\n  (print label = 'Actions taken',          value = todouble(actions), sort = 2),\n  (print label = 'Actions per 100 opens',  value = iff(opens == 0, real(null), round(100.0 * todouble(actions) / todouble(opens), 1)), sort = 3)\n| order by sort asc\n| project label, value",
+        "size": 1,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "label",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "value",
+            "formatter": 12,
+            "formatOptions": {
+              "min": 0,
+              "palette": "blue"
+            },
+            "numberFormat": {
+              "unit": 0,
+              "options": {
+                "style": "decimal"
+              }
+            }
+          },
+          "showBorder": true,
+          "size": "auto"
+        },
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let userActionMessages = dynamic([\n  'tree.contextMenu.copyKey',\n  'tree.contextMenu.copyValue',\n  'tree.contextMenu.copyPath',\n  'tree.contextMenu.searchByKey',\n  'tree.contextMenu.searchByValue',\n  'tree.contextMenu.collapse',\n  'tree.contextMenu.expandAllFromHere',\n  'tree.contextMenu.expandToDepth',\n  'tree.contextMenu.isolate',\n  'tree.contextMenu.isolateNarrow',\n  'tree.contextMenu.isolateWide',\n  'tree.contextMenu.highlight',\n  'tree.contextMenu.highlightSubtree',\n  'tree.contextMenu.extract',\n  'tree.row.doubleClickCopyValue',\n  'tree.row.doubleClickToggle',\n  'tree.keyboard.copyValue',\n  'tree.breadcrumb.click',\n  'tree.breadcrumb.copyPath',\n  'tree.highlight.apply',\n  'tree.highlight.remove',\n  'tree.highlight.swatchOpened'\n]);\nlet userActionEventNames = dynamic([\n  'tree.extract.click',\n  'tree.decoded.viewerOpened'\n]);\nunion\n  (traces\n    | where severityLevel == 1\n    | where message in (userActionMessages)\n    | project name = tostring(message)),\n  (customEvents\n    | where name in (userActionEventNames))\n| summarize count_ = count() by name\n| top 20 by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 1. Context menu\n\nThe right-click / kebab menu. Excludes `opened` and `subtreeOpened` (those are menu impressions, not actions; tile 0.1 already shows the conversion ratio)."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where severityLevel == 1\n| where message startswith 'tree.contextMenu.'\n| where message !in ('tree.contextMenu.opened', 'tree.contextMenu.subtreeOpened')\n| summarize count_ = count() by tostring(message)\n| order by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "customWidth": "50",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where severityLevel == 1\n| where message == 'tree.contextMenu.opened'\n| summarize count_ = count()\n    by bin(timestamp, 1d), source = tostring(customDimensions.source)\n| order by timestamp asc\n| render areachart with (kind = stacked)",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "areachart",
+        "customWidth": "50",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "Note: Tile 1.2 uses `summarize ... by bin(timestamp, 1d)` (not `make-series`) so the TimeRange picker applies cleanly. **Best viewed at 7d+;** at 24h the chart collapses to 1-2 bins by design -- the conversion ratio for a 24h window lives in Tile 0.1. Days with zero opens don't render as zero-valued points."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where severityLevel == 1\n| where message == 'tree.contextMenu.expandToDepth'\n| where tostring(customDimensions.source) == 'submenu'\n| summarize count_ = count() by relativeDepth = toint(customDimensions.relativeDepth)\n| order by relativeDepth asc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "customWidth": "50",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let copyMessages = dynamic([\n  'tree.contextMenu.copyKey',\n  'tree.contextMenu.copyValue',\n  'tree.contextMenu.copyPath',\n  'tree.row.doubleClickCopyValue',\n  'tree.keyboard.copyValue',\n  'tree.breadcrumb.copyPath'\n]);\ntraces\n| where severityLevel == 1\n| where message in (copyMessages)\n| summarize count_ = count() by tostring(message)\n| order by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "customWidth": "50",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 2. Subtree submenu\n\nNote: `isolateNarrow` and `isolateWide` carry no `source` prop, so we can't distinguish subtree-submenu vs top-level invocation telemetrically. Chart shows raw counts."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where severityLevel == 1\n| where message in (\n    'tree.contextMenu.subtreeOpened',\n    'tree.contextMenu.expandAllFromHere',\n    'tree.contextMenu.isolate',\n    'tree.contextMenu.isolateNarrow',\n    'tree.contextMenu.isolateWide',\n    'tree.contextMenu.highlightSubtree'\n  )\n| summarize count_ = count() by tostring(message)\n| order by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 3. Tree row interactions\n\nDouble-click and keyboard copy paths."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where severityLevel == 1\n| where message in (\n    'tree.row.doubleClickCopyValue',\n    'tree.row.doubleClickToggle',\n    'tree.keyboard.copyValue'\n  )\n| summarize count_ = count() by tostring(message)\n| order by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 4. Breadcrumb"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where severityLevel == 1\n| where message in ('tree.breadcrumb.click', 'tree.breadcrumb.copyPath')\n| summarize count_ = count() by tostring(message)\n| order by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 5. Highlight\n\nCovers both menu-dispatched highlight (`tree.contextMenu.highlight*`) and the applied-highlight signal (`tree.highlight.apply` / `tree.highlight.remove` / `tree.highlight.swatchOpened`). The color mix tile uses the 7-value swatch enum -- cardinality is bounded by design."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let highlightMessages = dynamic([\n  'tree.contextMenu.highlight',\n  'tree.contextMenu.highlightSubtree',\n  'tree.highlight.apply',\n  'tree.highlight.remove',\n  'tree.highlight.swatchOpened'\n]);\ntraces\n| where severityLevel == 1\n| where message in (highlightMessages)\n| summarize count_ = count() by tostring(message)\n| order by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "customWidth": "50",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where severityLevel == 1\n| where message == 'tree.highlight.apply'\n| summarize count_ = count() by color = tostring(customDimensions.color)\n| order by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "customWidth": "50",
+        "timeContextFromParameter": "TimeRange"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 6. Decoded viewer & Extract\n\nMixed-table section: `tree.extract.click`, `tree.extract.shown`, and `tree.decoded.viewerOpened` are correctly tagged `Kind: event` (in `customEvents`). The menu-driven extract path (`tree.contextMenu.extract`) is mis-tagged `Severity: info` and lives in `traces`. This tile unions both tables so the menu-vs-pill comparison stays intact until the instrumentation migration (issue #241) ships. `tree.decoded.click` was retired in v0.20.0 and is deliberately omitted."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "union\n  (customEvents\n    | where name in (\n        'tree.extract.shown',\n        'tree.extract.click',\n        'tree.decoded.viewerOpened'\n      )\n    | project name),\n  (traces\n    | where severityLevel == 1\n    | where message == 'tree.contextMenu.extract'\n    | project name = tostring(message))\n| summarize count_ = count() by name\n| order by count_ desc\n| render barchart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart",
+        "timeContextFromParameter": "TimeRange"
+      }
+    }
+  ],
+  "fallbackResourceIds": ["__COMPONENT_ID__"],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

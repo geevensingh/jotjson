@@ -84,13 +84,52 @@ module monitoringActions 'modules/actionGroup.bicep' = {
   }
 }
 
-module monitoringWorkbook 'modules/monitoringWorkbook.bicep' = {
-  name: 'monitoringWorkbook'
+// Resource-name seed convention:
+// - operatorWorkbook uses `resourceSuffix` UNSUFFIXED so guid() resolves
+//   to the same name as the pre-refactor `monitoringWorkbook` resource.
+//   This makes the deploy an in-place property update (displayName +
+//   serializedData + tags), preserving saved-portal links and edit
+//   history.
+// - productAnalyticsWorkbook uses `'${resourceSuffix}-analytics'`,
+//   producing a distinct guid -> new resource.
+// - Any future caller MUST use a distinct seed unless it intentionally
+//   targets one of the existing GUIDs.
+var operatorWorkbookContentTemplate = loadTextContent('workbooks/monitoring.json')
+var operatorWorkbookContent = replace(
+  replace(operatorWorkbookContentTemplate, '__ENVIRONMENT_NAME__', environmentName),
+  '__COMPONENT_ID__',
+  insights.outputs.componentId
+)
+
+module operatorWorkbook 'modules/workbook.bicep' = {
+  name: 'operatorWorkbook'
   params: {
-    environmentName: environmentName
+    displayName: 'JotJSON operator monitoring'
+    serializedContent: operatorWorkbookContent
     resourceNameSeed: resourceSuffix
     location: location
     componentId: insights.outputs.componentId
+    purpose: 'operator-monitoring'
+    tags: tags
+  }
+}
+
+var productAnalyticsContentTemplate = loadTextContent('workbooks/product-analytics.json')
+var productAnalyticsContent = replace(
+  replace(productAnalyticsContentTemplate, '__ENVIRONMENT_NAME__', environmentName),
+  '__COMPONENT_ID__',
+  insights.outputs.componentId
+)
+
+module productAnalyticsWorkbook 'modules/workbook.bicep' = {
+  name: 'productAnalyticsWorkbook'
+  params: {
+    displayName: 'JotJSON product analytics'
+    serializedContent: productAnalyticsContent
+    resourceNameSeed: '${resourceSuffix}-analytics'
+    location: location
+    componentId: insights.outputs.componentId
+    purpose: 'product-analytics'
     tags: tags
   }
 }
@@ -155,4 +194,5 @@ output dnsNameServers array = empty(dnsZoneName) ? [] : dns.outputs.nameServers
 output cosmosEndpoint string = cosmos.outputs.endpoint
 output storageAccountName string = storage.outputs.accountName
 output appInsightsConnectionString string = insights.outputs.connectionString
-output monitoringWorkbookId string = monitoringWorkbook.outputs.id
+output operatorWorkbookId string = operatorWorkbook.outputs.id
+output productAnalyticsWorkbookId string = productAnalyticsWorkbook.outputs.id
