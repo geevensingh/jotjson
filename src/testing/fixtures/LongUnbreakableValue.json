@@ -1,0 +1,14 @@
+{
+  "Method": "POST",
+  "Url": "/api/orders/abc-123/invoke",
+  "Parameters": [
+    {
+      "Name": "RequestBody",
+      "Value": "POST /api/orders/abc-123/invoke?api-version=2024-01-01&detailLevel=full HTTP/1.1\r\nHost: api.example.com\r\nAuthorization: <NOT_A_REAL_TOKEN_PLACEHOLDER_FOR_OVERFLOW_TEST_NOT_A_REAL_TOKEN_PLACEHOLDER_FOR_OVERFLOW_TEST_NOT_A_REAL_TOKEN_PLACEHOLDER_FOR_OVERFLOW_TEST_NOT_A_REAL_TOKEN_PLACEHOLDER_FOR_OVERFLOW_TEST_NOT_A_REAL_TOKEN_PLACEHOLDER_FOR_OVERFLOW_TEST_NOT_A_REAL_TOKEN_PLACEHOLDER_FOR_OVERFLOW_TEST>\r\nContent-Type: application/json\r\nx-correlation-id: 11111111-2222-3333-4444-555555555555\r\nUser-Agent: ExampleClient/1.0.0\r\n\r\n{\"action\":\"renew\",\"plan\":\"enterprise-yearly\",\"seatCount\":150}"
+    },
+    {
+      "Name": "ExpectedStatus",
+      "Value": 200
+    }
+  ]
+}

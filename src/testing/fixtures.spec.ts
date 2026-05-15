@@ -24,6 +24,7 @@ const FIXTURE_FILES = [
   'Bad-Config.json',
   'Depth.json',
   'FlatList.json',
+  'LongUnbreakableValue.json',
   'NestedEvents.json',
   'Recursive.json',
   'Semi-valid.json',
