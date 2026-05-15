@@ -10,9 +10,11 @@
 // drift across machines and CI is loud, not silent.
 //
 // Sizes are expressed in NODE COUNTS (not bytes). 1M nodes is the
-// canonical "user pain" stress.
+// canonical "user pain" stress. The `mixed-d10` shape is sized by
+// approxNodes too, but its catalog entry is empirically tuned to
+// land near the 5 MB NFR target (DESIGN_SPEC.md NFR #1).
 
-export type FixtureShape = 'deep25' | 'wide-aoo';
+export type FixtureShape = 'deep25' | 'wide-aoo' | 'mixed-d10';
 
 export interface FixtureOptions {
   shape: FixtureShape;
@@ -108,6 +110,76 @@ function buildWideAoo(rng: () => number, approxNodes: number): unknown {
 }
 
 /**
+ * Builds a `mixed-d10` fixture: a realistic depth-~10 tree of mixed
+ * types (objects + arrays + leaves intermixed). Stresses the
+ * mixed-shape parse / build-tree / paste path that NFR #1 ("open a
+ * 5 MB JSON file without freezing") describes. The 5 MB catalog
+ * entry under this shape anchors the perf suite's NFR ceiling
+ * (see DESIGN_SPEC.md NFR #1 and perf/fixtures/catalog.ts).
+ *
+ * Budget model: a SHARED node counter is decremented on every node
+ * emit (container or leaf). When it hits 0 every subsequent emit is
+ * a leaf. This gives `approxNodes` true linear control over realized
+ * node count (and therefore byte count) across runs, which a
+ * divide-by-K-per-child model cannot -- seeded determinism makes
+ * the divided model wildly non-monotonic in N because the rng
+ * stream is consumed in different orders at different sizes. Depth
+ * is independently capped at 10 (forces a leaf regardless of
+ * budget). The root is always a container (50/50 object vs array)
+ * so the first dice roll cannot collapse the whole fixture to a
+ * single primitive. Inner nodes draw 30% object / 30% array / 40%
+ * leaf per the issue #215 shape spec. Container children counts
+ * are 5-10 distinct KEY_POOL keys (objects) / 2-8 elements (arrays).
+ * The exact byte count is pinned by `generate.test.mjs`.
+ */
+function buildMixedD10(rng: () => number, approxNodes: number): unknown {
+  let budget = approxNodes;
+
+  function sampleDistinctKeys(count: number): string[] {
+    const indices: number[] = KEY_POOL.map((_, i) => i);
+    const capped = Math.min(count, indices.length);
+    for (let i = 0; i < capped; i++) {
+      const j = i + Math.floor(rng() * (indices.length - i));
+      [indices[i], indices[j]] = [indices[j]!, indices[i]!];
+    }
+    return indices.slice(0, capped).map((i) => KEY_POOL[i]!);
+  }
+
+  function makeObject(depth: number): Record<string, unknown> {
+    const keyCount = 5 + Math.floor(rng() * 6);
+    const keys = sampleDistinctKeys(keyCount);
+    const obj: Record<string, unknown> = {};
+    for (const key of keys) {
+      obj[key] = go(depth + 1);
+    }
+    return obj;
+  }
+
+  function makeArray(depth: number): unknown[] {
+    const elemCount = 2 + Math.floor(rng() * 7);
+    const arr: unknown[] = new Array(elemCount);
+    for (let i = 0; i < elemCount; i++) {
+      arr[i] = go(depth + 1);
+    }
+    return arr;
+  }
+
+  function go(depth: number): unknown {
+    budget--;
+    if (budget <= 0 || depth >= 10) {
+      return randomLeaf(rng);
+    }
+    const dice = rng();
+    if (dice < 0.4) return randomLeaf(rng);
+    if (dice < 0.7) return makeObject(depth);
+    return makeArray(depth);
+  }
+
+  budget--;
+  return rng() < 0.5 ? makeObject(0) : makeArray(0);
+}
+
+/**
  * Produces a minified JSON string. Returned value is suitable for
  * direct paste into the editor; downstream layers serialize / parse it
  * the same way the production code path does.
@@ -121,6 +193,9 @@ export function generate(options: FixtureOptions): string {
       break;
     case 'wide-aoo':
       value = buildWideAoo(rng, options.approxNodes);
+      break;
+    case 'mixed-d10':
+      value = buildMixedD10(rng, options.approxNodes);
       break;
     default: {
       const exhaustive: never = options.shape;

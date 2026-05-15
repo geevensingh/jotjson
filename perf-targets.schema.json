@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "JotJSON perf-targets",
-  "description": "Operationalizable NFR ceilings for the perf measurement suite. Each row maps a perfRowKey (<layer>.<scenario>.<fixture>.<size>) to one or more metric ceilings.",
+  "description": "Operationalizable NFR ceilings for the perf measurement suite. Each row maps a perfRowKey (<layer>.<scenario>.<fixture>.<size>) to one or more metric ceilings. `ceiling_ms` accepts negative values (typically -1) as a sentinel for draft-PR placeholders; `scripts/perf/check-no-sentinel-ceilings.mjs` (chained into `npm run lint`) rejects any negative value so sentinels cannot merge to main.",
   "type": "object",
   "required": ["schemaVersion", "rows"],
   "properties": {
@@ -17,7 +17,7 @@
             "type": "object",
             "required": ["ceiling_ms", "reason"],
             "properties": {
-              "ceiling_ms": { "type": "number", "minimum": 0 },
+              "ceiling_ms": { "type": "number", "minimum": -1 },
               "reason": { "type": "string", "minLength": 1 }
             },
             "additionalProperties": false

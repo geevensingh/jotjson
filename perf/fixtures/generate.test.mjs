@@ -30,12 +30,28 @@ const GOLDEN = [
   {
     shape: 'wide-aoo',
     approxNodes: 10_000,
+    bytes: null,
     hash: '806c12248ee3aee7f8f3f0c898779c8f87b7fdc1500e04b828f9bc752e43c6f8',
   },
   {
     shape: 'wide-aoo',
     approxNodes: 100_000,
+    bytes: null,
     hash: '9d25372d6271e3af9a8d66855b5315a8a8e100cc9b8e382589fcd85b1c663465',
+  },
+  {
+    // The mixed-d10 catalog row at 380k is the NFR-anchor fixture
+    // (DESIGN_SPEC.md NFR #1, issue #215). We pin both the SHA-256
+    // and the exact UTF-8 byte count: the hash catches generator
+    // drift, and the byte count catches accidental shape changes
+    // that re-balance the dice rolls into a same-hash-impossible-
+    // but-different-size output. Empirically tuned to land near
+    // 5 MB (advocate HIGH-1 fix: pin the deterministic byte count
+    // instead of a wide envelope).
+    shape: 'mixed-d10',
+    approxNodes: 380_000,
+    bytes: 5_178_027,
+    hash: '9042e4b3e451ad38a5b2848f2e3fcbbe0ce102070ad701263a9374fc0f9f065f',
   },
 ];
 
@@ -50,5 +66,13 @@ test('generator produces deterministic output for catalog sizes', async () => {
       golden.hash,
       `Generator drift at ${golden.shape} x ${golden.approxNodes}: expected ${golden.hash}, got ${actual}`,
     );
+    if (golden.bytes !== null) {
+      const actualBytes = Buffer.byteLength(json, 'utf8');
+      assert.equal(
+        actualBytes,
+        golden.bytes,
+        `Generator byte drift at ${golden.shape} x ${golden.approxNodes}: expected ${golden.bytes}, got ${actualBytes}`,
+      );
+    }
   }
 });

@@ -27,14 +27,18 @@
 //   - `1m`: gated behind `PERF_FORCE_1M=1` (issue #217). Each timed
 //     iter at this size can exceed Playwright's 10-min per-test
 //     timeout.
-//   - `100k`: gated behind `PERF_FORCE_100K=1` (issue #218). The
-//     bench runs 8 page.goto -> 100k-render iters per fixture, and
-//     the renderer accumulates state across iters until the
-//     post-`goto` `editor.waitFor` exceeds even 60s. This affects
-//     both `keyboard` and `setvalue` paths equally (the failure is
-//     pre-paste, at editor-load time). The default `paste-large`
-//     matrix is 10k only; flip the env var for centerpiece /
-//     on-demand 100k captures.
+//   - `100k`: gated behind `PERF_FORCE_L3_HEAVY=1` (formerly
+//     `PERF_FORCE_100K`, kept as backward-compat alias). The bench
+//     runs WARMUP_ITERS + TIMED_ITERS page.goto -> render iters per
+//     fixture; the renderer accumulates state across iters at heavy
+//     sizes (#218 cross-iter cliff). The default `paste-large`
+//     matrix is 10k + mixed-d10@380k; flip the env var for the
+//     `wide-aoo @ 100k` centerpiece / on-demand heavy capture.
+//   - `mixed-d10 @ 380k`: default-on. This fixture is the NFR-anchor
+//     row (DESIGN_SPEC.md NFR #1, issue #215). The F-2 v1-reference
+//     trial run confirmed all 7 iters complete in ~1.2 min --- the
+//     #218 cliff does NOT fire at 5 MB --- so the ceiling is
+//     enforced every L3 run.
 //
 // `pasteMethod` is recorded as an additive row field (per the schema
 // convention documented in `scripts/perf/baseline.mjs`), NOT as a
@@ -69,7 +73,23 @@ type PasteMethod = 'keyboard' | 'setvalue';
 const TIMED_ITERS = 7;
 const WARMUP_ITERS = 1;
 
-const FIXTURES = FIXTURE_CATALOG.filter((fixture) => fixture.shape === 'wide-aoo');
+// Paste-large is shape-restricted because deep25 fixtures stress
+// builder/expand more than paste (the L3 paste path is dominated by
+// flat-ish wide content). Adding a third shape (e.g., cosmos) here
+// is a one-line set update; F-2-followup-#2 tracks lifting this
+// into a catalog flag if a third shape lands.
+const PASTE_LARGE_SHAPES = new Set<'wide-aoo' | 'mixed-d10'>(['wide-aoo', 'mixed-d10']);
+const FIXTURES = FIXTURE_CATALOG.filter((fixture) =>
+  (PASTE_LARGE_SHAPES as Set<string>).has(fixture.shape),
+);
+
+// PERF_FORCE_L3_HEAVY gates large-fixture iters that trip the #218
+// cross-iter cliff. `PERF_FORCE_100K` is the pre-F-2 name; kept as
+// an alias for one transition window so in-flight scripts keep
+// working. New callers should use `PERF_FORCE_L3_HEAVY`.
+function isL3HeavyForced(): boolean {
+  return process.env['PERF_FORCE_L3_HEAVY'] === '1' || process.env['PERF_FORCE_100K'] === '1';
+}
 
 const RESULTS_ROOT =
   process.env['PERF_RESULTS_DIR'] ?? join(process.cwd(), 'perf-results', 'l3-tmp');
@@ -153,8 +173,8 @@ for (const fixture of FIXTURES) {
       'L3 1m tier gated behind PERF_FORCE_1M=1 (issue #217)',
     );
     test.skip(
-      fixture.size === '100k' && process.env['PERF_FORCE_100K'] !== '1',
-      'L3 100k tier gated behind PERF_FORCE_100K=1 (issue #218)',
+      fixture.size === '100k' && !isL3HeavyForced(),
+      'L3 wide-aoo@100k gated behind PERF_FORCE_L3_HEAVY=1 (issue #218; alias: PERF_FORCE_100K). The NFR-anchor mixed-d10@380k runs default-on.',
     );
     test.setTimeout(10 * 60 * 1000);
 

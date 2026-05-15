@@ -1,12 +1,24 @@
 {
   "$schema": "./perf-targets.schema.json",
   "schemaVersion": 1,
-  "_comment": "Operationalizable NFR targets. v1 row is a stress check on the 24MB wide-aoo fixture; F-2 tracks an NFR-faithful ~5MB target.",
+  "_comment": "Operationalizable NFR ceilings. The mixed-d10@380k rows anchor DESIGN_SPEC.md NFR #1 ('open a 5 MB JSON file without freezing the UI'): L1 parse + L1 build-tree + L3 paste-large each get a ceiling on the same fixture. Ceilings use `min(2 * measured median, 500ms)` rounded up to 50 ms, where 500ms is the Web Vitals INP 'poor' threshold (anchored on `docs/perf.md` 'Sentinel ceilings' section). The pre-F-2 stress-check row `3.paste-large.wide-aoo.1m` was removed (rather than ceiling-relaxed) because the 24 MB wide-aoo fixture exceeds Playwright's 10-min per-test timeout on the v1-reference machine (the #218 cross-iter cliff); the wide-aoo@1m baseline tracking is preserved by the missing-row contract in `scripts/perf/diff.mjs`.",
   "rows": {
-    "3.paste-large.wide-aoo.1m": {
+    "1.parse.mixed-d10.380k": {
+      "wallMsMedian": {
+        "ceiling_ms": 500,
+        "reason": "NFR-anchor (DESIGN_SPEC.md NFR #1, 5 MB without freezing). v1-reference measured wallNsMedian 416 ms; 2x = 832 ms capped at Web Vitals INP 'poor' threshold 500 ms."
+      }
+    },
+    "1.build-tree.mixed-d10.380k": {
+      "wallMsMedian": {
+        "ceiling_ms": 500,
+        "reason": "NFR-anchor (DESIGN_SPEC.md NFR #1, 5 MB without freezing). v1-reference measured wallNsMedian 473 ms; 2x = 946 ms capped at 500 ms."
+      }
+    },
+    "3.paste-large.mixed-d10.380k": {
       "longestTaskMsMedian": {
         "ceiling_ms": 500,
-        "reason": "v1 stress check on 24 MB wide-aoo; NFR-faithful ~5MB target tracked in F-2"
+        "reason": "NFR-anchor (DESIGN_SPEC.md NFR #1, 5 MB without freezing). v1-reference measured longestTaskMsMedian 288 ms; 2x = 576 ms capped at 500 ms."
       }
     }
   }

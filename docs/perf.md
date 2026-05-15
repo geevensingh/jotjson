@@ -398,17 +398,47 @@ The file is schema-validated on every read (`perf-targets.schema.json`,
 JSON Schema draft-07). `schemaVersion: 1` is mandatory; readers fail loud
 on mismatch.
 
-### NFR-anchor gap (v1)
+### NFR-anchor coverage
 
-The only enforced row in v1 is `3.paste-large.wide-aoo.1m` with a
-500 ms ceiling on `longestTaskMsMedian`. This is a **v1 stress check**
-on the 24 MB synthetic wide-aoo fixture; it does **not** directly anchor
-the DESIGN_SPEC NFR #1 ("open a 5 MB JSON file without freezing").
+The `mixed-d10 @ 380k` fixture in `perf/fixtures/catalog.ts` is the
+NFR-anchor fixture: an empirically-tuned ~5 MB UTF-8 minified JSON
+with mixed object/array/leaf content and realized depth 10, anchoring
+DESIGN_SPEC.md NFR #1 ("open a 5 MB JSON file without freezing").
+See `perf/fixtures/generate.ts` `buildMixedD10` for shape details.
 
-F-2 (filed as a follow-up issue) tracks adding the NFR-faithful ~5 MB
-fixture and a matching ceiling so the 5 MB no-freeze NFR is testable
-directly. Until then, the 1M row exercises the same paste/render stress
-path at a larger size and acts as a coarse proxy.
+Coverage per layer:
+
+- **L1** (`parse` + `build-tree` Node microbenches): ceiling-enforced
+  default-on. Adding the catalog entry surfaces the row in
+  `1.parse.mixed-d10.380k` and `1.build-tree.mixed-d10.380k` without
+  any opt-in.
+- **L2** (Karma in-browser benches): opt-in via `?force5mb=1` URL
+  query string or `window.__perfL2Force5MB = true`. A 380K-node
+  fixture is heavier than the default 100K cap and would risk Karma's
+  `browserNoActivityTimeout` watchdog on unattended runs. Both the
+  `initial-render` and `scroll-after-expand` paths participate when
+  the flag is set.
+- **L3** (Playwright + CDP `paste-large`): ceiling-enforced default-on.
+  The F-2 v1-reference trial confirmed all 7 iters (2 warmup + 5
+  timed) of `paste-large: mixed-d10 @ 380k` complete in ~1.2 min ---
+  well under the per-test `test.setTimeout(10 * 60 * 1000)` budget.
+  The `#218` cross-iter cliff that gates `wide-aoo @ 100k` behind
+  `PERF_FORCE_L3_HEAVY=1` does NOT manifest at 5 MB on the v1
+  reference, so the NFR row runs every L3 capture.
+
+Status: **L1 default-on; L3 default-on. NFR-anchor coverage: closed.**
+
+### Sentinel ceilings (draft-PR workflow)
+
+`perf-targets.json` may contain `ceiling_ms: -1` placeholders during
+the draft-PR phase of a perf-target change. These rows mean "ceiling
+to be measured on the v1 reference machine before merge." The
+`scripts/perf/check-no-sentinel-ceilings.mjs` lint script (chained
+into `npm run lint`) rejects any negative `ceiling_ms`, so a draft
+PR cannot merge with sentinels intact. Once measured, ceilings follow
+the formula `min(2 * measured median, 500ms)` rounded UP to 50 ms
+(500 ms = Web Vitals INP "poor" threshold; the 2x cushion provides
+regression headroom).
 
 ### Missing-row contract (warn-only)
 
@@ -479,17 +509,20 @@ npm run perf:clean -- --dry-run
   1m wide-aoo `expand-all` ran 10.1 min on the v1 reference machine
   and timed out. The bypass env var lets contributors run the full
   matrix on faster hardware. Tracked in issue #217.
-- **L3 100k tier gated behind `PERF_FORCE_100K=1`**: `paste-large @
-  100k` skips itself by default. The bench runs 8 iters per fixture
-  (1 warmup + 7 timed) with a fresh `page.goto('/')` per iter. At
-  100k the renderer accumulates state across iters until the
-  post-`goto` `editor.waitFor` exceeds even a 60s timeout (observed
-  at iter 7-8 of 8 on the v1 reference machine, both keyboard and
-  setvalue paths). The bypass env var lets contributors run the
-  100k tier on faster hardware or for one-off centerpiece snapshots.
-  Tracked in issue #218; the long-term fix is per-iter
-  fresh-context isolation or CDP `HeapProfiler.collectGarbage`
-  between iters.
+- **L3 heavy tier gated behind `PERF_FORCE_L3_HEAVY=1`** (one-window
+  alias: `PERF_FORCE_100K=1`): `paste-large @ 100k` skips itself by
+  default. The bench runs 8 iters per fixture (1 warmup + 7 timed)
+  with a fresh `page.goto('/')` per iter. At this size the renderer
+  accumulates state across iters until the post-`goto` `editor.waitFor`
+  exceeds even a 60s timeout (observed at iter 7-8 of 8 on the v1
+  reference machine, both keyboard and setvalue paths). The bypass env
+  var lets contributors run the heavy tier on faster hardware or for
+  one-off centerpiece snapshots. Tracked in issue #218; the long-term
+  fix is per-iter fresh-context isolation or CDP
+  `HeapProfiler.collectGarbage` between iters. The NFR-anchor
+  `paste-large @ mixed-d10/380k` row is NOT subject to this gate ---
+  the F-2 v1-reference trial confirmed all iters complete cleanly at
+  5 MB (`docs/perf.md` "NFR-anchor coverage").
 - **L3 paste path uses `setValue` at every size in v1**: the
   `paste-large.spec.ts` keyboard helper is wired but disabled in
   `pickPasteMethod` -- 10K hit intermittent `paste.handle.editor`
@@ -498,9 +531,14 @@ npm run perf:clean -- --dry-run
   (model update -> Angular CD -> tree render), not Monaco's
   `onDidPaste`. Tracked in issue #218; re-enabling is a one-line
   change in `pickPasteMethod` once #218 lands.
-- **NFR-faithful ~5 MB fixture deferred**: the 1M synthetic wide-aoo
-  case exercises the same paste/render stress path, while F-2 tracks a
-  fixture that maps directly to DESIGN_SPEC NFR #1.
+- **L2 `mixed-d10 @ 380k` opt-in**: the F-2 NFR-anchor fixture is
+  ~5 MB / ~380K nodes. At Karma's default settings the
+  `initial-render` and `scroll-after-expand` scenarios at this size
+  risk the `browserNoActivityTimeout` watchdog. The L2 spec gates
+  this fixture behind `?force5mb=1` or
+  `window.__perfL2Force5MB = true` (mirrors the existing `?force1m=1`
+  pattern). L1 and L3 enforce on this fixture default-on; only L2
+  needs the opt-in.
 
 See `plan.md` -> "Out of scope" in the session for the full
 follow-up issue list.
