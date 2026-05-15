@@ -36,9 +36,10 @@
 //     `wide-aoo @ 100k` centerpiece / on-demand heavy capture.
 //   - `mixed-d10 @ 380k`: default-on. This fixture is the NFR-anchor
 //     row (DESIGN_SPEC.md NFR #1, issue #215). The F-2 v1-reference
-//     trial run confirmed all 7 iters complete in ~1.2 min --- the
-//     #218 cliff does NOT fire at 5 MB --- so the ceiling is
-//     enforced every L3 run.
+//     trial run confirmed all 8 page.goto iters (1 warmup + 7 timed,
+//     per WARMUP_ITERS + TIMED_ITERS below) complete well within the
+//     per-test 10-min budget --- the #218 cliff does NOT fire at 5 MB
+//     --- so the ceiling is enforced every L3 run.
 //
 // `pasteMethod` is recorded as an additive row field (per the schema
 // convention documented in `scripts/perf/baseline.mjs`), NOT as a

@@ -177,6 +177,25 @@ contributor work, a non-reference contributor:
 3. Cross-references the committed reference baseline only to sanity-check
    "is my machine in the same ballpark as the reference."
 
+**v1 reference: L2 default-matrix gap.** As of `codeShaAtBaseline:
+3114d56`, the committed reference baseline contains L1 + L3 rows but
+no L2 (`2.*`) rows. The previous reference baseline (at
+`codeShaAtBaseline: d380114`) carried 3 L2 entries
+(`2.scroll-after-expand.deep25.10k`, `2.initial-render.deep25.10k`,
+`2.initial-render.wide-aoo.10k`), but those values were captured
+against the pre-virtualization mat-tree implementation. Issue #95
+(tree virtualization, landed in #236 / commit `d21acbd`) rewrote the
+L2 scenario harness to drive `cdk-virtual-scroll-viewport` instead of
+the outer wrapper; carrying the pre-virtualization numbers forward
+under the post-virtualization SHA would misrepresent the baseline
+file's per-row provenance. Fresh L2 captures against `3114d56` (and
+forward) are tracked by the L2 baseline reseed follow-up. Until
+that lands, an L2 capture has no committed reference to diff against;
+`perf:diff` compares only rows the current run AND the baseline both
+have, so L2 rows in a current run simply don't contribute to any
+ratio (and L2 rows aren't in `perf-targets.json` either, so no ceiling
+gate fires for them today).
+
 ### Paste mechanism (L3 paste-large)
 
 `paste-large.spec.ts` varies the paste path by fixture size to balance
@@ -419,9 +438,10 @@ Coverage per layer:
   `initial-render` and `scroll-after-expand` paths participate when
   the flag is set.
 - **L3** (Playwright + CDP `paste-large`): ceiling-enforced default-on.
-  The F-2 v1-reference trial confirmed all 7 iters (2 warmup + 5
-  timed) of `paste-large: mixed-d10 @ 380k` complete in ~1.2 min ---
-  well under the per-test `test.setTimeout(10 * 60 * 1000)` budget.
+  The F-2 v1-reference trial confirmed all 8 page.goto iters (1 warmup +
+  7 timed, per the `WARMUP_ITERS` + `TIMED_ITERS` constants in
+  `paste-large.spec.ts`) of `paste-large: mixed-d10 @ 380k` complete
+  well within the per-test `test.setTimeout(10 * 60 * 1000)` budget.
   The `#218` cross-iter cliff that gates `wide-aoo @ 100k` behind
   `PERF_FORCE_L3_HEAVY=1` does NOT manifest at 5 MB on the v1
   reference, so the NFR row runs every L3 capture.

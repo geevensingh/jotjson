@@ -119,18 +119,25 @@ function buildWideAoo(rng: () => number, approxNodes: number): unknown {
  *
  * Budget model: a SHARED node counter is decremented on every node
  * emit (container or leaf). When it hits 0 every subsequent emit is
- * a leaf. This gives `approxNodes` true linear control over realized
- * node count (and therefore byte count) across runs, which a
- * divide-by-K-per-child model cannot -- seeded determinism makes
- * the divided model wildly non-monotonic in N because the rng
- * stream is consumed in different orders at different sizes. Depth
- * is independently capped at 10 (forces a leaf regardless of
- * budget). The root is always a container (50/50 object vs array)
- * so the first dice roll cannot collapse the whole fixture to a
- * single primitive. Inner nodes draw 30% object / 30% array / 40%
- * leaf per the issue #215 shape spec. Container children counts
- * are 5-10 distinct KEY_POOL keys (objects) / 2-8 elements (arrays).
- * The exact byte count is pinned by `generate.test.mjs`.
+ * a leaf. This gives approximate linear control over realized node
+ * count: `realized = approxNodes + small overshoot`, where the
+ * overshoot is bounded by `maxChildrenPerContainer x depthCap`
+ * (the post-budget path still descends through in-progress
+ * container child loops, but every such descent collapses to a
+ * leaf via the `budget <= 0` guard). For the catalog's tuned sizes
+ * (>= 1000 nodes) the overshoot is amortized to ~zero (N=380000
+ * realizes 380035). The divide-by-K-per-child alternative cannot
+ * achieve this because seeded determinism makes the divided model
+ * wildly non-monotonic in N -- the rng stream is consumed in
+ * different orders at different sizes. Depth is independently
+ * capped at 10 (forces a leaf regardless of budget). The root is
+ * always a container (50/50 object vs array) so the first dice roll
+ * cannot collapse the whole fixture to a single primitive. Inner
+ * nodes draw 30% object / 30% array / 40% leaf per the issue #215
+ * shape spec. Container children counts are 5-10 distinct KEY_POOL
+ * keys (objects) / 2-8 elements (arrays). The exact byte count and
+ * realized node count are pinned by `generate.test.mjs` per catalog
+ * entry.
  */
 function buildMixedD10(rng: () => number, approxNodes: number): unknown {
   let budget = approxNodes;

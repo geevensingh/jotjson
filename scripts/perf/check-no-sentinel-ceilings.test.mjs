@@ -10,7 +10,7 @@ test('returns empty for a doc with all non-negative ceilings', () => {
         longestTaskMsMedian: { ceiling_ms: 500, reason: 'NFR-anchor' },
       },
       '1.parse.mixed-d10.380k': {
-        wallNsMedianMs: { ceiling_ms: 150, reason: 'measured' },
+        wallMsMedian: { ceiling_ms: 150, reason: 'measured' },
       },
     },
   };
@@ -38,10 +38,10 @@ test('detects multiple sentinels across rows and metrics', () => {
     schemaVersion: 1,
     rows: {
       '1.parse.mixed-d10.380k': {
-        wallNsMedianMs: { ceiling_ms: -1, reason: 'TODO' },
+        wallMsMedian: { ceiling_ms: -1, reason: 'TODO' },
       },
       '1.build-tree.mixed-d10.380k': {
-        wallNsMedianMs: { ceiling_ms: -1, reason: 'TODO' },
+        wallMsMedian: { ceiling_ms: -1, reason: 'TODO' },
       },
       '3.paste-large.mixed-d10.380k': {
         longestTaskMsMedian: { ceiling_ms: 500, reason: 'measured' },

@@ -6,13 +6,13 @@
     "1.parse.mixed-d10.380k": {
       "wallMsMedian": {
         "ceiling_ms": 500,
-        "reason": "NFR-anchor (DESIGN_SPEC.md NFR #1, 5 MB without freezing). v1-reference measured wallNsMedian 416 ms; 2x = 832 ms capped at Web Vitals INP 'poor' threshold 500 ms."
+        "reason": "NFR-anchor (DESIGN_SPEC.md NFR #1, 5 MB without freezing). v1-reference measured wallNsMedian 380571450 ns (= 380.6 ms via the wallMsMedian = wallNsMedian / 1e6 derivation in run-bench.mjs); 2x = 761 ms capped at Web Vitals INP 'poor' threshold 500 ms."
       }
     },
     "1.build-tree.mixed-d10.380k": {
       "wallMsMedian": {
         "ceiling_ms": 500,
-        "reason": "NFR-anchor (DESIGN_SPEC.md NFR #1, 5 MB without freezing). v1-reference measured wallNsMedian 473 ms; 2x = 946 ms capped at 500 ms."
+        "reason": "NFR-anchor (DESIGN_SPEC.md NFR #1, 5 MB without freezing). v1-reference measured wallNsMedian 481842850 ns (= 481.8 ms via wallMsMedian); 2x = 964 ms capped at 500 ms."
       }
     },
     "3.paste-large.mixed-d10.380k": {
