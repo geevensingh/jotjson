@@ -6751,31 +6751,43 @@ describe('JsonTreeComponent', () => {
       });
 
       it('top-level Expand all row is not bolded (dblclick-mirror mandate guardrail)', async () => {
+        // Setup: expand the root so $.outer is rendered, then
+        // collapse from $.outer so showExpandAllFromHere(outer) is
+        // true (subtree is not fully expanded).
         await createWith({ outer: { mid: { inner: 1 } } });
-        cmp.collapseAll();
+        cmp.expandAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
-        cmp.contextNode.set(outer);
+        cmp.collapseFromHere(outer);
         fixture.detectChanges();
-        // Open the row menu via the kebab pill so MatMenu renders.
-        const kebab = fixture.nativeElement.querySelector(
-          `[data-tree-kebab-path="${outer.pathString}"]`,
-        ) as HTMLButtonElement | null;
-        if (kebab) {
-          kebab.click();
-          fixture.detectChanges();
-        }
-        const overlayItems = Array.from(
-          document.querySelectorAll('.cdk-overlay-container .mat-mdc-menu-item'),
-        ) as HTMLElement[];
-        const expandAllRow = overlayItems.find(
-          (el) => (el.textContent ?? '').trim() === 'Expand all from here',
+        // Precondition: the new top-level row must render under
+        // this fixture or the guardrail test is meaningless.
+        expect(cmp.showExpandAllFromHere(outer))
+          .withContext('precondition: row must be visible')
+          .toBeTrue();
+        expect(cmp.hasContainerDescendants(outer))
+          .withContext('precondition: row must be visible')
+          .toBeTrue();
+        await openMenuFor('$.outer');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
         );
-        if (expandAllRow) {
-          expect(expandAllRow.classList.contains('ctx-default-action'))
-            .withContext('Top-level Expand all row must NOT carry .ctx-default-action')
-            .toBeFalse();
-        }
+        const expandAllRow = items.find(
+          (el) => (el.textContent ?? '').trim() === cmp.ctxExpandAllFromHereElevatedLabel,
+        );
+        // Hard assertion: the row MUST be in the rendered menu. A
+        // missing row would be a regression in the gating predicate
+        // or the template, not an acceptable test soft-pass.
+        expect(expandAllRow)
+          .withContext('Top-level Expand all from here row must render')
+          .toBeTruthy();
+        expect(expandAllRow!.classList.contains('ctx-default-action'))
+          .withContext('Top-level Expand all row must NOT carry .ctx-default-action')
+          .toBeFalse();
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
       });
 
       // ---- v0.23.0: deep `All` leaf retired ----
