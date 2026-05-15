@@ -2299,9 +2299,12 @@ Out of scope (for v1):
   `searchMatchMode: 'contains' | 'starts_with' | 'ends_with' | 'exact' | 'regex'`
   (default `'contains'`). The toolbar `.*` regex toggle is replaced
   with a `mat-menu` dropdown listing the five modes; the active mode
-  label appears on the trigger button and the dropdown checkmark
-  shows the current selection. `Alt+R` while the search input is
-  focused cycles to the next mode. The four anchored mode tokens
+  label appears on the trigger button and a leading check icon next
+  to the chosen item shows the current selection. The same
+  visible-check pattern is applied consistently to the two adjacent
+  Find toolbar dropdowns (search scope, value type) so all three
+  sibling menus look and behave the same way. `Alt+R` while the
+  search input is focused cycles to the next mode.The four anchored mode tokens
   intentionally share names with `FormattingRuleMatchType` so users
   learn one vocabulary; the wire type is
   `SearchMatchMode = FormattingRuleMatchType | 'regex'`. The

@@ -277,14 +277,14 @@ export class ProfileComponent implements OnInit {
   }
 
   onSearchMatchModeChange(value: string): void {
-    if (
-      value === 'contains' ||
-      value === 'starts_with' ||
-      value === 'ends_with' ||
-      value === 'exact' ||
-      value === 'regex'
-    ) {
-      this.prefsService.update({ searchMatchMode: value });
+    // Use `searchMatchModes` as the single source of truth so adding a
+    // 6th `SearchMatchMode` literal automatically extends the
+    // accepted set here without a manual edit. `.find` returns the
+    // matched `SearchMatchMode` value (typed and narrow), avoiding a
+    // cast on the user-facing `string` input.
+    const matched = this.searchMatchModes.find((mode) => mode === value);
+    if (matched) {
+      this.prefsService.update({ searchMatchMode: matched });
     }
   }
 

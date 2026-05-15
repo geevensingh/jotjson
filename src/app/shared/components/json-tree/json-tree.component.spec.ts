@@ -980,6 +980,25 @@ describe('JsonTreeComponent', () => {
       expect(() => cmp.searchHits()).not.toThrow();
       expect(cmp.searchHits().size).toBe(0);
     });
+
+    it('skips the tree walk on invalid regex (regression: matcher returns null)', () => {
+      // Pre-fix: `buildMatcher` always returned a function (`() => false`
+      // for invalid regex), so `if (query && !test)` was dead code and
+      // the walk ran on every keystroke - O(N) wasted work for large
+      // blobs. Post-fix: `buildMatcher` returns null on compile failure
+      // and the caller short-circuits before walking. Spy on the
+      // private `valueHaystack` (one of the per-node calls inside
+      // walk) to prove the walk truly didn't run, since both old and
+      // new produce the same observable empty `searchHits()` result.
+      const target = cmp as unknown as {
+        valueHaystack: (node: unknown, opts: { rawForStrings: boolean }) => string;
+      };
+      const haystackSpy = spyOn(target, 'valueHaystack').and.callThrough();
+      prefs.update({ searchScope: 'values', searchMatchMode: 'regex' });
+      cmp.search.set('[unclosed');
+      expect(cmp.searchHits().size).toBe(0);
+      expect(haystackSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('searchHits regex mode value haystack', () => {

@@ -137,25 +137,29 @@ export interface TreeExtractRequest {
  * and the per-mode matcher is independently testable.
  *
  * For `'regex'`, returns a predicate that calls `RegExp.test`; if the
- * pattern is invalid, returns a predicate that always returns `false`
- * (the legacy semantics - the red-border `searchRegexInvalid`
- * computed signals the error separately).
+ * pattern is invalid, returns `null` so the caller can short-circuit
+ * the tree walk entirely instead of doing O(N) wasted work calling a
+ * `() => false` predicate on every node. The red-border
+ * `searchRegexInvalid` computed signals the error to the user
+ * separately.
  *
  * For the four anchored modes (`'contains'`, `'starts_with'`,
  * `'ends_with'`, `'exact'`), returns a predicate using plain string
- * operations with case-normalization computed once.
+ * operations with case-normalization computed once. These modes
+ * cannot fail to compile, so the return type's `null` arm only fires
+ * for invalid regex.
  */
 function buildMatcher(
   mode: SearchMatchMode,
   query: string,
   caseSensitive: boolean,
-): (hay: string) => boolean {
+): ((hay: string) => boolean) | null {
   if (mode === 'regex') {
     try {
       const re = new RegExp(query, (caseSensitive ? '' : 'i') + 'm');
       return (hay) => re.test(hay);
     } catch {
-      return () => false;
+      return null;
     }
   }
   const needle = caseSensitive ? query : query.toLowerCase();
@@ -1107,8 +1111,22 @@ export class JsonTreeComponent {
     const scope = prefs.searchScope;
     const caseSensitive = prefs.searchCaseSensitive;
     const mode = prefs.searchMatchMode;
-    const test = query ? buildMatcher(mode, query, caseSensitive) : () => false;
-    if (query && !test) return { set: new Set(), order: [] };
+    // Build the predicate up-front so we can short-circuit before the
+    // tree walk on invalid regex (where `buildMatcher` returns null).
+    // Pre-fix the matcher always returned a function, so this short-
+    // circuit was dead code and an invalid regex walked the entire
+    // tree calling `() => false` on every node - O(N) wasted work
+    // per keystroke for large blobs. The explicit if/else gives `test`
+    // a non-nullable type past this block (TypeScript can't narrow
+    // a nullable across the closure boundary into `walk`).
+    let test: (hay: string) => boolean;
+    if (query) {
+      const compiled = buildMatcher(mode, query, caseSensitive);
+      if (!compiled) return { set: new Set(), order: [] };
+      test = compiled;
+    } else {
+      test = () => false;
+    }
     const haystackOpts = valueHaystackOpts(mode);
     const matchSet = new Set<string>();
     const matchOrder: string[] = [];
@@ -2889,8 +2907,9 @@ export class JsonTreeComponent {
    * whose scope is keys-only. Per plan.md decisions:
    *   - Q-typeFilter: clears `searchValueType` to `'all'` so the
    *     clicked row isn't filtered out of the result set.
-   *   - Q2: turns `searchRegexMode` off (literal text match) so
-   *     keys with regex metachars don't surprise users.
+   *   - Q2: forces `searchMatchMode: 'contains'` (was
+   *     `searchRegexMode: false` pre-rename) so keys with regex
+   *     metachars don't surprise users.
    *   - Q-activeHit: makes the clicked row the active hit if it
    *     ended up in the result set; falls back to first hit otherwise.
    *

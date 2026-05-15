@@ -77,6 +77,25 @@ body.theme-light {
   .mat-mdc-menu-item jj-icon {
     margin-inline-end: 12px;
   }
+
+  // Radio-style menu items (role="menuitemradio") show a leading
+  // check icon for the currently-selected option. The `<jj-icon
+  // name="check">` element is always present in the DOM (so labels
+  // stay aligned regardless of which item is checked); CSS
+  // visibility flips based on `is-checked`. `aria-hidden="true"`
+  // on the icon prevents screen readers from re-announcing the
+  // checked state alongside the radio's `aria-checked`. Used by
+  // the json-tree Find toolbar's three sibling dropdowns
+  // (matchMode, scope, type).
+  .mat-mdc-menu-item.jj-menu-item--radio {
+    .jj-menu-item__check {
+      visibility: hidden;
+    }
+
+    &.is-checked .jj-menu-item__check {
+      visibility: visible;
+    }
+  }
 }
 
 // Tree-row context menu (json-tree.component): bold "default

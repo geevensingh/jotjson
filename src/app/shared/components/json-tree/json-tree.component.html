@@ -43,11 +43,14 @@
         <button
           type="button"
           mat-menu-item
+          class="jj-menu-item--radio"
+          [class.is-checked]="searchMatchMode() === item.mode"
           [attr.aria-checked]="searchMatchMode() === item.mode"
           role="menuitemradio"
           (click)="setSearchMatchMode(item.mode)"
         >
-          {{ item.label() }}
+          <jj-icon class="jj-menu-item__check" name="check" [size]="18" aria-hidden="true" />
+          <span>{{ item.label() }}</span>
         </button>
       }
     </mat-menu>
@@ -65,29 +68,38 @@
       <button
         type="button"
         mat-menu-item
+        class="jj-menu-item--radio"
+        [class.is-checked]="searchScope() === 'keys'"
         [attr.aria-checked]="searchScope() === 'keys'"
         role="menuitemradio"
         (click)="setSearchScope('keys')"
       >
-        {{ searchScopeKeysLabel }}
+        <jj-icon class="jj-menu-item__check" name="check" [size]="18" aria-hidden="true" />
+        <span>{{ searchScopeKeysLabel }}</span>
       </button>
       <button
         type="button"
         mat-menu-item
+        class="jj-menu-item--radio"
+        [class.is-checked]="searchScope() === 'values'"
         [attr.aria-checked]="searchScope() === 'values'"
         role="menuitemradio"
         (click)="setSearchScope('values')"
       >
-        {{ searchScopeValuesLabel }}
+        <jj-icon class="jj-menu-item__check" name="check" [size]="18" aria-hidden="true" />
+        <span>{{ searchScopeValuesLabel }}</span>
       </button>
       <button
         type="button"
         mat-menu-item
+        class="jj-menu-item--radio"
+        [class.is-checked]="searchScope() === 'both'"
         [attr.aria-checked]="searchScope() === 'both'"
         role="menuitemradio"
         (click)="setSearchScope('both')"
       >
-        {{ searchScopeBothLabel }}
+        <jj-icon class="jj-menu-item__check" name="check" [size]="18" aria-hidden="true" />
+        <span>{{ searchScopeBothLabel }}</span>
       </button>
     </mat-menu>
     <button
@@ -106,11 +118,14 @@
         <button
           type="button"
           mat-menu-item
+          class="jj-menu-item--radio"
+          [class.is-checked]="searchValueType() === t"
           [attr.aria-checked]="searchValueType() === t"
           role="menuitemradio"
           (click)="setSearchValueType(t)"
         >
-          {{ valueTypeLabel(t) }}
+          <jj-icon class="jj-menu-item__check" name="check" [size]="18" aria-hidden="true" />
+          <span>{{ valueTypeLabel(t) }}</span>
         </button>
       }
     </mat-menu>
