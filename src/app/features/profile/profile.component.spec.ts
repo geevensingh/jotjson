@@ -5,7 +5,7 @@ import { MatCheckboxHarness } from '@angular/material/checkbox/testing';
 import { MatSlideToggleHarness } from '@angular/material/slide-toggle/testing';
 import { provideRouter } from '@angular/router';
 import { provideFakeAuth } from '../../../testing/auth.testing';
-import { FormattingRuleSet, UserPreferences } from '../../core/api/models';
+import { FormattingRuleSet, SearchMatchMode, UserPreferences } from '../../core/api/models';
 import { RuleSetsService } from '../../core/api/rule-sets.service';
 import { AuthUser } from '../../core/auth/auth-user';
 import { AuthService } from '../../core/auth/auth.service';
@@ -485,15 +485,37 @@ describe('ProfileComponent', () => {
     expect(prefs.prefs().searchCaseSensitive).toBe(false);
   });
 
-  it('writes searchRegexMode when toggled', async () => {
+  it('writes searchMatchMode when changed via mat-select (all 5 modes round-trip)', async () => {
     const { fixture, prefs } = await create({
       user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
       isConfigured: true,
     });
-    fixture.componentInstance.onSearchRegexModeChange(true);
-    expect(prefs.prefs().searchRegexMode).toBe(true);
-    fixture.componentInstance.onSearchRegexModeChange(false);
-    expect(prefs.prefs().searchRegexMode).toBe(false);
+    // Loop every valid mode so a typo in the validator's literal set
+    // (e.g., `'ends-with'` with a hyphen) would fail at least one of
+    // the five round-trips. Pre-fix the validator was 5 hardcoded
+    // `value === '...'` checks; post-fix it derives the accepted set
+    // from `searchMatchModes`. Either way, all 5 must round-trip.
+    const allModes: readonly SearchMatchMode[] = [
+      'contains',
+      'starts_with',
+      'ends_with',
+      'exact',
+      'regex',
+    ];
+    for (const mode of allModes) {
+      fixture.componentInstance.onSearchMatchModeChange(mode);
+      expect(prefs.prefs().searchMatchMode).withContext(`mode=${mode}`).toBe(mode);
+    }
+  });
+
+  it('ignores invalid searchMatchMode values', async () => {
+    const { fixture, prefs } = await create({
+      user: { id: 'oid-1', displayName: 'Ada', email: 'ada@example.com' },
+      isConfigured: true,
+    });
+    const before = prefs.prefs().searchMatchMode;
+    fixture.componentInstance.onSearchMatchModeChange('bogus');
+    expect(prefs.prefs().searchMatchMode).toBe(before);
   });
 
   it('writes searchScope for valid values and ignores invalid ones', async () => {

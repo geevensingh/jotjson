@@ -25,7 +25,12 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuTrigger } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter, finalize, take, timeout } from 'rxjs';
-import type { BlobHighlight, FormattingIcon, FormattingRuleSet } from '../../../core/api/models';
+import type {
+  BlobHighlight,
+  FormattingIcon,
+  FormattingRuleSet,
+  SearchMatchMode,
+} from '../../../core/api/models';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation.service';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
@@ -124,6 +129,64 @@ export interface TreeExtractRequest {
   sourceVersion: number;
   replacement: ExtractedJson;
   source: 'rowButton' | 'contextMenu';
+}
+
+/**
+ * Build a haystack-predicate for the current match mode. Extracted to
+ * a module-level helper so `searchHitData` stays a thin orchestrator
+ * and the per-mode matcher is independently testable.
+ *
+ * For `'regex'`, returns a predicate that calls `RegExp.test`; if the
+ * pattern is invalid, returns `null` so the caller can short-circuit
+ * the tree walk entirely instead of doing O(N) wasted work calling a
+ * `() => false` predicate on every node. The red-border
+ * `searchRegexInvalid` computed signals the error to the user
+ * separately.
+ *
+ * For the four anchored modes (`'contains'`, `'starts_with'`,
+ * `'ends_with'`, `'exact'`), returns a predicate using plain string
+ * operations with case-normalization computed once. These modes
+ * cannot fail to compile, so the return type's `null` arm only fires
+ * for invalid regex.
+ */
+function buildMatcher(
+  mode: SearchMatchMode,
+  query: string,
+  caseSensitive: boolean,
+): ((hay: string) => boolean) | null {
+  if (mode === 'regex') {
+    try {
+      const re = new RegExp(query, (caseSensitive ? '' : 'i') + 'm');
+      return (hay) => re.test(hay);
+    } catch {
+      return null;
+    }
+  }
+  const needle = caseSensitive ? query : query.toLowerCase();
+  const norm = (hay: string): string => (caseSensitive ? hay : hay.toLowerCase());
+  switch (mode) {
+    case 'contains':
+      return (hay) => norm(hay).includes(needle);
+    case 'starts_with':
+      return (hay) => norm(hay).startsWith(needle);
+    case 'ends_with':
+      return (hay) => norm(hay).endsWith(needle);
+    case 'exact':
+      return (hay) => norm(hay) === needle;
+  }
+}
+
+/**
+ * Haystack-policy rule for the value side of `searchHitData`. Named
+ * helper so the asymmetry between `'contains'` (JSON-escaped form so
+ * typing `"hello"` with quotes works) and the other four modes (raw
+ * string value) is explicit and pinning-testable. Pre-rename this
+ * was a `rawForStrings: regexMode` ternary inline at the call site.
+ *
+ * See `DESIGN_SPEC.md` §Search highlight mode table.
+ */
+function valueHaystackOpts(mode: SearchMatchMode): { rawForStrings: boolean } {
+  return { rawForStrings: mode !== 'contains' };
 }
 
 interface ManualHighlightRows {
@@ -507,8 +570,12 @@ export class JsonTreeComponent {
 
   readonly searchCaseSensitiveLabel = $localize`:@@tree.search.caseSensitive.label:Aa`;
   readonly searchCaseSensitiveTooltip = $localize`:@@tree.search.caseSensitive.tooltip:Match case`;
-  readonly searchRegexLabel = $localize`:@@tree.search.regex.label:.*`;
-  readonly searchRegexTooltip = $localize`:@@tree.search.regex.tooltip:Regular expression`;
+  readonly searchMatchModeTooltip = $localize`:@@tree.search.matchMode.tooltip:Match mode`;
+  readonly searchMatchModeContainsLabel = $localize`:@@tree.search.matchMode.contains:Contains`;
+  readonly searchMatchModeStartsWithLabel = $localize`:@@tree.search.matchMode.startsWith:Starts with`;
+  readonly searchMatchModeEndsWithLabel = $localize`:@@tree.search.matchMode.endsWith:Ends with`;
+  readonly searchMatchModeExactLabel = $localize`:@@tree.search.matchMode.exact:Exact match`;
+  readonly searchMatchModeRegexLabel = $localize`:@@tree.search.matchMode.regex:Regex (.*)`;
   readonly searchScopeTooltip = $localize`:@@tree.search.scope.tooltip:Find in`;
   readonly searchScopeKeysLabel = $localize`:@@tree.search.scope.keys:Keys`;
   readonly searchScopeValuesLabel = $localize`:@@tree.search.scope.values:Values`;
@@ -856,7 +923,7 @@ export class JsonTreeComponent {
    * `searchHits` already swallows regex errors and returns no hits.
    */
   readonly searchRegexInvalid = computed<boolean>(() => {
-    if (!this.prefs.prefs().searchRegexMode) return false;
+    if (this.prefs.prefs().searchMatchMode !== 'regex') return false;
     const query = this.search().trim();
     if (!query) return false;
     try {
@@ -996,6 +1063,26 @@ export class JsonTreeComponent {
   }
 
   /**
+   * Localized label for the match-mode dropdown trigger and menu
+   * items. Used by the `searchMatchModeButtonLabel` computed and the
+   * template's `@for` over `matchModes`.
+   */
+  matchModeLabel(mode: SearchMatchMode): string {
+    switch (mode) {
+      case 'contains':
+        return this.searchMatchModeContainsLabel;
+      case 'starts_with':
+        return this.searchMatchModeStartsWithLabel;
+      case 'ends_with':
+        return this.searchMatchModeEndsWithLabel;
+      case 'exact':
+        return this.searchMatchModeExactLabel;
+      case 'regex':
+        return this.searchMatchModeRegexLabel;
+    }
+  }
+
+  /**
    * Ordered list driving the type-filter dropdown. `'all'` is first
    * (the no-filter sentinel) followed by every `ValueClassification`
    * value except `'undefined'` (no JSON `undefined`).
@@ -1004,11 +1091,25 @@ export class JsonTreeComponent {
 
   readonly searchScope = computed(() => this.prefs.prefs().searchScope);
   readonly searchCaseSensitive = computed(() => this.prefs.prefs().searchCaseSensitive);
-  readonly searchRegexMode = computed(() => this.prefs.prefs().searchRegexMode);
+  readonly searchMatchMode = computed(() => this.prefs.prefs().searchMatchMode);
   readonly searchValueType = computed(() => this.prefs.prefs().searchValueType);
 
   readonly searchScopeButtonLabel = computed(() => this.scopeLabel(this.searchScope()));
   readonly searchValueTypeButtonLabel = computed(() => this.valueTypeLabel(this.searchValueType()));
+  readonly searchMatchModeButtonLabel = computed(() => this.matchModeLabel(this.searchMatchMode()));
+
+  /**
+   * Ordered list driving the match-mode dropdown. Order also defines
+   * the Alt+R cycle sequence: contains -> starts_with -> ends_with ->
+   * exact -> regex -> contains.
+   */
+  readonly matchModes: readonly { mode: SearchMatchMode; label: () => string }[] = [
+    { mode: 'contains', label: () => this.searchMatchModeContainsLabel },
+    { mode: 'starts_with', label: () => this.searchMatchModeStartsWithLabel },
+    { mode: 'ends_with', label: () => this.searchMatchModeEndsWithLabel },
+    { mode: 'exact', label: () => this.searchMatchModeExactLabel },
+    { mode: 'regex', label: () => this.searchMatchModeRegexLabel },
+  ];
 
   readonly searchPrevDisabled = computed(() => this.searchHitCount() === 0);
   readonly searchNextDisabled = computed(() => this.searchHitCount() === 0);
@@ -1023,20 +1124,26 @@ export class JsonTreeComponent {
     if (!query && typeFilter === 'all') return { set: new Set(), order: [] };
     const scope = prefs.searchScope;
     const caseSensitive = prefs.searchCaseSensitive;
-    const regexMode = prefs.searchRegexMode;
-    const needle = caseSensitive ? query : query.toLowerCase();
-    let regex: RegExp | undefined;
-    if (query && regexMode) {
-      try {
-        regex = new RegExp(query, (caseSensitive ? '' : 'i') + 'm');
-      } catch {
-        return { set: new Set(), order: [] };
-      }
+    const mode = prefs.searchMatchMode;
+    // Build the predicate up-front so we can short-circuit before the
+    // tree walk on invalid regex (where `buildMatcher` returns null).
+    // Pre-fix the matcher always returned a function, so this short-
+    // circuit was dead code and an invalid regex walked the entire
+    // tree calling `() => false` on every node - O(N) wasted work
+    // per keystroke for large blobs. The explicit if/else gives `test`
+    // a non-nullable type past this block (TypeScript can't narrow
+    // a nullable across the closure boundary into `walk`).
+    let test: (hay: string) => boolean;
+    if (query) {
+      const compiled = buildMatcher(mode, query, caseSensitive);
+      if (!compiled) return { set: new Set(), order: [] };
+      test = compiled;
+    } else {
+      test = () => false;
     }
+    const haystackOpts = valueHaystackOpts(mode);
     const matchSet = new Set<string>();
     const matchOrder: string[] = [];
-    const test = (hay: string): boolean =>
-      regex ? regex.test(hay) : (caseSensitive ? hay : hay.toLowerCase()).includes(needle);
     const record = (path: string): void => {
       if (matchSet.has(path)) return;
       matchSet.add(path);
@@ -1069,8 +1176,7 @@ export class JsonTreeComponent {
           }
           if (scope === 'values' || scope === 'both') {
             if (node.type !== 'object' && node.type !== 'array') {
-              if (test(this.valueHaystack(node, { rawForStrings: regexMode })))
-                record(node.pathString);
+              if (test(this.valueHaystack(node, haystackOpts))) record(node.pathString);
             }
           }
         }
@@ -2025,10 +2131,24 @@ export class JsonTreeComponent {
     });
   }
 
-  toggleSearchRegexMode(): void {
-    this.prefs.update({
-      searchRegexMode: !this.prefs.prefs().searchRegexMode,
-    });
+  setSearchMatchMode(mode: SearchMatchMode): void {
+    this.prefs.update({ searchMatchMode: mode });
+  }
+
+  /**
+   * Keyboard shortcut handler for Alt+R when the search input is
+   * focused. Cycles match mode through the `matchModes` array order
+   * (contains -> starts_with -> ends_with -> exact -> regex ->
+   * contains). Mitigates the loss of the legacy 1-click `.*` toggle
+   * (see plan.md "Pre-presentation gate" -> Skeptic #9 / Advocate #2).
+   */
+  onMatchModeShortcut(ev: Event): void {
+    ev.preventDefault();
+    const current = this.searchMatchMode();
+    const idx = this.matchModes.findIndex((m) => m.mode === current);
+    const nextIdx = (idx + 1) % this.matchModes.length;
+    const nextEntry = this.matchModes[nextIdx];
+    if (nextEntry) this.setSearchMatchMode(nextEntry.mode);
   }
 
   goToNextMatch(): void {
@@ -2954,8 +3074,9 @@ export class JsonTreeComponent {
    * whose scope is keys-only. Per plan.md decisions:
    *   - Q-typeFilter: clears `searchValueType` to `'all'` so the
    *     clicked row isn't filtered out of the result set.
-   *   - Q2: turns `searchRegexMode` off (literal text match) so
-   *     keys with regex metachars don't surprise users.
+   *   - Q2: forces `searchMatchMode: 'contains'` (was
+   *     `searchRegexMode: false` pre-rename) so keys with regex
+   *     metachars don't surprise users.
    *   - Q-activeHit: makes the clicked row the active hit if it
    *     ended up in the result set; falls back to first hit otherwise.
    *
@@ -2965,9 +3086,19 @@ export class JsonTreeComponent {
   findByKey(node: TreeNode): void {
     if (node.segment === undefined) return;
     this.logger.info('tree.contextMenu.searchByKey');
+    // Force `searchMatchMode: 'contains'` (was `searchRegexMode: false`
+    // pre-rename). Two intents: (1) defend against keys with regex
+    // metachars (`.`, `$`, `*`) so power users don't see surprises;
+    // (2) ensure the JSON-escaped haystack path is used so the
+    // clicked row's key matches even with embedded quotes. This
+    // intentionally clobbers a user's `'starts_with'`/`'ends_with'`/
+    // `'exact'`/`'regex'` choice for this one-shot action - the
+    // safety guarantee is more important than preserving picker
+    // state across context-menu clicks. Tracked: see plan.md
+    // "Pre-presentation gate" -> Skeptic #3 / Architect #findByKey.
     this.prefs.update({
       searchScope: 'keys',
-      searchRegexMode: false,
+      searchMatchMode: 'contains',
       searchValueType: 'all',
     });
     this.search.set(String(node.segment));
@@ -2989,19 +3120,23 @@ export class JsonTreeComponent {
       return;
     }
     this.logger.info('tree.contextMenu.searchByValue');
-    // findByValue writes to the substring-mode search query (regex is
-    // forced off below). Substring mode's haystack for string leaves is
-    // the JSON-escaped form (see `valueHaystack` JSDoc), so the raw
+    // findByValue writes to the contains-mode search query. The
+    // value-haystack path for string leaves in contains mode is the
+    // JSON-escaped form (see `valueHaystack` JSDoc), so the raw
     // string here matches as a substring inside the quoted hay -
     // e.g. query `hello` finds within hay `"hello"`. Pre-existing
-    // limitation: values containing JSON-escape characters (`"`, `\`,
-    // `\n`, `\t`, ...) do NOT round-trip correctly through this path -
-    // tracked separately; do not extend the workaround here.
+    // limitation: values containing JSON-escape characters (`"`,
+    // `\`, `\n`, `\t`, ...) do NOT round-trip correctly through this
+    // path - tracked separately; do not extend the workaround here.
+    // Mode is forced to `'contains'` (was `searchRegexMode: false`
+    // pre-rename) to defend against regex metachars in the value,
+    // intentionally clobbering a user's other mode choice - see
+    // `findByKey` JSDoc for the same rationale.
     const query =
       node.type === 'string' ? (node.value as string) : this.renderLeaf(node.value, node.type);
     this.prefs.update({
       searchScope: 'values',
-      searchRegexMode: false,
+      searchMatchMode: 'contains',
       searchValueType: 'all',
     });
     this.search.set(query);

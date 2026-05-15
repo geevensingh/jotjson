@@ -227,6 +227,63 @@ describe('PreferencesService', () => {
     expect(prefs.activeRuleSetIds).toEqual(['rs-stale']);
   });
 
+  describe('searchRegexMode -> searchMatchMode fold (mergeWithDefaults)', () => {
+    // Schema evolution rename: the legacy boolean `searchRegexMode`
+    // folds into the new string enum `searchMatchMode` in
+    // `mergeWithDefaults`. The 6 cases below pin precedence.
+    it('legacy true alone -> regex', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ searchRegexMode: true }));
+      const svc = TestBed.inject(PreferencesService);
+      const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+      expect(prefs.searchMatchMode).toBe('regex');
+      expect(prefs['searchRegexMode']).toBeUndefined();
+    });
+
+    it('legacy false alone -> contains', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ searchRegexMode: false }));
+      const svc = TestBed.inject(PreferencesService);
+      const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+      expect(prefs.searchMatchMode).toBe('contains');
+      expect(prefs['searchRegexMode']).toBeUndefined();
+    });
+
+    it('legacy absent -> default contains', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: 'dark' }));
+      const svc = TestBed.inject(PreferencesService);
+      expect(svc.prefs().searchMatchMode).toBe('contains');
+    });
+
+    it('new field valid + legacy present -> new wins, legacy stripped', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ searchMatchMode: 'starts_with', searchRegexMode: true }),
+      );
+      const svc = TestBed.inject(PreferencesService);
+      const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+      expect(prefs.searchMatchMode).toBe('starts_with');
+      expect(prefs['searchRegexMode']).toBeUndefined();
+    });
+
+    it('new field invalid + legacy true -> fold to regex', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ searchMatchMode: 'bogus', searchRegexMode: true }),
+      );
+      const svc = TestBed.inject(PreferencesService);
+      const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+      expect(prefs.searchMatchMode).toBe('regex');
+      expect(prefs['searchRegexMode']).toBeUndefined();
+    });
+
+    it('legacy non-boolean (string "true") -> strict bool check -> contains', () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ searchRegexMode: 'true' }));
+      const svc = TestBed.inject(PreferencesService);
+      const prefs = svc.prefs() as UserPreferences & Record<string, unknown>;
+      expect(prefs.searchMatchMode).toBe('contains');
+      expect(prefs['searchRegexMode']).toBeUndefined();
+    });
+  });
+
   it('merges deep treeHighlightColors shape from storage', () => {
     localStorage.setItem(
       STORAGE_KEY,
@@ -401,6 +458,18 @@ describe('PreferencesService', () => {
           kind: 'string',
           value: 'always',
         },
+        undefined,
+      );
+    });
+
+    it('emits a string event for a changed searchMatchMode', () => {
+      const svc = TestBed.inject(PreferencesService);
+
+      svc.update({ searchMatchMode: 'starts_with' });
+
+      expect(logger.event).toHaveBeenCalledOnceWith(
+        'pref.changed',
+        { key: 'searchMatchMode', source: 'user', kind: 'string', value: 'starts_with' },
         undefined,
       );
     });

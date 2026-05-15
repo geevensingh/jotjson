@@ -340,7 +340,7 @@ describe('normalizePreferences', () => {
     expect(() => normalizePreferences(bad)).toThrow();
   });
 
-  it.each(['historyTrackingMode', 'defaultRuleSetIds', 'defaultRuleSetId'])(
+  it.each(['historyTrackingMode', 'defaultRuleSetIds', 'defaultRuleSetId', 'searchRegexMode'])(
     'rejects legacy preference key %s',
     (key) => {
       const bad = valid() as Record<string, unknown>;
@@ -350,6 +350,34 @@ describe('normalizePreferences', () => {
       );
     },
   );
+
+  it('round-trips searchMatchMode=contains (default)', () => {
+    expect(normalizePreferences(valid()).searchMatchMode).toBe('contains');
+  });
+
+  it('round-trips a non-default searchMatchMode', () => {
+    const input = valid() as Record<string, unknown>;
+    input['searchMatchMode'] = 'starts_with';
+    expect(normalizePreferences(input).searchMatchMode).toBe('starts_with');
+  });
+
+  it('round-trips searchMatchMode=regex', () => {
+    const input = valid() as Record<string, unknown>;
+    input['searchMatchMode'] = 'regex';
+    expect(normalizePreferences(input).searchMatchMode).toBe('regex');
+  });
+
+  it('rejects unknown searchMatchMode', () => {
+    const bad = valid() as Record<string, unknown>;
+    bad['searchMatchMode'] = 'bogus';
+    expect(() => normalizePreferences(bad)).toThrow(/searchMatchMode must be one of/);
+  });
+
+  it('rejects a missing searchMatchMode', () => {
+    const bad = valid() as Record<string, unknown>;
+    delete bad['searchMatchMode'];
+    expect(() => normalizePreferences(bad)).toThrow(/searchMatchMode/);
+  });
 
   it('defaults activeRuleSetIds to [] when missing on the wire (stale-client tolerance)', () => {
     const input = valid() as Record<string, unknown>;
@@ -460,6 +488,71 @@ describe('normalizeStoredPreferences', () => {
     stored.recentlyViewedEnabled = false;
     const result = normalizeStoredPreferences(stored);
     expect(result.recentlyViewedEnabled).toBe(false);
+  });
+
+  describe('searchRegexMode -> searchMatchMode fold', () => {
+    // Schema-evolution rename. Six precedence cases pinned to match
+    // the frontend `mergeWithDefaults` fold (preferences.service.ts).
+    function storedWithoutSearchMatchMode(): Record<string, unknown> {
+      const base = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+      delete base['searchMatchMode'];
+      return base;
+    }
+
+    it('legacy searchRegexMode=true alone -> regex', () => {
+      const stored = storedWithoutSearchMatchMode();
+      stored['searchRegexMode'] = true;
+      const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+      expect(result.searchMatchMode).toBe('regex');
+      expect((result as { searchRegexMode?: unknown }).searchRegexMode).toBeUndefined();
+    });
+
+    it('legacy searchRegexMode=false alone -> contains', () => {
+      const stored = storedWithoutSearchMatchMode();
+      stored['searchRegexMode'] = false;
+      const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+      expect(result.searchMatchMode).toBe('contains');
+      expect((result as { searchRegexMode?: unknown }).searchRegexMode).toBeUndefined();
+    });
+
+    it('legacy absent -> default contains', () => {
+      const stored = storedWithoutSearchMatchMode();
+      const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+      expect(result.searchMatchMode).toBe('contains');
+    });
+
+    it('new field valid + legacy present -> new wins, legacy stripped', () => {
+      const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+      stored['searchMatchMode'] = 'starts_with';
+      stored['searchRegexMode'] = true;
+      const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+      expect(result.searchMatchMode).toBe('starts_with');
+      expect((result as { searchRegexMode?: unknown }).searchRegexMode).toBeUndefined();
+    });
+
+    it('new field invalid + legacy true -> fold to regex', () => {
+      const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+      stored['searchMatchMode'] = 'bogus';
+      stored['searchRegexMode'] = true;
+      const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+      expect(result.searchMatchMode).toBe('regex');
+      expect((result as { searchRegexMode?: unknown }).searchRegexMode).toBeUndefined();
+    });
+
+    it('legacy non-boolean (string "true") -> strict bool check -> contains', () => {
+      const stored = storedWithoutSearchMatchMode();
+      stored['searchRegexMode'] = 'true';
+      const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+      expect(result.searchMatchMode).toBe('contains');
+      expect((result as { searchRegexMode?: unknown }).searchRegexMode).toBeUndefined();
+    });
+
+    it('defensively defaults an invalid stored searchMatchMode to contains', () => {
+      const stored = structuredClone(DEFAULT_PREFERENCES) as unknown as Record<string, unknown>;
+      stored['searchMatchMode'] = 'bogus';
+      const result = normalizeStoredPreferences(stored as unknown as UserPreferences);
+      expect(result.searchMatchMode).toBe('contains');
+    });
   });
 
   it('defaults missing treeEditorSelectionSync to true', () => {
