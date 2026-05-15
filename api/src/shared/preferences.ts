@@ -111,8 +111,9 @@ export interface UserPreferences {
    * How tree search compares the query against keys and values. The
    * four anchored modes (`exact`, `contains`, `starts_with`,
    * `ends_with`) are intentionally shared with the FormattingRule
-   * match types declared in `src/app/core/api/models.ts:229` so the
-   * two surfaces speak the same vocabulary. Tree search can include
+   * match types declared in `src/app/core/api/models.ts` (the
+   * `FormattingRuleMatchType` type alias) so the two surfaces speak
+   * the same vocabulary. Tree search can include
    * `'regex'` today because the pattern is compiled per-keystroke
    * against the local in-memory tree and is never persisted or shared
    * with other users; the safe-evaluation concern that deferred
