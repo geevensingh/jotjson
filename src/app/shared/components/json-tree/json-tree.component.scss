@@ -109,11 +109,28 @@
 .tree-body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
   padding: 8px 4px 14px;
   font-family: v.$font-mono;
   font-size: var(--tree-font-size, 13px);
   line-height: 1.4;
+}
+
+// Phase 2 (issue #95) -- the CDK virtual scroll viewport that drives
+// the tree's row rendering. Owns the scroll surface (the host `.tree-body`
+// no longer scrolls). `contain: strict` is required by CdkFixedSizeVirtualScroll
+// for predictable layout; the parent flex sizing supplies the explicit
+// height contain requires. We never bind `[itemSize]="0"` -- the viewport
+// uses `effectiveRowHeightPx()` which falls back to a font-size-derived
+// default (`ceil(treeFontSize * 1.6)`) until the probe row's real
+// measurement lands.
+.tree-viewport {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  contain: strict;
 }
 
 .tree-empty {
@@ -133,10 +150,22 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 1px 4px 1px 0;
+  padding: 0 4px 0 0;
+  // Phase 2 (issue #95) -- fixed row height required by
+  // CdkFixedSizeVirtualScroll. Every real row renders at exactly
+  // var(--tree-row-height); the value is the measured height of the
+  // off-screen `.tree-row--probe` and is bound to the viewport's
+  // `[itemSize]` via the `measuredRowHeightPx` signal.
+  height: var(--tree-row-height, auto);
   border-radius: 3px;
   cursor: default;
   min-height: 0;
+  // Ensures flex children with intrinsic min-width-of-content
+  // (long unbreakable strings) participate in the ellipsis fallback
+  // instead of forcing a horizontal scroll.
+  > * {
+    min-width: 0;
+  }
 
   // Formatting-rules CSS-var seam (M6a.75). When a row participates in
   // a matched formatting rule, the engine sets these custom properties
@@ -153,14 +182,19 @@
 
   &--probe {
     // Hidden offscreen probe used by the auto-fit-to-window initial
-    // expansion to measure the rendered row height once per font
-    // size. `visibility: hidden` keeps the layout box (so we get a
-    // real bounding rect) without rendering pixels; offscreen left
-    // takes it out of any visual region.
+    // expansion AND the virtual-scroll viewport's `[itemSize]` to
+    // measure the rendered row height once per font / pref epoch.
+    // `visibility: hidden` keeps the layout box so we get a real
+    // bounding rect; offscreen left takes it out of any visual
+    // region. `height: auto` is REQUIRED so the probe is sized by
+    // its real content rather than inheriting the fixed
+    // `var(--tree-row-height)` from `.tree-row` above (which would
+    // make the measurement a tautology).
     visibility: hidden;
     position: absolute;
     left: -9999px;
     top: 0;
+    height: auto;
     pointer-events: none;
   }
 
@@ -194,22 +228,21 @@
 }
 
 // M7g-3b. Roving keyboard-focus ring on the focused tree node. Drawn
-// just outside the row using `box-shadow` so it stacks with the
+// on the row itself using `box-shadow` so it stacks with the
 // existing `.is-active-match` outline (which is drawn just inside at
 // `outline-offset: -2px`). When a row is both keyboard-focused AND
 // the active search hit, both rings render concurrently.
 //
 // The browser default outline is suppressed because the box-shadow
-// above already conveys focus.
-mat-nested-tree-node:focus-visible {
+// above already conveys focus. Phase 2 (issue #95) moved this from
+// `mat-nested-tree-node` to `.tree-row` because virtualization
+// dropped the tree-node host wrapper.
+.tree-row:focus-visible {
   outline: none;
-
-  > .tree-row {
-    box-shadow:
-      inset 4px 0 0 var(--tree-row-format-border, transparent),
-      0 0 0 2px var(--mat-sys-primary, var(--color-primary));
-    border-radius: 3px;
-  }
+  box-shadow:
+    inset 4px 0 0 var(--tree-row-format-border, transparent),
+    0 0 0 2px var(--mat-sys-primary, var(--color-primary));
+  border-radius: 3px;
 }
 
 .tree-match-badge {
@@ -311,6 +344,11 @@ mat-nested-tree-node:focus-visible {
   font-weight: var(--tree-key-weight, 600);
   font-style: var(--tree-key-style, normal);
   text-decoration: var(--tree-key-decoration, none);
+  // Phase 2 (issue #95) -- fixed-height rows force single-line text.
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
 
   &::after {
     content: ': ';
@@ -323,6 +361,8 @@ mat-nested-tree-node:focus-visible {
   color: var(--tree-muted-color);
   font-weight: normal;
   margin-right: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tree-value-string {
@@ -335,7 +375,15 @@ mat-nested-tree-node:focus-visible {
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
-  word-break: break-word;
+  // Phase 2 (issue #95) -- single-line with ellipsis when overflowing
+  // the viewport's row width. `OverflowDetectorDirective` reads
+  // `scrollWidth > clientWidth` to gate the matTooltip popup so a
+  // hover surfaces the full string only when it has actually been
+  // clipped.
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .tree-date-annotation {
@@ -344,13 +392,13 @@ mat-nested-tree-node:focus-visible {
   font-size: 0.92em;
   // Decoration -> sans (DESIGN_SPEC.md tree font philosophy).
   font-family: var(--font-ui);
-  // Match the wrap behavior of `.tree-value-string` so the original
-  // value and the annotation share space symmetrically. Without this,
-  // the annotation's flex-item intrinsic min-width was the entire
-  // unbreakable string, which forced it to claim full width and made
-  // the value wrap aggressively while the annotation stayed on one
-  // line - exactly the asymmetry users see on narrow rows.
-  word-break: break-word;
+  // Phase 2 -- single-line ellipsis. The previous `word-break:
+  // break-word` was paired with multi-line `.tree-value-string`;
+  // virtualization forces a single-line row.
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
 .tree-value-number {
@@ -358,6 +406,8 @@ mat-nested-tree-node:focus-visible {
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tree-value-boolean {
@@ -365,11 +415,15 @@ mat-nested-tree-node:focus-visible {
   font-weight: var(--tree-value-weight, normal);
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tree-value-null {
   color: var(--tree-muted-color);
   font-style: italic;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tree-value-container {
@@ -475,30 +529,11 @@ mat-nested-tree-node:focus-visible {
   font-weight: 500;
 }
 
-.tree-children {
-  display: block;
-  padding-left: 16px;
-}
-
-.tree-children-hidden {
-  display: none;
-}
-
-// Neutralize Material's default tree node paddings/backgrounds so our row
-// styling (padding from mat-tree-node-padding only) remains consistent.
-:host ::ng-deep .mat-tree {
-  background: transparent;
-  font-family: inherit;
-}
-
-:host ::ng-deep .mat-tree-node,
-:host ::ng-deep .mat-nested-tree-node {
-  min-height: 0;
-  color: inherit;
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--tree-font-size, 13px);
-}
+// Phase 2 (issue #95) - the `.tree-children` wrapper and the
+// Material tree-node host neutralizers below were removed when
+// `<mat-tree>` was replaced by `<cdk-virtual-scroll-viewport>` +
+// `*cdkVirtualFor`. Indentation is now driven by an inline
+// `padding-left.em` binding on `.tree-row` keyed off `item.level`.
 
 .tree-extract-pill,
 .tree-decoded-pill,
