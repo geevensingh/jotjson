@@ -3135,7 +3135,16 @@ Out of scope (for v1):
        real HTTP 404 status (`followup-true-404`). See SEO / Social
        section above for the full implementation.
    - ~~**M7i**: Monitoring (App Insights dashboards & alerts).~~ (done)
-     - App Insights workbook (5 sections) + 4 alerts + 1 action group shipped. Bicep modules: `infra/modules/{actionGroup,alerts,monitoringWorkbook}.bicep` + `infra/main.bicep` wiring + `infra/modules/appInsights.bicep` outputs. Docs: see `docs/telemetry.md` -> "Dashboards & alerts (M7i)". Post-V1 follow-ups: issues #87-#94.
+     - Two App Insights workbooks (`JotJSON operator monitoring`,
+       `JotJSON product analytics`) via shared `infra/modules/workbook.bicep`
+       module + 4 alerts + 1 action group shipped. Content lives in
+       `infra/workbooks/{monitoring,product-analytics}.json`. Bicep modules:
+       `infra/modules/{actionGroup,alerts,workbook}.bicep` + `infra/main.bicep`
+       wiring + `infra/modules/appInsights.bicep` outputs. Docs: see
+       `docs/telemetry.md` -> "Dashboards & alerts". Post-V1 follow-ups:
+       issues #87-#94, #240 (workbook CI gate), #241 (instrumentation
+       migration: `logger.info()` -> `logger.event()` for ~25 tree.*
+       events), #242 (third `JotJSON telemetry hygiene` workbook).
    - ~~**M7j**: Static Web Apps upgrade to Standard tier - flipped during M7e (commit 1ba34e1) because apex custom-domain binding requires Standard. See M7o for the BYO Functions follow-up.~~ (done)
    - ~~**M7k**: Surface JSONC comments in the tree view - the parser harvests every `//` and `/* */` comment in a second pass and attaches it to the nearest tree node; comments render as dimmed inline annotations on the same row as the value they document (trailing slot when on the same source line as the value, leading slot when introducing the next value). Single-line + ellipsis with full text via tooltip; toggleable via `treeShowComments` (default true). Comments do not participate in formatting-rules matching or tree search. Decoration-vs-data font philosophy codified alongside (commits `7d937c5` M7k-0 mockup-rule docs, `82f9073` M7k-1 parser harvest, `4f7d604` M7k-2 tree rendering, `66f695d` font philosophy, `fa02122` placement fix-up, plus this commit for M7k-3 preference + spec).~~ (done)
    - ~~**M7l**: Responsive layout - on viewports narrower than 768px, collapse the editor/tree split to a single visible pane: when persisted `paneVisibility` is `both`, render the tree pane by default (view-first at narrow widths); when persisted is `editor-only` or `tree-only`, honor the single-pane choice. The toolbar's segmented control collapses to a 2-state toggle (`editor-only` | `tree-only`); the persisted `paneVisibility` is never mutated by the override. Also collapse the status bar (M7m) to a single-line summary - keep Bytes, Lines, and Mode; hide Chars, cursor, nodes, depth, object/array counts, and the build/version badge.~~ (done)

@@ -54,6 +54,9 @@ Thumbs.db
 
 # Bicep build output (from `az bicep build`)
 /infra/**/*.json
+# Exception: workbook content templates are source files, not build output.
+# These are loaded by `infra/modules/workbook.bicep` via `loadTextContent()`.
+!/infra/workbooks/*.json
 
 # Scratch directory for scripts/generate-icons.mjs (ephemeral sharp install).
 /.iconbuild
