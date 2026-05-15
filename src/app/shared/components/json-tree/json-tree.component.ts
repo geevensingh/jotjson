@@ -699,6 +699,14 @@ export class JsonTreeComponent {
       // rather than exposing `viewport` publicly so the production API
       // surface stays narrow.
       getViewport: (): CdkVirtualScrollViewport | undefined => this.viewport(),
+      // Test seam for the cursor-aware non-hit fallback path. Production
+      // entry points (`findByKey`, `findByValue`) always force the
+      // clicked row's key/value into the search, which guarantees the
+      // path lands in the hit set. The non-hit branch only fires when
+      // a future caller passes an unmatched path (e.g. a JSON-escape
+      // mismatch like issue #238). Exposed here so the unit test can
+      // exercise the at-or-after fallback directly.
+      activateClickedHitOrFirst: (path: string): void => this.activateClickedHitOrFirst(path),
     };
   }
 
@@ -789,8 +797,14 @@ export class JsonTreeComponent {
   });
 
   /**
-   * Ordered list of paths matching the current query in document
-   * order. Backs prev/next navigation and the displayed match count.
+   * Ordered list of paths matching the current query in **document
+   * order** (depth-first, root-to-leaf walk via `searchHitData`).
+   * Backs prev/next navigation and the displayed match count, and is
+   * load-bearing for cursor-aware navigation: the
+   * `firstHitIndexAfter` / `lastHitIndexBefore` /
+   * `firstHitIndexAtOrAfter` helpers rely on `paths` being sorted by
+   * the same `nodeOrder` map they consult. Any future change to
+   * `searchHitData` must preserve the document-order invariant.
    */
   readonly searchHitPaths = computed<readonly string[]>(() => {
     return this.searchHitData().order;
@@ -1085,6 +1099,29 @@ export class JsonTreeComponent {
   });
 
   /**
+   * `pathString -> document-order position` map rebuilt whenever the
+   * tree root changes. Used by cursor-aware navigation to compare the
+   * current selection's position to hit positions in O(1) per lookup.
+   * Walk order matches `searchHitData` (depth-first), so the integer
+   * position is directly comparable across hits and selection. One
+   * extra O(n) walk per root rebuild on top of `nodeIndex`'s parallel
+   * walk; negligible alongside parse + build cost. Kept as a separate
+   * computed rather than folded into `nodeIndex` (Map<string, {node,
+   * order}>) so the two callsets don't accidentally cross-depend.
+   */
+  private readonly nodeOrder = computed<ReadonlyMap<string, number>>(() => {
+    const map = new Map<string, number>();
+    let order = 0;
+    const walk = (node: TreeNode | undefined): void => {
+      if (!node) return;
+      map.set(node.pathString, order++);
+      node.children?.forEach(walk);
+    };
+    walk(this.root());
+    return map;
+  });
+
+  /**
    * Phase 2 (issue #95) -- flattened render-order list of every row
    * the viewport should draw. Each non-empty container produces an
    * `'open'` row at entry and a `'close'` row when the walk
@@ -1365,11 +1402,34 @@ export class JsonTreeComponent {
     });
 
     // Reset the active-match index whenever the hit list changes
-    // (different query, scope, or value). Empty -> -1; non-empty -> 0.
+    // (different query, scope, or value). Cursor-aware: if the
+    // current selection is itself a hit (or sits before the first
+    // hit), land on the first hit AT-OR-AFTER the selection's
+    // document-order position; otherwise wrap to 0. When the hit
+    // list is empty, reset to -1.
+    //
+    // The entire body runs inside `untracked()` so neither
+    // `selectedPath` nor `nodeOrder` writes re-fire this effect.
+    // The effect's tracked surface is exactly `searchHitPaths`.
     effect(() => {
       const paths = this.searchHitPaths();
       untracked(() => {
-        this.activeHitIndex.set(paths.length > 0 ? 0 : -1);
+        if (paths.length === 0) {
+          this.activeHitIndex.set(-1);
+          return;
+        }
+        const sel = this.selectedPath();
+        if (sel === null) {
+          this.activeHitIndex.set(0);
+          return;
+        }
+        const orderMap = this.nodeOrder();
+        const selPos = orderMap.get(sel);
+        if (selPos === undefined) {
+          this.activeHitIndex.set(0);
+          return;
+        }
+        this.activeHitIndex.set(this.firstHitIndexAtOrAfter(paths, selPos, orderMap));
       });
     });
 
@@ -1974,8 +2034,7 @@ export class JsonTreeComponent {
   goToNextMatch(): void {
     const paths = this.searchHitPaths();
     if (paths.length === 0) return;
-    const index = this.activeHitIndex();
-    const next = index < 0 ? 0 : (index + 1) % paths.length;
+    const next = this.nextHitFromSelection(paths);
     this.activeHitIndex.set(next);
     const path = paths[next] as string;
     this.selectedPath.set(path);
@@ -1990,8 +2049,7 @@ export class JsonTreeComponent {
   goToPrevMatch(): void {
     const paths = this.searchHitPaths();
     if (paths.length === 0) return;
-    const index = this.activeHitIndex();
-    const prev = index <= 0 ? paths.length - 1 : index - 1;
+    const prev = this.prevHitFromSelection(paths);
     this.activeHitIndex.set(prev);
     const path = paths[prev] as string;
     this.selectedPath.set(path);
@@ -1999,6 +2057,115 @@ export class JsonTreeComponent {
     // input keeps focus.
     this.focusedPath.set(path);
     this.revealHit(path);
+  }
+
+  /**
+   * Resolves the next-hit index from the current selection, honoring
+   * cursor-aware semantics. When `selectedPath` is `null` or stale
+   * (no longer in the current tree -- e.g. after a document reload
+   * before signal sync), falls back to the legacy increment so
+   * keyboard-only sessions retain their cycle behavior.
+   */
+  private nextHitFromSelection(paths: readonly string[]): number {
+    const sel = this.selectedPath();
+    if (sel === null) return this.legacyNextIndex(paths);
+    const orderMap = this.nodeOrder();
+    const selPos = orderMap.get(sel);
+    if (selPos === undefined) return this.legacyNextIndex(paths);
+    return this.firstHitIndexAfter(paths, selPos, orderMap);
+  }
+
+  /**
+   * Resolves the previous-hit index from the current selection. Same
+   * stale-fallback contract as `nextHitFromSelection`.
+   */
+  private prevHitFromSelection(paths: readonly string[]): number {
+    const sel = this.selectedPath();
+    if (sel === null) return this.legacyPrevIndex(paths);
+    const orderMap = this.nodeOrder();
+    const selPos = orderMap.get(sel);
+    if (selPos === undefined) return this.legacyPrevIndex(paths);
+    return this.lastHitIndexBefore(paths, selPos, orderMap);
+  }
+
+  private legacyNextIndex(paths: readonly string[]): number {
+    const index = this.activeHitIndex();
+    return index < 0 ? 0 : (index + 1) % paths.length;
+  }
+
+  private legacyPrevIndex(paths: readonly string[]): number {
+    const index = this.activeHitIndex();
+    return index <= 0 ? paths.length - 1 : index - 1;
+  }
+
+  /**
+   * Returns the index into `paths` of the smallest hit position
+   * STRICTLY greater than `selPos`, with wrap-around to 0. Returns
+   * `-1` when `paths` is empty. Used by the Next press.
+   */
+  private firstHitIndexAfter(
+    paths: readonly string[],
+    selPos: number,
+    orderMap: ReadonlyMap<string, number>,
+  ): number {
+    if (paths.length === 0) return -1;
+    for (let i = 0; i < paths.length; i++) {
+      const hitPath = paths[i] as string;
+      const hitPos = orderMap.get(hitPath);
+      if (hitPos !== undefined && hitPos > selPos) return i;
+    }
+    return 0;
+  }
+
+  /**
+   * Returns the index into `paths` of the largest hit position
+   * STRICTLY less than `selPos`, with wrap-around to last. Returns
+   * `-1` when `paths` is empty. Used by the Prev press.
+   */
+  private lastHitIndexBefore(
+    paths: readonly string[],
+    selPos: number,
+    orderMap: ReadonlyMap<string, number>,
+  ): number {
+    if (paths.length === 0) return -1;
+    for (let i = paths.length - 1; i >= 0; i--) {
+      const hitPath = paths[i] as string;
+      const hitPos = orderMap.get(hitPath);
+      if (hitPos !== undefined && hitPos < selPos) return i;
+    }
+    return paths.length - 1;
+  }
+
+  /**
+   * Returns the index into `paths` of the smallest hit position
+   * AT-OR-AFTER `selPos`, with wrap-around to 0. Returns `-1` when
+   * `paths` is empty. Used by:
+   *
+   *   1. The `activeHitIndex` reset effect (cursor-aware
+   *      auto-activate of the cursor's own hit on query change).
+   *   2. The `activateClickedHitOrFirst` non-hit fallback (anchor
+   *      on clicked row when it matches, else jump to nearest
+   *      forward hit).
+   *
+   * Forward-compat hazard: if the design ever flips to symmetric
+   * strict (`>` everywhere), `activateClickedHitOrFirst` should
+   * keep using THIS helper, NOT `firstHitIndexAfter`. The click
+   * action's "anchor here" intent diverges from typed Next
+   * navigation: click-on-hit must activate that hit, not skip
+   * past it.
+   */
+  private firstHitIndexAtOrAfter(
+    paths: readonly string[],
+    selPos: number,
+    orderMap: ReadonlyMap<string, number>,
+  ): number {
+    if (paths.length === 0) return -1;
+    for (let i = 0; i < paths.length; i++) {
+      const hitPath = paths[i] as string;
+      const hitPos = orderMap.get(hitPath);
+      if (hitPos !== undefined && hitPos >= selPos) return i;
+    }
+    return 0;
   }
 
   /**
@@ -3627,17 +3794,25 @@ export class JsonTreeComponent {
   }
 
   /**
-   * After a search-by-key/value completes, sets the active hit to the
-   * clicked row when it landed in the result set; otherwise falls back
-   * to the first hit (or `-1` when there are no hits at all).
+   * After a search-by-key/value completes, sets the active hit to
+   * the clicked row when it landed in the result set; otherwise
+   * falls back to the first hit AT-OR-AFTER the clicked row's
+   * document-order position. The "at-or-after" fallback (rather
+   * than always `0`) keeps the menu flow consistent with the
+   * cursor-aware reset effect: a click expresses "anchor here",
+   * and snapping forward to the nearest hit honors that intent
+   * better than always cycling back to the start. When the clicked
+   * path is unknown to `nodeOrder` (stale path), falls through to
+   * `0` so the user still lands on a valid hit.
    *
-   * Deferred via `queueMicrotask` because the existing reset-to-0
-   * effect (which tracks `searchHitPaths`) is itself scheduled on the
+   * Deferred via `queueMicrotask` because the existing reset effect
+   * (which tracks `searchHitPaths`) is itself scheduled on the
    * microtask queue when our `prefs.update` / `search.set` calls
-   * mark `searchHitPaths` dirty. By queueing our update *after* that
-   * signal write, our microtask runs later in FIFO order and our
-   * value wins the race. Without this, the effect would clobber our
-   * set back to `0` after we returned.
+   * mark `searchHitPaths` dirty. By queueing our update *after*
+   * that signal write, our microtask runs later in FIFO order and
+   * our value wins the race. Without this, the effect would
+   * clobber our set back to its at-or-after fallback after we
+   * returned.
    */
   private activateClickedHitOrFirst(clickedPath: string): void {
     queueMicrotask(() => {
@@ -3647,7 +3822,14 @@ export class JsonTreeComponent {
         return;
       }
       const idx = paths.indexOf(clickedPath);
-      const next = idx >= 0 ? idx : 0;
+      let next: number;
+      if (idx >= 0) {
+        next = idx;
+      } else {
+        const orderMap = this.nodeOrder();
+        const selPos = orderMap.get(clickedPath);
+        next = selPos === undefined ? 0 : this.firstHitIndexAtOrAfter(paths, selPos, orderMap);
+      }
       this.activeHitIndex.set(next);
       const target = paths[next] as string;
       this.selectedPath.set(target);

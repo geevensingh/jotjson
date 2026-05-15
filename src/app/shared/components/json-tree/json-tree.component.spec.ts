@@ -3433,8 +3433,232 @@ describe('JsonTreeComponent', () => {
         const c = fixture.componentInstance;
         c.goToNextMatch();
         expect(c.activeHitIndex()).toBe(1);
+        // Under cursor-aware reset, refining the query while selection
+        // sits on $.alphabet (still a hit for "alpha") auto-activates
+        // the cursor's row (at-or-after rule). Clear selection first
+        // to exercise the legacy reset-to-0 fallback that this test
+        // was originally written to verify.
+        c.selectedPath.set(null);
         setSearch('alpha');
         expect(c.activeHitIndex()).toBe(0);
+      });
+    });
+
+    describe('cursor-aware navigation', () => {
+      it('Next from a selected hit advances strictly to the next hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set(paths[1] as string);
+        fixture.detectChanges();
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(2);
+        expect(c.selectedPath()).toBe(paths[2] as string);
+      });
+
+      it('Next from a non-hit row between hits jumps to the first hit after', async () => {
+        await createWith({ alpha: 1, mid: 'NA', alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set('$.mid');
+        fixture.detectChanges();
+        c.goToNextMatch();
+        expect(c.selectedPath()).toBe(paths[1] as string);
+        expect(c.activeHitIndex()).toBe(1);
+      });
+
+      it('Next from a non-hit row before all hits selects the first hit', async () => {
+        await createWith({ aaa: 'NA', alpha: 1, alphabet: 2 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set('$.aaa');
+        fixture.detectChanges();
+        c.goToNextMatch();
+        expect(c.selectedPath()).toBe(paths[0] as string);
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('Next from a non-hit row after all hits wraps to the first hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, zzz: 'NA' });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set('$.zzz');
+        fixture.detectChanges();
+        c.goToNextMatch();
+        expect(c.selectedPath()).toBe(paths[0] as string);
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('Next from the last selected hit wraps to the first hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set(paths[2] as string);
+        fixture.detectChanges();
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(0);
+        expect(c.selectedPath()).toBe(paths[0] as string);
+      });
+
+      it('Prev from a selected hit retreats strictly to the previous hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set(paths[1] as string);
+        fixture.detectChanges();
+        c.goToPrevMatch();
+        expect(c.activeHitIndex()).toBe(0);
+        expect(c.selectedPath()).toBe(paths[0] as string);
+      });
+
+      it('Prev from a non-hit row between hits retreats to the last hit before', async () => {
+        await createWith({ alpha: 1, mid: 'NA', alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set('$.mid');
+        fixture.detectChanges();
+        c.goToPrevMatch();
+        expect(c.selectedPath()).toBe(paths[0] as string);
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('Prev from a non-hit row before all hits wraps to the last hit', async () => {
+        await createWith({ aaa: 'NA', alpha: 1, alphabet: 2 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set('$.aaa');
+        fixture.detectChanges();
+        c.goToPrevMatch();
+        expect(c.selectedPath()).toBe(paths[1] as string);
+        expect(c.activeHitIndex()).toBe(1);
+      });
+
+      it('Prev from the first selected hit wraps to the last hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        const paths = c.searchHitPaths();
+        c.selectedPath.set(paths[0] as string);
+        fixture.detectChanges();
+        c.goToPrevMatch();
+        expect(c.activeHitIndex()).toBe(2);
+        expect(c.selectedPath()).toBe(paths[2] as string);
+      });
+
+      it('reset effect auto-activates the cursor row when it is itself a hit', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        const c = fixture.componentInstance;
+        c.selectedPath.set('$.alphabet');
+        fixture.detectChanges();
+        setSearch('alp');
+        expect(c.activeHitIndex()).toBe(1);
+      });
+
+      it('reset effect lands on the first hit at-or-after when cursor is between hits', async () => {
+        await createWith({ alpha: 1, mid: 'NA', alphabet: 2, alpine: 3 });
+        const c = fixture.componentInstance;
+        c.selectedPath.set('$.mid');
+        fixture.detectChanges();
+        setSearch('alp');
+        // Selection $.mid is between $.alpha and $.alphabet; at-or-after
+        // gives the first hit strictly after, which is $.alphabet (idx 1).
+        expect(c.activeHitIndex()).toBe(1);
+      });
+
+      it('reset effect falls back to 0 when nothing is selected', async () => {
+        await createWith({ alpha: 1, alphabet: 2 });
+        const c = fixture.componentInstance;
+        c.selectedPath.set(null);
+        fixture.detectChanges();
+        setSearch('alp');
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('reset effect falls back to 0 when selection is a stale path', async () => {
+        await createWith({ alpha: 1, alphabet: 2 });
+        const c = fixture.componentInstance;
+        c.selectedPath.set('$.does.not.exist');
+        fixture.detectChanges();
+        setSearch('alp');
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('Next on a stale selection falls back to legacy increment', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        c.selectedPath.set('$.does.not.exist');
+        fixture.detectChanges();
+        const before = c.activeHitIndex();
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe((before + 1) % c.searchHitCount());
+      });
+
+      it('reset effect re-fires only on searchHitPaths change, not on selection writes', async () => {
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        const c = fixture.componentInstance;
+        setSearch('alp');
+        const paths = c.searchHitPaths();
+        // Three explicit selection moves should not feed the reset
+        // effect back into activeHitIndex; the effect's tracked surface
+        // is searchHitPaths only, gated by untracked() over selectedPath.
+        c.selectedPath.set(paths[2] as string);
+        fixture.detectChanges();
+        c.selectedPath.set(paths[1] as string);
+        fixture.detectChanges();
+        c.selectedPath.set(paths[0] as string);
+        fixture.detectChanges();
+        // None of those selection moves write to activeHitIndex; it
+        // stays at the original reset value (0 because selection was
+        // null at setSearch time).
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('embeddedMode preserves legacy increment behavior', async () => {
+        // Embedded preview tree should follow the same cursor-aware
+        // logic in principle, but starting from a null selection means
+        // every press goes through the legacy increment fallback. This
+        // backstops parity with the home tree behavior on initial load.
+        await createWith({ alpha: 1, alphabet: 2, alpine: 3 });
+        const c = fixture.componentInstance;
+        fixture.componentRef.setInput('embeddedMode', true);
+        fixture.detectChanges();
+        c.search.set('alp');
+        fixture.detectChanges();
+        expect(c.activeHitIndex()).toBe(0);
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(1);
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(2);
+        c.goToNextMatch();
+        expect(c.activeHitIndex()).toBe(0);
+      });
+
+      it('activateClickedHitOrFirst falls back to first hit at-or-after the clicked path', async () => {
+        // Synthesize the rare non-hit-clicked-path scenario (e.g.
+        // issue #238 escape mismatch) by setting search to a query
+        // whose hits do NOT include the clicked path, then invoking
+        // the click-flow directly via the test seam. The clicked row
+        // sits between hits, so the at-or-after fallback should pick
+        // the first hit strictly after.
+        await createWith({ alpha: 1, mid: 'NA', alphabet: 2, alpine: 3 });
+        setSearch('alp');
+        const c = fixture.componentInstance;
+        c.__getHelpersForTesting().activateClickedHitOrFirst('$.mid');
+        await Promise.resolve();
+        await Promise.resolve();
+        const paths = c.searchHitPaths();
+        const idx = c.activeHitIndex();
+        expect(paths[idx]).toBe('$.alphabet');
+        expect(c.selectedPath()).toBe('$.alphabet');
       });
     });
   });
@@ -5267,25 +5491,25 @@ describe('JsonTreeComponent', () => {
         expect(paths[idx]).toBe('$.alphabet');
       });
 
-      it('falls back to the first hit when the clicked row is not a hit', async () => {
-        // searching for a key with a typo wouldn't yield clicked-row in
-        // hits; we simulate that by setting a non-matching pathString.
+      it('overrides any prior search to elevate the clicked row to the active hit', async () => {
+        // Confirms findByKey rewrites the search to the clicked row's
+        // segment regardless of any prior search the user had typed.
+        // After findByKey, the hit set always contains the clicked row
+        // by construction (search=`<segment>` matches `<segment>`), so
+        // the non-hit branch of `activateClickedHitOrFirst` is NOT
+        // exercised here -- it is covered separately under the
+        // "cursor-aware navigation" describe via the test seam.
         await createWith({ alpha: 1, beta: 2 });
         cmp.expandAll();
         fixture.detectChanges();
-        // Manually invoke activateClickedHitOrFirst with a path that
-        // isn't in the hit set after we set search to 'beta'.
         prefs.update({ searchScope: 'keys', searchRegexMode: false, searchValueType: 'all' });
         cmp.search.set('beta');
-        // call private helper indirectly: searchByKey on `$.alpha` with
-        // current search='beta' would write 'alpha' to search, but we
-        // want the inverse - just verify by calling searchByKey with a
-        // node whose key doesn't match the existing query.
         const node = nodeAt('$.alpha');
         cmp.findByKey(node);
         await Promise.resolve();
         await Promise.resolve();
-        // After searchByKey on $.alpha, paths = [$.alpha]; activeHit = 0.
+        // After findByKey on $.alpha, search='alpha', paths=[$.alpha],
+        // activeHitIndex=0 (the clicked row was elevated).
         const idx = cmp.activeHitIndex();
         const paths = cmp.searchHitPaths();
         expect(paths[idx]).toBe('$.alpha');
