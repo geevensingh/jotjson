@@ -210,6 +210,14 @@
   // Ensures flex children with intrinsic min-width-of-content
   // (long unbreakable strings) participate in the ellipsis fallback
   // instead of forcing a horizontal scroll.
+  //
+  // Convention for `.tree-row` direct children (v0.23.1): text cells
+  // that should ellipsify when overflowing (`.tree-value-string`,
+  // `.tree-comment*`) participate by default. Every other direct
+  // child MUST declare `flex-shrink: 0` so it keeps its intrinsic
+  // width under content pressure -- otherwise a long sibling value
+  // steals proportional space and visually shifts the row's spacers
+  // and badges (the v0.23.1 twisty-shrink bug; see issue #95).
   > * {
     min-width: 0;
   }
@@ -333,6 +341,11 @@
   align-items: center;
   width: 1.1em;
   height: 1.1em;
+  // v0.23.1: without this, the `.tree-row > * { min-width: 0 }` cascade
+  // (v0.21.1) lets the twisty shrink to near-zero under a long-value
+  // sibling, visually shifting `.tree-key` ~13px left. See the audit
+  // comment near `.tree-row > * { ... }` above.
+  flex-shrink: 0;
   font: inherit;
   border: 0;
   background: transparent;
@@ -361,6 +374,8 @@
   justify-content: center;
   width: 1.25em;
   height: 1.25em;
+  // v0.23.1: see `.tree-twisty` rationale.
+  flex-shrink: 0;
   margin-right: 2px;
   padding: 0;
   border: 0;
@@ -475,11 +490,24 @@
 
 .tree-value-container {
   color: var(--tree-muted-color);
+  // v0.23.1: keep container at intrinsic width on open rows when
+  // a long trailing-comment sibling would otherwise shrink it.
+  // See `.tree-twisty` rationale.
+  flex-shrink: 0;
 
   .tree-value-brace {
     color: inherit;
     font-weight: 600;
   }
+}
+
+// `.tree-value-brace` also renders as a direct `.tree-row > *` on
+// close rows (`.tree-row--close` in the template); guard its
+// intrinsic width there too. The nested copy under
+// `.tree-value-container` above carries the bold + inherit-color
+// styling for open rows.
+.tree-value-brace {
+  flex-shrink: 0;
 }
 
 .tree-row-right {

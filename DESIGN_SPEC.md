@@ -2379,6 +2379,58 @@ Out of scope (for v1):
   reachable. The `+1..+5` paths are unchanged at 3 clicks; the
   new `+6..+9` paths arrive at 3 clicks (previously unreachable
   from the per-row menu).
+- **0.23.1**: Tree row twisty alignment + tooltip width hotfixes
+  (regressions discovered on `https://jotjson.com/s/HiZ2qI` after
+  v0.21.0 ship). Pure presentation patch -- no TS, HTML logic, or
+  directive changes; SCSS + tooltip-class wiring only. (1) **Twisty
+  alignment.** The v0.21.1 `.tree-row > * { min-width: 0 }` cascade
+  (which makes the ellipsify fallback work) had the side-effect of
+  letting every flex child of `.tree-row` without an explicit
+  `flex-shrink` declaration shrink proportional to its flex-basis
+  under content pressure from a long sibling value-string. The leaf
+  row's `.tree-twisty` placeholder (intrinsic `width: 1.1em`)
+  shrunk from 14.3px to 0.91px on a row whose Value was ~6.4 kB of
+  URL + headers + embedded JSON, visually shifting `.tree-key`
+  ~13px left of its siblings. Fix: add `flex-shrink: 0` to every
+  fixed-width `.tree-row` direct child that was missing it --
+  `.tree-twisty`, `.tree-beacon-badge`, `.tree-value-container`,
+  and the close-row `.tree-value-brace` -- and document the
+  explicit-`flex-shrink` contract for new direct children of
+  `.tree-row` next to the cascade rule. (2) **Tooltip width.**
+  Material 21 hardcodes `.mdc-tooltip__surface { max-width: 200px;
+  word-break: normal; white-space: normal; }`. On a long value-string
+  / JSONC-comment tooltip the surface renders as a ~200x320px
+  vertical column with mid-character wrapping. There is no
+  `--mat-tooltip-max-width` token in `_m2-tooltip.scss` /
+  `_m3-tooltip.scss` (only color/font/line-height tokens), so the
+  fix is a class-scoped selector override:
+  `.mat-mdc-tooltip.jj-tooltip-wide .mdc-tooltip__surface {
+  max-width: 90vw; white-space: pre-wrap; }` in
+  `src/styles/_material.scss` next to the existing `.jj-menu`
+  / `.tree-row-menu` panel-class precedents, with
+  `matTooltipClass="jj-tooltip-wide"` wired onto the seven
+  user-data tooltips on the tree (leaf + open + close row
+  leading/trailing comments + leaf value-string). Selector
+  targets the inner `.mat-mdc-tooltip` div, not the outer
+  `.mat-mdc-tooltip-panel`, because that's where Material 21
+  binds `matTooltipClass`. The `90vw` cap is a principle, not a
+  guess: tooltip grows to fit content but never touches viewport
+  edges; the CDK overlay positioner shifts the panel rather than
+  shrinking it so 90vw never causes horizontal scroll on any
+  viewport. `overflow-wrap: anywhere` is intentionally not set
+  in the override -- Material 21 already declares it on
+  `.mat-mdc-tooltip-surface`. (3) Regression tests extend
+  `json-tree.component.overflow.spec.ts` with four new layered
+  assertions: twisty natural width preserved, key X-position
+  invariant against the row's `padding-left + twisty-width`,
+  `MatTooltip.tooltipClass` carries `jj-tooltip-wide` via the
+  directive injector, and the computed surface `max-width` on the
+  rendered tooltip exceeds `window.innerWidth * 0.85` (pins the
+  viewport-proportional principle and guards both the selector
+  correctness and any regression to a fixed pixel cap). Class
+  name `jj-tooltip-wide` is reusable -- future Monaco /
+  breadcrumb / status-bar tooltips with long bodies can opt in
+  with one attribute.
 - **0.21.0**: Tree view virtualization (issue #95 Phase 2). The
   `<mat-tree>` + `<mat-nested-tree-node>` render path is replaced
   with `<cdk-virtual-scroll-viewport>` + `*cdkVirtualFor` from
@@ -2437,9 +2489,11 @@ Out of scope (for v1):
   no TS, HTML, or directive changes; the `OverflowDetectorDirective`
   / `OverflowMeasurementQueue` machinery shipped in 0.21.0 already
   handles the tooltip gating once ellipsis fires. Out-of-scope
-  follow-ups: long object keys (`.tree-key` has `flex-shrink: 0`),
-  type-badge / pill-cluster width, and deep-nesting invisible
-  clipping at depth >= 25 are tracked as separate issues.
+  follow-ups: the `.tree-row > * { min-width: 0 }` cascade
+  introduced here left several siblings shrinkable under long-value
+  pressure (twisty + beacon badge + value container + close-row
+  brace); those were resolved in v0.23.1. Deep-nesting invisible
+  clipping at depth >= 25 remains tracked as a separate issue.
 - **0.20.2**: MSAL silent token refresh fix, part 2 of 2 (0.20.1 was
   part 1). Adds the iframe-side bridge call required for the silent-
   refresh flow to actually complete after the CSP layer was unblocked
