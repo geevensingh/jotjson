@@ -874,23 +874,36 @@ export class HomeComponent implements OnInit, OnDestroy {
         return;
       }
       const undoLatencyMs = performance.now() - pendingExtractUndo.startMs;
+      // Case 1: snackbar Undo already ran (`openExtractUndoSnack` sets the
+      // flag and calls `replaceDocument(priorText)`); the resulting
+      // content-match re-enters this effect. Telemetry was emitted in
+      // the action callback; just clear the pending state.
       if (pendingExtractUndo.undoneViaSnackbar && currentContent === pendingExtractUndo.priorText) {
         this.pendingExtractUndo = null;
         return;
       }
+      // Case 2: content reverted to priorText via some non-snackbar
+      // path (Ctrl+Z is the dominant case). Fire ctrlZ telemetry,
+      // clear pending state, and dismiss any still-visible snackbar
+      // so the offer to undo disappears once the undo is observable.
+      // The `'30s+'` bucket is documented and emitted here too -
+      // a late revert is still a revert worth counting.
       if (
         !pendingExtractUndo.undoneViaSnackbar &&
-        currentContent === pendingExtractUndo.priorText &&
-        undoLatencyMs <= 30_000
+        currentContent === pendingExtractUndo.priorText
       ) {
         this.logger.event('tree.extract.undo', {
           source: 'ctrlZ',
           undoLatencyMsBucket: bucketUndoLatency(undoLatencyMs),
         });
         this.pendingExtractUndo = null;
+        this.extractUndoSnackRef?.dismiss();
         return;
       }
-      if (undoLatencyMs > 30_000 && currentContent !== pendingExtractUndo.priorText) {
+      // Case 3: 30s cap elapsed without a revert (and not undone via
+      // snackbar). Drop pending state silently; the snackbar has long
+      // since timed out (8s duration).
+      if (undoLatencyMs > 30_000) {
         this.pendingExtractUndo = null;
       }
     });
@@ -1198,6 +1211,16 @@ export class HomeComponent implements OnInit, OnDestroy {
       .onAction()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
+        // Race guard: if Ctrl+Z fired the effect's `dismiss()` while
+        // the user's click was queued, the field has already been
+        // cleared (or replaced by a subsequent extract). The captured
+        // local `pendingExtractUndo` still references the original
+        // heap object, so an identity mismatch means we lost the race
+        // - treat the action as a no-op to avoid double-firing
+        // telemetry and re-applying the (now redundant) revert.
+        if (this.pendingExtractUndo !== pendingExtractUndo) {
+          return;
+        }
         pendingExtractUndo.undoneViaSnackbar = true;
         this.replaceDocument(priorText);
         this.logger.event('tree.extract.undo', {

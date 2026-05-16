@@ -5960,6 +5960,85 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     });
   });
 
+  it('dismisses the live undo snackbar when ctrlZ-detected revert clears the pending state', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, snack } = setup();
+    const snackRefHarness = createExtractSnackBarRefHarness();
+    snack.open.and.returnValue(snackRefHarness.ref);
+    treeExtractor.setVersion(15);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 15,
+      }),
+    );
+
+    nowMs = 1500;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(snackRefHarness.dismissSpy).toHaveBeenCalled();
+  });
+
+  it('logs ctrlZ undo telemetry with the 30s+ bucket when the revert lands after the snackbar window', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, eventSpy } = setup();
+    treeExtractor.setVersion(16);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 16,
+      }),
+    );
+    eventSpy.calls.reset();
+
+    nowMs = 36_000;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(eventSpy).toHaveBeenCalledWith('tree.extract.undo', {
+      source: 'ctrlZ',
+      undoLatencyMsBucket: '30s+',
+    });
+  });
+
+  it('treats snackbar Undo as a no-op when ctrlZ already cleared the pending state', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, snack, snackAction, eventSpy } = setup();
+    snack.open.and.returnValue(createExtractSnackBarRefHarness().ref);
+    treeExtractor.setVersion(17);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 17,
+      }),
+    );
+
+    nowMs = 2000;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    eventSpy.calls.reset();
+
+    snackAction.next();
+
+    expect(eventSpy).not.toHaveBeenCalledWith(
+      'tree.extract.undo',
+      jasmine.objectContaining({ source: 'snackbar' }),
+    );
+  });
+
   it('logs applyFailed and skips the snackbar when the editor is unavailable', () => {
     const { component, treeExtractor, snack, warnSpy } = setup();
     treeExtractor.setVersion(14);

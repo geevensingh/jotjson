@@ -92,10 +92,22 @@ function makeMinimalEditor(initialValue: string): object {
         text: string;
       }>,
     ) => {
-      for (const edit of edits) {
-        const start = positionToOffset(edit.range.startLineNumber, edit.range.startColumn);
-        const end = positionToOffset(edit.range.endLineNumber, edit.range.endColumn);
-        current = current.substring(0, start) + edit.text + current.substring(end);
+      // Snapshot all offsets against the pre-edit text BEFORE applying
+      // any edit, then apply from highest offset down so earlier
+      // ranges do not shift under later splices. Matches Monaco's
+      // documented semantics (ranges resolve against the pre-edit
+      // model). NOTE: this stub does not detect overlapping edits;
+      // real Monaco rejects them via IIdentifiedSingleEditOperation,
+      // but we silently apply both. Production callers only pass a
+      // single edit today, so the divergence is latent.
+      const offsetEdits = edits.map((edit) => ({
+        start: positionToOffset(edit.range.startLineNumber, edit.range.startColumn),
+        end: positionToOffset(edit.range.endLineNumber, edit.range.endColumn),
+        text: edit.text,
+      }));
+      offsetEdits.sort((a, b) => b.start - a.start);
+      for (const edit of offsetEdits) {
+        current = current.substring(0, edit.start) + edit.text + current.substring(edit.end);
       }
       emitContentChange();
       return true;

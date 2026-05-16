@@ -1244,8 +1244,10 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
-   * Fired by: `JsonTreeComponent.onDecodedDialogClosed`
+   * Fired by: `JsonTreeComponent.onDecodedButtonClick` /
+   *           `JsonTreeComponent.onDecodedMenuClick`
    *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           inside the shared `dialogRef.afterClosed()` subscription
    *           when the user clicks the dialog's Extract button but the
    *           captured source-version no longer matches
    *           `extractSourceVersion()` at close time; a background tree

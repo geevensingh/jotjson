@@ -403,7 +403,7 @@
                   @if (showTypeBadges()) {
                     <span class="tree-type-badge">{{ typeLabel(leafNode) }}</span>
                   }
-                  @if (extractCandidate(leafNode) && !decodedCandidate(leafNode); as extractable) {
+                  @if (extractCandidate(leafNode) && !decodedCandidate(leafNode)) {
                     <button
                       type="button"
                       class="tree-extract-pill"

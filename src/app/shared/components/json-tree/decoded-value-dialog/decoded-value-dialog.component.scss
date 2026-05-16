@@ -106,17 +106,35 @@
   justify-content: flex-end;
 }
 
-.decoded-actions__extract {
-  // Inline icon + label spacing matches the row context-menu items.
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-right: auto;
+.decoded-actions__extract,
+.decoded-actions__copy {
+  // Material 21 projects non-`mat-icon` button content into an
+  // auto-injected `<span class="mdc-button__label">` wrapper, so any
+  // `display: inline-flex; gap: 6px` applied to the button host never
+  // reaches the icon + text siblings - they cascade through inline
+  // layout and the icon collapses against the text. We reach into
+  // Material's own DOM via `::ng-deep` to align the projected label,
+  // matching the precedent at `toolbar.component.scss:191-219` and
+  // `extract-json-banner.component.scss:52-78` exactly (same 6px gap,
+  // same `flex: 0 0 auto` on the icon). This works inside the
+  // MatDialog overlay because Angular's emulated encapsulation is
+  // attribute-based (`_ngcontent-X`), not DOM-tree-based: portal
+  // projection preserves the attribute. We deliberately skip the
+  // toolbar Save button's `top: -2px` optical nudge because the
+  // sibling Close button is bare text with no `<span>` wrapper, so a
+  // host-level shift would leave Extract/Copy text on a different
+  // baseline from Close.
+  ::ng-deep .mdc-button__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  ::ng-deep jj-icon {
+    flex: 0 0 auto;
+  }
 }
 
-.decoded-actions__copy {
-  // Inline icon + label spacing matches the row context-menu items.
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.decoded-actions__extract {
+  margin-right: auto;
 }
