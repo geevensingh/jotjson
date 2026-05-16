@@ -111,6 +111,44 @@ body.theme-light {
   --mat-menu-item-label-text-weight: 700;
 }
 
+// Wide tooltip surface for tooltips that show user content (JSON
+// values, JSONC comments). Material 21's default 200px column wraps
+// mid-character on long input and hardcodes `max-width: 200px` on
+// `.mdc-tooltip__surface` -- no `--mat-tooltip-max-width` token
+// exists. Apply via `matTooltipClass="jj-tooltip-wide"` on any
+// `matTooltip` whose body is user-supplied text that may exceed
+// ~30 chars.
+//
+// Selector targets the inner `.mat-mdc-tooltip` div because that's
+// where Angular Material binds `matTooltipClass` (TooltipComponent
+// template: `<div #tooltip class="mdc-tooltip mat-mdc-tooltip"
+// [class]="tooltipClass" ...>` -- the cdk-overlay pane gets
+// `.mat-mdc-tooltip-panel` instead and would NOT match this selector).
+//
+// `max-width: 90vw` is the principle: tooltip grows to fit content,
+// but never touches the viewport edges. Earlier drafts used a fixed
+// pixel cap (e.g. 640px) but every fixed cap is an arbitrary
+// heuristic that leaves space unused on wide monitors and feels
+// over-constraining on long technical content (URLs, headers,
+// JSON-escaped POST bodies). `90vw` gives the same safety margin on
+// every viewport size and lets content drive natural width up to
+// that bound. The CDK overlay positioner shifts the panel to keep
+// it on-screen rather than shrinking it, so a 90vw cap never causes
+// horizontal scroll.
+//
+// `white-space: pre-wrap` preserves real newlines in JSONC comment
+// tooltips. Value-string tooltips render `JSON.stringify`'d text
+// where `\n` is the literal 2-char escape, so `pre-wrap` is a no-op
+// there -- correct for comments, harmless for values.
+//
+// `overflow-wrap: anywhere` is intentionally not set here -- Material
+// 21 already declares it on `.mat-mdc-tooltip-surface` (see
+// `_tooltip-chunk.mjs:816`); duplicating it would just be noise.
+.mat-mdc-tooltip.jj-tooltip-wide .mdc-tooltip__surface {
+  max-width: 90vw;
+  white-space: pre-wrap;
+}
+
 // Disables text selection on UI chrome where the user click-drags
 // as a control (splitter handle, chip button, status bar) or where
 // the row's own dblclick / mousedown is wired to a copy action and
