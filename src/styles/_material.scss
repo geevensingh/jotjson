@@ -111,6 +111,33 @@ body.theme-light {
   --mat-menu-item-label-text-weight: 700;
 }
 
+// Wide tooltip surface for tooltips that show user content (JSON
+// values, JSONC comments). Material 21's default 200px column wraps
+// mid-character on long input and hardcodes `max-width: 200px` on
+// `.mdc-tooltip__surface` -- no `--mat-tooltip-max-width` token
+// exists. Apply via `matTooltipClass="jj-tooltip-wide"` on any
+// `matTooltip` whose body is user-supplied text that may exceed
+// ~30 chars.
+//
+// Selector targets the inner `.mat-mdc-tooltip` div because that's
+// where Angular Material binds `matTooltipClass` (TooltipComponent
+// template: `<div #tooltip class="mdc-tooltip mat-mdc-tooltip"
+// [class]="tooltipClass" ...>` -- the cdk-overlay pane gets
+// `.mat-mdc-tooltip-panel` instead and would NOT match this selector).
+//
+// `overflow-wrap: anywhere` (modern; replaces legacy
+// `word-break: break-word`) lets unbreakable tokens break at any
+// character. `white-space: pre-wrap` preserves real newlines in
+// JSONC comment tooltips. Value-string tooltips render
+// `JSON.stringify`'d text where `\n` is the literal 2-char escape,
+// so `pre-wrap` is a no-op there -- correct for comments,
+// harmless for values.
+.mat-mdc-tooltip.jj-tooltip-wide .mdc-tooltip__surface {
+  max-width: min(640px, 80vw);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 // Disables text selection on UI chrome where the user click-drags
 // as a control (splitter handle, chip button, status bar) or where
 // the row's own dblclick / mousedown is wired to a copy action and
