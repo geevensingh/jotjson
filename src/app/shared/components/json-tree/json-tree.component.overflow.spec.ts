@@ -291,7 +291,7 @@ describe('JsonTreeComponent (row-width overflow)', () => {
       .toBe('jj-tooltip-wide');
   });
 
-  it('v0.23.1: cascades a widened max-width onto the tooltip surface via .jj-tooltip-wide', () => {
+  it('v0.23.1: cascades a viewport-proportional max-width onto the tooltip surface via .jj-tooltip-wide', () => {
     // Synthesize the exact tooltip DOM Material 21 renders (from
     // `node_modules/@angular/material/fesm2022/_tooltip-chunk.mjs:815`
     // template: a `.mat-mdc-tooltip` host div whose `[class]=
@@ -299,7 +299,7 @@ describe('JsonTreeComponent (row-width overflow)', () => {
     // `.mat-mdc-tooltip-surface.mdc-tooltip__surface` child).
     //
     // This is a stylesheet-cascade test, not a Material integration
-    // test. It guards against two regression modes the other three
+    // test. It guards against three regression modes the other three
     // assertions above can't see:
     //   (a) The selector regressing to `.mat-mdc-tooltip-panel` --
     //       which is the class Material puts on the cdk-overlay
@@ -309,6 +309,14 @@ describe('JsonTreeComponent (row-width overflow)', () => {
     //   (b) A Material upgrade renaming `.mdc-tooltip__surface` or
     //       `.mat-mdc-tooltip` such that the override no longer
     //       matches the rendered DOM.
+    //   (c) A regression to a fixed pixel cap (the v0.23.1 override
+    //       shipped as `90vw`, replacing an earlier `min(640px,
+    //       80vw)` draft that the user pushed back on as
+    //       under-justified). The `> innerWidth * 0.85` threshold
+    //       below pins the principle: cap scales with viewport.
+    //       A future regression to e.g. `max-width: 640px` on a
+    //       1024px+ Karma viewport would resolve to 640 < 870 and
+    //       fail this assertion.
     const wrapper = document.createElement('div');
     wrapper.className = 'mdc-tooltip mat-mdc-tooltip jj-tooltip-wide';
     const surface = document.createElement('div');
@@ -318,11 +326,19 @@ describe('JsonTreeComponent (row-width overflow)', () => {
     document.body.appendChild(wrapper);
     try {
       const computedMaxWidth = parseFloat(getComputedStyle(surface).maxWidth);
+      // `getComputedStyle` resolves `vw` units to absolute pixels at
+      // computed-style time in modern Chromium (the CSSOM "used
+      // value" form). 90vw on a 1024px viewport => 921.6px; on a
+      // 1366px viewport => 1229.4px. The threshold uses 85% of the
+      // current `window.innerWidth` to leave a small buffer for
+      // sub-pixel rounding while still failing if the cap ever
+      // collapses to a fixed pixel value smaller than the viewport.
+      const proportionalThreshold = window.innerWidth * 0.85;
       expect(computedMaxWidth)
         .withContext(
-          `computed surface max-width=${computedMaxWidth}px; pre-v0.23.1 it was 200px (Material default). The override in src/styles/_material.scss must target \`.mat-mdc-tooltip.jj-tooltip-wide .mdc-tooltip__surface\`; if the selector regresses to \`.mat-mdc-tooltip-panel\` (wrong -- that class lands on the cdk-overlay pane, not the inner tooltip div) the override silently no-ops and this assertion fires.`,
+          `computed surface max-width=${computedMaxWidth.toFixed(2)}px vs viewport*0.85=${proportionalThreshold.toFixed(2)}px (innerWidth=${window.innerWidth}). The v0.23.1 cap is 90vw -- a viewport-proportional rule, not a fixed pixel. If this fails because the value is small, the override either no-ops (selector regression to .mat-mdc-tooltip-panel) or has been swapped back to a fixed pixel cap.`,
         )
-        .toBeGreaterThan(200);
+        .toBeGreaterThan(proportionalThreshold);
     } finally {
       wrapper.remove();
     }

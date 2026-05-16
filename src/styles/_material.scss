@@ -125,16 +125,27 @@ body.theme-light {
 // [class]="tooltipClass" ...>` -- the cdk-overlay pane gets
 // `.mat-mdc-tooltip-panel` instead and would NOT match this selector).
 //
-// `overflow-wrap: anywhere` (modern; replaces legacy
-// `word-break: break-word`) lets unbreakable tokens break at any
-// character. `white-space: pre-wrap` preserves real newlines in
-// JSONC comment tooltips. Value-string tooltips render
-// `JSON.stringify`'d text where `\n` is the literal 2-char escape,
-// so `pre-wrap` is a no-op there -- correct for comments,
-// harmless for values.
+// `max-width: 90vw` is the principle: tooltip grows to fit content,
+// but never touches the viewport edges. Earlier drafts used a fixed
+// pixel cap (e.g. 640px) but every fixed cap is an arbitrary
+// heuristic that leaves space unused on wide monitors and feels
+// over-constraining on long technical content (URLs, headers,
+// JSON-escaped POST bodies). `90vw` gives the same safety margin on
+// every viewport size and lets content drive natural width up to
+// that bound. The CDK overlay positioner shifts the panel to keep
+// it on-screen rather than shrinking it, so a 90vw cap never causes
+// horizontal scroll.
+//
+// `white-space: pre-wrap` preserves real newlines in JSONC comment
+// tooltips. Value-string tooltips render `JSON.stringify`'d text
+// where `\n` is the literal 2-char escape, so `pre-wrap` is a no-op
+// there -- correct for comments, harmless for values.
+//
+// `overflow-wrap: anywhere` is intentionally not set here -- Material
+// 21 already declares it on `.mat-mdc-tooltip-surface` (see
+// `_tooltip-chunk.mjs:816`); duplicating it would just be noise.
 .mat-mdc-tooltip.jj-tooltip-wide .mdc-tooltip__surface {
-  max-width: min(640px, 80vw);
-  overflow-wrap: anywhere;
+  max-width: 90vw;
   white-space: pre-wrap;
 }
 

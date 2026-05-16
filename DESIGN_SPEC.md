@@ -2405,24 +2405,32 @@ Out of scope (for v1):
   `_m3-tooltip.scss` (only color/font/line-height tokens), so the
   fix is a class-scoped selector override:
   `.mat-mdc-tooltip.jj-tooltip-wide .mdc-tooltip__surface {
-  max-width: min(640px, 80vw); overflow-wrap: anywhere;
-  white-space: pre-wrap; }` in `src/styles/_material.scss` next
-  to the existing `.jj-menu` / `.tree-row-menu` panel-class
-  precedents, with `matTooltipClass="jj-tooltip-wide"` wired onto
-  the seven user-data tooltips on the tree (leaf + open + close
-  row leading/trailing comments + leaf value-string). Selector
+  max-width: 90vw; white-space: pre-wrap; }` in
+  `src/styles/_material.scss` next to the existing `.jj-menu`
+  / `.tree-row-menu` panel-class precedents, with
+  `matTooltipClass="jj-tooltip-wide"` wired onto the seven
+  user-data tooltips on the tree (leaf + open + close row
+  leading/trailing comments + leaf value-string). Selector
   targets the inner `.mat-mdc-tooltip` div, not the outer
   `.mat-mdc-tooltip-panel`, because that's where Material 21
-  binds `matTooltipClass`. (3) Regression tests extend
+  binds `matTooltipClass`. The `90vw` cap is a principle, not a
+  guess: tooltip grows to fit content but never touches viewport
+  edges; the CDK overlay positioner shifts the panel rather than
+  shrinking it so 90vw never causes horizontal scroll on any
+  viewport. `overflow-wrap: anywhere` is intentionally not set
+  in the override -- Material 21 already declares it on
+  `.mat-mdc-tooltip-surface`. (3) Regression tests extend
   `json-tree.component.overflow.spec.ts` with four new layered
   assertions: twisty natural width preserved, key X-position
   invariant against the row's `padding-left + twisty-width`,
   `MatTooltip.tooltipClass` carries `jj-tooltip-wide` via the
   directive injector, and the computed surface `max-width` on the
-  rendered tooltip exceeds 200px (guards the selector
-  correctness). Class name `jj-tooltip-wide` is reusable -- future
-  Monaco / breadcrumb / status-bar tooltips with long bodies can
-  opt in with one attribute.
+  rendered tooltip exceeds `window.innerWidth * 0.85` (pins the
+  viewport-proportional principle and guards both the selector
+  correctness and any regression to a fixed pixel cap). Class
+  name `jj-tooltip-wide` is reusable -- future Monaco /
+  breadcrumb / status-bar tooltips with long bodies can opt in
+  with one attribute.
 - **0.21.0**: Tree view virtualization (issue #95 Phase 2). The
   `<mat-tree>` + `<mat-nested-tree-node>` render path is replaced
   with `<cdk-virtual-scroll-viewport>` + `*cdkVirtualFor` from
