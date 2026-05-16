@@ -104,8 +104,8 @@
         >
           <jj-rule-sets-toolbar></jj-rule-sets-toolbar>
           <jj-json-tree
-            [value]="treeValue()"
-            [commentsByPath]="parseResult().commentsByPath"
+            [value]="treePaneInputs().value"
+            [commentsByPath]="treePaneInputs().commentsByPath"
             [viewResetToken]="viewResetTokenValue()"
             [highlights]="highlights()"
             [canEditHighlights]="canEditHighlights()"

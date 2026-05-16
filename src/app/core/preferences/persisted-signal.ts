@@ -1,4 +1,4 @@
-import { effect, signal, WritableSignal } from '@angular/core';
+import { DestroyRef, effect, inject, signal, WritableSignal } from '@angular/core';
 
 /**
  * Options for {@link persistedSignal}. Encapsulates the small
@@ -24,6 +24,27 @@ export interface PersistedSignalOptions<T> {
    * removing the key on update.
    */
   shouldRemove?: (value: T) => boolean;
+  /**
+   * Coalesce bursty writes into one localStorage round-trip per
+   * `writeDebounceMs` ms of idle. Defaults to 0 (write on every
+   * change, current behavior).
+   *
+   * Use for high-frequency signals where the write cost dominates
+   * (e.g., a draft autosave bound to every keystroke). The
+   * in-memory signal is always authoritative regardless of when
+   * storage catches up.
+   */
+  writeDebounceMs?: number;
+  /**
+   * When true, register `pagehide` and `visibilitychange` listeners
+   * that flush any pending debounced write synchronously when the
+   * tab is hidden or discarded. iOS Safari's `pagehide` is
+   * unreliable, so both listeners are required (pattern matches
+   * `preferences.service.ts`'s `flushOnHide`).
+   *
+   * Only meaningful when `writeDebounceMs > 0`.
+   */
+  flushOnHide?: boolean;
 }
 
 /**
@@ -40,11 +61,17 @@ export interface PersistedSignalOptions<T> {
  */
 export function persistedSignal<T>(opts: PersistedSignalOptions<T>): WritableSignal<T> {
   const { key, defaultValue, parse, serialize, shouldRemove } = opts;
+  const writeDebounceMs = opts.writeDebounceMs ?? 0;
+  const flushOnHide = opts.flushOnHide ?? false;
+  const isBrowser = typeof window !== 'undefined';
 
   const initial = readValue(key, defaultValue, parse);
   const sig = signal<T>(initial);
 
-  effect(() => {
+  const writeNow = (): void => {
+    // Always read the LIVE signal value at flush time. The point of
+    // the flush is to write the latest value, not a stale closure
+    // capture from when the effect last fired.
     const value = sig();
     try {
       if (shouldRemove?.(value)) {
@@ -55,7 +82,57 @@ export function persistedSignal<T>(opts: PersistedSignalOptions<T>): WritableSig
     } catch {
       /* storage unavailable / quota / private mode */
     }
+  };
+
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  const cancelPending = (): void => {
+    if (pendingTimer !== null) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
+  };
+  const flushPending = (): void => {
+    if (pendingTimer === null) return;
+    cancelPending();
+    writeNow();
+  };
+
+  effect(() => {
+    sig(); // tracked - re-run on every value change
+    if (writeDebounceMs > 0 && isBrowser) {
+      cancelPending();
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null;
+        writeNow();
+      }, writeDebounceMs);
+    } else {
+      writeNow();
+    }
   });
+
+  if (writeDebounceMs > 0 && flushOnHide && isBrowser) {
+    const onPageHide = (): void => flushPending();
+    const onVisibilityChange = (): void => {
+      if (document.visibilityState === 'hidden') flushPending();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    // Best-effort cleanup if a DestroyRef is available in the
+    // current injection context. persistedSignal is also called
+    // from root-provided services where DestroyRef is effectively
+    // app-lifetime; cleanup is then a no-op in practice.
+    try {
+      const destroyRef = inject(DestroyRef, { optional: true });
+      destroyRef?.onDestroy(() => {
+        cancelPending();
+        window.removeEventListener('pagehide', onPageHide);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      });
+    } catch {
+      /* not in injection context; listeners live for app lifetime */
+    }
+  }
 
   return sig;
 }
@@ -65,13 +142,19 @@ export function persistedSignal<T>(opts: PersistedSignalOptions<T>): WritableSig
  * common case: a UTF-8 string that should be `removeItem`'d when
  * empty (so the storage slot doesn't linger as `""`).
  */
-export function persistedStringSignal(key: string, defaultValue = ''): WritableSignal<string> {
+export function persistedStringSignal(
+  key: string,
+  defaultValue = '',
+  options?: { writeDebounceMs?: number; flushOnHide?: boolean },
+): WritableSignal<string> {
   return persistedSignal<string>({
     key,
     defaultValue,
     parse: (raw) => raw,
     serialize: (value) => value,
     shouldRemove: (value) => value.length === 0,
+    writeDebounceMs: options?.writeDebounceMs,
+    flushOnHide: options?.flushOnHide,
   });
 }
 

@@ -42,7 +42,7 @@ import {
 } from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
-import { HomeComponent } from './home.component';
+import { EDITOR_COMMIT_DEBOUNCE_MS, HomeComponent } from './home.component';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -795,7 +795,7 @@ describe('HomeComponent (unit-level)', () => {
       expect(component.viewResetTokenValue()).toBe(tokenAfterFirstBlob + 1);
     });
 
-    it('onClear allows later typed content without a token bump', () => {
+    it('onClear bumps the view-reset token and later typing does not bump again', () => {
       const fixture = TestBed.createComponent(HomeComponent);
       const component = fixture.componentInstance;
       component.onValueChange('{"before":true}');
@@ -806,14 +806,20 @@ describe('HomeComponent (unit-level)', () => {
       flushHomeEffects(fixture);
       expect(component.content()).toBe('');
       expect(component.treeValue()).toBeUndefined();
-      expect(component.viewResetTokenValue()).toBe(tokenBeforeClear);
+      // v5: onClear routes through replaceDocument, which bumps the
+      // view-reset token so the tree's selection / expansion state
+      // is conceptually reset for the now-empty document.
+      expect(component.viewResetTokenValue()).toBe(tokenBeforeClear + 1);
+      const tokenAfterClear = component.viewResetTokenValue();
 
       expect(() => component.onValueChange('{"after":true}')).not.toThrow();
       flushHomeEffects(fixture);
 
       expect(component.content()).toBe('{"after":true}');
       expect(component.treeValue()).toEqual({ after: true });
-      expect(component.viewResetTokenValue()).toBe(tokenBeforeClear);
+      // Subsequent typing is on the live setContent path and must
+      // not bump the token again.
+      expect(component.viewResetTokenValue()).toBe(tokenAfterClear);
     });
   });
 
@@ -956,6 +962,265 @@ describe('HomeComponent (unit-level)', () => {
     c.onKeydown(ev2);
     expect(focusSpy).toHaveBeenCalled();
     expect(ev2.preventDefault).toHaveBeenCalled();
+  });
+});
+
+/**
+ * v5 tree-pane debounce contract (issue: editing perf).
+ *
+ * The home component now exposes two separate views of `parseResult`:
+ *   - Live consumers (`errors`, `dirty`, status bar, Format/Minify,
+ *     search) read `parseResult()` directly and update on every
+ *     keystroke.
+ *   - The tree pane reads `treePaneInputs()` which is a 150 ms-idle
+ *     debounced projection.
+ *
+ * Discrete user actions (`onClear`, `restoreSignInSnapshotOnce`,
+ * `onDeleteBlob`, `onExtractRequest`) bypass the timer via
+ * `treeFlush$.next()` so the tree pane catches up in the same CD
+ * tick. `__flushTreePaneForTesting()` is the spec seam for
+ * triggering the same sync flush.
+ */
+describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), provideRouter([])],
+    });
+  });
+
+  afterEach(() => {
+    clearHomeStorage();
+  });
+
+  // Spec 1: typing path is debounced once the editor is non-empty.
+  // (The empty -> non-empty toggle path is covered by spec 5; this
+  // spec specifically guards the steady-state debounce.)
+  it('onValueChange does not update treePaneInputs synchronously when editor is non-empty', fakeAsync(() => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    // Prime to a non-empty steady state.
+    component.onValueChange('{"seed":1}');
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+    const baseline = component.treePaneInputs();
+    expect(baseline.value).toEqual({ seed: 1 });
+
+    // A non-empty -> non-empty change is debounced; treePaneInputs
+    // stays on the previous reference until the timer elapses.
+    component.onValueChange('{"seed":2}');
+    fixture.detectChanges();
+    expect(component.parseResult().value).toEqual({ seed: 2 });
+    expect(component.treePaneInputs()).toBe(baseline);
+
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+    expect(component.treePaneInputs().value).toEqual({ seed: 2 });
+  }));
+
+  // Spec 2: debounce window elapses -> tree pane catches up.
+  it('treePaneInputs matches parseResult after the debounce window elapses', fakeAsync(() => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    component.onValueChange('{"after":true}');
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+
+    expect(component.treePaneInputs().value).toEqual({ after: true });
+  }));
+
+  // Spec 3: replaceDocument flushes synchronously.
+  it('replaceDocument-style discrete swap updates treePaneInputs in the same tick', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.content.set('{"seed":true}');
+    component.__flushTreePaneForTesting();
+    fixture.detectChanges();
+    expect(component.treePaneInputs().value).toEqual({ seed: true });
+
+    // onClear routes through replaceDocument and fires treeFlush$.
+    component.onClear();
+    fixture.detectChanges();
+    expect(component.treePaneInputs().value).toBeUndefined();
+    expect(component.content()).toBe('');
+  });
+
+  // Spec 4: live consumers stay live (sentinel against accidental debouncing).
+  it('live consumers (errors, dirty, parseResult) update on every keystroke', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    component.onValueChange('not-json');
+    fixture.detectChanges();
+    expect(component.parseResult().errors.length).toBeGreaterThan(0);
+    expect(component.errors().length).toBeGreaterThan(0);
+    expect(component.dirty()).toBeTrue();
+    expect(component.hasContent()).toBeTrue();
+  });
+
+  // Spec 5: empty -> non-empty toggle flushes synchronously.
+  it('first character into empty editor flushes the tree pane on the empty toggle', fakeAsync(() => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    expect(component.treePaneInputs().value).toBeUndefined();
+    component.onValueChange('{"first":1}');
+    // Drain the toObservable microtask without ticking the timer.
+    flushMicrotasks();
+    fixture.detectChanges();
+
+    expect(component.treePaneInputs().value).toEqual({ first: 1 });
+    tick(EDITOR_COMMIT_DEBOUNCE_MS); // discharge any pending timer
+  }));
+
+  // Spec 6: non-empty -> empty toggle flushes synchronously.
+  it('deleting to empty flushes the tree pane on the non-empty -> empty toggle', fakeAsync(() => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.onValueChange('{"x":1}');
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+    expect(component.treePaneInputs().value).toEqual({ x: 1 });
+
+    component.onValueChange('');
+    flushMicrotasks();
+    fixture.detectChanges();
+    expect(component.treePaneInputs().value).toBeUndefined();
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+  }));
+
+  // Spec 7: Format/Minify don't visually shift the tree (same shape).
+  it('onFormat does not visually shift the tree after debounce (same shape)', fakeAsync(() => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    const source = '{"a":1,"b":[2,3]}';
+    component.onValueChange(source);
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+    const before = component.treePaneInputs().value;
+
+    component.onFormat();
+    component.__flushTreePaneForTesting();
+    fixture.detectChanges();
+
+    // Same value graph, structurally identical.
+    expect(component.treePaneInputs().value).toEqual(before);
+    expect(component.content()).not.toBe(source); // text is re-indented
+  }));
+
+  // Spec 8: view-reset semantics differ between setContent and replaceDocument.
+  it('setContent leaves viewResetToken unchanged; replaceDocument bumps it', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.content.set('{"a":1}');
+    fixture.detectChanges();
+    const before = component.viewResetTokenValue();
+
+    component.onValueChange('{"a":2}');
+    fixture.detectChanges();
+    expect(component.viewResetTokenValue()).toBe(before);
+
+    component.onClear(); // replaceDocument path
+    fixture.detectChanges();
+    expect(component.viewResetTokenValue()).toBe(before + 1);
+  });
+
+  // Spec 9: Format with active selection preserves selectedPath.
+  // (Phase 1b tree-component contract - signal-level assertion.)
+  it('onFormat preserves the existing parseResult shape so tree selection can survive', fakeAsync(() => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.onValueChange('{"users":[{"name":"alice"}]}');
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+    const shapeBefore = component.parseResult().value;
+
+    component.onFormat();
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+
+    // Format preserves the parsed value graph (it only re-indents
+    // text). The tree-component effect (Phase 1b) reads this graph
+    // and decides whether to preserve `selectedPath` based on
+    // path resolution against the new tree - identical shape means
+    // every prior path still resolves, so selection survives.
+    expect(component.parseResult().value).toEqual(shapeBefore);
+    expect(component.viewResetTokenValue()).toBe(0);
+  }));
+
+  // Spec 10: Extract preserves expansion of other subtrees (no token bump).
+  it('onExtractRequest does NOT bump viewResetToken (other subtrees survive)', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.content.set('{"a":{"longString":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"b":1,"c":2}');
+    component.__flushTreePaneForTesting();
+    fixture.detectChanges();
+    const tokenBefore = component.viewResetTokenValue();
+
+    // Synthesise an extract request shape against the current doc.
+    // The wiring just needs setContent + flush + expandNodeAtPath
+    // to fire; we are asserting only that the token does not bump.
+    component.content.set('{"a":{"longString":1},"b":1,"c":2}');
+    component.__flushTreePaneForTesting();
+    fixture.detectChanges();
+
+    // setContent does not bump the token, so any user-expanded
+    // sibling subtrees (b, c) survive.
+    expect(component.viewResetTokenValue()).toBe(tokenBefore);
+  });
+
+  // Spec 11: a Phase 1b regression guard at the home level.
+  // After a same-shape edit settles past the debounce window,
+  // treePaneInputs.commentsByPath must reference the LATEST
+  // parseResult.commentsByPath (not a stale map captured before
+  // the edit). The json-tree component spec covers the
+  // selection-clear-when-path-gone branch directly; this spec
+  // just locks in that the home-side projection rebinds the
+  // comments map after a debounced commit.
+  it('treePaneInputs.commentsByPath rebinds to the latest parseResult after debounce', fakeAsync(() => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.onValueChange('{"x":1}');
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+    const first = component.parseResult().commentsByPath;
+    expect(component.treePaneInputs().commentsByPath).toBe(first);
+
+    component.onValueChange('{"x":2}');
+    tick(EDITOR_COMMIT_DEBOUNCE_MS);
+    fixture.detectChanges();
+    const second = component.parseResult().commentsByPath;
+    expect(component.treePaneInputs().commentsByPath).toBe(second);
+  }));
+
+  // Spec 12: Extract path flushes tree before expandNodeAtPath runs.
+  it('discrete flush + setContent produces the new parseResult synchronously', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    component.content.set('{"a":{"placeholder":1}}');
+    component.__flushTreePaneForTesting();
+    fixture.detectChanges();
+    expect(component.treePaneInputs().value).toEqual({ a: { placeholder: 1 } });
+
+    // Simulate the body of onExtractRequest: setContent (synchronous
+    // content swap on the typing path) + treeFlush$.next() + caller
+    // would then invoke expandNodeAtPath against the new tree.
+    component.content.set('{"a":{"extracted":42}}');
+    component.__flushTreePaneForTesting();
+    fixture.detectChanges();
+
+    // The new shape is visible to the tree synchronously - any
+    // follow-up `expandNodeAtPath(["a","extracted"])` would resolve.
+    expect(component.treePaneInputs().value).toEqual({ a: { extracted: 42 } });
   });
 });
 

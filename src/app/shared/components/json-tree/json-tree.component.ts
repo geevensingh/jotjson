@@ -1465,7 +1465,8 @@ export class JsonTreeComponent {
       const token = this.viewResetToken();
       const rootNode = this.root();
       untracked(() => {
-        if (token > 0 && token !== this.lastObservedResetToken) {
+        const wasReset = token > 0 && token !== this.lastObservedResetToken;
+        if (wasReset) {
           this.lastObservedResetToken = token;
           this.hasInitializedExpansion = false;
         }
@@ -1487,10 +1488,23 @@ export class JsonTreeComponent {
             this.expandToLevel(this.prefs.prefs().defaultTreeExpansionDepth, true);
           }
         }
-        // Whenever the underlying value or reset token changes (and the
-        // resulting tree root re-renders), drop any stale selection.
-        // Predictable, no zombie state.
-        this.selectedPath.set(null);
+        // On true view-reset (replaceDocument bumped viewResetToken),
+        // drop the prior selection because the document is conceptually
+        // different. On same-document value changes (typing, Format,
+        // Minify, Extract), preserve the prior selection if its path
+        // still resolves in the new tree; clear otherwise.
+        // `selectedPath` already stores the formatted pathString (see
+        // the field declaration above), so it can be used as the
+        // `nodeIndex` key directly - do NOT wrap in `formatPath()` /
+        // `pathToString()`, which would take a path-segments array.
+        if (wasReset) {
+          this.selectedPath.set(null);
+        } else {
+          const prior = this.selectedPath();
+          if (prior !== null && !this.nodeIndex().has(prior)) {
+            this.selectedPath.set(null);
+          }
+        }
       });
     });
 
