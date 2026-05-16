@@ -879,6 +879,52 @@ describe('JsonTreeComponent', () => {
       expect(cmp.selectedPath()).toBeNull();
       runQueuedAnimationFrames(callbacks);
     });
+
+    // Phase 1b (editor-debounce): same-document value swaps preserve
+    // selection if the prior path still resolves in the new tree.
+    // Today (pre-Phase-1b) the effect cleared `selectedPath`
+    // unconditionally whenever `root()` changed - a UX wart that
+    // wiped breadcrumb / row highlight on Format/Minify.
+    it('preserves selection on a same-shape value swap when the path still resolves', async () => {
+      await createWith({ users: [{ name: 'alice' }, { name: 'bob' }] });
+      cmp.selectByPathString('$.users[0].name');
+      fixture.detectChanges();
+      expect(cmp.selectedPath()).toBe('$.users[0].name');
+
+      // Same-shape swap (e.g., post-Format / post-Minify); no
+      // viewResetToken bump.
+      fixture.componentRef.setInput('value', {
+        users: [{ name: 'alice' }, { name: 'bob' }],
+      });
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.users[0].name');
+    });
+
+    // Phase 1b (editor-debounce): when the prior selection's path
+    // no longer resolves in the new tree (e.g., user typed over the
+    // selected key, or Minify stripped a comment-only metadata key
+    // the spec docs reference), the effect clears it.
+    it('clears selection on a value swap when the prior path no longer resolves', async () => {
+      await createWith({ users: [{ name: 'alice' }] });
+      cmp.selectByPathString('$.users[0].name');
+      fixture.detectChanges();
+      expect(cmp.selectedPath()).toBe('$.users[0].name');
+
+      // Path-gone swap: the selected key has been renamed.
+      fixture.componentRef.setInput('value', {
+        users: [{ nickname: 'alice' }],
+      });
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBeNull();
+    });
   });
 
   describe('searchHits', () => {

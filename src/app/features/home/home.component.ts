@@ -16,7 +16,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import { Title } from '@angular/platform-browser';
@@ -28,7 +28,18 @@ import {
   format as jsoncFormat,
   Node as JsoncNode,
 } from 'jsonc-parser';
-import { debounceTime, firstValueFrom } from 'rxjs';
+import {
+  debounceTime,
+  firstValueFrom,
+  map,
+  merge,
+  of,
+  pairwise,
+  startWith,
+  Subject,
+  switchMap,
+  timer,
+} from 'rxjs';
 import { BlobService } from '../../core/api/blob.service';
 import type { BlobHighlight, CreateBlobResponse, JsonBlob } from '../../core/api/models';
 import { AuthService } from '../../core/auth/auth.service';
@@ -141,6 +152,19 @@ const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 const TREE_EXTRACT_SCAN_DEBOUNCE_MS = 1000;
 const COLD_BOOT_CLIPBOARD_TIMEOUT_MS = 150;
 const COLD_BOOT_CLIPBOARD_MAX_BYTES = 1 * 1024 * 1024;
+
+/**
+ * Tree-pane debounce window. Live consumers (errors, dirty, status
+ * bar, Format/Minify, search) continue to update on every keystroke
+ * by reading `parseResult()` directly; the tree pane reads the
+ * debounced `treePaneInputs` signal instead, which collapses bursts
+ * of keystrokes into one `buildTree` invocation per ~150 ms of idle.
+ *
+ * Discrete user actions (Clear, sign-in restore, delete-blob,
+ * Extract Accept) call `treeFlush$.next()` to bypass the timer and
+ * push the latest parse to the tree in the same CD tick.
+ */
+export const EDITOR_COMMIT_DEBOUNCE_MS = 150;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -340,6 +364,10 @@ export class HomeComponent implements OnInit, OnDestroy {
    */
   private replaceDocument(text: string): void {
     this.setContent(text);
+    // Bypass the 150 ms tree-pane debounce: a full-document swap is
+    // a discrete action and should be visible to the user in the
+    // same CD tick as the editor.
+    this.treeFlush$.next();
     this.viewResetToken.update((token) => token + 1);
   }
 
@@ -454,6 +482,108 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   private readonly treeValueChanges$ = toObservable(this.treeValue);
+
+  /**
+   * Discrete-action flush trigger for the tree-pane pipeline.
+   * Calling `treeFlush$.next()` pushes the latest `parseResult` to
+   * `treePaneInputs` synchronously, bypassing the 150 ms typing
+   * debounce. Used by `replaceDocument` (full-doc swap) and
+   * `onExtractRequest` (so `expandNodeAtPath` operates on the
+   * freshly-flushed tree).
+   *
+   * Pattern matches `rule-editor.component.ts`'s `retryTrigger$` -
+   * AGENTS.md s4's "RxJS only at I/O boundaries (HTTP, routing,
+   * events)" carve-out covers this Subject-as-event-trigger usage.
+   */
+  private readonly treeFlush$ = new Subject<void>();
+
+  /**
+   * TODO(perf-debounce-extract): if a second consumer of the
+   * debounced parseResult appears, lift this IIFE to a sibling
+   * factory and inject the resulting Observable. Today only the
+   * tree pane consumes it.
+   */
+  private readonly treePaneSource$ = (() => {
+    if (!this.isBrowser) {
+      // SSR/prerender path: emit the live parseResult once, no
+      // debounce machinery. The `toSignal` bridge below sees a
+      // single emission and stabilises immediately, so
+      // ApplicationRef stability is not delayed.
+      //
+      // Note: `treePaneInputs` is never read during SSR because
+      // `home.component.html` wraps `<jj-json-tree>` (the only
+      // consumer) in `@if (isBrowser)` per AGENTS.md s4 prerender
+      // constraints. The single emission here is purely defensive
+      // to keep the signal type non-`undefined`; downstream readers
+      // observe nothing during prerender.
+      return of(this.parseResult());
+    }
+    const parseResult$ = toObservable(this.parseResult);
+
+    // Single source for parseResult-derived updates. The inline
+    // empty-toggle vs debounce decision lives inside switchMap so
+    // a typing keystroke arriving with a pending timer naturally
+    // cancels and replaces the timer (switchMap auto-cancels the
+    // prior inner observable on each new emission).
+    const parseResultPath$ = parseResult$.pipe(
+      startWith(this.parseResult()),
+      pairwise(),
+      switchMap(([previous, next]) =>
+        previous.empty !== next.empty
+          ? of(next)
+          : timer(EDITOR_COMMIT_DEBOUNCE_MS).pipe(map(() => next)),
+      ),
+    );
+
+    // Discrete-action flush source. Reads `this.parseResult()`
+    // imperatively because we need the value AT FLUSH TIME, not
+    // whenever `parseResult$` happens to emit next - `toObservable`
+    // emits via an effect that fires on the next CD pass, so
+    // `withLatestFrom(parseResult$)` would deliver the previous
+    // value to a flush that fires between a signal write and the
+    // CD pass. Discrete flushes must NEVER be cancelled by a
+    // subsequent typing keystroke, so they live as a separate merge
+    // source rather than feeding into the switchMap above.
+    //
+    // Phase 4 lock-in surface: this assumes `parseResult` is a
+    // synchronous computed signal. If Phase 4 ever moves parsing to
+    // a worker, this map() must change to await the async result
+    // (or the discrete-flush semantics must be re-thought).
+    const discretePath$ = this.treeFlush$.pipe(map(() => this.parseResult()));
+
+    return merge(parseResultPath$, discretePath$);
+  })();
+
+  /**
+   * Debounced projection of `parseResult` consumed by the tree pane.
+   * Live consumers (errors, dirty, status bar, search, Format/Minify)
+   * continue to read `parseResult()` directly so they update on every
+   * keystroke. Only the tree pane sees the 150 ms-debounced view.
+   */
+  readonly treePaneInputs = toSignal(
+    this.treePaneSource$.pipe(
+      map((result) => ({
+        value: result.empty ? undefined : result.value,
+        commentsByPath: result.commentsByPath,
+      })),
+    ),
+    {
+      // Seed from the live parseResult at construction time so a
+      // hydrated draft renders synchronously on first paint.
+      // Without this seed, `pairwise` in `parseResultPath$` would
+      // absorb both the `startWith` emission and the bridging
+      // effect's first emission (both equal V0), the switchMap
+      // would take the timer branch (same `.empty`), and the tree
+      // pane would stay blank for ~150 ms before showing the draft.
+      // The pipeline's first downstream emission is the timer's,
+      // not `startWith`'s; the seed is the only thing the tree
+      // pane sees before then.
+      initialValue: {
+        value: this.parseResult().empty ? (undefined as unknown) : this.parseResult().value,
+        commentsByPath: this.parseResult().commentsByPath,
+      },
+    },
+  );
 
   readonly layoutOrientation = computed(() => this.prefs.prefs().layoutOrientation);
 
@@ -1089,6 +1219,21 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.applyLoadedBlob(blob);
   }
 
+  /**
+   * Test seam: bypass the 150 ms tree-pane debounce so a spec can
+   * synthesize a content change and immediately assert on rendered
+   * tree state. Specs must still call `fixture.detectChanges()` after
+   * calling this helper - it flushes the RxJS pipeline only, not
+   * Angular's change-detection scheduler.
+   *
+   * Convention enforcement (`__<verb>ForTesting` prefix) lives in
+   * AGENTS.md s4 + code review; TypeScript does not treat `__` as
+   * private. Production callers must not reference this method.
+   */
+  __flushTreePaneForTesting(): void {
+    this.treeFlush$.next();
+  }
+
   onHighlightsChange(nextHighlights: readonly BlobHighlight[]): void {
     const previousHighlights = this.highlights();
     this.highlights.set([...nextHighlights]);
@@ -1512,6 +1657,13 @@ export class HomeComponent implements OnInit, OnDestroy {
       },
     );
     this.setContent(result.patched);
+    // Bypass the 150 ms tree-pane debounce so `expandNodeAtPath`
+    // (below) operates against the freshly-flushed tree rather
+    // than the stale pre-Extract tree. We do NOT bump
+    // `viewResetToken` here - Extract preserves the rest of the
+    // document byte-for-byte, so any subtrees the user manually
+    // expanded elsewhere must survive.
+    this.treeFlush$.next();
     this.tree()?.expandNodeAtPath(event.path);
   }
 
@@ -1881,7 +2033,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   onClear(): void {
-    this.setContent('');
+    this.replaceDocument('');
     this.title.set('');
     this.resetLoadedBlobState();
     this.lastFilename.set(null);
@@ -1950,7 +2102,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
 
       if (parsedSnapshot.slug === (this.loadedBlob()?.slug ?? null)) {
-        this.setContent(parsedSnapshot.content);
+        this.replaceDocument(parsedSnapshot.content);
         this.title.set(parsedSnapshot.title);
         // M7p: snapshot-restore replaces the document; any prior
         // file-name association predates the round-trip and is gone.
@@ -2195,7 +2347,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     try {
       await firstValueFrom(this.blobs.delete(blob.id));
-      this.setContent('');
+      this.replaceDocument('');
       this.title.set('');
       this.resetLoadedBlobState();
       this.lastFilename.set(null);
