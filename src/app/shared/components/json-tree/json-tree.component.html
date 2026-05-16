@@ -744,6 +744,7 @@
     }
     @if (showExpandAllFromHere(cn) && hasContainerDescendants(cn)) {
       <button mat-menu-item type="button" (click)="expandAllFromHere(cn, 'topRow')">
+        <jj-icon name="expand-subtree" [size]="18" />
         <span>{{ ctxExpandAllFromHereElevatedLabel }}</span>
       </button>
     }

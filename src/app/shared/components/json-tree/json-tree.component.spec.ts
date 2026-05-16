@@ -7027,6 +7027,59 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
       });
 
+      it('renders a leading <jj-icon> on every top-level menu item for a container row', async () => {
+        // v0.23.2 regression guard. The primitive-fixture sibling
+        // test above only exercises rows that render for `$.alpha`.
+        // The v0.23.0 top-level `Expand all from here` row gates on
+        // `showExpandAllFromHere(cn) && hasContainerDescendants(cn)`,
+        // both false for primitives, so it is invisible to the
+        // primitive loop. Use the same fixture pattern as the
+        // dblclick-mirror guardrail (`{ outer: { mid: { inner: 1 } } }`
+        // + `expandAll()` + `collapseFromHere(outer)`) so the loop
+        // sees the new top-level row AND the Subtree trigger.
+        // Restores the v0.19.0 contract: every top-level row in
+        // the row menu carries a leading icon. Any future iconless
+        // top-level row added anywhere in `rowMenu` will fail here.
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        cmp.collapseFromHere(outer);
+        fixture.detectChanges();
+        // Preconditions: the new top-level row must render under
+        // this fixture or the guardrail is meaningless. (The
+        // Subtree trigger may or may not render: this fixture
+        // triggers v7's `isLoneDepth1RedundantWithSurfaced`
+        // suppression, which can hide it. That is orthogonal to
+        // the icon contract being tested -- this test asserts on
+        // the icons of whichever top-level rows DO render.)
+        expect(cmp.showExpandAllFromHere(outer))
+          .withContext('precondition: Expand-all top-level row must be visible')
+          .toBeTrue();
+        expect(cmp.hasContainerDescendants(outer))
+          .withContext('precondition: Expand-all top-level row must be visible')
+          .toBeTrue();
+        await openMenuFor('$.outer');
+        const items = Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        );
+        const expandAllRow = items.find(
+          (el) => (el.textContent ?? '').trim() === cmp.ctxExpandAllFromHereElevatedLabel,
+        );
+        expect(expandAllRow)
+          .withContext('precondition: Expand-all top-level row must be in the rendered menu')
+          .toBeTruthy();
+        for (const item of items) {
+          expect(item.querySelector('jj-icon'))
+            .withContext(`menu item "${(item.textContent ?? '').trim()}" has a leading jj-icon`)
+            .toBeTruthy();
+        }
+        document.body
+          .querySelectorAll('.cdk-overlay-backdrop')
+          .forEach((b) => (b as HTMLElement).click());
+        fixture.detectChanges();
+      });
+
       it('surfaces an "expand-subtree" icon on the surfaced shortcut for collapsed containers', async () => {
         await createWith({ obj: { a: 1 } });
         cmp.collapseAll();

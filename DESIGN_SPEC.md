@@ -2432,6 +2432,33 @@ Out of scope (for v1):
   name `jj-tooltip-wide` is reusable -- future Monaco /
   breadcrumb / status-bar tooltips with long bodies can opt in
   with one attribute.
+- **0.23.2**: Restore the v0.19.0 row-menu icon contract on the
+  new top-level **Expand all from here** row. v0.19.0 (Phase 3
+  of the tree-menu overhaul) established that "every top-level
+  row in the row menu now renders a leading icon"; the v0.23.0
+  shipped that row with a bare `<span>` and no `<jj-icon>`,
+  causing its label to sit flush at the icon column instead of
+  aligning with sibling rows. Pure presentation patch -- one
+  inserted `<jj-icon name="expand-subtree" [size]="18" />` line
+  in `json-tree.component.html` (mirrors the icon used on the
+  Subtree-elevated variants of the same action). Two adjacent
+  rows now share the `expand-subtree` icon (the bolded surfaced
+  shortcut and the new `Expand all from here`); accepted because
+  the icons are decorative (`aria-hidden="true"`) and bolding
+  visually differentiates the dblclick-mirror row. The
+  regression slipped past the existing Phase 3 guardrail
+  (`json-tree.component.spec.ts` `describe('icons (Phase 3)')`
+  -> `it('renders a leading <jj-icon> on every top-level menu
+  item')`) because that test opens the menu on `$.alpha` (a
+  primitive), where the new row never renders due to its
+  `hasContainerDescendants` gate. Closing the gap: a sibling
+  test case in the same describe block uses the container
+  fixture pattern from the dblclick-mirror guardrail
+  (`{ outer: { mid: { inner: 1 } } }` + `expandAll()` +
+  `collapseFromHere(outer)` + `openMenuFor('$.outer')`) so the
+  iteration sees BOTH the new top-level row AND the Subtree
+  trigger. Any future iconless top-level row added anywhere in
+  `rowMenu` will fail the new test.
 - **0.21.0**: Tree view virtualization (issue #95 Phase 2). The
   `<mat-tree>` + `<mat-nested-tree-node>` render path is replaced
   with `<cdk-virtual-scroll-viewport>` + `*cdkVirtualFor` from
