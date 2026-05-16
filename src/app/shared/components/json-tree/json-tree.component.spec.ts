@@ -6798,28 +6798,32 @@ describe('JsonTreeComponent', () => {
 
       // ---- v0.25.0: depth-aware label suffix ----
 
-      it('Expand all label keeps the base form at depth 1 (suffix would collide with surfaced shortcut)', async () => {
+      it('Expand all label shows "(+2 levels)" at the smallest visible depth (maxDescendantDepth=1)', async () => {
         await createWith({ outer: { mid: { inner: 1 } } });
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
-        // Precondition: depth 1 (mid is the only container descendant; inner is primitive).
-        // The suffix is intentionally omitted here so users don't see
-        // "(+1 level)" sitting directly under the bolded "Expand 1 level"
-        // surfaced shortcut.
-        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe(cmp.ctxExpandAllFromHereElevatedLabel);
+        // Precondition: maxDescendantDepth(outer)=1 (mid is the only
+        // container descendant; inner is primitive). "Expand all"
+        // walks containers at relative depths 0..1 -- 2 distinct
+        // levels of expansion. The smallest visible suffix value is
+        // therefore 2, never 1, so no collision with the bolded
+        // "Expand 1 level" surfaced shortcut row above.
+        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe('Expand all from here (+2 levels)');
       });
 
-      it('Expand all label gains a "(+N levels)" suffix at depth >= 2', async () => {
+      it('Expand all label suffix tracks containerDepth + 1 at depth >= 2', async () => {
         // Fixture: 5 container descendants below outer. Walk:
         // outer (d=0) -> a (d=1) -> b (d=2) -> c (d=3) -> d (d=4) -> e (d=5).
         // f is the primitive leaf, so e is the deepest container.
         // maxDescendantDepth(outer) === 5.
+        // "Expand all" walks containers at relative depths 0..5 ->
+        // 6 distinct levels of expansion.
         await createWith({ outer: { a: { b: { c: { d: { e: { f: 1 } } } } } } });
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
-        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe('Expand all from here (+5 levels)');
+        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe('Expand all from here (+6 levels)');
       });
 
       it('Expand all label scales beyond the +1..+9 depth-submenu range', async () => {
@@ -6835,7 +6839,7 @@ describe('JsonTreeComponent', () => {
         // children and short-circuits the walk before its depth is
         // recorded (maxDescendantDepth counts containers whose
         // descendants include at least one container).
-        // maxDescendantDepth(outer) === 11.
+        // maxDescendantDepth(outer) === 11, label suffix = 12.
         const buildDeep = (n: number): unknown => {
           let v: unknown = 1;
           for (let i = 0; i < n; i++) v = { x: v };
@@ -6845,7 +6849,43 @@ describe('JsonTreeComponent', () => {
         cmp.collapseAll();
         fixture.detectChanges();
         const outer = nodeAt('$.outer');
-        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe('Expand all from here (+11 levels)');
+        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe('Expand all from here (+12 levels)');
+      });
+
+      it('Expand all label N matches expandToDepthFromHere end state (action-equivalence)', async () => {
+        // Binds the label's N to the END STATE of the action, not
+        // to a structural metric. Specifically: the smallest N such
+        // that `expandToDepthFromHere(node, N)` produces the same
+        // expanded-paths set as `expandAllFromHere(node)` is the N
+        // the label advertises. Future refactors that break either
+        // walk surface here.
+        //
+        // Fixture: maxDescendantDepth(outer) === 2, so labelN = 3.
+        await createWith({ outer: { a: { b: { c: 1 } } } });
+        const helpers = cmp.__getHelpersForTesting();
+        const outer = nodeAt('$.outer');
+        const labelN = 3;
+        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe(
+          `Expand all from here (+${labelN} levels)`,
+        );
+        // "Source: 'top'" since production never offers
+        // relativeDepth > maxDescendantDepth via submenu.
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.expandAllFromHere(outer, 'topRow');
+        const allPaths = Array.from(helpers.readExpandedPaths()).sort();
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.expandToDepthFromHere(outer, labelN, 'top');
+        const depthPaths = Array.from(helpers.readExpandedPaths()).sort();
+        expect(depthPaths).toEqual(allPaths);
+        // Sanity: labelN - 1 produces a strict subset (label is the
+        // SMALLEST submenu value that matches expand-all's end state).
+        cmp.collapseAll();
+        fixture.detectChanges();
+        cmp.expandToDepthFromHere(outer, labelN - 1, 'top');
+        const shallowerPaths = Array.from(helpers.readExpandedPaths()).sort();
+        expect(shallowerPaths.length).toBeLessThan(allPaths.length);
       });
 
       it('Expand all label returns base form for primitives-only containers (safe default)', async () => {
@@ -6884,8 +6924,11 @@ describe('JsonTreeComponent', () => {
         const items = Array.from(
           document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
         );
-        const expandAllRow = items.find(
-          (el) => (el.textContent ?? '').trim() === cmp.ctxExpandAllFromHereElevatedLabel,
+        const expandAllRow = items.find((el) =>
+          // Tolerate any `(+N levels)` suffix added by
+          // ctxExpandAllFromHereLabelFor (v0.25.0); the elevated
+          // label stem is still the stable prefix.
+          (el.textContent ?? '').trim().startsWith(cmp.ctxExpandAllFromHereElevatedLabel),
         );
         // Hard assertion: the row MUST be in the rendered menu. A
         // missing row would be a regression in the gating predicate
@@ -7129,8 +7172,11 @@ describe('JsonTreeComponent', () => {
         const items = Array.from(
           document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
         );
-        const expandAllRow = items.find(
-          (el) => (el.textContent ?? '').trim() === cmp.ctxExpandAllFromHereElevatedLabel,
+        const expandAllRow = items.find((el) =>
+          // Tolerate any `(+N levels)` suffix added by
+          // ctxExpandAllFromHereLabelFor (v0.25.0); the elevated
+          // label stem is still the stable prefix.
+          (el.textContent ?? '').trim().startsWith(cmp.ctxExpandAllFromHereElevatedLabel),
         );
         expect(expandAllRow)
           .withContext('precondition: Expand-all top-level row must be in the rendered menu')

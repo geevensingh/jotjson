@@ -2433,15 +2433,33 @@ Out of scope (for v1):
   breadcrumb / status-bar tooltips with long bodies can opt in
   with one attribute.
 - **0.25.0**: Tree row top-level **Expand all from here** label gains
-  a depth hint when the subtree has at least two container levels
-  reachable: `Expand all from here (+5 levels)` (matching the
-  existing `+N levels` suffix vocabulary on the per-row depth
-  submenu at TS:633-641) rather than the bare `Expand all from
-  here`. The hint surfaces on the row whenever
-  `maxDescendantDepth(node) >= 2`; at depth 1 the suffix is
-  intentionally omitted to avoid visually duplicating the bolded
-  `Expand 1 level` surfaced dblclick mirror immediately above. The
-  hint scales past the depth-submenu's `+1..+9` ceiling -- e.g.,
+  a level-count hint whenever the row is visible:
+  `Expand all from here (+6 levels)` (matching the existing
+  `+N levels` suffix vocabulary on the per-row depth submenu at
+  TS:633-641) rather than the bare `Expand all from here`. The
+  hint surfaces whenever the top-level row is visible.
+
+  **Metric**: the suffix is `maxDescendantDepth(node) + 1` -- one
+  more than the deepest container descendant's relative depth.
+  `expandAllFromHere` walks every container at relative depths
+  `0..maxDescendantDepth`, which equals that many `+N levels` of
+  expansion in the submenu's vocabulary. The submenu (per-row
+  `+N`) caps at `maxDescendantDepth` to avoid duplicating this
+  row's end state, so this label always reads exactly one more
+  than the largest submenu entry. That `+1` gap is intentional:
+  it signals "Expand all reaches one level beyond the largest
+  partial-expand option," and is honest about the action's reach
+  (the prior off-by-one made the label look identical to the
+  submenu's max while doing strictly more).
+
+  **Telemetry divergence**: `tree.expand.slow` continues to emit
+  `depth: maxDescendantDepth` for both top-row and submenu sources
+  (preserving cross-version analytics continuity). The visible
+  label and the emitted `depth` are intentionally off-by-one for
+  top-row events. Renaming or splitting the telemetry field is
+  out of scope and is batched with issue #241.
+
+  The hint scales past the depth-submenu's `+1..+9` ceiling -- e.g.,
   `(+12 levels)` on a deeply-nested chain -- since the top-level
   row is the only path to "Expand all" once the submenu's range is
   exhausted, so a depth signal here also tells users how deep the
@@ -2449,7 +2467,8 @@ Out of scope (for v1):
   reach the bottom. New `$localize` ID
   `@@tree.contextMenu.expandAllFromHere.withDepth` (always plural
   source string, no ICU -- the codebase has zero `$localize` ICU
-  precedents and the depth-1 threshold rules out the singular).
+  precedents and the smallest visible suffix is `+2` so the
+  singular case never arises).
   Telemetry shape unchanged (`tree.contextMenu.expandAllFromHere`
   still emits `{ source: 'topRow' }`); enriching the event with
   the depth bucket is deferred to issue #241 alongside the
