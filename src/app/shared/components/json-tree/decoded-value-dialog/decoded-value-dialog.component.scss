@@ -101,8 +101,17 @@
   align-items: center;
   gap: 8px;
   // mat-dialog-actions defaults align="end" pushes everything right;
-  // pull the copy button left so it does not crowd the close button.
+  // when present, the extract button uses auto right margin so the
+  // copy and close buttons stay grouped at the right edge.
   justify-content: flex-end;
+}
+
+.decoded-actions__extract {
+  // Inline icon + label spacing matches the row context-menu items.
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
 }
 
 .decoded-actions__copy {

@@ -28,23 +28,79 @@ function makeNoopDisposable(): { dispose: () => void } {
 
 function makeMinimalEditor(initialValue: string): object {
   let current = initialValue;
+  const contentChangeHandlers: Array<() => void> = [];
+  const emitContentChange = (): void => {
+    for (const handler of contentChangeHandlers) {
+      handler();
+    }
+  };
+  const offsetToPosition = (offset: number): { lineNumber: number; column: number } => {
+    const bounded = Math.max(0, Math.min(offset, current.length));
+    const prefix = current.substring(0, bounded);
+    const lines = prefix.split('\n');
+    const lastLine = lines[lines.length - 1] ?? '';
+    return { lineNumber: lines.length, column: lastLine.length + 1 };
+  };
+  const positionToOffset = (lineNumber: number, column: number): number => {
+    const lines = current.split('\n');
+    let offset = 0;
+    for (let lineIndex = 0; lineIndex < lineNumber - 1; lineIndex += 1) {
+      offset += (lines[lineIndex] ?? '').length + 1;
+    }
+    return offset + (column - 1);
+  };
   const model = {
     getValue: () => current,
-    getValueInRange: () => '',
-    getOffsetAt: () => 0,
+    getValueInRange: (range: {
+      startLineNumber: number;
+      startColumn: number;
+      endLineNumber: number;
+      endColumn: number;
+    }) => {
+      const startOffset = positionToOffset(range.startLineNumber, range.startColumn);
+      const endOffset = positionToOffset(range.endLineNumber, range.endColumn);
+      return current.substring(startOffset, endOffset);
+    },
+    getOffsetAt: (position: { lineNumber: number; column: number }) =>
+      positionToOffset(position.lineNumber, position.column),
+    getPositionAt: (offset: number) => offsetToPosition(offset),
   };
   return {
     getValue: () => current,
     setValue: (next: string) => {
       current = next;
+      emitContentChange();
     },
     getModel: () => model,
-    onDidChangeModelContent: () => makeNoopDisposable(),
+    onDidChangeModelContent: (handler: () => void) => {
+      contentChangeHandlers.push(handler);
+      return makeNoopDisposable();
+    },
     onDidChangeCursorPosition: () => makeNoopDisposable(),
     onDidPaste: () => makeNoopDisposable(),
     updateOptions: () => undefined,
     dispose: () => undefined,
-    executeEdits: () => true,
+    executeEdits: (
+      _source: string,
+      edits: Array<{
+        range: {
+          startLineNumber: number;
+          startColumn: number;
+          endLineNumber: number;
+          endColumn: number;
+        };
+        text: string;
+      }>,
+    ) => {
+      for (const edit of edits) {
+        const start = positionToOffset(edit.range.startLineNumber, edit.range.startColumn);
+        const end = positionToOffset(edit.range.endLineNumber, edit.range.endColumn);
+        current = current.substring(0, start) + edit.text + current.substring(end);
+      }
+      emitContentChange();
+      return true;
+    },
+    trigger: () => undefined,
     layout: () => undefined,
     setSelection: () => undefined,
     revealRangeInCenterIfOutsideViewport: () => undefined,
@@ -53,6 +109,24 @@ function makeMinimalEditor(initialValue: string): object {
 
 function NoopSelection(this: object): void {
   // Constructor only - the minimal stub never reads selection fields.
+}
+
+function NoopRange(
+  this: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  },
+  startLineNumber: number,
+  startColumn: number,
+  endLineNumber: number,
+  endColumn: number,
+): void {
+  this.startLineNumber = startLineNumber;
+  this.startColumn = startColumn;
+  this.endLineNumber = endLineNumber;
+  this.endColumn = endColumn;
 }
 
 function buildMinimalMonaco(): typeof MonacoNS {
@@ -70,6 +144,7 @@ function buildMinimalMonaco(): typeof MonacoNS {
       },
     },
     MarkerSeverity: { Error: 8 },
+    Range: NoopRange,
     Selection: NoopSelection,
   };
   return stub as unknown as typeof MonacoNS;

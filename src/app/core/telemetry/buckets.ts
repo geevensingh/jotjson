@@ -38,6 +38,11 @@ export type CountBucket = '<100' | '100-1K' | '1K-10K' | '>10K';
 export type LineCountBucket = '1' | '2-5' | '6-20' | '21-100' | '100+';
 
 /**
+ * Closed-enum bucket for extract-undo latency.
+ */
+export type UndoLatencyBucket = '<1s' | '1-5s' | '5-30s' | '30s+';
+
+/**
  * Returns the {@link SizeBucket} that contains `n` bytes. `NaN` and
  * negative inputs clamp to the smallest bucket; `Infinity` clamps to
  * the largest. We do not throw on bad input.
@@ -74,6 +79,23 @@ export function bucketCount(n: number): CountBucket {
     return '1K-10K';
   }
   return '>10K';
+}
+
+/**
+ * Returns the {@link UndoLatencyBucket} that contains `ms`.
+ * `NaN` and negative inputs clamp to the smallest bucket.
+ */
+export function bucketUndoLatency(ms: number): UndoLatencyBucket {
+  if (Number.isNaN(ms) || ms < 1000) {
+    return '<1s';
+  }
+  if (ms < 5000) {
+    return '1-5s';
+  }
+  if (ms < 30000) {
+    return '5-30s';
+  }
+  return '30s+';
 }
 
 /**

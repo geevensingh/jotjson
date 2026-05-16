@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { Subject, type Observable } from 'rxjs';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { HIGHLIGHT_PATH_FIXTURES } from '../../../../testing/fixtures/highlight-paths.fixture';
 import type {
@@ -23,6 +24,7 @@ import { formatPath } from './build-tree';
 import {
   DecodedValueDialogComponent,
   type DecodedValueDialogData,
+  type DecodedValueDialogResult,
 } from './decoded-value-dialog/decoded-value-dialog.component';
 import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
 import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
@@ -4623,6 +4625,7 @@ describe('JsonTreeComponent', () => {
 
   describe('embedded JSON extraction UI', () => {
     const embeddedJson = 'prefix {"ok": true} suffix';
+    const primitiveArrayJson = '[1,2,3]';
 
     function replacementFor(text = '{\n  "ok": true\n}'): ExtractedJson {
       return {
@@ -4651,6 +4654,12 @@ describe('JsonTreeComponent', () => {
     function extractButtonFor(pathString: string): HTMLButtonElement | null {
       return (fixture.nativeElement as HTMLElement).querySelector(
         `.tree-row[data-path="${pathString}"] .tree-extract-pill`,
+      ) as HTMLButtonElement | null;
+    }
+
+    function decodedButtonFor(pathString: string): HTMLButtonElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${pathString}"] .tree-decoded-pill`,
       ) as HTMLButtonElement | null;
     }
 
@@ -4698,7 +4707,7 @@ describe('JsonTreeComponent', () => {
     });
 
     it('does not render the extract button when the string has no candidate', async () => {
-      await createWith({ payload: embeddedJson });
+      await createWith({ payload: primitiveArrayJson });
       cmp.expandAll();
       fixture.detectChanges();
       setExtractCandidates('other string');
@@ -4706,21 +4715,32 @@ describe('JsonTreeComponent', () => {
       expect(extractButtonFor('$.payload')).toBeNull();
     });
 
-    it('renders the extract button when the string has a candidate', async () => {
-      await createWith({ payload: embeddedJson });
+    it('hides the row extract pill when the row also renders the decoded pill', async () => {
+      await createWith({ payload: 'abc\ndef' });
       cmp.expandAll();
       fixture.detectChanges();
-      setExtractCandidates(embeddedJson);
+      setExtractCandidates('abc\ndef');
 
-      expect(extractButtonFor('$.payload')).not.toBeNull();
+      expect(extractButtonFor('$.payload')).toBeNull();
+      expect(decodedButtonFor('$.payload')).not.toBeNull();
     });
 
-    it('clicking the extract button emits extractRequest with rowButton source', async () => {
-      const replacement = replacementFor('{\n  "answer": 42\n}');
-      await createWith({ payload: embeddedJson });
+    it('renders the extract button when the string has a candidate but no decoded pill', async () => {
+      await createWith({ payload: primitiveArrayJson });
       cmp.expandAll();
       fixture.detectChanges();
-      setExtractCandidates(embeddedJson, replacement);
+      setExtractCandidates(primitiveArrayJson);
+
+      expect(extractButtonFor('$.payload')).not.toBeNull();
+      expect(decodedButtonFor('$.payload')).toBeNull();
+    });
+
+    it('clicking the extract button emits extractRequest with rowPillPrimitiveArray source', async () => {
+      const replacement = replacementFor('[\n  1,\n  2,\n  3\n]');
+      await createWith({ payload: primitiveArrayJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates(primitiveArrayJson, replacement);
       fixture.componentRef.setInput('extractSourceVersion', 7);
       fixture.detectChanges();
       const events: TreeExtractRequest[] = [];
@@ -4735,16 +4755,16 @@ describe('JsonTreeComponent', () => {
           path: ['payload'],
           sourceVersion: 7,
           replacement,
-          source: 'rowButton',
+          source: 'rowPillPrimitiveArray',
         },
       ]);
     });
 
     it('clicking the extract button does not toggle row selection', async () => {
-      await createWith({ payload: embeddedJson });
+      await createWith({ payload: primitiveArrayJson });
       cmp.expandAll();
       fixture.detectChanges();
-      setExtractCandidates(embeddedJson);
+      setExtractCandidates(primitiveArrayJson);
       const selectionEvents: (readonly (string | number)[] | null)[] = [];
       cmp.selectionChange.subscribe((path) => selectionEvents.push(path));
 
@@ -4810,10 +4830,10 @@ describe('JsonTreeComponent', () => {
     });
 
     it('uses a numeric sentinel sourceVersion when extractSourceVersion is null', async () => {
-      await createWith({ payload: embeddedJson });
+      await createWith({ payload: primitiveArrayJson });
       cmp.expandAll();
       fixture.detectChanges();
-      setExtractCandidates(embeddedJson);
+      setExtractCandidates(primitiveArrayJson);
       const events: TreeExtractRequest[] = [];
       cmp.extractRequest.subscribe((request) => events.push(request));
 
@@ -4875,13 +4895,45 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
     }
 
-    function spyOnDialogOpen(): jasmine.Spy {
+    function replacementFor(text = '{\n  "ok": true\n}'): ExtractedJson {
+      return {
+        text,
+        blockCount: 1,
+        preservesComments: true,
+        hasComments: false,
+      };
+    }
+
+    function candidatesFor(
+      rawString: string,
+      replacement: ExtractedJson = replacementFor(),
+    ): ReadonlyMap<string, ExtractedJson> {
+      return new Map<string, ExtractedJson>([[rawString, replacement]]);
+    }
+
+    function setExtractCandidates(
+      rawString: string,
+      replacement: ExtractedJson = replacementFor(),
+    ): void {
+      fixture.componentRef.setInput('extractCandidates', candidatesFor(rawString, replacement));
+      fixture.detectChanges();
+    }
+
+    function spyOnDialogOpen(
+      afterClosed$: Observable<DecodedValueDialogResult> = new Subject<DecodedValueDialogResult>(),
+    ): jasmine.Spy {
       const dialog = TestBed.inject(MatDialog);
       const spy = spyOn(dialog, 'open').and.returnValue({
-        afterClosed: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }),
+        afterClosed: () => afterClosed$,
         close: () => {},
-      } as unknown as MatDialogRef<unknown>);
+      } as unknown as MatDialogRef<DecodedValueDialogComponent, DecodedValueDialogResult>);
       return spy;
+    }
+
+    function staleCloseEventCalls(eventSpy: jasmine.Spy): number {
+      return eventSpy.calls
+        .all()
+        .filter((call) => call.args[0] === 'tree.extract.dialog.staleClose').length;
     }
 
     describe('decodedCandidate predicate', () => {
@@ -4978,6 +5030,28 @@ describe('JsonTreeComponent', () => {
         expect(button!.hasAttribute('aria-pressed')).toBe(false);
       });
 
+      it('uses extract-aware title and aria labels only when an Extract option is available', async () => {
+        await createWith({ withExtract: 'abc\ndef', withoutExtract: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        fixture.componentRef.setInput(
+          'extractCandidates',
+          candidatesFor('abc\ndef', replacementFor('{\n  "x": 1\n}')),
+        );
+        fixture.detectChanges();
+
+        const withExtractButton = decodedButtonFor('$.withExtract');
+        const withoutExtractButton = decodedButtonFor('$.withoutExtract');
+        expect(withExtractButton?.getAttribute('title')).toBe('Inspect value (Extract available)');
+        expect(withExtractButton?.getAttribute('aria-label')).toBe(
+          'Inspect value; an Extract option is available inside',
+        );
+        expect(withoutExtractButton?.getAttribute('title')).toBe('Open decoded value');
+        expect(withoutExtractButton?.getAttribute('aria-label')).toBe(
+          'Open decoded value in a viewer',
+        );
+      });
+
       it('inline value span never carries the legacy tree-value-decoded class', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
@@ -4992,7 +5066,7 @@ describe('JsonTreeComponent', () => {
     });
 
     describe('opening the dialog', () => {
-      it('pill click opens the DecodedValueDialog with the raw value and path', async () => {
+      it('pill click opens without extractCandidate when the row is not extractable', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
@@ -5005,6 +5079,25 @@ describe('JsonTreeComponent', () => {
         const config = args[1] as { data: DecodedValueDialogData };
         expect(config.data.value).toBe('first\nsecond');
         expect(config.data.pathString).toBe('$.note');
+        expect(config.data.extractCandidate).toBeUndefined();
+        expect(config.data.extractPath).toBeUndefined();
+      });
+
+      it('pill click opens with extractCandidate and extractPath when the row is extractable', async () => {
+        const replacement = replacementFor('{\n  "answer": 42\n}');
+        await createWith({ note: 'abc\ndef' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        setExtractCandidates('abc\ndef', replacement);
+        const open = spyOnDialogOpen();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+
+        const config = open.calls.mostRecent().args[1] as { data: DecodedValueDialogData };
+        expect(config.data.value).toBe('abc\ndef');
+        expect(config.data.pathString).toBe('$.note');
+        expect(config.data.extractCandidate).toEqual(replacement);
+        expect(config.data.extractPath).toEqual(['note']);
       });
 
       it('pill click stops propagation so the row is not selected', async () => {
@@ -5066,6 +5159,89 @@ describe('JsonTreeComponent', () => {
         // Calling onDecodedButtonClick with the stale node aborts.
         cmp.onDecodedButtonClick(node, new MouseEvent('click'));
         expect(open).not.toHaveBeenCalled();
+      });
+
+      it('dialog close result { extract: true } emits extractRequest with decodedDialog source when stable', async () => {
+        const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+        const replacement = replacementFor('{\n  "answer": 42\n}');
+        await createWith({ note: 'abc\ndef' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        setExtractCandidates('abc\ndef', replacement);
+        fixture.componentRef.setInput('extractSourceVersion', 7);
+        fixture.detectChanges();
+        const focusRestore = spyOn(cmp, 'focusRowByPath');
+        const events: TreeExtractRequest[] = [];
+        cmp.extractRequest.subscribe((request) => events.push(request));
+        spyOnDialogOpen(dialogClosed$);
+
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        dialogClosed$.next({ extract: true });
+        dialogClosed$.complete();
+        fixture.detectChanges();
+
+        expect(events).toEqual([
+          {
+            path: ['note'],
+            sourceVersion: 7,
+            replacement,
+            source: 'decodedDialog',
+          },
+        ]);
+        expect(focusRestore).toHaveBeenCalledWith('$.note');
+      });
+
+      it('dialog close result { extract: true } after sourceVersion bumps logs staleClose and does not emit extractRequest', async () => {
+        const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+        const replacement = replacementFor('{\n  "answer": 42\n}');
+        await createWith({ note: 'abc\ndef' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        setExtractCandidates('abc\ndef', replacement);
+        fixture.componentRef.setInput('extractSourceVersion', 7);
+        fixture.detectChanges();
+        const event = spyOn(TestBed.inject(LoggerService), 'event');
+        const focusRestore = spyOn(cmp, 'focusRowByPath');
+        const events: TreeExtractRequest[] = [];
+        cmp.extractRequest.subscribe((request) => events.push(request));
+        spyOnDialogOpen(dialogClosed$);
+
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        fixture.componentRef.setInput('extractSourceVersion', 8);
+        fixture.detectChanges();
+        dialogClosed$.next({ extract: true });
+        dialogClosed$.complete();
+        fixture.detectChanges();
+
+        expect(events).toEqual([]);
+        expect(staleCloseEventCalls(event)).toBe(1);
+        expect(focusRestore).toHaveBeenCalledWith('$.note');
+      });
+
+      it('dialog close result undefined does not emit extractRequest or stale-close telemetry', async () => {
+        const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+        const replacement = replacementFor('{\n  "answer": 42\n}');
+        await createWith({ note: 'abc\ndef' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        setExtractCandidates('abc\ndef', replacement);
+        const event = spyOn(TestBed.inject(LoggerService), 'event');
+        const focusRestore = spyOn(cmp, 'focusRowByPath');
+        const events: TreeExtractRequest[] = [];
+        cmp.extractRequest.subscribe((request) => events.push(request));
+        spyOnDialogOpen(dialogClosed$);
+
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        dialogClosed$.next(undefined);
+        dialogClosed$.complete();
+        fixture.detectChanges();
+
+        expect(events).toEqual([]);
+        expect(staleCloseEventCalls(event)).toBe(0);
+        expect(focusRestore).toHaveBeenCalledWith('$.note');
       });
     });
 

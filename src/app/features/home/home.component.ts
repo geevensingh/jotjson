@@ -62,7 +62,7 @@ import { persistedSignal } from '../../core/preferences/persisted-signal';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import { SeoService } from '../../core/seo/seo.service';
-import { bucketBytes } from '../../core/telemetry/buckets';
+import { bucketBytes, bucketUndoLatency } from '../../core/telemetry/buckets';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
 import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
@@ -256,6 +256,12 @@ export class HomeComponent implements OnInit, OnDestroy {
    * Cleared on dismiss.
    */
   private coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
+  private extractUndoSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
+  private pendingExtractUndo: {
+    priorText: string;
+    startMs: number;
+    undoneViaSnackbar: boolean;
+  } | null = null;
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -861,6 +867,34 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
     });
 
+    effect(() => {
+      const currentContent = this.content();
+      const pendingExtractUndo = this.pendingExtractUndo;
+      if (!pendingExtractUndo) {
+        return;
+      }
+      const undoLatencyMs = performance.now() - pendingExtractUndo.startMs;
+      if (pendingExtractUndo.undoneViaSnackbar && currentContent === pendingExtractUndo.priorText) {
+        this.pendingExtractUndo = null;
+        return;
+      }
+      if (
+        !pendingExtractUndo.undoneViaSnackbar &&
+        currentContent === pendingExtractUndo.priorText &&
+        undoLatencyMs <= 30_000
+      ) {
+        this.logger.event('tree.extract.undo', {
+          source: 'ctrlZ',
+          undoLatencyMsBucket: bucketUndoLatency(undoLatencyMs),
+        });
+        this.pendingExtractUndo = null;
+        return;
+      }
+      if (undoLatencyMs > 30_000 && currentContent !== pendingExtractUndo.priorText) {
+        this.pendingExtractUndo = null;
+      }
+    });
+
     this.treeValueChanges$
       .pipe(debounceTime(TREE_EXTRACT_SCAN_DEBOUNCE_MS), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.scanTreeStringLeaves(value));
@@ -1140,6 +1174,43 @@ export class HomeComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         if (this.coldBootClipboardSnackRef === snackRef) {
           this.coldBootClipboardSnackRef = null;
+        }
+      });
+  }
+
+  private openExtractUndoSnack(priorText: string): void {
+    if (this.extractUndoSnackRef) {
+      this.extractUndoSnackRef.dismiss();
+      this.logger.event('tree.extract.snackbarReplaced');
+      this.extractUndoSnackRef = null;
+    }
+    const pendingExtractUndo = this.pendingExtractUndo;
+    if (!pendingExtractUndo) {
+      return;
+    }
+    const snackRef: MatSnackBarRef<TextOnlySnackBar> = this.snack.open(
+      $localize`:@@home.extract.snackbar.applied:Extracted embedded JSON into the document.`,
+      $localize`:@@home.extract.snackbar.undo:Undo`,
+      { duration: 8000, politeness: 'assertive' },
+    );
+    this.extractUndoSnackRef = snackRef;
+    snackRef
+      .onAction()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        pendingExtractUndo.undoneViaSnackbar = true;
+        this.replaceDocument(priorText);
+        this.logger.event('tree.extract.undo', {
+          source: 'snackbar',
+          undoLatencyMsBucket: bucketUndoLatency(performance.now() - pendingExtractUndo.startMs),
+        });
+      });
+    snackRef
+      .afterDismissed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.extractUndoSnackRef === snackRef) {
+          this.extractUndoSnackRef = null;
         }
       });
   }
@@ -1638,13 +1709,26 @@ export class HomeComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const priorText = this.content();
     let result: PatchResult;
     try {
-      result = patchExtractedValue(this.content(), event.path, event.replacement);
+      result = patchExtractedValue(priorText, event.path, event.replacement);
     } catch (error) {
       this.logger.warn('tree.extract.applyFailed', {
         reason: error instanceof Error ? error.message : 'unknown',
       });
+      return;
+    }
+
+    const editor = this.editor();
+    if (!editor) {
+      this.logger.warn('tree.extract.applyFailed', { reason: 'editorUnavailable' });
+      return;
+    }
+    const startOffset = result.targetOffset;
+    const endOffset = startOffset + result.targetLength;
+    if (!editor.applyEdit(startOffset, endOffset, result.replacementText, 'jotjson-extract')) {
+      this.logger.warn('tree.extract.applyFailed', { reason: 'applyEditFailed' });
       return;
     }
 
@@ -1656,7 +1740,6 @@ export class HomeComponent implements OnInit, OnDestroy {
         proseSegments: event.replacement.proseSegments ?? 0,
       },
     );
-    this.setContent(result.patched);
     // Bypass the 150 ms tree-pane debounce so `expandNodeAtPath`
     // (below) operates against the freshly-flushed tree rather
     // than the stale pre-Extract tree. We do NOT bump
@@ -1665,6 +1748,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     // expanded elsewhere must survive.
     this.treeFlush$.next();
     this.tree()?.expandNodeAtPath(event.path);
+    this.pendingExtractUndo = {
+      priorText,
+      startMs: performance.now(),
+      undoneViaSnackbar: false,
+    };
+    this.openExtractUndoSnack(priorText);
   }
 
   onToggleSelectionSync(): void {

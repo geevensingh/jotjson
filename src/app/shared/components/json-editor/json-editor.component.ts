@@ -277,6 +277,47 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     });
   }
 
+  /**
+   * Localized in-document edit that preserves Monaco's undo stack. Prefer this
+   * for partial-content mutations (e.g. extract-embedded-json). Use the `value`
+   * input + the existing setValue effect for whole-document replacement (paste,
+   * load, clear) - the 17 existing setContent callers in HomeComponent are not
+   * migrating in this PR.
+   */
+  applyEdit(startOffset: number, endOffset: number, text: string, source: string): boolean {
+    const editor = this.editor;
+    const monaco = this.monaco;
+    const model = editor?.getModel();
+    if (!editor || !monaco || !model) return false;
+
+    let didApply = false;
+    this.zone.runOutsideAngular(() => {
+      const startPosition = model.getPositionAt(startOffset);
+      const endPosition = model.getPositionAt(endOffset);
+      const range = new monaco.Range(
+        startPosition.lineNumber,
+        startPosition.column,
+        endPosition.lineNumber,
+        endPosition.column,
+      );
+      if (model.getValueInRange(range).length !== endOffset - startOffset) {
+        return;
+      }
+      editor.executeEdits(source, [{ range, text, forceMoveMarkers: true }]);
+      editor.revealRangeInCenterIfOutsideViewport(range);
+      didApply = true;
+    });
+    return didApply;
+  }
+
+  applyReverseEdit(startOffset: number, endOffset: number, text: string, source: string): boolean {
+    return this.applyEdit(startOffset, endOffset, text, source);
+  }
+
+  triggerUndo(): void {
+    this.editor?.trigger('jotjson', 'undo', null);
+  }
+
   private applyMarkers(errs: readonly JsonParseError[]): void {
     const model = this.editor?.getModel();
     const monaco = this.monaco;

@@ -59,6 +59,7 @@ import { buildTree, formatPath, type TreeNode } from './build-tree';
 import {
   DecodedValueDialogComponent,
   type DecodedValueDialogData,
+  type DecodedValueDialogResult,
 } from './decoded-value-dialog/decoded-value-dialog.component';
 import { buildVisibleIndexMap, flatten, type FlatItem } from './flatten';
 import { EMPTY_BEACON_INDEX, buildBeaconIndex, type BeaconIndex } from './formatting-beacons-index';
@@ -128,7 +129,7 @@ export interface TreeExtractRequest {
   path: (string | number)[];
   sourceVersion: number;
   replacement: ExtractedJson;
-  source: 'rowButton' | 'contextMenu';
+  source: 'rowPillPrimitiveArray' | 'contextMenu' | 'decodedDialog';
 }
 
 /**
@@ -682,6 +683,8 @@ export class JsonTreeComponent {
   // show/hide pair was retired alongside the inline toggle.
   readonly decodedOpenDialogTitleLabel = $localize`:@@tree.decoded.pill.openDialog.title:Open decoded value`;
   readonly decodedOpenDialogAriaLabel = $localize`:@@tree.decoded.pill.openDialog.aria:Open decoded value in a viewer`;
+  readonly decodedOpenDialogWithExtractTitleLabel = $localize`:@@tree.decoded.pill.openDialogWithExtract.title:Inspect value (Extract available)`;
+  readonly decodedOpenDialogWithExtractAriaLabel = $localize`:@@tree.decoded.pill.openDialogWithExtract.aria:Inspect value; an Extract option is available inside`;
   readonly decodedOpenDialogMenuLabel = $localize`:@@tree.decoded.menu.openDialog:Open decoded value`;
 
   // Breadcrumb labels (Phase 2). Stable English source strings; i18n
@@ -1961,6 +1964,13 @@ export class JsonTreeComponent {
   }
 
   /**
+   * M7v: public focus entry point for parent-component restore-after-dialog flows (e.g., extract dialog close).
+   */
+  focusRowByPath(pathString: string): void {
+    this.moveFocusTo(pathString);
+  }
+
+  /**
    * M7g-3b. Keyboard handler bound on `.tree-row` (both leaf and
    * container variants). Implements the WAI-ARIA Tree pattern minus
    * type-ahead (deferred to issue #108). Phase 2 (issue #95) moved
@@ -2947,18 +2957,22 @@ export class JsonTreeComponent {
 
   onExtractButtonClick(node: TreeNode, event: MouseEvent): void {
     event.stopPropagation();
-    this.emitExtract(node, 'rowButton');
+    this.emitExtract(node, 'rowPillPrimitiveArray');
   }
 
   onExtractMenuClick(node: TreeNode): void {
     // Phase 4 (tree-menu overhaul): counts-only marker for the
     // menu-driven Extract entry point. The inline pill button uses
-    // `tree.extract.click` with `source: 'rowButton'` separately.
+    // `tree.extract.click` with `source: 'rowPillPrimitiveArray'`
+    // separately.
     this.logger.info('tree.contextMenu.extract');
     this.emitExtract(node, 'contextMenu');
   }
 
-  private emitExtract(node: TreeNode, source: 'rowButton' | 'contextMenu'): void {
+  private emitExtract(
+    node: TreeNode,
+    source: 'rowPillPrimitiveArray' | 'contextMenu' | 'decodedDialog',
+  ): void {
     const candidate = this.extractCandidate(node);
     if (!candidate) return;
     const sourceVersion = this.extractSourceVersion() ?? -1;
@@ -2984,6 +2998,18 @@ export class JsonTreeComponent {
   decodedCandidate(node: TreeNode): boolean {
     if (node.type !== 'string' || typeof node.value !== 'string') return false;
     return node.value.length > DECODED_LONG_THRESHOLD_CHARS || /[\n\r\t"\\]/.test(node.value);
+  }
+
+  decodedPillTitleFor(node: TreeNode): string {
+    return this.extractCandidate(node) !== null
+      ? this.decodedOpenDialogWithExtractTitleLabel
+      : this.decodedOpenDialogTitleLabel;
+  }
+
+  decodedPillAriaFor(node: TreeNode): string {
+    return this.extractCandidate(node) !== null
+      ? this.decodedOpenDialogWithExtractAriaLabel
+      : this.decodedOpenDialogAriaLabel;
   }
 
   /**
@@ -3028,11 +3054,51 @@ export class JsonTreeComponent {
     if (!this.decodedCandidate(node)) return;
     const value = node.value as string;
     const reason: 'escape' | 'long' = /[\n\r\t"\\]/.test(value) ? 'escape' : 'long';
-    const data: DecodedValueDialogData = { value, pathString: node.pathString };
-    this.dialog.open<DecodedValueDialogComponent, DecodedValueDialogData, void>(
+    const capturedExtractCandidate = this.extractCandidate(node);
+    const capturedSourceVersion = this.extractSourceVersion() ?? -1;
+    const data: DecodedValueDialogData = {
+      value,
+      pathString: node.pathString,
+      ...(capturedExtractCandidate !== null
+        ? { extractCandidate: capturedExtractCandidate, extractPath: node.path }
+        : {}),
+    };
+    const dialogRef = this.dialog.open<
       DecodedValueDialogComponent,
-      { data, width: '720px', maxWidth: '95vw', autoFocus: 'dialog' },
-    );
+      DecodedValueDialogData,
+      DecodedValueDialogResult
+    >(DecodedValueDialogComponent, {
+      data,
+      width: '720px',
+      maxWidth: '95vw',
+      autoFocus: 'dialog',
+    });
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((result) => {
+        if (result?.extract === true) {
+          const currentSourceVersion = this.extractSourceVersion() ?? -1;
+          const currentCandidate = this.extractCandidate(node);
+          const staleDialogClose =
+            currentSourceVersion !== capturedSourceVersion ||
+            this.nodeIndex().get(node.pathString) !== node ||
+            capturedExtractCandidate === null ||
+            currentCandidate === null ||
+            currentCandidate.text !== capturedExtractCandidate.text;
+          if (staleDialogClose) {
+            this.logger.event('tree.extract.dialog.staleClose');
+          } else {
+            this.extractRequest.emit({
+              path: node.path,
+              sourceVersion: currentSourceVersion,
+              replacement: currentCandidate,
+              source: 'decodedDialog',
+            });
+          }
+        }
+        this.focusRowByPath(node.pathString);
+      });
     this.logger.event('tree.decoded.viewerOpened', {
       source,
       reason,

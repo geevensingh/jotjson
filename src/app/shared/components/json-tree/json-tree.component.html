@@ -403,7 +403,7 @@
                   @if (showTypeBadges()) {
                     <span class="tree-type-badge">{{ typeLabel(leafNode) }}</span>
                   }
-                  @if (extractCandidate(leafNode); as extractable) {
+                  @if (extractCandidate(leafNode) && !decodedCandidate(leafNode); as extractable) {
                     <button
                       type="button"
                       class="tree-extract-pill"
@@ -420,8 +420,8 @@
                     <button
                       type="button"
                       class="tree-decoded-pill"
-                      [attr.title]="decodedOpenDialogTitleLabel"
-                      [attr.aria-label]="decodedOpenDialogAriaLabel"
+                      [attr.title]="decodedPillTitleFor(leafNode)"
+                      [attr.aria-label]="decodedPillAriaFor(leafNode)"
                       (click)="onDecodedButtonClick(leafNode, $event)"
                     >
                       <jj-icon name="decoded" [size]="'auto'" />
