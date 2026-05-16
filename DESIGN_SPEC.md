@@ -2432,6 +2432,31 @@ Out of scope (for v1):
   name `jj-tooltip-wide` is reusable -- future Monaco /
   breadcrumb / status-bar tooltips with long bodies can opt in
   with one attribute.
+- **0.25.0**: Tree row top-level **Expand all from here** label gains
+  a depth hint when the subtree has at least two container levels
+  reachable: `Expand all from here (+5 levels)` (matching the
+  existing `+N levels` suffix vocabulary on the per-row depth
+  submenu at TS:633-641) rather than the bare `Expand all from
+  here`. The hint surfaces on the row whenever
+  `maxDescendantDepth(node) >= 2`; at depth 1 the suffix is
+  intentionally omitted to avoid visually duplicating the bolded
+  `Expand 1 level` surfaced dblclick mirror immediately above. The
+  hint scales past the depth-submenu's `+1..+9` ceiling -- e.g.,
+  `(+12 levels)` on a deeply-nested chain -- since the top-level
+  row is the only path to "Expand all" once the submenu's range is
+  exhausted, so a depth signal here also tells users how deep the
+  subtree goes when the toolbar's Expand-to-Level range can't
+  reach the bottom. New `$localize` ID
+  `@@tree.contextMenu.expandAllFromHere.withDepth` (always plural
+  source string, no ICU -- the codebase has zero `$localize` ICU
+  precedents and the depth-1 threshold rules out the singular).
+  Telemetry shape unchanged (`tree.contextMenu.expandAllFromHere`
+  still emits `{ source: 'topRow' }`); enriching the event with
+  the depth bucket is deferred to issue #241 alongside the
+  `logger.info -> logger.event` migration so the sink and bucket
+  ship atomically per AGENTS.md §4. No HTML structure change --
+  only the label binding swaps from `ctxExpandAllFromHereElevatedLabel`
+  to the new `ctxExpandAllFromHereLabelFor(cn)` method.
 - **0.23.2**: Restore the v0.19.0 row-menu icon contract on the
   new top-level **Expand all from here** row. v0.19.0 (Phase 3
   of the tree-menu overhaul) established that "every top-level

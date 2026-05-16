@@ -6796,6 +6796,72 @@ describe('JsonTreeComponent', () => {
         });
       });
 
+      // ---- v0.25.0: depth-aware label suffix ----
+
+      it('Expand all label keeps the base form at depth 1 (suffix would collide with surfaced shortcut)', async () => {
+        await createWith({ outer: { mid: { inner: 1 } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        // Precondition: depth 1 (mid is the only container descendant; inner is primitive).
+        // The suffix is intentionally omitted here so users don't see
+        // "(+1 level)" sitting directly under the bolded "Expand 1 level"
+        // surfaced shortcut.
+        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe(cmp.ctxExpandAllFromHereElevatedLabel);
+      });
+
+      it('Expand all label gains a "(+N levels)" suffix at depth >= 2', async () => {
+        // Fixture: 5 container descendants below outer. Walk:
+        // outer (d=0) -> a (d=1) -> b (d=2) -> c (d=3) -> d (d=4) -> e (d=5).
+        // f is the primitive leaf, so e is the deepest container.
+        // maxDescendantDepth(outer) === 5.
+        await createWith({ outer: { a: { b: { c: { d: { e: { f: 1 } } } } } } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe('Expand all from here (+5 levels)');
+      });
+
+      it('Expand all label scales beyond the +1..+9 depth-submenu range', async () => {
+        // Build a deeply-nested container chain so the depth-aware
+        // label exercises a depth that the +N submenu never offers.
+        // This is the whole point of the label hint: deep subtrees
+        // that don't fit the submenu's range still get a depth
+        // signal on the top-level row.
+        //
+        // Walk trace (n=12 nested `x` wrappers around primitive 1):
+        // outer (d=0) -> x_1 (d=1) -> x_2 (d=2) -> ... -> x_11 (d=11).
+        // x_12 contains a primitive leaf so it has no container
+        // children and short-circuits the walk before its depth is
+        // recorded (maxDescendantDepth counts containers whose
+        // descendants include at least one container).
+        // maxDescendantDepth(outer) === 11.
+        const buildDeep = (n: number): unknown => {
+          let v: unknown = 1;
+          for (let i = 0; i < n; i++) v = { x: v };
+          return { outer: v };
+        };
+        await createWith(buildDeep(12));
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe('Expand all from here (+11 levels)');
+      });
+
+      it('Expand all label returns base form for primitives-only containers (safe default)', async () => {
+        // The row itself is hidden in production by hasContainerDescendants,
+        // but the method must return a sensible label for any programmatic
+        // caller. depth 0 -> base label.
+        await createWith({ outer: { x: 1, y: 2 } });
+        cmp.collapseAll();
+        fixture.detectChanges();
+        const outer = nodeAt('$.outer');
+        expect(cmp.hasContainerDescendants(outer))
+          .withContext('precondition: primitives-only -> row hidden in production')
+          .toBeFalse();
+        expect(cmp.ctxExpandAllFromHereLabelFor(outer)).toBe(cmp.ctxExpandAllFromHereElevatedLabel);
+      });
+
       it('top-level Expand all row is not bolded (dblclick-mirror mandate guardrail)', async () => {
         // Setup: expand the root so $.outer is rendered, then
         // collapse from $.outer so showExpandAllFromHere(outer) is

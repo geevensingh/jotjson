@@ -3956,6 +3956,35 @@ export class JsonTreeComponent {
   }
 
   /**
+   * Returns the label for the top-level `Expand all from here` row.
+   * When the subtree has at least two container levels reachable,
+   * suffixes the label with the depth count (`(+N levels)`) so the
+   * user can see how deep `all` will go before clicking.
+   *
+   * Threshold behavior (`maxDescendantDepth >= 2` for suffix):
+   * - depth 0 (primitives-only): row is hidden by the
+   *   `hasContainerDescendants` gate; method returns the base label
+   *   as a safe default for any programmatic caller.
+   * - depth 1: suffix omitted. The bolded `Expand 1 level` surfaced
+   *   shortcut row sits directly above; a `(+1 level)` suffix here
+   *   would visually collide with that shortcut's depth call-out.
+   *   The two actions still differ in scope (the bolded shortcut
+   *   only expands the clicked container; `expandAll` also expands
+   *   the deeper container descendant), but the verbs `1 level` vs
+   *   `all` carry that distinction without an explicit count.
+   * - depth >= 2: suffix shown so the action's reach is visible.
+   *
+   * The suffixed message is always plural ("levels") because the
+   * threshold rules out the singular case; the source string avoids
+   * an i18n ICU plural for which the codebase has no precedent.
+   */
+  ctxExpandAllFromHereLabelFor(node: TreeNode): string {
+    const depth = this.maxDescendantDepth(node);
+    if (depth < 2) return this.ctxExpandAllFromHereElevatedLabel;
+    return $localize`:@@tree.contextMenu.expandAllFromHere.withDepth:Expand all from here (+${depth}:DEPTH: levels)`;
+  }
+
+  /**
    * Length of the longest path from `node` down to any descendant
    * **container** (not counting primitive leaves). Drives the cap on
    * visible "Expand to depth +N" entries so we never offer an `+N`
