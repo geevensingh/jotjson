@@ -5984,7 +5984,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     expect(snackRefHarness.dismissSpy).toHaveBeenCalled();
   });
 
-  it('logs ctrlZ undo telemetry with the 30s+ bucket when the revert lands after the snackbar window', () => {
+  it('logs ctrlZ undo telemetry with the 5s+ bucket when the revert lands more than 5s after extract', () => {
     let nowMs = 1000;
     spyOn(performance, 'now').and.callFake(() => nowMs);
     const { fixture, component, treeExtractor, eventSpy } = setup();
@@ -5999,16 +5999,56 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     );
     eventSpy.calls.reset();
 
-    nowMs = 36_000;
+    // Stay inside the 30s wall-clock cap (the real `setTimeout` in
+    // production fires at 30s and clears state); the simulated
+    // `performance.now()` only drives the bucketizer.
+    nowMs = 7_000;
     component.onValueChange(priorText);
     fixture.detectChanges();
     TestBed.flushEffects();
 
     expect(eventSpy).toHaveBeenCalledWith('tree.extract.undo', {
       source: 'ctrlZ',
-      undoLatencyMsBucket: '30s+',
+      undoLatencyMsBucket: '5s+',
     });
   });
+
+  it('releases pendingExtractUndo state after the 30s wall-clock cap even without further edits', fakeAsync(() => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, eventSpy, snack } = setup();
+    snack.open.and.returnValue(createExtractSnackBarRefHarness().ref);
+    treeExtractor.setVersion(99);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 99,
+      }),
+    );
+    eventSpy.calls.reset();
+
+    // Advance the real scheduler past the 30s cap. The wall-clock
+    // timer scheduled in `onExtractRequest` fires and clears
+    // `pendingExtractUndo` via `clearPendingExtractUndo()` regardless
+    // of whether the user has typed anything.
+    tick(30_001);
+    fixture.detectChanges();
+
+    // Simulate a Ctrl+Z back to priorText. The state has been
+    // cleared, so the effect's content-match guard at the top
+    // returns early and no `tree.extract.undo` is logged.
+    nowMs = 35_000;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(eventSpy).not.toHaveBeenCalledWith(
+      'tree.extract.undo',
+      jasmine.objectContaining({ source: 'ctrlZ' }),
+    );
+  }));
 
   it('treats snackbar Undo as a no-op when ctrlZ already cleared the pending state', () => {
     let nowMs = 1000;

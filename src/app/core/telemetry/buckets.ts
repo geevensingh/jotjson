@@ -38,9 +38,14 @@ export type CountBucket = '<100' | '100-1K' | '1K-10K' | '>10K';
 export type LineCountBucket = '1' | '2-5' | '6-20' | '21-100' | '100+';
 
 /**
- * Closed-enum bucket for extract-undo latency.
+ * Closed-enum bucket for extract-undo latency. The top bucket is
+ * open-ended because the `pendingExtractUndo` snapshot is released by
+ * a 30s wall-clock timer; revert telemetry past 30s only fires when
+ * background-tab throttling delays the timer, so any `>= 5s` revert
+ * collapses into a single bucket rather than a misleading `5-30s`
+ * label. Naming matches `LineCountBucket`'s open-ended `'100+'` form.
  */
-export type UndoLatencyBucket = '<1s' | '1-5s' | '5-30s' | '30s+';
+export type UndoLatencyBucket = '<1s' | '1-5s' | '5s+';
 
 /**
  * Returns the {@link SizeBucket} that contains `n` bytes. `NaN` and
@@ -92,10 +97,7 @@ export function bucketUndoLatency(ms: number): UndoLatencyBucket {
   if (ms < 5000) {
     return '1-5s';
   }
-  if (ms < 30000) {
-    return '5-30s';
-  }
-  return '30s+';
+  return '5s+';
 }
 
 /**

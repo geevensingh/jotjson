@@ -154,6 +154,16 @@ const COLD_BOOT_CLIPBOARD_TIMEOUT_MS = 150;
 const COLD_BOOT_CLIPBOARD_MAX_BYTES = 1 * 1024 * 1024;
 
 /**
+ * Wall-clock cap on `pendingExtractUndo` retention. After this window,
+ * the captured `priorText` snapshot is released regardless of user
+ * activity, so a user who extracts and then walks away from the tab
+ * cannot hold an arbitrarily large snapshot in memory indefinitely.
+ * Reverts past this window (background-tab throttling, etc.) collapse
+ * into the `'5s+'` `bucketUndoLatency` bucket.
+ */
+const EXTRACT_UNDO_CAP_MS = 30_000;
+
+/**
  * Tree-pane debounce window. Live consumers (errors, dirty, status
  * bar, Format/Minify, search) continue to update on every keystroke
  * by reading `parseResult()` directly; the tree pane reads the
@@ -262,6 +272,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     startMs: number;
     undoneViaSnackbar: boolean;
   } | null = null;
+  // Single owner of the 30s `pendingExtractUndo` cap. Cleared atomically
+  // with `pendingExtractUndo` via `clearPendingExtractUndo()`; never null
+  // it directly. Background-tab throttling can delay the callback past
+  // 30s -- the helper is idempotent so a late firing after a manual
+  // clear is a safe no-op.
+  private pendingExtractUndoTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -879,15 +895,16 @@ export class HomeComponent implements OnInit, OnDestroy {
       // content-match re-enters this effect. Telemetry was emitted in
       // the action callback; just clear the pending state.
       if (pendingExtractUndo.undoneViaSnackbar && currentContent === pendingExtractUndo.priorText) {
-        this.pendingExtractUndo = null;
+        this.clearPendingExtractUndo();
         return;
       }
       // Case 2: content reverted to priorText via some non-snackbar
       // path (Ctrl+Z is the dominant case). Fire ctrlZ telemetry,
       // clear pending state, and dismiss any still-visible snackbar
       // so the offer to undo disappears once the undo is observable.
-      // The `'30s+'` bucket is documented and emitted here too -
-      // a late revert is still a revert worth counting.
+      // The 30s wall-clock timer in `clearPendingExtractUndo()` is
+      // the single owner of the cap -- once it fires, `pendingExtractUndo`
+      // is null and this branch returns early at the top guard above.
       if (
         !pendingExtractUndo.undoneViaSnackbar &&
         currentContent === pendingExtractUndo.priorText
@@ -896,16 +913,20 @@ export class HomeComponent implements OnInit, OnDestroy {
           source: 'ctrlZ',
           undoLatencyMsBucket: bucketUndoLatency(undoLatencyMs),
         });
-        this.pendingExtractUndo = null;
+        this.clearPendingExtractUndo();
         this.extractUndoSnackRef?.dismiss();
         return;
       }
-      // Case 3: 30s cap elapsed without a revert (and not undone via
-      // snackbar). Drop pending state silently; the snackbar has long
-      // since timed out (8s duration).
-      if (undoLatencyMs > 30_000) {
-        this.pendingExtractUndo = null;
-      }
+    });
+
+    // The 30s `setTimeout` that backs `pendingExtractUndoTimer` survives
+    // component destruction if not cleaned up - the callback would then
+    // touch a destroyed component's field and keep the instance alive
+    // for the remainder of the window. Register the helper so the timer
+    // (and any captured `priorText` snapshot) is released promptly on
+    // teardown.
+    this.destroyRef.onDestroy(() => {
+      this.clearPendingExtractUndo();
     });
 
     this.treeValueChanges$
@@ -1189,6 +1210,21 @@ export class HomeComponent implements OnInit, OnDestroy {
           this.coldBootClipboardSnackRef = null;
         }
       });
+  }
+
+  /**
+   * Atomically clear the `pendingExtractUndo` snapshot and any
+   * scheduled wall-clock timer. Idempotent: safe to call when neither
+   * field is set (e.g., the timer callback racing with an effect-
+   * driven clear). Always pair every `pendingExtractUndo` write with
+   * this helper; never null the field directly.
+   */
+  private clearPendingExtractUndo(): void {
+    if (this.pendingExtractUndoTimer !== null) {
+      clearTimeout(this.pendingExtractUndoTimer);
+      this.pendingExtractUndoTimer = null;
+    }
+    this.pendingExtractUndo = null;
   }
 
   private openExtractUndoSnack(priorText: string): void {
@@ -1771,11 +1807,20 @@ export class HomeComponent implements OnInit, OnDestroy {
     // expanded elsewhere must survive.
     this.treeFlush$.next();
     this.tree()?.expandNodeAtPath(event.path);
+    // Clear any in-flight pending state first so a rapid re-extract
+    // (A then B within 30s) cannot leave A's wall-clock timer queued -
+    // it would later wipe B's snapshot mid-window. The helper is
+    // idempotent when no prior state exists.
+    this.clearPendingExtractUndo();
     this.pendingExtractUndo = {
       priorText,
       startMs: performance.now(),
       undoneViaSnackbar: false,
     };
+    this.pendingExtractUndoTimer = setTimeout(
+      () => this.clearPendingExtractUndo(),
+      EXTRACT_UNDO_CAP_MS,
+    );
     this.openExtractUndoSnack(priorText);
   }
 

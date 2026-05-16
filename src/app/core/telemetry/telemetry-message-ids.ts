@@ -1234,10 +1234,13 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Volume control: bounded-frequency. At most one user action per
    * extract, with keyboard detection opt-in.
    * Props: { source: 'snackbar' | 'ctrlZ';
-   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5-30s' | '30s+' }.
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
    *          `source` distinguishes the entry path; `undoLatencyMsBucket`
    *          supports a misclick-rate KQL where undo within 5s is the
-   *          approximate signal.
+   *          approximate signal. The `'5s+'` top bucket is open-ended
+   *          because `pendingExtractUndo` is released by a 30s wall-clock
+   *          timer; reverts past 30s only land when background-tab
+   *          throttling delays the timer.
    * Privacy: no string contents or paths.
    */
   'tree.extract.undo',

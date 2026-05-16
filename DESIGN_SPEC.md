@@ -2469,7 +2469,12 @@ Out of scope (for v1):
   Monaco-native `Ctrl+Z` and opens an 8-second Undo snackbar
   (telemetry: `tree.extract.click`, `tree.extract.undo` with
   `source: 'snackbar' | 'ctrlZ'` and bucketed latency `<1s` /
-  `1-5s` / `5-30s` / `30s+`). Minor bump because the default
+  `1-5s` / `5s+`). The pre-extract `priorText` snapshot is
+  capped by a real 30s wall-clock timer (not a content-change-
+  driven check) so an idle tab cannot hold the snapshot
+  indefinitely; consequently the `bucketUndoLatency` top bucket
+  is open-ended (`'5s+'`) to honor what the simpler
+  implementation can emit. Minor bump because the default
   extract entry point changes and the UI adds a new dialog
   button + Undo snackbar. Also folds in a tooltip-style width fix
   for the Inspect string value dialog itself: `width: '90vw',
