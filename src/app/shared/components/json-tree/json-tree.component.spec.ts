@@ -5066,6 +5066,26 @@ describe('JsonTreeComponent', () => {
     });
 
     describe('opening the dialog', () => {
+      it('pill click opens with viewport-relative width matching the v0.23.1 tooltip principle', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const open = spyOnDialogOpen();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(open).toHaveBeenCalledTimes(1);
+        // jasmine.objectContaining guards intent without freezing the
+        // shape of the config object: future PRs may add panelClass /
+        // restoreFocus / other MatDialogConfig keys, and this
+        // assertion should keep firing on the dimensions only. The
+        // sibling `jj-tooltip-wide` rule in `src/styles/_material.scss`
+        // uses `max-width: 90vw` for the same reasoning.
+        expect(open).toHaveBeenCalledWith(
+          DecodedValueDialogComponent,
+          jasmine.objectContaining({ width: '90vw', maxWidth: '95vw' }),
+        );
+      });
+
       it('pill click opens without extractCandidate when the row is not extractable', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();

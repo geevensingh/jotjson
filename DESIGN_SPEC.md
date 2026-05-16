@@ -2459,6 +2459,26 @@ Out of scope (for v1):
   iteration sees BOTH the new top-level row AND the Subtree
   trigger. Any future iconless top-level row added anywhere in
   `rowMenu` will fail the new test.
+- **0.24.0**: M7v Safer Extract Embedded JSON UX (see milestone
+  M7v at the end of this document for the full prose). When a
+  string leaf is both extractable and a decoded-value candidate,
+  the destructive Extract action moves into the renamed `Inspect
+  string value` dialog and the row-level Extract pill is hidden,
+  so the destructive button no longer sits adjacent to the
+  non-destructive viewer pill. Every successful extract preserves
+  Monaco-native `Ctrl+Z` and opens an 8-second Undo snackbar
+  (telemetry: `tree.extract.click`, `tree.extract.undo` with
+  `source: 'snackbar' | 'ctrlZ'` and bucketed latency `<1s` /
+  `1-5s` / `5-30s` / `30s+`). Minor bump because the default
+  extract entry point changes and the UI adds a new dialog
+  button + Undo snackbar. Also folds in a tooltip-style width fix
+  for the Inspect string value dialog itself: `width: '90vw',
+  maxWidth: '95vw'` replaces the prior `width: '720px'` so the
+  dialog body uses the available horizontal real estate on wide
+  monitors, matching the v0.23.1 `jj-tooltip-wide` precedent
+  (percentage-only viewport sizing, no fixed pixel cap) one tier
+  up. Body still capped at `max-height: 70vh` (unchanged) so the
+  dialog stays vertically bounded on short viewports.
 - **0.21.0**: Tree view virtualization (issue #95 Phase 2). The
   `<mat-tree>` + `<mat-nested-tree-node>` render path is replaced
   with `<cdk-virtual-scroll-viewport>` + `*cdkVirtualFor` from

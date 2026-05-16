@@ -3069,7 +3069,18 @@ export class JsonTreeComponent {
       DecodedValueDialogResult
     >(DecodedValueDialogComponent, {
       data,
-      width: '720px',
+      // Viewport-relative width follows the v0.23.1 tree-value tooltip
+      // approach in `src/styles/_material.scss` (the `.jj-tooltip-wide`
+      // surface uses `max-width: 90vw` and rejects fixed pixel caps).
+      // Tooltips and this dialog are two tiers of viewer for the same
+      // content kind (long monospace strings); the dialog is the
+      // committed-inspection mode, so the same percentage-only rule
+      // applies here. Other MatDialog callers in this app (history,
+      // blobs, formatting-rules, etc.) keep their fixed `420px` form
+      // dialogs; this pattern is specific to dialogs rendering
+      // pre-wrap monospace user content where horizontal real estate
+      // matters.
+      width: '90vw',
       maxWidth: '95vw',
       autoFocus: 'dialog',
     });
