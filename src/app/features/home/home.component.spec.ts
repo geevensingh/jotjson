@@ -1161,20 +1161,36 @@ describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
   it('onExtractRequest does NOT bump viewResetToken (other subtrees survive)', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
-    component.content.set('{"a":{"longString":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"b":1,"c":2}');
+    // The real `TreeStringExtractorService` initialises
+    // `currentVersion()` to 0 (tree-string-extractor.service.ts:58),
+    // so an event with `sourceVersion: 0` passes the staleness gate
+    // at home.component.ts:1620 without any mock setup.
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}","keep":true}');
     component.__flushTreePaneForTesting();
     fixture.detectChanges();
     const tokenBefore = component.viewResetTokenValue();
+    expect(component.treeStringExtractor.currentVersion()).toBe(0);
 
-    // Synthesise an extract request shape against the current doc.
-    // The wiring just needs setContent + flush + expandNodeAtPath
-    // to fire; we are asserting only that the token does not bump.
-    component.content.set('{"a":{"longString":1},"b":1,"c":2}');
-    component.__flushTreePaneForTesting();
+    component.onExtractRequest({
+      path: ['payload'],
+      sourceVersion: 0,
+      replacement: {
+        text: '{"a":1}',
+        blockCount: 1,
+        preservesComments: true,
+        proseSegments: 0,
+        hasComments: false,
+      },
+      source: 'rowButton',
+    });
     fixture.detectChanges();
 
+    // Asserting on `content()` proves `setContent(result.patched)`
+    // actually ran -- the staleness early-return at line 1625 would
+    // leave `content()` unchanged and silently pass the token check.
+    expect(component.content()).toBe('{"payload":{"a":1},"keep":true}');
     // setContent does not bump the token, so any user-expanded
-    // sibling subtrees (b, c) survive.
+    // sibling subtrees (`keep`, etc.) survive.
     expect(component.viewResetTokenValue()).toBe(tokenBefore);
   });
 
@@ -1221,6 +1237,28 @@ describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
     // The new shape is visible to the tree synchronously - any
     // follow-up `expandNodeAtPath(["a","extracted"])` would resolve.
     expect(component.treePaneInputs().value).toEqual({ a: { extracted: 42 } });
+  });
+
+  // Spec 13: first-paint regression guard for users with a hydrated
+  // draft. Without seeding `toSignal`'s initialValue from the live
+  // parseResult, `pairwise` in `parseResultPath$` would absorb both
+  // the `startWith` emission and the bridging effect's first
+  // emission (both V0_hydrated, same `.empty`); the switchMap would
+  // take the timer branch; and the tree pane would remain blank for
+  // ~150 ms before showing the draft on cold load.
+  //
+  // CRITICAL: this spec must NOT call `tick(...)` or
+  // `fixture.detectChanges()` before the assertion. The fix only
+  // changes the synchronous initial value; both buggy and fixed
+  // pipelines emit the same V0 after the 150 ms timer, so any tick
+  // >= 150 would pass either way and silently neuter the regression
+  // guard. Future maintainers: do not "helpfully" add detectChanges.
+  it('treePaneInputs.value renders a hydrated draft synchronously on first paint', () => {
+    localStorage.setItem('jotjson.draft.v1', '{"hello":"world"}');
+    const fixture = TestBed.createComponent(HomeComponent);
+    expect(fixture.componentInstance.treePaneInputs().value).toEqual({
+      hello: 'world',
+    });
   });
 });
 

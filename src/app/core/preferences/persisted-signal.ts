@@ -118,20 +118,19 @@ export function persistedSignal<T>(opts: PersistedSignalOptions<T>): WritableSig
     window.addEventListener('pagehide', onPageHide);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
-    // Best-effort cleanup if a DestroyRef is available in the
-    // current injection context. persistedSignal is also called
-    // from root-provided services where DestroyRef is effectively
-    // app-lifetime; cleanup is then a no-op in practice.
-    try {
-      const destroyRef = inject(DestroyRef, { optional: true });
-      destroyRef?.onDestroy(() => {
-        cancelPending();
-        window.removeEventListener('pagehide', onPageHide);
-        document.removeEventListener('visibilitychange', onVisibilityChange);
-      });
-    } catch {
-      /* not in injection context; listeners live for app lifetime */
-    }
+    // The `effect()` call above already requires (and asserts) an
+    // injection context, so by the time we reach here `inject` is
+    // guaranteed to succeed - no `optional: true` / try/catch
+    // needed. For root-provided services (DraftService) the
+    // DestroyRef is effectively app-lifetime so cleanup is a
+    // no-op in practice; for component-scoped callers the cleanup
+    // matters and runs on injector teardown.
+    const destroyRef = inject(DestroyRef);
+    destroyRef.onDestroy(() => {
+      cancelPending();
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    });
   }
 
   return sig;

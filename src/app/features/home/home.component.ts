@@ -53,11 +53,7 @@ import {
   type ClipboardGrantedReadResult,
 } from '../../core/clipboard/clipboard-polling.service';
 import { ExtractedJson, JsonExtractorService } from '../../core/json/json-extractor.service';
-import {
-  CommentBundle,
-  JsonParseResult,
-  JsonParserService,
-} from '../../core/json/json-parser.service';
+import { JsonParseResult, JsonParserService } from '../../core/json/json-parser.service';
 import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
 import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
@@ -513,6 +509,13 @@ export class HomeComponent implements OnInit, OnDestroy {
       // debounce machinery. The `toSignal` bridge below sees a
       // single emission and stabilises immediately, so
       // ApplicationRef stability is not delayed.
+      //
+      // Note: `treePaneInputs` is never read during SSR because
+      // `home.component.html` wraps `<jj-json-tree>` (the only
+      // consumer) in `@if (isBrowser)` per AGENTS.md s4 prerender
+      // constraints. The single emission here is purely defensive
+      // to keep the signal type non-`undefined`; downstream readers
+      // observe nothing during prerender.
       return of(this.parseResult());
     }
     const parseResult$ = toObservable(this.parseResult);
@@ -565,9 +568,19 @@ export class HomeComponent implements OnInit, OnDestroy {
       })),
     ),
     {
+      // Seed from the live parseResult at construction time so a
+      // hydrated draft renders synchronously on first paint.
+      // Without this seed, `pairwise` in `parseResultPath$` would
+      // absorb both the `startWith` emission and the bridging
+      // effect's first emission (both equal V0), the switchMap
+      // would take the timer branch (same `.empty`), and the tree
+      // pane would stay blank for ~150 ms before showing the draft.
+      // The pipeline's first downstream emission is the timer's,
+      // not `startWith`'s; the seed is the only thing the tree
+      // pane sees before then.
       initialValue: {
-        value: undefined as unknown,
-        commentsByPath: new Map<string, CommentBundle>() as ReadonlyMap<string, CommentBundle>,
+        value: this.parseResult().empty ? (undefined as unknown) : this.parseResult().value,
+        commentsByPath: this.parseResult().commentsByPath,
       },
     },
   );
