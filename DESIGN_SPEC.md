@@ -467,7 +467,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - `null` - null values.
     - `array:N` - arrays, where N is the number of direct items (e.g., `array:5`).
     - `json:X` - objects, where X is the total number of nodes in the subtree rooted at that object (recursive count of all descendant keys). E.g., a nested object containing 3 keys, one of which is itself an object with 2 keys, displays `json:5`.
-    - String values are additionally classified into more specific labels when the content matches: `date` and `date/time` (parseable ISO 8601, RFC 2822, or slash-form date - gated by `treeShowDateAnnotations` so the badge stays in sync with the annotation visibility), `uuid`, `url`, `email`, `path` (URL-style absolute or relative paths, e.g., `/api/v2/items` or `docs/intro.md` - excludes full URLs with scheme), `ipv4`, `ipv6`. Detection is conservative; ambiguous strings fall back to `string`.
+    - String values are additionally classified into more specific labels when the content matches: `date` and `date/time` (parseable ISO 8601, RFC 2822, slash-form date, or the legacy ASP.NET / WCF JSON date format `/Date(<ms>[+/-HHMM])/` - gated by `treeShowDateAnnotations` so the badge stays in sync with the annotation visibility), `uuid`, `url`, `email`, `path` (URL-style absolute or relative paths, e.g., `/api/v2/items` or `docs/intro.md` - excludes full URLs with scheme), `ipv4`, `ipv6`. Detection is conservative; ambiguous strings fall back to `string`.
   - Type labels are styled with a muted/subdued color and a small sans-serif font so they don't compete with the key/value content. Type labels use a single muted color rather than per-type coloring - leaf values themselves already carry semantic color (strings, numbers, booleans, null), so coloring the type badge too would be visual noise. Per the **decoration vs data font** rule below, the badge - like every other JotJSON-added annotation in the tree - renders in the UI sans-serif face rather than the document's monospace face.
   - Type labels can be toggled on/off via the "Show type labels" preference in user settings.
   - **Decoration vs data fonts.** The tree mixes two type families on every row, and the rule for which to use is uniform: **anything inside the user's JSON document renders in the document's monospace face; anything JotJSON adds *about* the document renders in the UI sans-serif face, italic and dimmed.**
@@ -488,7 +488,7 @@ The primary page. Available to **all users** (anonymous + registered).
     - Followed by a parenthetical annotation showing: the parsed date/time in the user's local format and an approximate relative time.
     - Example: `"2024-11-05T18:30:00Z"  (Nov 5, 2024, 11:30 AM PST - 1 year ago)`
     - The annotation is styled in a muted/italic font to distinguish it from the raw value.
-    - Detection heuristics: ISO 8601, RFC 2822, and common formats like `YYYY-MM-DD`, `MM/DD/YYYY`. Uses a conservative parser - ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates. Numeric values (e.g., Unix timestamps) are **not** annotated - only string values are eligible.
+    - Detection heuristics: ISO 8601, RFC 2822, common formats like `YYYY-MM-DD`, `MM/DD/YYYY`, and the legacy ASP.NET / WCF JSON date format `/Date(<ms>[+/-HHMM])/`. Uses a conservative parser - ambiguous strings (e.g., `"12345"`, `"hello"`) are not treated as dates. Numeric values (e.g., Unix timestamps) are **not** annotated - only string values are eligible. For the ASP.NET / WCF format, the optional timezone-offset suffix is informational and ignored; the millisecond value is treated as UTC and re-localized for display via `Intl.DateTimeFormat`. The annotation always renders with a time component for this format because it cannot syntactically distinguish a date-only payload from a date+time payload.
     - Relative time updates live (e.g., "3 minutes ago" -> "4 minutes ago") while the page is open.
     - This feature can be toggled on/off via a tree toolbar toggle or the `treeShowDateAnnotations` user preference.
     - Two related preferences (`treeAssumeUtcForIsoDateTime`, `treeAssumeUtcForIsoDateOnly`, both default `true`) control whether ISO 8601 strings without an explicit timezone designator are interpreted as UTC. Defaults match the conventional reading of machine-emitted timestamps (logs, .NET round-trips, etc.); turn off either setting to fall back to native `Date` semantics (date-time as local, date-only as local midnight). The displayed absolute date is always in the user's local timezone via `Intl.DateTimeFormat` - these settings only change what instant the source string represents.
@@ -914,6 +914,13 @@ therefore use a dedicated deterministic helper at
 preference-sensitive search classifier in
 `src/app/shared/utils/value-classifier.ts`. The helper classifies the JSON
 value into `valueKind` and `isEmpty` for the engine.
+
+When the deferred `is_date` / `is_date_time` format predicates ship,
+the deterministic helper must recognize every date shape that
+`parseAsDate` accepts (ISO 8601, RFC 2822, slash-form, and the
+legacy ASP.NET / WCF JSON date format `/Date(<ms>[+/-HHMM])/`) so
+saved rule sets agree with the search-side `date` / `date/time`
+badges.
 
 #### Stale-tab graceful degradation
 

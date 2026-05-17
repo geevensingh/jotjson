@@ -9,6 +9,7 @@
  *   - ISO date-only:         YYYY-MM-DD
  *   - Slash with 4-digit year: NN/NN/YYYY (order resolved by user locale)
  *   - Loose RFC 2822 / human:  "Mon DD, YYYY" or "DD Mon YYYY" + optional time
+ *   - ASP.NET / WCF JSON date: /Date(<ms-since-epoch>[+/-HHMM])/ (offset informational, ignored)
  *
  * Strings that pass the regex are parsed and required to land in
  * [1900-01-01, 2100-12-31] to defend against e.g. accidental epoch parses.
@@ -20,6 +21,18 @@ const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const SLASH_DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/;
 const RFC2822_ISH =
   /^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+)?(?:(\d{1,2})\s+([A-Za-z]{3,9})|([A-Za-z]{3,9})\s+(\d{1,2}))[,\s]+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(?:Z|GMT|UTC|[+-]\d{2}:?\d{2}))?)?$/;
+
+// Microsoft ASP.NET / WCF JSON date format: /Date(<ms-since-epoch>[<+|-><HHMM>])/.
+// The optional timezone suffix is informational only per the format
+// spec - the millisecond value is always UTC. We discard the offset and
+// let Intl.DateTimeFormat re-localize for display, matching the
+// existing ISO-with-offset precedent. The regex deliberately does not
+// accept the backslash-escaped form (`\/Date(...)\/`); those are
+// expected to be unescaped upstream by the JSON parser. `\d{1,13}` is
+// sized to cover the legal range - 13 digits is the largest ms value
+// landing inside [1900-01-01, 2100-12-31]; `isInRange` catches any
+// overshoot the regex permits.
+const DOTNET_DATE = /^\/Date\((-?\d{1,13})(?:[+-]\d{4})?\)\/$/;
 
 const MIN_YEAR = 1900;
 const MAX_YEAR = 2100;
@@ -143,6 +156,22 @@ export function parseAsDate(raw: unknown, locale?: string, opts?: ParseOptions):
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   if (trimmed.length < 8 || trimmed.length > 40) return null;
+
+  // ASP.NET / WCF format is structurally exclusive of every other
+  // matcher (which all start with `\d` or `[A-Za-z]`), so checking it
+  // first is both correct and cheap. `hasTime: true` is unconditional:
+  // the format has no syntactic way to distinguish a DateTime used as
+  // a date (midnight-UTC payload) from a DateTime carrying a real
+  // time-of-day. We pick the shape-faithful answer and accept that
+  // west-of-UTC users pasting a midnight-UTC value see e.g.
+  // "Nov 14, 2023, 7:00 PM" rather than "Nov 15, 2023". The two
+  // `assumeUtc*` options have no effect here - the ms value is
+  // already an absolute instant.
+  const dotnet = DOTNET_DATE.exec(trimmed);
+  if (dotnet) {
+    const date = new Date(Number(dotnet[1]));
+    return isInRange(date) ? { date, hasTime: true } : null;
+  }
 
   if (ISO_WITH_TIME.test(trimmed)) {
     const hasTz = ISO_TZ_SUFFIX.test(trimmed);
