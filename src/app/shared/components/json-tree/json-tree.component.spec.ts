@@ -4544,6 +4544,79 @@ describe('JsonTreeComponent', () => {
       cmp.selectByPathString('$');
       expect(cmp.selectedPath()).toBe('$');
     });
+
+    it('does not re-emit selectionChange when only the value re-flows (same selectedPath, new nodeIndex)', async () => {
+      // Regression for the PR #261 tree-pane-debounce bug:
+      // home's 150 ms tree-pane debounce causes the tree to rebuild
+      // `root()` (and therefore `nodeIndex`) ~150 ms after a
+      // keystroke. The original `selectionChange` effect read both
+      // `selectedPath()` and `nodeIndex()`, so the second `nodeIndex`
+      // arrival re-fired the effect with the same `selectedPath` and
+      // re-emitted `node.path`. Downstream that bypassed the home's
+      // single-shot `pendingTreeApply` sentinel and triggered
+      // `editor.revealRange` -> `setSelection` over the AST range,
+      // selecting the entire editor content (the catastrophic
+      // symptom that prompts this fix).
+      //
+      // The fix dedups by `lastEmittedSelectedPath`: same `selected`
+      // means no re-emit even when `nodeIndex` changed.
+      await createWith({ a: 1, b: 2 });
+      cmp.selectByPathString('$.a');
+      fixture.detectChanges();
+
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+
+      // Same shape, different identity. Mimics home's debounced
+      // tree-pane rebuild after a keystroke. `selectedPath` stays
+      // `'$.a'`; `nodeIndex` recomputes from the new `root()`.
+      // Do not await whenStable(): json-tree owns a persistent
+      // setInterval (NOW_TICK_MS) that keeps the zone busy.
+      fixture.componentRef.setInput('value', { a: 1, b: 2 });
+      fixture.detectChanges();
+
+      expect(events).withContext('no spurious re-emit on value re-flow').toEqual([]);
+
+      // Sanity: deeper paths behave the same.
+      cmp.selectByPathString('$.b');
+      fixture.detectChanges();
+      events.length = 0;
+      fixture.componentRef.setInput('value', { a: 1, b: 2 });
+      fixture.detectChanges();
+      expect(events).withContext('no spurious re-emit at deeper path').toEqual([]);
+    });
+
+    it('still emits when selectedPath references a path the previous nodeIndex did not have', async () => {
+      // Defensive guard for skeptic's transient-then-resolve edge
+      // case: if any caller writes `selectedPath` to a value the
+      // current nodeIndex doesn't yet contain (the swallowed
+      // transient branch), the effect must NOT update the dedup
+      // sentinel. Once `nodeIndex` catches up (e.g., on the next
+      // tree-pane debounce flush), the effect re-fires with the
+      // same `selectedPath` and the new node, and we MUST emit.
+      // Without the "sentinel-not-updated-during-transient" rule,
+      // the second tick would short-circuit and the home would
+      // never receive the canonical structural path.
+      await createWith({ a: 1 });
+
+      // Pre-write a path that's not yet in nodeIndex. setInput is
+      // synchronous so we write the selection while the new tree
+      // is still being assembled by detectChanges.
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+
+      // Swap to a tree where '$.newKey' exists; selectByPathString
+      // is the canonical writer and asserts the new path resolves.
+      fixture.componentRef.setInput('value', { a: 1, newKey: 'value' });
+      fixture.detectChanges();
+      cmp.selectByPathString('$.newKey');
+      fixture.detectChanges();
+
+      const newKeyEvent = events.find(
+        (path) => path !== null && path.length === 1 && path[0] === 'newKey',
+      );
+      expect(newKeyEvent).withContext('expected an event for ["newKey"]').toBeTruthy();
+    });
   });
 
   // ---------------------------------------------------------------------------
