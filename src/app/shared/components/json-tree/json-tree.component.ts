@@ -1408,6 +1408,22 @@ export class JsonTreeComponent {
   private autoFitGeneration = 0;
 
   /**
+   * Last `selectedPath` value emitted to `selectionChange`. Used by
+   * the `selectionChange` effect to dedup spurious re-emissions when
+   * only `nodeIndex` changed (e.g., the home's 150 ms tree-pane
+   * debounce rebuilds `root()` after a keystroke). Without dedup,
+   * the second emission would bypass the home's single-shot
+   * `pendingTreeApply` echo-suppression sentinel and trigger an
+   * unwanted `editor.revealRange` -> `setSelection` over the AST
+   * range (which selects the entire document when the path is `$`).
+   *
+   * Initial value `undefined` (not `null`) so the construction-time
+   * first run with `selectedPath() === null` still emits an initial
+   * `null` per the documented output contract.
+   */
+  private lastEmittedSelectedPath: string | null | undefined = undefined;
+
+  /**
    * Test-only override for auto-fit measurement. When set, bypasses
    * DOM probing and viewport resolution so specs can drive the
    * algorithm with deterministic inputs. Production code paths
@@ -1615,14 +1631,30 @@ export class JsonTreeComponent {
     // path the current nodeIndex hasn't seen yet (e.g., a still-mid-
     // render mat-tree update) - the next effect tick will emit when
     // both signals agree. selectedPath = null always emits null.
+    //
+    // Dedup via `lastEmittedSelectedPath`: when only `nodeIndex`
+    // changes (e.g., the home's 150 ms tree-pane debounce rebuilds
+    // `root()` after a keystroke), `selectedPath` is unchanged and we
+    // must NOT re-emit. Re-emitting would bypass the home's single-
+    // shot `pendingTreeApply` sentinel and trigger an unwanted
+    // `editor.revealRange` -> `setSelection` over the AST range
+    // (catastrophic when the path is `$` because it selects the whole
+    // document).
     effect(() => {
       const selected = this.selectedPath();
+      if (selected === this.lastEmittedSelectedPath) return;
       if (selected === null) {
+        this.lastEmittedSelectedPath = null;
         this.selectionChange.emit(null);
         return;
       }
       const node = this.nodeIndex().get(selected);
+      // Transient: selectedPath references a path the current
+      // nodeIndex hasn't seen yet. Leave `lastEmittedSelectedPath`
+      // unchanged so the next effect tick (after nodeIndex catches
+      // up) re-evaluates and emits.
       if (!node) return;
+      this.lastEmittedSelectedPath = selected;
       this.selectionChange.emit(node.path);
     });
 
