@@ -6,6 +6,10 @@ export interface PatchResult {
   patched: string;
   targetOffset: number;
   targetLength: number;
+  /**
+   * The text actually spliced in (post-reindent). Equal to `patched.substring(targetOffset, targetOffset + replacementText.length)`.
+   */
+  replacementText: string;
 }
 
 export function patchExtractedValue(
@@ -35,7 +39,12 @@ export function patchExtractedValue(
   const patched = applyEdits(text, [
     { offset: targetOffset, length: target.length, content: indented },
   ]);
-  return { patched, targetOffset, targetLength: target.length };
+  return {
+    patched,
+    targetOffset,
+    targetLength: target.length,
+    replacementText: indented,
+  };
 }
 
 function computeColumn(text: string, offset: number): number {

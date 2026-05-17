@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ClipboardCopyService } from '../../../../core/clipboard/clipboard-copy.service';
+import type { ExtractedJson } from '../../../../core/json/json-extractor.service';
 import {
   DecodedValueDialogComponent,
   type DecodedValueDialogData,
@@ -9,6 +10,14 @@ import {
 describe('DecodedValueDialogComponent', () => {
   let close: jasmine.Spy;
   let copyWithToast: jasmine.Spy;
+
+  const extractCandidate = {
+    text: '{"a":1}',
+    blockCount: 1,
+    preservesComments: true,
+    proseSegments: 0,
+    hasComments: false,
+  } satisfies ExtractedJson;
 
   function createWith(data: DecodedValueDialogData) {
     close = jasmine.createSpy('ref.close');
@@ -123,6 +132,74 @@ describe('DecodedValueDialogComponent', () => {
         '.decoded-actions__copy',
       ) as HTMLButtonElement;
       expect(() => button.click()).not.toThrow();
+    });
+  });
+
+  describe('extract', () => {
+    it('does not render the extract button when no extract candidate is provided', () => {
+      const fixture = createWith({ value: 'a', pathString: '$.x' });
+      const extractButton = (fixture.nativeElement as HTMLElement).querySelector(
+        '.decoded-actions__extract',
+      );
+      expect(extractButton).toBeNull();
+    });
+
+    it('renders the extract button when an extract candidate is provided', () => {
+      const fixture = createWith({
+        value: '{"a":1}',
+        pathString: '$.x',
+        extractCandidate,
+        extractPath: ['x'],
+      });
+      const extractButton = (fixture.nativeElement as HTMLElement).querySelector(
+        '.decoded-actions__extract',
+      );
+      expect(extractButton).toBeTruthy();
+    });
+
+    it('renders the renamed title label', () => {
+      const fixture = createWith({
+        value: '{"a":1}',
+        pathString: '$.x',
+        extractCandidate,
+        extractPath: ['x'],
+      });
+      const titleLabel = (fixture.nativeElement as HTMLElement).querySelector(
+        '.decoded-title__label',
+      );
+      expect(titleLabel?.textContent?.trim()).toBe('Inspect string value');
+    });
+
+    it('renders the shared extract button label text', () => {
+      const fixture = createWith({
+        value: '{"a":1}',
+        pathString: '$.x',
+        extractCandidate,
+        extractPath: ['x'],
+      });
+      const extractButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '.decoded-actions__extract',
+      );
+      expect(extractButton).toBeTruthy();
+      expect(extractButton?.textContent?.replace(/\s+/g, ' ').trim()).toContain(
+        'Extract embedded JSON',
+      );
+    });
+
+    it('closes with an extract result when the extract button is clicked', () => {
+      const fixture = createWith({
+        value: '{"a":1}',
+        pathString: '$.x',
+        extractCandidate,
+        extractPath: ['x'],
+      });
+      const extractButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '.decoded-actions__extract',
+      );
+      expect(extractButton).toBeTruthy();
+      extractButton!.click();
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledWith({ extract: true });
     });
   });
 

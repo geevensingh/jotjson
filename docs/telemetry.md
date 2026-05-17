@@ -490,6 +490,46 @@ customEvents
 | summarize count() by tostring(customDimensions.source)
 ```
 
+#### Extract source rename / undo KQL
+
+`tree.extract.click` renamed its row-pill `source` from `rowButton` to
+`rowPillPrimitiveArray` in M7v, while `tree.decoded.viewerOpened`
+retains `source: rowButton` for the decoded-pill cohort. Normalize the
+extract event before comparing pre- and post-deploy cohorts or joining
+across the two events.
+
+```kusto
+customEvents
+| where name == "tree.extract.click"
+| extend source_normalized = case(
+    tostring(customDimensions.source) == "rowButton", "rowPillLegacy",
+    tostring(customDimensions.source) == "rowPillPrimitiveArray", "rowPillNew",
+    tostring(customDimensions.source))
+| summarize count() by source_normalized, bin(timestamp, 1h)
+| order by timestamp asc
+```
+
+Approximate extract misclick rate by dividing quick undos (`<5s`) by
+all `tree.extract.click` successes in the same time bucket.
+
+```kusto
+let extractClicks =
+    customEvents
+    | where name == "tree.extract.click"
+    | summarize extractClickCount = count() by bucket = bin(timestamp, 1h);
+let quickUndos =
+    customEvents
+    | where name == "tree.extract.undo"
+    | where tostring(customDimensions.undoLatencyMsBucket) in ("<1s", "1-5s")
+    | summarize quickUndoCount = count() by bucket = bin(timestamp, 1h);
+extractClicks
+| join kind=leftouter quickUndos on bucket
+| extend quickUndoCount = coalesce(quickUndoCount, 0)
+| extend misclickRate = todouble(quickUndoCount) / todouble(extractClickCount)
+| project bucket, extractClickCount, quickUndoCount, misclickRate
+| order by bucket asc
+```
+
 #### `blob.coldBoot.firstPaint`
 
 **Kind:** event   **Level:** info   **Cold flag:** yes (one-shot per cold-boot blob nav)   **Sampling:** 100% (unsampled)

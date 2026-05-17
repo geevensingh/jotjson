@@ -3,6 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ClipboardCopyService } from '../../../../core/clipboard/clipboard-copy.service';
+import type { ExtractedJson } from '../../../../core/json/json-extractor.service';
 import { IconComponent } from '../../icon/icon.component';
 
 /**
@@ -16,7 +17,23 @@ import { IconComponent } from '../../icon/icon.component';
 export interface DecodedValueDialogData {
   readonly value: string;
   readonly pathString: string;
+  /**
+   * Optional. When present, the dialog renders an 'Extract embedded JSON'
+   * button that closes the dialog with `{ extract: true }`. The tree
+   * component re-validates at close time.
+   */
+  readonly extractCandidate?: ExtractedJson;
+  /**
+   * Optional. The originating tree row's path (e.g. `['payload', 0]`)
+   * for the extractable candidate. Carried through so the tree
+   * component can re-validate against the live source-version map at
+   * dialog-close time without re-deriving the path from `pathString`.
+   * Should be supplied whenever `extractCandidate` is supplied.
+   */
+  readonly extractPath?: readonly (string | number)[];
 }
+
+export type DecodedValueDialogResult = { extract: true } | undefined;
 
 interface DecodedLine {
   readonly index: number;
@@ -31,7 +48,9 @@ interface DecodedLine {
  * scrolling, and content-driven row heights are fundamentally
  * incompatible with that. The dialog is a strict superset of the prior
  * inline render: line numbers, dedicated copy button, larger font,
- * and a mobile-friendly viewport.
+ * and a mobile-friendly viewport. When the caller supplies an
+ * `extractCandidate`, the dialog also hosts the confirm-before-mutate
+ * "Extract embedded JSON" action.
  *
  * The component is self-contained: it does not depend on the tree
  * component, and accepts only the raw string value plus its originating
@@ -49,11 +68,13 @@ interface DecodedLine {
   styleUrl: './decoded-value-dialog.component.scss',
 })
 export class DecodedValueDialogComponent {
-  readonly ref = inject<MatDialogRef<DecodedValueDialogComponent, void>>(MatDialogRef);
+  readonly ref =
+    inject<MatDialogRef<DecodedValueDialogComponent, DecodedValueDialogResult>>(MatDialogRef);
   readonly data = inject<DecodedValueDialogData>(MAT_DIALOG_DATA);
   private readonly clipboardCopy = inject(ClipboardCopyService);
 
-  readonly titleLabel = $localize`:@@tree.decoded.dialog.title:Decoded value`;
+  readonly titleLabel = $localize`:@@tree.decoded.dialog.title:Inspect string value`;
+  readonly canExtract = computed(() => this.data.extractCandidate !== undefined);
 
   /**
    * The string is split on `\r\n` / `\n` / `\r` so CRLF and CR-only
@@ -66,6 +87,10 @@ export class DecodedValueDialogComponent {
     const split = value.split(/\r\n|\r|\n/);
     return split.map((text, index) => ({ index: index + 1, text }));
   });
+
+  extract(): void {
+    this.ref.close({ extract: true });
+  }
 
   copy(): void {
     void this.clipboardCopy.copyWithToast(this.data.value, {

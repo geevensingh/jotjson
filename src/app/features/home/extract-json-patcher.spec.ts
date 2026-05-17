@@ -20,17 +20,33 @@ describe('patchExtractedValue', () => {
     expect(result.patched).toBe('{\n  "payload": {"a":1},\n  "keep": true\n}');
     expect(result.targetOffset).toBe(text.indexOf('"INFO'));
     expect(result.targetLength).toBe('"INFO {\\"a\\":1}"'.length);
+    expect(result.replacementText).toBe('{"a":1}');
+    expect(
+      result.patched.substring(
+        result.targetOffset,
+        result.targetOffset + result.replacementText.length,
+      ),
+    ).toBe(result.replacementText);
   });
 
   it('reindents a multi-line replacement to the target column', () => {
     const text = '{\n  "payload": "INFO {\\"a\\":1}",\n  "keep": true\n}';
     const replacementText = '{\n  "a": 1,\n  "b": true\n}';
+    const expectedReplacementText =
+      '{\n               "a": 1,\n               "b": true\n             }';
 
     const result = patchExtractedValue(text, ['payload'], replacement(replacementText));
 
     expect(result.patched).toBe(
       '{\n  "payload": {\n               "a": 1,\n               "b": true\n             },\n  "keep": true\n}',
     );
+    expect(result.replacementText).toBe(expectedReplacementText);
+    expect(
+      result.patched.substring(
+        result.targetOffset,
+        result.targetOffset + result.replacementText.length,
+      ),
+    ).toBe(result.replacementText);
   });
 
   it('reindents a multi-line wrapper replacement in a nested object', () => {
@@ -87,6 +103,20 @@ describe('patchExtractedValue', () => {
     expect(result.patched).toBe('{\n  "a": 1\n}');
     expect(result.targetOffset).toBe(0);
     expect(result.targetLength).toBe(text.length);
+  });
+
+  it('returns the root replacement text as the exact patched slice', () => {
+    const text = '"INFO {\\"a\\":1}"';
+    const replacementText = '{\n  "a": 1\n}';
+
+    const result = patchExtractedValue(text, [], replacement(replacementText));
+
+    expect(
+      result.patched.substring(
+        result.targetOffset,
+        result.targetOffset + result.replacementText.length,
+      ),
+    ).toBe(result.replacementText);
   });
 
   it('replaces a deep value in an array', () => {

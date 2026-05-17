@@ -62,7 +62,7 @@ import { persistedSignal } from '../../core/preferences/persisted-signal';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import { SeoService } from '../../core/seo/seo.service';
-import { bucketBytes } from '../../core/telemetry/buckets';
+import { bucketBytes, bucketUndoLatency } from '../../core/telemetry/buckets';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
 import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
@@ -152,6 +152,16 @@ const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
 const TREE_EXTRACT_SCAN_DEBOUNCE_MS = 1000;
 const COLD_BOOT_CLIPBOARD_TIMEOUT_MS = 150;
 const COLD_BOOT_CLIPBOARD_MAX_BYTES = 1 * 1024 * 1024;
+
+/**
+ * Wall-clock cap on `pendingExtractUndo` retention. After this window,
+ * the captured `priorText` snapshot is released regardless of user
+ * activity, so a user who extracts and then walks away from the tab
+ * cannot hold an arbitrarily large snapshot in memory indefinitely.
+ * Reverts past this window (background-tab throttling, etc.) collapse
+ * into the `'5s+'` `bucketUndoLatency` bucket.
+ */
+const EXTRACT_UNDO_CAP_MS = 30_000;
 
 /**
  * Tree-pane debounce window. Live consumers (errors, dirty, status
@@ -256,6 +266,18 @@ export class HomeComponent implements OnInit, OnDestroy {
    * Cleared on dismiss.
    */
   private coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
+  private extractUndoSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
+  private pendingExtractUndo: {
+    priorText: string;
+    startMs: number;
+    undoneViaSnackbar: boolean;
+  } | null = null;
+  // Single owner of the 30s `pendingExtractUndo` cap. Cleared atomically
+  // with `pendingExtractUndo` via `clearPendingExtractUndo()`; never null
+  // it directly. Background-tab throttling can delay the callback past
+  // 30s -- the helper is idempotent so a late firing after a manual
+  // clear is a safe no-op.
+  private pendingExtractUndoTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -870,6 +892,52 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
     });
 
+    effect(() => {
+      const currentContent = this.content();
+      const pendingExtractUndo = this.pendingExtractUndo;
+      if (!pendingExtractUndo) {
+        return;
+      }
+      const undoLatencyMs = performance.now() - pendingExtractUndo.startMs;
+      // Case 1: snackbar Undo already ran (`openExtractUndoSnack` sets the
+      // flag and calls `replaceDocument(priorText)`); the resulting
+      // content-match re-enters this effect. Telemetry was emitted in
+      // the action callback; just clear the pending state.
+      if (pendingExtractUndo.undoneViaSnackbar && currentContent === pendingExtractUndo.priorText) {
+        this.clearPendingExtractUndo();
+        return;
+      }
+      // Case 2: content reverted to priorText via some non-snackbar
+      // path (Ctrl+Z is the dominant case). Fire ctrlZ telemetry,
+      // clear pending state, and dismiss any still-visible snackbar
+      // so the offer to undo disappears once the undo is observable.
+      // The 30s wall-clock timer in `clearPendingExtractUndo()` is
+      // the single owner of the cap -- once it fires, `pendingExtractUndo`
+      // is null and this branch returns early at the top guard above.
+      if (
+        !pendingExtractUndo.undoneViaSnackbar &&
+        currentContent === pendingExtractUndo.priorText
+      ) {
+        this.logger.event('tree.extract.undo', {
+          source: 'ctrlZ',
+          undoLatencyMsBucket: bucketUndoLatency(undoLatencyMs),
+        });
+        this.clearPendingExtractUndo();
+        this.extractUndoSnackRef?.dismiss();
+        return;
+      }
+    });
+
+    // The 30s `setTimeout` that backs `pendingExtractUndoTimer` survives
+    // component destruction if not cleaned up - the callback would then
+    // touch a destroyed component's field and keep the instance alive
+    // for the remainder of the window. Register the helper so the timer
+    // (and any captured `priorText` snapshot) is released promptly on
+    // teardown.
+    this.destroyRef.onDestroy(() => {
+      this.clearPendingExtractUndo();
+    });
+
     this.treeValueChanges$
       .pipe(debounceTime(TREE_EXTRACT_SCAN_DEBOUNCE_MS), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.scanTreeStringLeaves(value));
@@ -1149,6 +1217,76 @@ export class HomeComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         if (this.coldBootClipboardSnackRef === snackRef) {
           this.coldBootClipboardSnackRef = null;
+        }
+      });
+  }
+
+  /**
+   * Atomically clear the `pendingExtractUndo` snapshot and any
+   * scheduled wall-clock timer. Idempotent: safe to call when neither
+   * field is set (e.g., the timer callback racing with an effect-
+   * driven clear). Always pair every `pendingExtractUndo` write with
+   * this helper; never null the field directly.
+   */
+  private clearPendingExtractUndo(): void {
+    if (this.pendingExtractUndoTimer !== null) {
+      clearTimeout(this.pendingExtractUndoTimer);
+      this.pendingExtractUndoTimer = null;
+    }
+    this.pendingExtractUndo = null;
+  }
+
+  private openExtractUndoSnack(priorText: string): void {
+    if (this.extractUndoSnackRef) {
+      this.extractUndoSnackRef.dismiss();
+      this.logger.event('tree.extract.snackbarReplaced');
+      this.extractUndoSnackRef = null;
+    }
+    const pendingExtractUndo = this.pendingExtractUndo;
+    if (!pendingExtractUndo) {
+      return;
+    }
+    const snackRef: MatSnackBarRef<TextOnlySnackBar> = this.snack.open(
+      $localize`:@@home.extract.snackbar.applied:Extracted embedded JSON into the document.`,
+      $localize`:@@home.extract.snackbar.undo:Undo`,
+      { duration: 8000, politeness: 'assertive' },
+    );
+    this.extractUndoSnackRef = snackRef;
+    snackRef
+      .onAction()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        // Race guard: if Ctrl+Z fired the effect's `dismiss()` while
+        // the user's click was queued, the field has already been
+        // cleared (or replaced by a subsequent extract). The captured
+        // local `pendingExtractUndo` still references the original
+        // heap object, so an identity mismatch means we lost the race
+        // - treat the action as a no-op to avoid double-firing
+        // telemetry and re-applying the (now redundant) revert.
+        if (this.pendingExtractUndo !== pendingExtractUndo) {
+          return;
+        }
+        pendingExtractUndo.undoneViaSnackbar = true;
+        // Full-doc swap (not a surgical reverse-edit via
+        // `JsonEditorComponent.applyEdit`). Trade-off: this clobbers
+        // Monaco's redo stack, so Ctrl+Y / Ctrl+Shift+Z cannot reach
+        // the post-extract state after snackbar Undo. Accepted because
+        // the captured `priorText` is the entire pre-extract document
+        // and a surgical reverse splice would still need to invalidate
+        // any post-extract typing - same observable outcome with more
+        // code.
+        this.replaceDocument(priorText);
+        this.logger.event('tree.extract.undo', {
+          source: 'snackbar',
+          undoLatencyMsBucket: bucketUndoLatency(performance.now() - pendingExtractUndo.startMs),
+        });
+      });
+    snackRef
+      .afterDismissed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.extractUndoSnackRef === snackRef) {
+          this.extractUndoSnackRef = null;
         }
       });
   }
@@ -1647,13 +1785,26 @@ export class HomeComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const priorText = this.content();
     let result: PatchResult;
     try {
-      result = patchExtractedValue(this.content(), event.path, event.replacement);
+      result = patchExtractedValue(priorText, event.path, event.replacement);
     } catch (error) {
       this.logger.warn('tree.extract.applyFailed', {
         reason: error instanceof Error ? error.message : 'unknown',
       });
+      return;
+    }
+
+    const editor = this.editor();
+    if (!editor) {
+      this.logger.warn('tree.extract.applyFailed', { reason: 'editorUnavailable' });
+      return;
+    }
+    const startOffset = result.targetOffset;
+    const endOffset = startOffset + result.targetLength;
+    if (!editor.applyEdit(startOffset, endOffset, result.replacementText, 'jotjson-extract')) {
+      this.logger.warn('tree.extract.applyFailed', { reason: 'applyEditFailed' });
       return;
     }
 
@@ -1665,7 +1816,6 @@ export class HomeComponent implements OnInit, OnDestroy {
         proseSegments: event.replacement.proseSegments ?? 0,
       },
     );
-    this.setContent(result.patched);
     // Bypass the 150 ms tree-pane debounce so `expandNodeAtPath`
     // (below) operates against the freshly-flushed tree rather
     // than the stale pre-Extract tree. We do NOT bump
@@ -1674,6 +1824,21 @@ export class HomeComponent implements OnInit, OnDestroy {
     // expanded elsewhere must survive.
     this.treeFlush$.next();
     this.tree()?.expandNodeAtPath(event.path);
+    // Clear any in-flight pending state first so a rapid re-extract
+    // (A then B within 30s) cannot leave A's wall-clock timer queued -
+    // it would later wipe B's snapshot mid-window. The helper is
+    // idempotent when no prior state exists.
+    this.clearPendingExtractUndo();
+    this.pendingExtractUndo = {
+      priorText,
+      startMs: performance.now(),
+      undoneViaSnackbar: false,
+    };
+    this.pendingExtractUndoTimer = setTimeout(
+      () => this.clearPendingExtractUndo(),
+      EXTRACT_UNDO_CAP_MS,
+    );
+    this.openExtractUndoSnack(priorText);
   }
 
   onToggleSelectionSync(): void {
