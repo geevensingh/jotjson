@@ -1380,6 +1380,94 @@ describe('JsonTreeComponent', () => {
     });
   });
 
+  describe('key display (control chars in keys)', () => {
+    function keySpans(): HTMLSpanElement[] {
+      // Exclude the offscreen row-height probe (tree-row--probe) so
+      // tests assert against rendered rows only.
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tree-row:not(.tree-row--probe) .tree-key',
+        ),
+      ) as HTMLSpanElement[];
+    }
+
+    function probeSpan(): HTMLSpanElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-row--probe .tree-key',
+      ) as HTMLSpanElement | null;
+    }
+
+    it('renders a leaf-row key with real LF as the literal \\n escape', async () => {
+      await createWith({ 'a\nb': 'v' });
+      const spans = keySpans();
+      const found = spans.find((span) => (span.textContent ?? '').includes('a\\nb'));
+      expect(found).toBeDefined();
+      expect(found?.textContent).toBe('a\\nb');
+    });
+
+    it('renders a leaf-row key with an embedded quote as \\"', async () => {
+      await createWith({ 'a"b': 'v' });
+      const found = keySpans().find((span) => (span.textContent ?? '').includes('a\\"b'));
+      expect(found).toBeDefined();
+      expect(found?.textContent).toBe('a\\"b');
+    });
+
+    it('renders a leaf-row key with a backslash as \\\\', async () => {
+      await createWith({ 'a\\b': 'v' });
+      const found = keySpans().find((span) => (span.textContent ?? '').includes('a\\\\b'));
+      expect(found).toBeDefined();
+      expect(found?.textContent).toBe('a\\\\b');
+    });
+
+    it('renders an open-container row key with real LF as the literal \\n escape', async () => {
+      await createWith({ 'a\nb': { x: 1 } });
+      // The open-container row for `a\nb` is the row labeled with key
+      // `a\nb` whose value renders as `{...}`. There is no leaf row
+      // for the container itself; only the inner `x` leaf row is below.
+      const found = keySpans().find((span) => (span.textContent ?? '').includes('a\\nb'));
+      expect(found).toBeDefined();
+      expect(found?.textContent).toBe('a\\nb');
+    });
+
+    it('preserves the row-height probe span as literal text "probe"', async () => {
+      await createWith({ ok: 1 });
+      const probe = probeSpan();
+      expect(probe).not.toBeNull();
+      expect(probe?.textContent).toBe('probe');
+    });
+
+    it('sets [attr.title] to the raw segment only when transformed', async () => {
+      await createWith({ 'a\nb': 'v', plain: 'v' });
+      const spans = keySpans();
+      const transformed = spans.find((span) => (span.textContent ?? '') === 'a\\nb');
+      const untransformed = spans.find((span) => (span.textContent ?? '') === 'plain');
+      expect(transformed).toBeDefined();
+      expect(untransformed).toBeDefined();
+      // Transformed span gets the raw decoded form as native title.
+      expect(transformed?.getAttribute('title')).toBe('a\nb');
+      // Untransformed span has no title attribute at all (so the
+      // row-level matchedRuleTitle cascade can apply on hover).
+      expect(untransformed?.hasAttribute('title')).toBe(false);
+    });
+
+    it('routes numeric segments to .tree-index, not .tree-key', async () => {
+      await createWith({ items: ['x', 'y'] });
+      const spans = keySpans();
+      // No .tree-key span carries a numeric literal label.
+      for (const span of spans) {
+        expect(span.textContent).not.toMatch(/^\d+$/);
+      }
+      const indexSpans = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tree-row:not(.tree-row--probe) .tree-index',
+        ),
+      ) as HTMLSpanElement[];
+      // Two array elements => two tree-index spans labeled "0:" and "1:".
+      const indexTexts = indexSpans.map((span) => span.textContent);
+      expect(indexTexts).toEqual(jasmine.arrayContaining(['0:', '1:']));
+    });
+  });
+
   describe('JSONC comment rendering (M7k)', () => {
     function makeBundle(
       leading?: string,
@@ -4457,6 +4545,79 @@ describe('JsonTreeComponent', () => {
       await createWith({ a: 1 });
       cmp.selectByPathString('$');
       expect(cmp.selectedPath()).toBe('$');
+    });
+
+    it('does not re-emit selectionChange when only the value re-flows (same selectedPath, new nodeIndex)', async () => {
+      // Regression for the PR #261 tree-pane-debounce bug:
+      // home's 150 ms tree-pane debounce causes the tree to rebuild
+      // `root()` (and therefore `nodeIndex`) ~150 ms after a
+      // keystroke. The original `selectionChange` effect read both
+      // `selectedPath()` and `nodeIndex()`, so the second `nodeIndex`
+      // arrival re-fired the effect with the same `selectedPath` and
+      // re-emitted `node.path`. Downstream that bypassed the home's
+      // single-shot `pendingTreeApply` sentinel and triggered
+      // `editor.revealRange` -> `setSelection` over the AST range,
+      // selecting the entire editor content (the catastrophic
+      // symptom that prompts this fix).
+      //
+      // The fix dedups by `lastEmittedSelectedPath`: same `selected`
+      // means no re-emit even when `nodeIndex` changed.
+      await createWith({ a: 1, b: 2 });
+      cmp.selectByPathString('$.a');
+      fixture.detectChanges();
+
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+
+      // Same shape, different identity. Mimics home's debounced
+      // tree-pane rebuild after a keystroke. `selectedPath` stays
+      // `'$.a'`; `nodeIndex` recomputes from the new `root()`.
+      // Do not await whenStable(): json-tree owns a persistent
+      // setInterval (NOW_TICK_MS) that keeps the zone busy.
+      fixture.componentRef.setInput('value', { a: 1, b: 2 });
+      fixture.detectChanges();
+
+      expect(events).withContext('no spurious re-emit on value re-flow').toEqual([]);
+
+      // Sanity: deeper paths behave the same.
+      cmp.selectByPathString('$.b');
+      fixture.detectChanges();
+      events.length = 0;
+      fixture.componentRef.setInput('value', { a: 1, b: 2 });
+      fixture.detectChanges();
+      expect(events).withContext('no spurious re-emit at deeper path').toEqual([]);
+    });
+
+    it('still emits when selectedPath references a path the previous nodeIndex did not have', async () => {
+      // Defensive guard for skeptic's transient-then-resolve edge
+      // case: if any caller writes `selectedPath` to a value the
+      // current nodeIndex doesn't yet contain (the swallowed
+      // transient branch), the effect must NOT update the dedup
+      // sentinel. Once `nodeIndex` catches up (e.g., on the next
+      // tree-pane debounce flush), the effect re-fires with the
+      // same `selectedPath` and the new node, and we MUST emit.
+      // Without the "sentinel-not-updated-during-transient" rule,
+      // the second tick would short-circuit and the home would
+      // never receive the canonical structural path.
+      await createWith({ a: 1 });
+
+      // Pre-write a path that's not yet in nodeIndex. setInput is
+      // synchronous so we write the selection while the new tree
+      // is still being assembled by detectChanges.
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+
+      // Swap to a tree where '$.newKey' exists; selectByPathString
+      // is the canonical writer and asserts the new path resolves.
+      fixture.componentRef.setInput('value', { a: 1, newKey: 'value' });
+      fixture.detectChanges();
+      cmp.selectByPathString('$.newKey');
+      fixture.detectChanges();
+
+      const newKeyEvent = events.find(
+        (path) => path !== null && path.length === 1 && path[0] === 'newKey',
+      );
+      expect(newKeyEvent).withContext('expected an event for ["newKey"]').toBeTruthy();
     });
   });
 

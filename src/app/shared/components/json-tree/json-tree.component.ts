@@ -36,6 +36,7 @@ import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import type { ExtractedJson } from '../../../core/json/json-extractor.service';
 import { CommentBundle, JsonParserService } from '../../../core/json/json-parser.service';
+import { displayKey as displayKeyHelper } from '../../../core/json/key-display';
 import { bucketColorHex } from '../../../core/preferences/pref-summarize';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
@@ -1319,12 +1320,23 @@ export class JsonTreeComponent {
     for (let i = 1; i <= path.length; i++) {
       const partial = path.slice(0, i);
       const segment = partial[partial.length - 1];
-      const label = typeof segment === 'number' ? `[${segment}]` : String(segment);
-      out.push({
+      let label: string;
+      let decodedLabel: string | undefined;
+      if (typeof segment === 'number') {
+        label = `[${segment}]`;
+      } else {
+        const raw = String(segment);
+        label = displayKeyHelper(raw);
+        if (label !== raw) decodedLabel = raw;
+      }
+      const base = {
         label,
         canonicalPath: formatPath(partial),
         current: i === path.length,
-      });
+      };
+      // Conditional spread honors aspirational exactOptionalPropertyTypes
+      // (AGENTS.md section 4) by not emitting `decodedLabel: undefined`.
+      out.push(decodedLabel !== undefined ? { ...base, decodedLabel } : base);
     }
     return out;
   });
@@ -1409,6 +1421,22 @@ export class JsonTreeComponent {
    * effects (auto-fit and `tree.render.slow`) advance independently.
    */
   private autoFitGeneration = 0;
+
+  /**
+   * Last `selectedPath` value emitted to `selectionChange`. Used by
+   * the `selectionChange` effect to dedup spurious re-emissions when
+   * only `nodeIndex` changed (e.g., the home's 150 ms tree-pane
+   * debounce rebuilds `root()` after a keystroke). Without dedup,
+   * the second emission would bypass the home's single-shot
+   * `pendingTreeApply` echo-suppression sentinel and trigger an
+   * unwanted `editor.revealRange` -> `setSelection` over the AST
+   * range (which selects the entire document when the path is `$`).
+   *
+   * Initial value `undefined` (not `null`) so the construction-time
+   * first run with `selectedPath() === null` still emits an initial
+   * `null` per the documented output contract.
+   */
+  private lastEmittedSelectedPath: string | null | undefined = undefined;
 
   /**
    * Test-only override for auto-fit measurement. When set, bypasses
@@ -1618,14 +1646,30 @@ export class JsonTreeComponent {
     // path the current nodeIndex hasn't seen yet (e.g., a still-mid-
     // render mat-tree update) - the next effect tick will emit when
     // both signals agree. selectedPath = null always emits null.
+    //
+    // Dedup via `lastEmittedSelectedPath`: when only `nodeIndex`
+    // changes (e.g., the home's 150 ms tree-pane debounce rebuilds
+    // `root()` after a keystroke), `selectedPath` is unchanged and we
+    // must NOT re-emit. Re-emitting would bypass the home's single-
+    // shot `pendingTreeApply` sentinel and trigger an unwanted
+    // `editor.revealRange` -> `setSelection` over the AST range
+    // (catastrophic when the path is `$` because it selects the whole
+    // document).
     effect(() => {
       const selected = this.selectedPath();
+      if (selected === this.lastEmittedSelectedPath) return;
       if (selected === null) {
+        this.lastEmittedSelectedPath = null;
         this.selectionChange.emit(null);
         return;
       }
       const node = this.nodeIndex().get(selected);
+      // Transient: selectedPath references a path the current
+      // nodeIndex hasn't seen yet. Leave `lastEmittedSelectedPath`
+      // unchanged so the next effect tick (after nodeIndex catches
+      // up) re-evaluates and emits.
       if (!node) return;
+      this.lastEmittedSelectedPath = selected;
       this.selectionChange.emit(node.path);
     });
 
@@ -3017,9 +3061,27 @@ export class JsonTreeComponent {
    * canonical JSON-escaped form via {@link renderLeaf} so every tree
    * row is uniform-height (issue #95 Phase 0). Decoded multi-line
    * content is shown via {@link openDecodedDialog} instead.
+   *
+   * Analog for object keys: `displayKey` in
+   * `src/app/core/json/key-display.ts`. That helper applies the same
+   * JSON-escape transform but strips the wrapping quotes so bare
+   * keys render naturally in `.tree-key` spans.
    */
   displayLeaf(node: TreeNode): string {
     return this.renderLeaf(node.value, node.type);
+  }
+
+  /**
+   * Template wrapper around `displayKey` (in
+   * `src/app/core/json/key-display.ts`) that narrows the polymorphic
+   * `TreeNode.segment` type for binding inside `.tree-key` spans.
+   * Numeric segments never reach the `.tree-key` branch (they go to
+   * `.tree-index` via `segmentIsIndex`), but the defensive `number`
+   * branch keeps the wrapper total and the template type-safe.
+   */
+  displayKey(segment: string | number): string {
+    if (typeof segment === 'number') return String(segment);
+    return displayKeyHelper(segment);
   }
 
   /**
