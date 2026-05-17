@@ -473,4 +473,33 @@ describe('JsonBreadcrumbComponent', () => {
       flush();
     }));
   });
+
+  describe('decodedLabel (escape-rendered keys)', () => {
+    it('transformed-segment chip renders label = escaped form and title = raw decoded form', async () => {
+      const fixture = await createWith([
+        {
+          label: 'a\\nb',
+          decodedLabel: 'a\nb',
+          canonicalPath: '$["a\\nb"]',
+          current: true,
+        },
+      ]);
+      const chips = chipButtons(fixture);
+      expect(chips.length).toBe(1);
+      expect(chips[0]!.textContent?.trim()).toBe('a\\nb');
+      // Title surfaces the raw decoded form (the real LF character).
+      expect(chips[0]!.getAttribute('title')).toBe('a\nb');
+    });
+
+    it('untransformed-segment chip preserves the existing overflow-hint title (title = label)', async () => {
+      const fixture = await createWith([
+        { label: 'plain', canonicalPath: '$.plain', current: true },
+      ]);
+      const chips = chipButtons(fixture);
+      expect(chips.length).toBe(1);
+      expect(chips[0]!.textContent?.trim()).toBe('plain');
+      // No decodedLabel -> title falls back to label.
+      expect(chips[0]!.getAttribute('title')).toBe('plain');
+    });
+  });
 });

@@ -239,6 +239,7 @@
       <jj-icon name="chevron-right" [size]="'auto'" />
     </button>
     <span class="tree-comment tree-comment-leading">// c</span>
+    <!-- intentionally raw: row-height probe; do not wrap in displayKey -->
     <span class="tree-key">probe</span>
     <span class="tree-value-string">"x"</span>
     <span class="tree-date-annotation">&nbsp;(2024)</span>
@@ -315,7 +316,14 @@
                   @if (segmentIsIndex(leafNode)) {
                     <span class="tree-index">{{ leafNode.segment }}:</span>
                   } @else {
-                    <span class="tree-key">{{ leafNode.segment }}</span>
+                    @let rawKey = leafNode.segment;
+                    @let displayedKey = displayKey(rawKey);
+                    <!-- title null when displayedKey === rawKey so row-level
+                         matchedRuleTitle cascade applies; title set to raw
+                         decoded form only when the key was transformed. -->
+                    <span class="tree-key" [attr.title]="displayedKey === rawKey ? null : rawKey">{{
+                      displayedKey
+                    }}</span>
                   }
                 }
 
@@ -514,7 +522,16 @@
                   @if (segmentIsIndex(openNode)) {
                     <span class="tree-index">{{ openNode.segment }}:</span>
                   } @else {
-                    <span class="tree-key">{{ openNode.segment }}</span>
+                    @let openRawKey = openNode.segment;
+                    @let openDisplayedKey = displayKey(openRawKey);
+                    <!-- title null when openDisplayedKey === openRawKey so
+                         row-level matchedRuleTitle cascade applies; title
+                         set to raw decoded form only when transformed. -->
+                    <span
+                      class="tree-key"
+                      [attr.title]="openDisplayedKey === openRawKey ? null : openRawKey"
+                      >{{ openDisplayedKey }}</span
+                    >
                   }
                 }
 
