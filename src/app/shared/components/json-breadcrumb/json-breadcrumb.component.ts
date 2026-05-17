@@ -27,6 +27,15 @@ export interface BreadcrumbCrumb {
   readonly label: string;
   readonly canonicalPath: string;
   readonly current: boolean;
+  /**
+   * Raw (un-escaped) key string when `label` is a JSON-escaped
+   * transform of the underlying segment (e.g. `label = 'a\\nb'` for a
+   * segment whose stored value is `'a\nb'`). Absent when `label` is
+   * already the raw form (bare keys, array indices). Used by the chip
+   * template to surface the raw form as a native browser `title`
+   * tooltip on hover.
+   */
+  readonly decodedLabel?: string;
 }
 
 /**

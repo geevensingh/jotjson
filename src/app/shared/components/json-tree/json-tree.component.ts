@@ -36,6 +36,7 @@ import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
 import type { ExtractedJson } from '../../../core/json/json-extractor.service';
 import { CommentBundle, JsonParserService } from '../../../core/json/json-parser.service';
+import { displayKey as displayKeyHelper } from '../../../core/json/key-display';
 import { bucketColorHex } from '../../../core/preferences/pref-summarize';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
@@ -1316,12 +1317,23 @@ export class JsonTreeComponent {
     for (let i = 1; i <= path.length; i++) {
       const partial = path.slice(0, i);
       const segment = partial[partial.length - 1];
-      const label = typeof segment === 'number' ? `[${segment}]` : String(segment);
-      out.push({
+      let label: string;
+      let decodedLabel: string | undefined;
+      if (typeof segment === 'number') {
+        label = `[${segment}]`;
+      } else {
+        const raw = String(segment);
+        label = displayKeyHelper(raw);
+        if (label !== raw) decodedLabel = raw;
+      }
+      const base = {
         label,
         canonicalPath: formatPath(partial),
         current: i === path.length,
-      });
+      };
+      // Conditional spread honors aspirational exactOptionalPropertyTypes
+      // (AGENTS.md section 4) by not emitting `decodedLabel: undefined`.
+      out.push(decodedLabel !== undefined ? { ...base, decodedLabel } : base);
     }
     return out;
   });
@@ -2991,9 +3003,27 @@ export class JsonTreeComponent {
    * canonical JSON-escaped form via {@link renderLeaf} so every tree
    * row is uniform-height (issue #95 Phase 0). Decoded multi-line
    * content is shown via {@link openDecodedDialog} instead.
+   *
+   * Analog for object keys: `displayKey` in
+   * `src/app/core/json/key-display.ts`. That helper applies the same
+   * JSON-escape transform but strips the wrapping quotes so bare
+   * keys render naturally in `.tree-key` spans.
    */
   displayLeaf(node: TreeNode): string {
     return this.renderLeaf(node.value, node.type);
+  }
+
+  /**
+   * Template wrapper around `displayKey` (in
+   * `src/app/core/json/key-display.ts`) that narrows the polymorphic
+   * `TreeNode.segment` type for binding inside `.tree-key` spans.
+   * Numeric segments never reach the `.tree-key` branch (they go to
+   * `.tree-index` via `segmentIsIndex`), but the defensive `number`
+   * branch keeps the wrapper total and the template type-safe.
+   */
+  displayKey(segment: string | number): string {
+    if (typeof segment === 'number') return String(segment);
+    return displayKeyHelper(segment);
   }
 
   /**
