@@ -4327,18 +4327,45 @@ describe('JsonTreeComponent', () => {
       expect(writes).toEqual([]);
     });
 
-    it('selectByPathString silently no-ops for unknown paths', async () => {
+    it('selectByPathString defers when path not in nodeIndex', async () => {
+      // Issue #266 renamed from "silently no-ops for unknown paths".
+      // The defer/retry pattern lets the home component drive
+      // selection from the live AST without waiting for the tree's
+      // 150 ms debounce. The path is remembered and applied when
+      // nodeIndex catches up.
       await createWith({ a: 1 });
       cmp.selectByPathString('$.does.not.exist');
+      // No write to selectedPath in the defer branch.
       expect(cmp.selectedPath()).toBeNull();
+      // Pending captured for the retry effect to find.
+      const internals = cmp as unknown as {
+        pendingSelectPathString: string | null;
+        pendingPriorSelectedPath: string | null;
+      };
+      expect(internals.pendingSelectPathString).toBe('$.does.not.exist');
+      expect(internals.pendingPriorSelectedPath).toBeNull();
     });
 
-    it('selectByPathString(null) clears the selection', async () => {
+    it('selectByPathString(null) clears the selection AND any pending defer', async () => {
+      // Issue #266: extends the original "clears the selection" spec
+      // to assert full-reset semantics. The defer-then-clear
+      // sequence is the canonical sentinel for "user explicitly
+      // dropped intent" -- the retry effect must not later resurrect
+      // pending after the tree-pane debounce flushes.
       await createWith({ a: 1 });
       cmp.selectByPathString('$.a');
       expect(cmp.selectedPath()).toBe('$.a');
+      // Stage a defer, then clear.
+      cmp.selectByPathString('$.does.not.exist');
+      const internals = cmp as unknown as {
+        pendingSelectPathString: string | null;
+        pendingPriorSelectedPath: string | null;
+      };
+      expect(internals.pendingSelectPathString).toBe('$.does.not.exist');
       cmp.selectByPathString(null);
       expect(cmp.selectedPath()).toBeNull();
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
     });
 
     it('selectByPathString expands ancestors so the row is visible', async () => {
@@ -4528,6 +4555,314 @@ describe('JsonTreeComponent', () => {
         (path) => path !== null && path.length === 1 && path[0] === 'newKey',
       );
       expect(newKeyEvent).withContext('expected an event for ["newKey"]').toBeTruthy();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Issue #266 defer/retry machinery for `selectByPathString`. The defer
+  // branch stages a path the current `nodeIndex` does not contain; the
+  // retry-pending effect applies it once `nodeIndex` catches up. The
+  // discriminator distinguishes "system cleared" / "passive preserve"
+  // (apply pending) from "user wrote a different path" (discard pending).
+  // ---------------------------------------------------------------------------
+  describe('selectByPathString defer/retry (issue #266)', () => {
+    type Internals = {
+      pendingSelectPathString: string | null;
+      pendingPriorSelectedPath: string | null;
+    };
+
+    it('applies pending when nodeIndex catches up', async () => {
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.bar');
+      expect(cmp.selectedPath()).toBeNull();
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      // Attach selectionChange spy AFTER the initial detectChanges
+      // window so the construction-time null emission from the
+      // dedup-emit effect is excluded.
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+
+      fixture.componentRef.setInput('value', { foo: 1, bar: 2 });
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.bar');
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+      const barEmissions = events.filter(
+        (path) => path !== null && path.length === 1 && path[0] === 'bar',
+      );
+      expect(barEmissions.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('discards pending when user clicks a different row mid-defer', async () => {
+      await createWith({ foo: 1, qux: 'stub' });
+      // Select foo first so priorSelected has a non-null value.
+      cmp.selectByPathString('$.foo');
+      expect(cmp.selectedPath()).toBe('$.foo');
+      // Stage a defer for a path not yet in nodeIndex.
+      cmp.selectByPathString('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+      expect(internals.pendingPriorSelectedPath).toBe('$.foo');
+
+      // User clicks a different row via direct selectedPath write
+      // (mimicking the tree's internal onSelect handler which
+      // bypasses selectByPathString). pendingPriorSelectedPath is
+      // NOT updated; the retry effect's discriminator should
+      // discard pending.
+      cmp.selectedPath.set('$.qux');
+
+      fixture.componentRef.setInput('value', { foo: 1, qux: 'stub', bar: 2 });
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.qux');
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+    });
+
+    it('repeated defers overwrite pending (last-write-wins)', async () => {
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.bar');
+      cmp.selectByPathString('$.baz');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.baz');
+
+      fixture.componentRef.setInput('value', { foo: 1, bar: 2, baz: 3 });
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.baz');
+    });
+
+    it('clearPendingSelectPath clears pending only, not the visible selection', async () => {
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.foo');
+      expect(cmp.selectedPath()).toBe('$.foo');
+      cmp.selectByPathString('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      cmp.clearPendingSelectPath();
+
+      expect(cmp.selectedPath()).toBe('$.foo');
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+
+      // Tree-pane settles; selection should stay at foo (preserved
+      // by L1480 preserve-or-clear because foo still resolves);
+      // pending is gone so retry is a no-op.
+      fixture.componentRef.setInput('value', { foo: 1, bar: 2 });
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.foo');
+    });
+
+    it('rapid defers overwrite pending; only the final value emits when nodeIndex settles', async () => {
+      // Mimics rapid key-rename typing FASTER than the tree-pane
+      // debounce flushes: multiple `selectByPathString` calls happen
+      // BEFORE the next nodeIndex update, so pending overwrites in
+      // place and only the final pending value applies when the
+      // tree finally catches up. This is the load-bearing case for
+      // the cursor-restore feature -- without it, each keystroke
+      // would emit selectionChange for stale intermediate paths.
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.foo');
+      fixture.detectChanges();
+      expect(cmp.selectedPath()).toBe('$.foo');
+
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+
+      // Three defers, no detectChanges between them. Last write wins.
+      cmp.selectByPathString('$.fooB');
+      cmp.selectByPathString('$.fooBa');
+      cmp.selectByPathString('$.fooBar');
+
+      // Tree-pane settles with the final shape.
+      fixture.componentRef.setInput('value', { fooBar: 1 });
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.fooBar');
+
+      // No stale intermediate emissions: the spy should never have
+      // been called with the abandoned pending values. (L1480 may
+      // emit a transient null between preserve-or-clear and retry-
+      // apply; that is allowed and not asserted against here.)
+      const stale = events.filter(
+        (path) =>
+          path !== null &&
+          path.length === 1 &&
+          (path[0] === 'foo' || path[0] === 'fooB' || path[0] === 'fooBa'),
+      );
+      expect(stale).withContext('no stale intermediate emissions').toEqual([]);
+
+      const finalEmissions = events.filter(
+        (path) => path !== null && path.length === 1 && path[0] === 'fooBar',
+      );
+      expect(finalEmissions.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('immediate-apply when path is already in nodeIndex (no defer)', async () => {
+      await createWith({ foo: 1, bar: 2 });
+      cmp.selectByPathString('$.foo');
+      expect(cmp.selectedPath()).toBe('$.foo');
+      cmp.selectByPathString('$.bar');
+      // Synchronous after the call: selectedPath is the new path
+      // and no defer was staged.
+      expect(cmp.selectedPath()).toBe('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+    });
+
+    it('applies pending when L1480 preserves prior selection (paste-of-new-property)', async () => {
+      // Regression for the paste-of-new-property scenario: user has
+      // foo selected; pastes `,"x":2`, cursor lands at $.x. Defer
+      // captures priorSelected = $.foo. After tree-pane settles:
+      // L1480 preserves $.foo (still resolves), but the retry-
+      // pending discriminator sees selected === priorSelected
+      // (passive preserve) and applies pending. Without this
+      // discriminator the simpler `selected !== null` guard
+      // would discard pending and leave the user stuck at foo.
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.foo');
+      expect(cmp.selectedPath()).toBe('$.foo');
+
+      cmp.selectByPathString('$.x');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.x');
+      expect(internals.pendingPriorSelectedPath).toBe('$.foo');
+
+      fixture.componentRef.setInput('value', { foo: 1, x: 2 });
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBe('$.x');
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+    });
+
+    it('Escape during defer cancels pending (selectedPath non-null start)', async () => {
+      // Issue #266 / v2.4 regression: Escape during a defer window
+      // must drop pending so the retry effect cannot resurrect
+      // selection after the tree-pane debounce flushes.
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.foo');
+      expect(cmp.selectedPath()).toBe('$.foo');
+
+      cmp.selectByPathString('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBeNull();
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+
+      fixture.componentRef.setInput('value', { foo: 1, bar: 2 });
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBeNull();
+      expect(events).not.toContain(
+        jasmine.arrayWithExactContents(['bar']) as unknown as readonly (string | number)[],
+      );
+      // Explicit form for clarity: assert no emission had a
+      // single-element path equal to 'bar'.
+      const barEmissions = events.filter(
+        (path) => path !== null && path.length === 1 && path[0] === 'bar',
+      );
+      expect(barEmissions).toEqual([]);
+    });
+
+    it('Escape during defer cancels pending (selectedPath null start; cold-start)', async () => {
+      // Issue #266 / v2.4 regression for the cold-start typing
+      // scenario: user types in editor before clicking any tree
+      // row, then presses Escape. The HostListener gate
+      // `selectedPath() !== null` would skip clearSelection(), so
+      // pending must be cleared by the HostListener's own
+      // unconditional clearPendingSelectPath() call.
+      await createWith({ foo: 1 });
+      expect(cmp.selectedPath()).toBeNull();
+
+      cmp.selectByPathString('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      fixture.detectChanges();
+
+      // Load-bearing assertion: pending cleared even though the
+      // HostListener's selectedPath gate skipped clearSelection().
+      expect(cmp.selectedPath()).toBeNull();
+      expect(internals.pendingSelectPathString).toBeNull();
+
+      const events: (readonly (string | number)[] | null)[] = [];
+      cmp.selectionChange.subscribe((path) => events.push(path));
+
+      fixture.componentRef.setInput('value', { foo: 1, bar: 2 });
+      fixture.detectChanges();
+
+      expect(cmp.selectedPath()).toBeNull();
+      const barEmissions = events.filter(
+        (path) => path !== null && path.length === 1 && path[0] === 'bar',
+      );
+      expect(barEmissions).toEqual([]);
+    });
+
+    it('goToNextMatch clears pending defer before applying the search hit', async () => {
+      // Search-nav is a user-intent writer (#266 Change 7); it
+      // should not let an in-flight editor-typing defer survive.
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      // Drive a search that matches '$.foo' so paths.length > 0.
+      cmp.search.set('foo');
+      fixture.detectChanges();
+      cmp.goToNextMatch();
+
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+      expect(cmp.selectedPath()).toBe('$.foo');
+    });
+
+    it('goToPrevMatch clears pending defer before applying the search hit', async () => {
+      await createWith({ foo: 1, qux: 2 });
+      cmp.selectByPathString('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      cmp.search.set('foo');
+      fixture.detectChanges();
+      cmp.goToPrevMatch();
+
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+      expect(cmp.selectedPath()).toBe('$.foo');
+    });
+
+    it('goToNextMatch with zero hits does NOT destroy an in-flight defer', async () => {
+      // Skeptic LOW #5: placement of clearPendingSelectPath() must
+      // be AFTER the early-return for empty hits. Otherwise a
+      // zero-hit Next press would destroy a typing-induced defer
+      // with no compensating UX action.
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      cmp.search.set('no-match-for-this-needle');
+      fixture.detectChanges();
+      cmp.goToNextMatch();
+
+      expect(internals.pendingSelectPathString).toBe('$.bar');
     });
   });
 
