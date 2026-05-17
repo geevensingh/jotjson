@@ -1378,6 +1378,94 @@ describe('JsonTreeComponent', () => {
     });
   });
 
+  describe('key display (control chars in keys)', () => {
+    function keySpans(): HTMLSpanElement[] {
+      // Exclude the offscreen row-height probe (tree-row--probe) so
+      // tests assert against rendered rows only.
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tree-row:not(.tree-row--probe) .tree-key',
+        ),
+      ) as HTMLSpanElement[];
+    }
+
+    function probeSpan(): HTMLSpanElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        '.tree-row--probe .tree-key',
+      ) as HTMLSpanElement | null;
+    }
+
+    it('renders a leaf-row key with real LF as the literal \\n escape', async () => {
+      await createWith({ 'a\nb': 'v' });
+      const spans = keySpans();
+      const found = spans.find((span) => (span.textContent ?? '').includes('a\\nb'));
+      expect(found).toBeDefined();
+      expect(found?.textContent).toBe('a\\nb');
+    });
+
+    it('renders a leaf-row key with an embedded quote as \\"', async () => {
+      await createWith({ 'a"b': 'v' });
+      const found = keySpans().find((span) => (span.textContent ?? '').includes('a\\"b'));
+      expect(found).toBeDefined();
+      expect(found?.textContent).toBe('a\\"b');
+    });
+
+    it('renders a leaf-row key with a backslash as \\\\', async () => {
+      await createWith({ 'a\\b': 'v' });
+      const found = keySpans().find((span) => (span.textContent ?? '').includes('a\\\\b'));
+      expect(found).toBeDefined();
+      expect(found?.textContent).toBe('a\\\\b');
+    });
+
+    it('renders an open-container row key with real LF as the literal \\n escape', async () => {
+      await createWith({ 'a\nb': { x: 1 } });
+      // The open-container row for `a\nb` is the row labeled with key
+      // `a\nb` whose value renders as `{...}`. There is no leaf row
+      // for the container itself; only the inner `x` leaf row is below.
+      const found = keySpans().find((span) => (span.textContent ?? '').includes('a\\nb'));
+      expect(found).toBeDefined();
+      expect(found?.textContent).toBe('a\\nb');
+    });
+
+    it('preserves the row-height probe span as literal text "probe"', async () => {
+      await createWith({ ok: 1 });
+      const probe = probeSpan();
+      expect(probe).not.toBeNull();
+      expect(probe?.textContent).toBe('probe');
+    });
+
+    it('sets [attr.title] to the raw segment only when transformed', async () => {
+      await createWith({ 'a\nb': 'v', plain: 'v' });
+      const spans = keySpans();
+      const transformed = spans.find((span) => (span.textContent ?? '') === 'a\\nb');
+      const untransformed = spans.find((span) => (span.textContent ?? '') === 'plain');
+      expect(transformed).toBeDefined();
+      expect(untransformed).toBeDefined();
+      // Transformed span gets the raw decoded form as native title.
+      expect(transformed?.getAttribute('title')).toBe('a\nb');
+      // Untransformed span has no title attribute at all (so the
+      // row-level matchedRuleTitle cascade can apply on hover).
+      expect(untransformed?.hasAttribute('title')).toBe(false);
+    });
+
+    it('routes numeric segments to .tree-index, not .tree-key', async () => {
+      await createWith({ items: ['x', 'y'] });
+      const spans = keySpans();
+      // No .tree-key span carries a numeric literal label.
+      for (const span of spans) {
+        expect(span.textContent).not.toMatch(/^\d+$/);
+      }
+      const indexSpans = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tree-row:not(.tree-row--probe) .tree-index',
+        ),
+      ) as HTMLSpanElement[];
+      // Two array elements => two tree-index spans labeled "0:" and "1:".
+      const indexTexts = indexSpans.map((span) => span.textContent);
+      expect(indexTexts).toEqual(jasmine.arrayContaining(['0:', '1:']));
+    });
+  });
+
   describe('JSONC comment rendering (M7k)', () => {
     function makeBundle(
       leading?: string,
