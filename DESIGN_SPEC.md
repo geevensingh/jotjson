@@ -2476,6 +2476,58 @@ Out of scope (for v1):
   ship atomically per AGENTS.md §4. No HTML structure change --
   only the label binding swaps from `ctxExpandAllFromHereElevatedLabel`
   to the new `ctxExpandAllFromHereLabelFor(cn)` method.
+- **0.25.1**: Tree row width hotfix on long object keys (issue
+  #248; sibling fix to v0.21.1 and v0.23.1). The Phase-2 ellipsify
+  cascade on `.tree-key` (`white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis`) was correct since #236 but never fired
+  because `.tree-key { flex-shrink: 0 }` (set deliberately so a
+  short key paired with a long value-string does not collapse
+  under scaled-flex-shrink math) left the cascade dormant: with
+  no max-width, the rendered box was always at least as wide as
+  the natural content. Fix: add `max-width: 80%` to `.tree-key`,
+  retaining `flex-shrink: 0`. The combo is load-bearing:
+  `max-width` engages the cascade; `flex-shrink: 0` keeps the
+  clamped size pinned so v0.21.1's short-key + long-value case
+  still has the value-string absorb shrinkage. 80% is the largest
+  cap that still leaves the value cell visible in the long-key +
+  short-value scenario (~60-80 px at level 0 on a 400 px panel --
+  room for short values like `"ok"` / `5` / `true`); reserving
+  20% for value + right-cluster mirrors v0.23.1's
+  "principle, not guess" precedent for the 90vw tooltip cap.
+  Pre-fix the `: ` separator lived in `.tree-key::after`, which
+  put it INSIDE the key's overflow box -- `text-overflow:
+  ellipsis` would clip trailing content first, replacing the
+  colon and leaving `longkey...` with no separator before the
+  value. Fix: move the separator into a sibling
+  `<span class="tree-key-sep">: </span>` with `flex-shrink: 0`
+  so it survives clipping. Tooltip wiring mirrors v0.21.1's
+  `.tree-value-string` pattern: both `.tree-key` template sites
+  (leaf row + open row) bind `[jjOverflowDetector]` and
+  `[matTooltip]="clampTooltip(segment)"` gated on
+  `keyOverflow.overflowing()`, with
+  `matTooltipClass="jj-tooltip-wide"` so the popover uses the
+  v0.23.1 viewport-proportional cap rather than Material 21's
+  hardcoded 200px (which would wrap a long key mid-character).
+  Regression tests extend `json-tree.component.overflow.spec.ts`
+  with a new describe block carrying six layered assertions:
+  fixture sanity (key natural width >= 2x panel content-box),
+  wrapper-still-constrained, leaf-row 80% cap, open-row 80% cap,
+  colon-separator visibility (guards the
+  `::after` -> sibling-span migration), and
+  `MatTooltip.tooltipClass === 'jj-tooltip-wide'` on both
+  template sites. Fixture
+  `src/testing/fixtures/LongUnbreakableKey.json` carries both a
+  leaf-row and an open-row long-key (the existing
+  `LongUnbreakableValue.json` covers only the leaf-row value
+  case). Out-of-scope follow-ups: a CSS Grid restructure of
+  `.tree-row` would solve the column-sizing problem
+  categorically and retire the
+  `> * { min-width: 0 }` cascade plus the magic 80% cap (filed
+  as a `tech-debt priority:medium` issue); and systematic
+  adoption of `OverflowDetectorDirective` on
+  `.tree-comment-*` / `.tree-date-annotation` (currently
+  always-on `matTooltip`) is filed as `tech-debt priority:low`
+  to fulfill the directive's JSDoc-promised extension surface.
 - **0.23.2**: Restore the v0.19.0 row-menu icon contract on the
   new top-level **Expand all from here** row. v0.19.0 (Phase 3
   of the tree-menu overhaul) established that "every top-level
@@ -2538,12 +2590,15 @@ Out of scope (for v1):
   internally calls `expandAll()` before driving
   `viewport.scrollToOffset` rather than `treeBody.scrollTop`.
   User-visible: the tree renders large blobs without freezing
-  (`DESIGN_SPEC.md` S1176 NFR), long values truncate with an
-  ellipsis and reveal the full string on hover instead of
-  wrapping, and search-jump / breadcrumb-click scroll the
-  minimum amount to reveal the target row (`scrollIntoView({block:
-  'nearest'})`-equivalent semantics, computed off the viewport's
-  actual scroll offset rather than CDK's buffered rendered range).
+  (`DESIGN_SPEC.md` S1176 NFR), long string values **and long object
+  keys** truncate with an ellipsis and reveal the full string on
+  hover instead of wrapping, and search-jump / breadcrumb-click
+  scroll the minimum amount to reveal the target row
+  (`scrollIntoView({block: 'nearest'})`-equivalent semantics,
+  computed off the viewport's actual scroll offset rather than
+  CDK's buffered rendered range). The `: ` separator after a key
+  is rendered in a sibling span (`.tree-key-sep`, v0.25.1) so it
+  remains visible when the key is clipped.
 - **0.21.1**: Tree row width hotfix on long string values
   (regression discovered post-0.21.0 ship). The Phase-2 ellipsify
   cascade on `.tree-value-string` (`white-space: nowrap; overflow:
@@ -2564,8 +2619,10 @@ Out of scope (for v1):
   follow-ups: the `.tree-row > * { min-width: 0 }` cascade
   introduced here left several siblings shrinkable under long-value
   pressure (twisty + beacon badge + value container + close-row
-  brace); those were resolved in v0.23.1. Deep-nesting invisible
-  clipping at depth >= 25 remains tracked as a separate issue.
+  brace); those were resolved in v0.23.1. Long-key overflow on
+  the key-side mirror of this bug (issue #248) was resolved in
+  v0.25.1. Deep-nesting invisible clipping at depth >= 25 remains
+  tracked as a separate issue.
 - **0.20.2**: MSAL silent token refresh fix, part 2 of 2 (0.20.1 was
   part 1). Adds the iframe-side bridge call required for the silent-
   refresh flow to actually complete after the CSP layer was unblocked

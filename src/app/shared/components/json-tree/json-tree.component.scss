@@ -411,12 +411,48 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+  // v0.25.1 (issue #248): cap the key at 80% of the row so very
+  // long unbreakable keys (base64 property names, long enum IDs)
+  // ellipsify against their max-width instead of pushing the row
+  // past the viewport. `flex-shrink: 0` is retained -- the combo
+  // is load-bearing:
+  //
+  //   * `max-width: 80%` clamps the key's hypothetical main size to
+  //     `min(content, 80% of parent)`, which engages the
+  //     `nowrap + overflow:hidden + text-overflow:ellipsis` cascade
+  //     above.
+  //   * `flex-shrink: 0` keeps the clamped size pinned under
+  //     pressure from an adjacent `.tree-value-string`. Without it,
+  //     scaled-flex-shrink math (`flex-basis x flex-shrink`)
+  //     collapses a short key to a few pixels when paired with a
+  //     multi-thousand-pixel value (v0.21.1 case).
+  //
+  // 80% is the largest cap that still leaves the value cell visible
+  // in the long-key + short-value scenario (~60-80 px at level 0 on
+  // a 400 px panel -- room for short values like "ok"/"true"/"5").
+  // Reserving 20% for value + right-cluster (count, type-badge,
+  // kebab) mirrors v0.23.1's "principle, not guess" precedent for
+  // the 90vw tooltip max-width.
+  max-width: 80%;
+  // The `: ` separator that used to live in `&::after` was moved to
+  // a sibling `.tree-key-sep` span (v0.25.1) so it survives
+  // ellipsification. Inside `&::after`, the colon would be the
+  // first content clipped by `text-overflow: ellipsis`, leaving
+  // `longkey...` with no separator before the value.
+}
 
-  &::after {
-    content: ': ';
-    color: var(--tree-muted-color);
-    font-weight: normal;
-  }
+.tree-key-sep {
+  // v0.25.1 (issue #248): the `: ` separator lives as a flex
+  // sibling of `.tree-key`, not inside it, so it remains visible
+  // when the key is clipped at `max-width: 80%`. The cascade-level
+  // `.tree-row > * { min-width: 0 }` rule (L221-223) applies to
+  // every flex child by default; `flex-shrink: 0` here is required
+  // so the separator itself does not shrink to zero under pressure
+  // from a long sibling `.tree-value-string`.
+  color: var(--tree-muted-color);
+  font-weight: normal;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .tree-index {

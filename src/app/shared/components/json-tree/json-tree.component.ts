@@ -4516,6 +4516,20 @@ export class JsonTreeComponent {
   }
 
   /**
+   * Returns `node.segment` coerced to a string for use in template
+   * bindings that demand strict `string` (e.g. `[jjOverflowDetector]`
+   * + `[matTooltip]` on the `.tree-key` template sites). The `@else`
+   * branch in the template fires only when `segmentIsIndex` is
+   * false, so the runtime value is always a string already; the
+   * coercion is purely a type-narrowing seam for Angular's strict
+   * template checker (`segment` is typed `string | number` because
+   * the index branch uses the same field).
+   */
+  keyText(node: TreeNode): string {
+    return typeof node.segment === 'string' ? node.segment : String(node.segment ?? '');
+  }
+
+  /**
    * Returns the leading-comment text attached to `node`'s path, or
    * `null` when there is no comment data or no leading comment for
    * this node. The renderer uses this for the inline slot before the

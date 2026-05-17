@@ -344,3 +344,309 @@ describe('JsonTreeComponent (row-width overflow)', () => {
     }
   });
 });
+
+/**
+ * v0.25.1 hotfix regression spec for long object keys (issue #248).
+ *
+ * Reproduces the bug surfaced by https://jotjson.com/s/HiZ2qI: a row
+ * whose JSON key is a long unbreakable string (base64 property
+ * name, long enum string ID) pushed the row past the viewport
+ * because `.tree-key` had `flex-shrink: 0` and no `max-width`, so
+ * the existing `nowrap + overflow:hidden + text-overflow:ellipsis`
+ * cascade (present since #236) was dormant.
+ *
+ * Fix in `json-tree.component.scss`:
+ *   * `.tree-key { max-width: 80%; flex-shrink: 0; ... }` -- the
+ *     80% cap engages ellipsification; `flex-shrink: 0` keeps it
+ *     pinned so the v0.21.1 short-key + long-value case still has
+ *     the value absorb shrinkage.
+ *   * The `: ` separator was moved from `.tree-key::after` into a
+ *     sibling `<span class="tree-key-sep">: </span>` with
+ *     `flex-shrink: 0`, so the colon survives ellipsification (in
+ *     `::after`, ellipsis would clip the colon first).
+ *
+ * Fix in `json-tree.component.html`: both `.tree-key` sites (leaf
+ * and open) wire `OverflowDetectorDirective` + `matTooltip` with
+ * `matTooltipClass="jj-tooltip-wide"`, mirroring the v0.21.1
+ * pattern on `.tree-value-string`.
+ *
+ * The six assertions below layer so any future regression in any
+ * layer surfaces independently:
+ *   1. Sanity: the leaf-row key's natural single-line width is far
+ *      wider than the panel (proves we're exercising the bug).
+ *   2. Wrapper constrained: the v0.21.1 invariant still holds
+ *      under key-side stress.
+ *   3. Leaf-row key ellipsifies AT the 80% cap.
+ *   4. Open-row key ellipsifies AT the 80% cap (covers L517).
+ *   5. Colon separator visible after key clipping (the
+ *      `.tree-key-sep` sibling does not get eaten by the ellipsis).
+ *   6. Tooltip wired with `jj-tooltip-wide` on BOTH key sites.
+ */
+describe('JsonTreeComponent (long-key overflow)', () => {
+  let teardown: (() => void) | undefined;
+  let fixtureValue: unknown;
+
+  beforeAll(async () => {
+    const response = await fetch('/fixtures/LongUnbreakableKey.json');
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load fixtures/LongUnbreakableKey.json: HTTP ${response.status}. ` +
+          `Ensure src/testing/fixtures is registered in angular.json test assets.`,
+      );
+    }
+    fixtureValue = JSON.parse(await response.text());
+  });
+
+  async function configure(panelWidthPx: number): Promise<ComponentFixture<JsonTreeComponent>> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [JsonTreeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideNoopAnimations(),
+        { provide: MatSnackBar, useValue: { open: jasmine.createSpy('snackOpen') } },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JsonTreeComponent);
+    fixture.componentRef.setInput('value', fixtureValue);
+
+    const host = fixture.nativeElement as HTMLElement;
+    host.style.height = '600px';
+    host.style.width = `${panelWidthPx}px`;
+    return fixture;
+  }
+
+  async function drainViewport(fixture: ComponentFixture<JsonTreeComponent>): Promise<void> {
+    fixture.detectChanges();
+    fixture.componentInstance.expandAll();
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  // Computes `row.clientWidth - paddingLeft - paddingRight` to match
+  // the box `max-width: 80%` resolves against (the content-box). The
+  // raw row.clientWidth includes the level-dependent padding-left
+  // (`item.level * 1.25em`) so a nesting-depth change in the fixture
+  // would silently shift the reference point if we compared against
+  // clientWidth directly.
+  function rowContentBoxWidth(row: HTMLElement): number {
+    const style = getComputedStyle(row);
+    const padLeft = parseFloat(style.paddingLeft);
+    const padRight = parseFloat(style.paddingRight);
+    return row.clientWidth - padLeft - padRight;
+  }
+
+  // The two long-key paths in fixtures/LongUnbreakableKey.json.
+  // Defined as constants so we can reuse them across assertions and
+  // get readable failure messages when the fixture drifts.
+  const LEAF_KEY_PATH =
+    '$.ALongUnbreakableLeafKey_For_Issue_248_Regression_Test_' +
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_ZZZZ';
+  const OPEN_KEY_PATH =
+    '$.ALongUnbreakableOpenKey_For_Issue_248_Regression_Test_' +
+    'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB_ZZZZ';
+
+  afterEach(() => {
+    teardown?.();
+    teardown = undefined;
+  });
+
+  it('sanity: leaf-row long key has natural single-line width >= 2x panel content-box width', async () => {
+    const PANEL_WIDTH_PX = 400;
+    const fixture = await configure(PANEL_WIDTH_PX);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const row = host.querySelector<HTMLElement>(`[data-path="${LEAF_KEY_PATH}"]`);
+    expect(row).withContext('leaf-row with long key must render').not.toBeNull();
+    const key = row!.querySelector<HTMLElement>('.tree-key');
+    expect(key).withContext('leaf row must render a .tree-key').not.toBeNull();
+
+    // If this precondition fails (a future fixture edit makes the
+    // key short enough to fit), the test stops exercising the bug
+    // class; fail loudly rather than passing by coincidence.
+    const contentBox = rowContentBoxWidth(row!);
+    expect(key!.scrollWidth)
+      .withContext(
+        `precondition: leaf-row key natural scrollWidth (${key!.scrollWidth}) must be >= 2x row content-box width (${contentBox.toFixed(2)}); if this fails, edit fixtures/LongUnbreakableKey.json to restore a long unbreakable key`,
+      )
+      .toBeGreaterThanOrEqual(2 * contentBox);
+  });
+
+  it('keeps the cdk-virtual-scroll-content-wrapper within the viewport when a row KEY is much wider', async () => {
+    // v0.21.1 invariant under v0.25.1 stress: long keys must not
+    // re-introduce horizontal scroll the way long values used to.
+    const PANEL_WIDTH_PX = 400;
+    const fixture = await configure(PANEL_WIDTH_PX);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const viewport = host.querySelector<HTMLElement>('.tree-viewport');
+    const wrapper = host.querySelector<HTMLElement>('.cdk-virtual-scroll-content-wrapper');
+    expect(viewport).withContext('viewport must render').not.toBeNull();
+    expect(wrapper).withContext('CDK wrapper must render').not.toBeNull();
+
+    const viewportWidth = viewport!.clientWidth;
+    expect(wrapper!.clientWidth)
+      .withContext(
+        `wrapper.clientWidth (${wrapper!.clientWidth}) must be <= viewport.clientWidth (${viewportWidth}) + 1 under long-key stress; pre-v0.25.1 the .tree-key (flex-shrink:0, no max-width) pushed .tree-row past the viewport`,
+      )
+      .toBeLessThanOrEqual(viewportWidth + 1);
+    expect(viewport!.scrollWidth)
+      .withContext(
+        `viewport.scrollWidth (${viewport!.scrollWidth}) must be <= viewport.clientWidth (${viewportWidth}) + 1; if this fails the user sees a horizontal scrollbar on a long-key row`,
+      )
+      .toBeLessThanOrEqual(viewportWidth + 1);
+  });
+
+  it('leaf-row .tree-key ellipsifies at the 80% max-width cap', async () => {
+    const PANEL_WIDTH_PX = 400;
+    const fixture = await configure(PANEL_WIDTH_PX);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const row = host.querySelector<HTMLElement>(`[data-path="${LEAF_KEY_PATH}"]`);
+    expect(row).withContext('leaf-row with long key must render').not.toBeNull();
+    const key = row!.querySelector<HTMLElement>('.tree-key');
+    expect(key).withContext('leaf row must render a .tree-key').not.toBeNull();
+
+    // Cascade activated: rendered box is narrower than natural.
+    expect(key!.scrollWidth)
+      .withContext(
+        `key.scrollWidth (${key!.scrollWidth}) must exceed key.clientWidth (${key!.clientWidth}); cascade dormant means max-width clamp didn't engage`,
+      )
+      .toBeGreaterThan(key!.clientWidth + 1);
+
+    // The 80% cap resolves against the row's content-box, NOT
+    // clientWidth (which includes the level-dependent padding-left).
+    const contentBox = rowContentBoxWidth(row!);
+    const cap = contentBox * 0.8;
+    expect(key!.clientWidth)
+      .withContext(
+        `key.clientWidth=${key!.clientWidth} must be <= 80% of row content-box (${cap.toFixed(2)}) + 1px tolerance; row contentBox=${contentBox.toFixed(2)}`,
+      )
+      .toBeLessThanOrEqual(cap + 1);
+  });
+
+  it('open-row .tree-key ellipsifies at the 80% max-width cap', async () => {
+    const PANEL_WIDTH_PX = 400;
+    const fixture = await configure(PANEL_WIDTH_PX);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const row = host.querySelector<HTMLElement>(`[data-path="${OPEN_KEY_PATH}"]`);
+    expect(row).withContext('open-row with long key must render').not.toBeNull();
+    const key = row!.querySelector<HTMLElement>('.tree-key');
+    expect(key).withContext('open row must render a .tree-key').not.toBeNull();
+
+    expect(key!.scrollWidth)
+      .withContext(
+        `open-row key.scrollWidth (${key!.scrollWidth}) must exceed key.clientWidth (${key!.clientWidth}); cascade dormant on open row means the L517 template site wasn't wired the same as L318`,
+      )
+      .toBeGreaterThan(key!.clientWidth + 1);
+
+    const contentBox = rowContentBoxWidth(row!);
+    const cap = contentBox * 0.8;
+    expect(key!.clientWidth)
+      .withContext(
+        `open-row key.clientWidth=${key!.clientWidth} must be <= 80% of row content-box (${cap.toFixed(2)}) + 1px tolerance; row contentBox=${contentBox.toFixed(2)}`,
+      )
+      .toBeLessThanOrEqual(cap + 1);
+  });
+
+  it('the colon separator remains visible after the leaf-row key is clipped', async () => {
+    // The `: ` separator used to live in `.tree-key::after` which
+    // sat INSIDE the key's overflow box -- `text-overflow: ellipsis`
+    // clips trailing content first, so it would replace the colon.
+    // The v0.25.1 fix moves the separator to a sibling
+    // `<span class="tree-key-sep">` with `flex-shrink: 0` so it
+    // survives clipping. This assertion guards against a regression
+    // that re-inlines the colon (e.g. someone reverts the
+    // `::after` removal or strips `flex-shrink: 0` on
+    // `.tree-key-sep`).
+    const PANEL_WIDTH_PX = 400;
+    const fixture = await configure(PANEL_WIDTH_PX);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const row = host.querySelector<HTMLElement>(`[data-path="${LEAF_KEY_PATH}"]`);
+    expect(row).withContext('leaf-row with long key must render').not.toBeNull();
+    const key = row!.querySelector<HTMLElement>('.tree-key');
+    const sep = row!.querySelector<HTMLElement>('.tree-key-sep');
+    expect(key).withContext('leaf row must render a .tree-key').not.toBeNull();
+    expect(sep)
+      .withContext(
+        '.tree-key-sep sibling span must render; if null, the colon was re-inlined into .tree-key::after and would be the first content clipped by the ellipsis',
+      )
+      .not.toBeNull();
+
+    expect(sep!.clientWidth)
+      .withContext(
+        `sep.clientWidth (${sep!.clientWidth}) must be > 0 -- if zero, the separator was clipped/hidden and the row would render as "longkey..." with no ": " before the value`,
+      )
+      .toBeGreaterThan(0);
+    expect(sep!.scrollWidth)
+      .withContext(
+        `sep.scrollWidth (${sep!.scrollWidth}) must be <= sep.clientWidth (${sep!.clientWidth}) + 1 -- separator itself must not be ellipsified`,
+      )
+      .toBeLessThanOrEqual(sep!.clientWidth + 1);
+
+    // The separator visually follows the key (the colon comes after
+    // the ellipsis, not before it).
+    const keyRight = key!.getBoundingClientRect().right;
+    const sepLeft = sep!.getBoundingClientRect().left;
+    expect(sepLeft)
+      .withContext(
+        `sep left=${sepLeft.toFixed(2)} must be >= key right=${keyRight.toFixed(2)} - 1 (DOM order: <key> then <sep>)`,
+      )
+      .toBeGreaterThanOrEqual(keyRight - 1);
+  });
+
+  it('wires matTooltipClass="jj-tooltip-wide" onto BOTH the leaf-row and open-row .tree-key tooltips', async () => {
+    const PANEL_WIDTH_PX = 400;
+    const fixture = await configure(PANEL_WIDTH_PX);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const probe = host.querySelector('.tree-row--probe');
+    const keyTooltips = fixture.debugElement
+      .queryAll(By.directive(MatTooltip))
+      .filter(
+        (de) =>
+          (de.nativeElement as HTMLElement).classList.contains('tree-key') &&
+          !probe?.contains(de.nativeElement as HTMLElement),
+      );
+
+    // Expect at least two: one on the leaf-row long-key and one on
+    // the open-row long-key. (The short "shortKey" row also has a
+    // tooltip directive bound, so the count may be higher; we
+    // assert >= 2 rather than == 2 to allow future fixture edits.)
+    expect(keyTooltips.length)
+      .withContext(
+        `expected at least 2 .tree-key tooltip directives (leaf + open); found ${keyTooltips.length}. If 1, only one of the two template sites was wired (likely L318 leaf only, missing L517 open).`,
+      )
+      .toBeGreaterThanOrEqual(2);
+
+    for (const de of keyTooltips) {
+      const tooltip = de.injector.get(MatTooltip);
+      // Reading off the directive instance (not `getAttribute(
+      // 'matTooltipClass')`) matches the v0.23.1 spec pattern --
+      // it stays valid if the binding form ever changes from
+      // static literal to `[matTooltipClass]="someConst"`.
+      expect(tooltip.tooltipClass)
+        .withContext(
+          'every .tree-key tooltip must opt into `jj-tooltip-wide`; otherwise long keys render in the Material default 200px popover and wrap mid-character',
+        )
+        .toBe('jj-tooltip-wide');
+    }
+  });
+});

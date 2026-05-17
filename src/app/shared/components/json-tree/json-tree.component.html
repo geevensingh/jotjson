@@ -315,7 +315,19 @@
                   @if (segmentIsIndex(leafNode)) {
                     <span class="tree-index">{{ leafNode.segment }}:</span>
                   } @else {
-                    <span class="tree-key">{{ leafNode.segment }}</span>
+                    @let leafKey = keyText(leafNode);
+                    <span
+                      class="tree-key"
+                      [jjOverflowDetector]="leafKey"
+                      #leafKeyOverflow="jjOverflowDetector"
+                      [matTooltip]="clampTooltip(leafKey)"
+                      [matTooltipDisabled]="!leafKeyOverflow.overflowing()"
+                      matTooltipShowDelay="500"
+                      matTooltipPosition="above"
+                      matTooltipClass="jj-tooltip-wide"
+                      >{{ leafKey }}</span
+                    >
+                    <span class="tree-key-sep">: </span>
                   }
                 }
 
@@ -514,7 +526,19 @@
                   @if (segmentIsIndex(openNode)) {
                     <span class="tree-index">{{ openNode.segment }}:</span>
                   } @else {
-                    <span class="tree-key">{{ openNode.segment }}</span>
+                    @let openKey = keyText(openNode);
+                    <span
+                      class="tree-key"
+                      [jjOverflowDetector]="openKey"
+                      #openKeyOverflow="jjOverflowDetector"
+                      [matTooltip]="clampTooltip(openKey)"
+                      [matTooltipDisabled]="!openKeyOverflow.overflowing()"
+                      matTooltipShowDelay="500"
+                      matTooltipPosition="above"
+                      matTooltipClass="jj-tooltip-wide"
+                      >{{ openKey }}</span
+                    >
+                    <span class="tree-key-sep">: </span>
                   }
                 }
 
