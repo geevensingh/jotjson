@@ -13,6 +13,10 @@ describe('value-classifier', () => {
     it('skips date detection when detectDates is false', () => {
       expect(classifyValue('string', '2024-11-05', { detectDates: false })).toBe('string');
     });
+
+    it('classifies ASP.NET /Date(...)/ format as date/time', () => {
+      expect(classifyValue('string', '/Date(1510050044592-0800)/')).toBe('date/time');
+    });
   });
 
   describe('classifyValue - uuid', () => {

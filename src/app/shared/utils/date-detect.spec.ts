@@ -362,4 +362,120 @@ describe('date-detect', () => {
       expect(a.date.getTime()).toBe(b.date.getTime());
     });
   });
+
+  describe('parseAsDate - ASP.NET JSON date', () => {
+    // All assertions intentionally use getTime() / toISOString() so the
+    // tests pass regardless of the runner's local timezone. Earlier
+    // local-field-based assertions in this file (e.g. ISO date-only
+    // tests at the top) are TZ-coupled by design; the ASP.NET path is
+    // an absolute ms-since-epoch instant and must not be.
+    it('parses canonical form with negative offset', () => {
+      const parsed = parseAsDate('/Date(1510050044592-0800)/');
+      expect(parsed).not.toBeNull();
+      expect(parsed!.date.getTime()).toBe(1510050044592);
+      expect(parsed!.hasTime).toBe(true);
+    });
+
+    it('parses without offset', () => {
+      const parsed = parseAsDate('/Date(1510050044592)/');
+      expect(parsed).not.toBeNull();
+      expect(parsed!.date.getTime()).toBe(1510050044592);
+    });
+
+    it('parses with positive zero offset', () => {
+      const parsed = parseAsDate('/Date(1510050044592+0000)/');
+      expect(parsed).not.toBeNull();
+      expect(parsed!.date.getTime()).toBe(1510050044592);
+    });
+
+    it('discards the offset entirely (a garbage 4-digit suffix still parses)', () => {
+      // The offset is informational-only per the format spec. The
+      // regex deliberately accepts any 4-digit `+HHMM` / `-HHMM`
+      // suffix without semantic validation - the ms value is the
+      // only authoritative payload.
+      const parsed = parseAsDate('/Date(1510050044592+9999)/');
+      expect(parsed).not.toBeNull();
+      expect(parsed!.date.getTime()).toBe(1510050044592);
+    });
+
+    it('parses /Date(0)/ as the Unix epoch', () => {
+      const parsed = parseAsDate('/Date(0)/');
+      expect(parsed).not.toBeNull();
+      expect(parsed!.date.toISOString()).toBe('1970-01-01T00:00:00.000Z');
+      expect(parsed!.hasTime).toBe(true);
+    });
+
+    it('parses negative ms (pre-epoch but still in range)', () => {
+      // -1510050044592 ms is approx year 1922 UTC, comfortably inside
+      // the [1900, 2100] range even after local-TZ year shift.
+      const parsed = parseAsDate('/Date(-1510050044592)/');
+      expect(parsed).not.toBeNull();
+      expect(parsed!.date.getTime()).toBe(-1510050044592);
+    });
+
+    it('locks in hasTime:true even for midnight-UTC ms values', () => {
+      // 1700006400000 is 2023-11-15T00:00:00Z. The natural-looking
+      // heuristic ms % 86400000 === 0 would call this date-only, but
+      // the format cannot distinguish "DateTime used as a date" from
+      // "DateTime at exactly midnight UTC", so we always emit
+      // hasTime:true. Test pins the decision; do not relax this
+      // without revisiting the §491 spec caveat.
+      const parsed = parseAsDate('/Date(1700006400000)/');
+      expect(parsed).not.toBeNull();
+      expect(parsed!.hasTime).toBe(true);
+    });
+
+    it('rejects non-numeric content inside the wrapper', () => {
+      expect(parseAsDate('/Date(abc)/')).toBeNull();
+    });
+
+    it('rejects empty wrapper', () => {
+      expect(parseAsDate('/Date()/')).toBeNull();
+    });
+
+    it('rejects colon-bearing offset (not in the canonical format)', () => {
+      expect(parseAsDate('/Date(1510050044592-08:00)/')).toBeNull();
+    });
+
+    it('rejects missing leading slash', () => {
+      expect(parseAsDate('Date(1510050044592)/')).toBeNull();
+    });
+
+    it('rejects missing trailing slash', () => {
+      expect(parseAsDate('/Date(1510050044592)')).toBeNull();
+    });
+
+    it('rejects trailing content after the wrapper', () => {
+      expect(parseAsDate('/Date(1510050044592)/extra')).toBeNull();
+    });
+
+    it('rejects the backslash-escaped form', () => {
+      // The escaped form `\/Date(...)\/` is a JSON-string artifact;
+      // by the time parseAsDate sees the value, the parser has
+      // already unescaped one layer. We deliberately do not
+      // accommodate doubly-escaped values - that would mask an
+      // upstream parser bug.
+      expect(parseAsDate('\\/Date(1510050044592)\\/')).toBeNull();
+    });
+
+    it('rejects ms outside the [1900, 2100] year range', () => {
+      // -9999999999999 ms is approximately year 1653 AD: regex
+      // matches (13 digits with leading minus) but isInRange rejects.
+      expect(parseAsDate('/Date(-9999999999999)/')).toBeNull();
+    });
+
+    it('rejects ms with more than 13 digits (regex bound)', () => {
+      // 17-digit value: \d{1,13} cannot consume it without leaving
+      // a digit where the regex expects ) or +/-.
+      expect(parseAsDate('/Date(99999999999999999)/')).toBeNull();
+    });
+
+    it('produces identical results regardless of assumeUtc opts', () => {
+      const opts = { assumeUtcForIsoDateTime: true, assumeUtcForIsoDateOnly: true };
+      const a = parseAsDate('/Date(1510050044592-0800)/')!;
+      const b = parseAsDate('/Date(1510050044592-0800)/', undefined, opts)!;
+      expect(a.date.getTime()).toBe(b.date.getTime());
+      expect(a.hasTime).toBe(b.hasTime);
+    });
+  });
 });

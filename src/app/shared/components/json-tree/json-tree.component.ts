@@ -400,12 +400,77 @@ export class JsonTreeComponent {
   readonly search: WritableSignal<string> = signal('');
 
   /**
+   * Selection-state ownership (issue #266 invariant doc block).
+   *
+   * `selectedPath` is read/written by three coordinated effects and
+   * ~7 user-intent writers:
+   *
+   * Effects (run in declaration order within a CD flush):
+   * 1. preserve-or-clear effect: reacts to nodeIndex / root /
+   *    viewResetToken changes. Reads selectedPath via untracked()
+   *    (load-bearing -- removing untracked breaks the invariant).
+   *    Writes selectedPath when prior path vanished or view reset.
+   * 2. retry-pending effect (issue #266): reacts to nodeIndex
+   *    changes when pending != null. Applies pending if
+   *    discriminator says "passive preserve" (selected ===
+   *    priorSelected) or "system cleared" (selected === null).
+   *    Otherwise discards pending.
+   * 3. dedup-emit effect (PR #261 / grep `lastEmittedSelectedPath`):
+   *    reacts to selectedPath changes; emits selectionChange exactly
+   *    once per net change.
+   *
+   * User-intent writers (each MUST clear pending; route through
+   * `clearPendingSelectPath()` before writing `selectedPath`):
+   *  - `onSelect` (mouse click on row)
+   *  - keyboard Enter / Space handler
+   *  - `clearSelection` (Escape via `onDocumentEscape` HostListener)
+   *  - `goToNextMatch` / `goToPrevMatch` (search nav)
+   *  - `onKebabClick` (context menu)
+   *  - search-result-click cycling handler
+   *
+   * Programmatic writers (do NOT clear pending; bypass the
+   * discriminator deliberately):
+   *  - `selectByPathString` immediate-select branch (the path is
+   *    already in nodeIndex; defer is unnecessary).
+   *  - The retry-pending effect itself (that's its whole purpose).
+   *
+   * Exception to AGENTS.md s4 ("effect() only for syncing to
+   * external systems"): effects #1 and #2 do signal-to-signal
+   * state derivation. This is consistent with the established
+   * pattern in this file (PR #261 set the precedent with the
+   * dedup-emit effect) because tree-state reconciliation across
+   * async `nodeIndex` rebuilds genuinely doesn't fit a
+   * `computed()`.
+   *
    * Path of the currently-selected tree row, or `null` for no selection.
    * Stored as `pathString` (display form) so the value survives mat-tree
    * re-renders that recreate node objects. We never reverse-parse it - all
    * lookups go through `nodeIndex`.
    */
   readonly selectedPath = signal<string | null>(null);
+
+  /**
+   * Issue #266 defer/retry state for `selectByPathString`. When the
+   * caller asks for a path the current `nodeIndex` does not yet
+   * contain (typical mid-typing case from the home component's
+   * editor-cursor sync), the path is stored here and the retry-
+   * pending effect applies it once `nodeIndex` catches up.
+   *
+   * Plain fields (not signals) because they are mutated from many
+   * sites including effect bodies, and the retry effect reads them
+   * via plain access inside `untracked` -- signal tracking would
+   * cause spurious re-runs.
+   */
+  private pendingSelectPathString: string | null = null;
+
+  /**
+   * Companion to `pendingSelectPathString` (#266). Captured at
+   * defer time so the retry effect can discriminate "system
+   * cleared because prior path vanished" (apply pending) from
+   * "user clicked a different row" (discard pending) by comparing
+   * the current `selectedPath()` against this snapshot.
+   */
+  private pendingPriorSelectedPath: string | null = null;
 
   /**
    * M7g-3b. Path of the row that currently owns the keyboard cursor
@@ -1638,6 +1703,50 @@ export class JsonTreeComponent {
     // TREE_SEARCH_STORAGE_KEY) when embeddedMode is false. Per-device,
     // never sent to the server.
 
+    // Issue #266 retry-pending effect. Declared BEFORE the dedup-emit
+    // effect so within a single CD flush the order is:
+    //   1. preserve-or-clear effect runs (above), updates selectedPath.
+    //   2. THIS effect runs, applies pending if discriminator allows.
+    //   3. dedup-emit effect runs, emits the final selectedPath value.
+    // Inverting #2 and #3 would emit a transient null between the
+    // preserve-or-clear clear and the retry apply, causing a visible
+    // tree flicker on the home component's editor-cursor sync path.
+    //
+    // The effect tracks `nodeIndex` so it re-evaluates whenever the
+    // tree's structural index rebuilds (typically after the home's
+    // 150 ms tree-pane debounce flushes a fresh `root()`). Inside
+    // `untracked` the plain `pendingSelectPathString` and
+    // `pendingPriorSelectedPath` fields are read; signal-tracking
+    // them would defeat the discriminator (the retry must read the
+    // most-recent priorSelected snapshot, not a stale tracked one).
+    effect(() => {
+      const index = this.nodeIndex();
+      untracked(() => {
+        const pending = this.pendingSelectPathString;
+        if (pending === null) return;
+        if (!index.has(pending)) return;
+        const selected = this.selectedPath();
+        const priorSelected = this.pendingPriorSelectedPath;
+        // Discriminator: discard pending if a user-intent writer
+        // wrote a non-null `selectedPath` different from the
+        // priorSelected snapshot between defer and now. Allows:
+        //  - selected === null (system-cleared by L1480; apply).
+        //  - selected === priorSelected (passive preserve; apply).
+        if (selected !== null && selected !== priorSelected) {
+          this.pendingSelectPathString = null;
+          this.pendingPriorSelectedPath = null;
+          return;
+        }
+        // Apply: clear pending first so re-entrancy is safe, then
+        // write selectedPath (which the dedup-emit effect will
+        // observe on the next flush step).
+        this.pendingSelectPathString = null;
+        this.pendingPriorSelectedPath = null;
+        this.selectedPath.set(pending);
+        this.expandAndScroll(pending);
+      });
+    });
+
     // Emit selectionChange whenever the canonical selectedPath signal
     // settles. Both user clicks (which write through onSelect) and
     // programmatic selects (selectByPathString) go through this funnel,
@@ -2175,6 +2284,13 @@ export class JsonTreeComponent {
   }
 
   clearSelection(): void {
+    // Issue #266: explicit pending-clear. Without this, the retry-
+    // pending effect cannot distinguish "system cleared because
+    // prior path vanished -- apply pending" (the preserve-or-clear
+    // case) from "user explicitly cleared -- discard pending" (this
+    // case), and pending would re-apply after the tree-pane
+    // debounce flushes.
+    this.clearPendingSelectPath();
     this.selectedPath.set(null);
   }
 
@@ -2182,9 +2298,24 @@ export class JsonTreeComponent {
    * Escape clears the active selection. We do not call preventDefault()
    * so the search input's own Esc binding can also clear the search
    * query when it has focus - one Esc press exits both at once.
+   *
+   * Pending-clear MUST happen unconditionally on Escape, even when
+   * `selectedPath` is already null. The early-return gate for the
+   * `selectedPath` write is preserved (skips a redundant signal write)
+   * but pending-clear runs first because pending may be non-null even
+   * when `selectedPath` is null (cold-start typing + Escape scenario;
+   * #266).
+   *
+   * The `if (selectedPath() !== null)` gate is the ONLY thing that
+   * makes the two Escape-during-defer specs cover distinct production
+   * paths. Removing the gate would make `clearSelection()` a no-op
+   * when `selectedPath` is already null, collapsing the cold-start
+   * spec into the warm-start spec. Future cleanup PRs MUST preserve
+   * this gate or update both tests in lockstep.
    */
   @HostListener('document:keydown.escape')
   onDocumentEscape(): void {
+    this.clearPendingSelectPath();
     if (this.selectedPath() !== null) {
       this.clearSelection();
     }
@@ -2242,6 +2373,11 @@ export class JsonTreeComponent {
     const next = this.nextHitFromSelection(paths);
     this.activeHitIndex.set(next);
     const path = paths[next] as string;
+    // Issue #266: user-intent writer; cancel any in-flight defer
+    // from editor-typing before navigating to the search hit. Placed
+    // AFTER the `paths.length === 0` early return so a zero-hit
+    // press of Next/Prev does not destroy an in-flight defer.
+    this.clearPendingSelectPath();
     this.selectedPath.set(path);
     // M7g-3b. Also update `focusedPath` silently so a subsequent Tab
     // into the tree lands on the active hit. Do NOT call DOM focus()
@@ -2257,6 +2393,8 @@ export class JsonTreeComponent {
     const prev = this.prevHitFromSelection(paths);
     this.activeHitIndex.set(prev);
     const path = paths[prev] as string;
+    // Issue #266: see goToNextMatch.
+    this.clearPendingSelectPath();
     this.selectedPath.set(path);
     // See goToNextMatch: focused-but-not-DOM-focused so the search
     // input keeps focus.
@@ -2402,24 +2540,69 @@ export class JsonTreeComponent {
 
   /**
    * Programmatic selection setter. Idempotent (no write when the path
-   * is already selected) and silently no-ops when the path is not in
-   * `nodeIndex`. `null` clears the selection. Used by the home
-   * component to drive editor->tree sync.
+   * is already selected). For paths not yet in `nodeIndex` (e.g.,
+   * editor-cursor-driven calls during the home's tree-pane debounce
+   * window), DEFERS the write: the path is stored in
+   * `pendingSelectPathString` together with a snapshot of
+   * `pendingPriorSelectedPath`, and the retry-pending effect applies
+   * it once `nodeIndex` catches up.
    *
-   * Expands ancestor containers and scrolls the row into view, mirroring
-   * the search-jump UX.
+   * The retry-pending effect uses a discriminator to decide whether
+   * to apply pending or discard it:
+   *  - If `selectedPath()` is null (system-cleared because the prior
+   *    path vanished, or cold-start) OR equal to
+   *    `pendingPriorSelectedPath` (passive preserve), APPLY.
+   *  - Otherwise (a user-intent writer set a different path between
+   *    defer and retry), DISCARD pending.
+   *
+   * To cancel an in-flight defer without touching the visible
+   * selection, call `clearPendingSelectPath()`. To clear BOTH the
+   * visible selection and any defer, call this method with `null`.
+   *
+   * `null` clears the selection (and pending). Expands ancestor
+   * containers and scrolls the row into view, mirroring the
+   * search-jump UX. (Defer + retry from #266.)
    */
   selectByPathString(pathString: string | null): void {
     if (pathString === null) {
+      this.clearPendingSelectPath();
       if (this.selectedPath() !== null) {
         this.selectedPath.set(null);
       }
       return;
     }
-    if (this.selectedPath() === pathString) return;
-    if (!this.nodeIndex().has(pathString)) return;
+    if (this.selectedPath() === pathString) {
+      // Idempotent: even though selectedPath is already the
+      // requested value, clear pending so a prior defer cannot
+      // re-apply later. The user just re-affirmed this path.
+      this.clearPendingSelectPath();
+      return;
+    }
+    if (!this.nodeIndex().has(pathString)) {
+      // Defer: path not in nodeIndex yet. Capture pending +
+      // priorSelected so the retry-pending effect can apply it
+      // when nodeIndex catches up (subject to the discriminator).
+      this.pendingSelectPathString = pathString;
+      this.pendingPriorSelectedPath = this.selectedPath();
+      return;
+    }
+    // Immediate apply: nodeIndex already has the path. Clear any
+    // stale pending and write selectedPath.
+    this.clearPendingSelectPath();
     this.selectedPath.set(pathString);
     this.expandAndScroll(pathString);
+  }
+
+  /**
+   * Cancel any in-flight `selectByPathString` defer without
+   * touching the visible `selectedPath`. Used by callers that
+   * need to invalidate pending user-intent state without
+   * gesturing at the tree (e.g., editor `setContent` clearing
+   * stale typing-induced defers; sync-OFF toggle).
+   */
+  clearPendingSelectPath(): void {
+    this.pendingSelectPathString = null;
+    this.pendingPriorSelectedPath = null;
   }
 
   /**

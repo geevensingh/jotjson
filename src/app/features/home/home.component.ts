@@ -362,6 +362,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     // that would suppress the user's next click on the same path.
     this.pendingEditorReveal = undefined;
     this.pendingTreeApply = undefined;
+    // Issue #266: cancel any in-flight editor-cursor-driven defer
+    // in the tree. Content has changed; any pending selection
+    // request was computed against the prior content and is now
+    // stale. We DO NOT clear `selectedPath` here -- the tree's
+    // own preserve-or-clear effect handles that on the next
+    // `value()` flush so the visible selection survives a same-
+    // document edit (and gracefully clears on full document
+    // replace via `viewResetToken`).
+    this.tree()?.clearPendingSelectPath();
     // Auto-clear the upload-source banner once content reaches empty or
     // parses cleanly. Reading parseResult() shares its memoized parse with
     // the editor's render path, so this does not add an extra parse.
@@ -1840,6 +1849,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     // on (the next gesture re-engages cleanly).
     this.pendingEditorReveal = undefined;
     this.pendingTreeApply = undefined;
+    // Issue #266: clear any pending defer in the tree on sync toggle
+    // (regardless of direction). A defer from the prior sync session
+    // is moot. We DO NOT clear `selectedPath` -- preserving today's
+    // behavior that toggling the preference does not destroy the
+    // user's current visible selection.
+    this.tree()?.clearPendingSelectPath();
   }
 
   private syncEnabled(): boolean {
@@ -1849,16 +1864,20 @@ export class HomeComponent implements OnInit, OnDestroy {
   /**
    * Resolves a Monaco editor offset to a tree path string. Returns
    * `null` when the cursor is in trailing whitespace, before the
-   * document starts, or otherwise outside the parsed AST. Trailing
-   * placeholder segments produced by `jsonc-parser`'s `getLocation`
-   * (e.g. cursor in incomplete syntax) are trimmed by walking upward
-   * until a path is known to the tree's `nodeIndex`. Falls back to
-   * the document root `$` only when the offset lies inside the AST
-   * AND the tree has a row at `$`.
+   * document starts, or otherwise outside the parsed AST.
+   *
+   * Validates the resolved path against the LIVE parse AST (not the
+   * tree's possibly-stale `nodeIndex`). The tree's
+   * `selectByPathString` defers application until `nodeIndex`
+   * catches up (issue #266). Trailing placeholder segments produced
+   * by `jsonc-parser`'s `getLocation` (cursor in incomplete syntax)
+   * are trimmed by walking upward until the AST has a node at that
+   * prefix. Falls back to the document root `$` ONLY when
+   * `locationAt` itself returned an empty path (cursor genuinely at
+   * top-level), preventing the historic root-jump on incomplete-
+   * value cursor positions.
    */
   private resolveTreePath(offset: number): string | null {
-    const tree = this.tree();
-    if (!tree) return null;
     const text = this.content();
     // Align Monaco's full-text offset with the parser's stripped-text
     // coordinate space (BOM-aware).
@@ -1866,15 +1885,22 @@ export class HomeComponent implements OnInit, OnDestroy {
     const adjusted = offset - bomShift;
     if (adjusted < 0) return null;
     const stripped = bomShift > 0 ? text.slice(bomShift) : text;
+    const ast = this.parseResult().ast;
+    if (!ast) return null;
     const path = this.parser.locationAt(stripped, adjusted);
 
     for (let length = path.length; length > 0; length--) {
-      const candidate = this.parser.pathToString(path.slice(0, length));
-      if (tree.hasPath(candidate)) return candidate;
+      const segments = path.slice(0, length);
+      if (findNodeAtLocation(ast, [...segments])) {
+        return this.parser.pathToString(segments);
+      }
     }
 
-    const ast = this.parseResult().ast;
-    if (ast && adjusted >= ast.offset && adjusted <= ast.offset + ast.length && tree.hasPath('$')) {
+    // Only fall back to '$' when the cursor was genuinely at top-
+    // level (locationAt returned []). This avoids the historic
+    // root-jump regression where an incomplete deeper path failed
+    // to resolve and we silently selected the whole document.
+    if (path.length === 0 && adjusted >= ast.offset && adjusted <= ast.offset + ast.length) {
       return '$';
     }
     return null;
