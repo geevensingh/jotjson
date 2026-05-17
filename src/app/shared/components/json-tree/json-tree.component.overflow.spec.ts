@@ -610,41 +610,66 @@ describe('JsonTreeComponent (long-key overflow)', () => {
       .toBeGreaterThanOrEqual(keyRight - 1);
   });
 
-  it('wires matTooltipClass="jj-tooltip-wide" onto BOTH the leaf-row and open-row .tree-key tooltips', async () => {
+  it('wires matTooltipClass="jj-tooltip-wide" onto BOTH the leaf-row and open-row .tree-key tooltips (per data-path)', async () => {
     const PANEL_WIDTH_PX = 400;
     const fixture = await configure(PANEL_WIDTH_PX);
     teardown = attachFixtureToBody(fixture, 'dark');
     await drainViewport(fixture);
 
-    const host = fixture.nativeElement as HTMLElement;
-    const probe = host.querySelector('.tree-row--probe');
-    const keyTooltips = fixture.debugElement
+    // Per-row lookup is required, not a global `>= 2` count: the
+    // fixture has multiple leaf rows (LeafKey + nested "child" +
+    // shortKey), so a global "found >= 2 .tree-key tooltips" check
+    // would pass even if the open-row template were unwired (3 leaf
+    // tooltips still satisfy >= 2). We must verify BOTH specific
+    // rows -- the leaf at LEAF_KEY_PATH and the open at
+    // OPEN_KEY_PATH -- carry a directly-bound MatTooltip with the
+    // wide tooltipClass. (PR #268 review feedback.)
+    //
+    // Why `By.directive(MatTooltip)` + `.closest('[data-path=...]')`
+    // and not `keyDebugEl.injector.get(MatTooltip)`:
+    //   - `injector.get` walks UP the NodeInjector tree, so an
+    //     ancestor's MatTooltip would resolve and mask a missing
+    //     binding on the .tree-key element itself.
+    //   - `injector.get` THROWS NullInjectorError when no binding is
+    //     found, which is the exact regression this test guards
+    //     against -- so the contextual diagnostic below would never
+    //     fire on the failure case.
+    // `By.directive(MatTooltip)` returns only DebugElements where
+    // the directive is directly attached, side-stepping both.
+    //
+    // The `.tree-row--probe` row at json-tree.component.html:237 has
+    // no `data-path` attribute and no `matTooltip` binding, so it
+    // cannot match `[data-path="..."] .tree-key` or
+    // `By.directive(MatTooltip)`; an explicit `probe.contains(...)`
+    // filter would be redundant here.
+    const treeKeyDirectiveDebugEls = fixture.debugElement
       .queryAll(By.directive(MatTooltip))
-      .filter(
-        (de) =>
-          (de.nativeElement as HTMLElement).classList.contains('tree-key') &&
-          !probe?.contains(de.nativeElement as HTMLElement),
+      .filter((debugEl) => (debugEl.nativeElement as HTMLElement).classList.contains('tree-key'));
+
+    for (const [rowLabel, rowPath] of [
+      ['leaf', LEAF_KEY_PATH],
+      ['open', OPEN_KEY_PATH],
+    ] as const) {
+      const tooltipDirectiveDebugEl = treeKeyDirectiveDebugEls.find(
+        (debugEl) =>
+          (debugEl.nativeElement as HTMLElement).closest(`[data-path="${rowPath}"]`) !== null,
       );
-
-    // Expect at least two: one on the leaf-row long-key and one on
-    // the open-row long-key. (The short "shortKey" row also has a
-    // tooltip directive bound, so the count may be higher; we
-    // assert >= 2 rather than == 2 to allow future fixture edits.)
-    expect(keyTooltips.length)
-      .withContext(
-        `expected at least 2 .tree-key tooltip directives (leaf + open); found ${keyTooltips.length}. If 1, only one of the two template sites was wired (likely L318 leaf only, missing L517 open).`,
-      )
-      .toBeGreaterThanOrEqual(2);
-
-    for (const de of keyTooltips) {
-      const tooltip = de.injector.get(MatTooltip);
+      expect(tooltipDirectiveDebugEl)
+        .withContext(
+          `${rowLabel}-row .tree-key (path=${rowPath}) must have a MatTooltip directive bound directly to the element; if missing, that template site was not wired with [matTooltip]`,
+        )
+        .toBeDefined();
+      if (!tooltipDirectiveDebugEl) {
+        continue;
+      }
       // Reading off the directive instance (not `getAttribute(
       // 'matTooltipClass')`) matches the v0.23.1 spec pattern --
       // it stays valid if the binding form ever changes from
       // static literal to `[matTooltipClass]="someConst"`.
+      const tooltip = tooltipDirectiveDebugEl.injector.get(MatTooltip);
       expect(tooltip.tooltipClass)
         .withContext(
-          'every .tree-key tooltip must opt into `jj-tooltip-wide`; otherwise long keys render in the Material default 200px popover and wrap mid-character',
+          `${rowLabel}-row .tree-key tooltip must opt into \`jj-tooltip-wide\`; otherwise long keys render in the Material default 200px popover and wrap mid-character`,
         )
         .toBe('jj-tooltip-wide');
     }
