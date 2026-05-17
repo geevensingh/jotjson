@@ -2416,6 +2416,13 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
   interface TreeStub {
     selectByPathString: jasmine.Spy<(path: string | null) => void>;
     hasPath: jasmine.Spy<(path: string) => boolean>;
+    // Issue #266 defer/retry: editor `setContent` and sync-toggle
+    // route through this method; #266 also adds defer behavior to
+    // `selectByPathString` which the stub mirrors via the
+    // `pending` / `currentSelection` fields below.
+    clearPendingSelectPath: jasmine.Spy<() => void>;
+    pending: string | null;
+    currentSelection: string | null;
   }
   interface EditorStub {
     revealRange: jasmine.Spy<
@@ -2442,9 +2449,35 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     const component = fixture.componentInstance;
     component.content.set(content);
     const knownSet = new Set<string>(knownPaths);
+    // Issue #266: TreeStub mirrors the defer/retry contract of the
+    // real `JsonTreeComponent.selectByPathString`. If you touch the
+    // json-tree effect chain (preserve-or-clear, retry-pending, or
+    // dedup-emit), re-verify this stub stays in sync; the home-side
+    // specs treat it as the source of truth for behavior assertions
+    // that don't warrant a TestBed-based tree-side spec.
     const tree: TreeStub = {
-      selectByPathString: jasmine.createSpy('selectByPathString'),
       hasPath: jasmine.createSpy('hasPath').and.callFake((p: string) => knownSet.has(p)),
+      selectByPathString: jasmine
+        .createSpy('selectByPathString')
+        .and.callFake((p: string | null) => {
+          if (p === null) {
+            tree.pending = null;
+            tree.currentSelection = null;
+            return;
+          }
+          if (tree.hasPath(p)) {
+            tree.pending = null;
+            tree.currentSelection = p;
+            return;
+          }
+          // Defer branch: stash pending; leave currentSelection alone.
+          tree.pending = p;
+        }),
+      clearPendingSelectPath: jasmine.createSpy('clearPendingSelectPath').and.callFake(() => {
+        tree.pending = null;
+      }),
+      pending: null,
+      currentSelection: null,
     };
     const editor: EditorStub = {
       revealRange: jasmine.createSpy('revealRange'),
@@ -2476,12 +2509,23 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
     expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$');
   });
 
-  it('cursor inside an empty object selects $', () => {
+  it('cursor inside an empty object clears tree selection (property-key slot)', () => {
     const text = '{ }';
     const { component, tree } = setUp(text, ['$']);
-    // Offset 1 is between the `{` and the space.
+    // Offset 1 is between the `{` and the space. jsonc-parser's
+    // getLocation returns path=[''] (the property-key slot of the
+    // root object). Under v2.5's resolveTreePath this is treated
+    // the same way as a top-level trailing-comma slot (issue #266
+    // Open Q #3): findNodeAtLocation(ast, ['']) returns undefined,
+    // the loop exhausts, and the '$' fallback is restricted to
+    // path.length === 0 (cursor genuinely at top-level), so the
+    // resolver returns null and the tree selection is cleared.
+    // This is a deliberate behavior change vs the pre-#266
+    // hasPath-based resolver, which incorrectly fell back to '$'
+    // for any in-AST cursor with an unresolved path -- the same
+    // root-jump path that caused #266.
     component.onCursorChange({ line: 1, column: 2, offset: 1 });
-    expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$');
+    expect(tree.selectByPathString).toHaveBeenCalledOnceWith(null);
   });
 
   it('cursor in trailing whitespace clears tree selection', () => {
@@ -2694,6 +2738,145 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
       startColumn: 8,
       endLineNumber: 1,
       endColumn: 10,
+    });
+  });
+
+  describe('issue #266 defer/restore (cursor-restore on settle)', () => {
+    it('cursor on a not-yet-existing key defers (does not regress to root)', () => {
+      // Editor content has the renamed key, but the tree's stub
+      // knownPaths still mirrors the pre-rename tree (mimicking the
+      // 150 ms tree-pane debounce). The new resolver validates
+      // against the live AST, so the call to selectByPathString
+      // uses the new key. The TreeStub's defer behavior stashes it
+      // as pending.
+      const text = '{"fooB": 1}';
+      const { component, tree } = setUp(text, ['$', '$.foo']);
+      component.onCursorChange({ line: 1, column: 4, offset: 3 });
+      expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.fooB');
+      expect(tree.pending).toBe('$.fooB');
+      // No clear-to-root: the OLD selection stays visible. (The
+      // stub starts with currentSelection = null so we can only
+      // assert that the defer branch did not write a clearing
+      // value; the visible-preserve case is covered tree-side.)
+      expect(tree.selectByPathString).not.toHaveBeenCalledWith('$');
+      expect(tree.selectByPathString).not.toHaveBeenCalledWith(null);
+    });
+
+    it('cursor inside existing key resolves to its path and does not defer', () => {
+      const text = '{"foo": 1}';
+      const { component, tree } = setUp(text, ['$', '$.foo']);
+      // Offset 3 sits inside "foo".
+      component.onCursorChange({ line: 1, column: 4, offset: 3 });
+      expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.foo');
+      // TreeStub: hasPath true -> immediate apply, no defer.
+      expect(tree.pending).toBeNull();
+      expect(tree.currentSelection).toBe('$.foo');
+    });
+
+    it('incomplete-value cursor returns null (no root fallback)', () => {
+      // Content with a property missing its value. locationAt
+      // returns ['foo'] at the post-colon position; the live AST
+      // has no node at ['foo'] because the property has no value
+      // child. The '$' fallback is gated on locationAt returning
+      // []; here it returned ['foo'] so no fallback fires.
+      const text = '{"foo": }';
+      const { component, tree } = setUp(text, ['$', '$.foo']);
+      // Offset 8 is between ': ' and '}'.
+      component.onCursorChange({ line: 1, column: 9, offset: 8 });
+      expect(tree.selectByPathString).toHaveBeenCalledOnceWith(null);
+    });
+
+    it('top-level trailing-comma slot returns null (no root fallback)', () => {
+      // jsonc-parser returns path=[''] for a trailing-comma slot
+      // at the top level. The live AST has no '' property, so the
+      // loop exits without resolving. path.length === 1 so the
+      // '$' fallback does not fire. Selection is cleared.
+      const text = '{"foo":"bar",}';
+      const { component, tree } = setUp(text, ['$', '$.foo']);
+      // Offset 13 is the closing brace after the trailing comma.
+      component.onCursorChange({ line: 1, column: 14, offset: 13 });
+      expect(tree.selectByPathString).toHaveBeenCalledOnceWith(null);
+    });
+
+    it('nested trailing-comma slot falls back to parent', () => {
+      // Nested trailing-comma in {"a":{"b":1,}} at offset 12.
+      // jsonc-parser returns path=['a','']. length=2 ['a','']
+      // does not resolve; length=1 ['a'] resolves to the inner
+      // object node. Selection moves to $.a (parent of the
+      // missing key).
+      const text = '{"a":{"b":1,}}';
+      const { component, tree } = setUp(text, ['$', '$.a', '$.a.b']);
+      component.onCursorChange({ line: 1, column: 13, offset: 12 });
+      expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.a');
+    });
+
+    it('cursor outside any AST returns null', () => {
+      // Empty document: parseResult.empty is true, ast undefined.
+      const text = '   ';
+      const { component, tree } = setUp(text, ['$']);
+      component.onCursorChange({ line: 1, column: 2, offset: 1 });
+      expect(tree.selectByPathString).toHaveBeenCalledOnceWith(null);
+    });
+
+    it('setContent clears tree pending but not selection', () => {
+      const text = '{"foo": 1}';
+      const { component, tree } = setUp(text, ['$', '$.foo']);
+      // Stage a pending defer via direct stub state (mimicking a
+      // prior typing-induced defer).
+      tree.pending = '$.fooB';
+      tree.currentSelection = '$.foo';
+
+      component.onValueChange('{"foo": 2}');
+
+      expect(tree.clearPendingSelectPath).toHaveBeenCalled();
+      // setContent must NOT call selectByPathString(null) (which
+      // would visibly clear the selection); the tree's preserve-
+      // or-clear effect handles the visible selection on the next
+      // value() flush.
+      expect(tree.selectByPathString).not.toHaveBeenCalledWith(null);
+      expect(tree.pending).toBeNull();
+      expect(tree.currentSelection).toBe('$.foo');
+    });
+
+    it('toggling sync OFF clears tree pending but not selection', () => {
+      const text = '{"foo": 1}';
+      const { component, tree } = setUp(text, ['$', '$.foo']);
+      tree.pending = '$.fooB';
+      tree.currentSelection = '$.foo';
+
+      component.onToggleSelectionSync();
+
+      expect(tree.clearPendingSelectPath).toHaveBeenCalled();
+      expect(tree.selectByPathString).not.toHaveBeenCalled();
+      expect(tree.pending).toBeNull();
+      expect(tree.currentSelection).toBe('$.foo');
+    });
+
+    it('with sync OFF from the start, onCursorChange does not call selectByPathString', () => {
+      const text = '{"foo": 1}';
+      const { component, tree } = setUp(text, ['$', '$.foo']);
+      // Toggle off (default is on per prefs default).
+      component.onToggleSelectionSync();
+      tree.selectByPathString.calls.reset();
+      tree.clearPendingSelectPath.calls.reset();
+
+      component.onCursorChange({ line: 1, column: 4, offset: 3 });
+
+      expect(tree.selectByPathString).not.toHaveBeenCalled();
+    });
+
+    it('selectByPathString is called with the LIVE path even when tree.hasPath is stale', () => {
+      // The pre-#266 resolver gated selectByPathString on
+      // tree.hasPath(candidate); a stale tree would return the
+      // OLD path. The #266 resolver validates against parseResult
+      // .ast, so the LIVE path flows through regardless of stale
+      // tree state. The defer happens INSIDE the tree (stubbed).
+      const text = '{"renamed": 1}';
+      const { component, tree } = setUp(text, ['$', '$.old']);
+      component.onCursorChange({ line: 1, column: 5, offset: 4 });
+      expect(tree.selectByPathString).toHaveBeenCalledOnceWith('$.renamed');
+      // tree.hasPath returned false; defer branch staged pending.
+      expect(tree.pending).toBe('$.renamed');
     });
   });
 });
