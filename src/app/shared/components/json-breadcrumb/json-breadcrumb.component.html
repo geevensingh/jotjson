@@ -8,12 +8,14 @@
       <ol #list class="jj-breadcrumb__list">
         @if (leadingCrumb(); as first) {
           <li class="jj-breadcrumb__item">
+            <!-- title always set (raw if untransformed: existing
+                 overflow-hint pattern; decoded form if transformed). -->
             <button
               type="button"
               class="jj-breadcrumb__chip"
               [class.is-current]="first.current"
               [attr.aria-current]="first.current ? 'location' : null"
-              [attr.title]="first.label"
+              [attr.title]="first.decodedLabel ?? first.label"
               (click)="onCrumbClick(first)"
               (contextmenu)="onCrumbContextMenu($event, first)"
             >
@@ -48,12 +50,14 @@
         }
         @for (crumb of trailingCrumbs(); track crumb.canonicalPath; let last = $last) {
           <li class="jj-breadcrumb__item">
+            <!-- title always set (raw if untransformed: existing
+                 overflow-hint pattern; decoded form if transformed). -->
             <button
               type="button"
               class="jj-breadcrumb__chip"
               [class.is-current]="crumb.current"
               [attr.aria-current]="crumb.current ? 'location' : null"
-              [attr.title]="crumb.label"
+              [attr.title]="crumb.decodedLabel ?? crumb.label"
               (click)="onCrumbClick(crumb)"
               (contextmenu)="onCrumbContextMenu($event, crumb)"
             >
