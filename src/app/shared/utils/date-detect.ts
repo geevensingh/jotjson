@@ -9,6 +9,7 @@
  *   - ISO date-only:         YYYY-MM-DD
  *   - Slash with 4-digit year: NN/NN/YYYY (order resolved by user locale)
  *   - Loose RFC 2822 / human:  "Mon DD, YYYY" or "DD Mon YYYY" + optional time
+ *   - ASP.NET / WCF JSON date: /Date(<ms-since-epoch>[+/-HHMM])/ (offset informational, ignored)
  *
  * Strings that pass the regex are parsed and required to land in
  * [1900-01-01, 2100-12-31] to defend against e.g. accidental epoch parses.
@@ -26,7 +27,7 @@ const RFC2822_ISH =
 // spec - the millisecond value is always UTC. We discard the offset and
 // let Intl.DateTimeFormat re-localize for display, matching the
 // existing ISO-with-offset precedent. The regex deliberately does not
-// accept the backslash-escaped form (`\/Date(...)\/ `); those are
+// accept the backslash-escaped form (`\/Date(...)\/`); those are
 // expected to be unescaped upstream by the JSON parser. `\d{1,13}` is
 // sized to cover the legal range - 13 digits is the largest ms value
 // landing inside [1900-01-01, 2100-12-31]; `isInRange` catches any
