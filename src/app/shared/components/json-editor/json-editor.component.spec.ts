@@ -657,6 +657,16 @@ describe('JsonEditorComponent', () => {
       expect(editor.getValue()).toBe('{"a":1}');
     });
 
+    it('returns false and skips reveal when executeEdits reports failure', async () => {
+      const component = await create('{"a":1}');
+      editor.executeEdits.and.returnValue(false);
+      editor.revealRangeInCenterIfOutsideViewport.calls.reset();
+
+      expect(component.applyEdit(5, 6, '2', 'spec-apply-edit')).toBeFalse();
+      expect(editor.executeEdits).toHaveBeenCalledTimes(1);
+      expect(editor.revealRangeInCenterIfOutsideViewport).not.toHaveBeenCalled();
+    });
+
     it('applies reverse edits with the same Monaco edit path', async () => {
       const component = await create('{"a":1}');
 

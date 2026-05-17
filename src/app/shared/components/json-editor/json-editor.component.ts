@@ -303,7 +303,10 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       if (model.getValueInRange(range).length !== endOffset - startOffset) {
         return;
       }
-      editor.executeEdits(source, [{ range, text, forceMoveMarkers: true }]);
+      const applied = editor.executeEdits(source, [{ range, text, forceMoveMarkers: true }]);
+      if (!applied) {
+        return;
+      }
       editor.revealRangeInCenterIfOutsideViewport(range);
       didApply = true;
     });
