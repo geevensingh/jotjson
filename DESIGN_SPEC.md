@@ -2432,6 +2432,50 @@ Out of scope (for v1):
   name `jj-tooltip-wide` is reusable -- future Monaco /
   breadcrumb / status-bar tooltips with long bodies can opt in
   with one attribute.
+- **0.25.0**: Tree row top-level **Expand all from here** label gains
+  a level-count hint whenever the row is visible:
+  `Expand all from here (+6 levels)` (matching the existing
+  `+N levels` suffix vocabulary on the per-row depth submenu at
+  TS:633-641) rather than the bare `Expand all from here`. The
+  hint surfaces whenever the top-level row is visible.
+
+  **Metric**: the suffix is `maxDescendantDepth(node) + 1` -- one
+  more than the deepest container descendant's relative depth.
+  `expandAllFromHere` walks every container at relative depths
+  `0..maxDescendantDepth`, which equals that many `+N levels` of
+  expansion in the submenu's vocabulary. The submenu (per-row
+  `+N`) caps at `maxDescendantDepth` to avoid duplicating this
+  row's end state, so this label always reads exactly one more
+  than the largest submenu entry. That `+1` gap is intentional:
+  it signals "Expand all reaches one level beyond the largest
+  partial-expand option," and is honest about the action's reach
+  (the prior off-by-one made the label look identical to the
+  submenu's max while doing strictly more).
+
+  **Telemetry divergence**: `tree.expand.slow` continues to emit
+  `depth: maxDescendantDepth` for both top-row and submenu sources
+  (preserving cross-version analytics continuity). The visible
+  label and the emitted `depth` are intentionally off-by-one for
+  top-row events. Renaming or splitting the telemetry field is
+  out of scope and is batched with issue #241.
+
+  The hint scales past the depth-submenu's `+1..+9` ceiling -- e.g.,
+  `(+12 levels)` on a deeply-nested chain -- since the top-level
+  row is the only path to "Expand all" once the submenu's range is
+  exhausted, so a depth signal here also tells users how deep the
+  subtree goes when the toolbar's Expand-to-Level range can't
+  reach the bottom. New `$localize` ID
+  `@@tree.contextMenu.expandAllFromHere.withDepth` (always plural
+  source string, no ICU -- the codebase has zero `$localize` ICU
+  precedents and the smallest visible suffix is `+2` so the
+  singular case never arises).
+  Telemetry shape unchanged (`tree.contextMenu.expandAllFromHere`
+  still emits `{ source: 'topRow' }`); enriching the event with
+  the depth bucket is deferred to issue #241 alongside the
+  `logger.info -> logger.event` migration so the sink and bucket
+  ship atomically per AGENTS.md §4. No HTML structure change --
+  only the label binding swaps from `ctxExpandAllFromHereElevatedLabel`
+  to the new `ctxExpandAllFromHereLabelFor(cn)` method.
 - **0.23.2**: Restore the v0.19.0 row-menu icon contract on the
   new top-level **Expand all from here** row. v0.19.0 (Phase 3
   of the tree-menu overhaul) established that "every top-level
@@ -2459,7 +2503,7 @@ Out of scope (for v1):
   iteration sees BOTH the new top-level row AND the Subtree
   trigger. Any future iconless top-level row added anywhere in
   `rowMenu` will fail the new test.
-- **0.24.0**: M7v Safer Extract Embedded JSON UX (see milestone
+- **0.26.0**: M7v Safer Extract Embedded JSON UX (see milestone
   M7v at the end of this document for the full prose). When a
   string leaf is both extractable and a decoded-value candidate,
   the destructive Extract action moves into the renamed `Inspect

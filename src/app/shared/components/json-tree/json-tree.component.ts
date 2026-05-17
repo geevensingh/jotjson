@@ -4033,6 +4033,64 @@ export class JsonTreeComponent {
   }
 
   /**
+   * Returns the label for the top-level `Expand all from here` row.
+   * Suffixes the label with the level count (`(+N levels)`) whenever
+   * the row is visible, so the user can see how deep `all` will go
+   * before clicking.
+   *
+   * Metric note: `maxDescendantDepth(node)` returns the relative
+   * depth of the deepest **container** descendant (containers below
+   * `node`; primitive leaves don't extend the count). But
+   * `expandAllFromHere` walks every container at relative depths
+   * `0..maxDescendantDepth` -- that's `maxDescendantDepth + 1`
+   * distinct levels of expansion in the submenu's `+N levels`
+   * vocabulary. The submenu's per-row depth options
+   * (`showExpandToDepth`) cap at `maxDescendantDepth` to avoid
+   * duplicating this row's end state; this label therefore always
+   * reads exactly one more than the largest submenu entry, which is
+   * the deliberate "+M+1 levels" the submenu intentionally omits.
+   *
+   * Threshold change (v0.25.0 follow-up bugfix): the prior
+   * `maxDescendantDepth >= 2` threshold was rooted in a now-invalid
+   * concern about a `(+1 level)` suffix colliding with the bolded
+   * `Expand 1 level` surfaced shortcut. With the corrected metric
+   * the smallest visible suffix is `(+2 levels)` -- no `(+1 level)`
+   * is ever rendered. The earlier "the verbs `1 level` vs `all`
+   * carry the distinction without an explicit count" rationale is
+   * superseded: with the corrected metric the suffix carries
+   * genuine information (the action's reach is exactly `+2` rather
+   * than the bolded shortcut's `+1`), not redundant decoration.
+   *
+   * The only remaining early-return is `containerDepth < 1`
+   * (primitives-only safe default). In production the row is gated
+   * out by `hasContainerDescendants` (`maxDescendantDepth > 0`); the
+   * early-return covers programmatic callers.
+   *
+   * Telemetry divergence: `tree.expand.slow`
+   * (`emitSlowExpandIfNeeded`) emits `depth: containerDepth` for both
+   * top-row and submenu sources, preserving cross-version analytics
+   * continuity. The visible label and the telemetry depth field
+   * are therefore intentionally off-by-one for top-row events.
+   * Renaming or splitting the telemetry field is out of scope for
+   * this fix and is batched with issue #241 (telemetry migration).
+   *
+   * The suffixed message is always plural ("levels") because the
+   * smallest visible value is 2; the source string avoids an i18n
+   * ICU plural for which the codebase has no precedent.
+   *
+   * The trans-unit ID `@@tree.contextMenu.expandAllFromHere.withDepth`
+   * is historical (introduced when the value was `containerDepth`).
+   * Per i18n stability rule (AGENTS.md s4), the ID stays even though
+   * the value is now `containerDepth + 1` (level count, not depth).
+   */
+  ctxExpandAllFromHereLabelFor(node: TreeNode): string {
+    const containerDepth = this.maxDescendantDepth(node);
+    if (containerDepth < 1) return this.ctxExpandAllFromHereElevatedLabel;
+    const levels = containerDepth + 1;
+    return $localize`:@@tree.contextMenu.expandAllFromHere.withDepth:Expand all from here (+${levels}:LEVELS: levels)`;
+  }
+
+  /**
    * Length of the longest path from `node` down to any descendant
    * **container** (not counting primitive leaves). Drives the cap on
    * visible "Expand to depth +N" entries so we never offer an `+N`
