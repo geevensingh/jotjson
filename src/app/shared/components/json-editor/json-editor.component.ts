@@ -313,10 +313,6 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
     return didApply;
   }
 
-  applyReverseEdit(startOffset: number, endOffset: number, text: string, source: string): boolean {
-    return this.applyEdit(startOffset, endOffset, text, source);
-  }
-
   triggerUndo(): void {
     this.editor?.trigger('jotjson', 'undo', null);
   }

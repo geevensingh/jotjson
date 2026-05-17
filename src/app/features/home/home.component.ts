@@ -1258,6 +1258,14 @@ export class HomeComponent implements OnInit, OnDestroy {
           return;
         }
         pendingExtractUndo.undoneViaSnackbar = true;
+        // Full-doc swap (not a surgical reverse-edit via
+        // `JsonEditorComponent.applyEdit`). Trade-off: this clobbers
+        // Monaco's redo stack, so Ctrl+Y / Ctrl+Shift+Z cannot reach
+        // the post-extract state after snackbar Undo. Accepted because
+        // the captured `priorText` is the entire pre-extract document
+        // and a surgical reverse splice would still need to invalidate
+        // any post-extract typing - same observable outcome with more
+        // code.
         this.replaceDocument(priorText);
         this.logger.event('tree.extract.undo', {
           source: 'snackbar',

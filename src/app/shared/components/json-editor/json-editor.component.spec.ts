@@ -667,13 +667,6 @@ describe('JsonEditorComponent', () => {
       expect(editor.revealRangeInCenterIfOutsideViewport).not.toHaveBeenCalled();
     });
 
-    it('applies reverse edits with the same Monaco edit path', async () => {
-      const component = await create('{"a":1}');
-
-      expect(component.applyReverseEdit(5, 6, '2', 'spec-reverse-edit')).toBeTrue();
-      expect(editor.getValue()).toBe('{"a":2}');
-    });
-
     it('calls editor.trigger with the Monaco undo command', async () => {
       const component = await create('{"a":1}');
 

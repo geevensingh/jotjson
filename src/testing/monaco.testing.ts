@@ -92,14 +92,30 @@ function makeMinimalEditor(initialValue: string): object {
         text: string;
       }>,
     ) => {
+      // Single-edit invariant: real Monaco rejects overlapping ranges
+      // via IIdentifiedSingleEditOperation. Rather than re-implement
+      // that overlap detection in a test stub, we hard-fail on any
+      // multi-edit batch so the single-edit constraint is executable
+      // rather than a documented gap. Production callers
+      // (json-editor.component.ts paste-unescape and applyEdit) pass
+      // exactly one edit per call today; if a future caller batches
+      // edits this throw fires and forces them to update both the
+      // production code and this stub together.
+      if (edits.length > 1) {
+        throw new Error(
+          'monaco.testing.ts executeEdits stub only supports single-edit batches; ' +
+            'real Monaco rejects overlapping ranges and this stub does not implement ' +
+            'overlap detection. Update both the caller and this stub if multi-edit ' +
+            'batches are needed.',
+        );
+      }
       // Snapshot all offsets against the pre-edit text BEFORE applying
       // any edit, then apply from highest offset down so earlier
       // ranges do not shift under later splices. Matches Monaco's
       // documented semantics (ranges resolve against the pre-edit
-      // model). NOTE: this stub does not detect overlapping edits;
-      // real Monaco rejects them via IIdentifiedSingleEditOperation,
-      // but we silently apply both. Production callers only pass a
-      // single edit today, so the divergence is latent.
+      // model). The loop body is retained (rather than collapsed to a
+      // single splice) so that adding multi-edit support later only
+      // requires removing the guard above and adding overlap detection.
       const offsetEdits = edits.map((edit) => ({
         start: positionToOffset(edit.range.startLineNumber, edit.range.startColumn),
         end: positionToOffset(edit.range.endLineNumber, edit.range.endColumn),
