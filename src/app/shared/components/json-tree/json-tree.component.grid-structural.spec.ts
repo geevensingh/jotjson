@@ -21,6 +21,13 @@ import { JsonTreeComponent } from './json-tree.component';
  * separate build-time lint later (see follow-up issue #5 in the
  * #269 PR description).
  *
+ * Issue #278 follow-up: `scripts/check-tree-row-grid.mjs` now
+ * enforces a strict subset of these invariants at `npm run lint`
+ * time (direct-child allowlist, grid-template-columns track
+ * integrity, flex-shrink retainee preservation). This runtime
+ * spec remains the authority for dynamic-class regressions and
+ * computed-style assertions that require a browser.
+ *
  * Mounting strategy mirrors `json-tree.component.overflow.spec.ts`:
  * the host is sized AT mount (not resize-after-render) so the first
  * `OverflowDetectorDirective.afterNextRender` measurement already

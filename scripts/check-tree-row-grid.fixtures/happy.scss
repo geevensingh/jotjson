@@ -1,0 +1,67 @@
+// Structural invariants enforced by scripts/check-tree-row-grid.mjs
+// Accepted grid-column grammar:
+//   grid-column: <name>;
+//   grid-column: <name> / span <integer>;
+.tree-row {
+  display: grid;
+  grid-template-columns:
+    [leading] auto
+    [key] auto
+    [sep] auto
+    [value] minmax(0, 1fr)
+    [trailing] auto
+    [right] auto;
+
+  > .tree-row-leading {
+    grid-column: leading;
+  }
+  > .tree-key {
+    grid-column: key;
+  }
+  > .tree-index {
+    grid-column: key / span 2;
+  }
+  > .tree-key-sep {
+    grid-column: sep;
+  }
+  > .tree-row-value-cell {
+    grid-column: value;
+  }
+  > .tree-row-trailing {
+    grid-column: trailing;
+  }
+  > .tree-row-right {
+    grid-column: right;
+  }
+
+  &--probe {
+    visibility: hidden;
+  }
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+}
+
+.tree-row.tree-row--close {
+  display: flex;
+}
+
+.tree-row:focus-visible {
+  outline: none;
+}
+
+.tree-twisty {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.tree-beacon-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.tree-rule-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
