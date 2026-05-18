@@ -1,6 +1,9 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import type { UserPreferences } from '../api/models';
+import { DEFAULT_PREFERENCES, PreferencesService } from '../preferences/preferences.service';
 import { LoggerService } from '../telemetry/logger.service';
-import type { ExtractedJson } from './json-extractor.core';
+import type { ExtractedJson, IndentSize } from './json-extractor.core';
 import { MAX_INPUT_LENGTH } from './json-extractor.core';
 import {
   TREE_STRING_EXTRACTOR_BATCH_SIZE,
@@ -12,6 +15,7 @@ import {
 interface ScanRequest {
   type: 'scan';
   sourceVersion: number;
+  tabSize: IndentSize;
   strings: readonly string[];
 }
 
@@ -106,18 +110,38 @@ describe('TreeStringExtractorService', () => {
   let service: TreeStringExtractorService;
   let mockWorker: MockWorker;
   let logger: jasmine.SpyObj<LoggerService>;
+  let prefsSignal: ReturnType<typeof signal<UserPreferences>>;
+  let prefsStub: Pick<PreferencesService, 'prefs'>;
+
+  function createPrefsStub(initial: UserPreferences): {
+    signal: ReturnType<typeof signal<UserPreferences>>;
+    stub: Pick<PreferencesService, 'prefs'>;
+  } {
+    const stateSignal = signal<UserPreferences>(initial);
+    const stub = { prefs: stateSignal.asReadonly() } as Pick<PreferencesService, 'prefs'>;
+    return { signal: stateSignal, stub };
+  }
 
   beforeEach(() => {
     mockWorker = new MockWorker();
     logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['warn']);
+    const created = createPrefsStub({ ...DEFAULT_PREFERENCES });
+    prefsSignal = created.signal;
+    prefsStub = created.stub;
     TestBed.configureTestingModule({
       providers: [
         { provide: WORKER_FACTORY, useValue: () => mockWorker.asWorker() },
         { provide: LoggerService, useValue: logger },
+        { provide: PreferencesService, useValue: prefsStub },
       ],
     });
     service = TestBed.inject(TreeStringExtractorService);
     service.beginGeneration();
+    // Flush the constructor's first-sync effect run so `lastObservedTabSize`
+    // captures the initial prefs value. Without this, the next
+    // `prefsSignal.set(...)` would be observed as the "first" tabSize and
+    // would not trigger a rescan.
+    TestBed.flushEffects();
   });
 
   it('rejects strings shorter than two characters', () => {
@@ -269,6 +293,7 @@ describe('TreeStringExtractorService', () => {
   it('marks the scanner unavailable when worker creation fails', () => {
     TestBed.resetTestingModule();
     logger = jasmine.createSpyObj<LoggerService>('LoggerService', ['warn']);
+    const fallbackPrefs = createPrefsStub({ ...DEFAULT_PREFERENCES });
     TestBed.configureTestingModule({
       providers: [
         {
@@ -278,6 +303,7 @@ describe('TreeStringExtractorService', () => {
           },
         },
         { provide: LoggerService, useValue: logger },
+        { provide: PreferencesService, useValue: fallbackPrefs.stub },
       ],
     });
     service = TestBed.inject(TreeStringExtractorService);
@@ -427,6 +453,98 @@ describe('TreeStringExtractorService', () => {
     expect(candidate?.proseSegments).toBe(1);
   });
 
+  describe('tabSize', () => {
+    // Issue #253: editor tab-size preference must propagate to the
+    // worker request and govern cache keying so visible indent
+    // matches the user's preference at all times.
+
+    it('posts the current prefs editorTabSize on each scan request', () => {
+      prefsSignal.set({ ...DEFAULT_PREFERENCES, editorTabSize: 4 });
+      TestBed.flushEffects();
+
+      service.beginGeneration();
+      service.enqueueScan([rawJsonString(70)]);
+
+      expect(mockWorker.requirePostedMessage(0).tabSize).toBe(4);
+    });
+
+    it('captures tabSize at dispatch so mid-flight pref flips do not corrupt the cache (TOCTOU regression)', () => {
+      const rawString = rawJsonString(71);
+
+      // Dispatch at tabSize=2.
+      service.enqueueScan([rawString]);
+      expect(mockWorker.requirePostedMessage(0).tabSize).toBe(2);
+
+      // Flip prefs to 4 BEFORE responding. The pending chunk must
+      // still cache the result under tabSize=2 because that is the
+      // tabSize the worker formatted at.
+      prefsSignal.set({ ...DEFAULT_PREFERENCES, editorTabSize: 4 });
+
+      mockWorker.respondToMessage(0);
+
+      // The flushed effect will trigger a re-scan at tabSize=4. The
+      // re-post must MISS the cache (different key) and dispatch a
+      // fresh worker request with tabSize=4.
+      TestBed.flushEffects();
+
+      expect(mockWorker.postedMessages.length).toBe(2);
+      expect(mockWorker.requirePostedMessage(1).tabSize).toBe(4);
+      expect(mockWorker.requirePostedMessage(1).strings).toEqual([rawString]);
+    });
+
+    it('flipping editorTabSize invalidates current-generation results and re-scans', () => {
+      const rawString = rawJsonString(72);
+
+      service.enqueueScan([rawString]);
+      mockWorker.respondToMessage(0);
+      expectCandidateText(rawString, rawString);
+
+      prefsSignal.set({ ...DEFAULT_PREFERENCES, editorTabSize: 4 });
+      TestBed.flushEffects();
+
+      // Stale results cleared until the new-tabSize chunk responds.
+      expect(service.candidates().size).toBe(0);
+      expect(mockWorker.postedMessages.length).toBe(2);
+      expect(mockWorker.requirePostedMessage(1).tabSize).toBe(4);
+    });
+
+    it('serves a cached tabSize-4 result on re-flip without re-posting', () => {
+      const rawString = rawJsonString(73);
+
+      // Cache an entry at tabSize=2.
+      service.enqueueScan([rawString]);
+      mockWorker.respondToMessage(0);
+
+      // Flip to 4: forces a re-scan at the new tabSize.
+      prefsSignal.set({ ...DEFAULT_PREFERENCES, editorTabSize: 4 });
+      TestBed.flushEffects();
+      mockWorker.respondToMessage(1);
+
+      // Flip back to 2: the tabSize=2 entry is still in the LRU,
+      // so no fresh worker post is needed.
+      prefsSignal.set({ ...DEFAULT_PREFERENCES, editorTabSize: 2 });
+      TestBed.flushEffects();
+
+      expect(mockWorker.postedMessages.length).toBe(2);
+      expectCandidateText(rawString, rawString);
+    });
+
+    it('pre-screen failures are tabSize-independent (no re-post after tabSize flip)', () => {
+      // Strings without `{` or `[` cannot have JSON regardless of
+      // tabSize. They go into definitelyNullStrings, not the cache.
+      service.enqueueScan(['plain text without delimiters']);
+      expect(mockWorker.postedMessages).toEqual([]);
+
+      prefsSignal.set({ ...DEFAULT_PREFERENCES, editorTabSize: 4 });
+      TestBed.flushEffects();
+
+      service.beginGeneration();
+      service.enqueueScan(['plain text without delimiters']);
+
+      expect(mockWorker.postedMessages).toEqual([]);
+    });
+  });
+
   function expectCandidateText(rawString: string, expectedText: string): void {
     const candidate = service.candidates().get(rawString);
     expect(candidate).toBeDefined();
@@ -456,11 +574,13 @@ function isScanRequest(value: unknown): value is ScanRequest {
   const candidate = value as {
     type?: unknown;
     sourceVersion?: unknown;
+    tabSize?: unknown;
     strings?: unknown;
   };
   return (
     candidate.type === 'scan' &&
     typeof candidate.sourceVersion === 'number' &&
+    (candidate.tabSize === 2 || candidate.tabSize === 4) &&
     Array.isArray(candidate.strings) &&
     candidate.strings.every((item) => typeof item === 'string')
   );

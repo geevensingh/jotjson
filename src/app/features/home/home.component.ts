@@ -52,7 +52,11 @@ import {
   ClipboardPollingService,
   type ClipboardGrantedReadResult,
 } from '../../core/clipboard/clipboard-polling.service';
-import { ExtractedJson, JsonExtractorService } from '../../core/json/json-extractor.service';
+import {
+  ExtractedJson,
+  IndentSize,
+  JsonExtractorService,
+} from '../../core/json/json-extractor.service';
 import { JsonParseResult, JsonParserService } from '../../core/json/json-parser.service';
 import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
@@ -502,6 +506,13 @@ export class HomeComponent implements OnInit, OnDestroy {
    */
   private lastHydratedInputId: string | null = null;
   private signInRestoreAttempted = false;
+  /**
+   * Tracks the last `editorTabSize` observed by the issue #253 effect so
+   * the first synchronous read during construction is treated as the
+   * baseline rather than a change. Subsequent flips re-format the
+   * extract banner preview in place.
+   */
+  private lastObservedExtractorTabSize: IndentSize | null = null;
 
   readonly parseResult = computed<JsonParseResult>(() => this.parser.parse(this.content()));
 
@@ -890,6 +901,37 @@ export class HomeComponent implements OnInit, OnDestroy {
           this.seo.setNoindex(true);
         }
       }
+    });
+
+    // Issue #253: when `editorTabSize` changes, re-run extraction over
+    // the current content so the extract banner preview reformats with
+    // the new indent. This is intentionally lightweight: it does NOT
+    // emit `home.extract.banner.shown` again (the banner is already
+    // shown, only its rendered text is changing) -- it patches the
+    // candidate's `data` in place.
+    effect(() => {
+      const tabSize = this.prefs.prefs().editorTabSize;
+      if (this.lastObservedExtractorTabSize === null) {
+        this.lastObservedExtractorTabSize = tabSize;
+        return;
+      }
+      if (this.lastObservedExtractorTabSize === tabSize) {
+        return;
+      }
+      this.lastObservedExtractorTabSize = tabSize;
+      const candidate = this.extractedCandidate();
+      if (candidate === null || candidate.sourceVersion !== this.contentVersion()) {
+        return;
+      }
+      const reformatted = this.extractor.extractFromMixedText(this.content(), tabSize);
+      if (reformatted === null) {
+        return;
+      }
+      this.extractedCandidate.set({
+        data: reformatted,
+        sourceVersion: candidate.sourceVersion,
+        source: candidate.source,
+      });
     });
 
     effect(() => {
@@ -1981,7 +2023,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.replaceExtractedCandidate(null, null);
       return;
     }
-    const extracted = this.extractor.extractFromMixedText(this.content());
+    const extracted = this.extractor.extractFromMixedText(
+      this.content(),
+      this.prefs.prefs().editorTabSize,
+    );
     if (extracted) {
       this.replaceExtractedCandidate(extracted, source);
     } else {
@@ -2008,7 +2053,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.replaceExtractedCandidate(null, null);
     } else {
       const parseStartedAt = performance.now();
-      const extracted = this.extractor.extractFromMixedText(event.pastedText);
+      const extracted = this.extractor.extractFromMixedText(
+        event.pastedText,
+        this.prefs.prefs().editorTabSize,
+      );
       parseMs = this.durationSince(parseStartedAt);
       if (extracted) {
         this.replaceExtractedCandidate(extracted, 'editor.paste');

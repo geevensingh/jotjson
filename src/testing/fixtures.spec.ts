@@ -161,7 +161,7 @@ describe('extractor on mixed-text fixtures', () => {
 
   it('extractFromMixedText finds the two HTTP bodies and wraps them with their surrounding prose', () => {
     const extractor = TestBed.inject(JsonExtractorService);
-    const extracted = extractor.extractFromMixedText(mixedText);
+    const extracted = extractor.extractFromMixedText(mixedText, 2);
 
     expect(extracted).withContext('extractor must return non-null on this fixture').not.toBeNull();
     expect(extracted!.blockCount).withContext('two HTTP bodies in this capture').toBe(2);

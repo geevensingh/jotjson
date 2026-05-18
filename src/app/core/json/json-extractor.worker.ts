@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { parse, ParseError } from 'jsonc-parser';
+import type { IndentSize } from './json-extractor.core';
 import { extractFromMixedText } from './json-extractor.core';
 
 // Message shapes - keep these in sync with the service.
@@ -8,6 +9,11 @@ export interface ScanRequest {
   type: 'scan';
   // Identifies the parse generation; service drops responses for stale versions.
   sourceVersion: number;
+  // Indent size to use when formatting extracted JSON output (2 | 4).
+  // Captured at chunk-dispatch time by the service so that a tabSize
+  // change between dispatch and response cannot cause stale cache
+  // entries.
+  tabSize: IndentSize;
   // Strings to scan. The service is responsible for de-duping before sending,
   // for size pre-screening, and for the {/[ pre-screen.
   strings: readonly string[];
@@ -36,7 +42,17 @@ addEventListener('message', (event: MessageEvent<ScanRequest>) => {
 
   const results = message.strings.map((value) => {
     try {
-      const extracted = extractFromMixedText(value, parseJsonCandidate);
+      // A missing/invalid tabSize is a wire-format skew bug (older queued
+      // worker request crossing a reload boundary, or a code-side type
+      // violation). Fail loudly per AGENTS.md "never swallow errors" --
+      // the surrounding try/catch turns this into a null result for that
+      // input, which the service treats as "not extractable". That is far
+      // better than silently producing 2-space indent under a user's
+      // 4-space preference (issue #253).
+      if (message.tabSize !== 2 && message.tabSize !== 4) {
+        throw new Error(`json-extractor.worker: invalid tabSize ${String(message.tabSize)}`);
+      }
+      const extracted = extractFromMixedText(value, parseJsonCandidate, message.tabSize);
       if (!extracted) return null;
       return {
         text: extracted.text,
