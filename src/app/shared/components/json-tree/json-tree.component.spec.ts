@@ -5112,10 +5112,12 @@ describe('JsonTreeComponent', () => {
     it('Escape during defer cancels pending (selectedPath null start; cold-start)', async () => {
       // Issue #266 / v2.4 regression for the cold-start typing
       // scenario: user types in editor before clicking any tree
-      // row, then presses Escape. The HostListener gate
-      // `selectedPath() !== null` would skip clearSelection(), so
-      // pending must be cleared by the HostListener's own
-      // unconditional clearPendingSelectPath() call.
+      // row, then presses Escape. `onDocumentEscape` routes
+      // through `clearSelection()` -> `setUserSelection(null)`,
+      // which clears pending (the load-bearing action) and
+      // writes `selectedPath.set(null)`. Since `selectedPath`
+      // is already null, the signal write is a no-op via
+      // Angular's native Object.is dedup - no spurious emission.
       await createWith({ foo: 1 });
       expect(cmp.selectedPath()).toBeNull();
 

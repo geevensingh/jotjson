@@ -2322,36 +2322,29 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Escape clears the active selection. We do not call preventDefault()
-   * so the search input's own Esc binding can also clear the search
-   * query when it has focus - one Esc press exits both at once.
+   * Escape clears the active selection (and any in-flight #266
+   * defer). We do not call preventDefault() so the search input's
+   * own Esc binding can also clear the search query when it has
+   * focus - one Esc press exits both at once.
    *
-   * Two production paths, kept separate so each can be tested in
-   * isolation (the two Escape-during-defer specs cover distinct
-   * production paths):
+   * Single-path delegation to `clearSelection()`, which routes
+   * through `setUserSelection(null)`:
    *
-   *  - Cold-start backstop (selectedPath already null, pending
-   *    possibly non-null from typing-before-tree-catches-up):
-   *    clear pending only. We do NOT route through
-   *    `setUserSelection(null)` here to avoid a redundant
-   *    same-value signal write that would re-fire the dedup-
-   *    emit effect.
-   *  - Warm-path (selectedPath non-null): `clearSelection()`,
-   *    which calls `setUserSelection(null)`, which clears
-   *    pending and writes null.
+   *  - `clearPendingSelectPath()` clears any in-flight defer
+   *    (the load-bearing action for the #266 v2.4 cold-start
+   *    regression, where `selectedPath` is already null but a
+   *    defer is pending from typing-before-tree-catches-up).
+   *  - `selectedPath.set(null)` writes null. On the cold-start
+   *    branch this is a same-value write; Angular signals'
+   *    native Object.is dedup makes it a no-op (no notification,
+   *    no effect fire), so there's no spurious emission.
    *
-   * The cold-start branch's `clearPendingSelectPath()` call is
-   * load-bearing for #266 v2.4 cold-start regression coverage
-   * at `json-tree.component.spec.ts` (search for "cold-start").
-   * Future cleanup PRs MUST preserve the branch split or update
-   * both tests in lockstep.
+   * Two regression specs (cold-start and warm-path) at
+   * `json-tree.component.spec.ts` (search for
+   * "Escape during defer") exercise both call-state combinations.
    */
   @HostListener('document:keydown.escape')
   onDocumentEscape(): void {
-    if (this.selectedPath() === null) {
-      this.clearPendingSelectPath();
-      return;
-    }
     this.clearSelection();
   }
 
@@ -2599,10 +2592,14 @@ export class JsonTreeComponent {
   selectByPathString(pathString: string | null): void {
     if (pathString === null) {
       // Programmatic clear. Issue #274 routes through
-      // `setUserSelection(null)`. The dedup-emit effect's
-      // `lastEmittedSelectedPath` swallows the redundant
-      // same-value emission when `selectedPath` is already null,
-      // so we do not gate the helper call.
+      // `setUserSelection(null)`. When `selectedPath` is already
+      // null the inner `selectedPath.set(null)` is a same-value
+      // write; Angular signals' native Object.is dedup makes it
+      // a signal-level no-op (no notification, the dedup-emit
+      // effect does not re-fire), so we do not gate the helper
+      // call. The `clearPendingSelectPath()` half of the helper
+      // still runs and is the load-bearing action when a defer
+      // is in flight.
       this.setUserSelection(null);
       return;
     }

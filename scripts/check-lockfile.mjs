@@ -115,7 +115,6 @@ export function checkVersionInSync(pkg, lock) {
 }
 
 function printVersionDriftMessage(workspace, detail) {
-  const cdHint = workspace.prefix ? `cd ${workspace.prefix}; ` : '';
   console.error('');
   console.error(`check-lockfile: FAILED for workspace '${workspace.name}' (version drift)`);
   console.error(`  ${detail}`);
