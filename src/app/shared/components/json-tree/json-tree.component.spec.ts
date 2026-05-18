@@ -1469,49 +1469,25 @@ describe('JsonTreeComponent', () => {
   });
 
   describe('JSONC comment rendering (M7k)', () => {
-    function makeBundle(
-      leading?: string,
-      trailing?: string,
-      closeTrailing?: string,
-      closeLeading?: string,
-    ): {
-      leading?: string;
-      trailing?: string;
-      closeLeading?: string;
-      closeTrailing?: string;
-    } {
-      const bundle: {
-        leading?: string;
-        trailing?: string;
-        closeLeading?: string;
-        closeTrailing?: string;
-      } = {};
-      if (leading !== undefined) bundle.leading = leading;
-      if (trailing !== undefined) bundle.trailing = trailing;
-      if (closeLeading !== undefined) bundle.closeLeading = closeLeading;
-      if (closeTrailing !== undefined) bundle.closeTrailing = closeTrailing;
-      return bundle;
-    }
-
     function makeMap(
       entries: Array<
         [
           string,
           {
-            leading?: string;
-            trailing?: string;
-            closeLeading?: string;
-            closeTrailing?: string;
+            leading?: readonly string[];
+            trailing?: readonly string[];
+            closeLeading?: readonly string[];
+            closeTrailing?: readonly string[];
           },
         ]
       >,
     ): ReadonlyMap<
       string,
       {
-        leading?: string;
-        trailing?: string;
-        closeLeading?: string;
-        closeTrailing?: string;
+        leading?: readonly string[];
+        trailing?: readonly string[];
+        closeLeading?: readonly string[];
+        closeTrailing?: readonly string[];
       }
     > {
       return new Map(entries);
@@ -1522,10 +1498,10 @@ describe('JsonTreeComponent', () => {
       comments: ReadonlyMap<
         string,
         {
-          leading?: string;
-          trailing?: string;
-          closeLeading?: string;
-          closeTrailing?: string;
+          leading?: readonly string[];
+          trailing?: readonly string[];
+          closeLeading?: readonly string[];
+          closeTrailing?: readonly string[];
         }
       >,
       beforeDetectChanges?: () => void,
@@ -1543,6 +1519,32 @@ describe('JsonTreeComponent', () => {
         .map((el) => el.textContent?.trim() ?? '');
     }
 
+    function visibleElements(
+      selector: string,
+      root: HTMLElement = fixture.nativeElement as HTMLElement,
+    ): HTMLElement[] {
+      const host = fixture.nativeElement as HTMLElement;
+      const probe = host.querySelector('.tree-row--probe');
+      return Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(
+        (element) => !probe?.contains(element),
+      );
+    }
+
+    function findVisibleTooltipMessage(...requiredClasses: string[]): string | undefined {
+      const host = fixture.nativeElement as HTMLElement;
+      const probe = host.querySelector('.tree-row--probe');
+      return fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((debugElement) => {
+          const element = debugElement.nativeElement as HTMLElement;
+          return (
+            requiredClasses.every((className) => element.classList.contains(className)) &&
+            !probe?.contains(element)
+          );
+        })
+        ?.injector.get(MatTooltip).message;
+    }
+
     it('renders no comment slots when commentsByPath is null (default)', async () => {
       await createWith({ name: 'Alice' });
       const host = fixture.nativeElement as HTMLElement;
@@ -1556,7 +1558,7 @@ describe('JsonTreeComponent', () => {
     it('renders a leading comment before the key on a leaf row', async () => {
       await createWithComments(
         { name: 'Alice' },
-        makeMap([['$.name', makeBundle('legal name on file')]]),
+        makeMap([['$.name', { leading: ['legal name on file'] }]]),
       );
       const leading = commentTexts('.tree-comment-leading');
       expect(leading.length).toBe(1);
@@ -1566,7 +1568,7 @@ describe('JsonTreeComponent', () => {
     it('renders a trailing comment on a leaf row as a sibling of tree-row-right', async () => {
       await createWithComments(
         { id: 42 },
-        makeMap([['$.id', makeBundle(undefined, 'uuid migration TBD')]]),
+        makeMap([['$.id', { trailing: ['uuid migration TBD'] }]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]');
@@ -1595,7 +1597,7 @@ describe('JsonTreeComponent', () => {
     it('renders the trailing comment AFTER the value and BEFORE tree-row-right on leaf rows', async () => {
       await createWithComments(
         { id: 42 },
-        makeMap([['$.id', makeBundle(undefined, 'inline note')]]),
+        makeMap([['$.id', { trailing: ['inline note'] }]]),
         () => {
           prefs.update({ treeShowTypeLabels: true });
         },
@@ -1627,7 +1629,7 @@ describe('JsonTreeComponent', () => {
     it('renders the trailing comment AFTER the date annotation on string rows', async () => {
       await createWithComments(
         { when: '2024-01-15T00:00:00Z' },
-        makeMap([['$.when', makeBundle(undefined, 'logged at noon')]]),
+        makeMap([['$.when', { trailing: ['logged at noon'] }]]),
         () => {
           prefs.update({ treeShowDateAnnotations: true });
         },
@@ -1650,10 +1652,7 @@ describe('JsonTreeComponent', () => {
     });
 
     it('renders the trailing comment BEFORE the kebab on leaf rows', async () => {
-      await createWithComments(
-        { id: 42 },
-        makeMap([['$.id', makeBundle(undefined, 'inline note')]]),
-      );
+      await createWithComments({ id: 42 }, makeMap([['$.id', { trailing: ['inline note'] }]]));
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
       const trailing = leafRow.querySelector('.tree-comment-trailing');
@@ -1667,7 +1666,7 @@ describe('JsonTreeComponent', () => {
     });
 
     it('does not impose a max-width on .tree-comment (flex-driven shrink instead)', async () => {
-      await createWithComments({ id: 42 }, makeMap([['$.id', makeBundle(undefined, 'note')]]));
+      await createWithComments({ id: 42 }, makeMap([['$.id', { trailing: ['note'] }]]));
       document.body.appendChild(fixture.nativeElement);
       try {
         const trailing = (fixture.nativeElement as HTMLElement).querySelector(
@@ -1685,7 +1684,7 @@ describe('JsonTreeComponent', () => {
     it('renders the trailing-on-close comment on the container close row', async () => {
       await createWithComments(
         { user: { name: 'Alice' } },
-        makeMap([['$.user', makeBundle(undefined, undefined, 'end of user')]]),
+        makeMap([['$.user', { closeTrailing: ['end of user'] }]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const closeRow = host.querySelector('.tree-row--close');
@@ -1707,7 +1706,10 @@ describe('JsonTreeComponent', () => {
         makeMap([
           [
             '$.foo',
-            makeBundle(undefined, undefined, 'closing comment of foo', 'end of section for bar'),
+            {
+              closeLeading: ['end of section for bar'],
+              closeTrailing: ['closing comment of foo'],
+            },
           ],
         ]),
       );
@@ -1753,7 +1755,7 @@ describe('JsonTreeComponent', () => {
       // bug class M7k-fu3 / fu4 exist to fix.
       await createWithComments(
         { foo: {} },
-        makeMap([['$.foo', makeBundle(undefined, undefined, 'tail', 'hello')]]),
+        makeMap([['$.foo', { closeLeading: ['hello'], closeTrailing: ['tail'] }]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const probe = host.querySelector('.tree-row--probe');
@@ -1784,7 +1786,9 @@ describe('JsonTreeComponent', () => {
     it('merges trailing, closeLeading, and closeTrailing on an empty inline container with all three populated', async () => {
       await createWithComments(
         { foo: {} },
-        makeMap([['$.foo', makeBundle(undefined, 'open', 'tail', 'mid')]]),
+        makeMap([
+          ['$.foo', { trailing: ['open'], closeLeading: ['mid'], closeTrailing: ['tail'] }],
+        ]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const probe = host.querySelector('.tree-row--probe');
@@ -1819,7 +1823,7 @@ describe('JsonTreeComponent', () => {
       // next sibling's leading slot.
       await createWithComments(
         { foo: { bar: 1 } },
-        makeMap([['$.foo', makeBundle(undefined, 'explaination of foo')]]),
+        makeMap([['$.foo', { trailing: ['explaination of foo'] }]]),
       );
       const host = fixture.nativeElement as HTMLElement;
       const openRow = host.querySelector('[data-path="$.foo"]') as HTMLElement;
@@ -1855,7 +1859,7 @@ describe('JsonTreeComponent', () => {
     it('renders only the first line of a multi-line comment in the inline slot', async () => {
       await createWithComments(
         { version: 3 },
-        makeMap([['$.version', makeBundle(undefined, 'first line\nsecond line\nthird line')]]),
+        makeMap([['$.version', { trailing: ['first line\nsecond line\nthird line'] }]]),
       );
       const trailing = commentTexts('.tree-comment-trailing');
       expect(trailing[0]).toBe('first line');
@@ -1863,10 +1867,7 @@ describe('JsonTreeComponent', () => {
 
     it('exposes the full multi-line text via matTooltip', async () => {
       const fullText = 'first line\nsecond line';
-      await createWithComments(
-        { version: 3 },
-        makeMap([['$.version', makeBundle(undefined, fullText)]]),
-      );
+      await createWithComments({ version: 3 }, makeMap([['$.version', { trailing: [fullText] }]]));
       const debugEl = fixture.debugElement
         .queryAll(By.directive(MatTooltip))
         .find((de) =>
@@ -1878,10 +1879,189 @@ describe('JsonTreeComponent', () => {
       expect(tooltip.message).toContain('Trailing comment:');
     });
 
+    it('renders a (+1) count badge when leading has 2 stacked bodies', async () => {
+      await createWithComments(
+        { name: 'Alice' },
+        makeMap([['$.name', { leading: ['first', 'second'] }]]),
+      );
+      const [badge] = visibleElements('.tree-comment-count');
+      expect(badge).withContext('count badge should render').toBeDefined();
+      expect(badge!.textContent).toMatch(/\b1\b/);
+    });
+
+    it('renders a (+2) count badge when leading has 3 stacked bodies', async () => {
+      await createWithComments(
+        { name: 'Alice' },
+        makeMap([['$.name', { leading: ['a', 'b', 'c'] }]]),
+      );
+      const [badge] = visibleElements('.tree-comment-count');
+      expect(badge).withContext('count badge should render').toBeDefined();
+      expect(badge!.textContent).toMatch(/\b2\b/);
+    });
+
+    it('renders no count badge for a single-body slot', async () => {
+      await createWithComments({ name: 'Alice' }, makeMap([['$.name', { leading: ['only'] }]]));
+      const [badge] = visibleElements('.tree-comment-count');
+      expect(badge).toBeUndefined();
+    });
+
+    it('renders no count badge for a single multi-line block body', async () => {
+      await createWithComments(
+        { name: 'Alice' },
+        makeMap([['$.name', { leading: ['line1\nline2\nline3'] }]]),
+      );
+      const [badge] = visibleElements('.tree-comment-count');
+      expect(badge).toBeUndefined();
+    });
+
+    it('enumerates all leading bodies in matTooltip joined with newline', async () => {
+      await createWithComments(
+        { name: 'Alice' },
+        makeMap([['$.name', { leading: ['first', 'second'] }]]),
+      );
+      const tooltipMessage = findVisibleTooltipMessage('tree-comment-leading');
+      expect(tooltipMessage).toBeDefined();
+      expect(tooltipMessage!).toContain('first\nsecond');
+    });
+
+    it('renders a count badge on closeLeading when it has 2 stacked bodies', async () => {
+      await createWithComments(
+        { foo: { bar: 1 } },
+        makeMap([['$.foo', { closeLeading: ['a', 'b'] }]]),
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const closeRow = host.querySelector('.tree-row--close') as HTMLElement | null;
+      expect(closeRow).withContext('close row should render').not.toBeNull();
+      const [badge] = visibleElements('.tree-comment-count', closeRow!);
+      expect(badge).withContext('closeLeading badge should render').toBeDefined();
+      expect(badge!.textContent).toMatch(/\b1\b/);
+    });
+
+    it('renders a count badge on a primitive trailing slot when it has 2 stacked bodies', async () => {
+      await createWithComments({ id: 42 }, makeMap([['$.id', { trailing: ['t1', 't2'] }]]));
+      const host = fixture.nativeElement as HTMLElement;
+      const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement | null;
+      expect(leafRow).withContext('leaf row should render').not.toBeNull();
+      const [badge] = visibleElements('.tree-comment-count', leafRow!);
+      expect(badge).withContext('trailing badge should render').toBeDefined();
+      expect(badge!.textContent).toMatch(/\b1\b/);
+    });
+
+    it('renders a (+2) badge when empty-container trailing merge has 3 total bodies', async () => {
+      await createWithComments(
+        { foo: {} },
+        makeMap([['$.foo', { trailing: ['T1'], closeLeading: ['a', 'b'] }]]),
+      );
+      const [trailing] = visibleElements('.tree-comment-trailing');
+      expect(trailing).withContext('merged trailing slot should render').toBeDefined();
+      expect(trailing!.textContent).toContain('T1');
+      const [badge] = visibleElements('.tree-comment-count');
+      expect(badge).withContext('count badge should render').toBeDefined();
+      expect(badge!.textContent).toMatch(/\b2\b/);
+      const tooltipMessage = findVisibleTooltipMessage('tree-comment-trailing');
+      expect(tooltipMessage).toBeDefined();
+      expect(tooltipMessage!).toContain('T1');
+      expect(tooltipMessage!).toContain('a');
+      expect(tooltipMessage!).toContain('b');
+    });
+
+    it('flattens stacked closeLeading and closeTrailing into one merged slot with badge', async () => {
+      await createWithComments(
+        { foo: {} },
+        makeMap([['$.foo', { closeLeading: ['c1', 'c2'], closeTrailing: ['t1'] }]]),
+      );
+      const [trailing] = visibleElements('.tree-comment-trailing');
+      expect(trailing).withContext('merged trailing slot should render').toBeDefined();
+      expect(trailing!.textContent).toContain('c1');
+      const [badge] = visibleElements('.tree-comment-count');
+      expect(badge).withContext('count badge should render').toBeDefined();
+      expect(badge!.textContent).toMatch(/\b2\b/);
+    });
+
+    it('renders independent badges and tooltips for stacked leading and trailing slots', async () => {
+      await createWithComments(
+        { name: 'Alice' },
+        makeMap([['$.name', { leading: ['l1', 'l2'], trailing: ['t1', 't2'] }]]),
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const leafRow = host.querySelector('[data-path="$.name"]') as HTMLElement | null;
+      expect(leafRow).withContext('leaf row should render').not.toBeNull();
+      const badges = visibleElements('.tree-comment-count', leafRow!);
+      expect(badges.length).toBe(2);
+      badges.forEach((badge) => expect(badge.textContent).toMatch(/\b1\b/));
+      const leadingTooltipMessage = findVisibleTooltipMessage('tree-comment-leading');
+      expect(leadingTooltipMessage).toBeDefined();
+      expect(leadingTooltipMessage!).toContain('l1\nl2');
+      const trailingTooltipMessage = findVisibleTooltipMessage('tree-comment-trailing');
+      expect(trailingTooltipMessage).toBeDefined();
+      expect(trailingTooltipMessage!).toContain('t1\nt2');
+    });
+
+    it('renders independent badges on closeLeading and closeTrailing on a non-empty container close row', async () => {
+      await createWithComments(
+        { foo: { bar: 1 } },
+        makeMap([['$.foo', { closeLeading: ['cl1', 'cl2'], closeTrailing: ['ct1', 'ct2'] }]]),
+      );
+      const host = fixture.nativeElement as HTMLElement;
+      const closeRow = host.querySelector('.tree-row--close') as HTMLElement | null;
+      expect(closeRow).withContext('close row should render').not.toBeNull();
+      const badges = visibleElements('.tree-comment-count', closeRow!);
+      expect(badges.length).toBe(2);
+      badges.forEach((badge) => expect(badge.textContent).toMatch(/\b1\b/));
+    });
+
+    it('exposes a localized aria-label on the count badge', async () => {
+      await createWithComments(
+        { name: 'Alice' },
+        makeMap([['$.name', { leading: ['first', 'second'] }]]),
+      );
+      const [badge] = visibleElements('.tree-comment-count');
+      expect(badge).withContext('count badge should render').toBeDefined();
+      const ariaLabel = badge!.getAttribute('aria-label');
+      expect(ariaLabel).toBeTruthy();
+      expect(ariaLabel!).toMatch(/\b1\b/);
+    });
+
+    it('paints the count badge in the same color as the body comment (computed-styles regression net)', async () => {
+      await createWithComments(
+        { name: 'Alice' },
+        makeMap([['$.name', { leading: ['first', 'second'] }]]),
+      );
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        fixture.detectChanges();
+        const [body] = visibleElements('.tree-comment-leading');
+        const [badge] = visibleElements('.tree-comment-count');
+        expect(body).withContext('body comment should render').toBeDefined();
+        expect(badge).withContext('count badge should render').toBeDefined();
+        const bodyStyles = getComputedStyle(body!);
+        const badgeStyles = getComputedStyle(badge!);
+        expect(badgeStyles.color).toEqual(bodyStyles.color);
+        expect(badgeStyles.fontFamily).toEqual(bodyStyles.fontFamily);
+        expect(badgeStyles.fontFamily).toMatch(/system-ui|Segoe UI|Roboto|sans-serif/i);
+        expect(badgeStyles.fontStyle).toBe('italic');
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
+    it('does not compound margins between slot wrapper and inner comment (hoisting regression net)', async () => {
+      await createWithComments({ name: 'Alice' }, makeMap([['$.name', { leading: ['only'] }]]));
+      document.body.appendChild(fixture.nativeElement);
+      try {
+        fixture.detectChanges();
+        const [inner] = visibleElements('.tree-comment-leading');
+        expect(inner).withContext('leading comment should render').toBeDefined();
+        expect(getComputedStyle(inner!).marginRight).toBe('0px');
+      } finally {
+        document.body.removeChild(fixture.nativeElement);
+      }
+    });
+
     it('renders a leading comment on a container open row', async () => {
       await createWithComments(
         { user: { name: 'Alice' } },
-        makeMap([['$.user', makeBundle('Customer record')]]),
+        makeMap([['$.user', { leading: ['Customer record'] }]]),
       );
       const leading = commentTexts('.tree-comment-leading');
       expect(leading).toContain('Customer record');
@@ -1890,7 +2070,7 @@ describe('JsonTreeComponent', () => {
     it('does not render comment slots that are not in the map', async () => {
       await createWithComments(
         { kept: 1, dropped: 2 },
-        makeMap([['$.kept', makeBundle(undefined, 'shown')]]),
+        makeMap([['$.kept', { trailing: ['shown'] }]]),
       );
       const trailing = commentTexts('.tree-comment-trailing');
       expect(trailing).toEqual(['shown']);
@@ -1900,8 +2080,8 @@ describe('JsonTreeComponent', () => {
       await createWithComments(
         { user: { name: 'Alice' }, version: 3 },
         makeMap([
-          ['$.user', makeBundle('Customer record', 'end of user')],
-          ['$.version', makeBundle(undefined, 'see issue #128')],
+          ['$.user', { leading: ['Customer record'], trailing: ['end of user'] }],
+          ['$.version', { trailing: ['see issue #128'] }],
         ]),
       );
       // Sanity check: comments visible by default.
@@ -1935,7 +2115,7 @@ describe('JsonTreeComponent', () => {
         'Customer record that is really long and record that is really long and record that is really really really long';
       await createWithComments(
         { foo: { user: { name: 'Alice', id: 42 } } },
-        makeMap([['$.foo.user', makeBundle(longComment)]]),
+        makeMap([['$.foo.user', { leading: [longComment] }]]),
       );
       document.body.appendChild(fixture.nativeElement);
       try {
@@ -2027,7 +2207,7 @@ describe('JsonTreeComponent', () => {
 
     it('renders .tree-comment in the UI sans-serif font (decoration)', async () => {
       await createWith({ name: 'Alice' });
-      fixture.componentRef.setInput('commentsByPath', new Map([['$.name', { leading: 'note' }]]));
+      fixture.componentRef.setInput('commentsByPath', new Map([['$.name', { leading: ['note'] }]]));
       fixture.detectChanges();
       const family = attachAndComputeFontFamily('.tree-comment');
       expect(family).toMatch(SANS_PATTERN);

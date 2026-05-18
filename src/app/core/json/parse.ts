@@ -18,17 +18,43 @@ export interface JsonParseError {
 }
 
 /**
- * A bundle of leading / trailing / close-trailing JSONC comments
- * attached to a single canonical path (e.g. `$.foo[0]`).
+ * Per-path bundle of JSONC comment bodies attached to a value.
+ *
+ * Each slot is a non-empty array iff present; absent slot means
+ * no bodies in that role. The parser never produces an empty
+ * array (`extractCommentBody` at parse.ts:338-347 strips
+ * delimiters and trims; the `onComment` caller at parse.ts:303
+ * drops empty bodies via `if (body.length === 0) return;` before
+ * they reach the bundle). The renderer's matTooltip joins bodies
+ * with `\n` for display.
+ *
+ * The slot shape distinguishes stacked line comments (`['a', 'b']`)
+ * from a single multi-line block comment (`['a\nb']`)
+ * structurally - count is `bodies.length`. This is the load-bearing
+ * invariant the renderer's `(+N-1)` count badge depends on.
  *
  * See DESIGN_SPEC.md M7k Decision B for the full attachment ruleset.
  */
 export interface CommentBundle {
-  leading?: string;
-  trailing?: string;
-  closeLeading?: string;
-  closeTrailing?: string;
+  leading?: readonly string[];
+  trailing?: readonly string[];
+  closeLeading?: readonly string[];
+  closeTrailing?: readonly string[];
 }
+
+/**
+ * Parser-internal mutable mirror of `CommentBundle`. Maps each
+ * slot from `readonly string[]` to `string[]` via the
+ * `-readonly` mapped type modifier so the parser can `push`
+ * bodies in-place. The harvest function casts once at the
+ * export boundary to `ReadonlyMap<string, CommentBundle>` -
+ * the same pattern as `commentsByPath`'s readonly outer Map
+ * over a mutable backing store. A schema change to
+ * `CommentBundle` propagates automatically.
+ */
+type MutableCommentBundle = {
+  -readonly [K in keyof CommentBundle]: string[];
+};
 
 export interface JsonParseResult {
   value: unknown;
@@ -172,7 +198,7 @@ function harvestComments(text: string): {
 } {
   if (!/\/\/|\/\*/.test(text)) return { commentsByPath: EMPTY_COMMENT_MAP, commentCount: 0 };
 
-  const map = new Map<string, CommentBundle>();
+  const map = new Map<string, MutableCommentBundle>();
   const containerPathStack: string[] = [];
   const pendingLeading: string[] = [];
   let commentCount = 0;
@@ -189,42 +215,61 @@ function harvestComments(text: string): {
   let lastContainerOpenEndOffset = -1;
   let lastContainerOpenLine = -1;
 
-  const flushPendingAsLeading = (path: string): void => {
-    if (pendingLeading.length === 0) return;
-    const merged = pendingLeading.join('\n');
-    pendingLeading.length = 0;
+  const appendLeading = (path: string, body: string): void => {
     const existing = map.get(path);
     if (existing) {
-      existing.leading = existing.leading ? existing.leading + '\n' + merged : merged;
+      if (existing.leading) {
+        existing.leading.push(body);
+      } else {
+        existing.leading = [body];
+      }
     } else {
-      map.set(path, { leading: merged });
+      map.set(path, { leading: [body] });
     }
+  };
+
+  const flushPendingAsLeading = (path: string): void => {
+    if (pendingLeading.length === 0) return;
+    for (const body of pendingLeading) appendLeading(path, body);
+    pendingLeading.length = 0;
   };
 
   const appendTrailing = (path: string, body: string): void => {
     const existing = map.get(path);
     if (existing) {
-      existing.trailing = existing.trailing ? existing.trailing + '\n' + body : body;
+      if (existing.trailing) {
+        existing.trailing.push(body);
+      } else {
+        existing.trailing = [body];
+      }
     } else {
-      map.set(path, { trailing: body });
+      map.set(path, { trailing: [body] });
     }
   };
 
   const appendCloseLeading = (path: string, body: string): void => {
     const existing = map.get(path);
     if (existing) {
-      existing.closeLeading = existing.closeLeading ? existing.closeLeading + '\n' + body : body;
+      if (existing.closeLeading) {
+        existing.closeLeading.push(body);
+      } else {
+        existing.closeLeading = [body];
+      }
     } else {
-      map.set(path, { closeLeading: body });
+      map.set(path, { closeLeading: [body] });
     }
   };
 
   const appendCloseTrailing = (path: string, body: string): void => {
     const existing = map.get(path);
     if (existing) {
-      existing.closeTrailing = existing.closeTrailing ? existing.closeTrailing + '\n' + body : body;
+      if (existing.closeTrailing) {
+        existing.closeTrailing.push(body);
+      } else {
+        existing.closeTrailing = [body];
+      }
     } else {
-      map.set(path, { closeTrailing: body });
+      map.set(path, { closeTrailing: [body] });
     }
   };
 
@@ -243,9 +288,8 @@ function harvestComments(text: string): {
     const path = containerPathStack.pop();
     if (path === undefined) return;
     if (pendingLeading.length > 0) {
-      const merged = pendingLeading.join('\n');
+      for (const body of pendingLeading) appendCloseLeading(path, body);
       pendingLeading.length = 0;
-      appendCloseLeading(path, merged);
     }
     const endOffset = offset + length;
     closeJustSeenPath = path;
@@ -332,7 +376,7 @@ function harvestComments(text: string): {
     { disallowComments: false, allowTrailingComma: true },
   );
 
-  return { commentsByPath: map, commentCount };
+  return { commentsByPath: map as ReadonlyMap<string, CommentBundle>, commentCount };
 }
 
 function extractCommentBody(raw: string): string {

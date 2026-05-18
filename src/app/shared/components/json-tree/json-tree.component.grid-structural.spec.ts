@@ -471,11 +471,12 @@ describe('JsonTreeComponent (.tree-row Grid template invariants -- v0.26.1)', ()
         [
           path!,
           {
-            leading:
+            leading: [
               'A very long leading comment that should ellipsify under wrapper pressure ' +
-              'and not push the key off-screen or cause the row to overflow horizontally. '.repeat(
-                3,
-              ),
+                'and not push the key off-screen or cause the row to overflow horizontally. '.repeat(
+                  3,
+                ),
+            ],
           },
         ],
       ]),
@@ -715,8 +716,10 @@ describe('JsonTreeComponent (.tree-row Grid template invariants -- v0.26.1)', ()
         [
           '$.createdAt',
           {
-            leading: 'A very long leading comment placed before the key on the row. '.repeat(2),
-            trailing: 'A very long trailing comment placed after the value on the row. '.repeat(2),
+            leading: ['A very long leading comment placed before the key on the row. '.repeat(2)],
+            trailing: [
+              'A very long trailing comment placed after the value on the row. '.repeat(2),
+            ],
           },
         ],
       ]),
