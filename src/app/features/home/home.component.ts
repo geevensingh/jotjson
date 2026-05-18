@@ -271,10 +271,49 @@ export class HomeComponent implements OnInit, OnDestroy {
    */
   private coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
   private extractUndoSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
+  /**
+   * Kind tag for the currently-visible extract Undo snackbar. Set
+   * atomically with `extractUndoSnackRef` and cleared on dismiss.
+   * Used to populate `from` / `to` on `tree.extract.snackbarReplaced`
+   * when a new extract supersedes a still-visible snackbar.
+   */
+  private extractUndoSnackKind: 'tree' | 'banner' | null = null;
   private pendingExtractUndo: {
     priorText: string;
     startMs: number;
     undoneViaSnackbar: boolean;
+    /**
+     * Discriminates the entry surface so the constructor effect and
+     * `openExtractUndoSnack`'s `onAction` route to the right
+     * telemetry messageId and decide whether to restore highlights
+     * and re-arm the banner on undo.
+     */
+    kind: 'tree' | 'banner';
+    /**
+     * Banner-only: the paste-origin enum captured at accept time.
+     * Used to re-arm the banner with the same source after undo and
+     * to populate `pasteSource` on `home.extract.banner.undo`. Null
+     * for `kind: 'tree'`.
+     */
+    pasteSource: ExtractSource | null;
+    /**
+     * Banner-only snapshots: `resetHighlightsForDocumentReplacement`
+     * moves highlights into `mutatedPaths` on accept, so the user
+     * would lose their highlights permanently after undo. Capture
+     * both pre-accept signals so undo can restore them. Empty for
+     * `kind: 'tree'` (which doesn't reset highlights).
+     */
+    highlightsSnapshot: readonly BlobHighlight[];
+    mutatedPathsAtAccept: ReadonlySet<string>;
+    /**
+     * Phantom-undo gate (banner only). `replaceDocument` /
+     * banner-accept bump `viewResetToken`; capture the post-bump
+     * value so the constructor effect can distinguish a Monaco
+     * Ctrl+Z (token unchanged) from a user re-pasting the same
+     * `priorText` (token bumped again). Tree-extract doesn't bump
+     * the token, so the field is informational for `kind: 'tree'`.
+     */
+    viewResetTokenAtAccept: number;
   } | null = null;
   // Single owner of the 30s `pendingExtractUndo` cap. Cleared atomically
   // with `pendingExtractUndo` via `clearPendingExtractUndo()`; never null
@@ -949,6 +988,21 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.clearPendingExtractUndo();
         return;
       }
+      // Phantom-undo gate (banner kind only). The banner-accept path
+      // bumps `viewResetToken` to force a tree-pane re-fit; a Monaco
+      // Ctrl+Z leaves the token unchanged because it goes through
+      // `applyEdit` -> `valueChange` -> `setContent` (no bump). A user
+      // re-pasting the same `priorText` from the clipboard goes
+      // through `replaceDocument` which DOES bump the token again, so
+      // the captured `viewResetTokenAtAccept` no longer matches. Tree-
+      // extract doesn't bump the token at accept, so it doesn't need
+      // this gate.
+      if (
+        pendingExtractUndo.kind === 'banner' &&
+        this.viewResetToken() !== pendingExtractUndo.viewResetTokenAtAccept
+      ) {
+        return;
+      }
       // Case 2: content reverted to priorText via some non-snackbar
       // path (Ctrl+Z is the dominant case). Fire ctrlZ telemetry,
       // clear pending state, and dismiss any still-visible snackbar
@@ -960,6 +1014,28 @@ export class HomeComponent implements OnInit, OnDestroy {
         !pendingExtractUndo.undoneViaSnackbar &&
         currentContent === pendingExtractUndo.priorText
       ) {
+        if (pendingExtractUndo.kind === 'banner') {
+          this.logger.event('home.extract.banner.undo', {
+            source: 'ctrlZ',
+            pasteSource: pendingExtractUndo.pasteSource ?? 'paste',
+            undoLatencyMsBucket: bucketUndoLatency(undoLatencyMs),
+          });
+          // Restore the pre-accept highlights and `mutatedPaths` (the
+          // accept path called `resetHighlightsForDocumentReplacement`,
+          // which moved highlights into `mutatedPaths`). Re-arm the
+          // banner per spec policy "snackbar plus Ctrl+Z are the
+          // recovery affordances" (DESIGN_SPEC.md M7v) - the user is
+          // back at the mixed text, so the banner should re-offer.
+          this.highlights.set([...pendingExtractUndo.highlightsSnapshot]);
+          this.mutatedPaths.set(new Set(pendingExtractUndo.mutatedPathsAtAccept));
+          const pasteSource = pendingExtractUndo.pasteSource;
+          this.clearPendingExtractUndo();
+          this.extractUndoSnackRef?.dismiss();
+          if (pasteSource !== null) {
+            this.runExtractorOnCurrentContent(pasteSource);
+          }
+          return;
+        }
         this.logger.event('tree.extract.undo', {
           source: 'ctrlZ',
           undoLatencyMsBucket: bucketUndoLatency(undoLatencyMs),
@@ -1280,9 +1356,15 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private openExtractUndoSnack(priorText: string): void {
     if (this.extractUndoSnackRef) {
+      const fromKind = this.extractUndoSnackKind ?? 'tree';
+      const toKind = this.pendingExtractUndo?.kind ?? 'tree';
       this.extractUndoSnackRef.dismiss();
-      this.logger.event('tree.extract.snackbarReplaced');
+      this.logger.event('tree.extract.snackbarReplaced', {
+        from: fromKind,
+        to: toKind,
+      });
       this.extractUndoSnackRef = null;
+      this.extractUndoSnackKind = null;
     }
     const pendingExtractUndo = this.pendingExtractUndo;
     if (!pendingExtractUndo) {
@@ -1294,6 +1376,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       { duration: 8000, politeness: 'assertive' },
     );
     this.extractUndoSnackRef = snackRef;
+    this.extractUndoSnackKind = pendingExtractUndo.kind;
     snackRef
       .onAction()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -1318,10 +1401,26 @@ export class HomeComponent implements OnInit, OnDestroy {
         // any post-extract typing - same observable outcome with more
         // code.
         this.replaceDocument(priorText);
-        this.logger.event('tree.extract.undo', {
-          source: 'snackbar',
-          undoLatencyMsBucket: bucketUndoLatency(performance.now() - pendingExtractUndo.startMs),
-        });
+        if (pendingExtractUndo.kind === 'banner') {
+          this.logger.event('home.extract.banner.undo', {
+            source: 'snackbar',
+            pasteSource: pendingExtractUndo.pasteSource ?? 'paste',
+            undoLatencyMsBucket: bucketUndoLatency(performance.now() - pendingExtractUndo.startMs),
+          });
+          // Restore pre-accept highlights / mutated paths and re-arm
+          // the extract banner so the user lands at the mixed text
+          // with the same offer they had before clicking Extract.
+          this.highlights.set([...pendingExtractUndo.highlightsSnapshot]);
+          this.mutatedPaths.set(new Set(pendingExtractUndo.mutatedPathsAtAccept));
+          if (pendingExtractUndo.pasteSource !== null) {
+            this.runExtractorOnCurrentContent(pendingExtractUndo.pasteSource);
+          }
+        } else {
+          this.logger.event('tree.extract.undo', {
+            source: 'snackbar',
+            undoLatencyMsBucket: bucketUndoLatency(performance.now() - pendingExtractUndo.startMs),
+          });
+        }
       });
     snackRef
       .afterDismissed()
@@ -1329,6 +1428,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         if (this.extractUndoSnackRef === snackRef) {
           this.extractUndoSnackRef = null;
+          this.extractUndoSnackKind = null;
         }
       });
   }
@@ -1875,6 +1975,14 @@ export class HomeComponent implements OnInit, OnDestroy {
       priorText,
       startMs: performance.now(),
       undoneViaSnackbar: false,
+      kind: 'tree',
+      pasteSource: null,
+      highlightsSnapshot: [],
+      mutatedPathsAtAccept: new Set(),
+      // Tree-extract doesn't bump `viewResetToken`; record the
+      // current value so the phantom-undo gate in the effect is a
+      // no-op for `kind: 'tree'`.
+      viewResetTokenAtAccept: this.viewResetToken(),
     };
     this.pendingExtractUndoTimer = setTimeout(
       () => this.clearPendingExtractUndo(),
@@ -2083,9 +2191,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   onExtractAccept(): void {
     const candidate = this.extractedCandidate();
     if (!candidate) return;
+    // Capture everything into locals BEFORE mutating signals so the
+    // fallback branch (and the snackbar's captured closure) never
+    // depends on the signal-backed state being non-null.
+    const priorText = this.content();
+    const candidateText = candidate.data.text;
+    const pasteSource = candidate.source;
+    const highlightsSnapshot = this.highlights();
+    const mutatedPathsAtAccept = new Set(this.mutatedPaths());
+
     this.logger.event(
       'home.extract.banner.accept',
-      { source: candidate.source },
+      { source: pasteSource },
       {
         blockCount: candidate.data.blockCount,
         preservesComments: candidate.data.preservesComments ? 1 : 0,
@@ -2097,8 +2214,59 @@ export class HomeComponent implements OnInit, OnDestroy {
     // does not additionally fire `home.extract.banner.dismiss` with
     // `reason='content.changed'` for the same candidate.
     this.extractedCandidate.set(null);
-    this.replaceDocument(candidate.data.text);
-    this.resetHighlightsForDocumentReplacement();
+
+    // Install pending state BEFORE `applyEdit` so any synchronously-
+    // flushed effect that reaches the constructor's content-watch
+    // effect sees the snapshot rather than a null pending field.
+    this.clearPendingExtractUndo();
+    this.pendingExtractUndo = {
+      priorText,
+      startMs: performance.now(),
+      undoneViaSnackbar: false,
+      kind: 'banner',
+      pasteSource,
+      highlightsSnapshot,
+      mutatedPathsAtAccept,
+      // Both the happy and fallback paths bump `viewResetToken` by
+      // exactly 1 below; record the post-bump value so the
+      // phantom-undo gate in the constructor effect can distinguish
+      // a Monaco Ctrl+Z (token unchanged) from a user re-pasting the
+      // same `priorText` (token bumped again).
+      viewResetTokenAtAccept: this.viewResetToken() + 1,
+    };
+    this.pendingExtractUndoTimer = setTimeout(
+      () => this.clearPendingExtractUndo(),
+      EXTRACT_UNDO_CAP_MS,
+    );
+
+    const editor = this.editor();
+    const applied =
+      editor?.applyEdit(0, priorText.length, candidateText, 'jotjson-extract-banner') ?? false;
+
+    if (applied) {
+      // `applyEdit` only mutates the Monaco model; mirror the three
+      // side-effects `replaceDocument` performs on top of `setContent`
+      // so the rest of the app (tree pane, view-reset listeners,
+      // highlight reset) sees the same state it would have after a
+      // full document swap.
+      this.treeFlush$.next();
+      this.viewResetToken.update((token) => token + 1);
+      this.resetHighlightsForDocumentReplacement();
+    } else {
+      this.logger.warn('home.extract.banner.applyFailed', {
+        reason: editor ? 'applyEditFailed' : 'editorUnavailable',
+      });
+      // Snapshot-based snackbar Undo still works on this branch
+      // (`replaceDocument(priorText)` doesn't depend on Monaco's
+      // undo stack), so the snackbar is still opened below to
+      // preserve at least one undo affordance even when Monaco-
+      // native Ctrl+Z is lost. Precedent: cold-boot clipboard's
+      // snackbar-only Undo at home.component.ts cold-boot section.
+      this.replaceDocument(candidateText);
+      this.resetHighlightsForDocumentReplacement();
+    }
+
+    this.openExtractUndoSnack(priorText);
   }
 
   onExtractDismiss(): void {
