@@ -1,0 +1,25 @@
+.tree-row {
+  display: grid;
+  grid-template-columns: [a] auto [b] 1fr;
+
+  > .tree-row-leading {
+    grid-column: a;
+  }
+  > .tree-row-value-cell {
+    grid-column: b;
+  }
+}
+
+.tree-twisty {
+  display: inline-flex;
+}
+
+.tree-beacon-badge {
+  display: inline-flex;
+  flex: 0 1 auto;
+}
+
+.tree-rule-icon {
+  display: inline-flex;
+  flex: 1 1 auto;
+}

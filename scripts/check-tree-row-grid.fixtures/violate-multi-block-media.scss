@@ -1,0 +1,27 @@
+.tree-row {
+  display: grid;
+  grid-template-columns: [a] auto [b] 1fr;
+
+  > .tree-row-leading {
+    grid-column: a;
+  }
+  > .tree-row-value-cell {
+    grid-column: b;
+  }
+}
+
+@media (max-width: 600px) {
+  .tree-row {
+    display: flex;
+  }
+}
+
+.tree-twisty {
+  flex-shrink: 0;
+}
+.tree-beacon-badge {
+  flex-shrink: 0;
+}
+.tree-rule-icon {
+  flex: 0 0 auto;
+}

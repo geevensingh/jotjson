@@ -1,0 +1,54 @@
+.tree-row {
+  display: grid;
+  grid-template-columns: [a] auto [b] 1fr;
+
+  > .tree-row-leading {
+    grid-column: a;
+  }
+  > .tree-row-value-cell {
+    grid-column: b;
+  }
+}
+
+.tree-row.tree-row--close {
+  display: flex;
+}
+
+.tree-row:focus-visible {
+  outline: none;
+}
+
+.tree-row > .tree-row-leading {
+  margin-right: 4px;
+}
+
+.tree-row + .tree-row {
+  border-top: 1px solid transparent;
+}
+
+.tree-row ~ .tree-row {
+  border-top: 1px solid transparent;
+}
+
+.tree-row-leading {
+  color: blue;
+}
+
+.tree-row-trailing,
+.tree-row-value-cell {
+  color: red;
+}
+
+.tree-row-right {
+  text-align: right;
+}
+
+.tree-twisty {
+  flex-shrink: 0;
+}
+.tree-beacon-badge {
+  flex-shrink: 0;
+}
+.tree-rule-icon {
+  flex: 0 0 auto;
+}

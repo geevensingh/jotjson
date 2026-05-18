@@ -1612,6 +1612,18 @@ What this layer model deliberately does *not* claim:
 Layer names above are runner-neutral so this model survives runner migrations
 (see issue #47 - test-runner migration).
 
+### Static-shape vs runtime invariants: a placement rubric
+
+Static-shape invariants (structural rules that can be answered by parsing a
+file as text or AST) go in `scripts/check-*.mjs` and run at `npm run lint`
+time. Computed-style invariants, dynamic-class invariants, and anything
+that requires the live DOM or Angular change-detection stay in Karma
+`*.spec.ts`. The two layers are belt-and-suspenders: the lint catches
+regressions in milliseconds without needing a browser; the runtime spec
+catches regressions that only manifest at render time. `.tree-row` Grid
+structural invariants follow this split (see `scripts/check-tree-row-grid.mjs`
+and `json-tree.component.grid-structural.spec.ts`, issues #269 / #278).
+
 ---
 
 ## Telemetry & Logging

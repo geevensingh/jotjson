@@ -194,6 +194,10 @@
 }
 
 .tree-row {
+  // Structural invariants enforced by scripts/check-tree-row-grid.mjs.
+  // Accepted grid-column grammar:
+  //   grid-column: <name>;
+  //   grid-column: <name> / span <integer>;
   // v0.26.1 (issue #269): CSS Grid migration. Retires the
   // `flex-shrink: 0` cascade convention that grew across
   // v0.21.1, v0.23.1, v0.23.2, v0.25.1. Direct Grid items size
