@@ -93,7 +93,12 @@ module.exports = function (config) {
     specReporter: {
       suppressErrorSummary: false,
       suppressFailed: false,
-      suppressPassed: false,
+      // Suppress per-spec PASS lines in CI so a single failure isn't
+      // buried in thousands of green-check lines in the runner's
+      // "Run tests" step log (see run 26011840111: ~5000 lines of
+      // passes hiding 1 failure). Kept on locally so the inner loop
+      // still shows live progress as specs run.
+      suppressPassed: isCI,
       suppressSkipped: true,
       showSpecTiming: false,
       failFast: false,
