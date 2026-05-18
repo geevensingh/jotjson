@@ -397,39 +397,62 @@ export class JsonTreeComponent {
   readonly search: WritableSignal<string> = signal('');
 
   /**
-   * Selection-state ownership (issue #266 invariant doc block).
+   * Selection-state ownership (issue #266 invariant doc block;
+   * tightened by issue #274).
    *
-   * `selectedPath` is read/written by three coordinated effects and
-   * ~7 user-intent writers:
+   * `selectedPath` is read/written by three coordinated effects
+   * and a set of intentional writers. Intentional writers route
+   * through `setUserSelection()` (issue #274) so the "clear
+   * pending then set" idiom lives in exactly one place; the
+   * `check-prod-patterns.mjs` `selected-path-set` rule rejects
+   * raw `selectedPath.set(...)` writes outside that helper
+   * (system-clear writes carry the trailing pragma
+   * `// allow:selected-path-set <category>`).
    *
    * Effects (run in declaration order within a CD flush):
    * 1. preserve-or-clear effect: reacts to nodeIndex / root /
    *    viewResetToken changes. Reads selectedPath via untracked()
    *    (load-bearing -- removing untracked breaks the invariant).
-   *    Writes selectedPath when prior path vanished or view reset.
+   *    Writes selectedPath when prior path vanished or view reset
+   *    (system-clear; raw write, pragma-tagged).
    * 2. retry-pending effect (issue #266): reacts to nodeIndex
-   *    changes when pending != null. Applies pending if
-   *    discriminator says "passive preserve" (selected ===
-   *    priorSelected) or "system cleared" (selected === null).
-   *    Otherwise discards pending.
+   *    changes when pending != null. Applies pending via
+   *    `setUserSelection()` (issue #274) if discriminator says
+   *    "passive preserve" (selected === priorSelected) or
+   *    "system cleared" (selected === null). Otherwise discards
+   *    pending via `clearPendingSelectPath()`.
    * 3. dedup-emit effect (PR #261 / grep `lastEmittedSelectedPath`):
    *    reacts to selectedPath changes; emits selectionChange exactly
    *    once per net change.
    *
-   * User-intent writers (each MUST clear pending; route through
-   * `clearPendingSelectPath()` before writing `selectedPath`):
+   * Intentional writers (each routes through `setUserSelection()`):
    *  - `onSelect` (mouse click on row)
    *  - keyboard Enter / Space handler
    *  - `clearSelection` (Escape via `onDocumentEscape` HostListener)
    *  - `goToNextMatch` / `goToPrevMatch` (search nav)
    *  - `onKebabClick` (context menu)
-   *  - search-result-click cycling handler
+   *  - `activateClickedHitOrFirst` (search-result-click cycling;
+   *    microtask-deferred but the originating gesture is user click)
+   *  - `selectByPathString` immediate-apply branch (programmatic,
+   *    path already in nodeIndex)
+   *  - `selectByPathString` null-clear branch (programmatic clear)
+   *  - retry-pending effect apply branch (issue #266; same idiom)
    *
-   * Programmatic writers (do NOT clear pending; bypass the
-   * discriminator deliberately):
-   *  - `selectByPathString` immediate-select branch (the path is
-   *    already in nodeIndex; defer is unnecessary).
-   *  - The retry-pending effect itself (that's its whole purpose).
+   * System-clear writers (raw `selectedPath.set(null)` with
+   * `// allow:selected-path-set system-clear` pragma; do NOT
+   * clear pending because the retry-pending discriminator needs
+   * to distinguish system-clear-because-prior-path-vanished
+   * (apply pending) from intentional-clear (discard pending)):
+   *  - preserve-or-clear effect (the three sites in the
+   *    nodeIndex / viewResetToken reaction).
+   *
+   * The retry-pending effect's discriminator is now a defensive
+   * backstop: every intentional writer clears pending
+   * synchronously via the helper, so the discriminator only
+   * fires when a writer bypasses the helper (which the lint
+   * guard rejects in production code). Tests at
+   * `'defensive backstop: discriminator discards stale pending
+   * if a writer bypasses setUserSelection'` cover this path.
    *
    * Exception to AGENTS.md s4 ("effect() only for syncing to
    * external systems"): effects #1 and #2 do signal-to-signal
@@ -1572,7 +1595,7 @@ export class JsonTreeComponent {
         // `flatList` is computed off `root()` directly.
         if (!rootNode) {
           this.hasInitializedExpansion = false;
-          this.selectedPath.set(null);
+          this.selectedPath.set(null); // allow:selected-path-set system-clear
           return;
         }
         if (!this.hasInitializedExpansion) {
@@ -1593,11 +1616,11 @@ export class JsonTreeComponent {
         // `nodeIndex` key directly - do NOT wrap in `formatPath()` /
         // `pathToString()`, which would take a path-segments array.
         if (wasReset) {
-          this.selectedPath.set(null);
+          this.selectedPath.set(null); // allow:selected-path-set system-clear
         } else {
           const prior = this.selectedPath();
           if (prior !== null && !this.nodeIndex().has(prior)) {
-            this.selectedPath.set(null);
+            this.selectedPath.set(null); // allow:selected-path-set system-clear
           }
         }
       });
@@ -1726,22 +1749,26 @@ export class JsonTreeComponent {
         if (!index.has(pending)) return;
         const selected = this.selectedPath();
         const priorSelected = this.pendingPriorSelectedPath;
-        // Discriminator: discard pending if a user-intent writer
-        // wrote a non-null `selectedPath` different from the
-        // priorSelected snapshot between defer and now. Allows:
-        //  - selected === null (system-cleared by L1480; apply).
+        // Discriminator (issue #266; now a defensive backstop per
+        // issue #274): discard pending if some writer wrote a
+        // non-null `selectedPath` different from the priorSelected
+        // snapshot between defer and now. After #274 every
+        // intentional writer clears pending synchronously via
+        // `setUserSelection()`, so this branch only fires when a
+        // writer bypasses the helper. Allows:
+        //  - selected === null (system-cleared by preserve-or-
+        //    clear effect; apply).
         //  - selected === priorSelected (passive preserve; apply).
         if (selected !== null && selected !== priorSelected) {
-          this.pendingSelectPathString = null;
-          this.pendingPriorSelectedPath = null;
+          this.clearPendingSelectPath();
           return;
         }
-        // Apply: clear pending first so re-entrancy is safe, then
-        // write selectedPath (which the dedup-emit effect will
-        // observe on the next flush step).
-        this.pendingSelectPathString = null;
-        this.pendingPriorSelectedPath = null;
-        this.selectedPath.set(pending);
+        // Apply via `setUserSelection` (issue #274). The helper
+        // clears pending (no-op when this effect was already
+        // going to clear it) then writes selectedPath. The
+        // dedup-emit effect observes the set on the next flush
+        // step.
+        this.setUserSelection(pending);
         this.expandAndScroll(pending);
       });
     });
@@ -1963,7 +1990,7 @@ export class JsonTreeComponent {
     if (target.closest('button, a, input, [role="button"]')) {
       return;
     }
-    this.selectedPath.set(node.pathString);
+    this.setUserSelection(node.pathString);
     this.focusedPath.set(node.pathString);
     event.stopPropagation();
   }
@@ -2222,7 +2249,7 @@ export class JsonTreeComponent {
       case ' ':
       case 'Spacebar': {
         event.preventDefault();
-        this.selectedPath.set(node.pathString);
+        this.setUserSelection(node.pathString);
         return;
       }
       case 'F10': {
@@ -2283,41 +2310,42 @@ export class JsonTreeComponent {
   }
 
   clearSelection(): void {
-    // Issue #266: explicit pending-clear. Without this, the retry-
-    // pending effect cannot distinguish "system cleared because
-    // prior path vanished -- apply pending" (the preserve-or-clear
-    // case) from "user explicitly cleared -- discard pending" (this
-    // case), and pending would re-apply after the tree-pane
-    // debounce flushes.
-    this.clearPendingSelectPath();
-    this.selectedPath.set(null);
+    // Issue #266: pending-clear is required. Without it, the
+    // retry-pending effect cannot distinguish "system cleared
+    // because prior path vanished -- apply pending" (the
+    // preserve-or-clear case) from "user explicitly cleared --
+    // discard pending" (this case), and pending would re-apply
+    // after the tree-pane debounce flushes. Issue #274 routes
+    // both halves through `setUserSelection(null)` so the idiom
+    // lives in exactly one place.
+    this.setUserSelection(null);
   }
 
   /**
-   * Escape clears the active selection. We do not call preventDefault()
-   * so the search input's own Esc binding can also clear the search
-   * query when it has focus - one Esc press exits both at once.
+   * Escape clears the active selection (and any in-flight #266
+   * defer). We do not call preventDefault() so the search input's
+   * own Esc binding can also clear the search query when it has
+   * focus - one Esc press exits both at once.
    *
-   * Pending-clear MUST happen unconditionally on Escape, even when
-   * `selectedPath` is already null. The early-return gate for the
-   * `selectedPath` write is preserved (skips a redundant signal write)
-   * but pending-clear runs first because pending may be non-null even
-   * when `selectedPath` is null (cold-start typing + Escape scenario;
-   * #266).
+   * Single-path delegation to `clearSelection()`, which routes
+   * through `setUserSelection(null)`:
    *
-   * The `if (selectedPath() !== null)` gate is the ONLY thing that
-   * makes the two Escape-during-defer specs cover distinct production
-   * paths. Removing the gate would make `clearSelection()` a no-op
-   * when `selectedPath` is already null, collapsing the cold-start
-   * spec into the warm-start spec. Future cleanup PRs MUST preserve
-   * this gate or update both tests in lockstep.
+   *  - `clearPendingSelectPath()` clears any in-flight defer
+   *    (the load-bearing action for the #266 v2.4 cold-start
+   *    regression, where `selectedPath` is already null but a
+   *    defer is pending from typing-before-tree-catches-up).
+   *  - `selectedPath.set(null)` writes null. On the cold-start
+   *    branch this is a same-value write; Angular signals'
+   *    native Object.is dedup makes it a no-op (no notification,
+   *    no effect fire), so there's no spurious emission.
+   *
+   * Two regression specs (cold-start and warm-path) at
+   * `json-tree.component.spec.ts` (search for
+   * "Escape during defer") exercise both call-state combinations.
    */
   @HostListener('document:keydown.escape')
   onDocumentEscape(): void {
-    this.clearPendingSelectPath();
-    if (this.selectedPath() !== null) {
-      this.clearSelection();
-    }
+    this.clearSelection();
   }
 
   /**
@@ -2372,12 +2400,12 @@ export class JsonTreeComponent {
     const next = this.nextHitFromSelection(paths);
     this.activeHitIndex.set(next);
     const path = paths[next] as string;
-    // Issue #266: user-intent writer; cancel any in-flight defer
-    // from editor-typing before navigating to the search hit. Placed
-    // AFTER the `paths.length === 0` early return so a zero-hit
-    // press of Next/Prev does not destroy an in-flight defer.
-    this.clearPendingSelectPath();
-    this.selectedPath.set(path);
+    // Issue #266 / #274: intentional writer; route through
+    // `setUserSelection` so any in-flight defer from editor-
+    // typing is cancelled synchronously. Placed AFTER the
+    // `paths.length === 0` early return so a zero-hit press of
+    // Next/Prev does not destroy an in-flight defer.
+    this.setUserSelection(path);
     // M7g-3b. Also update `focusedPath` silently so a subsequent Tab
     // into the tree lands on the active hit. Do NOT call DOM focus()
     // on the row -- the search input keeps focus so repeated Enter /
@@ -2392,9 +2420,8 @@ export class JsonTreeComponent {
     const prev = this.prevHitFromSelection(paths);
     this.activeHitIndex.set(prev);
     const path = paths[prev] as string;
-    // Issue #266: see goToNextMatch.
-    this.clearPendingSelectPath();
-    this.selectedPath.set(path);
+    // Issue #266 / #274: see goToNextMatch.
+    this.setUserSelection(path);
     // See goToNextMatch: focused-but-not-DOM-focused so the search
     // input keeps focus.
     this.focusedPath.set(path);
@@ -2564,16 +2591,22 @@ export class JsonTreeComponent {
    */
   selectByPathString(pathString: string | null): void {
     if (pathString === null) {
-      this.clearPendingSelectPath();
-      if (this.selectedPath() !== null) {
-        this.selectedPath.set(null);
-      }
+      // Programmatic clear. Issue #274 routes through
+      // `setUserSelection(null)`. When `selectedPath` is already
+      // null the inner `selectedPath.set(null)` is a same-value
+      // write; Angular signals' native Object.is dedup makes it
+      // a signal-level no-op (no notification, the dedup-emit
+      // effect does not re-fire), so we do not gate the helper
+      // call. The `clearPendingSelectPath()` half of the helper
+      // still runs and is the load-bearing action when a defer
+      // is in flight.
+      this.setUserSelection(null);
       return;
     }
     if (this.selectedPath() === pathString) {
       // Idempotent: even though selectedPath is already the
       // requested value, clear pending so a prior defer cannot
-      // re-apply later. The user just re-affirmed this path.
+      // re-apply later. The caller just re-affirmed this path.
       this.clearPendingSelectPath();
       return;
     }
@@ -2585,10 +2618,11 @@ export class JsonTreeComponent {
       this.pendingPriorSelectedPath = this.selectedPath();
       return;
     }
-    // Immediate apply: nodeIndex already has the path. Clear any
-    // stale pending and write selectedPath.
-    this.clearPendingSelectPath();
-    this.selectedPath.set(pathString);
+    // Immediate apply: nodeIndex already has the path. Issue
+    // #274 routes through `setUserSelection` (clears any stale
+    // pending then writes selectedPath); `expandAndScroll` is
+    // the immediate-apply-specific tail.
+    this.setUserSelection(pathString);
     this.expandAndScroll(pathString);
   }
 
@@ -2602,6 +2636,59 @@ export class JsonTreeComponent {
   clearPendingSelectPath(): void {
     this.pendingSelectPathString = null;
     this.pendingPriorSelectedPath = null;
+  }
+
+  /**
+   * Issue #274. Standard "clear pending then set" idiom for every
+   * in-component intentional write to `selectedPath`. Clears any
+   * in-flight #266 defer (so the retry-pending effect's
+   * discriminator cannot later re-apply a stale pending path
+   * over this write), then writes the new path.
+   *
+   * Call sites (also enumerated in the "Intentional writers" doc
+   * block at `selectedPath`'s declaration):
+   *  - Direct user gestures: `onSelect` (mouse click),
+   *    keyboard Enter / Space, `onKebabClick`, Escape via
+   *    `clearSelection`, search-nav (`goToNextMatch` /
+   *    `goToPrevMatch`).
+   *  - Microtask-deferred user gesture:
+   *    `activateClickedHitOrFirst` (the microtask defers the
+   *    write past the search-hit-list reset effect, but the
+   *    originating gesture is the user's click).
+   *  - Programmatic: `selectByPathString` immediate-apply
+   *    branch, `selectByPathString` null-clear branch, the
+   *    retry-pending effect's apply branch.
+   *
+   * `null` clears the selection (and pending). Does NOT touch
+   * `focusedPath`: callers that also want to move the keyboard
+   * cursor (e.g., `onSelect`, search-nav) update `focusedPath`
+   * separately. Does NOT expand or scroll: the immediate-apply
+   * branch of `selectByPathString` chains `expandAndScroll`
+   * after this call.
+   *
+   * Caller contract: pass a path that is in `nodeIndex()` (or
+   * `null`). The helper does NOT defer like `selectByPathString` --
+   * if the path is not in `nodeIndex`, the preserve-or-clear
+   * effect on the next nodeIndex tick will clear `selectedPath`
+   * back to null. All current callers satisfy this naturally:
+   * direct gestures operate on rendered `TreeNode`s; programmatic
+   * callers go through `selectByPathString` which checks
+   * `nodeIndex().has(...)` before deciding to defer vs
+   * immediate-apply.
+   *
+   * Why this exists (issue #274): pre-helper, only 3 of 7
+   * intentional writers cleared pending; the other 4 relied on
+   * keyboard-release timing to terminate any in-flight typing-
+   * induced defer. The helper makes the pending-clear structural
+   * rather than empirical. The `check-prod-patterns.mjs`
+   * `selected-path-set` rule rejects raw `selectedPath.set(...)`
+   * writes outside this helper (system-clear writes inside this
+   * file carry the trailing pragma
+   * `// allow:selected-path-set <category>`).
+   */
+  setUserSelection(path: string | null): void {
+    this.clearPendingSelectPath();
+    this.selectedPath.set(path); // allow:selected-path-set helper
   }
 
   /**
@@ -3141,7 +3228,7 @@ export class JsonTreeComponent {
     event.stopPropagation();
     this.contextNode.set(node);
     this.contextIsCloseRow.set(false);
-    this.selectedPath.set(node.pathString);
+    this.setUserSelection(node.pathString);
     this.logger.info('tree.contextMenu.opened', { source: 'kebab' });
   }
 
@@ -4470,7 +4557,7 @@ export class JsonTreeComponent {
       }
       this.activeHitIndex.set(next);
       const target = paths[next] as string;
-      this.selectedPath.set(target);
+      this.setUserSelection(target);
       this.revealHit(target);
     });
   }

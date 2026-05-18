@@ -35,6 +35,21 @@
 //      `items.create()` (insert with 409 on conflict) or
 //      `replaceWithIfMatch<T>(...)` (etag-guarded replace).
 //
+//   4. `.selectedPath.set(` and `.selectedPath.update(` (issue #274
+//      helper-bypass footgun)
+//      Raw `.selectedPath.set(...)` / `.selectedPath.update(...)`
+//      calls bypass the issue #266 defer/retry machinery. Intentional
+//      writes must route through `JsonTreeComponent.setUserSelection()`.
+//      System-clear writes inside `json-tree.component.ts` itself
+//      remain raw but require the closed-vocabulary trailing pragma
+//      `// allow:selected-path-set <helper|system-clear>`.
+//      The rule fires repo-wide so cross-file writers (e.g., a
+//      sibling component holding `viewChild(JsonTreeComponent)`)
+//      cannot grow a back-door writer. The regex is defense-in-
+//      depth, not airtight: destructuring, aliasing, bracket-notation,
+//      and casts dodge the match; intentional circumvention is
+//      visible in review.
+//
 // File scope:
 //   - frontend production: `src/**/*.ts`
 //   - backend production:  `api/src/**/*.ts`
@@ -52,13 +67,19 @@
 //   `pragmaAllowedPaths` (forward-slash form) - this keeps the
 //   safe-harbor narrow.
 //
+//   `pragma` accepts either a string (literal `String.prototype.includes`
+//   match -- used by rule #2) or a RegExp (`RegExp.prototype.test`
+//   match -- used by rule #4 to enforce a closed-enum reason
+//   vocabulary).
+//
 // Runs with zero dependencies on Node 24+. Invoke directly or via
 //   npm run lint:prod-patterns
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
-const RULES = [
+export const RULES = [
   {
     pattern: /\bas\s+TelemetryMessageId\b/g,
     message:
@@ -93,9 +114,46 @@ const RULES = [
     // the frontend is unrelated to Cosmos and is not banned.
     paths: [/^api\/src\//],
   },
+  {
+    // Issue #274. Raw `.selectedPath.set(...)` /
+    // `.selectedPath.update(...)` calls bypass the #266 defer/retry
+    // machinery. Route intentional writes through
+    // `JsonTreeComponent.setUserSelection()`. Fires repo-wide so a
+    // hypothetical sibling component holding a
+    // `viewChild(JsonTreeComponent)` reference cannot grow a
+    // back-door writer. System writes inside json-tree.component.ts
+    // itself remain raw but require a closed-vocabulary trailing
+    // pragma (enforced by the RegExp pragma matcher below).
+    //
+    // The regex is defense-in-depth, not airtight: destructuring
+    // (`const { selectedPath } = this`), aliasing (`const sig =
+    // this.selectedPath`), bracket notation
+    // (`this.selectedPath['set']`), and `(this.selectedPath as ...).set`
+    // all dodge the match. The convention is documented in the doc
+    // block at `selectedPath`'s declaration; intentional
+    // circumvention is possible but obvious in review.
+    //
+    // The pragma terminator `(?![-\w])` rejects suffixes containing
+    // word characters or hyphens (so `helper-typo`, `helpers`,
+    // `system-clear-foo` all fail), but allows the natural
+    // line-terminators we expect in source (`helper.`, `helper\t`,
+    // `helper\r\n`, `helper` at EOF).
+    pattern: /\.selectedPath\.(?:set|update)\s*\(/g,
+    message:
+      'Raw `.selectedPath.set(...)` / `.selectedPath.update(...)` bypass' +
+      ' issue #266 defer/retry. Route intentional writes through' +
+      ' `setUserSelection()` on JsonTreeComponent. System writes inside' +
+      ' json-tree.component.ts require the closed-vocabulary pragma' +
+      ' `// allow:selected-path-set <helper|system-clear>`.',
+    pragma: /\/\/\s*allow:selected-path-set\s+(?:helper|system-clear)(?![-\w])/,
+    pragmaAllowedPaths: [/^src\/app\/shared\/components\/json-tree\/json-tree\.component\.ts$/],
+    // No `paths` filter: fires repo-wide. The only legitimate
+    // writers live in json-tree.component.ts and that file is
+    // covered by pragmaAllowedPaths.
+  },
 ];
 
-function listProdFiles() {
+export function listProdFiles() {
   const out = execFileSync(
     'git',
     ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
@@ -109,7 +167,28 @@ function listProdFiles() {
     .filter((p) => !p.includes('/testing/') && !p.endsWith('.testing.ts'));
 }
 
-function scan(path) {
+/**
+ * Tests whether a candidate trailing-pragma line matches a rule's
+ * `pragma` field. The field is either a string (literal-substring
+ * match via `String.prototype.includes`, used by rule #2) or a
+ * RegExp (`RegExp.prototype.test`, used by rule #4 to enforce a
+ * closed-enum reason vocabulary).
+ *
+ * Exported for unit-testing under `scripts/check-prod-patterns.test.mjs`.
+ */
+export function matchesPragma(pragma, fullLine) {
+  if (typeof pragma === 'string') {
+    return fullLine.includes(pragma);
+  }
+  if (pragma instanceof RegExp) {
+    return pragma.test(fullLine);
+  }
+  throw new TypeError(
+    `check-prod-patterns: rule.pragma must be string or RegExp, got ${typeof pragma}`,
+  );
+}
+
+export function scan(path) {
   let text;
   try {
     text = readFileSync(path, 'utf8');
@@ -120,6 +199,15 @@ function scan(path) {
   // git ls-files returns forward-slash paths on every platform, but
   // belt-and-suspenders against any future Windows-native call site.
   const normalizedPath = path.replace(/\\/g, '/');
+  return scanText(text, normalizedPath);
+}
+
+/**
+ * Pure-function variant of `scan` that takes the file's text and
+ * normalized path directly. Exported so unit tests can exercise the
+ * scanner against in-memory fixtures without touching the filesystem.
+ */
+export function scanText(text, normalizedPath) {
   const violations = [];
   for (const rule of RULES) {
     if (rule.paths && !rule.paths.some((re) => re.test(normalizedPath))) {
@@ -147,8 +235,8 @@ function scan(path) {
         continue;
       }
       // Per-rule trailing pragma support: if the rule defines a
-      // `pragma`, look for the pragma string on the line where the
-      // match ENDS. If found AND the file path matches one of
+      // `pragma`, look for the pragma on the line where the match
+      // ENDS. If found AND the file path matches one of
       // `pragmaAllowedPaths`, allow the match. This safe-harbor is
       // intentionally narrow so a stray `// allow:...` pasted into
       // any other file is still a violation.
@@ -158,7 +246,7 @@ function scan(path) {
         const eolIdx = text.indexOf('\n', matchEnd);
         const lineEnd = eolIdx === -1 ? text.length : eolIdx;
         const fullLine = text.slice(lineStart, lineEnd);
-        if (fullLine.includes(rule.pragma)) {
+        if (matchesPragma(rule.pragma, fullLine)) {
           const allowed =
             !rule.pragmaAllowedPaths ||
             rule.pragmaAllowedPaths.some((re) => re.test(normalizedPath));
@@ -170,38 +258,57 @@ function scan(path) {
           // pragma-specific guidance baked into the message.
         }
       }
-      violations.push({ path, line, col, message: rule.message, snippet: m[0] });
+      violations.push({ path: normalizedPath, line, col, message: rule.message, snippet: m[0] });
     }
   }
   return violations;
 }
 
-const files = listProdFiles();
-const allViolations = files.flatMap(scan);
+export function main() {
+  const files = listProdFiles();
+  const allViolations = files.flatMap(scan);
 
-if (allViolations.length === 0) {
-  console.log(
-    `check-prod-patterns: OK (${files.length} production .ts files scanned, 0 violations)`,
-  );
-  process.exit(0);
-}
-
-console.error('check-prod-patterns: violations found:');
-for (const v of allViolations) {
-  console.error(`  ${v.path}:${v.line}:${v.col}  ${v.snippet}`);
-  console.error(`    -> ${v.message}`);
-}
-console.error(`\n${allViolations.length} violation(s) in ${files.length} production .ts files.`);
-
-if (process.env.GITHUB_ACTIONS === 'true') {
-  for (const v of allViolations) {
-    const file = v.path.replace(/%/g, '%25');
-    const msg = String(`${v.snippet} - ${v.message}`)
-      .replace(/%/g, '%25')
-      .replace(/\r/g, '%0D')
-      .replace(/\n/g, '%0A');
-    console.log(`::error file=${file},line=${v.line},col=${v.col}::${msg}`);
+  if (allViolations.length === 0) {
+    console.log(
+      `check-prod-patterns: OK (${files.length} production .ts files scanned, 0 violations)`,
+    );
+    return 0;
   }
+
+  console.error('check-prod-patterns: violations found:');
+  for (const v of allViolations) {
+    console.error(`  ${v.path}:${v.line}:${v.col}  ${v.snippet}`);
+    console.error(`    -> ${v.message}`);
+  }
+  console.error(`\n${allViolations.length} violation(s) in ${files.length} production .ts files.`);
+
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    for (const v of allViolations) {
+      const file = v.path.replace(/%/g, '%25');
+      const msg = String(`${v.snippet} - ${v.message}`)
+        .replace(/%/g, '%25')
+        .replace(/\r/g, '%0D')
+        .replace(/\n/g, '%0A');
+      console.log(`::error file=${file},line=${v.line},col=${v.col}::${msg}`);
+    }
+  }
+
+  return 1;
 }
 
-process.exit(1);
+// Only invoke main() when this file is executed directly. Importers
+// (the test file at scripts/check-prod-patterns.test.mjs) load the
+// module solely for its exports; they must not trigger the CLI side
+// effects (git ls-files, fs reads, process.exit).
+const invokedDirectly = (() => {
+  try {
+    if (!process.argv[1]) return false;
+    return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url;
+  } catch {
+    return false;
+  }
+})();
+
+if (invokedDirectly) {
+  process.exit(main());
+}
