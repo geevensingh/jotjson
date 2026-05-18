@@ -4453,7 +4453,7 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     });
 
     expect(extractSpy).toHaveBeenCalledTimes(1);
-    expect(extractSpy).toHaveBeenCalledWith('INFO log {"a":1}');
+    expect(extractSpy).toHaveBeenCalledWith('INFO log {"a":1}', 2);
     expect(component.extractBannerVisible()).toBe(true);
   });
 
@@ -4560,9 +4560,32 @@ describe('HomeComponent M7p extract-from-mixed-text', () => {
     await component.onUpload(file);
     await waitForDoubleAnimationFrame();
 
-    expect(extractor.extractFromMixedText).toHaveBeenCalledWith('INFO log {"a":1}');
+    expect(extractor.extractFromMixedText).toHaveBeenCalledWith('INFO log {"a":1}', 2);
     expect(component.extractBannerVisible()).toBe(true);
     expect(component.extractedCandidate()?.data.blockCount).toBe(1);
+  });
+
+  // Issue #253: editor tab-size preference reaches the extractor.
+  it('honors editorTabSize=4 when extracting from a mixed-text file', async () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const component = fixture.componentInstance;
+    const prefs = TestBed.inject(PreferencesService);
+    prefs.update({ editorTabSize: 4 });
+    const extractor = TestBed.inject(JsonExtractorService);
+    spyOn(extractor, 'extractFromMixedText').and.returnValue({
+      text: '{ "a": 1 }',
+      blockCount: 1,
+      preservesComments: true,
+      hasComments: false,
+    });
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain',
+    });
+
+    await component.onUpload(file);
+    await waitForDoubleAnimationFrame();
+
+    expect(extractor.extractFromMixedText).toHaveBeenCalledWith('INFO log {"a":1}', 4);
   });
 
   it('file load with already-valid JSON does NOT show the extract banner', async () => {
@@ -5883,7 +5906,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     if (typeof rawParameterValue !== 'string') {
       throw new Error('Expected fixture Parameters[0].Value to be a string');
     }
-    const replacement = extractFromMixedTextCore(rawParameterValue, parseJsonCandidate);
+    const replacement = extractFromMixedTextCore(rawParameterValue, parseJsonCandidate, 2);
     if (replacement === null) {
       throw new Error('Expected fixture Parameters[0].Value to be extractable');
     }

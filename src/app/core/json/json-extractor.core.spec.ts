@@ -1,6 +1,6 @@
 import type { ParseError } from 'jsonc-parser';
 import { parse } from 'jsonc-parser';
-import type { ExtractedJson, ParseJsonCandidate } from './json-extractor.core';
+import type { ExtractedJson, IndentSize, ParseJsonCandidate } from './json-extractor.core';
 import { extractFromMixedText } from './json-extractor.core';
 
 const parseJsonCandidate: ParseJsonCandidate = (candidateText: string) => {
@@ -185,10 +185,67 @@ describe('extractFromMixedText core', () => {
     expect(wrapper['suffix']).toBe(' post');
     expect(extracted.proseSegments).toBe(4);
   });
+
+  // Issue #253: `editorTabSize` is honored across all four output shapes.
+  describe('honors tabSize parameter', () => {
+    it('formats a bare single block at tabSize 4', () => {
+      const extracted = extractRequired('{"a":1,"b":{"c":2}}', 4);
+      expect(extracted.proseSegments).toBe(0);
+      expect(extracted.blockCount).toBe(1);
+      // 4-space indent on the nested key.
+      expect(extracted.text).toContain('\n    "a"');
+      expect(extracted.text).toContain('\n    "b"');
+      // No 2-space-only indentation should leak through.
+      expect(extracted.text).not.toMatch(/\n  "[ab]"/);
+    });
+
+    it('formats a bare multi-block array at tabSize 4', () => {
+      const extracted = extractRequired('{"a":1}{"b":2}', 4);
+      expect(extracted.proseSegments).toBe(0);
+      expect(extracted.blockCount).toBe(2);
+      expect(parseJsoncText(extracted.text)).toEqual([{ a: 1 }, { b: 2 }]);
+      // JSON.stringify with indent 4 -> 4-space indent on array elements.
+      expect(extracted.text).toContain('\n    {');
+    });
+
+    it('formats a single-block prose wrapper at tabSize 4', () => {
+      const extracted = extractRequired('before {"a":1} after', 4);
+      const wrapper = expectJsoncRecord(extracted.text);
+
+      expect(wrapper['prefix']).toBe('before ');
+      expect(wrapper['json']).toEqual({ a: 1 });
+      expect(wrapper['suffix']).toBe(' after');
+      // 4-space indent on top-level wrapper keys.
+      expect(extracted.text).toContain('\n    "prefix"');
+      expect(extracted.text).toContain('\n    "json"');
+    });
+
+    it('formats a multi-block prose wrapper at tabSize 4', () => {
+      const extracted = extractRequired('pre {"a":1} mid {"b":2} post', 4);
+      const wrapper = expectJsoncRecord(extracted.text);
+
+      expect(wrapper['prefix']).toBe('pre ');
+      expect(wrapper['json1']).toEqual({ a: 1 });
+      expect(wrapper['between_1_and_2']).toBe(' mid ');
+      expect(wrapper['json2']).toEqual({ b: 2 });
+      expect(wrapper['suffix']).toBe(' post');
+      // 4-space indent on top-level wrapper keys.
+      expect(extracted.text).toContain('\n    "prefix"');
+      expect(extracted.text).toContain('\n    "json1"');
+    });
+
+    it('defaults to 2-space indent when extractRequired is called without tabSize', () => {
+      const extracted = extractRequired('{"a":1,"b":2}');
+      // 2-space indent on top-level keys.
+      expect(extracted.text).toContain('\n  "a"');
+      // No 4-space indent should appear.
+      expect(extracted.text).not.toContain('\n    "a"');
+    });
+  });
 });
 
-function extractRequired(input: string): ExtractedJson {
-  const extracted = extractFromMixedText(input, parseJsonCandidate);
+function extractRequired(input: string, tabSize: IndentSize = 2): ExtractedJson {
+  const extracted = extractFromMixedText(input, parseJsonCandidate, tabSize);
   if (extracted === null) {
     throw new Error(`Expected extraction for ${input}`);
   }

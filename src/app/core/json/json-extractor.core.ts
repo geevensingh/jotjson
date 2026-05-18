@@ -1,5 +1,14 @@
 import { applyEdits, format as formatJsonc } from 'jsonc-parser';
 
+/**
+ * Indent size honored by the JSON extractor's formatted output. Mirrors
+ * `UserPreferences.editorTabSize` (`src/app/core/api/models.ts`). Threaded
+ * as a parameter through every output-shaping function so the worker
+ * (which has no Angular DI access) can honor the preference without
+ * reading global state.
+ */
+export type IndentSize = 2 | 4;
+
 export interface ExtractedJson {
   text: string;
   blockCount: number;
@@ -96,6 +105,7 @@ const CHARACTER_LINE_FEED = 0x0a; // \n
 export function extractFromMixedText(
   input: string,
   parseJsonCandidate: ParseJsonCandidate,
+  tabSize: IndentSize,
 ): ExtractedJson | null {
   if (!input) return null;
   if (input.length > MAX_INPUT_LENGTH) return null;
@@ -103,12 +113,13 @@ export function extractFromMixedText(
   const candidates = scan(input, parseJsonCandidate);
   if (candidates.length === 0) return null;
 
-  return buildResult(input, candidates);
+  return buildResult(input, candidates, tabSize);
 }
 
 function buildResult(
   input: string,
   candidates: readonly JsonExtractorCandidate[],
+  tabSize: IndentSize,
 ): ExtractedJson | null {
   if (candidates.length === 1) {
     const candidate = candidates[0];
@@ -116,11 +127,11 @@ function buildResult(
 
     const proseSegments = countSingleBlockProseSegments(input, candidate);
     if (proseSegments === 0) {
-      return buildBareResult(candidates);
+      return buildBareResult(candidates, tabSize);
     }
 
     return {
-      text: buildSingleBlockProseWrapper(input, candidate),
+      text: buildSingleBlockProseWrapper(input, candidate, tabSize),
       blockCount: 1,
       preservesComments: true,
       proseSegments,
@@ -130,11 +141,11 @@ function buildResult(
 
   const proseSegments = countMultiBlockProseSegments(input, candidates);
   if (proseSegments === 0) {
-    return buildBareResult(candidates);
+    return buildBareResult(candidates, tabSize);
   }
 
   return {
-    text: buildMultiBlockProseWrapper(input, candidates),
+    text: buildMultiBlockProseWrapper(input, candidates, tabSize),
     blockCount: candidates.length,
     preservesComments: false,
     proseSegments,
@@ -142,13 +153,16 @@ function buildResult(
   };
 }
 
-function buildBareResult(candidates: readonly JsonExtractorCandidate[]): ExtractedJson | null {
+function buildBareResult(
+  candidates: readonly JsonExtractorCandidate[],
+  tabSize: IndentSize,
+): ExtractedJson | null {
   if (candidates.length === 1) {
     const candidate = candidates[0];
     if (candidate === undefined) return null;
 
     return {
-      text: formatExtractedJson(candidate.slice),
+      text: formatExtractedJson(candidate.slice, tabSize),
       blockCount: 1,
       preservesComments: true,
       proseSegments: 0,
@@ -160,7 +174,7 @@ function buildBareResult(candidates: readonly JsonExtractorCandidate[]): Extract
     text: JSON.stringify(
       candidates.map((candidate) => candidate.value),
       null,
-      2,
+      tabSize,
     ),
     blockCount: candidates.length,
     preservesComments: false,
@@ -169,19 +183,24 @@ function buildBareResult(candidates: readonly JsonExtractorCandidate[]): Extract
   };
 }
 
-function buildSingleBlockProseWrapper(input: string, candidate: JsonExtractorCandidate): string {
+function buildSingleBlockProseWrapper(
+  input: string,
+  candidate: JsonExtractorCandidate,
+  tabSize: IndentSize,
+): string {
   const parts: string[] = [];
   const prefix = input.slice(0, candidate.startIndex);
   addProsePart(parts, 'prefix', prefix);
-  parts.push(`"json": ${formatExtractedJson(candidate.slice)}`);
+  parts.push(`"json": ${formatExtractedJson(candidate.slice, tabSize)}`);
   const suffix = input.slice(candidate.endIndex);
   addProsePart(parts, 'suffix', suffix);
-  return formatExtractedJson(`{\n${parts.join(',\n')}\n}`);
+  return formatExtractedJson(`{\n${parts.join(',\n')}\n}`, tabSize);
 }
 
 function buildMultiBlockProseWrapper(
   input: string,
   candidates: readonly JsonExtractorCandidate[],
+  tabSize: IndentSize,
 ): string {
   const parts: string[] = [];
   const firstCandidate = candidates[0];
@@ -209,7 +228,7 @@ function buildMultiBlockProseWrapper(
     }
   }
   addProsePart(parts, 'suffix', input.slice(lastCandidate.endIndex));
-  return formatExtractedJson(`{\n${parts.join(',\n')}\n}`);
+  return formatExtractedJson(`{\n${parts.join(',\n')}\n}`, tabSize);
 }
 
 function countSingleBlockProseSegments(input: string, candidate: JsonExtractorCandidate): number {
@@ -312,9 +331,9 @@ export function scan(
   return candidates;
 }
 
-export function formatExtractedJson(slice: string): string {
+export function formatExtractedJson(slice: string, tabSize: IndentSize): string {
   const edits = formatJsonc(slice, undefined, {
-    tabSize: 2,
+    tabSize,
     insertSpaces: true,
   });
   return applyEdits(slice, edits);
