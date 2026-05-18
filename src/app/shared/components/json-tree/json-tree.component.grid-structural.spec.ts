@@ -247,17 +247,37 @@ describe('JsonTreeComponent (.tree-row Grid template invariants -- v0.26.1)', ()
     const key = longLongRow!.querySelector<HTMLElement>('.tree-key')!;
     const valueEl = longLongRow!.querySelector<HTMLElement>('.tree-value-string')!;
 
-    // Both renderable (nonzero clientWidth). A regression to flex
-    // shrink-to-0 would trip this without invoking any flaky px
-    // floor.
-    expect(key.clientWidth)
-      .withContext(`key.clientWidth=${key.clientWidth} -- key must render with nonzero width`)
-      .toBeGreaterThan(0);
-    expect(valueEl.clientWidth)
+    // Both present in the render tree and not visibility:hidden. A
+    // regression to `display: none` on the element OR any ancestor
+    // (e.g. `.tree-row { display: none }`) trips `getClientRects()`.
+    // We do NOT assert `clientWidth > 0` here: `.tree-key` has
+    // `min-width: 0` and the `[key]` Grid track is `minmax(0,
+    // max-content)`, so under unbreakable-content competition the
+    // track CAN legitimately resolve to 0px without it being a
+    // regression (see issue #287; the author's note at the `long
+    // leading comment + long key` test below documents the 2-50+ px
+    // cross-platform variance). This assertion is strictly narrower
+    // than the old `clientWidth > 0` -- "key is wide enough to be
+    // readable" is intentionally NOT enforced (and was not reliably
+    // enforced before either, since 0px is a legitimate layout
+    // outcome). The row-overflow assertion below guards the
+    // user-visible "row fits the panel" contract.
+    expect(key.getClientRects().length)
       .withContext(
-        `value.clientWidth=${valueEl.clientWidth} -- value must render with nonzero width`,
+        'key must be in the render tree (display:none on element or any ancestor would fail this)',
       )
       .toBeGreaterThan(0);
+    expect(getComputedStyle(key).visibility)
+      .withContext('key must not be visibility:hidden (inherited from ancestor or set directly)')
+      .not.toBe('hidden');
+    expect(valueEl.getClientRects().length)
+      .withContext(
+        'value must be in the render tree (display:none on element or any ancestor would fail this)',
+      )
+      .toBeGreaterThan(0);
+    expect(getComputedStyle(valueEl).visibility)
+      .withContext('value must not be visibility:hidden')
+      .not.toBe('hidden');
 
     // Row no horizontal overflow. This is the user-visible
     // contract: the Grid template MUST shrink long-long content
@@ -353,8 +373,20 @@ describe('JsonTreeComponent (.tree-row Grid template invariants -- v0.26.1)', ()
       .toBeLessThanOrEqual(2);
   });
 
-  // 9. Long-trailing-comment fixture at 400px: key + value both >= 1px.
-  it('LongUnbreakableValue Parameters[0].Value at 400px: key clientWidth >= 1 and value clientWidth >= 1', async () => {
+  // 9. Long-trailing-comment fixture at 400px: key + value present in
+  //    the render tree (structural CSS). The previous assertions used
+  //    `key.clientWidth >= 1` / `value.clientWidth >= 1` (px floor on
+  //    Grid track widths), which is fragile -- both elements have
+  //    `min-width: 0` and the `[key]` / `[value]` tracks are
+  //    `minmax(0, max-content)`, so under unbreakable-content
+  //    competition the track can legitimately resolve to 0px without
+  //    it being a regression (see issue #287 + the cross-platform
+  //    variance note at test 10). We now assert render-tree presence
+  //    (catches `display: none` on element or any ancestor) and
+  //    non-hidden visibility (catches `visibility: hidden`). Row-no-
+  //    overflow under this fixture is already covered by test 11
+  //    (every row at 300px) so we do not duplicate it here.
+  it('LongUnbreakableValue Parameters[0].Value at 400px: key + value present in render tree (structural CSS)', async () => {
     const value = await loadFixture('LongUnbreakableValue.json');
     const fixture = await configure(value, 400);
     teardown = attachFixtureToBody(fixture, 'dark');
@@ -369,14 +401,22 @@ describe('JsonTreeComponent (.tree-row Grid template invariants -- v0.26.1)', ()
     expect(key).not.toBeNull();
     expect(valueEl).not.toBeNull();
 
-    expect(key!.clientWidth)
+    expect(key!.getClientRects().length)
       .withContext(
-        `key.clientWidth=${key!.clientWidth} must be >= 1 even under extreme value pressure`,
+        'key must be in the render tree (display:none on element or any ancestor would fail this)',
       )
-      .toBeGreaterThanOrEqual(1);
-    expect(valueEl!.clientWidth)
-      .withContext(`value.clientWidth=${valueEl!.clientWidth} must be >= 1`)
-      .toBeGreaterThanOrEqual(1);
+      .toBeGreaterThan(0);
+    expect(getComputedStyle(key!).visibility)
+      .withContext('key must not be visibility:hidden')
+      .not.toBe('hidden');
+    expect(valueEl!.getClientRects().length)
+      .withContext(
+        'value must be in the render tree (display:none on element or any ancestor would fail this)',
+      )
+      .toBeGreaterThan(0);
+    expect(getComputedStyle(valueEl!).visibility)
+      .withContext('value must not be visibility:hidden')
+      .not.toBe('hidden');
   });
 
   // 10. Long-leading-comment + long-key fixture at 400px:
@@ -385,17 +425,24 @@ describe('JsonTreeComponent (.tree-row Grid template invariants -- v0.26.1)', ()
   //         so it CAN truncate rather than push the row;
   //     (b) the leading-wrapper has `min-width: 0` so Grid is
   //         allowed to size its track below intrinsic;
-  //     (c) the key has nonzero clientWidth (renders);
+  //     (c) the key is in the render tree (i.e. not `display: none`
+  //         on the element or any ancestor, and not
+  //         `visibility: hidden`);
   //     (d) the row has no horizontal overflow.
   //
-  //     The fragile `key.clientWidth >= N` assertion that earlier
-  //     drafts used is intentionally NOT re-asserted: Grid track
-  //     sharing under unbreakable-content competition tie-breaks
-  //     on font metrics + layout timing and is not stable across
-  //     local Chrome on Windows vs. Chrome headless on CI Linux
-  //     (observed: 2-50+ px variance for the same SCSS + fixture).
-  //     The structural assertions below are the actual contract;
-  //     row-level no-overflow guards the user-visible outcome.
+  //     We do NOT assert `key.clientWidth > 0` here: `.tree-key`
+  //     has `min-width: 0` and the `[key]` Grid track is `minmax(0,
+  //     max-content)`, so under unbreakable-content competition
+  //     the track CAN legitimately resolve to 0px without it being
+  //     a regression (see issue #287). Grid track sharing under
+  //     unbreakable-content competition tie-breaks on font metrics
+  //     + layout timing and is not stable across local Chrome on
+  //     Windows vs. Chrome headless on CI Linux (observed: 2-50+ px
+  //     variance for the same SCSS + fixture). The structural
+  //     assertions below are the actual contract; row-level no-
+  //     overflow guards the user-visible outcome. "Key is wide
+  //     enough to be readable" is intentionally NOT enforced here
+  //     -- it would need a separate test with retry + tolerance.
   it('long leading comment + long key at 400px: comment ellipsify contract holds + row no overflow', async () => {
     const value = await loadFixture('LongUnbreakableKey.json');
     const fixture = await configure(value, 400);
@@ -477,12 +524,25 @@ describe('JsonTreeComponent (.tree-row Grid template invariants -- v0.26.1)', ()
       )
       .toBe('0px');
 
-    // (c) Key has nonzero clientWidth (i.e. actually renders -- a
-    //     `display: none` or fully-collapsed-to-0 regression would
-    //     trip this without invoking any flaky px floor).
-    expect(key!.clientWidth)
-      .withContext(`key.clientWidth=${key!.clientWidth} -- key must render with nonzero width`)
+    // (c) Key is in the render tree and not visibility:hidden. A
+    //     `display: none` regression on the element or any ancestor
+    //     (e.g. `.tree-row { display: none }`) would produce an
+    //     empty `getClientRects()` list. Replaces the earlier
+    //     `clientWidth > 0` runtime layout check, which flaked on
+    //     Linux CI because `.tree-key { min-width: 0 }` plus the
+    //     `[key]` track's `minmax(0, max-content)` legitimately
+    //     allows 0px under unbreakable-content competition (issue
+    //     #287). `getClientRects()` is not subject to Grid track
+    //     sizing -- a 0px-wide rendered element still produces one
+    //     `DOMRect` with `length === 1`.
+    expect(key!.getClientRects().length)
+      .withContext(
+        'key must be in the render tree (display:none on element or any ancestor would fail this)',
+      )
       .toBeGreaterThan(0);
+    expect(getComputedStyle(key!).visibility)
+      .withContext('key must not be visibility:hidden (inherited from ancestor or set directly)')
+      .not.toBe('hidden');
 
     // (d) Row no horizontal overflow.
     expect(longKeyRow!.scrollWidth)
