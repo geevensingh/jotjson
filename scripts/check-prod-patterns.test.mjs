@@ -25,7 +25,7 @@ test('matchesPragma accepts a literal-string pragma via includes', () => {
 });
 
 test('matchesPragma accepts a RegExp pragma via test', () => {
-  const pragma = /\/\/\s*allow:selected-path-set\s+(?:helper|system-clear)\b/;
+  const pragma = /\/\/\s*allow:selected-path-set\s+(?:helper|system-clear)(?![-\w])/;
   assert.equal(matchesPragma(pragma, 'code; // allow:selected-path-set helper'), true);
   assert.equal(matchesPragma(pragma, 'code; // allow:selected-path-set system-clear'), true);
   assert.equal(matchesPragma(pragma, 'code; // allow:selected-path-set yolo'), false);
@@ -68,13 +68,56 @@ test('selected-path-set: system-clear pragma in json-tree.component.ts passes', 
   assert.equal(violations.length, 0);
 });
 
-test('selected-path-set: programmatic-immediate and -clear and retry-pending-apply pass', () => {
+test('selected-path-set: programmatic-immediate / -clear / retry-pending-apply NO LONGER pass', () => {
+  // Anti-regression: the v1 vocabulary documented 5 reasons; PR #286
+  // review feedback tightened to 2 (`helper`, `system-clear`) once
+  // Resolution B routed the programmatic + retry-pending sites
+  // through `setUserSelection` instead of carrying their own pragmas.
+  // A stale `programmatic-immediate` / `programmatic-clear` /
+  // `retry-pending-apply` comment must NOT pass.
   for (const reason of ['programmatic-immediate', 'programmatic-clear', 'retry-pending-apply']) {
     const text = `this.selectedPath.set(x); // allow:selected-path-set ${reason}\n`;
     const violations = scanText(text, JSON_TREE_PATH).filter((v) =>
       v.snippet.includes('selectedPath'),
     );
-    assert.equal(violations.length, 0, `reason '${reason}' should pass`);
+    assert.equal(violations.length, 1, `reason '${reason}' should now fail`);
+  }
+});
+
+test('selected-path-set: word-char suffix on a valid reason fails (e.g. "helpers")', () => {
+  // The `(?![-\w])` lookahead must reject a typo where the reason is
+  // a longer word that happens to start with `helper` or `system-clear`.
+  for (const bogus of ['helpers', 'helper-typo', 'system-clear-foo', 'system-clears']) {
+    const text = `this.selectedPath.set(x); // allow:selected-path-set ${bogus}\n`;
+    const violations = scanText(text, JSON_TREE_PATH).filter((v) =>
+      v.snippet.includes('selectedPath'),
+    );
+    assert.equal(violations.length, 1, `reason '${bogus}' should fail`);
+  }
+});
+
+test('selected-path-set: pragma followed by punctuation / whitespace / EOF passes', () => {
+  // The `(?![-\w])` lookahead must allow the natural terminators
+  // appearing in source: trailing whitespace before EOL, tab, CRLF,
+  // EOF without a newline, or punctuation like `.` / `;`.
+  const passes = [
+    'this.selectedPath.set(x); // allow:selected-path-set helper\n',
+    'this.selectedPath.set(x); // allow:selected-path-set helper\r\n',
+    'this.selectedPath.set(x); // allow:selected-path-set helper\t\n',
+    'this.selectedPath.set(x); // allow:selected-path-set helper ',
+    'this.selectedPath.set(x); // allow:selected-path-set helper.',
+    'this.selectedPath.set(x); // allow:selected-path-set helper',
+    'this.selectedPath.set(x); // allow:selected-path-set system-clear\n',
+  ];
+  for (const text of passes) {
+    const violations = scanText(text, JSON_TREE_PATH).filter((v) =>
+      v.snippet.includes('selectedPath'),
+    );
+    assert.equal(
+      violations.length,
+      0,
+      `text ${JSON.stringify(text)} should pass but had ${violations.length} violations`,
+    );
   }
 });
 
@@ -88,8 +131,8 @@ test('selected-path-set: unknown reason fails even in json-tree.component.ts', (
 });
 
 test('selected-path-set: old generic "system-write" reason no longer passes', () => {
-  // Anti-regression: the v1 plan used `system-write`; the v2 plan
-  // tightened the vocabulary to `system-clear`. A stale `system-write`
+  // Anti-regression: an early plan used `system-write`; the final
+  // vocabulary is `{helper, system-clear}`. A stale `system-write`
   // comment must NOT pass.
   const text = `this.selectedPath.set(null); // allow:selected-path-set system-write\n`;
   const violations = scanText(text, JSON_TREE_PATH).filter((v) =>
@@ -119,6 +162,41 @@ test('selected-path-set: pragma in a NON-allow-listed file is still a violation'
 
 test('selected-path-set: raw write in any non-allow-listed file fails', () => {
   const text = `this.tree()?.selectedPath.set('x');\n`;
+  const violations = scanText(text, HOME_PATH).filter((v) => v.snippet.includes('selectedPath'));
+  assert.equal(violations.length, 1);
+});
+
+test('selected-path-set: `.update(...)` raw write in json-tree.component.ts fails', () => {
+  // Issue #274 + PR #286 review: the rule must cover `.update` not
+  // just `.set`. A signal computed-update like
+  // `this.selectedPath.update((prev) => ...)` is functionally an
+  // intentional write and must route through `setUserSelection`.
+  const text = `this.selectedPath.update((p) => p);\n`;
+  const violations = scanText(text, JSON_TREE_PATH).filter((v) =>
+    v.snippet.includes('selectedPath'),
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0].message, /setUserSelection\(\)/);
+});
+
+test('selected-path-set: `.update(...)` with helper pragma in json-tree.component.ts passes', () => {
+  const text = `this.selectedPath.update((p) => p); // allow:selected-path-set helper\n`;
+  const violations = scanText(text, JSON_TREE_PATH).filter((v) =>
+    v.snippet.includes('selectedPath'),
+  );
+  assert.equal(violations.length, 0);
+});
+
+test('selected-path-set: `.update(...)` with pragma in NON-allow-listed file still fails', () => {
+  // Symmetric with the `.set` cross-file test: pragma alone is not
+  // enough; the file must also be on `pragmaAllowedPaths`.
+  const text = `this.tree()?.selectedPath.update((p) => p); // allow:selected-path-set helper\n`;
+  const violations = scanText(text, HOME_PATH).filter((v) => v.snippet.includes('selectedPath'));
+  assert.equal(violations.length, 1);
+});
+
+test('selected-path-set: `.update(...)` raw write in any non-allow-listed file fails', () => {
+  const text = `this.tree()?.selectedPath.update((p) => p);\n`;
   const violations = scanText(text, HOME_PATH).filter((v) => v.snippet.includes('selectedPath'));
   assert.equal(violations.length, 1);
 });

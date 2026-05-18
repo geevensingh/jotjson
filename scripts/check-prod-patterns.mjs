@@ -35,13 +35,14 @@
 //      `items.create()` (insert with 409 on conflict) or
 //      `replaceWithIfMatch<T>(...)` (etag-guarded replace).
 //
-//   4. `.selectedPath.set(` (issue #274 helper-bypass footgun)
-//      Raw `.selectedPath.set(...)` calls bypass the issue #266
-//      defer/retry machinery. Intentional writes must route through
-//      `JsonTreeComponent.setUserSelection()`. System-clear writes
-//      inside `json-tree.component.ts` itself remain raw but require
-//      the closed-vocabulary trailing pragma
-//      `// allow:selected-path-set <helper|system-clear|programmatic-immediate|programmatic-clear|retry-pending-apply>`.
+//   4. `.selectedPath.set(` and `.selectedPath.update(` (issue #274
+//      helper-bypass footgun)
+//      Raw `.selectedPath.set(...)` / `.selectedPath.update(...)`
+//      calls bypass the issue #266 defer/retry machinery. Intentional
+//      writes must route through `JsonTreeComponent.setUserSelection()`.
+//      System-clear writes inside `json-tree.component.ts` itself
+//      remain raw but require the closed-vocabulary trailing pragma
+//      `// allow:selected-path-set <helper|system-clear>`.
 //      The rule fires repo-wide so cross-file writers (e.g., a
 //      sibling component holding `viewChild(JsonTreeComponent)`)
 //      cannot grow a back-door writer. The regex is defense-in-
@@ -114,8 +115,9 @@ export const RULES = [
     paths: [/^api\/src\//],
   },
   {
-    // Issue #274. Raw `.selectedPath.set(...)` calls bypass the
-    // #266 defer/retry machinery. Route user-intent writes through
+    // Issue #274. Raw `.selectedPath.set(...)` /
+    // `.selectedPath.update(...)` calls bypass the #266 defer/retry
+    // machinery. Route intentional writes through
     // `JsonTreeComponent.setUserSelection()`. Fires repo-wide so a
     // hypothetical sibling component holding a
     // `viewChild(JsonTreeComponent)` reference cannot grow a
@@ -130,15 +132,20 @@ export const RULES = [
     // all dodge the match. The convention is documented in the doc
     // block at `selectedPath`'s declaration; intentional
     // circumvention is possible but obvious in review.
-    pattern: /\.selectedPath\.set\s*\(/g,
+    //
+    // The pragma terminator `(?![-\w])` rejects suffixes containing
+    // word characters or hyphens (so `helper-typo`, `helpers`,
+    // `system-clear-foo` all fail), but allows the natural
+    // line-terminators we expect in source (`helper.`, `helper\t`,
+    // `helper\r\n`, `helper` at EOF).
+    pattern: /\.selectedPath\.(?:set|update)\s*\(/g,
     message:
-      'Raw `.selectedPath.set(...)` bypasses issue #266 defer/retry.' +
-      ' Route intentional writes through `setUserSelection()` on' +
-      ' JsonTreeComponent. System writes inside json-tree.component.ts' +
-      ' require the closed-vocabulary pragma' +
-      ' `// allow:selected-path-set <helper|system-clear|programmatic-immediate|programmatic-clear|retry-pending-apply>`.',
-    pragma:
-      /\/\/\s*allow:selected-path-set\s+(?:helper|system-clear|programmatic-immediate|programmatic-clear|retry-pending-apply)\b/,
+      'Raw `.selectedPath.set(...)` / `.selectedPath.update(...)` bypass' +
+      ' issue #266 defer/retry. Route intentional writes through' +
+      ' `setUserSelection()` on JsonTreeComponent. System writes inside' +
+      ' json-tree.component.ts require the closed-vocabulary pragma' +
+      ' `// allow:selected-path-set <helper|system-clear>`.',
+    pragma: /\/\/\s*allow:selected-path-set\s+(?:helper|system-clear)(?![-\w])/,
     pragmaAllowedPaths: [/^src\/app\/shared\/components\/json-tree\/json-tree\.component\.ts$/],
     // No `paths` filter: fires repo-wide. The only legitimate
     // writers live in json-tree.component.ts and that file is
