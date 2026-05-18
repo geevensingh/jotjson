@@ -233,7 +233,7 @@ jobs:
         run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
 
       - name: Post sticky preview comment
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: cd-preview
           message: |
@@ -413,7 +413,7 @@ jobs:
 
       - name: Update sticky comment (teardown)
         if: ${{ always() }}
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: cd-preview
           message: |
