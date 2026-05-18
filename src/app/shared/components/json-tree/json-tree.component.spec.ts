@@ -2042,6 +2042,15 @@ describe('JsonTreeComponent', () => {
   });
 
   describe('selection highlighting', () => {
+    // The `cmp.selectedPath.set(...)` calls in this describe block are
+    // intentional test-state setup -- they drive the signal directly so
+    // downstream projections (ancestor highlights, match badges, CSS
+    // classes, ARIA attributes) can be asserted without going through
+    // the user-intent code path. Real user gestures (clicks, keyboard
+    // activation) are covered elsewhere via real DOM events. See issue
+    // #274 doc block at `selectedPath`'s declaration; the
+    // `check-prod-patterns.mjs` `selected-path-set` rule deliberately
+    // does NOT scan `*.spec.ts` for this reason.
     /** Look up a rendered .tree-row whose bound TreeNode has the given pathString. */
     function findRow(path: string): HTMLElement {
       cmp.expandAll();
@@ -3915,6 +3924,13 @@ describe('JsonTreeComponent', () => {
         await createWith({ alpha: 1, mid: 'NA', alphabet: 2, alpine: 3 });
         setSearch('alp');
         const c = fixture.componentInstance;
+        // Stage a pending defer to verify `activateClickedHitOrFirst`
+        // routes through `setUserSelection()` (issue #274) and
+        // clears it.
+        c.selectByPathString('$.missing');
+        const internals = c as unknown as { pendingSelectPathString: string | null };
+        expect(internals.pendingSelectPathString).toBe('$.missing');
+
         c.__getHelpersForTesting().activateClickedHitOrFirst('$.mid');
         await Promise.resolve();
         await Promise.resolve();
@@ -3922,6 +3938,7 @@ describe('JsonTreeComponent', () => {
         const idx = c.activeHitIndex();
         expect(paths[idx]).toBe('$.alphabet');
         expect(c.selectedPath()).toBe('$.alphabet');
+        expect(internals.pendingSelectPathString).toBeNull();
       });
     });
   });
@@ -4720,7 +4737,18 @@ describe('JsonTreeComponent', () => {
       expect(barEmissions.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('discards pending when user clicks a different row mid-defer', async () => {
+    it('defensive backstop: discriminator discards stale pending if a writer bypasses setUserSelection', async () => {
+      // Pre-#274 this scenario WAS the load-bearing path: `onSelect`
+      // wrote `selectedPath` directly, leaving pending intact, and
+      // the discriminator was the only thing preventing the retry
+      // effect from clobbering the user's click with a stale defer.
+      // Post-#274 all intentional writers route through
+      // `setUserSelection()` which clears pending synchronously, so
+      // this `cmp.selectedPath.set(...)` direct write now mimics a
+      // hypothetical future writer that bypasses the helper (e.g.,
+      // a sibling component holding a `viewChild(JsonTreeComponent)`
+      // reference). The discriminator stays as a defensive backstop
+      // for that case; this test pins the backstop's behavior.
       await createWith({ foo: 1, qux: 'stub' });
       // Select foo first so priorSelected has a non-null value.
       cmp.selectByPathString('$.foo');
@@ -4731,11 +4759,9 @@ describe('JsonTreeComponent', () => {
       expect(internals.pendingSelectPathString).toBe('$.bar');
       expect(internals.pendingPriorSelectedPath).toBe('$.foo');
 
-      // User clicks a different row via direct selectedPath write
-      // (mimicking the tree's internal onSelect handler which
-      // bypasses selectByPathString). pendingPriorSelectedPath is
-      // NOT updated; the retry effect's discriminator should
-      // discard pending.
+      // Direct-write bypass of `setUserSelection`. pendingPriorSelectedPath
+      // is NOT updated; the retry effect's discriminator should
+      // discard pending on the next nodeIndex tick.
       cmp.selectedPath.set('$.qux');
 
       fixture.componentRef.setInput('value', { foo: 1, qux: 'stub', bar: 2 });
@@ -4987,6 +5013,78 @@ describe('JsonTreeComponent', () => {
       cmp.goToNextMatch();
 
       expect(internals.pendingSelectPathString).toBe('$.bar');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Issue #274 `setUserSelection()` helper. The helper is the canonical
+  // "clear pending then set" idiom for every intentional write to
+  // `selectedPath`. Routing all user-intent + programmatic writers
+  // through it makes the pending-clear structural instead of empirically-
+  // true via keyboard-release timing. See top-of-component doc block at
+  // `selectedPath`'s declaration.
+  // ---------------------------------------------------------------------------
+  describe('setUserSelection helper (issue #274)', () => {
+    type Internals = {
+      pendingSelectPathString: string | null;
+      pendingPriorSelectedPath: string | null;
+    };
+
+    it('clears pending then writes selectedPath in one shot', async () => {
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.foo');
+      cmp.selectByPathString('$.bar'); // stages pending: $.bar
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      cmp.setUserSelection('$.foo');
+
+      expect(cmp.selectedPath()).toBe('$.foo');
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+    });
+
+    it('null path clears both selection and pending', async () => {
+      await createWith({ foo: 1 });
+      cmp.selectByPathString('$.foo');
+      cmp.selectByPathString('$.bar');
+      const internals = cmp as unknown as Internals;
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      cmp.setUserSelection(null);
+
+      expect(cmp.selectedPath()).toBeNull();
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+    });
+
+    it('clicking the already-selected row mid-defer cancels the pending jump', async () => {
+      // Pre-#274 behavior: a user click on the already-selected row
+      // mid-defer was a no-op signal write (same value -> Angular
+      // signal deduplication), pending stayed, and on the next
+      // nodeIndex tick the tree silently jumped to the deferred
+      // path. Post-#274 the helper's synchronous pending-clear
+      // cancels the jump; the user's affirmation of the current
+      // selection wins.
+      await createWith({ foo: 1 });
+      cmp.setUserSelection('$.foo');
+      cmp.selectByPathString('$.bar'); // programmatic defer
+      const internals = cmp as unknown as Internals;
+      expect(cmp.selectedPath()).toBe('$.foo');
+      expect(internals.pendingSelectPathString).toBe('$.bar');
+
+      // User clicks the same row $.foo again (mid-defer). Routed
+      // through the helper -- same code path as `onSelect`.
+      cmp.setUserSelection('$.foo');
+
+      expect(internals.pendingSelectPathString).toBeNull();
+      expect(internals.pendingPriorSelectedPath).toBeNull();
+
+      fixture.componentRef.setInput('value', { foo: 1, bar: 2 });
+      fixture.detectChanges();
+
+      // Pending was cancelled by the helper; no silent jump to $.bar.
+      expect(cmp.selectedPath()).toBe('$.foo');
     });
   });
 
@@ -6063,10 +6161,17 @@ describe('JsonTreeComponent', () => {
         const node = nodeAt('$.alpha');
         const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
         const stopSpy = spyOn(ev, 'stopPropagation').and.callThrough();
+        // Stage a pending defer to verify `onKebabClick` routes
+        // through `setUserSelection()` (issue #274) and clears it.
+        cmp.selectByPathString('$.missing');
+        const internals = cmp as unknown as { pendingSelectPathString: string | null };
+        expect(internals.pendingSelectPathString).toBe('$.missing');
+
         cmp.onKebabClick(ev, node);
         expect(cmp.contextNode()?.pathString).toBe('$.alpha');
         expect(cmp.selectedPath()).toBe('$.alpha');
         expect(stopSpy).toHaveBeenCalled();
+        expect(internals.pendingSelectPathString).toBeNull();
       });
 
       it("logs tree.contextMenu.opened with source: 'kebab'", async () => {
@@ -8538,9 +8643,15 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       cmp.focusedPath.set('$.a');
       fixture.detectChanges();
+      // Stage a pending defer to verify the keyboard handler routes
+      // through `setUserSelection()` (issue #274) and clears it.
+      cmp.selectByPathString('$.missing');
+      const internals = cmp as unknown as { pendingSelectPathString: string | null };
+      expect(internals.pendingSelectPathString).toBe('$.missing');
 
       dispatchKey(nodeEl('$.a'), 'Enter');
       expect(cmp.selectedPath()).toBe('$.a');
+      expect(internals.pendingSelectPathString).toBeNull();
     });
 
     it('Space on the focused row sets selectedPath and prevents default', async () => {
@@ -8549,11 +8660,17 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       cmp.focusedPath.set('$.a');
       fixture.detectChanges();
+      // Stage a pending defer to verify the keyboard handler routes
+      // through `setUserSelection()` (issue #274) and clears it.
+      cmp.selectByPathString('$.missing');
+      const internals = cmp as unknown as { pendingSelectPathString: string | null };
+      expect(internals.pendingSelectPathString).toBe('$.missing');
 
       const ev = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
       nodeEl('$.a').dispatchEvent(ev);
       expect(cmp.selectedPath()).toBe('$.a');
       expect(ev.defaultPrevented).toBeTrue();
+      expect(internals.pendingSelectPathString).toBeNull();
     });
 
     it('clicking a row sets BOTH selectedPath and focusedPath', async () => {
@@ -8566,6 +8683,11 @@ describe('JsonTreeComponent', () => {
       // Reset initial focus so we can verify the click moves it.
       cmp.focusedPath.set('$');
       fixture.detectChanges();
+      // Stage a pending defer to verify `onSelect` routes through
+      // `setUserSelection()` (issue #274) and clears it.
+      cmp.selectByPathString('$.missing');
+      const internals = cmp as unknown as { pendingSelectPathString: string | null };
+      expect(internals.pendingSelectPathString).toBe('$.missing');
 
       const aRow = nodeEl('$.a');
       aRow.click();
@@ -8573,6 +8695,7 @@ describe('JsonTreeComponent', () => {
 
       expect(cmp.selectedPath()).toBe('$.a');
       expect(cmp.focusedPath()).toBe('$.a');
+      expect(internals.pendingSelectPathString).toBeNull();
     });
 
     it('search Enter does not yank focus from the search input', async () => {
