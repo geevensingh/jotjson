@@ -1,0 +1,54 @@
+// Structural invariants enforced by scripts/check-tree-row-grid.mjs
+// Accepted grid-column grammar:
+//   grid-column: <name>;
+//   grid-column: <name> / span <integer>;
+//
+// This fixture exists to verify the F2 fix to the
+// `isCandidateCanonicalCompound` boundary check. Before F2, the
+// guard tested `afterPrefix.startsWith('-')`, which accepted
+// `.tree-row5`, `.tree-row_x`, and `.tree-row` followed by any
+// non-dash identifier-continuation character as candidate canonical
+// blocks (false-positive multi-block fire). After F2, the guard
+// rejects any CSS identifier-continuation character (`[\w-]`) at
+// `afterPrefix[0]`, so `.tree-row5` and `.tree-row_x` are
+// correctly treated as DIFFERENT classes that happen to share the
+// `.tree-row` literal prefix -- they should NOT trip the
+// multi-block guard.
+.tree-row {
+  display: grid;
+  grid-template-columns:
+    [leading] auto
+    [key] auto
+    [sep] auto
+    [value] minmax(0, 1fr)
+    [trailing] auto
+    [right] auto;
+
+  > .tree-row-leading {
+    grid-column: leading;
+  }
+}
+
+.tree-row5 {
+  color: red;
+}
+
+.tree-row_x {
+  color: blue;
+}
+
+.tree-row.tree-row--close {
+  display: flex;
+}
+
+.tree-twisty {
+  flex-shrink: 0;
+}
+
+.tree-beacon-badge {
+  flex-shrink: 0;
+}
+
+.tree-rule-icon {
+  flex-shrink: 0;
+}

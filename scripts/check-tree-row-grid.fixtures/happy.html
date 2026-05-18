@@ -1,0 +1,22 @@
+<!-- Structural invariants enforced by scripts/check-tree-row-grid.mjs -->
+<div class="tree-row">
+  <span class="tree-row-leading"></span>
+  <span class="tree-key"></span>
+  <span class="tree-key-sep"></span>
+  <span class="tree-row-value-cell"></span>
+  <span class="tree-row-trailing"></span>
+  <span class="tree-row-right"></span>
+  <span class="sr-only">label</span>
+</div>
+@if (open()) {
+<div class="tree-row">
+  <span class="tree-row-leading"></span>
+  <span class="tree-index"></span>
+  <span class="tree-row-value-cell"></span>
+</div>
+} @for (item of items(); track item.id) {
+<div class="tree-row">
+  <span class="tree-row-leading"></span>
+  <span class="tree-row-value-cell"></span>
+</div>
+}
