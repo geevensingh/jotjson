@@ -1,0 +1,72 @@
+// Structural invariants enforced by scripts/check-tree-row-grid.mjs
+// Accepted grid-column grammar:
+//   grid-column: <name>;
+//   grid-column: <name> / span <integer>;
+
+/*
+ * Multi-line block comment placed BEFORE the canonical `.tree-row`
+ * block. With non-length-preserving comment stripping, the newlines
+ * inside this comment would be deleted from the stripped text and
+ * the line number reported for any violation below would drift
+ * upward. The F1 fix replaces block-comment interiors with the same
+ * count of `\n` (for `\n`) and ASCII space (for everything else),
+ * so offsets in the stripped text map 1:1 to offsets in the
+ * original text. This fixture verifies that line stability.
+ *
+ * Additional padding lines so the drift would be obviously wrong
+ * if it ever regressed:
+ *
+ * line A
+ * line B
+ * line C
+ * line D
+ */
+.tree-row {
+  display: grid;
+  grid-template-columns:
+    [leading] auto
+    [key] auto
+    [sep] auto
+    [value] minmax(0, 1fr)
+    [trailing] auto
+    [right] auto;
+
+  > .tree-row-leading {
+    grid-column: leading;
+  }
+  > .tree-key {
+    grid-column: key;
+  }
+  > .tree-key-sep {
+    grid-column: sep;
+  }
+  > .tree-row-value-cell {
+    grid-column: ghost;
+  }
+  > .tree-row-trailing {
+    grid-column: trailing;
+  }
+  > .tree-row-right {
+    grid-column: right;
+  }
+}
+
+.tree-row.tree-row--close {
+  display: flex;
+}
+
+.tree-row:focus-visible {
+  outline: none;
+}
+
+.tree-twisty {
+  flex-shrink: 0;
+}
+
+.tree-beacon-badge {
+  flex-shrink: 0;
+}
+
+.tree-rule-icon {
+  flex-shrink: 0;
+}

@@ -221,3 +221,126 @@ test('DIRECT_CHILD_ALLOWLIST + FLEX_SHRINK_GUARDS shapes are sane', () => {
     'tree-twisty',
   ]);
 });
+
+// PR #296 review-feedback regression tests (F1, F2, F4, F5, F6, Architect-A).
+// Each cites the bot finding it guards against by short label.
+
+test('F1: line-stability -- multi-line /* */ before violation does not drift line number', () => {
+  // The lint reports the rule HEADER line (`> .tree-row-value-cell {`),
+  // not the declaration line. In line-stability.scss, the rule header
+  // is on line 43. A non-length-preserving stripper would delete
+  // embedded newlines from the multi-line block comment, shifting all
+  // subsequent offsets upward and reporting a smaller line number
+  // (e.g. ~26 -- 17 newlines shifted out of the comment).
+  const violations = lintFixturePair('happy.html', 'line-stability.scss');
+  const ghost = violations.filter((v) => v.message.includes('"ghost"'));
+  assert.equal(
+    ghost.length,
+    1,
+    `expected one unknown-track violation, got: ${JSON.stringify(violations, null, 2)}`,
+  );
+  const fixture = readFixture('line-stability.scss');
+  const lines = fixture.split('\n');
+  const expectedLine = lines.findIndex((l) => l.includes('> .tree-row-value-cell {')) + 1;
+  assert.ok(expectedLine > 0, 'fixture is missing the rule header line; update fixture');
+  assert.equal(
+    ghost[0].line,
+    expectedLine,
+    `expected line ${expectedLine}, got ${ghost[0].line} (drift suggests stripScssComments is not length-preserving)`,
+  );
+});
+
+test('F2: class-boundary -- .tree-row5 and .tree-row_x do NOT trigger multi-block guard', () => {
+  const violations = lintFixturePair('happy.html', 'happy-class-boundary.scss');
+  const multiBlock = violations.filter((v) => v.message.includes('multi-block guard'));
+  assert.deepEqual(
+    multiBlock,
+    [],
+    `expected no multi-block guard fires for .tree-row5 / .tree-row_x, got: ${JSON.stringify(multiBlock, null, 2)}`,
+  );
+});
+
+test('F4: unterminated /* ... */ throws a `check-tree-row-grid.mjs:`-prefixed Error', () => {
+  // Constructed inline (not as a fixture file) because prettier
+  // refuses to format a `.scss` file with an unterminated comment.
+  const htmlSrc = readFixture('happy.html');
+  const scssSrc = `
+/* unterminated comment, on purpose
+
+.tree-row {
+  display: grid;
+  grid-template-columns: [leading] auto;
+  > .tree-row-leading { grid-column: leading; }
+}
+`;
+  assert.throws(
+    () =>
+      lintTemplate({
+        htmlSrc,
+        scssSrc,
+        htmlPath: 'fixtures/happy.html',
+        scssPath: '<inline-unterminated>',
+      }),
+    (error) => {
+      assert.ok(error instanceof Error, 'expected an Error');
+      assert.match(
+        error.message,
+        /^check-tree-row-grid\.mjs: unterminated \/\* \.\.\. \*\/ block comment/u,
+        `expected CLI-formatted error, got: ${error.message}`,
+      );
+      return true;
+    },
+  );
+});
+
+test('F5: countTreeRowAttributes is idempotent across repeated calls (no lastIndex hazard)', () => {
+  const htmlSrc = `
+    <div class="tree-row">a</div>
+    <div class="tree-row foo">b</div>
+    <div class="bar tree-row baz">c</div>
+    <div class="tree-row-leading">should not match</div>
+    <div class="tree-row-leading tree-row">d</div>
+  `;
+  const expected = 4;
+  const c1 = countTreeRowAttributes(htmlSrc);
+  const c2 = countTreeRowAttributes(htmlSrc);
+  const c3 = countTreeRowAttributes(htmlSrc);
+  assert.equal(c1, expected, `first call expected ${expected}, got ${c1}`);
+  assert.equal(c2, expected, `second call expected ${expected}, got ${c2}`);
+  assert.equal(c3, expected, `third call expected ${expected}, got ${c3}`);
+});
+
+test('F6: pathToFileURL produces the canonical 3-slash form for POSIX-style absolute paths', async () => {
+  // Smoke test for the repo idiom used in isMain(). Catches the
+  // bug class where `new URL('file:///' + posixPath)` would produce
+  // `file:////absolute/path` (four slashes) on POSIX, breaking the
+  // strict-equality check against `import.meta.url` (which always
+  // uses the canonical 3-slash form).
+  const { pathToFileURL } = await import('node:url');
+  const href = pathToFileURL('/usr/local/bin/x.mjs').href;
+  // Windows-only: pathToFileURL of a POSIX-style path produces a URL
+  // relative to the current drive, e.g. `file:///C:/usr/local/...`,
+  // so the assertion is platform-aware.
+  if (process.platform === 'win32') {
+    assert.match(
+      href,
+      /^file:\/\/\/[A-Za-z]:\/usr\/local\/bin\/x\.mjs$/u,
+      `Windows: expected canonical drive-anchored form, got: ${href}`,
+    );
+  } else {
+    assert.equal(href, 'file:///usr/local/bin/x.mjs');
+  }
+});
+
+test('Architect-A: nested-only .tree-twisty (no top-level rule) fires "block not found"', () => {
+  const violations = lintFixturePair('happy.html', 'violate-nested-flex-shrink.scss');
+  const notFound = violations.filter((v) =>
+    v.message.includes('flex-shrink retainee block not found'),
+  );
+  const twisty = notFound.filter((v) => v.message.includes('.tree-twisty { ... }'));
+  assert.equal(
+    twisty.length,
+    1,
+    `expected nested-only .tree-twisty to fire "block not found", got: ${JSON.stringify(violations, null, 2)}`,
+  );
+});

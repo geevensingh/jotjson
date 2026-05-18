@@ -1,0 +1,51 @@
+// Structural invariants enforced by scripts/check-tree-row-grid.mjs
+// Accepted grid-column grammar:
+//   grid-column: <name>;
+//   grid-column: <name> / span <integer>;
+//
+// This fixture exists to verify the Architect-A fix to the
+// flex-shrink retainee finder. Before the fix, the finder used a
+// flat regex `(?:^|\n)\s*\.X\s*\{` to find `.tree-twisty` etc.,
+// which would happily match a nested `.tree-twisty { ... }` block
+// inside ANOTHER rule's body even though the top-level retainee
+// class doesn't exist as a stand-alone top-level rule. After the
+// fix, the finder uses `walkTopLevelTreeRowCandidates` to require
+// a true top-level (or `@media`-scoped) rule whose selector is
+// exactly `.tree-twisty`. Same bug class as F2 -- false-positive
+// matching of nested vs. top-level.
+.tree-row {
+  display: grid;
+  grid-template-columns:
+    [leading] auto
+    [key] auto
+    [sep] auto
+    [value] minmax(0, 1fr)
+    [trailing] auto
+    [right] auto;
+
+  > .tree-row-leading {
+    grid-column: leading;
+  }
+}
+
+.tree-row.tree-row--close {
+  display: flex;
+}
+
+.tree-row:focus-visible {
+  outline: none;
+}
+
+.some-parent {
+  .tree-twisty {
+    flex-shrink: 0;
+  }
+}
+
+.tree-beacon-badge {
+  flex-shrink: 0;
+}
+
+.tree-rule-icon {
+  flex-shrink: 0;
+}

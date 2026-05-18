@@ -69,9 +69,9 @@ import {
   TmplAstText,
   TmplAstUnknownBlock,
 } from '@angular/compiler';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -89,6 +89,11 @@ const BACK_POINTER_PHRASE = 'Structural invariants enforced by scripts/check-tre
 // `class="x tree-row"`, `class="x tree-row y"` -- but NOT
 // `class="tree-row-leading"` (no whitespace/quote boundary after
 // `tree-row`). Used by the walker tripwire parity check.
+//
+// NOTE: this regex has the `/g` flag. Callers MUST use
+// `String.prototype.matchAll(htmlSrc, TREE_ROW_HTML_PATTERN)` to
+// avoid mutating the shared `lastIndex` on this exported binding.
+// Never call `.exec` or `.test` directly on this regex.
 export const TREE_ROW_HTML_PATTERN = /class="(?:[^"]*\s)?tree-row(?:\s[^"]*)?"/g;
 
 // Allowlisted direct-child classes of `.tree-row`. New entries
@@ -307,21 +312,59 @@ function locationOf(node) {
   return { line: 1, column: 1 };
 }
 
+// Consume a `/* ... */` block comment starting at `text[i]` (which
+// must be `/` followed by `*`). Returns the index immediately after
+// the closing `*/`. Throws a `check-tree-row-grid.mjs:`-prefixed
+// error on an unterminated block comment so the CLI try/catch can
+// emit a one-line diagnostic instead of silently dropping content.
+// The `sitePath` argument is used to name the source file in the
+// error; pass an opaque label like `'<stripScssComments>'` when the
+// caller does not have a file path handy.
+function consumeBlockCommentOrThrow(text, startIndex, sitePath) {
+  let i = startIndex + 2;
+  while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
+    i += 1;
+  }
+  if (i >= text.length) {
+    throw new Error(
+      `check-tree-row-grid.mjs: unterminated /* ... */ block comment in ` +
+        `${sitePath} (started at offset ${startIndex}).`,
+    );
+  }
+  return i + 2;
+}
+
 // Strip SCSS line comments (`// ...`) and block comments (`/* ... */`)
 // from a string. Used before tokenizing selector and declaration
 // text. Conservative: does not attempt to respect strings (SCSS
 // selectors don't carry comment-introducing tokens inside strings in
 // any pattern used by the canonical block).
-function stripScssComments(text) {
+//
+// LENGTH-PRESERVING: block comments are replaced with the same
+// number of `\n`s for embedded newlines and ASCII spaces for every
+// other character. This keeps offsets in the stripped text aligned
+// 1:1 with offsets in the original `text`, so `lineStarts` (built
+// from the original) gives correct line numbers when handed offsets
+// from `stripped`. Line comments preserve their content's newlines
+// implicitly because `//` only terminates at `\n` (which we keep).
+function stripScssComments(text, sitePath = '<stripScssComments>') {
   let result = '';
   let i = 0;
   while (i < text.length) {
     if (text[i] === '/' && text[i + 1] === '/') {
-      while (i < text.length && text[i] !== '\n') i += 1;
+      // Line comment: replace `//<content>` with spaces; leave the
+      // trailing `\n` (or EOF) alone so line counts stay aligned.
+      while (i < text.length && text[i] !== '\n') {
+        result += ' ';
+        i += 1;
+      }
     } else if (text[i] === '/' && text[i + 1] === '*') {
-      i += 2;
-      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i += 1;
-      i += 2;
+      const start = i;
+      const end = consumeBlockCommentOrThrow(text, i, sitePath);
+      for (let j = start; j < end; j += 1) {
+        result += text[j] === '\n' ? '\n' : ' ';
+      }
+      i = end;
     } else {
       result += text[i];
       i += 1;
@@ -347,9 +390,7 @@ function* walkScssRules(text) {
       continue;
     }
     if (text[i] === '/' && text[i + 1] === '*') {
-      i += 2;
-      while (i < len && !(text[i] === '*' && text[i + 1] === '/')) i += 1;
-      i += 2;
+      i = consumeBlockCommentOrThrow(text, i, '<walkScssRules>');
       continue;
     }
     const headerStart = i;
@@ -369,9 +410,7 @@ function* walkScssRules(text) {
         continue;
       }
       if (ch === '/' && text[i + 1] === '*') {
-        i += 2;
-        while (i < len && !(text[i] === '*' && text[i + 1] === '/')) i += 1;
-        i += 2;
+        i = consumeBlockCommentOrThrow(text, i, '<walkScssRules:body>');
         continue;
       }
       if (ch === '{') depth += 1;
@@ -409,14 +448,22 @@ function* walkTopLevelTreeRowCandidates(text) {
 // canonical `.tree-row` block per the v4-final multi-block guard
 // rules:
 //   1. First simple-selector token == `.tree-row` exactly (not
-//      `.tree-row-*` for any suffix).
+//      `.tree-row-*` / `.tree-row5` / `.tree-row_x` -- any
+//      CSS-identifier-continuation character disqualifies).
 //   2. No combinator (space, `>`, `+`, `~`) between `.tree-row` and
 //      end of compound.
+//
+// CSS identifier continuation chars: `[a-zA-Z0-9_-]` (plus non-ASCII
+// per the CSS spec; we don't expect those in this codebase but the
+// `\w` class would miss them and we still want to reject them). The
+// `/^[\w-]/u` test rejects any of `_`, `-`, `0-9`, `a-z`, `A-Z` at
+// `afterPrefix[0]`, which is exactly the "the previous selector
+// hadn't ended at `.tree-row`" condition.
 function isCandidateCanonicalCompound(compound) {
   const trimmed = compound.trim();
   if (!trimmed.startsWith('.tree-row')) return false;
   const afterPrefix = trimmed.slice('.tree-row'.length);
-  if (afterPrefix.startsWith('-')) return false;
+  if (/^[\w-]/u.test(afterPrefix)) return false;
   for (const ch of afterPrefix) {
     if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '>' || ch === '+' || ch === '~') {
       return false;
@@ -493,9 +540,7 @@ function findTopLevelDeclaration(body, property) {
       continue;
     }
     if (body[i] === '/' && body[i + 1] === '*') {
-      i += 2;
-      while (i < body.length && !(body[i] === '*' && body[i + 1] === '/')) i += 1;
-      i += 2;
+      i = consumeBlockCommentOrThrow(body, i, '<findTopLevelDeclaration>');
       continue;
     }
     const start = i;
@@ -645,7 +690,7 @@ function splitSelectorList(selectorList) {
 
 function scanScss(scssSrc, scssPath) {
   const violations = [];
-  const stripped = stripScssComments(scssSrc);
+  const stripped = stripScssComments(scssSrc, scssPath);
   const lineStarts = buildLineStarts(scssSrc);
 
   let canonicalBlock = null;
@@ -758,9 +803,31 @@ function scanScss(scssSrc, scssPath) {
   }
 
   for (const className of FLEX_SHRINK_GUARDS) {
-    const pattern = new RegExp(`(?:^|\\n)\\s*\\.${className}\\s*\\{`, 'u');
-    const match = pattern.exec(stripped);
-    if (!match) {
+    // Find the retainee rule via the same top-level walk used for
+    // the canonical `.tree-row` block detection (covers file root
+    // and `@media`/`@supports`/`@container`/`@layer` bodies; does
+    // NOT match nested-only declarations like
+    // `.parent { .${className} { ... } }`, which would be at
+    // greater specificity and would not actually preserve the
+    // top-level retainee class's `flex-shrink: 0`). Same bug class
+    // as F2 -- a flat regex like `(?:^|\n)\s*\.X\s*\{` would match
+    // a `.${className}` inside another rule's body, missing the
+    // top-level semantics this lint must enforce.
+    let foundRule = null;
+    let foundOffset = -1;
+    for (const rule of walkTopLevelTreeRowCandidates(stripped)) {
+      if (rule.header.startsWith('@')) continue;
+      const compounds = splitSelectorList(rule.header);
+      for (const compound of compounds) {
+        if (compound.trim() === `.${className}`) {
+          foundRule = rule;
+          foundOffset = rule.headerStart + rule.header.indexOf(`.${className}`);
+          break;
+        }
+      }
+      if (foundRule) break;
+    }
+    if (!foundRule) {
       violations.push({
         path: scssPath,
         line: 1,
@@ -771,19 +838,10 @@ function scanScss(scssSrc, scssPath) {
       });
       continue;
     }
-    const braceOffset = match.index + match[0].length - 1;
-    let depth = 1;
-    let i = braceOffset + 1;
-    while (i < stripped.length && depth > 0) {
-      if (stripped[i] === '{') depth += 1;
-      else if (stripped[i] === '}') depth -= 1;
-      i += 1;
-    }
-    const body = stripped.slice(braceOffset + 1, i - 1);
-    if (!bodyHasAcceptedFlexShrink(body)) {
+    if (!bodyHasAcceptedFlexShrink(foundRule.body)) {
       violations.push({
         path: scssPath,
-        line: lineNumberForOffset(lineStarts, match.index + match[0].indexOf(`.${className}`)),
+        line: lineNumberForOffset(lineStarts, foundOffset),
         message:
           `\`.${className}\` block is missing a shrink-of-zero declaration. ` +
           `Accepted forms: \`flex-shrink: 0;\`, \`flex: <grow> 0 [<basis>];\` ` +
@@ -848,9 +906,13 @@ export function lintTemplate({ htmlSrc, scssSrc, htmlPath, scssPath }) {
 }
 
 export function countTreeRowAttributes(htmlSrc) {
-  TREE_ROW_HTML_PATTERN.lastIndex = 0;
+  // `matchAll` does not mutate the regex's `lastIndex` between calls,
+  // so the shared exported `TREE_ROW_HTML_PATTERN` stays safe even if
+  // any other caller is using `exec`/`test` on it concurrently in
+  // some future code path. (Today, this is the only caller; the
+  // safety is a defense-in-depth guarantee.)
   let count = 0;
-  while (TREE_ROW_HTML_PATTERN.exec(htmlSrc) !== null) count += 1;
+  for (const _match of htmlSrc.matchAll(TREE_ROW_HTML_PATTERN)) count += 1;
   return count;
 }
 
@@ -936,13 +998,21 @@ function emitDiagnostics(violations, scriptPathForCi) {
   }
 }
 
+// Detects whether this module is the CLI entry point. Uses the repo
+// idiom shared with `check-deploy-freshness.mjs`,
+// `check-csp-hashes.mjs`, `check-prod-patterns.mjs`,
+// `check-lockfile.mjs`, `check-swa-config.mjs`, and
+// `write-ngsw-appdata.mjs`: convert `process.argv[1]` to a file URL
+// via `pathToFileURL` (handles backslashes / drive letters / the
+// triple-slash boundary correctly on every platform) after resolving
+// symlinks via `realpathSync` (so a script invoked through a symlink
+// still detects as main). Compare strict-equal against
+// `import.meta.url`.
 function isMain() {
   if (!process.argv[1]) return false;
   try {
-    const mainHref = new URL(`file:///${process.argv[1].replace(/\\/g, '/')}`).href;
-    return (
-      import.meta.url === mainHref || import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))
-    );
+    const realPath = realpathSync(process.argv[1]);
+    return pathToFileURL(realPath).href === import.meta.url;
   } catch {
     return false;
   }
