@@ -227,7 +227,7 @@ function parseAngularTemplate(source, path) {
       parseErrors: [
         {
           path,
-          line: first.span?.start?.line ? first.span.start.line + 1 : 1,
+          line: first.span?.start?.line != null ? first.span.start.line + 1 : 1,
           message: `parseTemplate error: ${first.msg ?? String(first)}`,
         },
       ],
