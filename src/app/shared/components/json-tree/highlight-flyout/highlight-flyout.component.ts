@@ -39,13 +39,17 @@ export interface HighlightFlyoutApplyEvent {
  *
  * Design rationale:
  *
- * - **Keydown is bound at the component host with `{ capture: true }`**
- *   so the arrow keys / Enter / Space are intercepted before
- *   `MatMenu`'s overlay-level `keydownEvents()` subscription gets a
- *   chance to run its own focus-shifting logic. Descendant
- *   `stopPropagation()` alone does not stop the overlay because the
- *   overlay subscribes via `Overlay.keydownEvents()` rather than the
- *   bubble path.
+ * - **Keydown is bound at the component host (bubble phase, via
+ *   `@HostListener`)** and each handled branch calls
+ *   `event.preventDefault()` + `event.stopPropagation()`. The
+ *   `stopPropagation()` is load-bearing: CDK's overlay infrastructure
+ *   attaches a single document-level keydown listener that dispatches
+ *   to the topmost overlay's `_keydownEvents` subject, which in turn
+ *   drives `MatMenu`'s focus key manager. Halting bubble at the
+ *   flyout host prevents the document-level listener from ever
+ *   firing for our arrow / Enter / Space / Tab keys, so MatMenu's
+ *   key manager never sees them and never shifts focus among the
+ *   surrounding `mat-menu-item` siblings.
  *
  * - **Escape is intentionally not handled.** Letting Escape bubble
  *   into the `MatMenu` panel listener gives free flyout-closes-and-

@@ -1294,11 +1294,16 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   replacedExisting: 'true' | 'false';
    *   inputMode: 'keyboard' | 'mouse' }.
    *
-   * `inputMode` is the user gesture that activated the swatch
-   * (issue #100): `'keyboard'` for Enter/Space inside the flyout
-   * after arrow-key navigation, `'mouse'` for swatch clicks and
-   * the parent menu-item Enter / click path that applies the
-   * preferred color without opening the flyout.
+   * `inputMode` is the user gesture that activated the apply
+   * (issue #100): `'keyboard'` for any non-pointer activation
+   * (Enter/Space inside the flyout after arrow-key navigation,
+   * Enter/Space on the parent menu-item that applies the preferred
+   * color, and assistive-tech virtual-cursor activation that
+   * synthesizes clicks without a pointer); `'mouse'` for any
+   * pointer-device activation (mouse click, touch tap, pen tap).
+   * The classification feeds focus restoration too: keyboard
+   * activation returns DOM focus to the originating row, mouse
+   * activation does not.
    */
   'tree.highlight.apply',
 

@@ -3499,7 +3499,7 @@ export class JsonTreeComponent {
     node: TreeNode,
     cascade: boolean,
     color: string,
-    inputMode: 'keyboard' | 'mouse' = 'mouse',
+    inputMode: 'keyboard' | 'mouse',
   ): void {
     if (!this.canEditHighlights()) return;
     if (cascade) {
@@ -3546,13 +3546,24 @@ export class JsonTreeComponent {
    * dismisses the row menu via `closeHighlightMenuChain` once the
    * change is emitted (or on idempotent skip).
    *
-   * Keyboard parity: pressing Enter on a focused mat-menu-item
-   * fires a synthetic click in browsers, so this same path covers
-   * the keyboard case without a separate `(keydown.enter)` handler.
+   * Keyboard parity: pressing Enter / Space on a focused
+   * `mat-menu-item` fires a synthetic click in browsers (native
+   * `<button>` activation), so this same path covers keyboard
+   * activation without a separate `(keydown.enter)` handler. We
+   * use `MouseEvent.detail` to distinguish the two gestures:
+   * browsers set `detail = 0` for the synthetic click that follows
+   * keyboard activation of a focused button, and `detail >= 1` for
+   * real pointer-device clicks (mouse / touch / pen). The
+   * `'keyboard'` bucket also captures non-pointer assistive-tech
+   * activation that synthesizes clicks with `detail = 0` (e.g. AT
+   * virtual cursors), which we accept as a deliberate conflation:
+   * the user is not using a pointing device, and the focus-restore
+   * + keyboard telemetry semantics are the correct match.
    */
   onHighlightItemClick(event: MouseEvent, node: TreeNode, cascade: boolean): void {
     event.stopImmediatePropagation();
-    this.applyManualHighlight(node, cascade, this.preferredHighlightColor());
+    const inputMode: 'keyboard' | 'mouse' = event.detail === 0 ? 'keyboard' : 'mouse';
+    this.applyManualHighlight(node, cascade, this.preferredHighlightColor(), inputMode);
   }
 
   /**
