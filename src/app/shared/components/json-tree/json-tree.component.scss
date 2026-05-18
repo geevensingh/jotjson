@@ -646,8 +646,16 @@
   // Add ellipsify so a collapsed-container summary like
   // `{ "key": "long-value", ... } (N more)` truncates with an
   // ellipsis instead of clipping mid-glyph at the wrapper edge.
-  // `white-space: nowrap` intentionally NOT declared -- summaries
-  // can wrap if multi-line content is ever introduced.
+  //
+  // `white-space: nowrap` IS declared because today the tree uses
+  // `CdkFixedSizeVirtualScroll` (Phase 2, issue #95) which requires
+  // every row to render at exactly `var(--tree-row-height)`. A
+  // wrapping container summary would break that invariant and
+  // also defeat `text-overflow: ellipsis` (which only applies to
+  // single-line overflow). When the virtual-scroll strategy
+  // migrates to `AutoSizeVirtualScrollStrategy` (follow-up issue
+  // #281), the nowrap declaration can be revisited.
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
