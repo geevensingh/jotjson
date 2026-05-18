@@ -49,6 +49,22 @@ module.exports = function (config) {
   const jasmineConfig = { random: true };
   if (trimmedSeed) {
     jasmineConfig.seed = trimmedSeed;
+    // Early-startup echo (fires at karma config load, before the browser
+    // launches) so the user gets sub-second confirmation that the env
+    // var was honored, rather than waiting ~30s for the end-of-run
+    // SeedReporter line. Helps catch copy-paste typos quickly.
+    console.log(
+      `[karma.conf] JASMINE_SEED applied: ${trimmedSeed} (replay key, not a unique run id).`,
+    );
+  } else if (typeof rawSeed === 'string') {
+    // JASMINE_SEED was set but resolved to empty after trim (e.g. "   ",
+    // ""). Without this warning the seed is silently dropped and the
+    // user believes replay is in effect, only to discover at end-of-run
+    // that a fresh random seed was used. Warn loudly so the discrepancy
+    // is visible immediately.
+    console.warn(
+      `[karma.conf] JASMINE_SEED was set but resolved to empty after trim; using random seed.`,
+    );
   }
 
   config.set({
