@@ -1247,6 +1247,45 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
+   *           snackbar Undo click or when Ctrl+Z (or any other content
+   *           reset that restores the pre-extract text without bumping
+   *           `viewResetToken`) brings the editor back to the
+   *           pre-extract text within ~30s of a successful banner-accept
+   *           extract.
+   * Volume control: bounded-frequency. At most one undo per
+   *   banner-accept extract; capped at 30s by `pendingExtractUndo`.
+   * Props: { source: 'snackbar' | 'ctrlZ';
+   *          pasteSource: 'paste' | 'editor.paste' | 'upload.pick' | 'upload.drag';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          `source` distinguishes the undo entry path; `pasteSource`
+   *          mirrors `home.extract.banner.{shown,accept}` so an
+   *          accept-rate vs undo-rate-by-origin KQL is a clean join.
+   *          `undoLatencyMsBucket` mirrors `tree.extract.undo` so a
+   *          misclick-rate query works the same way across both
+   *          extract surfaces.
+   * Privacy: no string contents or paths.
+   */
+  'home.extract.banner.undo',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent.onExtractAccept`
+   *           (`features/home/home.component.ts`) when the editor's
+   *           `applyEdit` primitive cannot splice the extracted document
+   *           in place; the component falls back to a full setValue
+   *           replacement via `replaceDocument` so the user still gets
+   *           the extract result, and the snackbar is still opened so
+   *           snackbar-Undo (which goes through `replaceDocument`)
+   *           remains available even though Monaco-native Ctrl+Z is
+   *           lost on this branch.
+   * Props: { reason: 'editorUnavailable' | 'applyEditFailed' }. Mirrors
+   *   `tree.extract.applyFailed`.
+   */
+  'home.extract.banner.applyFailed',
+
+  /**
+   * Kind: event
    * Fired by: `JsonTreeComponent.onDecodedButtonClick` /
    *           `JsonTreeComponent.onDecodedMenuClick`
    *           (`shared/components/json-tree/json-tree.component.ts`)
@@ -1268,9 +1307,22 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           (`features/home/home.component.ts`) when a second extract
    *           opens while the prior snackbar ref is still live; the
    *           prior snackbar is dismissed before the new one opens.
+   *           Fires for ALL cross-extract snackbar replacements - i.e.
+   *           tree->tree, tree->banner, banner->tree, banner->banner.
+   *           The legacy event name retains the `tree.` prefix from
+   *           M7v even though banner-extract also triggers it; renaming
+   *           would break dashboards keyed off the existing namespace
+   *           per AGENTS.md s4 ("Pick the right sink up front -
+   *           migrating later breaks history"). `from`/`to` props
+   *           disambiguate the surfaces.
    * Volume control: bounded-frequency. Bounded by double-extract
    * frequency while the prior snackbar is still active (rare).
-   * Props: none.
+   * Props: { from: 'tree' | 'banner'; to: 'tree' | 'banner' }. The
+   *   surface of the snackbar being dismissed (`from`) and the
+   *   surface of the snackbar being opened (`to`). Cross-combos are
+   *   the motivating signal: e.g., banner->tree means the user
+   *   accepted the banner, then promptly extracted a tree row before
+   *   the banner snackbar timed out.
    * Privacy: no content.
    */
   'tree.extract.snackbarReplaced',

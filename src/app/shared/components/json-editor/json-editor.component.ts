@@ -283,6 +283,12 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
    * input + the existing setValue effect for whole-document replacement (paste,
    * load, clear) - the 17 existing setContent callers in HomeComponent are not
    * migrating in this PR.
+   *
+   * Whole-document edits (range `[0, model length]`) are also supported when
+   * undo preservation is the goal; `executeEdits` with a single operation
+   * lands as one undo entry on Monaco's stack regardless of range size. The
+   * banner-extract accept path uses this property to make Ctrl+Z reverse a
+   * full-document swap from mixed text to extracted JSON.
    */
   applyEdit(startOffset: number, endOffset: number, text: string, source: string): boolean {
     const editor = this.editor;
