@@ -6137,7 +6137,10 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     );
 
     expect(firstSnackRefHarness.dismissSpy).toHaveBeenCalledTimes(1);
-    expect(eventSpy).toHaveBeenCalledWith('tree.extract.snackbarReplaced');
+    expect(eventSpy).toHaveBeenCalledWith('tree.extract.snackbarReplaced', {
+      from: 'tree',
+      to: 'tree',
+    });
   });
 
   it('logs ctrlZ undo telemetry when the document returns to the pre-extract text', () => {
@@ -6362,6 +6365,308 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
       candidateNodes: 2,
     });
   }));
+});
+
+describe('HomeComponent banner-extract undo (M7v)', () => {
+  setupMinimalMonacoStub();
+
+  interface ExtractSnackBarStub {
+    open: jasmine.Spy<
+      (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
+    >;
+  }
+
+  interface ExtractSnackBarRefHarness {
+    action: Subject<void>;
+    dismissSpy: jasmine.Spy;
+    ref: MatSnackBarRef<TextOnlySnackBar>;
+  }
+
+  function createSnackHarness(): ExtractSnackBarRefHarness {
+    const action = new Subject<void>();
+    const dismissed = new Subject<unknown>();
+    const dismissSpy = jasmine.createSpy('dismiss');
+    const snackRef: Partial<MatSnackBarRef<TextOnlySnackBar>> = {
+      onAction: () => action.asObservable(),
+      afterDismissed: () =>
+        dismissed.asObservable() as unknown as ReturnType<
+          MatSnackBarRef<TextOnlySnackBar>['afterDismissed']
+        >,
+      dismiss: dismissSpy,
+    };
+    return {
+      action,
+      dismissSpy,
+      ref: snackRef as unknown as MatSnackBarRef<TextOnlySnackBar>,
+    };
+  }
+
+  interface EditorStub {
+    applyEdit: jasmine.Spy<
+      (startOffset: number, endOffset: number, text: string, source: string) => boolean
+    >;
+  }
+
+  function setup(options: { editor: 'real' | 'failing' | 'absent' } = { editor: 'real' }): {
+    fixture: ComponentFixture<HomeComponent>;
+    component: HomeComponent;
+    snack: ExtractSnackBarStub;
+    snackHarness: ExtractSnackBarRefHarness;
+    editorStub: EditorStub | null;
+    eventSpy: jasmine.Spy;
+    warnSpy: jasmine.Spy;
+  } {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+    TestBed.resetTestingModule();
+    const snackHarness = createSnackHarness();
+    const snack: ExtractSnackBarStub = {
+      open: jasmine.createSpy('open').and.returnValue(snackHarness.ref),
+    };
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: MatSnackBar, useValue: snack },
+      ],
+    });
+    const logger = TestBed.inject(LoggerService);
+    const eventSpy = spyOn(logger, 'event');
+    const warnSpy = spyOn(logger, 'warn');
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    let editorStub: EditorStub | null = null;
+    if (options.editor === 'absent') {
+      (component as unknown as { editor: () => undefined }).editor = () => undefined;
+    } else if (options.editor === 'failing') {
+      editorStub = {
+        applyEdit: jasmine.createSpy('applyEdit').and.returnValue(false),
+      };
+      (component as unknown as { editor: () => EditorStub }).editor = () => editorStub!;
+    } else {
+      editorStub = {
+        applyEdit: jasmine
+          .createSpy('applyEdit')
+          .and.callFake(
+            (startOffset: number, endOffset: number, text: string, _source: string): boolean => {
+              const currentContent = component.content();
+              if (endOffset - startOffset !== currentContent.length) {
+                return false;
+              }
+              const next =
+                currentContent.substring(0, startOffset) +
+                text +
+                currentContent.substring(endOffset);
+              component.onValueChange(next);
+              return true;
+            },
+          ),
+      };
+      (component as unknown as { editor: () => EditorStub }).editor = () => editorStub!;
+    }
+
+    return { fixture, component, snack, snackHarness, editorStub, eventSpy, warnSpy };
+  }
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+  });
+
+  function seedMixedContent(component: HomeComponent, mixedText: string, candidateText: string) {
+    component.onValueChange(mixedText);
+    component.extractedCandidate.set({
+      data: {
+        text: candidateText,
+        blockCount: 1,
+        preservesComments: true,
+        hasComments: false,
+      },
+      sourceVersion: 0,
+      source: 'paste',
+    });
+  }
+
+  it('onExtractAccept goes through editor.applyEdit on the happy path and opens a snackbar', () => {
+    const { component, snack, editorStub } = setup();
+    const priorText = 'INFO log {"a":1}';
+    const candidateText = '{ "a": 1 }';
+    seedMixedContent(component, priorText, candidateText);
+
+    component.onExtractAccept();
+
+    expect(editorStub!.applyEdit).toHaveBeenCalledTimes(1);
+    expect(editorStub!.applyEdit).toHaveBeenCalledWith(
+      0,
+      priorText.length,
+      candidateText,
+      'jotjson-extract-banner',
+    );
+    expect(component.content()).toBe(candidateText);
+    expect(component.extractedCandidate()).toBeNull();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('snackbar Undo restores priorText, restores highlights, re-arms the banner, and emits home.extract.banner.undo with source=snackbar', () => {
+    const { component, snackHarness, eventSpy } = setup();
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const priorText = 'INFO log {"a":1}';
+    const candidateText = '{ "a": 1 }';
+    seedMixedContent(component, priorText, candidateText);
+
+    const highlightsBefore: readonly BlobHighlight[] = [
+      { path: 'a', color: '#ff0000', cascade: false },
+    ];
+    component.highlights.set(highlightsBefore);
+
+    nowMs = 1200;
+    component.onExtractAccept();
+    expect(component.content()).toBe(candidateText);
+    // resetHighlightsForDocumentReplacement moves highlights into mutatedPaths.
+    expect(component.highlights().length).toBe(0);
+
+    eventSpy.calls.reset();
+    nowMs = 2500;
+    snackHarness.action.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.highlights()).toEqual(highlightsBefore);
+    expect(component.extractBannerVisible()).toBe(true);
+    expect(component.extractedCandidate()?.source).toBe('paste');
+    expect(eventSpy).toHaveBeenCalledWith('home.extract.banner.undo', {
+      source: 'snackbar',
+      pasteSource: 'paste',
+      undoLatencyMsBucket: '1-5s',
+    });
+  });
+
+  it('content reverting to priorText (Ctrl+Z) emits home.extract.banner.undo with source=ctrlZ and re-arms the banner', () => {
+    const { fixture, component, snackHarness, eventSpy } = setup();
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const priorText = 'INFO log {"a":1}';
+    const candidateText = '{ "a": 1 }';
+    seedMixedContent(component, priorText, candidateText);
+
+    const highlightsBefore: readonly BlobHighlight[] = [
+      { path: 'a', color: '#00ff00', cascade: false },
+    ];
+    component.highlights.set(highlightsBefore);
+
+    nowMs = 1500;
+    component.onExtractAccept();
+    eventSpy.calls.reset();
+
+    // Simulate Monaco Ctrl+Z: content reverts WITHOUT bumping
+    // viewResetToken (Ctrl+Z goes through editor.valueChange ->
+    // setContent, not replaceDocument).
+    nowMs = 2000;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(eventSpy).toHaveBeenCalledWith('home.extract.banner.undo', {
+      source: 'ctrlZ',
+      pasteSource: 'paste',
+      undoLatencyMsBucket: '<1s',
+    });
+    expect(component.highlights()).toEqual(highlightsBefore);
+    expect(component.extractBannerVisible()).toBe(true);
+    expect(snackHarness.dismissSpy).toHaveBeenCalled();
+  });
+
+  it('phantom-undo gate: a re-paste of priorText (replaceDocument path that bumps viewResetToken) does NOT emit home.extract.banner.undo', () => {
+    const { fixture, component, eventSpy } = setup();
+    const priorText = 'INFO log {"a":1}';
+    const candidateText = '{ "a": 1 }';
+    seedMixedContent(component, priorText, candidateText);
+
+    component.onExtractAccept();
+    eventSpy.calls.reset();
+
+    // Simulate a user pasting the same priorText back via the toolbar
+    // paste path -- which routes through replaceDocument and bumps
+    // viewResetToken. The phantom-undo gate must distinguish this
+    // from a Monaco Ctrl+Z (which leaves the token alone).
+    (component as unknown as { replaceDocument: (text: string) => void }).replaceDocument(
+      priorText,
+    );
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(eventSpy).not.toHaveBeenCalledWith(
+      'home.extract.banner.undo',
+      jasmine.anything() as unknown as never,
+    );
+  });
+
+  it('falls back to replaceDocument when editor() is undefined, still opens the snackbar, and emits home.extract.banner.applyFailed', () => {
+    const { component, snack, warnSpy } = setup({ editor: 'absent' });
+    const priorText = 'INFO log {"a":1}';
+    const candidateText = '{ "a": 1 }';
+    seedMixedContent(component, priorText, candidateText);
+
+    component.onExtractAccept();
+
+    expect(component.content()).toBe(candidateText);
+    expect(component.extractedCandidate()).toBeNull();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith('home.extract.banner.applyFailed', {
+      reason: 'editorUnavailable',
+    });
+  });
+
+  it('falls back to replaceDocument when editor.applyEdit returns false, still opens the snackbar, and emits home.extract.banner.applyFailed with reason=applyEditFailed', () => {
+    const { component, snack, warnSpy } = setup({ editor: 'failing' });
+    const priorText = 'INFO log {"a":1}';
+    const candidateText = '{ "a": 1 }';
+    seedMixedContent(component, priorText, candidateText);
+
+    component.onExtractAccept();
+
+    expect(component.content()).toBe(candidateText);
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith('home.extract.banner.applyFailed', {
+      reason: 'applyEditFailed',
+    });
+  });
+
+  it('fallback-path snackbar Undo still restores priorText, highlights, and re-arms the banner', () => {
+    const { component, snackHarness, eventSpy } = setup({ editor: 'absent' });
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const priorText = 'INFO log {"a":1}';
+    const candidateText = '{ "a": 1 }';
+    seedMixedContent(component, priorText, candidateText);
+    const highlightsBefore: readonly BlobHighlight[] = [
+      { path: 'a', color: '#0000ff', cascade: false },
+    ];
+    component.highlights.set(highlightsBefore);
+
+    nowMs = 1100;
+    component.onExtractAccept();
+    eventSpy.calls.reset();
+
+    nowMs = 1500;
+    snackHarness.action.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.highlights()).toEqual(highlightsBefore);
+    expect(component.extractBannerVisible()).toBe(true);
+    expect(eventSpy).toHaveBeenCalledWith('home.extract.banner.undo', {
+      source: 'snackbar',
+      pasteSource: 'paste',
+      undoLatencyMsBucket: '<1s',
+    });
+  });
 });
 
 describe('HomeComponent splash render-complete hook (Phase C)', () => {
