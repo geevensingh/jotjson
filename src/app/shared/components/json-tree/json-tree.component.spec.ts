@@ -1571,11 +1571,19 @@ describe('JsonTreeComponent', () => {
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]');
       expect(leafRow).withContext('leaf row should be rendered').not.toBeNull();
-      const trailing = leafRow!.querySelector(':scope > .tree-comment-trailing');
-      expect(trailing)
-        .withContext('trailing slot is a direct child of the leaf row')
-        .not.toBeNull();
+      // v0.26.1 (#269): trailing comment lives inside the
+      // `.tree-row-trailing` Grid track wrapper, not as a direct
+      // child of `.tree-row`. Assert via descendant query.
+      const trailing = leafRow!.querySelector('.tree-comment-trailing');
+      expect(trailing).withContext('trailing slot must render').not.toBeNull();
       expect(trailing!.textContent?.trim()).toBe('uuid migration TBD');
+      const trailingWrapper = leafRow!.querySelector(':scope > .tree-row-trailing');
+      expect(trailingWrapper)
+        .withContext('.tree-row-trailing wrapper is a direct child of the leaf row')
+        .not.toBeNull();
+      expect(trailingWrapper!.contains(trailing!))
+        .withContext('trailing comment is inside the trailing wrapper')
+        .toBe(true);
       // Per M7k-2-fu the trailing slot lives outside `tree-row-right`
       // so it sits next to the value, matching JSONC source order.
       const right = leafRow!.querySelector(':scope > .tree-row-right')!;
@@ -1594,17 +1602,26 @@ describe('JsonTreeComponent', () => {
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
-      const children = Array.from(leafRow.children) as HTMLElement[];
-      const valueIndex = children.findIndex((c) => c.classList.contains('tree-value-number'));
-      const trailingIndex = children.findIndex((c) =>
-        c.classList.contains('tree-comment-trailing'),
-      );
-      const rightIndex = children.findIndex((c) => c.classList.contains('tree-row-right'));
-      expect(valueIndex).withContext('value span').toBeGreaterThanOrEqual(0);
-      expect(trailingIndex).withContext('trailing comment').toBeGreaterThan(valueIndex);
-      expect(rightIndex)
-        .withContext('tree-row-right after trailing')
-        .toBeGreaterThan(trailingIndex);
+      // v0.26.1 (#269): under Grid, the value lives inside
+      // `.tree-row-value-cell`, the trailing comment lives inside
+      // `.tree-row-trailing`, and the right cluster is still a
+      // direct grid item. Compare positions via document order.
+      const valueEl = leafRow.querySelector('.tree-value-number');
+      const trailingEl = leafRow.querySelector('.tree-comment-trailing');
+      const rightEl = leafRow.querySelector(':scope > .tree-row-right');
+      expect(valueEl).withContext('value span').not.toBeNull();
+      expect(trailingEl).withContext('trailing comment').not.toBeNull();
+      expect(rightEl).withContext('tree-row-right').not.toBeNull();
+      const valueBeforeTrailing =
+        valueEl!.compareDocumentPosition(trailingEl!) & Node.DOCUMENT_POSITION_FOLLOWING;
+      const trailingBeforeRight =
+        trailingEl!.compareDocumentPosition(rightEl!) & Node.DOCUMENT_POSITION_FOLLOWING;
+      expect(valueBeforeTrailing)
+        .withContext('trailing must follow the value in document order')
+        .toBeGreaterThan(0);
+      expect(trailingBeforeRight)
+        .withContext('tree-row-right must follow the trailing comment')
+        .toBeGreaterThan(0);
     });
 
     it('renders the trailing comment AFTER the date annotation on string rows', async () => {
@@ -1617,19 +1634,15 @@ describe('JsonTreeComponent', () => {
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.when"]') as HTMLElement;
-      const children = Array.from(leafRow.children) as HTMLElement[];
-      const trailingIndex = children.findIndex((c) =>
-        c.classList.contains('tree-comment-trailing'),
-      );
-      // The date annotation lives inside the .tree-value-string's
-      // @case block, so it's a descendant - check its position within
-      // the row by querying its closest direct child of the row.
+      // v0.26.1 (#269): both the date annotation and the trailing
+      // comment now live inside `.tree-row-trailing` (the date
+      // annotation moved out of the string @case to fit the Grid
+      // template). Order must remain: date before trailing.
       const dateAnn = leafRow.querySelector('.tree-date-annotation');
+      const trailing = leafRow.querySelector('.tree-comment-trailing');
       expect(dateAnn).withContext('date annotation should render').not.toBeNull();
-      // Order via DOM position comparison: date annotation must come
-      // before trailing comment.
-      const trailing = children[trailingIndex];
-      const positionMask = dateAnn!.compareDocumentPosition(trailing);
+      expect(trailing).withContext('trailing comment should render').not.toBeNull();
+      const positionMask = dateAnn!.compareDocumentPosition(trailing!);
       // DOCUMENT_POSITION_FOLLOWING = 4
       expect(positionMask & Node.DOCUMENT_POSITION_FOLLOWING)
         .withContext('trailing must follow date annotation in document order')
@@ -1811,14 +1824,24 @@ describe('JsonTreeComponent', () => {
       const host = fixture.nativeElement as HTMLElement;
       const openRow = host.querySelector('[data-path="$.foo"]') as HTMLElement;
       expect(openRow).withContext('foo open row should render').not.toBeNull();
-      // The trailing comment is a direct child of the open row, NOT
-      // of the close row.
+      // The trailing comment is a direct child of the open row's
+      // `.tree-row-trailing` wrapper (v0.26.1 #269 Grid migration),
+      // NOT of the close row.
       const closeRow = host.querySelector('.tree-row--close');
-      const openRowTrailing = openRow.querySelector(':scope > .tree-comment-trailing');
+      const openRowTrailing = openRow.querySelector('.tree-comment-trailing');
       const closeRowTrailing = closeRow?.querySelector('.tree-comment-trailing');
       expect(openRowTrailing).withContext('open-row trailing slot must render').not.toBeNull();
       expect(openRowTrailing!.textContent?.trim()).toBe('explaination of foo');
       expect(closeRowTrailing).withContext('close-row trailing slot must NOT render').toBeFalsy();
+      // Open-row trailing wrapper is a direct grid-item child of
+      // the open row.
+      const openRowTrailingWrapper = openRow.querySelector(':scope > .tree-row-trailing');
+      expect(openRowTrailingWrapper)
+        .withContext('.tree-row-trailing wrapper must render as a direct grid-item')
+        .not.toBeNull();
+      expect(openRowTrailingWrapper!.contains(openRowTrailing!))
+        .withContext('trailing comment must live inside the trailing wrapper')
+        .toBe(true);
       // The trailing slot sits before tree-row-right in DOM order,
       // mirroring the leaf-row pattern.
       const rowRight = openRow.querySelector(':scope > .tree-row-right') as HTMLElement;
@@ -1897,8 +1920,17 @@ describe('JsonTreeComponent', () => {
       // 2026-05-01 151953.png): a very long leading comment squeezed
       // .tree-row-right below the natural width of "N keys", which
       // wrapped the count text at the internal space and pushed the
-      // type-badge to a second line. The fix is `flex-shrink: 0` on
-      // .tree-row-right plus `white-space: nowrap` on .tree-count.
+      // type-badge to a second line. The original fix was
+      // `flex-shrink: 0` on .tree-row-right plus `white-space:
+      // nowrap` on .tree-count.
+      //
+      // v0.26.1 (#269): the row is now `display: grid` with an
+      // `[right] auto` track that pins the right cluster to its
+      // intrinsic width without `flex-shrink`. The architectural
+      // guarantee shifts from "right is non-shrinking flex item" to
+      // "right is an auto-sized grid track"; the behavioral guards
+      // (count is single-line, right is no taller than the count)
+      // are the load-bearing assertions.
       const longComment =
         'Customer record that is really long and record that is really long and record that is really really really long';
       await createWithComments(
@@ -1921,8 +1953,10 @@ describe('JsonTreeComponent', () => {
         expect(count).withContext('count span').not.toBeNull();
         expect(count.textContent?.trim()).toBe('2 keys');
 
-        // Computed-style guards: the actual fix.
-        expect(getComputedStyle(rowRight).flexShrink).toBe('0');
+        // v0.26.1 (#269): row uses CSS Grid. The right cluster's
+        // intrinsic width is pinned via the auto-sized `[right]`
+        // track, not flex-shrink.
+        expect(getComputedStyle(userRow!).display).toBe('grid');
         expect(getComputedStyle(count).whiteSpace).toBe('nowrap');
 
         // Behavioral guard: the count text fits on a single line and
@@ -6000,9 +6034,15 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.alpha');
+        // v0.26.1 (#269): scope to a button-tag kebab. The probe row
+        // (`.tree-row-probe`) renders an inert `<span>` kebab so
+        // height measurement doesn't pull in interactive semantics;
+        // the data-row kebab remains a `<button>` so
+        // `target.closest('button, ...')` matches.
         const pill = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-kebab-pill',
+          'button.tree-kebab-pill',
         ) as HTMLButtonElement;
+        expect(pill).withContext('expected an interactive data-row kebab button').toBeTruthy();
         const ev = new MouseEvent('contextmenu', {
           clientX: 100,
           clientY: 100,
@@ -6958,9 +6998,12 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        // v0.26.1 (#269): scope to a button-tag kebab (see L6037 sibling
+        // test for rationale; probe row uses inert `<span>` kebab).
         const kebab = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-kebab-pill',
+          'button.tree-kebab-pill',
         ) as HTMLButtonElement;
+        expect(kebab).withContext('expected an interactive data-row kebab button').toBeTruthy();
         const ev = new MouseEvent('dblclick', { bubbles: true });
         Object.defineProperty(ev, 'target', { value: kebab });
         const node = nodeAt('$.alpha');

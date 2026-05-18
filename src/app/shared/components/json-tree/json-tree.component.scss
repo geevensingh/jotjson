@@ -194,7 +194,71 @@
 }
 
 .tree-row {
-  display: flex;
+  // v0.26.1 (issue #269): CSS Grid migration. Retires the
+  // `flex-shrink: 0` cascade convention that grew across
+  // v0.21.1, v0.23.1, v0.23.2, v0.25.1. Direct Grid items size
+  // via named-track auto-sizing; flex-shrink no longer applies to
+  // them.
+  //
+  // `flex-shrink: 0` KEPT on `.tree-twisty`, `.tree-beacon-badge`,
+  // `.tree-rule-icon` because they live inside `.tree-row-leading`
+  // (still inline-flex). RETIRED on `.tree-date-annotation`
+  // because the class already declares
+  // `overflow:hidden + text-overflow:ellipsis + white-space:nowrap`;
+  // keeping flex-shrink contradicts those ellipsify rules and
+  // caused date overflow into the right cluster under wrapper
+  // pressure.
+  //
+  // `.tree-comment-leading/-trailing` are unchanged -- they rely
+  // on `min-width: 0` (not `flex-shrink: 0`) for ellipsification.
+  //
+  // `display: contents` was considered as an alternative to the
+  // three structural wrappers. Rejected: under `display: contents`
+  // the wrapper's children become direct grid items, defeating
+  // the "single child per named track" design. Each wrapper child
+  // would need its own `grid-column` assignment, expanding the
+  // placement rules from 7 selectors to 20+ and making the
+  // convention "every direct child must be placed" impossible
+  // (children of dissolved wrappers lack the wrapper class to
+  // target).
+  //
+  // Convention for future contributors: every NEW direct child
+  // of `.tree-row` MUST be assigned a `grid-column` -- either
+  // directly (if it stands alone in its own track, like `.tree-key`
+  // and `.tree-key-sep`) OR by wrapping inside `.tree-row-leading`,
+  // `.tree-row-value-cell`, `.tree-row-trailing`, or
+  // `.tree-row-right`. New tracks require both a
+  // `grid-template-columns` edit AND consensus that the new track
+  // is permanent. A structural test enforces this (see the
+  // ".tree-row Grid template invariants" describe block in
+  // `json-tree.component.grid-structural.spec.ts`).
+  //
+  // Track-sizing rationale:
+  // - `[leading]` uses `minmax(0, max-content)` (NOT `auto`) so the
+  //   track can shrink to 0 under content pressure. A long leading
+  //   comment INSIDE `.tree-row-leading` would otherwise pin the
+  //   track's min-content at the comment's full unbreakable width
+  //   (the inline-flex wrapper's `min-width: 0` is not sufficient
+  //   to override Grid's min-content track-sizing for an `auto`
+  //   track). The `minmax(0, ...)` form unlocks shrinkage so the
+  //   comment's `overflow:hidden + text-overflow:ellipsis` cascade
+  //   activates.
+  // - `[key]`, `[value]`, `[trailing]` similarly use `minmax(0, ...)`
+  //   so long content competes proportionally rather than pushing
+  //   the row past the viewport.
+  // - `[sep]` is `auto` (just `: ` -- bounded ~2 chars).
+  // - `[filler] 1fr` absorbs slack so `[right]` pins to the row
+  //   right edge.
+  // - `[right] auto` so the kebab/count cluster sizes to content.
+  display: grid;
+  grid-template-columns:
+    [leading] minmax(0, max-content)
+    [key] minmax(0, max-content)
+    [sep] auto
+    [value] minmax(0, max-content)
+    [trailing] minmax(0, auto)
+    [filler] 1fr
+    [right] auto;
   align-items: center;
   gap: 2px;
   padding: 0 4px 0 0;
@@ -207,20 +271,6 @@
   border-radius: 3px;
   cursor: default;
   min-height: 0;
-  // Ensures flex children with intrinsic min-width-of-content
-  // (long unbreakable strings) participate in the ellipsis fallback
-  // instead of forcing a horizontal scroll.
-  //
-  // Convention for `.tree-row` direct children (v0.23.1): text cells
-  // that should ellipsify when overflowing (`.tree-value-string`,
-  // `.tree-comment*`) participate by default. Every other direct
-  // child MUST declare `flex-shrink: 0` so it keeps its intrinsic
-  // width under content pressure -- otherwise a long sibling value
-  // steals proportional space and visually shifts the row's spacers
-  // and badges (the v0.23.1 twisty-shrink bug; see issue #95).
-  > * {
-    min-width: 0;
-  }
 
   // Formatting-rules CSS-var seam (M6a.75). When a row participates in
   // a matched formatting rule, the engine sets these custom properties
@@ -234,6 +284,36 @@
   // `borderColor`, mirroring the `.pref-subgroup` pattern on /profile
   // so the strip does not collide with the selection outline below.
   box-shadow: inset 4px 0 0 var(--tree-row-format-border, transparent);
+
+  // Grid-column placement (issue #269). `.sr-only` is
+  // `position: absolute` (verified at src/styles.scss); per the
+  // Grid spec, out-of-flow children are not auto-placed so it is
+  // safe to leave unassigned. The `[filler]` track has no
+  // assignment -- it absorbs slack to pin `[right]` to the row's
+  // right edge.
+  > .tree-row-leading {
+    grid-column: leading;
+  }
+  > .tree-key {
+    grid-column: key;
+  }
+  // Index rows span [key] + [sep] so the 2px gap from an empty
+  // [sep] track doesn't open between `0:` and the value.
+  > .tree-index {
+    grid-column: key / span 2;
+  }
+  > .tree-key-sep {
+    grid-column: sep;
+  }
+  > .tree-row-value-cell {
+    grid-column: value;
+  }
+  > .tree-row-trailing {
+    grid-column: trailing;
+  }
+  > .tree-row-right {
+    grid-column: right;
+  }
 
   &--probe {
     // Hidden offscreen probe used by the auto-fit-to-window initial
@@ -280,6 +360,48 @@
     outline: 2px solid var(--color-primary);
     outline-offset: -2px;
   }
+}
+
+// Close rows retain `display: flex` because their 1-3 children
+// (`.tree-comment-leading--close`, `.tree-value-brace`,
+// `.tree-comment-trailing--close`) don't compete for shrink space.
+// The grid-column assignments above are inert here because `display:
+// flex` overrides the parent's grid template. The scoped
+// `> * { min-width: 0 }` rule is the close-row replacement for the
+// retired `.tree-row > * { min-width: 0 }` cascade, preserving
+// close-row protection from the v0.21.1-era overflow fix.
+.tree-row.tree-row--close {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 0;
+
+  > * {
+    min-width: 0;
+  }
+}
+
+// Structural wrappers introduced by issue #269. Each spans a single
+// grid track and acts as an inline-flex container for its inner
+// elements. None carry `overflow: hidden`: child classes that need
+// ellipsification declare `overflow: hidden + text-overflow: ellipsis
+// + white-space: nowrap` themselves (see `.tree-value-string`,
+// `.tree-value-number`, etc.). Wrapper-level clipping would
+// pre-commit to clipping future child decorations (focus rings,
+// hover badges); leaving it off preserves those affordances.
+//
+// `.tree-row-leading` and `.tree-row-trailing` are
+// disparate-group wrappers (leading: twisty + beacons + comment +
+// rule-icons; trailing: date-annotation + trailing-comment).
+// `.tree-row-value-cell` is a single-purpose value slot with
+// zero-or-more rule-icons preceding a single value span.
+.tree-row-leading,
+.tree-row-trailing,
+.tree-row-value-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
 }
 
 // M7g-3b. Roving keyboard-focus ring on the focused tree node. Drawn
@@ -410,13 +532,27 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
+  // v0.26.1 (issue #269): `flex-shrink: 0` retired -- under Grid, the
+  // `[key]` track is `minmax(0, max-content)` which constrains key
+  // width to between 0 and natural width and lets the key ellipsify
+  // under shrink pressure. The pseudo-`::after { content: ': ' }`
+  // separator retired in favor of a `.tree-key-sep` sibling span
+  // placed in the `[sep]` Grid track. Without the separator's own
+  // track the colon would either consume key shrink budget (pseudo
+  // inside `.tree-key`) or get squeezed off the row at narrow panes.
+  min-width: 0;
+}
 
-  &::after {
-    content: ': ';
-    color: var(--tree-muted-color);
-    font-weight: normal;
-  }
+.tree-key-sep {
+  // v0.26.1 (issue #269): colon-and-space separator between the key
+  // and value cells, placed in its own [sep] Grid track. Replaces
+  // the pre-#269 `.tree-key::after { content: ': ' }` pseudo so the
+  // colon has a stable width that doesn't get clipped under shrink
+  // pressure. Only renders on leaf+open rows (not on `.tree-index`
+  // rows, which display the colon inline and span [key]+[sep]).
+  color: var(--tree-muted-color);
+  font-weight: normal;
+  white-space: pre;
 }
 
 .tree-index {
@@ -424,7 +560,6 @@
   font-weight: normal;
   margin-right: 6px;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .tree-value-string {
@@ -460,7 +595,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
+  // v0.26.1 (issue #269): `flex-shrink: 0` retired. Inside the
+  // `.tree-row-trailing` wrapper this declaration contradicted the
+  // ellipsify rules above and caused the date annotation to overflow
+  // the trailing track into the right cluster at narrow panes.
+  min-width: 0;
 }
 
 .tree-value-number {
@@ -469,7 +608,13 @@
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
   white-space: nowrap;
-  flex-shrink: 0;
+  // v0.26.1 (issue #269): ellipsify under wrapper pressure. Without
+  // these rules a 200-char numeric string clips mid-character at the
+  // `.tree-row-value-cell` wrapper edge with no ellipsis indicator.
+  // Restores visual parity with `.tree-value-string`.
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .tree-value-boolean {
@@ -478,22 +623,34 @@
   font-style: var(--tree-value-style, normal);
   text-decoration: var(--tree-value-decoration, none);
   white-space: nowrap;
-  flex-shrink: 0;
+  // v0.26.1 (issue #269): ellipsify under wrapper pressure.
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .tree-value-null {
   color: var(--tree-muted-color);
   font-style: italic;
   white-space: nowrap;
-  flex-shrink: 0;
+  // v0.26.1 (issue #269): ellipsify under wrapper pressure.
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .tree-value-container {
   color: var(--tree-muted-color);
-  // v0.23.1: keep container at intrinsic width on open rows when
-  // a long trailing-comment sibling would otherwise shrink it.
-  // See `.tree-twisty` rationale.
-  flex-shrink: 0;
+  // v0.26.1 (issue #269): `flex-shrink: 0` retired; now nested
+  // inside `.tree-row-value-cell` (`inline-flex` + `min-width: 0`).
+  // Add ellipsify so a collapsed-container summary like
+  // `{ "key": "long-value", ... } (N more)` truncates with an
+  // ellipsis instead of clipping mid-glyph at the wrapper edge.
+  // `white-space: nowrap` intentionally NOT declared -- summaries
+  // can wrap if multi-line content is ever introduced.
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 
   .tree-value-brace {
     color: inherit;
@@ -501,27 +658,28 @@
   }
 }
 
-// `.tree-value-brace` also renders as a direct `.tree-row > *` on
-// close rows (`.tree-row--close` in the template); guard its
-// intrinsic width there too. The nested copy under
+// `.tree-value-brace` renders as a direct child of `.tree-row--close`
+// (close-row flex context); the nested copy under
 // `.tree-value-container` above carries the bold + inherit-color
 // styling for open rows.
 .tree-value-brace {
-  flex-shrink: 0;
+  // v0.26.1 (issue #269): `flex-shrink: 0` retired here. Close rows
+  // are flex-with-min-width-0 (no shrink competition); open rows
+  // wrap the brace inside `.tree-value-container` which sits inside
+  // `.tree-row-value-cell`.
 }
 
 .tree-row-right {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  // Never compress the right cluster. Long leading/trailing JSONC
-  // comments shrink first via their own `min-width: 0` + ellipsis;
-  // without this guard the flex algorithm shrinks both items in
-  // parallel and squeezes `.tree-count` text below the natural width
-  // of "N keys"/"N items", which then wraps and pushes the badge to
-  // a second line.
-  flex-shrink: 0;
+  // v0.26.1 (issue #269): `margin-left: auto` and `flex-shrink: 0`
+  // retired. Under Grid, the right cluster pins to the row's right
+  // edge via the `[filler] 1fr` track absorbing slack; no-shrink
+  // is guaranteed by the `[right] auto` track sizing. The
+  // long-comment-vs-right-cluster shrink contest from v0.23.1 no
+  // longer exists -- comments shrink within `.tree-row-trailing`,
+  // independent of the right cluster.
 
   .tree-count {
     color: var(--tree-muted-color);
