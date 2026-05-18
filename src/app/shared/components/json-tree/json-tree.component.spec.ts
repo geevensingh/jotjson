@@ -2018,8 +2018,7 @@ describe('JsonTreeComponent', () => {
       const [badge] = visibleElements('.tree-comment-count');
       expect(badge).withContext('count badge should render').toBeDefined();
       const ariaLabel = badge!.getAttribute('aria-label');
-      expect(ariaLabel).toBeTruthy();
-      expect(ariaLabel!).toMatch(/\b1\b/);
+      expect(ariaLabel).toBe('1 more comment');
     });
 
     it('paints the count badge in the same color as the body comment (computed-styles regression net)', async () => {

@@ -228,7 +228,7 @@ describe('JsonParserService', () => {
       expect(r.commentsByPath.get('$.a')).toBeUndefined();
     });
 
-    it('stacks multiple leading comments with newline separator', () => {
+    it('stacks multiple leading comments as separate array elements', () => {
       const r = svc.parse('{\n  // line 1\n  // line 2\n  "x": 1\n}');
       expect(r.commentsByPath.get('$.x')).toEqual({
         leading: ['line 1', 'line 2'],
@@ -371,7 +371,7 @@ describe('JsonParserService', () => {
       });
     });
 
-    it('stacks multiple pre-close orphan comments under closeLeading with newline separator', () => {
+    it('stacks multiple pre-close orphan comments under closeLeading as separate array elements', () => {
       const r = svc.parse(
         '{\n  "foo": [\n    1,\n    /* first orphan */\n    /* second orphan */\n  ]\n}',
       );

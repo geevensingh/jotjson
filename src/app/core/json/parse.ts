@@ -22,11 +22,11 @@ export interface JsonParseError {
  *
  * Each slot is a non-empty array iff present; absent slot means
  * no bodies in that role. The parser never produces an empty
- * array (`extractCommentBody` at parse.ts:338-347 strips
- * delimiters and trims; the `onComment` caller at parse.ts:303
- * drops empty bodies via `if (body.length === 0) return;` before
- * they reach the bundle). The renderer's matTooltip joins bodies
- * with `\n` for display.
+ * array (`extractCommentBody` strips delimiters and trims; the
+ * `onComment` caller drops empty bodies via
+ * `if (body.length === 0) return;` before they reach the
+ * bundle). The renderer's matTooltip joins bodies with `\n` for
+ * display.
  *
  * The slot shape distinguishes stacked line comments (`['a', 'b']`)
  * from a single multi-line block comment (`['a\nb']`)

@@ -85,12 +85,16 @@ describe('comment-display', () => {
   });
 
   describe('moreBadgeAriaLabel', () => {
-    it('includes 1 in the aria label', () => {
-      expect(moreBadgeAriaLabel(1)).toContain('1');
+    it('uses the singular form when extraCount is 1 (length-2 stack)', () => {
+      expect(moreBadgeAriaLabel(1)).toBe('1 more comment');
     });
 
-    it('includes 99 in the aria label', () => {
-      expect(moreBadgeAriaLabel(99)).toContain('99');
+    it('uses the plural form when extraCount is 2 (length-3 stack)', () => {
+      expect(moreBadgeAriaLabel(2)).toBe('2 more comments');
+    });
+
+    it('uses the plural form for large extraCount values', () => {
+      expect(moreBadgeAriaLabel(99)).toBe('99 more comments');
     });
   });
 

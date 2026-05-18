@@ -53,9 +53,16 @@ export function moreBadge(extraCount: number): string {
 }
 
 /** Aria-label phrasing for the same badge. Localized via $localize
- *  with stable ID. */
+ *  with stable IDs; uses a singular/plural pair matching the
+ *  in-repo `tree.search.count.one`/`.other` precedent. Note that
+ *  `extraCount === 1` (a length-2 stack of comments) is the common
+ *  case, not an edge case: the renderer template guards `count >= 2`
+ *  so `extraCount = count - 1 >= 1`. */
 export function moreBadgeAriaLabel(extraCount: number): string {
-  return $localize`:@@tree.comment.moreBadge.aria:${extraCount}:INTERPOLATION: more comments`;
+  if (extraCount === 1) {
+    return $localize`:@@tree.comment.moreBadge.aria.one:1 more comment`;
+  }
+  return $localize`:@@tree.comment.moreBadge.aria.other:${extraCount}:INTERPOLATION: more comments`;
 }
 
 /** Empty-container trailing-slot merge. Flattens the bundle's
