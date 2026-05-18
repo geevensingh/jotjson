@@ -12,7 +12,12 @@ import { parse as pureParse, type JsonParseResult } from './parse';
  * The end-to-end behavioural coverage lives in
  * `json-parser.service.spec.ts`.
  */
-const FIXTURES: { name: string; text: string }[] = [
+const FIXTURES: {
+  name: string;
+  text: string;
+  assertPureResult?: (result: JsonParseResult) => void;
+  assertParity?: (fromService: JsonParseResult, fromPure: JsonParseResult) => void;
+}[] = [
   { name: 'empty string', text: '' },
   { name: 'whitespace-only', text: '   \n\t ' },
   { name: 'BOM-prefixed', text: '\uFEFF{"a":1}' },
@@ -40,6 +45,34 @@ const FIXTURES: { name: string; text: string }[] = [
   { name: 'malformed: unclosed object', text: '{"a"' },
   { name: 'malformed: missing colon', text: '{"a" 1}' },
   { name: 'non-identifier key', text: '{"a.b":1,"0starts":2,"":3}' },
+  {
+    name: 'JSONC: stacked leading and closeLeading comments (issue #96)',
+    text: `{
+      // first leading
+      // second leading
+      "x": 1
+      // first closeLeading
+      // second closeLeading
+    }`,
+    assertParity: (fromService, fromPure) => {
+      expect(fromPure.commentsByPath.size).toBe(fromService.commentsByPath.size);
+      for (const [path, bundle] of fromPure.commentsByPath) {
+        expect(fromService.commentsByPath.get(path)).toEqual(bundle);
+      }
+    },
+    assertPureResult: (result) => {
+      expect(result.commentsByPath.get('$.x')?.leading?.length).toBe(2);
+      expect(result.commentsByPath.get('$')?.closeLeading?.length).toBe(2);
+      expect(result.commentsByPath.get('$.x')?.leading).toEqual([
+        'first leading',
+        'second leading',
+      ]);
+      expect(result.commentsByPath.get('$')?.closeLeading).toEqual([
+        'first closeLeading',
+        'second closeLeading',
+      ]);
+    },
+  },
 ];
 
 function expectEquivalent(a: JsonParseResult, b: JsonParseResult): void {
@@ -69,6 +102,8 @@ describe('parse parity (service <-> pure)', () => {
       const fromService = service.parse(fixture.text);
       const fromPure = pureParse(fixture.text);
       expectEquivalent(fromService, fromPure);
+      fixture.assertParity?.(fromService, fromPure);
+      fixture.assertPureResult?.(fromPure);
     });
   }
 });
