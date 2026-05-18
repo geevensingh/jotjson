@@ -1005,132 +1005,22 @@
 
 <mat-menu #highlightMenu="matMenu" class="jj-menu tree-highlight-menu">
   @if (contextNode(); as cn) {
-    <div
-      class="highlight-flyout"
-      style="width: 148px; min-height: 110px; padding: 6px; box-sizing: border-box"
-      (click)="$event.stopPropagation()"
-    >
-      <button
-        type="button"
-        class="preferred-bar"
-        style="
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 100%;
-          height: 32px;
-          border: 1px solid var(--mat-sys-outline-variant);
-          border-radius: 4px;
-          cursor: pointer;
-          font: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          padding: 0 8px;
-        "
-        tabindex="-1"
-        [style.background]="preferredHighlightColor()"
-        [style.color]="preferredHighlightTextColor()"
-        [attr.aria-label]="preferredHighlightAriaLabel()"
-        [matTooltip]="preferredHighlightAriaLabel()"
-        (click)="applyManualHighlight(cn, false, preferredHighlightColor())"
-      >
-        <span>{{ preferredHighlightLabel }}</span>
-      </button>
-      <hr
-        class="highlight-divider"
-        style="border: 0; border-top: 1px solid var(--mat-sys-outline-variant); margin: 6px 0"
-      />
-      <div
-        class="swatch-grid"
-        style="display: grid; grid-template-columns: repeat(5, 24px); gap: 4px; padding: 0"
-      >
-        @for (swatch of activePalette(); track swatch.hex) {
-          @let swatchLabel = highlightSwatchLabel(swatch);
-          <button
-            type="button"
-            class="swatch"
-            style="
-              width: 24px;
-              height: 24px;
-              border: 1px solid var(--mat-sys-outline-variant);
-              border-radius: 4px;
-              cursor: pointer;
-              padding: 0;
-            "
-            tabindex="-1"
-            [style.background]="swatch.hex"
-            [attr.aria-label]="swatchLabel"
-            [matTooltip]="swatchLabel"
-            (click)="applyManualHighlight(cn, false, swatch.hex)"
-          ></button>
-        }
-      </div>
-    </div>
+    <jj-highlight-flyout
+      #singleFlyout
+      [cascade]="false"
+      (apply)="onHighlightFlyoutApply(cn, false, $event)"
+      (close)="onHighlightFlyoutClose(cn)"
+    />
   }
 </mat-menu>
 
 <mat-menu #highlightTreeMenu="matMenu" class="jj-menu tree-highlight-menu">
   @if (contextNode(); as cn) {
-    <div
-      class="highlight-flyout"
-      style="width: 148px; min-height: 110px; padding: 6px; box-sizing: border-box"
-      (click)="$event.stopPropagation()"
-    >
-      <button
-        type="button"
-        class="preferred-bar"
-        style="
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 100%;
-          height: 32px;
-          border: 1px solid var(--mat-sys-outline-variant);
-          border-radius: 4px;
-          cursor: pointer;
-          font: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          padding: 0 8px;
-        "
-        tabindex="-1"
-        [style.background]="preferredHighlightColor()"
-        [style.color]="preferredHighlightTextColor()"
-        [attr.aria-label]="preferredHighlightAriaLabel()"
-        [matTooltip]="preferredHighlightAriaLabel()"
-        (click)="applyManualHighlight(cn, true, preferredHighlightColor())"
-      >
-        <span>{{ preferredHighlightLabel }}</span>
-      </button>
-      <hr
-        class="highlight-divider"
-        style="border: 0; border-top: 1px solid var(--mat-sys-outline-variant); margin: 6px 0"
-      />
-      <div
-        class="swatch-grid"
-        style="display: grid; grid-template-columns: repeat(5, 24px); gap: 4px; padding: 0"
-      >
-        @for (swatch of activePalette(); track swatch.hex) {
-          @let swatchLabel = highlightSwatchLabel(swatch);
-          <button
-            type="button"
-            class="swatch"
-            style="
-              width: 24px;
-              height: 24px;
-              border: 1px solid var(--mat-sys-outline-variant);
-              border-radius: 4px;
-              cursor: pointer;
-              padding: 0;
-            "
-            tabindex="-1"
-            [style.background]="swatch.hex"
-            [attr.aria-label]="swatchLabel"
-            [matTooltip]="swatchLabel"
-            (click)="applyManualHighlight(cn, true, swatch.hex)"
-          ></button>
-        }
-      </div>
-    </div>
+    <jj-highlight-flyout
+      #cascadeFlyout
+      [cascade]="true"
+      (apply)="onHighlightFlyoutApply(cn, true, $event)"
+      (close)="onHighlightFlyoutClose(cn)"
+    />
   }
 </mat-menu>

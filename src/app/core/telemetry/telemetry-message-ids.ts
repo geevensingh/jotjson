@@ -1229,7 +1229,14 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Fired by: `JsonTreeComponent.applyManualHighlight`
    *           (`shared/components/json-tree/json-tree.component.ts`)
    * Props: { kind: 'single' | 'cascade'; bucket: ColorBucket;
-   *   replacedExisting: 'true' | 'false' }.
+   *   replacedExisting: 'true' | 'false';
+   *   inputMode: 'keyboard' | 'mouse' }.
+   *
+   * `inputMode` is the user gesture that activated the swatch
+   * (issue #100): `'keyboard'` for Enter/Space inside the flyout
+   * after arrow-key navigation, `'mouse'` for swatch clicks and
+   * the parent menu-item Enter / click path that applies the
+   * preferred color without opening the flyout.
    */
   'tree.highlight.apply',
 

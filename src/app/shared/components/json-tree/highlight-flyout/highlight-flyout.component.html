@@ -1,0 +1,48 @@
+<div class="highlight-flyout" (click)="$event.stopPropagation()">
+  <button
+    #preferredBar
+    type="button"
+    class="preferred-bar"
+    [class.kbd-focused]="isActive(0) && interactionMode() === 'keyboard'"
+    [attr.tabindex]="tabIndexFor(0)"
+    [style.background]="preferredHighlightColor()"
+    [style.color]="preferredHighlightTextColor()"
+    [attr.aria-label]="preferredHighlightAriaLabel()"
+    [matTooltip]="preferredHighlightAriaLabel()"
+    (mouseenter)="onPreferredEnter()"
+    (focus)="onPreferredFocus()"
+    (click)="onPreferredClick()"
+  >
+    <span>{{ preferredHighlightLabel }}</span>
+  </button>
+  <hr class="highlight-divider" />
+  <div
+    class="swatch-grid"
+    role="grid"
+    i18n-aria-label="@@tree.highlight.swatch.grid.aria"
+    aria-label="Highlight colors"
+  >
+    @for (paletteRow of paletteRows(); track $index; let rowIndex = $index) {
+      <div role="row" class="swatch-row">
+        @for (swatch of paletteRow; track swatch.hex; let colIndex = $index) {
+          @let activeIdx = swatchActiveIndex(rowIndex, colIndex);
+          @let swatchLabel = highlightSwatchLabel(swatch);
+          <button
+            #swatchButton
+            type="button"
+            class="swatch"
+            role="gridcell"
+            [class.kbd-focused]="isActive(activeIdx) && interactionMode() === 'keyboard'"
+            [attr.tabindex]="tabIndexFor(activeIdx)"
+            [style.background]="swatch.hex"
+            [attr.aria-label]="swatchLabel"
+            [matTooltip]="swatchLabel"
+            (mouseenter)="onSwatchEnter(rowIndex, colIndex)"
+            (focus)="onSwatchFocus(rowIndex, colIndex)"
+            (click)="onSwatchClick(rowIndex, colIndex)"
+          ></button>
+        }
+      </div>
+    }
+  </div>
+</div>

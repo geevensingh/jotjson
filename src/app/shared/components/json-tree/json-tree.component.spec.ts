@@ -2750,6 +2750,7 @@ describe('JsonTreeComponent', () => {
           kind: 'single',
           bucket: 'red',
           replacedExisting: 'false',
+          inputMode: 'mouse',
         });
       });
 
@@ -2765,6 +2766,7 @@ describe('JsonTreeComponent', () => {
           kind: 'cascade',
           bucket: 'blue',
           replacedExisting: 'true',
+          inputMode: 'mouse',
         });
       });
 
@@ -3021,6 +3023,138 @@ describe('JsonTreeComponent', () => {
         expect(events).toEqual([[{ path: '$.leaf', color: '#abcdef', cascade: false }]]);
         expect(highlightFlyoutCount()).withContext('flyout did not open').toBe(0);
         expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
+      });
+    });
+
+    describe('context menu keyboard navigation (issue #100)', () => {
+      function isAnyMenuPanelOpenLocal(): boolean {
+        return document.body.querySelectorAll('.mat-mdc-menu-panel').length > 0;
+      }
+      function highlightFlyoutCountLocal(): number {
+        return document.body.querySelectorAll('.highlight-flyout').length;
+      }
+      async function flushMenuCloseLocal(): Promise<void> {
+        for (let i = 0; i < 6; i += 1) {
+          fixture.detectChanges();
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+        fixture.detectChanges();
+      }
+
+      it('focuses the Preferred bar when the swatch menu opens (bridge via onSwatchMenuOpened)', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+        // focusEntry() defers via queueMicrotask + cdr.detectChanges(); flush one extra microtask.
+        await Promise.resolve();
+        fixture.detectChanges();
+        await Promise.resolve();
+
+        const preferredBar = flyout.querySelector<HTMLButtonElement>('.preferred-bar');
+        expect(preferredBar).withContext('preferred bar present').toBeTruthy();
+        expect(document.activeElement)
+          .withContext('keyboard-bridge moves focus into the flyout')
+          .toBe(preferredBar);
+      });
+
+      it('returns focus to the originating row after a keyboard apply', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const node = nodeAt('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#ff0000', 'keyboard');
+        await flushMenuCloseLocal();
+        // moveFocusTo runs inside requestAnimationFrame; flush one frame.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        fixture.detectChanges();
+
+        expect(cmp.focusedPath())
+          .withContext('focusedPath snaps back to the originating row on keyboard apply')
+          .toBe('$.leaf');
+        // Verify isAnyMenuPanelOpenLocal helper is exercised so the
+        // close-state assertion is part of the keyboard contract too.
+        expect(isAnyMenuPanelOpenLocal())
+          .withContext('apply path also closes the menu chain')
+          .toBeFalse();
+      });
+
+      it('does not move focus to the row on a mouse apply', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        // Pin focus to the root so we can detect whether the mouse
+        // apply path yanks it to '$.leaf'. (The default-recovery
+        // effect at json-tree.component.ts:1819 auto-snaps focus
+        // away from null to the first visible row, so we cannot use
+        // null as the pinning anchor.)
+        cmp.focusedPath.set('$');
+        const node = nodeAt('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#ff0000', 'mouse');
+        await flushMenuCloseLocal();
+
+        expect(cmp.focusedPath())
+          .withContext('mouse path does not yank focus to the row')
+          .toBe('$');
+      });
+
+      it('clicking the flyout padding (root host) does not emit apply or close the menu', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const events = captureHighlightChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        flyout.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        expect(events).withContext('no highlight emitted from padding click').toEqual([]);
+        expect(highlightFlyoutCountLocal())
+          .withContext('flyout stays open when the padding strip is clicked')
+          .toBeGreaterThan(0);
+      });
+
+      it('logs tree.highlight.apply with inputMode=keyboard when applied via keyboard', async () => {
+        const logger = await createWithLoggerSpy({ leaf: 1 });
+        enableHighlightEditing();
+        const node = nodeAt('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#ff0000', 'keyboard');
+
+        expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
+          kind: 'single',
+          bucket: 'red',
+          replacedExisting: 'false',
+          inputMode: 'keyboard',
+        });
+      });
+
+      it('does not preventDefault on Escape inside the flyout (delegates to mat-menu)', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        const preferredBar = flyout.querySelector<HTMLButtonElement>('.preferred-bar')!;
+        const escape = new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        });
+        preferredBar.dispatchEvent(escape);
+
+        expect(escape.defaultPrevented)
+          .withContext('Escape passes through to mat-menu')
+          .toBeFalse();
       });
     });
   });

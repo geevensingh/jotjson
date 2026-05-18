@@ -1,0 +1,78 @@
+// Per-node manual-highlight color picker. Hosted inside a
+// `<mat-menu>` panel, so the rendered DOM lives under `<body>` via
+// the CDK overlay portal. Angular's emulated view encapsulation
+// still tags this template with the component's `_ngcontent-*`
+// attribute, so these selectors apply correctly inside the portal.
+
+:host {
+  display: block;
+}
+
+.highlight-flyout {
+  width: 148px;
+  min-height: 110px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.preferred-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 8px;
+}
+
+.highlight-divider {
+  border: 0;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  margin: 6px 0;
+}
+
+.swatch-grid {
+  display: grid;
+  grid-template-rows: repeat(2, 24px);
+  gap: 4px;
+  padding: 0;
+}
+
+.swatch-row {
+  display: grid;
+  grid-template-columns: repeat(5, 24px);
+  gap: 4px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+// Visible focus ring uses `--mat-sys-primary` for theme parity.
+// Two selectors give us coverage in both modalities:
+//
+// - `:focus-visible` catches genuine keyboard focus (e.g., Tab into
+//   the flyout from an adjacent control on a hypothetical future
+//   page where the flyout is not gated behind a mat-menu).
+// - `.kbd-focused` is set from the component based on the
+//   `interactionMode` signal so that programmatic `.focus()` after
+//   an arrow keypress still renders a ring even in browsers that
+//   silently fail the `:focus-visible` heuristic for programmatic
+//   focus moves.
+.preferred-bar:focus-visible,
+.preferred-bar.kbd-focused,
+.swatch:focus-visible,
+.swatch.kbd-focused {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
