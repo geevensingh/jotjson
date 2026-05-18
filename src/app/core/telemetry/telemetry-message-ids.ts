@@ -1291,7 +1291,19 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Fired by: `JsonTreeComponent.applyManualHighlight`
    *           (`shared/components/json-tree/json-tree.component.ts`)
    * Props: { kind: 'single' | 'cascade'; bucket: ColorBucket;
-   *   replacedExisting: 'true' | 'false' }.
+   *   replacedExisting: 'true' | 'false';
+   *   inputMode: 'keyboard' | 'mouse' }.
+   *
+   * `inputMode` is the user gesture that activated the apply
+   * (issue #100): `'keyboard'` for any non-pointer activation
+   * (Enter/Space inside the flyout after arrow-key navigation,
+   * Enter/Space on the parent menu-item that applies the preferred
+   * color, and assistive-tech virtual-cursor activation that
+   * synthesizes clicks without a pointer); `'mouse'` for any
+   * pointer-device activation (mouse click, touch tap, pen tap).
+   * The classification feeds focus restoration too: keyboard
+   * activation returns DOM focus to the originating row, mouse
+   * activation does not.
    */
   'tree.highlight.apply',
 

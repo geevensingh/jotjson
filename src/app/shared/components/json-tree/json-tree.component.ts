@@ -70,12 +70,8 @@ import {
   RuleEngineResult,
   evaluateFormattingRules,
 } from './formatting-rules-engine';
-import {
-  HIGHLIGHT_PALETTE_DARK,
-  HIGHLIGHT_PALETTE_LIGHT,
-  contrastText,
-  type PaletteSwatch,
-} from './highlight-palette';
+import type { HighlightFlyoutApplyEvent } from './highlight-flyout/highlight-flyout.component';
+import { HighlightFlyoutComponent } from './highlight-flyout/highlight-flyout.component';
 import type { ResolvedHighlight } from './highlight-resolver';
 import { findNearestCascade, indexHighlights, resolveManualHighlight } from './highlight-resolver';
 import { findScrollableAncestor } from './scroll-container';
@@ -320,6 +316,7 @@ const EMPTY_ICONS: readonly FormattingIcon[] = Object.freeze([]);
     IconComponent,
     JsonBreadcrumbComponent,
     OverflowDetectorDirective,
+    HighlightFlyoutComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './json-tree.component.html',
@@ -599,6 +596,19 @@ export class JsonTreeComponent {
   readonly allMatMenuTriggers = viewChildren(MatMenuTrigger);
 
   /**
+   * Refs to the two `HighlightFlyoutComponent` instances embedded in
+   * the `#highlightMenu` and `#highlightTreeMenu` panels (issue #100).
+   * The signals resolve only while the corresponding mat-menu is open
+   * (the flyout lives inside an `@if (contextNode())` gate inside the
+   * `<mat-menu>` template), so `onSwatchMenuOpened` calls
+   * `flyout?.focusEntry()` defensively. Direct refs (vs. a single
+   * `viewChildren` query) keep the keyboard-open entry point O(1)
+   * per scope.
+   */
+  private readonly singleHighlightFlyout = viewChild<HighlightFlyoutComponent>('singleFlyout');
+  private readonly cascadeHighlightFlyout = viewChild<HighlightFlyoutComponent>('cascadeFlyout');
+
+  /**
    * Hidden offscreen probe row used to measure the rendered row
    * height. Carries every height-driving element (twisty, key,
    * value, date-annotation, comment, kebab pill, extract pill,
@@ -736,7 +746,6 @@ export class JsonTreeComponent {
   readonly ctxExpandToDepth7ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.7.elevated:Expand 7 levels from here`;
   readonly ctxExpandToDepth8ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.8.elevated:Expand 8 levels from here`;
   readonly ctxExpandToDepth9ElevatedLabel = $localize`:@@tree.contextMenu.expandToDepth.9.elevated:Expand 9 levels from here`;
-  readonly preferredHighlightLabel = $localize`:@@tree.highlight.swatch.preferred:Preferred`;
   readonly kebabAriaLabel = $localize`:@@tree.kebab.aria:Row actions`;
   readonly kebabTitleLabel = $localize`:@@tree.kebab.title:Row actions`;
 
@@ -911,19 +920,9 @@ export class JsonTreeComponent {
     () => this.manualHighlightRows().cascadeHighlightsByPath,
   );
 
-  readonly activePalette = computed<readonly PaletteSwatch[]>(() =>
-    this.prefs.effectiveTheme() === 'dark' ? HIGHLIGHT_PALETTE_DARK : HIGHLIGHT_PALETTE_LIGHT,
-  );
   readonly preferredHighlightColor = computed(
     () => this.prefs.prefs().treeHighlightColors[this.prefs.effectiveTheme()].manualHighlightColor,
   );
-  readonly preferredHighlightTextColor = computed(() =>
-    contrastText(this.preferredHighlightColor()),
-  );
-  readonly preferredHighlightAriaLabel = computed(() => {
-    const hex = this.preferredHighlightColor();
-    return $localize`:@@tree.highlight.swatch.preferred.aria:Apply preferred highlight color (${hex}:hex:)`;
-  });
 
   readonly showTypeBadges = computed(() => this.prefs.prefs().treeShowTypeLabels);
   readonly showDateAnnotations = computed(() => this.prefs.prefs().treeShowDateAnnotations);
@@ -3496,7 +3495,12 @@ export class JsonTreeComponent {
     this.activateClickedHitOrFirst(node.pathString);
   }
 
-  applyManualHighlight(node: TreeNode, cascade: boolean, color: string): void {
+  applyManualHighlight(
+    node: TreeNode,
+    cascade: boolean,
+    color: string,
+    inputMode: 'keyboard' | 'mouse',
+  ): void {
     if (!this.canEditHighlights()) return;
     if (cascade) {
       if (!this.showHighlightTree(node)) return;
@@ -3508,6 +3512,7 @@ export class JsonTreeComponent {
     const existingHighlight = this.highlightIndex().get(path);
     if (existingHighlight?.color === color && existingHighlight.cascade === cascade) {
       this.closeHighlightMenuChain();
+      if (inputMode === 'keyboard') this.moveFocusTo(node.pathString);
       return;
     }
 
@@ -3517,6 +3522,7 @@ export class JsonTreeComponent {
       kind: cascade ? 'cascade' : 'single',
       bucket: bucketColorHex(color),
       replacedExisting: existingHighlight ? 'true' : 'false',
+      inputMode,
     });
     // Phase 4 (tree-menu overhaul): counts-only context-menu marker
     // distinguishing single-row scope from subtree scope. The
@@ -3525,6 +3531,7 @@ export class JsonTreeComponent {
     this.logger.info(cascade ? 'tree.contextMenu.highlightSubtree' : 'tree.contextMenu.highlight');
     this.highlightsChange.emit(nextHighlights);
     this.closeHighlightMenuChain();
+    if (inputMode === 'keyboard') this.moveFocusTo(node.pathString);
   }
 
   /**
@@ -3539,13 +3546,24 @@ export class JsonTreeComponent {
    * dismisses the row menu via `closeHighlightMenuChain` once the
    * change is emitted (or on idempotent skip).
    *
-   * Keyboard parity: pressing Enter on a focused mat-menu-item
-   * fires a synthetic click in browsers, so this same path covers
-   * the keyboard case without a separate `(keydown.enter)` handler.
+   * Keyboard parity: pressing Enter / Space on a focused
+   * `mat-menu-item` fires a synthetic click in browsers (native
+   * `<button>` activation), so this same path covers keyboard
+   * activation without a separate `(keydown.enter)` handler. We
+   * use `MouseEvent.detail` to distinguish the two gestures:
+   * browsers set `detail = 0` for the synthetic click that follows
+   * keyboard activation of a focused button, and `detail >= 1` for
+   * real pointer-device clicks (mouse / touch / pen). The
+   * `'keyboard'` bucket also captures non-pointer assistive-tech
+   * activation that synthesizes clicks with `detail = 0` (e.g. AT
+   * virtual cursors), which we accept as a deliberate conflation:
+   * the user is not using a pointing device, and the focus-restore
+   * + keyboard telemetry semantics are the correct match.
    */
   onHighlightItemClick(event: MouseEvent, node: TreeNode, cascade: boolean): void {
     event.stopImmediatePropagation();
-    this.applyManualHighlight(node, cascade, this.preferredHighlightColor());
+    const inputMode: 'keyboard' | 'mouse' = event.detail === 0 ? 'keyboard' : 'mouse';
+    this.applyManualHighlight(node, cascade, this.preferredHighlightColor(), inputMode);
   }
 
   /**
@@ -3598,10 +3616,29 @@ export class JsonTreeComponent {
 
   onSwatchMenuOpened(kind: 'single' | 'cascade'): void {
     this.logger.info('tree.highlight.swatchOpened', { kind });
+    const flyout = kind === 'single' ? this.singleHighlightFlyout() : this.cascadeHighlightFlyout();
+    flyout?.focusEntry();
   }
 
-  highlightSwatchLabel(swatch: PaletteSwatch): string {
-    return $localize`:@@tree.highlight.swatch.aria:${swatch.name}:name: ${swatch.hex}:hex:`;
+  /**
+   * Bridge from `HighlightFlyoutComponent.apply` to
+   * `applyManualHighlight`. Forwards the input mode captured by the
+   * flyout (Enter/Space vs. click) so the `tree.highlight.apply`
+   * telemetry event records the gesture that triggered the change.
+   */
+  onHighlightFlyoutApply(node: TreeNode, cascade: boolean, event: HighlightFlyoutApplyEvent): void {
+    this.applyManualHighlight(node, cascade, event.color, event.inputMode);
+  }
+
+  /**
+   * Bridge from `HighlightFlyoutComponent.close` (Tab inside the
+   * flyout). Closes the menu chain and returns DOM focus to the
+   * originating row, since mat-menu's default tab handling would
+   * otherwise drop focus to `<body>`.
+   */
+  onHighlightFlyoutClose(node: TreeNode): void {
+    this.closeHighlightMenuChain();
+    this.moveFocusTo(node.pathString);
   }
 
   removeTreeHighlightAriaLabel(node: TreeNode): string {

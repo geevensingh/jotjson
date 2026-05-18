@@ -2690,7 +2690,7 @@ describe('JsonTreeComponent', () => {
         const events = captureHighlightChanges();
         const node = await setCloseRowContext('$.parent');
 
-        cmp.applyManualHighlight(node, true, '#b3e5fc');
+        cmp.applyManualHighlight(node, true, '#b3e5fc', 'mouse');
 
         expect(events).toEqual([[{ path: '$.parent', color: '#b3e5fc', cascade: true }]]);
       });
@@ -2702,7 +2702,7 @@ describe('JsonTreeComponent', () => {
         const events = captureHighlightChanges();
         const node = setRowContext('$.leaf');
 
-        cmp.applyManualHighlight(node, false, '#fff59d');
+        cmp.applyManualHighlight(node, false, '#fff59d', 'mouse');
 
         expect(events).toEqual([]);
       });
@@ -2776,7 +2776,7 @@ describe('JsonTreeComponent', () => {
         enableHighlightEditing();
         const node = nodeAt('$.leaf');
 
-        cmp.applyManualHighlight(node, false, '#ff0000');
+        cmp.applyManualHighlight(node, false, '#ff0000', 'mouse');
 
         // Phase 4: applyManualHighlight now also fires the
         // counts-only `tree.contextMenu.highlight` /
@@ -2786,6 +2786,7 @@ describe('JsonTreeComponent', () => {
           kind: 'single',
           bucket: 'red',
           replacedExisting: 'false',
+          inputMode: 'mouse',
         });
       });
 
@@ -2795,12 +2796,13 @@ describe('JsonTreeComponent', () => {
         setHighlights([{ path: '$.parent', color: '#fff59d', cascade: true }]);
         const node = nodeAt('$.parent');
 
-        cmp.applyManualHighlight(node, true, '#0000ff');
+        cmp.applyManualHighlight(node, true, '#0000ff', 'mouse');
 
         expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
           kind: 'cascade',
           bucket: 'blue',
           replacedExisting: 'true',
+          inputMode: 'mouse',
         });
       });
 
@@ -2810,7 +2812,7 @@ describe('JsonTreeComponent', () => {
         setHighlights([{ path: '$.leaf', color: '#ff0000', cascade: false }]);
         const node = nodeAt('$.leaf');
 
-        cmp.applyManualHighlight(node, false, '#ff0000');
+        cmp.applyManualHighlight(node, false, '#ff0000', 'mouse');
 
         expect(logger.info).not.toHaveBeenCalled();
       });
@@ -3013,7 +3015,11 @@ describe('JsonTreeComponent', () => {
         await openMenuFor('$.leaf');
 
         const item = menuItemContaining(cmp.ctxHighlightLabel);
-        item.click();
+        // Real mouse / touch / pen clicks set detail >= 1; we
+        // dispatch detail:1 explicitly so this test exercises the
+        // mouse branch of onHighlightItemClick (HTMLElement.click()
+        // synthesizes detail:0 which would take the keyboard branch).
+        item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
         await flushMenuClose();
 
         expect(events).toEqual([[{ path: '$.leaf', color: '#abcdef', cascade: false }]]);
@@ -3033,7 +3039,8 @@ describe('JsonTreeComponent', () => {
         // the Subtree panel and pick the item from there.
         const subtreePanel = await openSubtreeSubmenu();
         const item = panelItemContaining(subtreePanel, cmp.ctxHighlightTreeLabel);
-        item.click();
+        // detail:1 so this test stays a "mouse" path test.
+        item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
         await flushMenuClose();
 
         expect(events).toEqual([[{ path: '$.parent', color: '#abcdef', cascade: true }]]);
@@ -3041,22 +3048,195 @@ describe('JsonTreeComponent', () => {
         expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
       });
 
-      it('keyboard Enter on the Highlight item applies preferred and closes', async () => {
-        await createWith({ leaf: 1 });
+      it('keyboard Enter on the Highlight item applies preferred, closes, restores row focus, and reports inputMode=keyboard', async () => {
+        const logger = await createWithLoggerSpy({ leaf: 1 });
         enableHighlightEditing();
         setPreferredHighlightColor('#abcdef');
         const events = captureHighlightChanges();
         await openMenuFor('$.leaf');
 
         const item = menuItemContaining(cmp.ctxHighlightLabel);
-        // Browsers synthesize a click with detail=0 for keyboard Enter on a
-        // focused button; mimic that path so this covers keyboard parity.
+        // Browsers synthesize a click with detail=0 for keyboard Enter / Space
+        // on a focused button (native <button> activation); mimic that path so
+        // this covers keyboard parity. The detail=0 signal is what
+        // onHighlightItemClick uses to classify the gesture.
         item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
         await flushMenuClose();
+        // moveFocusTo runs inside requestAnimationFrame; flush one frame.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        fixture.detectChanges();
 
         expect(events).toEqual([[{ path: '$.leaf', color: '#abcdef', cascade: false }]]);
         expect(highlightFlyoutCount()).withContext('flyout did not open').toBe(0);
         expect(isAnyMenuPanelOpen()).withContext('all menu panels closed').toBeFalse();
+        expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
+          kind: 'single',
+          bucket: 'blue',
+          replacedExisting: 'false',
+          inputMode: 'keyboard',
+        });
+        expect(cmp.focusedPath())
+          .withContext('focusedPath returns to the originating row on keyboard apply')
+          .toBe('$.leaf');
+      });
+
+      it('mouse click on the Highlight item reports inputMode=mouse and does not yank focus to the row', async () => {
+        const logger = await createWithLoggerSpy({ leaf: 1 });
+        enableHighlightEditing();
+        setPreferredHighlightColor('#abcdef');
+        // Pin focus to the root so we can detect whether the mouse
+        // apply path yanks it to '$.leaf'. (The default-recovery
+        // effect at json-tree.component.ts:1819 auto-snaps focus
+        // away from null to the first visible row, so we cannot use
+        // null as the pinning anchor.)
+        cmp.focusedPath.set('$');
+        await openMenuFor('$.leaf');
+
+        const item = menuItemContaining(cmp.ctxHighlightLabel);
+        item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+        await flushMenuClose();
+
+        expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
+          kind: 'single',
+          bucket: 'blue',
+          replacedExisting: 'false',
+          inputMode: 'mouse',
+        });
+        expect(cmp.focusedPath())
+          .withContext('mouse path does not yank focus to the row')
+          .toBe('$');
+      });
+    });
+
+    describe('context menu keyboard navigation (issue #100)', () => {
+      function isAnyMenuPanelOpenLocal(): boolean {
+        return document.body.querySelectorAll('.mat-mdc-menu-panel').length > 0;
+      }
+      function highlightFlyoutCountLocal(): number {
+        return document.body.querySelectorAll('.highlight-flyout').length;
+      }
+      async function flushMenuCloseLocal(): Promise<void> {
+        for (let i = 0; i < 6; i += 1) {
+          fixture.detectChanges();
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+        fixture.detectChanges();
+      }
+
+      it('focuses the Preferred bar when the swatch menu opens (bridge via onSwatchMenuOpened)', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+        // focusEntry() defers via queueMicrotask + cdr.detectChanges(); flush one extra microtask.
+        await Promise.resolve();
+        fixture.detectChanges();
+        await Promise.resolve();
+
+        const preferredBar = flyout.querySelector<HTMLButtonElement>('.preferred-bar');
+        expect(preferredBar).withContext('preferred bar present').toBeTruthy();
+        expect(document.activeElement)
+          .withContext('keyboard-bridge moves focus into the flyout')
+          .toBe(preferredBar);
+      });
+
+      it('returns focus to the originating row after a keyboard apply', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const node = nodeAt('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#ff0000', 'keyboard');
+        await flushMenuCloseLocal();
+        // moveFocusTo runs inside requestAnimationFrame; flush one frame.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        fixture.detectChanges();
+
+        expect(cmp.focusedPath())
+          .withContext('focusedPath snaps back to the originating row on keyboard apply')
+          .toBe('$.leaf');
+        // Verify isAnyMenuPanelOpenLocal helper is exercised so the
+        // close-state assertion is part of the keyboard contract too.
+        expect(isAnyMenuPanelOpenLocal())
+          .withContext('apply path also closes the menu chain')
+          .toBeFalse();
+      });
+
+      it('does not move focus to the row on a mouse apply', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        // Pin focus to the root so we can detect whether the mouse
+        // apply path yanks it to '$.leaf'. (The default-recovery
+        // effect at json-tree.component.ts:1819 auto-snaps focus
+        // away from null to the first visible row, so we cannot use
+        // null as the pinning anchor.)
+        cmp.focusedPath.set('$');
+        const node = nodeAt('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#ff0000', 'mouse');
+        await flushMenuCloseLocal();
+
+        expect(cmp.focusedPath())
+          .withContext('mouse path does not yank focus to the row')
+          .toBe('$');
+      });
+
+      it('clicking the flyout padding (root host) does not emit apply or close the menu', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const events = captureHighlightChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        flyout.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        fixture.detectChanges();
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        expect(events).withContext('no highlight emitted from padding click').toEqual([]);
+        expect(highlightFlyoutCountLocal())
+          .withContext('flyout stays open when the padding strip is clicked')
+          .toBeGreaterThan(0);
+      });
+
+      it('logs tree.highlight.apply with inputMode=keyboard when applied via keyboard', async () => {
+        const logger = await createWithLoggerSpy({ leaf: 1 });
+        enableHighlightEditing();
+        const node = nodeAt('$.leaf');
+
+        cmp.applyManualHighlight(node, false, '#ff0000', 'keyboard');
+
+        expect(logger.info).toHaveBeenCalledWith('tree.highlight.apply', {
+          kind: 'single',
+          bucket: 'red',
+          replacedExisting: 'false',
+          inputMode: 'keyboard',
+        });
+      });
+
+      it('does not preventDefault on Escape inside the flyout (delegates to mat-menu)', async () => {
+        await createWith({ leaf: 1 });
+        enableHighlightEditing();
+        prefs.update({ theme: 'light' });
+        fixture.detectChanges();
+        const flyout = await openHighlightFlyout('$.leaf', cmp.ctxHighlightLabel);
+
+        const preferredBar = flyout.querySelector<HTMLButtonElement>('.preferred-bar')!;
+        const escape = new KeyboardEvent('keydown', {
+          key: 'Escape',
+          bubbles: true,
+          cancelable: true,
+        });
+        preferredBar.dispatchEvent(escape);
+
+        expect(escape.defaultPrevented)
+          .withContext('Escape passes through to mat-menu')
+          .toBeFalse();
       });
     });
   });
@@ -8022,10 +8202,10 @@ describe('JsonTreeComponent', () => {
         // hit the predicate directly by mutating the signal.
         fixture.componentRef.setInput('canEditHighlights', true);
         fixture.detectChanges();
-        cmp.applyManualHighlight(nodeAt('$.parent'), false, '#fff59d');
+        cmp.applyManualHighlight(nodeAt('$.parent'), false, '#fff59d', 'mouse');
         expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.highlight');
         logger.info.calls.reset();
-        cmp.applyManualHighlight(nodeAt('$.parent'), true, '#b3e5fc');
+        cmp.applyManualHighlight(nodeAt('$.parent'), true, '#b3e5fc', 'mouse');
         expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.highlightSubtree');
       });
 
