@@ -231,39 +231,33 @@ export class HighlightFlyoutComponent {
       case 'ArrowDown': {
         event.preventDefault();
         event.stopPropagation();
-        if (isPreferred) {
-          this.moveActive(1);
-        } else if (row === 0) {
-          this.moveActive(1 + 5 + col);
-        }
-        // row 1: no wrap.
+        // Clamp paths funnel to `target = idx`. `moveActive` then
+        // refocuses the same cell AND flips `interactionMode` to
+        // `'keyboard'`, so the focus ring shows even when the first
+        // keypress after a mouse hover hits a clamp boundary.
+        const target = isPreferred ? 1 : row === 0 ? 1 + 5 + col : idx;
+        this.moveActive(target);
         return;
       }
       case 'ArrowUp': {
         event.preventDefault();
         event.stopPropagation();
-        if (row === 1) {
-          this.moveActive(1 + col);
-        } else if (row === 0) {
-          this.moveActive(0);
-        }
-        // preferred: no wrap.
+        const target = row === 1 ? 1 + col : row === 0 ? 0 : idx;
+        this.moveActive(target);
         return;
       }
       case 'ArrowLeft': {
         event.preventDefault();
         event.stopPropagation();
-        if (!isPreferred && col > 0) {
-          this.moveActive(idx - 1);
-        }
+        const target = !isPreferred && col > 0 ? idx - 1 : idx;
+        this.moveActive(target);
         return;
       }
       case 'ArrowRight': {
         event.preventDefault();
         event.stopPropagation();
-        if (!isPreferred && col < 4) {
-          this.moveActive(idx + 1);
-        }
+        const target = !isPreferred && col < 4 ? idx + 1 : idx;
+        this.moveActive(target);
         return;
       }
       case 'Enter':

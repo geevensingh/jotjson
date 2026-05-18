@@ -185,7 +185,7 @@ describe('HighlightFlyoutComponent', () => {
       expect(document.activeElement).toBe(list[7]!);
     });
 
-    it('ArrowDown from row 2 is a no-op (no wrap)', async () => {
+    it('ArrowDown from row 2 clamps and re-asserts keyboard ring', async () => {
       await openAndFocus();
       dispatchKey('ArrowDown');
       await flushMicrotasks();
@@ -198,14 +198,20 @@ describe('HighlightFlyoutComponent', () => {
       await flushMicrotasks();
 
       expect(document.activeElement).toBe(list[5]!);
+      expect(list[5]!.classList.contains('kbd-focused'))
+        .withContext('clamp keypress re-asserts kbd-focused on the active cell')
+        .toBeTrue();
     });
 
-    it('ArrowUp from Preferred is a no-op (no wrap)', async () => {
+    it('ArrowUp from Preferred clamps and re-asserts keyboard ring', async () => {
       await openAndFocus();
       dispatchKey('ArrowUp');
       await flushMicrotasks();
 
       expect(document.activeElement).toBe(preferredBar());
+      expect(preferredBar().classList.contains('kbd-focused'))
+        .withContext('clamp keypress re-asserts kbd-focused on Preferred')
+        .toBeTrue();
     });
 
     it('ArrowUp from row 1 returns to Preferred', async () => {
@@ -218,17 +224,19 @@ describe('HighlightFlyoutComponent', () => {
       expect(document.activeElement).toBe(preferredBar());
     });
 
-    it('ArrowLeft / ArrowRight on Preferred are no-ops', async () => {
+    it('ArrowLeft / ArrowRight on Preferred clamp and re-assert keyboard ring', async () => {
       await openAndFocus();
       dispatchKey('ArrowLeft');
       await flushMicrotasks();
       expect(document.activeElement).toBe(preferredBar());
+      expect(preferredBar().classList.contains('kbd-focused')).toBeTrue();
       dispatchKey('ArrowRight');
       await flushMicrotasks();
       expect(document.activeElement).toBe(preferredBar());
+      expect(preferredBar().classList.contains('kbd-focused')).toBeTrue();
     });
 
-    it('ArrowLeft clamps at column 0', async () => {
+    it('ArrowLeft clamps at column 0 and re-asserts keyboard ring', async () => {
       await openAndFocus();
       dispatchKey('ArrowDown');
       await flushMicrotasks();
@@ -237,9 +245,12 @@ describe('HighlightFlyoutComponent', () => {
       dispatchKey('ArrowLeft');
       await flushMicrotasks();
       expect(document.activeElement).toBe(list[0]!);
+      expect(list[0]!.classList.contains('kbd-focused'))
+        .withContext('clamp keypress re-asserts kbd-focused on the active cell')
+        .toBeTrue();
     });
 
-    it('ArrowRight clamps at column 4', async () => {
+    it('ArrowRight clamps at column 4 and re-asserts keyboard ring', async () => {
       await openAndFocus();
       dispatchKey('ArrowDown');
       await flushMicrotasks();
@@ -250,6 +261,9 @@ describe('HighlightFlyoutComponent', () => {
       const list = swatches();
       // Should be at row 0 col 4 (flat index 4), not past.
       expect(document.activeElement).toBe(list[4]!);
+      expect(list[4]!.classList.contains('kbd-focused'))
+        .withContext('clamp keypress re-asserts kbd-focused on the active cell')
+        .toBeTrue();
     });
 
     it('Enter on a swatch emits apply with inputMode=keyboard', async () => {
@@ -411,6 +425,136 @@ describe('HighlightFlyoutComponent', () => {
 
       expect(list[3]!.classList.contains('kbd-focused')).toBeFalse();
       expect(preferredBar().classList.contains('kbd-focused')).toBeFalse();
+    });
+
+    it('clamp keypress after mouse hover re-asserts the keyboard ring (col 4 boundary)', async () => {
+      // Regression test for the gap surfaced on PR #285: after a
+      // mouse hover sets `interactionMode='mouse'` (kbd-focused
+      // dropped), the first keyboard arrow press at a clamp
+      // boundary must flip interactionMode back to 'keyboard' AND
+      // move DOM focus to the active cell. Without this, the user
+      // is keyboard-driving the flyout with no visible focus ring.
+      await createComponent('light');
+      cmp.focusEntry();
+      await flushMicrotasks();
+      // Move keyboard focus to row 0 col 4 first.
+      dispatchKey('ArrowDown');
+      await flushMicrotasks();
+      for (let i = 0; i < 4; i++) {
+        dispatchKey('ArrowRight');
+        await flushMicrotasks();
+      }
+      const list = swatches();
+      expect(document.activeElement).toBe(list[4]!);
+      expect(list[4]!.classList.contains('kbd-focused')).toBeTrue();
+
+      // Mouse-hover the same cell drops the ring.
+      list[4]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      fixture.detectChanges();
+      expect(list[4]!.classList.contains('kbd-focused')).toBeFalse();
+
+      // First arrow keypress at the col-4 clamp must restore the
+      // ring even though the active index doesn't change.
+      dispatchKey('ArrowRight');
+      await flushMicrotasks();
+      expect(document.activeElement).toBe(list[4]!);
+      expect(list[4]!.classList.contains('kbd-focused'))
+        .withContext('clamp at col 4 after mouse hover must re-assert kbd-focused')
+        .toBeTrue();
+    });
+
+    it('clamp keypress after mouse hover re-asserts the keyboard ring (col 0 boundary)', async () => {
+      await createComponent('light');
+      cmp.focusEntry();
+      await flushMicrotasks();
+      dispatchKey('ArrowDown');
+      await flushMicrotasks();
+      const list = swatches();
+      expect(document.activeElement).toBe(list[0]!);
+
+      list[0]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      fixture.detectChanges();
+      expect(list[0]!.classList.contains('kbd-focused')).toBeFalse();
+
+      dispatchKey('ArrowLeft');
+      await flushMicrotasks();
+      expect(document.activeElement).toBe(list[0]!);
+      expect(list[0]!.classList.contains('kbd-focused'))
+        .withContext('clamp at col 0 after mouse hover must re-assert kbd-focused')
+        .toBeTrue();
+    });
+
+    it('clamp keypress after mouse hover re-asserts the keyboard ring (row 2 boundary)', async () => {
+      await createComponent('light');
+      cmp.focusEntry();
+      await flushMicrotasks();
+      // Navigate to row 2 col 0.
+      dispatchKey('ArrowDown');
+      await flushMicrotasks();
+      dispatchKey('ArrowDown');
+      await flushMicrotasks();
+      const list = swatches();
+      expect(document.activeElement).toBe(list[5]!);
+
+      list[5]!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      fixture.detectChanges();
+      expect(list[5]!.classList.contains('kbd-focused')).toBeFalse();
+
+      dispatchKey('ArrowDown');
+      await flushMicrotasks();
+      expect(document.activeElement).toBe(list[5]!);
+      expect(list[5]!.classList.contains('kbd-focused'))
+        .withContext('clamp at row 2 after mouse hover must re-assert kbd-focused')
+        .toBeTrue();
+    });
+
+    it('clamp keypress after mouse hover re-asserts the keyboard ring (Preferred boundary)', async () => {
+      await createComponent('light');
+      cmp.focusEntry();
+      await flushMicrotasks();
+
+      // Drop the ring via mouse hover on Preferred.
+      preferredBar().dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      fixture.detectChanges();
+      expect(preferredBar().classList.contains('kbd-focused')).toBeFalse();
+
+      // ArrowUp on Preferred is a clamp.
+      dispatchKey('ArrowUp');
+      await flushMicrotasks();
+      expect(document.activeElement).toBe(preferredBar());
+      expect(preferredBar().classList.contains('kbd-focused'))
+        .withContext('clamp on Preferred after mouse hover must re-assert kbd-focused')
+        .toBeTrue();
+    });
+
+    it('held arrow key at a clamp boundary does not emit apply or duplicate ring transitions', async () => {
+      // Key auto-repeat at a clamp fires `moveActive(idx)` repeatedly.
+      // Verify the same-idx branch is bounded: signal-set is
+      // Object.is-deduped (no extra CD), no `apply` emit, no
+      // telemetry. The user-visible outcome is a steady ring.
+      await createComponent('light');
+      cmp.focusEntry();
+      await flushMicrotasks();
+      // Navigate to col 4.
+      dispatchKey('ArrowDown');
+      await flushMicrotasks();
+      for (let i = 0; i < 4; i++) {
+        dispatchKey('ArrowRight');
+        await flushMicrotasks();
+      }
+      const list = swatches();
+      expect(document.activeElement).toBe(list[4]!);
+      applyEvents.length = 0;
+
+      // 5 ArrowRight presses at the col-4 boundary -> all clamps.
+      for (let i = 0; i < 5; i++) {
+        dispatchKey('ArrowRight');
+        await flushMicrotasks();
+      }
+
+      expect(applyEvents.length).withContext('clamps must never emit apply').toBe(0);
+      expect(document.activeElement).toBe(list[4]!);
+      expect(list[4]!.classList.contains('kbd-focused')).toBeTrue();
     });
   });
 });
