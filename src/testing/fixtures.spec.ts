@@ -22,9 +22,15 @@ import { provideFakeAuth } from './auth.testing';
  */
 const FIXTURE_FILES = [
   'Bad-Config.json',
+  'CollapsedContainerSummary.json',
   'Depth.json',
+  'EmptyArrayLeaf.json',
   'FlatList.json',
+  'IsoDateAnnotations.json',
+  'LongNumberValue.json',
+  'LongUnbreakableKey.json',
   'LongUnbreakableValue.json',
+  'MidKeyMidValue.json',
   'NestedEvents.json',
   'Recursive.json',
   'Semi-valid.json',

@@ -1,0 +1,28 @@
+{
+  "wrapper": {
+    "container": {
+      "field01": "value01",
+      "field02": "value02",
+      "field03": "value03",
+      "field04": "value04",
+      "field05": "value05",
+      "field06": "value06",
+      "field07": "value07",
+      "field08": "value08",
+      "field09": "value09",
+      "field10": "value10"
+    },
+    "list": [
+      "alpha",
+      "bravo",
+      "charlie",
+      "delta",
+      "echo",
+      "foxtrot",
+      "golf",
+      "hotel",
+      "india",
+      "juliet"
+    ]
+  }
+}

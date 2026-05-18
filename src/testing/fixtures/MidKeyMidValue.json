@@ -1,0 +1,9 @@
+{
+  "wrapper": {
+    "level": {
+      "shortKey": "short value",
+      "anotherKey": "another short value",
+      "thirdKey": "third short value"
+    }
+  }
+}

@@ -231,31 +231,53 @@
     Offscreen probe row used to measure rendered row height for both
     the auto-fit-initial-expansion algorithm and the virtual scroll
     viewport's [itemSize] binding (issue #95 Phase 2). The probe
-    carries every height-driving element so the measured height is
-    an upper bound across any row that may render.
+    carries every height-driving element across leaf AND open rows
+    (twisty, beacon-badge, key+value rule icons, key, value-string,
+    value-container brace, date-annotation, leading+trailing
+    comments, right-cluster pills) so the measured height is an
+    upper bound across any row that may render. Issue #269: probe
+    mirrors the Grid wrapper structure (`.tree-row-leading`,
+    `.tree-row-value-cell`, `.tree-row-trailing`); probe uses
+    `<span>` everywhere (inert) so no implicit button styling
+    pollutes the height measurement.
   -->
   <div #rowHeightProbe class="tree-row tree-row--probe" aria-hidden="true">
-    <button type="button" class="tree-twisty" tabindex="-1">
-      <jj-icon name="chevron-right" [size]="'auto'" />
-    </button>
-    <span class="tree-comment tree-comment-leading">// c</span>
+    <span class="tree-row-leading">
+      <span class="tree-twisty" tabindex="-1">
+        <jj-icon name="chevron-right" [size]="'auto'" />
+      </span>
+      <span class="tree-beacon-badge" tabindex="-1">
+        <jj-icon name="check" [size]="'auto'" />
+      </span>
+      <span class="tree-comment tree-comment-leading">// c</span>
+      <jj-icon class="tree-rule-icon tree-rule-icon--key" name="check" [size]="'auto'" />
+    </span>
     <!-- intentionally raw: row-height probe; do not wrap in displayKey -->
     <span class="tree-key">probe</span>
-    <span class="tree-value-string">"x"</span>
-    <span class="tree-date-annotation">&nbsp;(2024)</span>
-    <span class="tree-comment tree-comment-trailing">// t</span>
+    <span class="tree-key-sep">: </span>
+    <span class="tree-row-value-cell">
+      <jj-icon class="tree-rule-icon tree-rule-icon--value" name="check" [size]="'auto'" />
+      <span class="tree-value-string">"x"</span>
+      <span class="tree-value-container">
+        <span class="tree-value-brace">&#123;</span>
+      </span>
+    </span>
+    <span class="tree-row-trailing">
+      <span class="tree-date-annotation">&nbsp;(2024)</span>
+      <span class="tree-comment tree-comment-trailing">// t</span>
+    </span>
     <span class="tree-row-right">
       <span class="tree-count">(0)</span>
       <span class="tree-type-badge">string</span>
-      <button type="button" class="tree-extract-pill" tabindex="-1">
+      <span class="tree-extract-pill" tabindex="-1">
         <jj-icon name="extract" [size]="'auto'" />
-      </button>
-      <button type="button" class="tree-decoded-pill" tabindex="-1">
+      </span>
+      <span class="tree-decoded-pill" tabindex="-1">
         <jj-icon name="decoded" [size]="'auto'" />
-      </button>
-      <button type="button" class="tree-kebab-pill" tabindex="-1">
+      </span>
+      <span class="tree-kebab-pill" tabindex="-1">
         <jj-icon name="more-vert" [size]="'auto'" />
-      </button>
+      </span>
     </span>
   </div>
   @if (root()) {
@@ -296,22 +318,28 @@
                 (dblclick)="onRowDblClick($event, leafNode)"
                 (keydown)="onTreeKeydown($event, leafNode)"
               >
-                <span class="tree-twisty tree-spacer" aria-hidden="true">&middot;</span>
+                <span class="tree-row-leading">
+                  <span class="tree-twisty tree-spacer" aria-hidden="true">&middot;</span>
 
-                @if (showComments() && leadingComment(leafNode); as lc) {
-                  <span
-                    class="tree-comment tree-comment-leading"
-                    [matTooltip]="leadingCommentTooltipPrefix + lc"
-                    matTooltipShowDelay="500"
-                    matTooltipPosition="above"
-                    matTooltipClass="jj-tooltip-wide"
-                    >{{ commentFirstLine(lc) }}</span
-                  >
-                }
+                  @if (showComments() && leadingComment(leafNode); as lc) {
+                    <span
+                      class="tree-comment tree-comment-leading"
+                      [matTooltip]="leadingCommentTooltipPrefix + lc"
+                      matTooltipShowDelay="500"
+                      matTooltipPosition="above"
+                      matTooltipClass="jj-tooltip-wide"
+                      >{{ commentFirstLine(lc) }}</span
+                    >
+                  }
 
-                @for (ki of keyIcons(leafNode); track ki) {
-                  <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="'auto'" />
-                }
+                  @for (ki of keyIcons(leafNode); track ki) {
+                    <jj-icon
+                      class="tree-rule-icon tree-rule-icon--key"
+                      [name]="ki"
+                      [size]="'auto'"
+                    />
+                  }
+                </span>
                 @if (leafNode.segment !== undefined) {
                   @if (segmentIsIndex(leafNode)) {
                     <span class="tree-index">{{ leafNode.segment }}:</span>
@@ -324,77 +352,82 @@
                     <span class="tree-key" [attr.title]="displayedKey === rawKey ? null : rawKey">{{
                       displayedKey
                     }}</span>
+                    <span class="tree-key-sep">: </span>
                   }
                 }
 
-                @for (vi of valueIcons(leafNode); track vi) {
-                  <jj-icon
-                    class="tree-rule-icon tree-rule-icon--value"
-                    [name]="vi"
-                    [size]="'auto'"
-                  />
-                }
-                @switch (leafNode.type) {
-                  @case ('string') {
-                    @let leafText = displayLeaf(leafNode);
+                <span class="tree-row-value-cell">
+                  @for (vi of valueIcons(leafNode); track vi) {
+                    <jj-icon
+                      class="tree-rule-icon tree-rule-icon--value"
+                      [name]="vi"
+                      [size]="'auto'"
+                    />
+                  }
+                  @switch (leafNode.type) {
+                    @case ('string') {
+                      @let leafText = displayLeaf(leafNode);
+                      <span
+                        class="tree-value-string"
+                        [jjOverflowDetector]="leafText"
+                        #leafOverflow="jjOverflowDetector"
+                        [matTooltip]="clampTooltip(leafText)"
+                        [matTooltipDisabled]="!leafOverflow.overflowing()"
+                        matTooltipShowDelay="500"
+                        matTooltipPosition="above"
+                        matTooltipClass="jj-tooltip-wide"
+                        >{{ leafText }}</span
+                      >
+                    }
+                    @case ('number') {
+                      <span class="tree-value-number">{{
+                        renderLeaf(leafNode.value, leafNode.type)
+                      }}</span>
+                    }
+                    @case ('boolean') {
+                      <span class="tree-value-boolean">{{
+                        renderLeaf(leafNode.value, leafNode.type)
+                      }}</span>
+                    }
+                    @case ('null') {
+                      <span class="tree-value-null">null</span>
+                    }
+                    @case ('array') {
+                      <span class="tree-value-container">
+                        <span class="tree-value-brace">[]</span>
+                      </span>
+                    }
+                    @case ('object') {
+                      <span class="tree-value-container">
+                        <span class="tree-value-brace">&#123;&#125;</span>
+                      </span>
+                    }
+                  }
+                </span>
+
+                <span class="tree-row-trailing">
+                  @if (leafNode.type === 'string' && showDateAnnotations()) {
+                    @let ann = dateAnnotation(leafNode);
+                    @if (ann) {
+                      <span
+                        class="tree-date-annotation"
+                        aria-label="Date annotation"
+                        i18n-aria-label="@@tree.dateAnnotation.aria"
+                        >&nbsp;({{ ann }})</span
+                      >
+                    }
+                  }
+                  @if (showComments() && trailingComment(leafNode); as tc) {
                     <span
-                      class="tree-value-string"
-                      [jjOverflowDetector]="leafText"
-                      #leafOverflow="jjOverflowDetector"
-                      [matTooltip]="clampTooltip(leafText)"
-                      [matTooltipDisabled]="!leafOverflow.overflowing()"
+                      class="tree-comment tree-comment-trailing"
+                      [matTooltip]="trailingCommentTooltipPrefix + tc"
                       matTooltipShowDelay="500"
                       matTooltipPosition="above"
                       matTooltipClass="jj-tooltip-wide"
-                      >{{ leafText }}</span
+                      >{{ commentFirstLine(tc) }}</span
                     >
-                    @if (showDateAnnotations()) {
-                      @let ann = dateAnnotation(leafNode);
-                      @if (ann) {
-                        <span
-                          class="tree-date-annotation"
-                          aria-label="Date annotation"
-                          i18n-aria-label="@@tree.dateAnnotation.aria"
-                          >&nbsp;({{ ann }})</span
-                        >
-                      }
-                    }
                   }
-                  @case ('number') {
-                    <span class="tree-value-number">{{
-                      renderLeaf(leafNode.value, leafNode.type)
-                    }}</span>
-                  }
-                  @case ('boolean') {
-                    <span class="tree-value-boolean">{{
-                      renderLeaf(leafNode.value, leafNode.type)
-                    }}</span>
-                  }
-                  @case ('null') {
-                    <span class="tree-value-null">null</span>
-                  }
-                  @case ('array') {
-                    <span class="tree-value-container">
-                      <span class="tree-value-brace">[]</span>
-                    </span>
-                  }
-                  @case ('object') {
-                    <span class="tree-value-container">
-                      <span class="tree-value-brace">&#123;&#125;</span>
-                    </span>
-                  }
-                }
-
-                @if (showComments() && trailingComment(leafNode); as tc) {
-                  <span
-                    class="tree-comment tree-comment-trailing"
-                    [matTooltip]="trailingCommentTooltipPrefix + tc"
-                    matTooltipShowDelay="500"
-                    matTooltipPosition="above"
-                    matTooltipClass="jj-tooltip-wide"
-                    >{{ commentFirstLine(tc) }}</span
-                  >
-                }
+                </span>
 
                 <span class="tree-row-right">
                   @if (matchingPaths().has(leafNode.pathString)) {
@@ -479,45 +512,51 @@
                 (dblclick)="onRowDblClick($event, openNode)"
                 (keydown)="onTreeKeydown($event, openNode)"
               >
-                <button
-                  type="button"
-                  class="tree-twisty"
-                  (click)="onTwistyClick(openNode, $event)"
-                  [attr.aria-label]="isExpanded(openNode) ? collapseLabel : expandLabel"
-                >
-                  <jj-icon
-                    [name]="isExpanded(openNode) ? 'chevron-down' : 'chevron-right'"
-                    [size]="'auto'"
-                  />
-                </button>
-
-                @for (ai of ancestorBeaconIcons(openNode); track ai) {
+                <span class="tree-row-leading">
                   <button
                     type="button"
-                    class="tree-beacon-badge"
-                    [attr.aria-label]="ancestorBadgeTooltip(openNode, ai)"
-                    [matTooltip]="ancestorBadgeTooltip(openNode, ai)"
-                    matTooltipShowDelay="500"
-                    (click)="onAncestorBadgeClick(openNode, ai, $event)"
+                    class="tree-twisty"
+                    (click)="onTwistyClick(openNode, $event)"
+                    [attr.aria-label]="isExpanded(openNode) ? collapseLabel : expandLabel"
                   >
-                    <jj-icon [name]="ai" [size]="'auto'" />
+                    <jj-icon
+                      [name]="isExpanded(openNode) ? 'chevron-down' : 'chevron-right'"
+                      [size]="'auto'"
+                    />
                   </button>
-                }
 
-                @if (showComments() && leadingComment(openNode); as lc) {
-                  <span
-                    class="tree-comment tree-comment-leading"
-                    [matTooltip]="leadingCommentTooltipPrefix + lc"
-                    matTooltipShowDelay="500"
-                    matTooltipPosition="above"
-                    matTooltipClass="jj-tooltip-wide"
-                    >{{ commentFirstLine(lc) }}</span
-                  >
-                }
+                  @for (ai of ancestorBeaconIcons(openNode); track ai) {
+                    <button
+                      type="button"
+                      class="tree-beacon-badge"
+                      [attr.aria-label]="ancestorBadgeTooltip(openNode, ai)"
+                      [matTooltip]="ancestorBadgeTooltip(openNode, ai)"
+                      matTooltipShowDelay="500"
+                      (click)="onAncestorBadgeClick(openNode, ai, $event)"
+                    >
+                      <jj-icon [name]="ai" [size]="'auto'" />
+                    </button>
+                  }
 
-                @for (ki of keyIcons(openNode); track ki) {
-                  <jj-icon class="tree-rule-icon tree-rule-icon--key" [name]="ki" [size]="'auto'" />
-                }
+                  @if (showComments() && leadingComment(openNode); as lc) {
+                    <span
+                      class="tree-comment tree-comment-leading"
+                      [matTooltip]="leadingCommentTooltipPrefix + lc"
+                      matTooltipShowDelay="500"
+                      matTooltipPosition="above"
+                      matTooltipClass="jj-tooltip-wide"
+                      >{{ commentFirstLine(lc) }}</span
+                    >
+                  }
+
+                  @for (ki of keyIcons(openNode); track ki) {
+                    <jj-icon
+                      class="tree-rule-icon tree-rule-icon--key"
+                      [name]="ki"
+                      [size]="'auto'"
+                    />
+                  }
+                </span>
                 @if (openNode.segment !== undefined) {
                   @if (segmentIsIndex(openNode)) {
                     <span class="tree-index">{{ openNode.segment }}:</span>
@@ -532,31 +571,36 @@
                       [attr.title]="openDisplayedKey === openRawKey ? null : openRawKey"
                       >{{ openDisplayedKey }}</span
                     >
+                    <span class="tree-key-sep">: </span>
                   }
                 }
 
-                <span class="tree-value-container">
-                  <span class="tree-value-brace">
-                    {{
-                      isExpanded(openNode)
-                        ? openNode.type === 'array'
-                          ? '['
-                          : '{'
-                        : containerSummary(openNode)
-                    }}
+                <span class="tree-row-value-cell">
+                  <span class="tree-value-container">
+                    <span class="tree-value-brace">
+                      {{
+                        isExpanded(openNode)
+                          ? openNode.type === 'array'
+                            ? '['
+                            : '{'
+                          : containerSummary(openNode)
+                      }}
+                    </span>
                   </span>
                 </span>
 
-                @if (showComments() && trailingComment(openNode); as tc) {
-                  <span
-                    class="tree-comment tree-comment-trailing"
-                    [matTooltip]="trailingCommentTooltipPrefix + tc"
-                    matTooltipShowDelay="500"
-                    matTooltipPosition="above"
-                    matTooltipClass="jj-tooltip-wide"
-                    >{{ commentFirstLine(tc) }}</span
-                  >
-                }
+                <span class="tree-row-trailing">
+                  @if (showComments() && trailingComment(openNode); as tc) {
+                    <span
+                      class="tree-comment tree-comment-trailing"
+                      [matTooltip]="trailingCommentTooltipPrefix + tc"
+                      matTooltipShowDelay="500"
+                      matTooltipPosition="above"
+                      matTooltipClass="jj-tooltip-wide"
+                      >{{ commentFirstLine(tc) }}</span
+                    >
+                  }
+                </span>
 
                 <span class="tree-row-right">
                   <span class="tree-count">{{ containerCountText(openNode) }}</span>

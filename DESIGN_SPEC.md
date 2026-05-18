@@ -2511,6 +2511,59 @@ Out of scope (for v1):
   iteration sees BOTH the new top-level row AND the Subtree
   trigger. Any future iconless top-level row added anywhere in
   `rowMenu` will fail the new test.
+- **0.26.1**: Tree row CSS Grid migration (issue #269). Retires the
+  flexbox + four-rounds-of-hotfix cascade on `.tree-row` that grew
+  across v0.21.1 (`.tree-row > * { min-width: 0 }`), v0.23.1
+  (`flex-shrink: 0` re-pinning on twisty / beacon / container /
+  brace), v0.23.2 (count cluster `flex-shrink: 0`), and v0.25.1
+  (`.tree-key` 80% cap, never shipped to main). Replaces them with
+  a six-track Grid template:
+  `grid-template-columns: [leading] minmax(0, max-content) [key] minmax(0, max-content)
+  [sep] auto [value] minmax(0, max-content) [trailing] minmax(0, auto)
+  [filler] 1fr [right] auto`. Each previously-direct flex child of
+  `.tree-row` is wrapped in one of three inline-flex containers
+  (`.tree-row-leading`, `.tree-row-value-cell`, `.tree-row-trailing`)
+  so the Grid template sees exactly the cells it places. The
+  `::after { content: ': ' }` pseudo on `.tree-key` retires in
+  favor of a sibling `<span class="tree-key-sep">: </span>` placed
+  in the dedicated `[sep]` track -- the colon now has a stable
+  width that doesn't get clipped by `text-overflow: ellipsis` when
+  the key shrinks. The `.tree-date-annotation` element (previously
+  nested inside the string @case block) moves into the
+  `.tree-row-trailing` wrapper so the Grid template sees a single
+  trailing cell. Twelve `flex-shrink: 0` declarations retire across
+  `.tree-key`, `.tree-index`, `.tree-date-annotation`,
+  `.tree-value-number`, `.tree-value-boolean`, `.tree-value-null`,
+  `.tree-value-container`, `.tree-value-brace`, and `.tree-row-right`
+  (plus `margin-left: auto` on the last); the Grid track sizing
+  carries the same load-bearing invariants. `.tree-value-number /
+  -boolean / -null / -container` gain `overflow: hidden;
+  text-overflow: ellipsis; min-width: 0` so non-string values now
+  ellipsify at the wrapper edge instead of clipping mid-glyph (the
+  long-numeric-string and long-container-summary cases that
+  v0.21.1 left silently truncating). `.tree-twisty` and
+  `.tree-beacon-badge` retain `flex-shrink: 0` because they live
+  inside the `.tree-row-leading` flex wrapper (not direct grid
+  items); the v0.23.1 twisty-alignment invariant is preserved
+  unchanged. The close-row keeps its existing flex layout
+  (`.tree-row--close { display: flex; > * { min-width: 0 } }`) as
+  a separate, scoped block so the Grid template doesn't have to
+  encode `}`/`]` glyph centering. Pure presentation patch -- no
+  TS, no template logic changes beyond wrapper insertion; the
+  `OverflowDetectorDirective` / `OverflowMeasurementQueue`
+  machinery from v0.21.0 keeps doing its job inside the new
+  wrappers. Spec coverage shifts from direct-child `:scope >`
+  queries and `.children.findIndex` ordering to descendant
+  queries + `compareDocumentPosition`; the
+  `flex-shrink === '0'` computed-style guard from v0.23.2
+  becomes a `display === 'grid'` guard on the parent row plus
+  the existing behavioral assertions (count text fits on one line;
+  right cluster height <= count height * 1.6). Patch bump --
+  pure under-the-hood architectural cleanup; no user-visible
+  behavior change in normal-width cases, and the long-key
+  overflow regression that v0.25.1 was drafted against is
+  resolved by the new track sizing without needing the
+  `max-width: 80%` cap.
 - **0.26.0**: M7v Safer Extract Embedded JSON UX (see milestone
   M7v at the end of this document for the full prose). When a
   string leaf is both extractable and a decoded-value candidate,
