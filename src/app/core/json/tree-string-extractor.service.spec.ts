@@ -15,6 +15,7 @@ import {
 interface ScanRequest {
   type: 'scan';
   sourceVersion: number;
+  chunkId: number;
   tabSize: IndentSize;
   strings: readonly string[];
 }
@@ -22,6 +23,7 @@ interface ScanRequest {
 interface ScanResultMessage {
   type: 'scanResult';
   sourceVersion: number;
+  chunkId: number;
   results: readonly (ExtractedJsonWireFormat | null)[];
 }
 
@@ -53,6 +55,7 @@ class MockWorker {
     this.emitScanResult({
       type: 'scanResult',
       sourceVersion: request.sourceVersion,
+      chunkId: request.chunkId,
       results: results ?? request.strings.map((rawString) => wireResultFor(rawString)),
     });
   }
@@ -246,6 +249,7 @@ describe('TreeStringExtractorService', () => {
     mockWorker.emitScanResult({
       type: 'scanResult',
       sourceVersion: oldRequest.sourceVersion,
+      chunkId: oldRequest.chunkId,
       results: [wireResultFor(oldString)],
     });
 
@@ -254,6 +258,7 @@ describe('TreeStringExtractorService', () => {
     mockWorker.emitScanResult({
       type: 'scanResult',
       sourceVersion: newRequest.sourceVersion,
+      chunkId: newRequest.chunkId,
       results: [wireResultFor(newString)],
     });
 
@@ -530,8 +535,14 @@ describe('TreeStringExtractorService', () => {
     });
 
     it('pre-screen failures are tabSize-independent (no re-post after tabSize flip)', () => {
-      // Strings without `{` or `[` cannot have JSON regardless of
-      // tabSize. They go into definitelyNullStrings, not the cache.
+      // shouldScan is pure and deterministic: it depends only on the
+      // raw string length and the presence of `{`/`[`. A string that
+      // fails the pre-screen at tabSize=2 will fail again at tabSize=4,
+      // so no worker request should be posted on either side of the
+      // flip. This regression protects against a future change that
+      // makes shouldScan tabSize-sensitive (e.g., a misguided
+      // "optimize by skipping comment characters" pass whose count
+      // would differ by indent).
       service.enqueueScan(['plain text without delimiters']);
       expect(mockWorker.postedMessages).toEqual([]);
 
@@ -542,6 +553,77 @@ describe('TreeStringExtractorService', () => {
       service.enqueueScan(['plain text without delimiters']);
 
       expect(mockWorker.postedMessages).toEqual([]);
+    });
+
+    it('drops a stale OLD-tabSize response arriving AFTER a rescan reposted at the new tabSize (chunkId TOCTOU regression)', () => {
+      // PR #289 review: previously, `rescanCurrentGenerationOnTabSizeChange`
+      // deleted the version-keyed queue entry and reposted a new chunk
+      // at the SAME sourceVersion. A late-arriving OLD-tabSize response
+      // would pass the sourceVersion guard, pop the NEW chunk via the
+      // FIFO queue, cache the OLD result under the NEW chunk's tabSize
+      // key (poisoning the cache), AND eat the NEW chunk's queue slot
+      // so the legitimate NEW response was silently dropped. With
+      // per-chunk ids the OLD response's chunkId is no longer tracked
+      // after the rescan and the response is dropped.
+      const rawString = rawJsonString(74);
+
+      // 1) Dispatch at tabSize=2. Capture chunkId 0 for the OLD chunk.
+      service.enqueueScan([rawString]);
+      const oldRequest = mockWorker.requirePostedMessage(0);
+      expect(oldRequest.tabSize).toBe(2);
+
+      // 2) Flip prefs and flush -- rescan deletes the OLD chunkId and
+      //    posts a NEW chunk (chunkId 1) at tabSize=4 / same sourceVersion.
+      prefsSignal.set({ ...DEFAULT_PREFERENCES, editorTabSize: 4 });
+      TestBed.flushEffects();
+      const newRequest = mockWorker.requirePostedMessage(1);
+      expect(newRequest.tabSize).toBe(4);
+      expect(newRequest.sourceVersion).toBe(oldRequest.sourceVersion);
+
+      // 3) Deliver the OLD chunkId's response. It must be dropped:
+      //    no candidate poisoning, no NEW chunk consumed.
+      mockWorker.emitScanResult({
+        type: 'scanResult',
+        sourceVersion: oldRequest.sourceVersion,
+        chunkId: oldRequest.chunkId,
+        results: [
+          {
+            text: 'OLD_TABSIZE_2_RESULT',
+            blockCount: 1,
+            preservesComments: true,
+            proseSegments: 0,
+            hasComments: false,
+          },
+        ],
+      });
+
+      expect(service.candidates().size).toBe(0);
+
+      // 4) Now deliver the NEW chunkId's response. It must land as the
+      //    visible candidate.
+      mockWorker.respondToMessage(1);
+
+      expectCandidateText(rawString, rawString);
+    });
+
+    it('handles out-of-order worker responses within a generation (chunkId lookup, not FIFO)', () => {
+      // PR #289 review: with the queue-based design, out-of-order
+      // delivery would misassociate strings. chunkId lookup tolerates
+      // any delivery order.
+      const firstString = rawJsonString(75);
+      const secondString = rawJsonString(76);
+
+      service.enqueueScan([firstString]);
+      service.enqueueScan([secondString]);
+
+      expect(mockWorker.postedMessages.length).toBe(2);
+
+      // Respond out of order: second chunk first, then first.
+      mockWorker.respondToMessage(1);
+      mockWorker.respondToMessage(0);
+
+      expectCandidateText(firstString, firstString);
+      expectCandidateText(secondString, secondString);
     });
   });
 
@@ -574,12 +656,15 @@ function isScanRequest(value: unknown): value is ScanRequest {
   const candidate = value as {
     type?: unknown;
     sourceVersion?: unknown;
+    chunkId?: unknown;
     tabSize?: unknown;
     strings?: unknown;
   };
   return (
     candidate.type === 'scan' &&
     typeof candidate.sourceVersion === 'number' &&
+    typeof candidate.chunkId === 'number' &&
+    Number.isInteger(candidate.chunkId) &&
     (candidate.tabSize === 2 || candidate.tabSize === 4) &&
     Array.isArray(candidate.strings) &&
     candidate.strings.every((item) => typeof item === 'string')

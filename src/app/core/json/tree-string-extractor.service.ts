@@ -22,6 +22,7 @@ export const WORKER_FACTORY = new InjectionToken<() => Worker>(
 interface ScanRequest {
   type: 'scan';
   sourceVersion: number;
+  chunkId: number;
   tabSize: IndentSize;
   strings: readonly string[];
 }
@@ -29,6 +30,7 @@ interface ScanRequest {
 interface ScanResultMessage {
   type: 'scanResult';
   sourceVersion: number;
+  chunkId: number;
   results: readonly (ExtractedJsonWireFormat | null)[];
 }
 
@@ -47,11 +49,14 @@ type ScannerUnavailableReason = 'factory' | 'postMessage' | 'error' | 'messageer
  * One pending chunk awaiting a worker response. We capture the tabSize
  * at chunk-dispatch time (not at response time) so that a tabSize change
  * between dispatch and response cannot poison the cache with a result
- * keyed under the wrong tabSize. See issue #253.
+ * keyed under the wrong tabSize. We also capture the sourceVersion so
+ * the worker-message handler can verify the chunk still belongs to the
+ * generation that issued it. See issue #253 and PR #289 review.
  */
 interface PendingChunk {
   strings: string[];
   tabSize: IndentSize;
+  sourceVersion: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -63,22 +68,34 @@ export class TreeStringExtractorService {
    * LRU cache keyed by `${tabSize}:${rawString}`. tabSize is always the
    * captured-at-dispatch value, never a live read from prefs, so a
    * mid-flight tabSize toggle cannot land a result under the wrong key.
-   * Strings that fail `shouldScan` (length / no `{` or `[`) bypass this
-   * cache and use `definitelyNullStrings` instead, since that result is
-   * tabSize-independent.
    */
   private readonly cache = new Map<string, CachedExtraction>();
-  /**
-   * Strings that cannot contain any extractable JSON regardless of
-   * tabSize (too short, too long, or no `{`/`[` trigger). Tracked
-   * separately from the indent-keyed `cache` so a tabSize flip does
-   * not invalidate these mechanical-failure entries.
-   */
-  private readonly definitelyNullStrings = new Set<string>();
   private readonly currentGenerationStrings = new Set<string>();
   private readonly currentGenerationInFlight = new Set<string>();
   private readonly currentGenerationResults = new Map<string, ExtractedJson>();
-  private readonly pendingChunksByVersion = new Map<number, PendingChunk[]>();
+  /**
+   * Pending worker chunks keyed by per-chunk id. Replaced the prior
+   * version-keyed FIFO queue (PR #289 review): the queue allowed a
+   * stale OLD-tabSize response (arriving after `rescanCurrentGenerationOnTabSizeChange`
+   * had cleared the queue slot and reposted a NEW-tabSize chunk at the
+   * same sourceVersion) to misassociate with the NEW chunk -- poisoning
+   * the cache under the new tabSize key AND eating the legitimate new
+   * response. With per-chunk ids the stale response simply finds no
+   * matching chunk and is dropped.
+   *
+   * Invariant: every chunk in this Map has `sourceVersion ===
+   * currentVersionSignal()`. `beginGeneration` clears the map, and
+   * `rescanCurrentGenerationOnTabSizeChange` deletes the
+   * currentVersion entries before reposting.
+   */
+  private readonly pendingChunksById = new Map<number, PendingChunk>();
+  /**
+   * Per-version pending chunk count. Kept in sync with `pendingChunksById`
+   * so `refreshScanInFlight` can answer "any chunk for currentVersion?"
+   * in O(1) without iterating the id map. Required for the editor hot
+   * path where a large pasted blob can produce many chunks.
+   */
+  private readonly pendingChunkCountByVersion = new Map<number, number>();
   private readonly candidatesSignal: WritableSignal<ReadonlyMap<string, ExtractedJson>> = signal(
     new Map<string, ExtractedJson>(),
   );
@@ -87,6 +104,13 @@ export class TreeStringExtractorService {
   private readonly currentVersionSignal = signal(0);
   private worker: Worker | null = null;
   private nextVersion = 0;
+  /**
+   * Monotonic per-chunk identifier. NEVER reset by `beginGeneration` --
+   * cross-generation collisions would re-enable a worse variant of the
+   * bug fixed in PR #289 review. Number.MAX_SAFE_INTEGER (~9e15) is
+   * astronomically more than any plausible service lifetime can produce.
+   */
+  private nextChunkId = 0;
   /**
    * Tracks the last tabSize observed by the prefs-change effect so the
    * first synchronous run (during construction) does not invalidate a
@@ -130,7 +154,8 @@ export class TreeStringExtractorService {
     this.currentGenerationStrings.clear();
     this.currentGenerationInFlight.clear();
     this.currentGenerationResults.clear();
-    this.pendingChunksByVersion.clear();
+    this.pendingChunksById.clear();
+    this.pendingChunkCountByVersion.clear();
     this.scanInFlightSignal.set(false);
     this.candidatesSignal.set(new Map<string, ExtractedJson>());
     return sourceVersion;
@@ -149,11 +174,14 @@ export class TreeStringExtractorService {
     for (const rawString of new Set(strings)) {
       this.currentGenerationStrings.add(rawString);
 
+      // shouldScan is pure and deterministic over (rawString,
+      // MAX_INPUT_LENGTH) -- the same input always yields the same
+      // result. A prior memoization set was removed in the PR #289
+      // review: it was dead code (a string that fails shouldScan once
+      // would fail it on every subsequent call) and unbounded.
+      // shouldScan is O(string-length) with V8-optimized
+      // string.includes; recomputing is essentially free.
       if (!this.shouldScan(rawString)) {
-        this.definitelyNullStrings.add(rawString);
-        continue;
-      }
-      if (this.definitelyNullStrings.has(rawString)) {
         continue;
       }
 
@@ -267,10 +295,12 @@ export class TreeStringExtractorService {
     tabSize: IndentSize,
     chunk: readonly string[],
   ): void {
-    this.addPendingChunk(sourceVersion, tabSize, chunk);
+    const chunkId = this.nextChunkId++;
+    this.addPendingChunk(chunkId, sourceVersion, tabSize, chunk);
     const request: ScanRequest = {
       type: 'scan',
       sourceVersion,
+      chunkId,
       tabSize,
       strings: chunk,
     };
@@ -283,39 +313,38 @@ export class TreeStringExtractorService {
   }
 
   private addPendingChunk(
+    chunkId: number,
     sourceVersion: number,
     tabSize: IndentSize,
     chunk: readonly string[],
   ): void {
-    const existingChunks = this.pendingChunksByVersion.get(sourceVersion);
-    const ownedChunk: PendingChunk = { strings: [...chunk], tabSize };
-    if (existingChunks) {
-      existingChunks.push(ownedChunk);
-      return;
-    }
-    this.pendingChunksByVersion.set(sourceVersion, [ownedChunk]);
+    const ownedChunk: PendingChunk = { strings: [...chunk], tabSize, sourceVersion };
+    this.pendingChunksById.set(chunkId, ownedChunk);
+    const priorCount = this.pendingChunkCountByVersion.get(sourceVersion) ?? 0;
+    this.pendingChunkCountByVersion.set(sourceVersion, priorCount + 1);
     this.refreshScanInFlight();
   }
 
-  private shiftPendingChunk(sourceVersion: number): PendingChunk | undefined {
-    const pendingChunks = this.pendingChunksByVersion.get(sourceVersion);
-    if (!pendingChunks) {
+  private popPendingChunk(chunkId: number): PendingChunk | undefined {
+    const chunk = this.pendingChunksById.get(chunkId);
+    if (!chunk) {
       return undefined;
     }
-
-    const chunk = pendingChunks.shift();
-    if (pendingChunks.length === 0) {
-      this.pendingChunksByVersion.delete(sourceVersion);
+    this.pendingChunksById.delete(chunkId);
+    const priorCount = this.pendingChunkCountByVersion.get(chunk.sourceVersion) ?? 0;
+    if (priorCount <= 1) {
+      this.pendingChunkCountByVersion.delete(chunk.sourceVersion);
+    } else {
+      this.pendingChunkCountByVersion.set(chunk.sourceVersion, priorCount - 1);
     }
     this.refreshScanInFlight();
     return chunk;
   }
 
   private refreshScanInFlight(): void {
-    this.scanInFlightSignal.set(
-      !this.scannerUnavailableSignal() &&
-        this.pendingChunksByVersion.has(this.currentVersionSignal()),
-    );
+    const currentVersion = this.currentVersionSignal();
+    const pendingForCurrent = this.pendingChunkCountByVersion.get(currentVersion) ?? 0;
+    this.scanInFlightSignal.set(!this.scannerUnavailableSignal() && pendingForCurrent > 0);
   }
 
   private handleWorkerMessage(event: MessageEvent<unknown>): void {
@@ -328,7 +357,11 @@ export class TreeStringExtractorService {
       return;
     }
 
-    const chunk = this.shiftPendingChunk(message.sourceVersion);
+    // Per-chunk lookup: a stale response whose chunk was deleted (by
+    // beginGeneration, rescanCurrentGenerationOnTabSizeChange, or a
+    // worker failure) finds no matching entry and is dropped. This is
+    // the load-bearing guard against the PR #289 review TOCTOU bug.
+    const chunk = this.popPendingChunk(message.chunkId);
     if (!chunk) {
       return;
     }
@@ -372,6 +405,13 @@ export class TreeStringExtractorService {
    * immediately; misses repost to the worker. Stale results from the
    * prior tabSize are cleared so the visible candidates signal does
    * not show outdated indent.
+   *
+   * Pending chunks for the current sourceVersion are deleted before
+   * reposting. PR #289 review: this is the load-bearing invariant
+   * paired with per-chunk ids -- by removing the OLD chunkIds, a stale
+   * worker response arriving after rescan finds no matching entry in
+   * `pendingChunksById` and is dropped, instead of misassociating with
+   * a NEW chunk and poisoning the cache.
    */
   private rescanCurrentGenerationOnTabSizeChange(): void {
     if (this.currentGenerationStrings.size === 0) {
@@ -381,10 +421,22 @@ export class TreeStringExtractorService {
     this.currentGenerationStrings.clear();
     this.currentGenerationInFlight.clear();
     this.currentGenerationResults.clear();
-    this.pendingChunksByVersion.delete(this.currentVersionSignal());
+    this.clearPendingChunksForVersion(this.currentVersionSignal());
     this.refreshScanInFlight();
     this.candidatesSignal.set(new Map<string, ExtractedJson>());
     this.enqueueScan(strings);
+  }
+
+  private clearPendingChunksForVersion(sourceVersion: number): void {
+    // Invariant: only currentVersion chunks should be in the map (see
+    // pendingChunksById JSDoc). Walk defensively anyway in case a
+    // future change relaxes that invariant.
+    for (const [chunkId, chunk] of this.pendingChunksById) {
+      if (chunk.sourceVersion === sourceVersion) {
+        this.pendingChunksById.delete(chunkId);
+      }
+    }
+    this.pendingChunkCountByVersion.delete(sourceVersion);
   }
 
   private handleWorkerFailure(reason: ScannerUnavailableReason): void {
@@ -393,7 +445,8 @@ export class TreeStringExtractorService {
     }
     this.scannerUnavailableSignal.set(true);
     this.currentGenerationInFlight.clear();
-    this.pendingChunksByVersion.clear();
+    this.pendingChunksById.clear();
+    this.pendingChunkCountByVersion.clear();
     this.scanInFlightSignal.set(false);
   }
 }
@@ -406,11 +459,14 @@ function isScanResultMessage(value: unknown): value is ScanResultMessage {
   const candidate = value as {
     type?: unknown;
     sourceVersion?: unknown;
+    chunkId?: unknown;
     results?: unknown;
   };
   return (
     candidate.type === 'scanResult' &&
     typeof candidate.sourceVersion === 'number' &&
+    typeof candidate.chunkId === 'number' &&
+    Number.isInteger(candidate.chunkId) &&
     Array.isArray(candidate.results)
   );
 }
