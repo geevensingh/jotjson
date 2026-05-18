@@ -34,6 +34,13 @@ import type {
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
 import { BeaconNavigationService } from '../../../core/beacons/beacon-navigation.service';
 import { ClipboardCopyService } from '../../../core/clipboard/clipboard-copy.service';
+import {
+  formatInlineComment,
+  mergeEmptyContainerTrailing,
+  moreBadge,
+  moreBadgeAriaLabel,
+  type InlineCommentText,
+} from '../../../core/json/comment-display';
 import type { ExtractedJson } from '../../../core/json/json-extractor.service';
 import { CommentBundle, JsonParserService } from '../../../core/json/json-parser.service';
 import { displayKey as displayKeyHelper } from '../../../core/json/key-display';
@@ -333,6 +340,8 @@ export class JsonTreeComponent {
   private readonly logger = inject(LoggerService);
   private readonly beaconNav = inject(BeaconNavigationService);
   private readonly dialog = inject(MatDialog);
+  protected readonly moreBadge = moreBadge;
+  protected readonly moreBadgeAriaLabel = moreBadgeAriaLabel;
 
   readonly value = input<unknown>(undefined);
   readonly viewResetToken = input<number>(0);
@@ -368,11 +377,12 @@ export class JsonTreeComponent {
    * obscured by editorial annotations.
    *
    * For container nodes, `bundle.trailing` is rendered on the
-   * container's open row (mirroring the leaf-row trailing slot) and
-   * `bundle.closeTrailing` is rendered on the close row. Empty
-   * containers, which render as a single inline row, fall back to
-   * `closeTrailing` when `trailing` is absent so a `// tail`
-   * comment after `"foo": {}` still surfaces. See `CommentBundle`
+   * container's open row, while `bundle.closeLeading` /
+   * `bundle.closeTrailing` render on the dedicated close row. Empty
+   * containers render as a single inline row, so the trailing slot
+   * merges `trailing`, `closeLeading`, and `closeTrailing` in source
+   * order so comments around `"foo": {}` still surface. See
+   * `CommentBundle`
    * and DESIGN_SPEC.md M7k.
    */
   readonly commentsByPath = input<ReadonlyMap<string, CommentBundle> | null>(null);
@@ -4962,85 +4972,48 @@ export class JsonTreeComponent {
   }
 
   /**
-   * Returns the leading-comment text attached to `node`'s path, or
-   * `null` when there is no comment data or no leading comment for
-   * this node. The renderer uses this for the inline slot before the
-   * key on value rows and on container open rows.
+   * Returns the formatted leading-comment payload attached to
+   * `node`'s path, or `null` when absent.
    */
-  leadingComment(node: TreeNode): string | null {
-    const map = this.commentsByPath();
-    if (!map) return null;
-    return map.get(node.pathString)?.leading ?? null;
+  leadingComment(node: TreeNode): InlineCommentText | null {
+    const bundle = this.commentsByPath()?.get(node.pathString);
+    return formatInlineComment(bundle?.leading);
   }
 
   /**
-   * Returns the trailing-comment text attached to `node`'s primary
-   * row, or `null` when there is no comment data or no trailing
-   * comment for this row.
+   * Returns the formatted trailing-comment payload attached to
+   * `node`'s primary row, or `null` when absent.
    *
-   * For primitives and empty containers (rendered as a single row
-   * that serves as both open and close), this MERGES every
-   * applicable bundle field in source order so that no comment is
-   * hidden: `trailing` (open-row), then `closeLeading` (between
-   * brace and close, drained at container end), then `closeTrailing`
-   * (after the close brace). Only the first line shows in the row
-   * preview; the tooltip surfaces the full text.
-   *
-   * For non-empty containers (which render an open row + children +
-   * a separate close row), this returns only `bundle.trailing`
-   * (the open-row trailing slot). The close row uses
-   * `closeLeadingComment(node)` and `closeTrailingComment(node)`.
+   * For primitives and empty containers (rendered as a single inline
+   * row that serves as both open and close), the trailing slot merges
+   * `trailing`, `closeLeading`, and `closeTrailing` in source order so
+   * no comment body is hidden. Non-empty containers keep the open-row
+   * `trailing` slot separate from the close-row helpers below.
    */
-  trailingComment(node: TreeNode): string | null {
-    const map = this.commentsByPath();
-    if (!map) return null;
-    const bundle = map.get(node.pathString);
+  trailingComment(node: TreeNode): InlineCommentText | null {
+    const bundle = this.commentsByPath()?.get(node.pathString);
     if (!bundle) return null;
     const isInlineRow = !node.children || node.children.length === 0;
-    if (isInlineRow) {
-      const parts = [bundle.trailing, bundle.closeLeading, bundle.closeTrailing].filter(
-        (part): part is string => part !== undefined,
-      );
-      return parts.length > 0 ? parts.join('\n') : null;
-    }
-    return bundle.trailing ?? null;
+    if (isInlineRow) return mergeEmptyContainerTrailing(bundle);
+    return formatInlineComment(bundle.trailing);
   }
 
   /**
-   * Returns the close-row leading-comment text attached to a
-   * non-empty container node's close row, or `null` when absent.
-   * Rendered before the close brace, so a row reads as
-   * `[closeLeading]  }  [closeTrailing]`. Only meaningful for
-   * object / array nodes that have children (i.e. are rendered as
-   * open + children + close); empty containers fold into
-   * `trailingComment` via the merge fallback.
+   * Returns the formatted close-row leading-comment payload attached
+   * to a non-empty container node's close row, or `null` when absent.
    */
-  closeLeadingComment(node: TreeNode): string | null {
-    const map = this.commentsByPath();
-    if (!map) return null;
-    return map.get(node.pathString)?.closeLeading ?? null;
+  closeLeadingComment(node: TreeNode): InlineCommentText | null {
+    const bundle = this.commentsByPath()?.get(node.pathString);
+    return formatInlineComment(bundle?.closeLeading);
   }
 
   /**
-   * Returns the close-row trailing-comment text attached to a
-   * non-empty container node's close row, or `null` when absent.
-   * Only meaningful for object / array nodes that have children
-   * (i.e. are rendered as open + children + close).
+   * Returns the formatted close-row trailing-comment payload attached
+   * to a non-empty container node's close row, or `null` when absent.
    */
-  closeTrailingComment(node: TreeNode): string | null {
-    const map = this.commentsByPath();
-    if (!map) return null;
-    return map.get(node.pathString)?.closeTrailing ?? null;
-  }
-
-  /**
-   * First-line preview of a comment for the inline slot. Multi-line
-   * or stacked comments collapse to their first line in the row;
-   * the full text is surfaced via `matTooltip` on hover.
-   */
-  commentFirstLine(text: string): string {
-    const newlineIndex = text.indexOf('\n');
-    return newlineIndex === -1 ? text : text.slice(0, newlineIndex);
+  closeTrailingComment(node: TreeNode): InlineCommentText | null {
+    const bundle = this.commentsByPath()?.get(node.pathString);
+    return formatInlineComment(bundle?.closeTrailing);
   }
 
   private emitSlowExpandIfNeeded(timeMs: number, depth: number, nodeCount: number): void {

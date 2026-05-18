@@ -363,8 +363,8 @@
 }
 
 // Close rows retain `display: flex` because their 1-3 children
-// (`.tree-comment-leading--close`, `.tree-value-brace`,
-// `.tree-comment-trailing--close`) don't compete for shrink space.
+// (`.tree-comment-slot--leading-close`, `.tree-value-brace`,
+// `.tree-comment-slot--trailing-close`) don't compete for shrink space.
 // The grid-column assignments above are inert here because `display:
 // flex` overrides the parent's grid template. The scoped
 // `> * { min-width: 0 }` rule is the close-row replacement for the
@@ -709,6 +709,37 @@
 // a dimmed-italic treatment so the eye groups them as editorial
 // annotation, not data. The in-row preview is always single-line +
 // ellipsis; full text (including newlines) shows on matTooltip hover.
+.tree-comment-slot {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.tree-comment-slot--leading,
+.tree-comment-slot--leading-close {
+  margin-right: 8px;
+}
+
+.tree-comment-slot--trailing,
+.tree-comment-slot--trailing-close {
+  margin-left: 8px;
+}
+
+.tree-comment-count {
+  flex-shrink: 0;
+  margin-inline-start: var(--tree-comment-gap, 0.25em);
+  // EXPLICIT (not inherit) - CSS inherit does NOT flow sibling-to-sibling.
+  // Match .tree-comment's declarations token-for-token so the badge reads
+  // as part of the same editorial-annotation lane (DESIGN_SPEC sec 475).
+  color: var(--mat-sys-on-surface-variant, #9aa0a6);
+  font-style: italic;
+  font-size: 0.92em;
+  // var(--font-ui) explicit (NOT inherit) - .tree-row inherits mono from
+  // .tree-body; if this were inherit the badge would render in monospace
+  // while the body span is sans (architect pass-3 HIGH-1).
+  font-family: var(--font-ui);
+}
+
 .tree-comment {
   color: var(--mat-sys-on-surface-variant, #9aa0a6);
   font-style: italic;
@@ -727,33 +758,25 @@
 }
 
 .tree-comment-leading {
-  // Sit between the twisty/key-icon column and the key span. A small
-  // right margin separates the leading comment from the key it
-  // annotates, matching how it reads in the source.
-  margin-right: 8px;
+  // The 8px separator between this comment and the surrounding row
+  // content lives on the parent .tree-comment-slot--leading wrapper.
+  // Modifier kept for text-styling overrides.
 }
 
 .tree-comment-trailing {
-  // Trailing comment sits on the leaf row between the value (or its
-  // date annotation) and the right-aligned `tree-row-right` cluster,
-  // matching JSONC source order: `"x": 5  // milliseconds  [number]`.
-  margin-left: 8px;
+  // The 8px separator between this comment and the surrounding row
+  // content lives on the parent .tree-comment-slot--trailing wrapper.
+  // Modifier kept for text-styling overrides.
 }
 
 .tree-comment-trailing--close {
-  // On the close row the trailing comment sits beside the brace;
-  // the brace span has no flex gap, so the same 8px left margin
-  // applies. Modifier kept for future divergence (e.g., distinct
-  // color for end-of-container vs end-of-value).
-  margin-left: 8px;
+  // The slot wrapper .tree-comment-slot--trailing-close owns the 8px
+  // left margin separating the comment from the brace.
 }
 
 .tree-comment-leading--close {
-  // On the close row the leading comment sits BEFORE the brace,
-  // mirroring how `[closeLeading] }  [closeTrailing]` reads in
-  // source order. The base `.tree-comment-leading` rule already
-  // supplies a right margin to separate it from the brace; this
-  // modifier exists for future divergence.
+  // The slot wrapper .tree-comment-slot--leading-close owns the 8px
+  // right margin separating the comment from the brace.
 }
 
 .tree-type-badge {
