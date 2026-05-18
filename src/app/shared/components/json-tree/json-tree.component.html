@@ -250,7 +250,10 @@
       <span class="tree-beacon-badge" tabindex="-1">
         <jj-icon name="check" [size]="'auto'" />
       </span>
-      <span class="tree-comment tree-comment-leading">// c</span>
+      <span class="tree-comment-slot tree-comment-slot--leading">
+        <span class="tree-comment tree-comment-leading">// c</span>
+        <span class="tree-comment-count" dir="ltr">(+99)</span>
+      </span>
       <jj-icon class="tree-rule-icon tree-rule-icon--key" name="check" [size]="'auto'" />
     </span>
     <!-- intentionally raw: row-height probe; do not wrap in displayKey -->
@@ -265,7 +268,9 @@
     </span>
     <span class="tree-row-trailing">
       <span class="tree-date-annotation">&nbsp;(2024)</span>
-      <span class="tree-comment tree-comment-trailing">// t</span>
+      <span class="tree-comment-slot tree-comment-slot--trailing">
+        <span class="tree-comment tree-comment-trailing">// t</span>
+      </span>
     </span>
     <span class="tree-row-right">
       <span class="tree-count">(0)</span>
@@ -323,14 +328,24 @@
                   <span class="tree-twisty tree-spacer" aria-hidden="true">&middot;</span>
 
                   @if (showComments() && leadingComment(leafNode); as lc) {
-                    <span
-                      class="tree-comment tree-comment-leading"
-                      [matTooltip]="leadingCommentTooltipPrefix + lc"
-                      matTooltipShowDelay="500"
-                      matTooltipPosition="above"
-                      matTooltipClass="jj-tooltip-wide"
-                      >{{ commentFirstLine(lc) }}</span
-                    >
+                    <span class="tree-comment-slot tree-comment-slot--leading">
+                      <span
+                        class="tree-comment tree-comment-leading"
+                        [matTooltip]="leadingCommentTooltipPrefix + lc.tooltipBody"
+                        matTooltipShowDelay="500"
+                        matTooltipPosition="above"
+                        matTooltipClass="jj-tooltip-wide"
+                        >{{ lc.visible }}</span
+                      >
+                      @if (lc.count >= 2) {
+                        <span
+                          class="tree-comment-count"
+                          dir="ltr"
+                          [attr.aria-label]="moreBadgeAriaLabel(lc.count - 1)"
+                          >{{ moreBadge(lc.count - 1) }}</span
+                        >
+                      }
+                    </span>
                   }
 
                   @for (ki of keyIcons(leafNode); track ki) {
@@ -419,14 +434,24 @@
                     }
                   }
                   @if (showComments() && trailingComment(leafNode); as tc) {
-                    <span
-                      class="tree-comment tree-comment-trailing"
-                      [matTooltip]="trailingCommentTooltipPrefix + tc"
-                      matTooltipShowDelay="500"
-                      matTooltipPosition="above"
-                      matTooltipClass="jj-tooltip-wide"
-                      >{{ commentFirstLine(tc) }}</span
-                    >
+                    <span class="tree-comment-slot tree-comment-slot--trailing">
+                      <span
+                        class="tree-comment tree-comment-trailing"
+                        [matTooltip]="trailingCommentTooltipPrefix + tc.tooltipBody"
+                        matTooltipShowDelay="500"
+                        matTooltipPosition="above"
+                        matTooltipClass="jj-tooltip-wide"
+                        >{{ tc.visible }}</span
+                      >
+                      @if (tc.count >= 2) {
+                        <span
+                          class="tree-comment-count"
+                          dir="ltr"
+                          [attr.aria-label]="moreBadgeAriaLabel(tc.count - 1)"
+                          >{{ moreBadge(tc.count - 1) }}</span
+                        >
+                      }
+                    </span>
                   }
                 </span>
 
@@ -540,14 +565,24 @@
                   }
 
                   @if (showComments() && leadingComment(openNode); as lc) {
-                    <span
-                      class="tree-comment tree-comment-leading"
-                      [matTooltip]="leadingCommentTooltipPrefix + lc"
-                      matTooltipShowDelay="500"
-                      matTooltipPosition="above"
-                      matTooltipClass="jj-tooltip-wide"
-                      >{{ commentFirstLine(lc) }}</span
-                    >
+                    <span class="tree-comment-slot tree-comment-slot--leading">
+                      <span
+                        class="tree-comment tree-comment-leading"
+                        [matTooltip]="leadingCommentTooltipPrefix + lc.tooltipBody"
+                        matTooltipShowDelay="500"
+                        matTooltipPosition="above"
+                        matTooltipClass="jj-tooltip-wide"
+                        >{{ lc.visible }}</span
+                      >
+                      @if (lc.count >= 2) {
+                        <span
+                          class="tree-comment-count"
+                          dir="ltr"
+                          [attr.aria-label]="moreBadgeAriaLabel(lc.count - 1)"
+                          >{{ moreBadge(lc.count - 1) }}</span
+                        >
+                      }
+                    </span>
                   }
 
                   @for (ki of keyIcons(openNode); track ki) {
@@ -592,14 +627,24 @@
 
                 <span class="tree-row-trailing">
                   @if (showComments() && trailingComment(openNode); as tc) {
-                    <span
-                      class="tree-comment tree-comment-trailing"
-                      [matTooltip]="trailingCommentTooltipPrefix + tc"
-                      matTooltipShowDelay="500"
-                      matTooltipPosition="above"
-                      matTooltipClass="jj-tooltip-wide"
-                      >{{ commentFirstLine(tc) }}</span
-                    >
+                    <span class="tree-comment-slot tree-comment-slot--trailing">
+                      <span
+                        class="tree-comment tree-comment-trailing"
+                        [matTooltip]="trailingCommentTooltipPrefix + tc.tooltipBody"
+                        matTooltipShowDelay="500"
+                        matTooltipPosition="above"
+                        matTooltipClass="jj-tooltip-wide"
+                        >{{ tc.visible }}</span
+                      >
+                      @if (tc.count >= 2) {
+                        <span
+                          class="tree-comment-count"
+                          dir="ltr"
+                          [attr.aria-label]="moreBadgeAriaLabel(tc.count - 1)"
+                          >{{ moreBadge(tc.count - 1) }}</span
+                        >
+                      }
+                    </span>
                   }
                 </span>
 
@@ -637,25 +682,45 @@
                 (contextmenu)="onCloseRowContextMenu($event, closeNode)"
               >
                 @if (showComments() && closeLeadingComment(closeNode); as cl) {
-                  <span
-                    class="tree-comment tree-comment-leading tree-comment-leading--close"
-                    [matTooltip]="closeLeadingCommentTooltipPrefix + cl"
-                    matTooltipShowDelay="500"
-                    matTooltipPosition="above"
-                    matTooltipClass="jj-tooltip-wide"
-                    >{{ commentFirstLine(cl) }}</span
-                  >
+                  <span class="tree-comment-slot tree-comment-slot--leading-close">
+                    <span
+                      class="tree-comment tree-comment-leading tree-comment-leading--close"
+                      [matTooltip]="closeLeadingCommentTooltipPrefix + cl.tooltipBody"
+                      matTooltipShowDelay="500"
+                      matTooltipPosition="above"
+                      matTooltipClass="jj-tooltip-wide"
+                      >{{ cl.visible }}</span
+                    >
+                    @if (cl.count >= 2) {
+                      <span
+                        class="tree-comment-count"
+                        dir="ltr"
+                        [attr.aria-label]="moreBadgeAriaLabel(cl.count - 1)"
+                        >{{ moreBadge(cl.count - 1) }}</span
+                      >
+                    }
+                  </span>
                 }
                 <span class="tree-value-brace">{{ closeNode.type === 'array' ? ']' : '}' }}</span>
                 @if (showComments() && closeTrailingComment(closeNode); as tc) {
-                  <span
-                    class="tree-comment tree-comment-trailing tree-comment-trailing--close"
-                    [matTooltip]="closeTrailingCommentTooltipPrefix + tc"
-                    matTooltipShowDelay="500"
-                    matTooltipPosition="above"
-                    matTooltipClass="jj-tooltip-wide"
-                    >{{ commentFirstLine(tc) }}</span
-                  >
+                  <span class="tree-comment-slot tree-comment-slot--trailing-close">
+                    <span
+                      class="tree-comment tree-comment-trailing tree-comment-trailing--close"
+                      [matTooltip]="closeTrailingCommentTooltipPrefix + tc.tooltipBody"
+                      matTooltipShowDelay="500"
+                      matTooltipPosition="above"
+                      matTooltipClass="jj-tooltip-wide"
+                      >{{ tc.visible }}</span
+                    >
+                    @if (tc.count >= 2) {
+                      <span
+                        class="tree-comment-count"
+                        dir="ltr"
+                        [attr.aria-label]="moreBadgeAriaLabel(tc.count - 1)"
+                        >{{ moreBadge(tc.count - 1) }}</span
+                      >
+                    }
+                  </span>
                 }
                 @if (closeManualHighlight) {
                   <span class="sr-only" i18n="@@tree.highlighted.aria">highlighted</span>
