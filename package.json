@@ -80,7 +80,7 @@
     "@angular/service-worker": "^21.2.12",
     "@angular/ssr": "^21.2.10",
     "@azure/msal-angular": "^5.2.0",
-    "@azure/msal-browser": "^5.7.0",
+    "@azure/msal-browser": "^5.10.1",
     "@microsoft/applicationinsights-web": "^3.4.1",
     "jsonc-parser": "^3.3.1",
     "monaco-editor": "^0.55.1",
