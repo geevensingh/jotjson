@@ -1158,13 +1158,15 @@ describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
   }));
 
   // Spec 10: Extract preserves expansion of other subtrees (no token bump).
-  it('onExtractRequest does NOT bump viewResetToken (other subtrees survive)', () => {
+  it('onExtractRequest does NOT bump viewResetToken (other subtrees survive)', fakeAsync(() => {
     const fixture = TestBed.createComponent(HomeComponent);
     const component = fixture.componentInstance;
     // The real `TreeStringExtractorService` initialises
     // `currentVersion()` to 0 (tree-string-extractor.service.ts:58),
     // so an event with `sourceVersion: 0` passes the staleness gate
     // at home.component.ts:1620 without any mock setup.
+    fixture.detectChanges();
+    flushMicrotasks();
     component.onValueChange('{"payload":"INFO {\\"a\\":1}","keep":true}');
     component.__flushTreePaneForTesting();
     fixture.detectChanges();
@@ -1181,18 +1183,19 @@ describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
         proseSegments: 0,
         hasComments: false,
       },
-      source: 'rowButton',
+      source: 'rowPillPrimitiveArray',
     });
     fixture.detectChanges();
 
-    // Asserting on `content()` proves `setContent(result.patched)`
-    // actually ran -- the staleness early-return at line 1625 would
-    // leave `content()` unchanged and silently pass the token check.
+    // Asserting on `content()` proves the applyEdit flow ran through
+    // valueChange and updated the content signal -- the staleness
+    // early-return at line 1625 would leave `content()` unchanged
+    // and silently pass the token check.
     expect(component.content()).toBe('{"payload":{"a":1},"keep":true}');
-    // setContent does not bump the token, so any user-expanded
+    // applyEdit does not bump the token, so any user-expanded
     // sibling subtrees (`keep`, etc.) survive.
     expect(component.viewResetTokenValue()).toBe(tokenBefore);
-  });
+  }));
 
   // Spec 11: a Phase 1b regression guard at the home level.
   // After a same-shape edit settles past the debounce window,
@@ -5712,7 +5715,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
       path: ['payload'],
       sourceVersion: 1,
       replacement,
-      source: 'rowButton',
+      source: 'rowPillPrimitiveArray',
       ...overrides,
     };
   }
@@ -5754,21 +5757,87 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     return parameterRecord['Value'];
   }
 
+  interface ExtractSnackBarStub {
+    open: jasmine.Spy<
+      (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
+    >;
+  }
+
+  interface ExtractSnackBarRefHarness {
+    action: Subject<void>;
+    dismissSpy: jasmine.Spy;
+    ref: MatSnackBarRef<TextOnlySnackBar>;
+  }
+
+  interface ExtractEditorStub {
+    applyEdit: jasmine.Spy<
+      (startOffset: number, endOffset: number, text: string, source: string) => boolean
+    >;
+  }
+
+  function createExtractSnackBarRefHarness(): ExtractSnackBarRefHarness {
+    const action = new Subject<void>();
+    const dismissed = new Subject<unknown>();
+    const dismissSpy = jasmine.createSpy('dismiss');
+    const snackRef: Partial<MatSnackBarRef<TextOnlySnackBar>> = {
+      onAction: () => action.asObservable(),
+      afterDismissed: () =>
+        dismissed.asObservable() as unknown as ReturnType<
+          MatSnackBarRef<TextOnlySnackBar>['afterDismissed']
+        >,
+      dismiss: dismissSpy,
+    };
+    return {
+      action,
+      dismissSpy,
+      ref: snackRef as unknown as MatSnackBarRef<TextOnlySnackBar>,
+    };
+  }
+
+  function createExtractEditorStub(component: HomeComponent): ExtractEditorStub {
+    return {
+      applyEdit: jasmine
+        .createSpy('applyEdit')
+        .and.callFake(
+          (startOffset: number, endOffset: number, text: string, _source: string): boolean => {
+            const currentContent = component.content();
+            const expectedLength = endOffset - startOffset;
+            if (currentContent.substring(startOffset, endOffset).length !== expectedLength) {
+              return false;
+            }
+            const nextContent =
+              currentContent.substring(0, startOffset) + text + currentContent.substring(endOffset);
+            component.onValueChange(nextContent);
+            return true;
+          },
+        ),
+    };
+  }
+
   function setup(): {
     fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>;
     component: HomeComponent;
     treeExtractor: FakeTreeStringExtractor;
+    snack: ExtractSnackBarStub;
+    snackAction: Subject<void>;
+    snackRef: MatSnackBarRef<TextOnlySnackBar>;
+    editorStub: ExtractEditorStub;
     eventSpy: jasmine.Spy;
     warnSpy: jasmine.Spy;
   } {
     clearHomeStorage();
     TestBed.resetTestingModule();
     const treeExtractor = new FakeTreeStringExtractor();
+    const snackRefHarness = createExtractSnackBarRefHarness();
+    const snack: ExtractSnackBarStub = {
+      open: jasmine.createSpy('open').and.returnValue(snackRefHarness.ref),
+    };
     TestBed.configureTestingModule({
       imports: [HomeComponent],
       providers: [
         ...provideFakeAuth(),
         provideRouter([]),
+        { provide: MatSnackBar, useValue: snack },
         { provide: TreeStringExtractorService, useValue: treeExtractor },
       ],
     });
@@ -5777,7 +5846,20 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     const warnSpy = spyOn(logger, 'warn');
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.detectChanges();
-    return { fixture, component: fixture.componentInstance, treeExtractor, eventSpy, warnSpy };
+    const component = fixture.componentInstance;
+    const editorStub = createExtractEditorStub(component);
+    (component as unknown as { editor: () => ExtractEditorStub }).editor = () => editorStub;
+    return {
+      fixture,
+      component,
+      treeExtractor,
+      snack,
+      snackAction: snackRefHarness.action,
+      snackRef: snackRefHarness.ref,
+      editorStub,
+      eventSpy,
+      warnSpy,
+    };
   }
 
   afterEach(() => {
@@ -5947,6 +6029,255 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     );
 
     expect(expandSpy).not.toHaveBeenCalled();
+  });
+
+  it('opens an undo snackbar after a successful tree extract request', () => {
+    const { component, treeExtractor, snack } = setup();
+    treeExtractor.setVersion(9);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}","keep":true}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 9,
+      }),
+    );
+
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    const [message, action, config] = snack.open.calls.mostRecent().args;
+    expect(message).toBe('Extracted embedded JSON into the document.');
+    expect(action).toBe('Undo');
+    expect(config).toEqual(jasmine.objectContaining({ duration: 8000, politeness: 'assertive' }));
+  });
+
+  it('restores the prior document when the extract undo snackbar action is clicked', () => {
+    const { component, treeExtractor, snackAction } = setup();
+    treeExtractor.setVersion(10);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 10,
+      }),
+    );
+    expect(component.content()).toBe('{"payload":{"a":1},"keep":true}');
+
+    snackAction.next();
+
+    expect(component.content()).toBe(priorText);
+  });
+
+  it('logs snackbar undo telemetry after restoring the prior document', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { component, treeExtractor, snackAction, eventSpy } = setup();
+    treeExtractor.setVersion(11);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}","keep":true}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 11,
+      }),
+    );
+    eventSpy.calls.reset();
+
+    nowMs = 2500;
+    snackAction.next();
+
+    expect(eventSpy).toHaveBeenCalledOnceWith('tree.extract.undo', {
+      source: 'snackbar',
+      undoLatencyMsBucket: '1-5s',
+    });
+  });
+
+  it('replaces an earlier extract undo snackbar when a second extract succeeds', () => {
+    const { component, treeExtractor, snack, eventSpy } = setup();
+    const firstSnackRefHarness = createExtractSnackBarRefHarness();
+    const secondSnackRefHarness = createExtractSnackBarRefHarness();
+    snack.open.and.returnValues(firstSnackRefHarness.ref, secondSnackRefHarness.ref);
+    treeExtractor.setVersion(12);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}","other":"INFO {\\"b\\":2}"}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 12,
+      }),
+    );
+    eventSpy.calls.reset();
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"b":2}'), {
+        path: ['other'],
+        source: 'contextMenu',
+        sourceVersion: 12,
+      }),
+    );
+
+    expect(firstSnackRefHarness.dismissSpy).toHaveBeenCalledTimes(1);
+    expect(eventSpy).toHaveBeenCalledWith('tree.extract.snackbarReplaced');
+  });
+
+  it('logs ctrlZ undo telemetry when the document returns to the pre-extract text', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, eventSpy } = setup();
+    treeExtractor.setVersion(13);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 13,
+      }),
+    );
+    eventSpy.calls.reset();
+
+    nowMs = 1500;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(eventSpy).toHaveBeenCalledWith('tree.extract.undo', {
+      source: 'ctrlZ',
+      undoLatencyMsBucket: '<1s',
+    });
+  });
+
+  it('dismisses the live undo snackbar when ctrlZ-detected revert clears the pending state', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, snack } = setup();
+    const snackRefHarness = createExtractSnackBarRefHarness();
+    snack.open.and.returnValue(snackRefHarness.ref);
+    treeExtractor.setVersion(15);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 15,
+      }),
+    );
+
+    nowMs = 1500;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(snackRefHarness.dismissSpy).toHaveBeenCalled();
+  });
+
+  it('logs ctrlZ undo telemetry with the 5s+ bucket when the revert lands more than 5s after extract', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, eventSpy } = setup();
+    treeExtractor.setVersion(16);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 16,
+      }),
+    );
+    eventSpy.calls.reset();
+
+    // Stay inside the 30s wall-clock cap (the real `setTimeout` in
+    // production fires at 30s and clears state); the simulated
+    // `performance.now()` only drives the bucketizer.
+    nowMs = 7_000;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(eventSpy).toHaveBeenCalledWith('tree.extract.undo', {
+      source: 'ctrlZ',
+      undoLatencyMsBucket: '5s+',
+    });
+  });
+
+  it('releases pendingExtractUndo state after the 30s wall-clock cap even without further edits', fakeAsync(() => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, eventSpy, snack } = setup();
+    snack.open.and.returnValue(createExtractSnackBarRefHarness().ref);
+    treeExtractor.setVersion(99);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 99,
+      }),
+    );
+    eventSpy.calls.reset();
+
+    // Advance the real scheduler past the 30s cap. The wall-clock
+    // timer scheduled in `onExtractRequest` fires and clears
+    // `pendingExtractUndo` via `clearPendingExtractUndo()` regardless
+    // of whether the user has typed anything.
+    tick(30_001);
+    fixture.detectChanges();
+
+    // Simulate a Ctrl+Z back to priorText. The state has been
+    // cleared, so the effect's content-match guard at the top
+    // returns early and no `tree.extract.undo` is logged.
+    nowMs = 35_000;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(eventSpy).not.toHaveBeenCalledWith(
+      'tree.extract.undo',
+      jasmine.objectContaining({ source: 'ctrlZ' }),
+    );
+  }));
+
+  it('treats snackbar Undo as a no-op when ctrlZ already cleared the pending state', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { fixture, component, treeExtractor, snack, snackAction, eventSpy } = setup();
+    snack.open.and.returnValue(createExtractSnackBarRefHarness().ref);
+    treeExtractor.setVersion(17);
+    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+    component.onValueChange(priorText);
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 17,
+      }),
+    );
+
+    nowMs = 2000;
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    eventSpy.calls.reset();
+
+    snackAction.next();
+
+    expect(eventSpy).not.toHaveBeenCalledWith(
+      'tree.extract.undo',
+      jasmine.objectContaining({ source: 'snackbar' }),
+    );
+  });
+
+  it('logs applyFailed and skips the snackbar when the editor is unavailable', () => {
+    const { component, treeExtractor, snack, warnSpy } = setup();
+    treeExtractor.setVersion(14);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}"}');
+    (component as unknown as { editor: () => undefined }).editor = () => undefined;
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 14,
+      }),
+    );
+
+    expect(warnSpy).toHaveBeenCalledWith('tree.extract.applyFailed', {
+      reason: 'editorUnavailable',
+    });
+    expect(snack.open).not.toHaveBeenCalled();
   });
 
   it('debounces tree string scans after treeValue changes', fakeAsync(() => {

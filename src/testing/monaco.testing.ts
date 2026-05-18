@@ -28,23 +28,107 @@ function makeNoopDisposable(): { dispose: () => void } {
 
 function makeMinimalEditor(initialValue: string): object {
   let current = initialValue;
+  const contentChangeHandlers: Array<() => void> = [];
+  const emitContentChange = (): void => {
+    for (const handler of contentChangeHandlers) {
+      handler();
+    }
+  };
+  const offsetToPosition = (offset: number): { lineNumber: number; column: number } => {
+    const bounded = Math.max(0, Math.min(offset, current.length));
+    const prefix = current.substring(0, bounded);
+    const lines = prefix.split('\n');
+    const lastLine = lines[lines.length - 1] ?? '';
+    return { lineNumber: lines.length, column: lastLine.length + 1 };
+  };
+  const positionToOffset = (lineNumber: number, column: number): number => {
+    const lines = current.split('\n');
+    let offset = 0;
+    for (let lineIndex = 0; lineIndex < lineNumber - 1; lineIndex += 1) {
+      offset += (lines[lineIndex] ?? '').length + 1;
+    }
+    return offset + (column - 1);
+  };
   const model = {
     getValue: () => current,
-    getValueInRange: () => '',
-    getOffsetAt: () => 0,
+    getValueInRange: (range: {
+      startLineNumber: number;
+      startColumn: number;
+      endLineNumber: number;
+      endColumn: number;
+    }) => {
+      const startOffset = positionToOffset(range.startLineNumber, range.startColumn);
+      const endOffset = positionToOffset(range.endLineNumber, range.endColumn);
+      return current.substring(startOffset, endOffset);
+    },
+    getOffsetAt: (position: { lineNumber: number; column: number }) =>
+      positionToOffset(position.lineNumber, position.column),
+    getPositionAt: (offset: number) => offsetToPosition(offset),
   };
   return {
     getValue: () => current,
     setValue: (next: string) => {
       current = next;
+      emitContentChange();
     },
     getModel: () => model,
-    onDidChangeModelContent: () => makeNoopDisposable(),
+    onDidChangeModelContent: (handler: () => void) => {
+      contentChangeHandlers.push(handler);
+      return makeNoopDisposable();
+    },
     onDidChangeCursorPosition: () => makeNoopDisposable(),
     onDidPaste: () => makeNoopDisposable(),
     updateOptions: () => undefined,
     dispose: () => undefined,
-    executeEdits: () => true,
+    executeEdits: (
+      _source: string,
+      edits: Array<{
+        range: {
+          startLineNumber: number;
+          startColumn: number;
+          endLineNumber: number;
+          endColumn: number;
+        };
+        text: string;
+      }>,
+    ) => {
+      // Single-edit invariant: real Monaco rejects overlapping ranges
+      // via IIdentifiedSingleEditOperation. Rather than re-implement
+      // that overlap detection in a test stub, we hard-fail on any
+      // multi-edit batch so the single-edit constraint is executable
+      // rather than a documented gap. Production callers
+      // (json-editor.component.ts paste-unescape and applyEdit) pass
+      // exactly one edit per call today; if a future caller batches
+      // edits this throw fires and forces them to update both the
+      // production code and this stub together.
+      if (edits.length > 1) {
+        throw new Error(
+          'monaco.testing.ts executeEdits stub only supports single-edit batches; ' +
+            'real Monaco rejects overlapping ranges and this stub does not implement ' +
+            'overlap detection. Update both the caller and this stub if multi-edit ' +
+            'batches are needed.',
+        );
+      }
+      // Snapshot all offsets against the pre-edit text BEFORE applying
+      // any edit, then apply from highest offset down so earlier
+      // ranges do not shift under later splices. Matches Monaco's
+      // documented semantics (ranges resolve against the pre-edit
+      // model). The loop body is retained (rather than collapsed to a
+      // single splice) so that adding multi-edit support later only
+      // requires removing the guard above and adding overlap detection.
+      const offsetEdits = edits.map((edit) => ({
+        start: positionToOffset(edit.range.startLineNumber, edit.range.startColumn),
+        end: positionToOffset(edit.range.endLineNumber, edit.range.endColumn),
+        text: edit.text,
+      }));
+      offsetEdits.sort((a, b) => b.start - a.start);
+      for (const edit of offsetEdits) {
+        current = current.substring(0, edit.start) + edit.text + current.substring(edit.end);
+      }
+      emitContentChange();
+      return true;
+    },
+    trigger: () => undefined,
     layout: () => undefined,
     setSelection: () => undefined,
     revealRangeInCenterIfOutsideViewport: () => undefined,
@@ -53,6 +137,24 @@ function makeMinimalEditor(initialValue: string): object {
 
 function NoopSelection(this: object): void {
   // Constructor only - the minimal stub never reads selection fields.
+}
+
+function NoopRange(
+  this: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  },
+  startLineNumber: number,
+  startColumn: number,
+  endLineNumber: number,
+  endColumn: number,
+): void {
+  this.startLineNumber = startLineNumber;
+  this.startColumn = startColumn;
+  this.endLineNumber = endLineNumber;
+  this.endColumn = endColumn;
 }
 
 function buildMinimalMonaco(): typeof MonacoNS {
@@ -70,6 +172,7 @@ function buildMinimalMonaco(): typeof MonacoNS {
       },
     },
     MarkerSeverity: { Error: 8 },
+    Range: NoopRange,
     Selection: NoopSelection,
   };
   return stub as unknown as typeof MonacoNS;

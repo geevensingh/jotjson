@@ -9,16 +9,19 @@ import { __resetMonacoLoaderForTesting, __setMonacoLoaderPromiseForTesting } fro
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 
+interface FakeRange {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+}
+
 interface FakeModel {
   id: string;
   getValue: () => string;
-  getValueInRange: (range: {
-    startLineNumber: number;
-    startColumn: number;
-    endLineNumber: number;
-    endColumn: number;
-  }) => string;
+  getValueInRange: (range: FakeRange) => string;
   getOffsetAt: jasmine.Spy<(pos: { lineNumber: number; column: number }) => number>;
+  getPositionAt: jasmine.Spy<(offset: number) => { lineNumber: number; column: number }>;
 }
 
 interface FakeEditor {
@@ -31,6 +34,7 @@ interface FakeEditor {
   updateOptions: jasmine.Spy;
   dispose: jasmine.Spy;
   executeEdits: jasmine.Spy;
+  trigger: jasmine.Spy;
   layout: jasmine.Spy;
   setSelection: jasmine.Spy;
   revealRangeInCenterIfOutsideViewport: jasmine.Spy;
@@ -52,6 +56,12 @@ interface FakeMonaco {
   };
   json: { jsonDefaults: { setDiagnosticsOptions: jasmine.Spy } };
   MarkerSeverity: { Error: number };
+  Range: new (
+    startLineNumber: number,
+    startColumn: number,
+    endLineNumber: number,
+    endColumn: number,
+  ) => FakeRange;
   Selection: new (
     selectionStartLineNumber: number,
     selectionStartColumn: number,
@@ -76,6 +86,8 @@ const FAKE_MARKER_ERROR_SEVERITY = 8;
 
 function makeFakeEditor(initial: string): FakeEditor {
   let current = initial;
+  const undoStack: string[] = [];
+  const modelContentHandlers: Array<() => void> = [];
   const toOffset = (line: number, column: number): number => {
     const lines = current.split('\n');
     let off = 0;
@@ -83,6 +95,21 @@ function makeFakeEditor(initial: string): FakeEditor {
       off += lines[i].length + 1;
     }
     return off + (column - 1);
+  };
+  const toPosition = (offset: number): { lineNumber: number; column: number } => {
+    const boundedOffset = Math.max(0, Math.min(offset, current.length));
+    const prefix = current.substring(0, boundedOffset);
+    const lines = prefix.split('\n');
+    const lastLine = lines[lines.length - 1] ?? '';
+    return {
+      lineNumber: lines.length,
+      column: lastLine.length + 1,
+    };
+  };
+  const emitModelContentChange = (): void => {
+    for (const handler of modelContentHandlers) {
+      handler();
+    }
   };
   const model: FakeModel = {
     id: 'fake-model',
@@ -97,16 +124,24 @@ function makeFakeEditor(initial: string): FakeEditor {
       .and.callFake((position: { lineNumber: number; column: number }) =>
         toOffset(position.lineNumber, position.column),
       ),
+    getPositionAt: jasmine
+      .createSpy('getPositionAt')
+      .and.callFake((offset: number) => toPosition(offset)),
   };
   return {
     getValue: jasmine.createSpy('getValue').and.callFake(() => current),
     setValue: jasmine.createSpy('setValue').and.callFake((v: string) => {
       current = v;
+      undoStack.length = 0;
+      emitModelContentChange();
     }),
     getModel: jasmine.createSpy('getModel').and.returnValue(model),
-    onDidChangeModelContent: jasmine.createSpy('onDidChangeModelContent').and.returnValue({
-      dispose: () => undefined,
-    }),
+    onDidChangeModelContent: jasmine
+      .createSpy('onDidChangeModelContent')
+      .and.callFake((handler: () => void) => {
+        modelContentHandlers.push(handler);
+        return { dispose: () => undefined };
+      }),
     onDidChangeCursorPosition: jasmine.createSpy('onDidChangeCursorPosition').and.returnValue({
       dispose: () => undefined,
     }),
@@ -119,23 +154,34 @@ function makeFakeEditor(initial: string): FakeEditor {
       (
         _source: string,
         edits: Array<{
-          range: {
-            startLineNumber: number;
-            startColumn: number;
-            endLineNumber: number;
-            endColumn: number;
-          };
+          range: FakeRange;
           text: string;
+          forceMoveMarkers?: boolean;
         }>,
       ) => {
-        for (const e of edits) {
-          const start = toOffset(e.range.startLineNumber, e.range.startColumn);
-          const end = toOffset(e.range.endLineNumber, e.range.endColumn);
-          current = current.substring(0, start) + e.text + current.substring(end);
+        undoStack.push(current);
+        for (const edit of edits) {
+          const start = toOffset(edit.range.startLineNumber, edit.range.startColumn);
+          const end = toOffset(edit.range.endLineNumber, edit.range.endColumn);
+          current = current.substring(0, start) + edit.text + current.substring(end);
         }
+        emitModelContentChange();
         return true;
       },
     ),
+    trigger: jasmine
+      .createSpy('trigger')
+      .and.callFake((_source: string, handlerId: string, _payload: unknown) => {
+        if (handlerId !== 'undo') {
+          return;
+        }
+        const previousValue = undoStack.pop();
+        if (previousValue === undefined) {
+          return;
+        }
+        current = previousValue;
+        emitModelContentChange();
+      }),
     layout: jasmine.createSpy('layout'),
     setSelection: jasmine.createSpy('setSelection'),
     revealRangeInCenterIfOutsideViewport: jasmine.createSpy('revealRangeInCenterIfOutsideViewport'),
@@ -144,6 +190,19 @@ function makeFakeEditor(initial: string): FakeEditor {
 
 function makeFakeMonaco(editor: FakeEditor): FakeMonaco {
   const selectionCalls: Array<[number, number, number, number]> = [];
+  function FakeRangeCtor(
+    this: FakeRange,
+    startLineNumber: number,
+    startColumn: number,
+    endLineNumber: number,
+    endColumn: number,
+  ): FakeRange {
+    this.startLineNumber = startLineNumber;
+    this.startColumn = startColumn;
+    this.endLineNumber = endLineNumber;
+    this.endColumn = endColumn;
+    return this;
+  }
   function FakeSelectionCtor(
     this: FakeSelection,
     selectionStartLineNumber: number,
@@ -179,6 +238,7 @@ function makeFakeMonaco(editor: FakeEditor): FakeMonaco {
     },
     json: { jsonDefaults: { setDiagnosticsOptions: jasmine.createSpy('setDiagnosticsOptions') } },
     MarkerSeverity: { Error: FAKE_MARKER_ERROR_SEVERITY },
+    Range: FakeRangeCtor as unknown as FakeMonaco['Range'],
     Selection: FakeSelectionCtor as unknown as FakeMonaco['Selection'],
     __selectionConstructorCalls: selectionCalls,
   };
@@ -553,6 +613,89 @@ describe('JsonEditorComponent', () => {
       const events = fireCursor(2, 3);
       expect(events.length).toBe(1);
       expect(events[0]).toEqual({ line: 2, column: 3, offset: 0 });
+    });
+  });
+
+  describe('applyEdit and undo helpers', () => {
+    it('splices text via executeEdits and preserves undo history', async () => {
+      const component = await create('{"a":1}');
+
+      expect(component.applyEdit(5, 6, '2', 'spec-apply-edit')).toBeTrue();
+      expect(editor.getValue()).toBe('{"a":2}');
+      expect(editor.executeEdits).toHaveBeenCalledTimes(1);
+      expect(editor.revealRangeInCenterIfOutsideViewport).toHaveBeenCalledTimes(1);
+
+      component.triggerUndo();
+      expect(editor.getValue()).toBe('{"a":1}');
+    });
+
+    it('returns false when the editor is not yet ready', async () => {
+      delete (window as unknown as { monaco?: unknown }).monaco;
+      __resetMonacoLoaderForTesting();
+      let resolveLoader!: (value: typeof MonacoNS) => void;
+      const deferred = new Promise<typeof MonacoNS>((resolve) => {
+        resolveLoader = resolve;
+      });
+      __setMonacoLoaderPromiseForTesting(deferred);
+
+      const earlyFixture = await createFixtureWithoutSettling('{"a":1}');
+
+      expect(earlyFixture.componentInstance.applyEdit(5, 6, '2', 'spec-apply-edit')).toBeFalse();
+      expect(editor.executeEdits).not.toHaveBeenCalled();
+
+      earlyFixture.destroy();
+      resolveLoader(monaco as unknown as typeof MonacoNS);
+      await deferred;
+      await Promise.resolve();
+    });
+
+    it('returns false when the range length assertion fails', async () => {
+      const component = await create('{"a":1}');
+
+      expect(component.applyEdit(5, 99, '2', 'spec-apply-edit')).toBeFalse();
+      expect(editor.executeEdits).not.toHaveBeenCalled();
+      expect(editor.getValue()).toBe('{"a":1}');
+    });
+
+    it('returns false and skips reveal when executeEdits reports failure', async () => {
+      const component = await create('{"a":1}');
+      editor.executeEdits.and.returnValue(false);
+      editor.revealRangeInCenterIfOutsideViewport.calls.reset();
+
+      expect(component.applyEdit(5, 6, '2', 'spec-apply-edit')).toBeFalse();
+      expect(editor.executeEdits).toHaveBeenCalledTimes(1);
+      expect(editor.revealRangeInCenterIfOutsideViewport).not.toHaveBeenCalled();
+    });
+
+    it('calls editor.trigger with the Monaco undo command', async () => {
+      const component = await create('{"a":1}');
+
+      component.triggerUndo();
+
+      expect(editor.trigger).toHaveBeenCalledOnceWith('jotjson', 'undo', null);
+    });
+
+    it('keeps undo history when valueChange is echoed back through the value input', async () => {
+      const component = await create('{"a":1}');
+      const emittedValues: string[] = [];
+      component.valueChange.subscribe((value) => emittedValues.push(value));
+      editor.setValue.calls.reset();
+
+      expect(component.applyEdit(5, 6, '2', 'extract-embedded-json')).toBeTrue();
+      expect(emittedValues).toEqual(['{"a":2}']);
+
+      const echoedValue = emittedValues[0];
+      if (echoedValue === undefined) {
+        fail('Expected valueChange to emit after applyEdit');
+        return;
+      }
+      fixture.componentRef.setInput('value', echoedValue);
+      fixture.detectChanges();
+
+      expect(editor.setValue).not.toHaveBeenCalled();
+
+      component.triggerUndo();
+      expect(editor.getValue()).toBe('{"a":1}');
     });
   });
 

@@ -8,6 +8,18 @@
   ><code class="decoded-code">@for (line of lines(); track line.index) {<span class="decoded-line"><span class="decoded-line__no" aria-hidden="true">{{ line.index }}</span><span class="decoded-line__text">{{ line.text }}</span></span>}</code></pre>
 </mat-dialog-content>
 <mat-dialog-actions align="end" class="decoded-actions">
+  @if (canExtract()) {
+    <button
+      mat-stroked-button
+      type="button"
+      color="primary"
+      class="decoded-actions__extract"
+      (click)="extract()"
+    >
+      <jj-icon name="extract" [size]="18" />
+      <span i18n="@@tree.extract.menu.label">Extract embedded JSON</span>
+    </button>
+  }
   <button mat-button type="button" class="decoded-actions__copy" (click)="copy()">
     <jj-icon name="copy" [size]="18" />
     <span i18n="@@tree.decoded.dialog.copy">Copy decoded value</span>

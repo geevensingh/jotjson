@@ -1181,6 +1181,11 @@ export const TELEMETRY_MESSAGE_IDS = [
    *          length > 256 fallback (`long`); `pathDepth` is the
    *          bucketed depth of the originating row's path; user
    *          string contents and raw paths are never logged.
+   *
+   * Note: this event's `source: 'rowButton'` cohort remains the row
+   * Decoded pill click and is NOT comparable to
+   * `tree.extract.click`'s former `rowButton` cohort after this
+   * milestone. Cross-event joins on `source` must use the new mapping.
    */
   'tree.decoded.viewerOpened',
 
@@ -1189,7 +1194,13 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Fired by: `HomeComponent.onExtractRequest`
    *           (`features/home/home.component.ts`) after a non-stale tree
    *           extract click patches the editor text successfully.
-   * Props: { source: 'rowButton' | 'contextMenu' }.
+   * Props: { source: 'rowPillPrimitiveArray' | 'contextMenu' | 'decodedDialog' }.
+   * Note: `source: 'rowButton'` was intentionally renamed to
+   * `rowPillPrimitiveArray` in M7v. This is a deliberate loud break:
+   * dashboards filtering on `rowButton` will go to zero after deploy.
+   * `decodedDialog` fires when extract is invoked from the Decoded Value
+   * dialog. See `tree.decoded.viewerOpened` for the non-comparable
+   * cohort note.
    * Measurements: { blockCount: number; proseSegments: number }.
    */
   'tree.extract.click',
@@ -1212,6 +1223,57 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   | 'unknown' }.
    */
   'tree.extract.applyFailed',
+
+  // Tree extract undo (M7v)
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
+   *           snackbar Undo click or when Ctrl+Z is detected within
+   *           ~1 turn of a successful extract.
+   * Volume control: bounded-frequency. At most one user action per
+   * extract, with keyboard detection opt-in.
+   * Props: { source: 'snackbar' | 'ctrlZ';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          `source` distinguishes the entry path; `undoLatencyMsBucket`
+   *          supports a misclick-rate KQL where undo within 5s is the
+   *          approximate signal. The `'5s+'` top bucket is open-ended
+   *          because `pendingExtractUndo` is released by a 30s wall-clock
+   *          timer; reverts past 30s only land when background-tab
+   *          throttling delays the timer.
+   * Privacy: no string contents or paths.
+   */
+  'tree.extract.undo',
+
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent.onDecodedButtonClick` /
+   *           `JsonTreeComponent.onDecodedMenuClick`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           inside the shared `dialogRef.afterClosed()` subscription
+   *           when the user clicks the dialog's Extract button but the
+   *           captured source-version no longer matches
+   *           `extractSourceVersion()` at close time; a background tree
+   *           re-scan invalidated the candidate while the dialog was open.
+   * Volume control: bounded-frequency. Bounded by decoded-dialog
+   * Extract click frequency.
+   * Props: none.
+   * Privacy: no content.
+   */
+  'tree.extract.dialog.staleClose',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.openExtractUndoSnack`
+   *           (`features/home/home.component.ts`) when a second extract
+   *           opens while the prior snackbar ref is still live; the
+   *           prior snackbar is dismissed before the new one opens.
+   * Volume control: bounded-frequency. Bounded by double-extract
+   * frequency while the prior snackbar is still active (rare).
+   * Props: none.
+   * Privacy: no content.
+   */
+  'tree.extract.snackbarReplaced',
 
   // Tree row context menu (M7q)
 

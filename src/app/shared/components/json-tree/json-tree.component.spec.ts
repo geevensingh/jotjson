@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { Subject, type Observable } from 'rxjs';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { HIGHLIGHT_PATH_FIXTURES } from '../../../../testing/fixtures/highlight-paths.fixture';
 import type {
@@ -23,6 +24,7 @@ import { formatPath } from './build-tree';
 import {
   DecodedValueDialogComponent,
   type DecodedValueDialogData,
+  type DecodedValueDialogResult,
 } from './decoded-value-dialog/decoded-value-dialog.component';
 import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
 import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
@@ -1569,11 +1571,19 @@ describe('JsonTreeComponent', () => {
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]');
       expect(leafRow).withContext('leaf row should be rendered').not.toBeNull();
-      const trailing = leafRow!.querySelector(':scope > .tree-comment-trailing');
-      expect(trailing)
-        .withContext('trailing slot is a direct child of the leaf row')
-        .not.toBeNull();
+      // v0.26.1 (#269): trailing comment lives inside the
+      // `.tree-row-trailing` Grid track wrapper, not as a direct
+      // child of `.tree-row`. Assert via descendant query.
+      const trailing = leafRow!.querySelector('.tree-comment-trailing');
+      expect(trailing).withContext('trailing slot must render').not.toBeNull();
       expect(trailing!.textContent?.trim()).toBe('uuid migration TBD');
+      const trailingWrapper = leafRow!.querySelector(':scope > .tree-row-trailing');
+      expect(trailingWrapper)
+        .withContext('.tree-row-trailing wrapper is a direct child of the leaf row')
+        .not.toBeNull();
+      expect(trailingWrapper!.contains(trailing!))
+        .withContext('trailing comment is inside the trailing wrapper')
+        .toBe(true);
       // Per M7k-2-fu the trailing slot lives outside `tree-row-right`
       // so it sits next to the value, matching JSONC source order.
       const right = leafRow!.querySelector(':scope > .tree-row-right')!;
@@ -1592,17 +1602,26 @@ describe('JsonTreeComponent', () => {
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.id"]') as HTMLElement;
-      const children = Array.from(leafRow.children) as HTMLElement[];
-      const valueIndex = children.findIndex((c) => c.classList.contains('tree-value-number'));
-      const trailingIndex = children.findIndex((c) =>
-        c.classList.contains('tree-comment-trailing'),
-      );
-      const rightIndex = children.findIndex((c) => c.classList.contains('tree-row-right'));
-      expect(valueIndex).withContext('value span').toBeGreaterThanOrEqual(0);
-      expect(trailingIndex).withContext('trailing comment').toBeGreaterThan(valueIndex);
-      expect(rightIndex)
-        .withContext('tree-row-right after trailing')
-        .toBeGreaterThan(trailingIndex);
+      // v0.26.1 (#269): under Grid, the value lives inside
+      // `.tree-row-value-cell`, the trailing comment lives inside
+      // `.tree-row-trailing`, and the right cluster is still a
+      // direct grid item. Compare positions via document order.
+      const valueEl = leafRow.querySelector('.tree-value-number');
+      const trailingEl = leafRow.querySelector('.tree-comment-trailing');
+      const rightEl = leafRow.querySelector(':scope > .tree-row-right');
+      expect(valueEl).withContext('value span').not.toBeNull();
+      expect(trailingEl).withContext('trailing comment').not.toBeNull();
+      expect(rightEl).withContext('tree-row-right').not.toBeNull();
+      const valueBeforeTrailing =
+        valueEl!.compareDocumentPosition(trailingEl!) & Node.DOCUMENT_POSITION_FOLLOWING;
+      const trailingBeforeRight =
+        trailingEl!.compareDocumentPosition(rightEl!) & Node.DOCUMENT_POSITION_FOLLOWING;
+      expect(valueBeforeTrailing)
+        .withContext('trailing must follow the value in document order')
+        .toBeGreaterThan(0);
+      expect(trailingBeforeRight)
+        .withContext('tree-row-right must follow the trailing comment')
+        .toBeGreaterThan(0);
     });
 
     it('renders the trailing comment AFTER the date annotation on string rows', async () => {
@@ -1615,19 +1634,15 @@ describe('JsonTreeComponent', () => {
       );
       const host = fixture.nativeElement as HTMLElement;
       const leafRow = host.querySelector('[data-path="$.when"]') as HTMLElement;
-      const children = Array.from(leafRow.children) as HTMLElement[];
-      const trailingIndex = children.findIndex((c) =>
-        c.classList.contains('tree-comment-trailing'),
-      );
-      // The date annotation lives inside the .tree-value-string's
-      // @case block, so it's a descendant - check its position within
-      // the row by querying its closest direct child of the row.
+      // v0.26.1 (#269): both the date annotation and the trailing
+      // comment now live inside `.tree-row-trailing` (the date
+      // annotation moved out of the string @case to fit the Grid
+      // template). Order must remain: date before trailing.
       const dateAnn = leafRow.querySelector('.tree-date-annotation');
+      const trailing = leafRow.querySelector('.tree-comment-trailing');
       expect(dateAnn).withContext('date annotation should render').not.toBeNull();
-      // Order via DOM position comparison: date annotation must come
-      // before trailing comment.
-      const trailing = children[trailingIndex];
-      const positionMask = dateAnn!.compareDocumentPosition(trailing);
+      expect(trailing).withContext('trailing comment should render').not.toBeNull();
+      const positionMask = dateAnn!.compareDocumentPosition(trailing!);
       // DOCUMENT_POSITION_FOLLOWING = 4
       expect(positionMask & Node.DOCUMENT_POSITION_FOLLOWING)
         .withContext('trailing must follow date annotation in document order')
@@ -1809,14 +1824,24 @@ describe('JsonTreeComponent', () => {
       const host = fixture.nativeElement as HTMLElement;
       const openRow = host.querySelector('[data-path="$.foo"]') as HTMLElement;
       expect(openRow).withContext('foo open row should render').not.toBeNull();
-      // The trailing comment is a direct child of the open row, NOT
-      // of the close row.
+      // The trailing comment is a direct child of the open row's
+      // `.tree-row-trailing` wrapper (v0.26.1 #269 Grid migration),
+      // NOT of the close row.
       const closeRow = host.querySelector('.tree-row--close');
-      const openRowTrailing = openRow.querySelector(':scope > .tree-comment-trailing');
+      const openRowTrailing = openRow.querySelector('.tree-comment-trailing');
       const closeRowTrailing = closeRow?.querySelector('.tree-comment-trailing');
       expect(openRowTrailing).withContext('open-row trailing slot must render').not.toBeNull();
       expect(openRowTrailing!.textContent?.trim()).toBe('explaination of foo');
       expect(closeRowTrailing).withContext('close-row trailing slot must NOT render').toBeFalsy();
+      // Open-row trailing wrapper is a direct grid-item child of
+      // the open row.
+      const openRowTrailingWrapper = openRow.querySelector(':scope > .tree-row-trailing');
+      expect(openRowTrailingWrapper)
+        .withContext('.tree-row-trailing wrapper must render as a direct grid-item')
+        .not.toBeNull();
+      expect(openRowTrailingWrapper!.contains(openRowTrailing!))
+        .withContext('trailing comment must live inside the trailing wrapper')
+        .toBe(true);
       // The trailing slot sits before tree-row-right in DOM order,
       // mirroring the leaf-row pattern.
       const rowRight = openRow.querySelector(':scope > .tree-row-right') as HTMLElement;
@@ -1895,8 +1920,17 @@ describe('JsonTreeComponent', () => {
       // 2026-05-01 151953.png): a very long leading comment squeezed
       // .tree-row-right below the natural width of "N keys", which
       // wrapped the count text at the internal space and pushed the
-      // type-badge to a second line. The fix is `flex-shrink: 0` on
-      // .tree-row-right plus `white-space: nowrap` on .tree-count.
+      // type-badge to a second line. The original fix was
+      // `flex-shrink: 0` on .tree-row-right plus `white-space:
+      // nowrap` on .tree-count.
+      //
+      // v0.26.1 (#269): the row is now `display: grid` with an
+      // `[right] auto` track that pins the right cluster to its
+      // intrinsic width without `flex-shrink`. The architectural
+      // guarantee shifts from "right is non-shrinking flex item" to
+      // "right is an auto-sized grid track"; the behavioral guards
+      // (count is single-line, right is no taller than the count)
+      // are the load-bearing assertions.
       const longComment =
         'Customer record that is really long and record that is really long and record that is really really really long';
       await createWithComments(
@@ -1919,8 +1953,10 @@ describe('JsonTreeComponent', () => {
         expect(count).withContext('count span').not.toBeNull();
         expect(count.textContent?.trim()).toBe('2 keys');
 
-        // Computed-style guards: the actual fix.
-        expect(getComputedStyle(rowRight).flexShrink).toBe('0');
+        // v0.26.1 (#269): row uses CSS Grid. The right cluster's
+        // intrinsic width is pinned via the auto-sized `[right]`
+        // track, not flex-shrink.
+        expect(getComputedStyle(userRow!).display).toBe('grid');
         expect(getComputedStyle(count).whiteSpace).toBe('nowrap');
 
         // Behavioral guard: the count text fits on a single line and
@@ -5253,6 +5289,7 @@ describe('JsonTreeComponent', () => {
 
   describe('embedded JSON extraction UI', () => {
     const embeddedJson = 'prefix {"ok": true} suffix';
+    const primitiveArrayJson = '[1,2,3]';
 
     function replacementFor(text = '{\n  "ok": true\n}'): ExtractedJson {
       return {
@@ -5281,6 +5318,12 @@ describe('JsonTreeComponent', () => {
     function extractButtonFor(pathString: string): HTMLButtonElement | null {
       return (fixture.nativeElement as HTMLElement).querySelector(
         `.tree-row[data-path="${pathString}"] .tree-extract-pill`,
+      ) as HTMLButtonElement | null;
+    }
+
+    function decodedButtonFor(pathString: string): HTMLButtonElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        `.tree-row[data-path="${pathString}"] .tree-decoded-pill`,
       ) as HTMLButtonElement | null;
     }
 
@@ -5328,7 +5371,7 @@ describe('JsonTreeComponent', () => {
     });
 
     it('does not render the extract button when the string has no candidate', async () => {
-      await createWith({ payload: embeddedJson });
+      await createWith({ payload: primitiveArrayJson });
       cmp.expandAll();
       fixture.detectChanges();
       setExtractCandidates('other string');
@@ -5336,21 +5379,32 @@ describe('JsonTreeComponent', () => {
       expect(extractButtonFor('$.payload')).toBeNull();
     });
 
-    it('renders the extract button when the string has a candidate', async () => {
-      await createWith({ payload: embeddedJson });
+    it('hides the row extract pill when the row also renders the decoded pill', async () => {
+      await createWith({ payload: 'abc\ndef' });
       cmp.expandAll();
       fixture.detectChanges();
-      setExtractCandidates(embeddedJson);
+      setExtractCandidates('abc\ndef');
 
-      expect(extractButtonFor('$.payload')).not.toBeNull();
+      expect(extractButtonFor('$.payload')).toBeNull();
+      expect(decodedButtonFor('$.payload')).not.toBeNull();
     });
 
-    it('clicking the extract button emits extractRequest with rowButton source', async () => {
-      const replacement = replacementFor('{\n  "answer": 42\n}');
-      await createWith({ payload: embeddedJson });
+    it('renders the extract button when the string has a candidate but no decoded pill', async () => {
+      await createWith({ payload: primitiveArrayJson });
       cmp.expandAll();
       fixture.detectChanges();
-      setExtractCandidates(embeddedJson, replacement);
+      setExtractCandidates(primitiveArrayJson);
+
+      expect(extractButtonFor('$.payload')).not.toBeNull();
+      expect(decodedButtonFor('$.payload')).toBeNull();
+    });
+
+    it('clicking the extract button emits extractRequest with rowPillPrimitiveArray source', async () => {
+      const replacement = replacementFor('[\n  1,\n  2,\n  3\n]');
+      await createWith({ payload: primitiveArrayJson });
+      cmp.expandAll();
+      fixture.detectChanges();
+      setExtractCandidates(primitiveArrayJson, replacement);
       fixture.componentRef.setInput('extractSourceVersion', 7);
       fixture.detectChanges();
       const events: TreeExtractRequest[] = [];
@@ -5365,16 +5419,16 @@ describe('JsonTreeComponent', () => {
           path: ['payload'],
           sourceVersion: 7,
           replacement,
-          source: 'rowButton',
+          source: 'rowPillPrimitiveArray',
         },
       ]);
     });
 
     it('clicking the extract button does not toggle row selection', async () => {
-      await createWith({ payload: embeddedJson });
+      await createWith({ payload: primitiveArrayJson });
       cmp.expandAll();
       fixture.detectChanges();
-      setExtractCandidates(embeddedJson);
+      setExtractCandidates(primitiveArrayJson);
       const selectionEvents: (readonly (string | number)[] | null)[] = [];
       cmp.selectionChange.subscribe((path) => selectionEvents.push(path));
 
@@ -5440,10 +5494,10 @@ describe('JsonTreeComponent', () => {
     });
 
     it('uses a numeric sentinel sourceVersion when extractSourceVersion is null', async () => {
-      await createWith({ payload: embeddedJson });
+      await createWith({ payload: primitiveArrayJson });
       cmp.expandAll();
       fixture.detectChanges();
-      setExtractCandidates(embeddedJson);
+      setExtractCandidates(primitiveArrayJson);
       const events: TreeExtractRequest[] = [];
       cmp.extractRequest.subscribe((request) => events.push(request));
 
@@ -5505,13 +5559,45 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
     }
 
-    function spyOnDialogOpen(): jasmine.Spy {
+    function replacementFor(text = '{\n  "ok": true\n}'): ExtractedJson {
+      return {
+        text,
+        blockCount: 1,
+        preservesComments: true,
+        hasComments: false,
+      };
+    }
+
+    function candidatesFor(
+      rawString: string,
+      replacement: ExtractedJson = replacementFor(),
+    ): ReadonlyMap<string, ExtractedJson> {
+      return new Map<string, ExtractedJson>([[rawString, replacement]]);
+    }
+
+    function setExtractCandidates(
+      rawString: string,
+      replacement: ExtractedJson = replacementFor(),
+    ): void {
+      fixture.componentRef.setInput('extractCandidates', candidatesFor(rawString, replacement));
+      fixture.detectChanges();
+    }
+
+    function spyOnDialogOpen(
+      afterClosed$: Observable<DecodedValueDialogResult> = new Subject<DecodedValueDialogResult>(),
+    ): jasmine.Spy {
       const dialog = TestBed.inject(MatDialog);
       const spy = spyOn(dialog, 'open').and.returnValue({
-        afterClosed: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }),
+        afterClosed: () => afterClosed$,
         close: () => {},
-      } as unknown as MatDialogRef<unknown>);
+      } as unknown as MatDialogRef<DecodedValueDialogComponent, DecodedValueDialogResult>);
       return spy;
+    }
+
+    function staleCloseEventCalls(eventSpy: jasmine.Spy): number {
+      return eventSpy.calls
+        .all()
+        .filter((call) => call.args[0] === 'tree.extract.dialog.staleClose').length;
     }
 
     describe('decodedCandidate predicate', () => {
@@ -5608,6 +5694,28 @@ describe('JsonTreeComponent', () => {
         expect(button!.hasAttribute('aria-pressed')).toBe(false);
       });
 
+      it('uses extract-aware title and aria labels only when an Extract option is available', async () => {
+        await createWith({ withExtract: 'abc\ndef', withoutExtract: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        fixture.componentRef.setInput(
+          'extractCandidates',
+          candidatesFor('abc\ndef', replacementFor('{\n  "x": 1\n}')),
+        );
+        fixture.detectChanges();
+
+        const withExtractButton = decodedButtonFor('$.withExtract');
+        const withoutExtractButton = decodedButtonFor('$.withoutExtract');
+        expect(withExtractButton?.getAttribute('title')).toBe('Inspect value (Extract available)');
+        expect(withExtractButton?.getAttribute('aria-label')).toBe(
+          'Inspect value; an Extract option is available inside',
+        );
+        expect(withoutExtractButton?.getAttribute('title')).toBe('Open decoded value');
+        expect(withoutExtractButton?.getAttribute('aria-label')).toBe(
+          'Open decoded value in a viewer',
+        );
+      });
+
       it('inline value span never carries the legacy tree-value-decoded class', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
@@ -5622,7 +5730,27 @@ describe('JsonTreeComponent', () => {
     });
 
     describe('opening the dialog', () => {
-      it('pill click opens the DecodedValueDialog with the raw value and path', async () => {
+      it('pill click opens with viewport-relative width matching the v0.23.1 tooltip principle', async () => {
+        await createWith({ note: 'first\nsecond' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const open = spyOnDialogOpen();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        expect(open).toHaveBeenCalledTimes(1);
+        // jasmine.objectContaining guards intent without freezing the
+        // shape of the config object: future PRs may add panelClass /
+        // restoreFocus / other MatDialogConfig keys, and this
+        // assertion should keep firing on the dimensions only. The
+        // sibling `jj-tooltip-wide` rule in `src/styles/_material.scss`
+        // uses `max-width: 90vw` for the same reasoning.
+        expect(open).toHaveBeenCalledWith(
+          DecodedValueDialogComponent,
+          jasmine.objectContaining({ width: '90vw', maxWidth: '95vw' }),
+        );
+      });
+
+      it('pill click opens without extractCandidate when the row is not extractable', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
@@ -5635,6 +5763,25 @@ describe('JsonTreeComponent', () => {
         const config = args[1] as { data: DecodedValueDialogData };
         expect(config.data.value).toBe('first\nsecond');
         expect(config.data.pathString).toBe('$.note');
+        expect(config.data.extractCandidate).toBeUndefined();
+        expect(config.data.extractPath).toBeUndefined();
+      });
+
+      it('pill click opens with extractCandidate and extractPath when the row is extractable', async () => {
+        const replacement = replacementFor('{\n  "answer": 42\n}');
+        await createWith({ note: 'abc\ndef' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        setExtractCandidates('abc\ndef', replacement);
+        const open = spyOnDialogOpen();
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+
+        const config = open.calls.mostRecent().args[1] as { data: DecodedValueDialogData };
+        expect(config.data.value).toBe('abc\ndef');
+        expect(config.data.pathString).toBe('$.note');
+        expect(config.data.extractCandidate).toEqual(replacement);
+        expect(config.data.extractPath).toEqual(['note']);
       });
 
       it('pill click stops propagation so the row is not selected', async () => {
@@ -5696,6 +5843,89 @@ describe('JsonTreeComponent', () => {
         // Calling onDecodedButtonClick with the stale node aborts.
         cmp.onDecodedButtonClick(node, new MouseEvent('click'));
         expect(open).not.toHaveBeenCalled();
+      });
+
+      it('dialog close result { extract: true } emits extractRequest with decodedDialog source when stable', async () => {
+        const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+        const replacement = replacementFor('{\n  "answer": 42\n}');
+        await createWith({ note: 'abc\ndef' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        setExtractCandidates('abc\ndef', replacement);
+        fixture.componentRef.setInput('extractSourceVersion', 7);
+        fixture.detectChanges();
+        const focusRestore = spyOn(cmp, 'focusRowByPath');
+        const events: TreeExtractRequest[] = [];
+        cmp.extractRequest.subscribe((request) => events.push(request));
+        spyOnDialogOpen(dialogClosed$);
+
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        dialogClosed$.next({ extract: true });
+        dialogClosed$.complete();
+        fixture.detectChanges();
+
+        expect(events).toEqual([
+          {
+            path: ['note'],
+            sourceVersion: 7,
+            replacement,
+            source: 'decodedDialog',
+          },
+        ]);
+        expect(focusRestore).toHaveBeenCalledWith('$.note');
+      });
+
+      it('dialog close result { extract: true } after sourceVersion bumps logs staleClose and does not emit extractRequest', async () => {
+        const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+        const replacement = replacementFor('{\n  "answer": 42\n}');
+        await createWith({ note: 'abc\ndef' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        setExtractCandidates('abc\ndef', replacement);
+        fixture.componentRef.setInput('extractSourceVersion', 7);
+        fixture.detectChanges();
+        const event = spyOn(TestBed.inject(LoggerService), 'event');
+        const focusRestore = spyOn(cmp, 'focusRowByPath');
+        const events: TreeExtractRequest[] = [];
+        cmp.extractRequest.subscribe((request) => events.push(request));
+        spyOnDialogOpen(dialogClosed$);
+
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        fixture.componentRef.setInput('extractSourceVersion', 8);
+        fixture.detectChanges();
+        dialogClosed$.next({ extract: true });
+        dialogClosed$.complete();
+        fixture.detectChanges();
+
+        expect(events).toEqual([]);
+        expect(staleCloseEventCalls(event)).toBe(1);
+        expect(focusRestore).toHaveBeenCalledWith('$.note');
+      });
+
+      it('dialog close result undefined does not emit extractRequest or stale-close telemetry', async () => {
+        const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+        const replacement = replacementFor('{\n  "answer": 42\n}');
+        await createWith({ note: 'abc\ndef' });
+        cmp.expandAll();
+        fixture.detectChanges();
+        setExtractCandidates('abc\ndef', replacement);
+        const event = spyOn(TestBed.inject(LoggerService), 'event');
+        const focusRestore = spyOn(cmp, 'focusRowByPath');
+        const events: TreeExtractRequest[] = [];
+        cmp.extractRequest.subscribe((request) => events.push(request));
+        spyOnDialogOpen(dialogClosed$);
+
+        decodedButtonFor('$.note')!.click();
+        fixture.detectChanges();
+        dialogClosed$.next(undefined);
+        dialogClosed$.complete();
+        fixture.detectChanges();
+
+        expect(events).toEqual([]);
+        expect(staleCloseEventCalls(event)).toBe(0);
+        expect(focusRestore).toHaveBeenCalledWith('$.note');
       });
     });
 
@@ -5938,9 +6168,15 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const node = nodeAt('$.alpha');
+        // v0.26.1 (#269): scope to a button-tag kebab. The probe row
+        // (`.tree-row-probe`) renders an inert `<span>` kebab so
+        // height measurement doesn't pull in interactive semantics;
+        // the data-row kebab remains a `<button>` so
+        // `target.closest('button, ...')` matches.
         const pill = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-kebab-pill',
+          'button.tree-kebab-pill',
         ) as HTMLButtonElement;
+        expect(pill).withContext('expected an interactive data-row kebab button').toBeTruthy();
         const ev = new MouseEvent('contextmenu', {
           clientX: 100,
           clientY: 100,
@@ -6896,9 +7132,12 @@ describe('JsonTreeComponent', () => {
         cmp.expandAll();
         fixture.detectChanges();
         const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+        // v0.26.1 (#269): scope to a button-tag kebab (see L6037 sibling
+        // test for rationale; probe row uses inert `<span>` kebab).
         const kebab = (fixture.nativeElement as HTMLElement).querySelector(
-          '.tree-kebab-pill',
+          'button.tree-kebab-pill',
         ) as HTMLButtonElement;
+        expect(kebab).withContext('expected an interactive data-row kebab button').toBeTruthy();
         const ev = new MouseEvent('dblclick', { bubbles: true });
         Object.defineProperty(ev, 'target', { value: kebab });
         const node = nodeAt('$.alpha');
