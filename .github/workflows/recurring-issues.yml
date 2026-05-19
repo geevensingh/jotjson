@@ -1,0 +1,56 @@
+name: Recurring issues
+
+# Active forcing function for plans that need periodic re-evaluation
+# but no day-to-day attention. The default cadence reopens issues
+# that have a tracking label; humans close the issue once the
+# re-evaluation is complete.
+#
+# See docs/sw-migration.md for the SW retirement re-evaluation
+# checklist.
+
+on:
+  schedule:
+    # Annual: Jan 15 at 09:00 UTC. Re-opens "Re-evaluate SW
+    # retirement triggers" issue if no open instance exists.
+    - cron: '0 9 15 1 *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  reopen-sw-retirement-triggers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues
+              .listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'sw-migration-cadence',
+              });
+            if (issues.length > 0) {
+              core.info(`Existing open issue: #${issues[0].number}`);
+              return;
+            }
+            const body = [
+              '## Re-evaluate SW retirement triggers',
+              '',
+              'Annual cadence (per `docs/sw-migration.md`).',
+              '',
+              '- [ ] Chromium release notes since last check (filter for "service worker", "PWA install", "installability")',
+              '- [ ] SWA platform updates since last check (filter for "routes", "limits", "caching")',
+              '- [ ] Open security advisories (none expected -- @angular/service-worker is removed; check our minimal SW pattern: clients.claim semantics, caches API)',
+              '- [ ] Reconfirm priority:low follow-up issue from §PWA Decision log still represents the right re-evaluation question',
+              '- [ ] `/ngsw.json` poll-volume check on Azure Front Door access logs -- if <10 sessions/quarter, the OLD ngsw cohort has drained and the `/ngsw-worker.js` alias can retire alongside the `/ngsw.json` stub',
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Re-evaluate SW retirement triggers',
+              body,
+              labels: ['priority:low', 'sw-migration-cadence'],
+            });
