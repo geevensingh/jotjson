@@ -681,47 +681,55 @@
                 [style.--manual-highlight]="closeManualHighlight?.color ?? null"
                 (contextmenu)="onCloseRowContextMenu($event, closeNode)"
               >
-                @if (showComments() && closeLeadingComment(closeNode); as cl) {
-                  <span class="tree-comment-slot tree-comment-slot--leading-close">
-                    <span
-                      class="tree-comment tree-comment-leading tree-comment-leading--close"
-                      [matTooltip]="closeLeadingCommentTooltipPrefix + cl.tooltipBody"
-                      matTooltipShowDelay="500"
-                      matTooltipPosition="above"
-                      matTooltipClass="jj-tooltip-wide"
-                      >{{ cl.visible }}</span
-                    >
-                    @if (cl.count >= 2) {
+                <span class="tree-row-leading">
+                  <span class="tree-twisty tree-spacer" aria-hidden="true">&middot;</span>
+
+                  @if (showComments() && closeLeadingComment(closeNode); as cl) {
+                    <span class="tree-comment-slot tree-comment-slot--leading-close">
                       <span
-                        class="tree-comment-count"
-                        dir="ltr"
-                        [attr.aria-label]="moreBadgeAriaLabel(cl.count - 1)"
-                        >{{ moreBadge(cl.count - 1) }}</span
+                        class="tree-comment tree-comment-leading tree-comment-leading--close"
+                        [matTooltip]="closeLeadingCommentTooltipPrefix + cl.tooltipBody"
+                        matTooltipShowDelay="500"
+                        matTooltipPosition="above"
+                        matTooltipClass="jj-tooltip-wide"
+                        >{{ cl.visible }}</span
                       >
-                    }
-                  </span>
-                }
-                <span class="tree-value-brace">{{ closeNode.type === 'array' ? ']' : '}' }}</span>
-                @if (showComments() && closeTrailingComment(closeNode); as tc) {
-                  <span class="tree-comment-slot tree-comment-slot--trailing-close">
-                    <span
-                      class="tree-comment tree-comment-trailing tree-comment-trailing--close"
-                      [matTooltip]="closeTrailingCommentTooltipPrefix + tc.tooltipBody"
-                      matTooltipShowDelay="500"
-                      matTooltipPosition="above"
-                      matTooltipClass="jj-tooltip-wide"
-                      >{{ tc.visible }}</span
-                    >
-                    @if (tc.count >= 2) {
+                      @if (cl.count >= 2) {
+                        <span
+                          class="tree-comment-count"
+                          dir="ltr"
+                          [attr.aria-label]="moreBadgeAriaLabel(cl.count - 1)"
+                          >{{ moreBadge(cl.count - 1) }}</span
+                        >
+                      }
+                    </span>
+                  }
+                </span>
+                <span class="tree-row-value-cell">
+                  <span class="tree-value-brace">{{ closeNode.type === 'array' ? ']' : '}' }}</span>
+                </span>
+                <span class="tree-row-trailing">
+                  @if (showComments() && closeTrailingComment(closeNode); as tc) {
+                    <span class="tree-comment-slot tree-comment-slot--trailing-close">
                       <span
-                        class="tree-comment-count"
-                        dir="ltr"
-                        [attr.aria-label]="moreBadgeAriaLabel(tc.count - 1)"
-                        >{{ moreBadge(tc.count - 1) }}</span
+                        class="tree-comment tree-comment-trailing tree-comment-trailing--close"
+                        [matTooltip]="closeTrailingCommentTooltipPrefix + tc.tooltipBody"
+                        matTooltipShowDelay="500"
+                        matTooltipPosition="above"
+                        matTooltipClass="jj-tooltip-wide"
+                        >{{ tc.visible }}</span
                       >
-                    }
-                  </span>
-                }
+                      @if (tc.count >= 2) {
+                        <span
+                          class="tree-comment-count"
+                          dir="ltr"
+                          [attr.aria-label]="moreBadgeAriaLabel(tc.count - 1)"
+                          >{{ moreBadge(tc.count - 1) }}</span
+                        >
+                      }
+                    </span>
+                  }
+                </span>
                 @if (closeManualHighlight) {
                   <span class="sr-only" i18n="@@tree.highlighted.aria">highlighted</span>
                 }

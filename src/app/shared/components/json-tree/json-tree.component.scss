@@ -366,14 +366,31 @@
   }
 }
 
-// Close rows retain `display: flex` because their 1-3 children
-// (`.tree-comment-slot--leading-close`, `.tree-value-brace`,
-// `.tree-comment-slot--trailing-close`) don't compete for shrink space.
-// The grid-column assignments above are inert here because `display:
-// flex` overrides the parent's grid template. The scoped
-// `> * { min-width: 0 }` rule is the close-row replacement for the
-// retired `.tree-row > * { min-width: 0 }` cascade, preserving
-// close-row protection from the v0.21.1-era overflow fix.
+// Close rows retain `display: flex` because their wrappers don't
+// compete for shrink space and there's no need to encode brace-glyph
+// centering in the grid template. Issue #282 (v0.28.2) restructured
+// the close row to use the same three structural wrappers leaf/open
+// rows use -- `.tree-row-leading` (containing a chevron-sized
+// `.tree-twisty.tree-spacer` placeholder + optional leading-close
+// comment slot), `.tree-row-value-cell` (containing the brace), and
+// `.tree-row-trailing` (containing optional trailing-close comment
+// slot) -- so the brace aligns with sibling key text instead of
+// sitting flush against the row's `padding-left`. This is the
+// Prettier / jq / VS Code / IntelliJ / `python -m json.tool`
+// convention; matches expectations of every mainstream JSON viewer.
+//
+// `.tree-row-leading` therefore operates in two layout contexts: as
+// a grid item on `.tree-row` (leaf/open rows), and as a flex item
+// on `.tree-row.tree-row--close`. Its internal `inline-flex`
+// semantics are identical in both contexts; only the parent's
+// participation rules differ.
+//
+// The grid-column assignments on the canonical block above are
+// inert here because `display: flex` overrides the parent's grid
+// template. The scoped `> * { min-width: 0 }` rule is the
+// close-row replacement for the retired `.tree-row > * { min-width: 0 }`
+// cascade, preserving close-row protection from the v0.21.1-era
+// overflow fix.
 .tree-row.tree-row--close {
   display: flex;
   align-items: center;
