@@ -288,4 +288,28 @@ describe('LoggerService', () => {
       await expectAsync(log.connect()).toBeResolved();
     });
   });
+
+  describe('quiet console mirror (QUIET_CONSOLE_IDS)', () => {
+    it('does NOT mirror errorHandler.suppressed events to console.info', () => {
+      const log = makeWithFakeTelemetry(false);
+      log.event('errorHandler.suppressed', { reasonBucket: 'monacoCanceled' });
+      expect(console.info).not.toHaveBeenCalled();
+    });
+
+    it('still dispatches errorHandler.suppressed to App Insights after connect', async () => {
+      const log = makeWithFakeTelemetry(false);
+      log.event('errorHandler.suppressed', { reasonBucket: 'monacoCanceled' });
+      await log.connect();
+      expect(trackEvent).toHaveBeenCalledTimes(1);
+      const [name, props] = trackEvent.calls.argsFor(0);
+      expect(name).toBe('errorHandler.suppressed');
+      expect(props as Record<string, unknown>).toEqual({ reasonBucket: 'monacoCanceled' });
+    });
+
+    it('does not affect other event IDs (regression guard)', () => {
+      const log = makeWithFakeTelemetry(false);
+      log.event('app.unhandled', { foo: 'bar' });
+      expect(console.info).toHaveBeenCalledWith('[event:app.unhandled]', { foo: 'bar' }, {});
+    });
+  });
 });
