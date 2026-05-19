@@ -1294,6 +1294,53 @@ tripwires together make IfMatch protection the default for every
     returns 200 and would need `responseOverrides` config. Issue:
     `followup-true-404`.
 
+### Environment indicator
+
+Non-production environments (the nonprod SWA, PR-preview slots, and
+local dev) are visually distinguished from production so the user
+cannot confuse them for prod:
+
+- **Alternate favicon.** `public/icons/icon-nonprod.svg`,
+  `icons/icon-nonprod-192.png`, and `favicon-nonprod.ico` are an
+  inverted-palette variant of the brand icon (amber `#f59e0b`
+  background, dark `#1e1e1e` glyph). Generated alongside the prod
+  icons by `scripts/generate-icons.mjs`. The `<link>` `href`s on
+  `favicon.ico`, `icons/icon.svg`, and `icons/icon-192.png` (the
+  apple-touch-icon) are swapped at runtime when the env label is
+  not `'prod'`. PWA manifest icons are intentionally NOT swapped;
+  installed PWAs continue to show the prod icon.
+- **Document title prefix.** Every route's `<title>` is prefixed
+  `[nonprod] `, `[preview] `, `[dev] `, or `[unknown] ` (anything
+  else) via a custom `EnvPrefixedTitleStrategy` (route titles) and
+  `EnvLabelService.withPrefix()` (the dynamic home-component title).
+  The prefix is the outermost wrapper, sibling to the existing
+  dirty-marker `'* '` prefix.
+- **Hostname-driven classification.** `src/app/core/env/env-label.ts`
+  classifies `window.location.hostname` into one of
+  `'prod' | 'nonprod' | 'preview' | 'dev' | 'unknown'`. Prod is
+  `jotjson.com` / `www.jotjson.com`; dev is `localhost` /
+  `127.0.0.1` / `[::1]`; nonprod is the SWA root hostname stem
+  `calm-flower-01969880f.<region>.azurestaticapps.net`; preview is
+  the same stem with a `-<slug>` suffix. Anything else is
+  `'unknown'` (fail-noisy: a misclassified prod alias shows
+  `[unknown]` rather than silently looking like prod).
+- **Pre-bootstrap swap.** An inline boot script in `src/index.html`
+  classifies the hostname and rewrites `<link>` `href`s + the
+  document title BEFORE the browser fetches the favicon and before
+  Angular bootstraps. This is the same dual-source pattern as
+  `resolve-boot-theme.ts`: needed because the prerendered
+  `dist/jotjson/browser/index.html` ships the prod title baked in,
+  and the prerendered HTML is served unchanged to every SWA
+  deployment. The Angular-side `provideEnvIndicatorInitializer()`
+  re-applies the same swap idempotently as a safety net. A new
+  SHA-256 token in `script-src` of `staticwebapp.config.json`
+  covers the inline script; `npm run lint:csp-hashes` catches
+  drift.
+- **Telemetry.** The existing `app.boot` event carries an
+  `envLabel` closed-enum dimension (`prod | nonprod | preview |
+  dev | unknown`), so any unexpected `'unknown'` classification
+  on prod is queryable from App Insights.
+
 ### Progressive Web App (PWA)
 - The site is installable as a **browser app** (PWA) on desktop and mobile.
 - **Shipped in v1:**

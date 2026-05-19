@@ -129,6 +129,7 @@ describe('AppComponent', () => {
         sha: jasmine.any(String),
         branch: jasmine.any(String),
         buildNumber: jasmine.any(String),
+        envLabel: jasmine.stringMatching(/^(prod|nonprod|preview|dev|unknown)$/),
       },
       undefined,
     );
