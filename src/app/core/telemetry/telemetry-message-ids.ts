@@ -63,6 +63,27 @@ export const TELEMETRY_MESSAGE_IDS = [
   'app.unhandled',
 
   /**
+   * Kind: event
+   * Fired by: `TelemetryErrorHandler.handleError`
+   *           (`core/telemetry/error-handler.ts`) when the noise
+   *           classifier in `core/telemetry/noise-filter.ts` returns
+   *           `'suppress'`. Suppressed errors do NOT also flow to
+   *           `'app.unhandled'` -- this counter is the only signal
+   *           they emit so we can monitor cancellation volume in
+   *           `customEvents` without polluting the `exceptions` table.
+   * Props: { reasonBucket: 'monacoCanceled' }.
+   *   `monacoCanceled`: Monaco's `CancellationError` thrown during
+   *   normal editor / completion-provider disposal.
+   *   The bucket is a closed enum; expand here when a new suppress
+   *   rule is added to `noise-filter.ts`.
+   * Measurements: none.
+   * Bounded-frequency: bounded by Monaco editor lifecycle events
+   *   (mount / dispose / completion-provider teardown). Can be high
+   *   during chatty editor sessions but not unbounded.
+   */
+  'errorHandler.suppressed',
+
+  /**
    * Severity: error
    * Fired by: `LoggerService.flushSessionStorage` via direct
    *           `telemetry.trackException(..., {messageId})` in
