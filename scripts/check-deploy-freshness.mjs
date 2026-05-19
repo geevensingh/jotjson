@@ -1,29 +1,74 @@
 #!/usr/bin/env node
 // scripts/check-deploy-freshness.mjs
 //
-// Post-deploy gate: verifies the SWA origin stops returning 304 for
-// stale ETags on the Angular SW gateway files (/ngsw.json and
-// /ngsw-worker.js).
+// Post-deploy gate. Verifies the four invariants the SW migration
+// (see plan.md, DESIGN_SPEC.md -> Versioning) depends on at the
+// CDN edge:
 //
-// SCOPE: This probe verifies origin Cache-Control: no-store is in effect.
-// It does NOT verify the user-visible "new tab shows old version"
+//   1. GET /sw.js                -> 200, Cache-Control: no-store,
+//                                    body contains the required
+//                                    migration substrings.
+//   2. GET /ngsw-worker.js       -> 200, byte-equal to /sw.js (the
+//                                    permanent passthrough alias is
+//                                    the URL the OLD ngsw cohort
+//                                    revalidates against; drift here
+//                                    breaks the stuck-user unstick
+//                                    mechanism).
+//   3. GET /ngsw.json            -> 200, body == "{}\n" (build-emitted
+//                                    inert stub keeps the OLD ngsw's
+//                                    periodic poll from entering
+//                                    `unrecoverable`).
+//   4. GET /index.html           -> Cache-Control:
+//                                    "no-cache, must-revalidate".
+//
+// Propagation: SWA deploys propagate to the CDN over time. The
+// script polls /sw.js with exponential backoff until the response
+// body byte-matches the local dist/jotjson/browser/sw.js (the bytes
+// the current build emitted). Once propagation is detected, the
+// four assertions above run sequentially. Total budget is bounded
+// by DEFAULT_TIMEOUT_MS.
+//
+// SCOPE: This probe verifies origin / edge state. It does NOT
+// verify the user-visible "stuck SW unsticks on next visit"
 // symptom -- that test requires a browser with a stale SW already
 // controlling the origin, which neither this script nor Playwright
-// can reproduce in a fresh context. The user-symptom verification is
-// a manual smoke test post-deploy (see plan.md Phase 3.1).
+// can reproduce in a fresh context. See e2e/sw-migration.spec.ts
+// for the user-symptom verification.
 
 import { randomUUID } from 'node:crypto';
-import { realpathSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { NGSW_JSON_STUB_URL, SW_CANONICAL_URL, SW_LEGACY_ALIAS_URLS } from './sw-urls.mjs';
 
 const DEFAULT_ORIGIN = 'https://jotjson.com';
 const INITIAL_BACKOFF_MS = 5_000;
 const MAX_BACKOFF_MS = 30_000;
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1_000;
-const NGSW_JSON_PATH = '/ngsw.json';
-const NGSW_WORKER_PATH = '/ngsw-worker.js';
+const INDEX_HTML_PATH = '/index.html';
+const INDEX_HTML_CACHE_CONTROL = 'no-cache, must-revalidate';
+const SW_CACHE_CONTROL = 'no-store';
+const NGSW_JSON_EXPECTED_BODY = '{}\n';
+
+// Mirrors the required-substring set in scripts/build-sw.mjs.
+// Drift between the two would let a broken transpile pass the
+// post-deploy gate; the SW shape lint (scripts/check-sw-shape.mjs)
+// catches the inverse case at build time.
+const REQUIRED_SW_SUBSTRINGS = Object.freeze([
+  'skipWaiting',
+  'caches.delete',
+  'clients.claim',
+  'jotjson-sw-migration',
+  'legacyCacheWiped',
+]);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const repoRoot = resolve(__dirname, '..');
+const DEFAULT_LOCAL_SW = resolve(repoRoot, 'dist/jotjson/browser/sw.js');
 
 function randomProbeToken() {
   return randomUUID().replaceAll('-', '');
@@ -51,9 +96,7 @@ function readOptionWithOptionalValue(args, optionName) {
 function requireNoUnknownArgs(args, consumedIndexes) {
   for (let index = 0; index < args.length; index += 1) {
     if (!consumedIndexes.has(index)) {
-      throw new Error(
-        `Unknown argument '${args[index]}'. Valid options: --expected-sha, --origin.`,
-      );
+      throw new Error(`Unknown argument '${args[index]}'. Valid options: --origin, --local-sw.`);
     }
   }
 }
@@ -62,7 +105,7 @@ function normalizeOrigin(rawOrigin) {
   let parsedOrigin;
   try {
     parsedOrigin = new URL(rawOrigin);
-  } catch (error) {
+  } catch {
     throw new Error(`Invalid origin '${rawOrigin}'. Expected an absolute https:// URL.`);
   }
   if (parsedOrigin.protocol !== 'https:') {
@@ -72,42 +115,26 @@ function normalizeOrigin(rawOrigin) {
 }
 
 export function parseCliOptions(args = process.argv.slice(2), env = process.env) {
-  const expectedShaOption = readOptionWithOptionalValue(args, '--expected-sha');
   const originOption = readOptionWithOptionalValue(args, '--origin');
+  const localSwOption = readOptionWithOptionalValue(args, '--local-sw');
   const consumedIndexes = new Set([
-    ...expectedShaOption.consumedIndexes,
     ...originOption.consumedIndexes,
+    ...localSwOption.consumedIndexes,
   ]);
   requireNoUnknownArgs(args, consumedIndexes);
-
-  const cliExpectedSha = expectedShaOption.value?.trim() ?? '';
-  const envGithubSha = env.GITHUB_SHA?.trim() ?? '';
-  const envExpectedSha = env.EXPECTED_SHA?.trim() ?? '';
-  const expectedSha = cliExpectedSha || envGithubSha || envExpectedSha;
-  const expectedShaSource = cliExpectedSha
-    ? '--expected-sha'
-    : envGithubSha
-      ? 'GITHUB_SHA'
-      : envExpectedSha
-        ? 'EXPECTED_SHA'
-        : null;
-
-  if (!expectedSha) {
-    throw new Error(
-      'Missing expected SHA. Pass --expected-sha=<sha> or set GITHUB_SHA / EXPECTED_SHA.',
-    );
-  }
 
   const cliOrigin = originOption.value?.trim() ?? '';
   const envOrigin = env.DEPLOY_ORIGIN?.trim() ?? '';
   const rawOrigin = cliOrigin || envOrigin || DEFAULT_ORIGIN;
   const originSource = cliOrigin ? '--origin' : envOrigin ? 'DEPLOY_ORIGIN' : 'default';
 
+  const cliLocalSw = localSwOption.value?.trim() ?? '';
+  const localSwPath = cliLocalSw ? resolve(cliLocalSw) : DEFAULT_LOCAL_SW;
+
   return {
-    expectedSha,
-    expectedShaSource,
     origin: normalizeOrigin(rawOrigin),
     originSource,
+    localSwPath,
   };
 }
 
@@ -119,32 +146,6 @@ function buildUrl(origin, pathname, searchParams = {}) {
   return url.toString();
 }
 
-function extractBuildSha(ngswManifest) {
-  if (!ngswManifest || typeof ngswManifest !== 'object' || Array.isArray(ngswManifest)) {
-    return { ok: false, reason: 'manifest JSON is not an object' };
-  }
-  const appData = ngswManifest.appData;
-  if (!appData || typeof appData !== 'object' || Array.isArray(appData)) {
-    return { ok: false, reason: 'manifest JSON has no appData object' };
-  }
-  const buildSha = appData.buildSha;
-  if (typeof buildSha !== 'string' || buildSha.length === 0) {
-    return { ok: false, reason: 'manifest JSON has no appData.buildSha string' };
-  }
-  return { ok: true, buildSha };
-}
-
-async function readManifestBuildSha(response) {
-  let manifestJson;
-  try {
-    manifestJson = await response.json();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, reason: `manifest body is not valid JSON (${message})` };
-  }
-  return extractBuildSha(manifestJson);
-}
-
 async function fetchWithAssertionName(fetchImpl, assertionName, url, options = {}) {
   try {
     return await fetchImpl(url, options);
@@ -154,9 +155,27 @@ async function fetchWithAssertionName(fetchImpl, assertionName, url, options = {
   }
 }
 
+export function readLocalSwBytes(localSwPath = DEFAULT_LOCAL_SW) {
+  try {
+    return readFileSync(localSwPath);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Could not read local SW from ${localSwPath}: ${message}. ` +
+        `Run \`npm run build:prod\` (or the equivalent CI build step) first so ` +
+        `dist/jotjson/browser/sw.js exists, or pass --local-sw=<path>.`,
+    );
+  }
+}
+
+function bytesEqual(left, right) {
+  if (left.length !== right.length) return false;
+  return Buffer.compare(left, right) === 0;
+}
+
 export async function waitForPropagation({
-  expectedSha,
   origin,
+  localSwBytes,
   fetchImpl = globalThis.fetch,
   logger = console,
   sleepImpl = sleep,
@@ -174,11 +193,12 @@ export async function waitForPropagation({
     const elapsedMs = nowImpl() - startedAtMs;
     if (elapsedMs >= timeoutMs) {
       throw new Error(
-        `propagation assertion failed: timed out after ${timeoutMs}ms waiting for ${NGSW_JSON_PATH} appData.buildSha to equal ${expectedSha}.`,
+        `propagation assertion failed: timed out after ${timeoutMs}ms waiting for ` +
+          `${SW_CANONICAL_URL} body to byte-match the locally built dist/jotjson/browser/sw.js.`,
       );
     }
 
-    const probeUrl = buildUrl(origin, NGSW_JSON_PATH, {
+    const probeUrl = buildUrl(origin, SW_CANONICAL_URL, {
       probe: createProbeToken(),
     });
     logger.log(`check-deploy-freshness: propagation attempt ${attemptNumber}: GET ${probeUrl}`);
@@ -191,32 +211,36 @@ export async function waitForPropagation({
       );
       if (response.status !== 200) {
         logger.log(
-          `check-deploy-freshness: propagation attempt ${attemptNumber}: status ${response.status}, waiting for 200.`,
+          `check-deploy-freshness: propagation attempt ${attemptNumber}: ` +
+            `status ${response.status}, waiting for 200.`,
         );
       } else {
-        const buildShaResult = await readManifestBuildSha(response);
-        if (buildShaResult.ok && buildShaResult.buildSha === expectedSha) {
+        const remoteBytes = Buffer.from(await response.arrayBuffer());
+        if (bytesEqual(remoteBytes, localSwBytes)) {
           logger.log(
-            `check-deploy-freshness: propagation detected on attempt ${attemptNumber} for sha ${expectedSha}.`,
+            `check-deploy-freshness: propagation detected on attempt ${attemptNumber} ` +
+              `(${remoteBytes.length} bytes match).`,
           );
           return;
         }
-        const observedSha = buildShaResult.ok ? buildShaResult.buildSha : buildShaResult.reason;
         logger.log(
-          `check-deploy-freshness: propagation attempt ${attemptNumber}: observed ${observedSha}; expected ${expectedSha}.`,
+          `check-deploy-freshness: propagation attempt ${attemptNumber}: ` +
+            `served ${remoteBytes.length} bytes, expected ${localSwBytes.length}; not yet propagated.`,
         );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.log(
-        `check-deploy-freshness: propagation attempt ${attemptNumber}: ${message}; retrying until timeout.`,
+        `check-deploy-freshness: propagation attempt ${attemptNumber}: ${message}; ` +
+          `retrying until timeout.`,
       );
     }
 
     const remainingMs = timeoutMs - (nowImpl() - startedAtMs);
     if (remainingMs <= 0) {
       throw new Error(
-        `propagation assertion failed: timed out after ${timeoutMs}ms waiting for ${NGSW_JSON_PATH} appData.buildSha to equal ${expectedSha}.`,
+        `propagation assertion failed: timed out after ${timeoutMs}ms waiting for ` +
+          `${SW_CANONICAL_URL} body to byte-match the locally built dist/jotjson/browser/sw.js.`,
       );
     }
     const delayMs = Math.min(backoffMs, remainingMs);
@@ -227,97 +251,137 @@ export async function waitForPropagation({
   }
 }
 
-export async function assertNgswJsonNoStore({
-  expectedSha,
-  origin,
-  fetchImpl = globalThis.fetch,
-  logger = console,
-  createProbeToken = randomProbeToken,
-}) {
-  const staleEtag = `"probe-${createProbeToken()}"`;
-  const url = buildUrl(origin, NGSW_JSON_PATH);
-  logger.log(
-    `check-deploy-freshness: asserting ${NGSW_JSON_PATH} ignores stale If-None-Match and returns 200.`,
-  );
+export async function assertSwJs({ origin, fetchImpl = globalThis.fetch, logger = console }) {
+  const url = buildUrl(origin, SW_CANONICAL_URL);
+  logger.log(`check-deploy-freshness: GET ${url}`);
   const response = await fetchWithAssertionName(
     fetchImpl,
-    'ngsw.json no-store assertion failed',
+    `${SW_CANONICAL_URL} assertion failed`,
     url,
-    {
-      headers: { 'If-None-Match': staleEtag },
-    },
   );
 
-  if (response.status === 304) {
-    throw new Error(
-      `${NGSW_JSON_PATH} no-store assertion failed: expected 200, got 304 for a stale If-None-Match header.`,
-    );
-  }
   if (response.status !== 200) {
+    throw new Error(`${SW_CANONICAL_URL} assertion failed: expected 200, got ${response.status}.`);
+  }
+  const cacheControl = response.headers.get('Cache-Control');
+  if (cacheControl !== SW_CACHE_CONTROL) {
     throw new Error(
-      `${NGSW_JSON_PATH} no-store assertion failed: expected 200, got ${response.status}.`,
+      `${SW_CANONICAL_URL} assertion failed: Cache-Control must be '${SW_CACHE_CONTROL}' ` +
+        `(got: ${JSON.stringify(cacheControl)}). The SW gateway must not be cached or the ` +
+        `24h byte-revalidation that delivers updates can be defeated by a CDN cache.`,
     );
   }
-
-  const buildShaResult = await readManifestBuildSha(response);
-  if (!buildShaResult.ok) {
-    throw new Error(`${NGSW_JSON_PATH} no-store assertion failed: ${buildShaResult.reason}.`);
+  const body = await response.text();
+  for (const needle of REQUIRED_SW_SUBSTRINGS) {
+    if (!body.includes(needle)) {
+      throw new Error(
+        `${SW_CANONICAL_URL} assertion failed: body is missing required substring '${needle}'. ` +
+          `The post-deploy SW does not look like the minimal pass-through SW; ` +
+          `migration mechanism would be broken.`,
+      );
+    }
   }
-  if (buildShaResult.buildSha !== expectedSha) {
-    throw new Error(
-      `${NGSW_JSON_PATH} no-store assertion failed: appData.buildSha was ${buildShaResult.buildSha}, expected ${expectedSha}.`,
-    );
-  }
-
-  logger.log(`check-deploy-freshness: ${NGSW_JSON_PATH} no-store assertion passed.`);
+  logger.log(`check-deploy-freshness: ${SW_CANONICAL_URL} assertion passed.`);
+  return Buffer.from(body, 'utf8');
 }
 
-export async function assertWorkerNoStore({
+export async function assertLegacyAlias({
+  origin,
+  legacyUrl,
+  canonicalBytes,
+  fetchImpl = globalThis.fetch,
+  logger = console,
+}) {
+  const url = buildUrl(origin, legacyUrl);
+  logger.log(`check-deploy-freshness: GET ${url}`);
+  const response = await fetchWithAssertionName(fetchImpl, `${legacyUrl} assertion failed`, url);
+
+  if (response.status !== 200) {
+    throw new Error(`${legacyUrl} assertion failed: expected 200, got ${response.status}.`);
+  }
+  const remoteBytes = Buffer.from(await response.arrayBuffer());
+  if (!bytesEqual(remoteBytes, canonicalBytes)) {
+    throw new Error(
+      `${legacyUrl} assertion failed: bytes differ from ${SW_CANONICAL_URL} ` +
+        `(${remoteBytes.length} vs ${canonicalBytes.length}). The permanent passthrough alias ` +
+        `MUST stay byte-identical to the canonical SW or the OLD ngsw cohort's ` +
+        `byte-revalidation against the legacy URL would never see new bytes.`,
+    );
+  }
+  logger.log(`check-deploy-freshness: ${legacyUrl} assertion passed.`);
+}
+
+export async function assertNgswJsonStub({
   origin,
   fetchImpl = globalThis.fetch,
   logger = console,
-  createProbeToken = randomProbeToken,
 }) {
-  const staleEtag = `"probe-${createProbeToken()}"`;
-  const url = buildUrl(origin, NGSW_WORKER_PATH);
-  logger.log(
-    `check-deploy-freshness: asserting ${NGSW_WORKER_PATH} ignores stale If-None-Match and returns 200.`,
-  );
+  const url = buildUrl(origin, NGSW_JSON_STUB_URL);
+  logger.log(`check-deploy-freshness: GET ${url}`);
   const response = await fetchWithAssertionName(
     fetchImpl,
-    'ngsw-worker.js no-store assertion failed',
+    `${NGSW_JSON_STUB_URL} assertion failed`,
     url,
-    {
-      headers: { 'If-None-Match': staleEtag },
-    },
   );
 
-  if (response.status === 304) {
-    throw new Error(
-      `${NGSW_WORKER_PATH} no-store assertion failed: expected 200, got 304 for a stale If-None-Match header.`,
-    );
-  }
   if (response.status !== 200) {
     throw new Error(
-      `${NGSW_WORKER_PATH} no-store assertion failed: expected 200, got ${response.status}.`,
+      `${NGSW_JSON_STUB_URL} assertion failed: expected 200, got ${response.status}.`,
     );
   }
+  const body = await response.text();
+  if (body !== NGSW_JSON_EXPECTED_BODY) {
+    throw new Error(
+      `${NGSW_JSON_STUB_URL} assertion failed: body must be exactly ` +
+        `${JSON.stringify(NGSW_JSON_EXPECTED_BODY)} (got ${JSON.stringify(body)}). ` +
+        `The inert stub is what keeps the OLD ngsw's periodic poll from entering ` +
+        `\`unrecoverable\` mid-migration.`,
+    );
+  }
+  logger.log(`check-deploy-freshness: ${NGSW_JSON_STUB_URL} assertion passed.`);
+}
 
-  logger.log(`check-deploy-freshness: ${NGSW_WORKER_PATH} no-store assertion passed.`);
+export async function assertIndexHtmlCacheControl({
+  origin,
+  fetchImpl = globalThis.fetch,
+  logger = console,
+}) {
+  const url = buildUrl(origin, INDEX_HTML_PATH);
+  logger.log(`check-deploy-freshness: GET ${url}`);
+  const response = await fetchWithAssertionName(
+    fetchImpl,
+    `${INDEX_HTML_PATH} assertion failed`,
+    url,
+  );
+
+  if (response.status !== 200) {
+    throw new Error(`${INDEX_HTML_PATH} assertion failed: expected 200, got ${response.status}.`);
+  }
+  const cacheControl = response.headers.get('Cache-Control');
+  if (cacheControl !== INDEX_HTML_CACHE_CONTROL) {
+    throw new Error(
+      `${INDEX_HTML_PATH} assertion failed: Cache-Control must be ` +
+        `'${INDEX_HTML_CACHE_CONTROL}' (got: ${JSON.stringify(cacheControl)}).`,
+    );
+  }
+  logger.log(`check-deploy-freshness: ${INDEX_HTML_PATH} assertion passed.`);
 }
 
 export async function runDeployFreshnessCheck(options) {
-  await waitForPropagation(options);
-  await assertNgswJsonNoStore(options);
-  await assertWorkerNoStore(options);
+  const localSwBytes = options.localSwBytes ?? readLocalSwBytes(options.localSwPath);
+  await waitForPropagation({ ...options, localSwBytes });
+  const canonicalBytes = await assertSwJs(options);
+  for (const legacyUrl of SW_LEGACY_ALIAS_URLS) {
+    await assertLegacyAlias({ ...options, legacyUrl, canonicalBytes });
+  }
+  await assertNgswJsonStub(options);
+  await assertIndexHtmlCacheControl(options);
 }
 
 export async function main(args = process.argv.slice(2), env = process.env) {
   const options = parseCliOptions(args, env);
-  console.log(
-    `check-deploy-freshness: expected sha source: ${options.expectedShaSource} (${options.expectedSha})`,
-  );
   console.log(`check-deploy-freshness: origin source: ${options.originSource} (${options.origin})`);
+  console.log(`check-deploy-freshness: local SW: ${options.localSwPath}`);
   await runDeployFreshnessCheck(options);
   console.log('check-deploy-freshness: OK');
 }
