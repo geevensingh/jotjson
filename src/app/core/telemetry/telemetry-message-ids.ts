@@ -109,12 +109,24 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           (`app/app.component.ts`) once per page load, BEFORE
    *           `LoggerService.connect()` resolves (the buffered entry
    *           is replayed once the SDK is up).
-   * Props: { version: string; sha: string; branch: string; buildNumber: string }
-   *   sourced from `BUILD_INFO` (`src/generated/build-info.ts`).
-   *   `buildNumber` is `git rev-list --count HEAD` from the build that
-   *   produced the artifact, or the sentinel `'unknown'` if the
-   *   checkout was shallow / git was unavailable. See preamble for
-   *   the build-identity carve-out.
+   * Props: {
+   *   version: string;
+   *   sha: string;
+   *   branch: string;
+   *   buildNumber: string;
+   *   envLabel: 'prod' | 'nonprod' | 'preview' | 'dev' | 'unknown';
+   * }
+   *   `version`, `sha`, `branch`, `buildNumber` sourced from
+   *   `BUILD_INFO` (`src/generated/build-info.ts`). `buildNumber` is
+   *   `git rev-list --count HEAD` from the build that produced the
+   *   artifact, or the sentinel `'unknown'` if the checkout was
+   *   shallow / git was unavailable. See preamble for the build-
+   *   identity carve-out.
+   *   `envLabel` is the runtime environment classification from
+   *   `EnvLabelService` (see `core/env/env-label.ts`). A closed enum
+   *   of five values; answers "how often do real users hit the
+   *   nonprod URL?" and "are we ever misclassifying prod as
+   *   'unknown'?". Always 'prod' on server-platform (prerender).
    * Measurements: none.
    */
   'app.boot',
