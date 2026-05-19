@@ -144,4 +144,44 @@ describe('parse (pure)', () => {
       expect(locationAt(text, offsetOnValue)).toEqual(['a']);
     });
   });
+
+  describe('comment bundles (appendBody)', () => {
+    it('creates a fresh bundle when no bundle exists for the path (case 1)', () => {
+      // Single leading comment exercises the new-bundle branch of
+      // `appendBody`: `map.get(path)` is undefined, so a fresh
+      // `MutableCommentBundle` is constructed with only the leading slot.
+      const result = parse('{\n  // hello\n  "x": 1\n}');
+      expect(result.errors).toEqual([]);
+      const bundle = result.commentsByPath.get('$.x');
+      expect(bundle).toBeDefined();
+      expect(bundle?.leading).toEqual(['hello']);
+      expect(bundle?.trailing).toBeUndefined();
+      expect(bundle?.closeLeading).toBeUndefined();
+      expect(bundle?.closeTrailing).toBeUndefined();
+    });
+
+    it('preserves an existing slot when adding a different slot (case 2)', () => {
+      // A leading + trailing pair on the same value exercises the
+      // "path exists, second slot is undefined" branch of `appendBody`.
+      // A regression that replaced `existing[slot] = [body]` with a
+      // computed-property-name literal (`map.set(path, { [slot]: [body] })`)
+      // would clobber the leading slot; this asserts both coexist.
+      const result = parse('{\n  // L\n  "x": 1 // T\n}');
+      expect(result.errors).toEqual([]);
+      const bundle = result.commentsByPath.get('$.x');
+      expect(bundle?.leading).toEqual(['L']);
+      expect(bundle?.trailing).toEqual(['T']);
+    });
+
+    it('pushes onto an existing slot rather than replacing it (case 3)', () => {
+      // Stacked leading comments exercise the "path exists, slot exists,
+      // push" branch. The `flushPendingAsLeading` drain calls `appendBody`
+      // twice for the same path+slot; the second call must push to the
+      // existing array, not overwrite it.
+      const result = parse('{\n  // first\n  // second\n  "x": 1\n}');
+      expect(result.errors).toEqual([]);
+      const bundle = result.commentsByPath.get('$.x');
+      expect(bundle?.leading).toEqual(['first', 'second']);
+    });
+  });
 });

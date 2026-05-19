@@ -56,6 +56,8 @@ type MutableCommentBundle = {
   -readonly [K in keyof CommentBundle]: string[];
 };
 
+type CommentSlot = keyof CommentBundle;
+
 export interface JsonParseResult {
   value: unknown;
   ast: JsoncNode | undefined;
@@ -215,62 +217,26 @@ function harvestComments(text: string): {
   let lastContainerOpenEndOffset = -1;
   let lastContainerOpenLine = -1;
 
-  const appendLeading = (path: string, body: string): void => {
+  const appendBody = (path: string, slot: CommentSlot, body: string): void => {
     const existing = map.get(path);
     if (existing) {
-      if (existing.leading) {
-        existing.leading.push(body);
+      const arr = existing[slot];
+      if (arr) {
+        arr.push(body);
       } else {
-        existing.leading = [body];
+        existing[slot] = [body];
       }
     } else {
-      map.set(path, { leading: [body] });
+      const newBundle: MutableCommentBundle = {};
+      newBundle[slot] = [body];
+      map.set(path, newBundle);
     }
   };
 
   const flushPendingAsLeading = (path: string): void => {
     if (pendingLeading.length === 0) return;
-    for (const body of pendingLeading) appendLeading(path, body);
+    for (const body of pendingLeading) appendBody(path, 'leading', body);
     pendingLeading.length = 0;
-  };
-
-  const appendTrailing = (path: string, body: string): void => {
-    const existing = map.get(path);
-    if (existing) {
-      if (existing.trailing) {
-        existing.trailing.push(body);
-      } else {
-        existing.trailing = [body];
-      }
-    } else {
-      map.set(path, { trailing: [body] });
-    }
-  };
-
-  const appendCloseLeading = (path: string, body: string): void => {
-    const existing = map.get(path);
-    if (existing) {
-      if (existing.closeLeading) {
-        existing.closeLeading.push(body);
-      } else {
-        existing.closeLeading = [body];
-      }
-    } else {
-      map.set(path, { closeLeading: [body] });
-    }
-  };
-
-  const appendCloseTrailing = (path: string, body: string): void => {
-    const existing = map.get(path);
-    if (existing) {
-      if (existing.closeTrailing) {
-        existing.closeTrailing.push(body);
-      } else {
-        existing.closeTrailing = [body];
-      }
-    } else {
-      map.set(path, { closeTrailing: [body] });
-    }
   };
 
   const onValueStart = (path: string): void => {
@@ -288,7 +254,7 @@ function harvestComments(text: string): {
     const path = containerPathStack.pop();
     if (path === undefined) return;
     if (pendingLeading.length > 0) {
-      for (const body of pendingLeading) appendCloseLeading(path, body);
+      for (const body of pendingLeading) appendBody(path, 'closeLeading', body);
       pendingLeading.length = 0;
     }
     const endOffset = offset + length;
@@ -352,7 +318,7 @@ function harvestComments(text: string): {
           startLine === closeJustSeenLine &&
           offset >= closeJustSeenOffset
         ) {
-          appendCloseTrailing(closeJustSeenPath, body);
+          appendBody(closeJustSeenPath, 'closeTrailing', body);
           return;
         }
 
@@ -361,12 +327,12 @@ function harvestComments(text: string): {
           startLine === lastValueEndLine &&
           offset >= lastValueEndOffset
         ) {
-          appendTrailing(lastValuePath, body);
+          appendBody(lastValuePath, 'trailing', body);
           return;
         }
 
         if (isOpenRowTrailing(offset, length, startLine)) {
-          appendTrailing(lastContainerOpenPath as string, body);
+          appendBody(lastContainerOpenPath as string, 'trailing', body);
           return;
         }
 
