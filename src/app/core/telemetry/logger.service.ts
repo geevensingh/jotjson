@@ -1,6 +1,7 @@
-import { Injectable, inject } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { msalBridge } from './msal-bridge';
 import { HttpErrorContext, NormalizedError, normalizeError } from './normalize-error';
+import { attachSwEventDirectEmit, isSwEvent, SW_EVENTS_KEY, SwEvent } from './sw-registration';
 import { TelemetryMessageId } from './telemetry-message-ids';
 import {
   TelemetryMeasurements,
@@ -286,6 +287,53 @@ export class LoggerService {
       }
     } catch {
       // ignore
+    }
+    this.flushSwEvents();
+  }
+
+  /**
+   * Drains the pre-bootstrap SW telemetry queue and attaches the
+   * direct-emit dispatcher so subsequent `queueSwEvent` calls bypass
+   * `sessionStorage` and emit directly. Called from
+   * `flushSessionStorage()` after the App Insights SDK has connected.
+   *
+   * Per skeptic v5 S1 BLOCKER fix: `attachSwEventDirectEmit(dispatch)`
+   * runs UNCONDITIONALLY (before any early return), so direct-emit is
+   * attached for every user, regardless of whether the pre-bootstrap
+   * queue happened to be empty. Without this, `sw.activated` is lost
+   * for every non-stuck user (the dominant cohort) because their
+   * post-bootstrap events write to `sessionStorage` and never drain.
+   *
+   * Per skeptic v5 S4: per-event try/catch in the drain loop so one
+   * throwing emit does not drop the rest of the batch.
+   */
+  private flushSwEvents(): void {
+    const dispatch = (event: SwEvent): void => {
+      if (event.name === 'sw.registerFailed') {
+        this.warn(event.name, { ...event.props });
+      } else {
+        this.event(event.name, { ...event.props });
+      }
+    };
+    attachSwEventDirectEmit(dispatch);
+
+    try {
+      const raw = sessionStorage.getItem(SW_EVENTS_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(SW_EVENTS_KEY);
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      for (const entry of parsed) {
+        if (!isSwEvent(entry)) continue;
+        try {
+          dispatch(entry);
+        } catch {
+          // Intentional swallow: one throwing emit must not drop others.
+        }
+      }
+    } catch {
+      // Malformed queue; drop silently. Direct-emit is attached above so
+      // future events still flow.
     }
   }
 

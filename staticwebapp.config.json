@@ -41,6 +41,33 @@
       "headers": {
         "Cache-Control": "no-store"
       }
+    },
+    {
+      "route": "/sw.js",
+      "headers": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "route": "/*.js",
+      "methods": ["GET"],
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "route": "/*.css",
+      "methods": ["GET"],
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "route": "/*.woff2",
+      "methods": ["GET"],
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
     }
   ],
   "mimeTypes": {
