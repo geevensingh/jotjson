@@ -8,6 +8,7 @@ import type { ParseError } from 'jsonc-parser';
 import { parse } from 'jsonc-parser';
 import { EMPTY, of, Subject, throwError } from 'rxjs';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
+import { provideStubEnvLabel } from '../../../testing/env.testing';
 import { installMatchMediaStub } from '../../../testing/match-media.testing';
 import { installMinimalMonacoStub, restoreMonacoStub } from '../../../testing/monaco.testing';
 import { BlobService, type BlobSyncEvent } from '../../core/api/blob.service';
@@ -3729,7 +3730,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])],
+      providers: [...provideFakeAuth(), ...provideStubEnvLabel(), provideRouter([])],
     });
   });
 
@@ -3792,7 +3793,7 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
-      providers: [...provideFakeAuth(), provideRouter([])],
+      providers: [...provideFakeAuth(), ...provideStubEnvLabel(), provideRouter([])],
     });
   });
 
@@ -3901,6 +3902,51 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
       highlights: [],
     });
     expect(mostRecentTitle(titleSpy)).toBe('Saved title | JotJSON');
+  });
+});
+
+describe('HomeComponent browser-title env-label prefix', () => {
+  setupMinimalMonacoStub();
+
+  beforeEach(() => {
+    clearHomeStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [...provideFakeAuth(), ...provideStubEnvLabel('nonprod'), provideRouter([])],
+    });
+  });
+
+  it('prefixes the homepage title with [nonprod] when no blob is loaded', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const titleSvc = TestBed.inject(Title);
+    const spy = spyOn(titleSvc, 'setTitle');
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    const lastArg = spy.calls.mostRecent().args[0];
+    expect(lastArg.startsWith('[nonprod] ')).toBeTrue();
+    expect(lastArg).toContain('JotJSON');
+  });
+
+  it('prefixes a loaded-blob title with [nonprod]', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const titleSvc = TestBed.inject(Title);
+    const spy = spyOn(titleSvc, 'setTitle');
+    fixture.componentInstance.__loadBlobForTesting({
+      id: 'b1',
+      slug: 's1',
+      content: '{}',
+      title: 'My Config',
+      ownerId: 'o1',
+      isPublic: false,
+      version: 1,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+      highlights: [],
+    });
+    fixture.componentRef.changeDetectorRef.detectChanges();
+    TestBed.flushEffects();
+    expect(spy).toHaveBeenCalledWith('[nonprod] My Config | JotJSON');
   });
 });
 
