@@ -694,6 +694,7 @@ function scanScss(scssSrc, scssPath) {
   const lineStarts = buildLineStarts(scssSrc);
 
   let canonicalBlock = null;
+  let closeBlock = null;
   const candidateCompoundsSeen = [];
 
   for (const rule of walkTopLevelTreeRowCandidates(stripped)) {
@@ -732,6 +733,8 @@ function scanScss(scssSrc, scssPath) {
               `extend EXEMPT_CANONICAL_COMPOUNDS in check-tree-row-grid.mjs or refactor.`,
           });
         }
+      } else if (candidate.compound === '.tree-row.tree-row--close' && closeBlock === null) {
+        closeBlock = candidate;
       }
       continue;
     }
@@ -851,6 +854,41 @@ function scanScss(scssSrc, scssPath) {
     }
   }
 
+  // Issue #282 (v0.28.2): assert the close-row block declares
+  // `display: flex`. The `lintTemplate` carve-out at the top of
+  // this file accepts ANY direct-child class on `.tree-row--close`
+  // rows on the premise that they are `display: flex` and the grid
+  // direct-child allowlist doesn't apply. If a future contributor
+  // flips this block to `display: grid` (or removes the `display`
+  // declaration so it inherits the canonical `display: grid` from
+  // `.tree-row`), the carve-out becomes a silent gap. This
+  // assertion fails loudly in that case.
+  if (closeBlock === null) {
+    violations.push({
+      path: scssPath,
+      line: 1,
+      message:
+        `close-row block not found: expected one top-level ` +
+        `\`.tree-row.tree-row--close { ... }\` rule. The lintTemplate ` +
+        `carve-out for close rows assumes this block exists and ` +
+        `declares \`display: flex\`.`,
+    });
+  } else {
+    const displayDeclaration = findTopLevelDeclaration(closeBlock.body, 'display');
+    if (!displayDeclaration || displayDeclaration.value.trim() !== 'flex') {
+      violations.push({
+        path: scssPath,
+        line: lineNumberForOffset(lineStarts, closeBlock.offset),
+        message:
+          `\`.tree-row.tree-row--close\` must declare \`display: flex\` ` +
+          `(found: ${displayDeclaration ? `\`display: ${displayDeclaration.value.trim()}\`` : 'no `display` declaration'}). ` +
+          `The lintTemplate carve-out for close rows assumes this; ` +
+          `flipping to grid without lifting the carve-out would silently ` +
+          `accept any direct-child class on close rows.`,
+      });
+    }
+  }
+
   return { violations, canonicalBlock };
 }
 
@@ -863,8 +901,18 @@ export function lintTemplate({ htmlSrc, scssSrc, htmlPath, scssPath }) {
   }
   for (const row of rows) {
     const rowClasses = staticClasses(row);
-    // .tree-row.tree-row--close uses display: flex (scss:373); the
-    // Grid direct-child allowlist doesn't apply to its children.
+    // `.tree-row.tree-row--close` is `display: flex` (scss block at
+    // `.tree-row.tree-row--close`), so the Grid direct-child
+    // allowlist doesn't apply: grid-column placements on its
+    // children would be inert. Close rows still use the same three
+    // structural wrappers as leaf/open rows (`tree-row-leading`,
+    // `tree-row-value-cell`, `tree-row-trailing`) for visual parity
+    // (issue #282, v0.28.2), but the carve-out remains because the
+    // grid-track invariants in `lintTemplate` don't model flex
+    // layout. The SCSS-side `scanScss` checks that this block
+    // declares `display: flex` so a future contributor flipping the
+    // display value can't silently regress the carve-out into a
+    // silent gap.
     if (rowClasses.includes('tree-row--close')) continue;
     const children = directDomChildren(row);
     for (const child of children) {
