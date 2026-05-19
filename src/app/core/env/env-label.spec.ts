@@ -48,6 +48,13 @@ describe('getEnvLabel', () => {
     { hostname: 'some-other-app.azurestaticapps.net', expected: 'unknown' },
     { hostname: 'evil-jotjson.com', expected: 'unknown' },
     { hostname: 'example.com', expected: 'unknown' },
+
+    // unknown: exact-suffix boundary cases. Pins the contract that
+    // dropping the `hostname.length > swaSuffix.length` guard in the
+    // inline mirror at `src/index.html` is safe: an empty stem fails
+    // both `startsWith` checks and falls through to 'unknown'.
+    { hostname: '.azurestaticapps.net', expected: 'unknown' },
+    { hostname: 'azurestaticapps.net', expected: 'unknown' },
   ];
 
   for (const { hostname, expected } of cases) {

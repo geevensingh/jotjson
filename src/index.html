@@ -314,13 +314,10 @@
             label = 'prod';
           } else if (devHosts[hostname]) {
             label = 'dev';
-          } else if (
-            hostname.length > swaSuffix.length &&
-            hostname.indexOf(swaSuffix, hostname.length - swaSuffix.length) !== -1
-          ) {
-            var stem = hostname.substring(0, hostname.length - swaSuffix.length);
-            if (stem.indexOf(swaStem + '.') === 0) label = 'nonprod';
-            else if (stem.indexOf(swaStem + '-') === 0) label = 'preview';
+          } else if (hostname.endsWith(swaSuffix)) {
+            var stem = hostname.slice(0, hostname.length - swaSuffix.length);
+            if (stem.startsWith(swaStem + '.')) label = 'nonprod';
+            else if (stem.startsWith(swaStem + '-')) label = 'preview';
           }
           if (label === 'prod') return;
           var swaps = [
