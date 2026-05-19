@@ -172,10 +172,16 @@ type ReplaceUndoKind =
 
 /**
  * Closed-enum reason for `home.<surface>.applyFailed` telemetry. Maps
- * to the three failure modes the new `replaceAll`-backed fallback can
- * surface: editor not mounted, model unavailable, or `replaceAll`
- * itself rejecting (never observed in practice today but kept for
- * forward-compat).
+ * 1:1 onto `ReplaceAllResult`'s failure outcomes plus the
+ * editor-not-mounted case detected before `replaceAll` is reached:
+ * - `'editorNotReady'`: `editor()` signal returned null (component
+ *   not mounted yet).
+ * - `'modelNull'`: `replaceAll` returned `'modelNull'` (Monaco or
+ *   the underlying model is unavailable despite the wrapper being
+ *   mounted).
+ * - `'editsRejected'`: `replaceAll` returned `'editsRejected'`
+ *   (Monaco's `executeEdits` reported the edit did not apply).
+ * Not emitted on the no-op path (`replaceAll` returns `'noOp'`).
  */
 type ReplaceApplyFailedReason = 'editorNotReady' | 'modelNull' | 'editsRejected';
 
@@ -1655,35 +1661,55 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
     };
     const bumpToken = surface === 'upload';
+    const finishSuccess = (): void => {
+      // Mirror the post-`setContent` side-effects `replaceDocument`
+      // performs so the tree pane and view-reset listeners see the
+      // same state.
+      this.treeFlush$.next();
+      if (bumpToken) {
+        this.viewResetToken.update((token) => token + 1);
+      }
+    };
+    const finishFallback = (reason: ReplaceApplyFailedReason): void => {
+      logApplyFailed(reason);
+      this.setContent(next);
+      this.treeFlush$.next();
+      if (bumpToken) {
+        this.viewResetToken.update((token) => token + 1);
+      }
+    };
     const editor = this.editor();
     if (!editor) {
-      logApplyFailed('editorNotReady');
       // No editor mounted; the legacy path still flushes `content` to
       // the (eventual) Monaco model when it mounts. The captured
       // `priorText` snapshot keeps snackbar Undo working.
-      this.setContent(next);
-      this.treeFlush$.next();
-      if (bumpToken) {
-        this.viewResetToken.update((token) => token + 1);
-      }
+      finishFallback('editorNotReady');
       return;
     }
-    const applied = editor.replaceAll(next, editorSource);
-    if (!applied) {
-      logApplyFailed('modelNull');
-      this.setContent(next);
-      this.treeFlush$.next();
-      if (bumpToken) {
-        this.viewResetToken.update((token) => token + 1);
-      }
-      return;
-    }
-    // `replaceAll` only mutates the Monaco model; mirror the
-    // side-effects `setContent`/`replaceDocument` perform so the rest
-    // of the app (tree pane, view-reset listeners) sees the same state.
-    this.treeFlush$.next();
-    if (bumpToken) {
-      this.viewResetToken.update((token) => token + 1);
+    // Defense in depth: every production caller already short-circuits
+    // when `next === content()` (see `onFormat`, `onMinify`, and the
+    // `onFilesReceived` text-no-op branch). `this.content()` is the
+    // right oracle here because `setContent` is the single funnel that
+    // updates it from the editor's value change events, so it stays in
+    // sync with `model.getValue()` outside of mid-flight normalization
+    // races. `replaceAll` also detects the no-op internally and returns
+    // `'noOp'`; this gate avoids a stale-snackbar leak for a future
+    // caller that forgets to short-circuit.
+    const result = editor.replaceAll(next, editorSource);
+    switch (result) {
+      case 'applied':
+        finishSuccess();
+        return;
+      case 'noOp':
+        // No work needed; editor and content already in sync. Skip
+        // `treeFlush$` and `viewResetToken` bumps -- `parseResult` is
+        // unchanged by definition (`next === content()`), so the tree
+        // pane and view-reset listeners have nothing to react to.
+        return;
+      case 'modelNull':
+      case 'editsRejected':
+        finishFallback(result);
+        return;
     }
   }
 
@@ -2611,14 +2637,19 @@ export class HomeComponent implements OnInit, OnDestroy {
         const parseStartedAt = performance.now();
         const { unescaped } = this.parser.tryUnescape(result.text);
         const parseMs = this.durationSince(parseStartedAt);
-        // No-op short-circuit: identical content + filename means no
-        // user-observable change. Skip the pending-undo install so a
-        // Ctrl+Z does not accidentally consume a stale snackbar.
+        // Text-no-op short-circuit: when uploaded content matches the
+        // current editor content (regardless of filename), there is
+        // nothing to undo. Skip the pending-undo install + snackbar so
+        // a snackbar Undo click does not emit a spurious
+        // `home.upload.undo` event for a content-no-op (issue #313 PR
+        // review). Still set `lastFilename` so filename-only changes
+        // (e.g., user renamed `data.json` to `data-copy.json` and
+        // re-dragged) propagate; still run the extractor in case
+        // filename-driven heuristics depend on it.
         const priorText = this.content();
-        if (unescaped === priorText && this.lastFilename() === filename) {
-          // Still run the extractor + run telemetry below; just skip
-          // the pending-undo + snackbar install.
+        if (unescaped === priorText) {
           this.suggestedTitlesForMenu.set([]);
+          this.lastFilename.set(filename);
           this.runExtractorOnCurrentContent(source === 'pick' ? 'upload.pick' : 'upload.drag');
         } else {
           // Capture the full pre-upload side-state for snackbar Undo /

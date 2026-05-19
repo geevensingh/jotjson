@@ -1314,9 +1314,17 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           which preserves the uploaded content but loses
    *           Monaco-native Ctrl+Z.
    * Volume control: bounded-frequency. One warn per upload replace
-   *   action that falls back to full replacement.
+   *   action that falls back to full replacement. Not emitted on the
+   *   no-op path (when uploaded content equals the current editor
+   *   content): that branch short-circuits silently with no warn and
+   *   no fallback.
    * Props: { reason: 'editorNotReady' | 'modelNull' | 'editsRejected' }.
    *   Closed-enum reason for the in-place apply failure.
+   *   `editorNotReady`: the wrapper editor signal returned null.
+   *   `modelNull`: `replaceAll` returned `'modelNull'` (Monaco
+   *   namespace or model unavailable). `editsRejected`: `replaceAll`
+   *   returned `'editsRejected'` (Monaco's `executeEdits` reported the
+   *   edit did not apply).
    */
   'home.upload.applyFailed',
 
@@ -1348,9 +1356,13 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           which preserves the formatted content but loses
    *           Monaco-native Ctrl+Z.
    * Volume control: bounded-frequency. One warn per format replace
-   *   action that falls back to full replacement.
+   *   action that falls back to full replacement. Not emitted on the
+   *   no-op path (when the formatter output equals the current editor
+   *   content): `onFormat` short-circuits at the caller before this
+   *   path is reached.
    * Props: { reason: 'editorNotReady' | 'modelNull' | 'editsRejected' }.
-   *   Closed-enum reason for the in-place apply failure.
+   *   Closed-enum reason for the in-place apply failure. See
+   *   `home.upload.applyFailed` for the reason semantics.
    */
   'home.format.applyFailed',
 
@@ -1383,9 +1395,16 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           which preserves the minified content but loses
    *           Monaco-native Ctrl+Z.
    * Volume control: bounded-frequency. One warn per minify replace
-   *   action that falls back to full replacement.
+   *   action that falls back to full replacement. Not emitted on the
+   *   no-op path. `onMinify` short-circuits at the caller when the
+   *   minifier output equals the current editor content *and* the
+   *   mode is already `'json'`; the JSONC-mode-already-minified case
+   *   falls through into `applyReplaceWithFallback`, where the inner
+   *   `'noOp'` branch suppresses the warn so the only observable
+   *   change (mode flip) still gets its snackbar.
    * Props: { reason: 'editorNotReady' | 'modelNull' | 'editsRejected' }.
-   *   Closed-enum reason for the in-place apply failure.
+   *   Closed-enum reason for the in-place apply failure. See
+   *   `home.upload.applyFailed` for the reason semantics.
    */
   'home.minify.applyFailed',
 
@@ -1434,7 +1453,7 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
-   * Fired by: `HomeComponent.installPendingReplaceSnack`
+   * Fired by: `HomeComponent.openReplaceUndoSnack`
    *           (`features/home/home.component.ts`) when a second
    *           replace-undo snackbar opens while the prior snackbar ref
    *           is still live; the prior snackbar is dismissed before the

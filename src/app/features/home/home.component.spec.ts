@@ -32,6 +32,7 @@ import { bucketBytes } from '../../core/telemetry/buckets';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
+import type { ReplaceAllResult } from '../../shared/components/json-editor/json-editor.component';
 import {
   JsonTreeComponent,
   type TreeExtractRequest,
@@ -6714,21 +6715,23 @@ describe('HomeComponent upload/format/minify undo (issue #313)', () => {
   }
 
   interface ReplaceEditorStub {
-    replaceAll: jasmine.Spy<(text: string, source: string) => boolean>;
+    replaceAll: jasmine.Spy<(text: string, source: string) => ReplaceAllResult>;
   }
 
   /**
    * Editor stub for issue #313 specs. Mirrors `replaceAll`'s production
-   * contract: returns false on no-op, returns true and forwards the new
-   * text into `component.onValueChange(...)` to mimic Monaco's
-   * model-content-change event firing on a real edit.
+   * contract: returns `'noOp'` when text equals current content,
+   * otherwise returns `'applied'` and forwards the new text into
+   * `component.onValueChange(...)` to mimic Monaco's
+   * model-content-change event firing on a real edit. Tests that need
+   * `'modelNull'` or `'editsRejected'` override the spy after setup.
    */
   function createEditorStub(component: HomeComponent): ReplaceEditorStub {
     return {
-      replaceAll: jasmine.createSpy('replaceAll').and.callFake((text: string): boolean => {
-        if (component.content() === text) return false;
+      replaceAll: jasmine.createSpy('replaceAll').and.callFake((text: string): ReplaceAllResult => {
+        if (component.content() === text) return 'noOp';
         component.onValueChange(text);
-        return true;
+        return 'applied';
       }),
     };
   }
@@ -7021,6 +7024,85 @@ describe('HomeComponent upload/format/minify undo (issue #313)', () => {
     // a Format snackbar. If it did, the user would see a stale "Undo"
     // affordance after every paste.
     expect(snackOpenSpy).not.toHaveBeenCalled();
+  });
+
+  // --------------------------------------------------------------------
+  // PR review (issue #313): upload same-content-different-filename
+  // must NOT install pending-undo, NOT open snackbar, NOT emit
+  // applyFailed -- the caller short-circuits before
+  // applyReplaceWithFallback. lastFilename still updates so a
+  // filename-only re-drag is reflected.
+  // --------------------------------------------------------------------
+
+  it('upload same-content-different-filename updates lastFilename without opening snackbar or warning', async () => {
+    const priorText = '{"prior":true}';
+    const { component, snackOpenSpy, editorStub, warnSpy, eventSpy } = setup({
+      initialContent: priorText,
+      initialLastFilename: 'old.json',
+    });
+
+    const uploadFile = new File([priorText], 'renamed.json');
+    await component.onUpload(uploadFile);
+
+    expect(component.content()).toBe(priorText);
+    expect(component.lastFilename()).toBe('renamed.json');
+    expect(editorStub.replaceAll).not.toHaveBeenCalled();
+    expect(snackOpenSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalledWith('home.upload.applyFailed', jasmine.anything());
+    expect(eventSpy).not.toHaveBeenCalledWith(
+      'home.upload.undo',
+      jasmine.anything(),
+      jasmine.anything(),
+    );
+  });
+
+  // --------------------------------------------------------------------
+  // PR review (issue #313): minify-jsonc-already-minified. The text
+  // is already minified but mode='jsonc'. Caller does NOT
+  // short-circuit (the mode flip is user-visible), so the snackbar
+  // opens and mode flips. `applyReplaceWithFallback` hits its inner
+  // 'noOp' branch (defense in depth) and silently skips -- no warn.
+  // --------------------------------------------------------------------
+
+  it('minify of already-minified jsonc flips mode and opens snackbar without warning (replaceAll inner noOp)', () => {
+    const alreadyMinified = '{"a":1}';
+    const { component, snackOpenSpy, editorStub, warnSpy } = setup({
+      initialContent: alreadyMinified,
+      initialMode: 'jsonc',
+    });
+
+    component.onMinify();
+
+    expect(editorStub.replaceAll).toHaveBeenCalledTimes(1);
+    expect(component.content()).toBe(alreadyMinified);
+    expect(component.mode()).toBe('json');
+    expect(snackOpenSpy).toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalledWith('home.minify.applyFailed', jasmine.anything());
+  });
+
+  // --------------------------------------------------------------------
+  // PR review (issue #313): applyFailed emission for modelNull and
+  // editsRejected. Stub `replaceAll` to return the specific literal
+  // and assert the warn fires with the correct reason -- demonstrates
+  // the discriminated-union return surface is wired through.
+  // --------------------------------------------------------------------
+
+  it('emits home.format.applyFailed with reason=modelNull when replaceAll returns modelNull', () => {
+    const { component, editorStub, warnSpy } = setup({ initialContent: '{"a":1,"b":2}' });
+    editorStub.replaceAll.and.returnValue('modelNull');
+
+    component.onFormat();
+
+    expect(warnSpy).toHaveBeenCalledWith('home.format.applyFailed', { reason: 'modelNull' });
+  });
+
+  it('emits home.format.applyFailed with reason=editsRejected when replaceAll returns editsRejected', () => {
+    const { component, editorStub, warnSpy } = setup({ initialContent: '{"a":1,"b":2}' });
+    editorStub.replaceAll.and.returnValue('editsRejected');
+
+    component.onFormat();
+
+    expect(warnSpy).toHaveBeenCalledWith('home.format.applyFailed', { reason: 'editsRejected' });
   });
 });
 

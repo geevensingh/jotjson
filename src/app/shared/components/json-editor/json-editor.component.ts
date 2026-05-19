@@ -20,6 +20,15 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { loadMonaco } from './monaco-loader';
 
+/**
+ * Discriminated outcome of {@link JsonEditorComponent.replaceAll}. Lets
+ * callers map cleanly onto telemetry's closed-enum failure reasons
+ * (issue #313 PR review): success vs. no-op vs. model-unavailable vs.
+ * Monaco-rejected-the-edit, without conflating them through a single
+ * `boolean`.
+ */
+export type ReplaceAllResult = 'applied' | 'noOp' | 'modelNull' | 'editsRejected';
+
 @Component({
   selector: 'jj-json-editor',
   standalone: true,
@@ -289,13 +298,22 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
    * Monaco stubs implement (real Monaco supports both, with identical
    * undo-stack semantics). The whole-document range is computed from the
    * current model length so we never rely on `getFullModelRange`.
+   *
+   * Returns a discriminated outcome so callers can map cleanly onto
+   * telemetry's closed-enum reasons (issue #313 PR review):
+   * - `'applied'`: `executeEdits` reported the edit was applied.
+   * - `'noOp'`: model already holds the requested text; no edit needed.
+   * - `'modelNull'`: editor / Monaco namespace / model not available
+   *   (component mounted but Monaco still loading, or model disposed).
+   * - `'editsRejected'`: `executeEdits` returned `false` despite a valid
+   *   range and non-equal text.
    */
-  replaceAll(text: string, source: string): boolean {
+  replaceAll(text: string, source: string): ReplaceAllResult {
     const editor = this.editor;
     const monaco = this.monaco;
     const model = editor?.getModel();
-    if (!editor || !monaco || !model) return false;
-    if (model.getValue() === text) return false;
+    if (!editor || !monaco || !model) return 'modelNull';
+    if (model.getValue() === text) return 'noOp';
 
     let didApply = false;
     this.zone.runOutsideAngular(() => {
@@ -311,7 +329,7 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
       if (!applied) return;
       didApply = true;
     });
-    return didApply;
+    return didApply ? 'applied' : 'editsRejected';
   }
 
   /**

@@ -660,7 +660,7 @@ describe('JsonEditorComponent', () => {
   });
 
   describe('replaceAll, applyEdit, and undo helpers', () => {
-    it('replaceAll returns false and does not mutate when editor is not yet initialized', async () => {
+    it('replaceAll returns modelNull and does not mutate when editor is not yet initialized', async () => {
       delete (window as unknown as { monaco?: unknown }).monaco;
       __resetMonacoLoaderForTesting();
       let resolveLoader!: (value: typeof MonacoNS) => void;
@@ -671,7 +671,9 @@ describe('JsonEditorComponent', () => {
 
       const earlyFixture = await createFixtureWithoutSettling('{"a":1}');
 
-      expect(earlyFixture.componentInstance.replaceAll('{"a":2}', 'spec-replace-all')).toBeFalse();
+      expect(earlyFixture.componentInstance.replaceAll('{"a":2}', 'spec-replace-all')).toBe(
+        'modelNull',
+      );
       expect(editor.executeEdits).not.toHaveBeenCalled();
       expect(editor.getValue()).toBe('{"a":1}');
 
@@ -681,26 +683,26 @@ describe('JsonEditorComponent', () => {
       await Promise.resolve();
     });
 
-    it('replaceAll returns false and does not mutate when text equals current model value', async () => {
+    it('replaceAll returns noOp and does not mutate when text equals current model value', async () => {
       const component = await create('{"a":1}');
       const model = editor.getModel() as FakeModel;
       const beforeAlternativeVersionId = model.getAlternativeVersionId();
       editor.revealRangeInCenterIfOutsideViewport.calls.reset();
 
-      expect(component.replaceAll('{"a":1}', 'spec-replace-all')).toBeFalse();
+      expect(component.replaceAll('{"a":1}', 'spec-replace-all')).toBe('noOp');
       expect(editor.executeEdits).not.toHaveBeenCalled();
       expect(editor.getValue()).toBe('{"a":1}');
       expect(model.getAlternativeVersionId()).toBe(beforeAlternativeVersionId);
       expect(editor.revealRangeInCenterIfOutsideViewport).not.toHaveBeenCalled();
     });
 
-    it('replaceAll replaces full model content and returns true on different text', async () => {
+    it('replaceAll replaces full model content and returns applied on different text', async () => {
       const component = await create('{"a":1}');
       const model = editor.getModel() as FakeModel;
       const fullRange = model.getFullModelRange();
       editor.revealRangeInCenterIfOutsideViewport.calls.reset();
 
-      expect(component.replaceAll('{"a":2}', 'spec-replace-all')).toBeTrue();
+      expect(component.replaceAll('{"a":2}', 'spec-replace-all')).toBe('applied');
       expect(editor.getValue()).toBe('{"a":2}');
       expect(editor.executeEdits).toHaveBeenCalledTimes(1);
       const [editsSource, editOperations] = editor.executeEdits.calls.mostRecent().args;
@@ -715,12 +717,24 @@ describe('JsonEditorComponent', () => {
       expect(editor.revealRangeInCenterIfOutsideViewport).not.toHaveBeenCalled();
     });
 
+    it('replaceAll returns editsRejected when executeEdits returns false despite a valid range', async () => {
+      const component = await create('{"a":1}');
+      editor.executeEdits.and.returnValue(false);
+
+      expect(component.replaceAll('{"a":2}', 'spec-replace-all')).toBe('editsRejected');
+      // executeEdits was still attempted (range computed, edits passed),
+      // but Monaco reported the edit was rejected; the model is left
+      // unchanged so the caller's fallback can take over.
+      expect(editor.executeEdits).toHaveBeenCalledTimes(1);
+      expect(editor.getValue()).toBe('{"a":1}');
+    });
+
     it('replaceAll preserves alternativeVersionId behavior (advances on edit)', async () => {
       const component = await create('{"a":1}');
       const model = editor.getModel() as FakeModel;
       const beforeAlternativeVersionId = model.getAlternativeVersionId();
 
-      expect(component.replaceAll('{"a":2}', 'spec-replace-all')).toBeTrue();
+      expect(component.replaceAll('{"a":2}', 'spec-replace-all')).toBe('applied');
       expect(model.getAlternativeVersionId()).toBeGreaterThan(beforeAlternativeVersionId);
     });
 

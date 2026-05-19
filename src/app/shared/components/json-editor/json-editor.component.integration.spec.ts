@@ -199,7 +199,7 @@ describe('JsonEditorComponent (browser integration)', () => {
       expect(model).not.toBeNull();
 
       const beforeAlternativeVersionId = model!.getAlternativeVersionId();
-      expect(component.replaceAll('bar', 'test')).toBeTrue();
+      expect(component.replaceAll('bar', 'test')).toBe('applied');
       expect(model!.getValue()).toBe('bar');
       const afterEditAlternativeVersionId = model!.getAlternativeVersionId();
       expect(afterEditAlternativeVersionId).toBeGreaterThan(beforeAlternativeVersionId);
