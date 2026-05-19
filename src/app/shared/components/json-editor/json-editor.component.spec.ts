@@ -16,10 +16,27 @@ interface FakeRange {
   endColumn: number;
 }
 
+interface FakeEditOperation {
+  range: FakeRange;
+  text: string;
+  forceMoveMarkers?: boolean;
+}
+
 interface FakeModel {
   id: string;
   getValue: () => string;
   getValueInRange: (range: FakeRange) => string;
+  getFullModelRange: () => FakeRange;
+  getAlternativeVersionId: jasmine.Spy<() => number>;
+  pushEditOperations: jasmine.Spy<
+    (
+      beforeCursorState: readonly FakeSelection[],
+      editOperations: readonly FakeEditOperation[],
+      cursorStateComputer: (
+        _inverseEditOperations: readonly FakeEditOperation[],
+      ) => FakeSelection[] | null,
+    ) => FakeSelection[] | null
+  >;
   getOffsetAt: jasmine.Spy<(pos: { lineNumber: number; column: number }) => number>;
   getPositionAt: jasmine.Spy<(offset: number) => { lineNumber: number; column: number }>;
 }
@@ -86,7 +103,8 @@ const FAKE_MARKER_ERROR_SEVERITY = 8;
 
 function makeFakeEditor(initial: string): FakeEditor {
   let current = initial;
-  const undoStack: string[] = [];
+  let alternativeVersionId = 1;
+  const undoStack: Array<{ value: string; alternativeVersionId: number }> = [];
   const modelContentHandlers: Array<() => void> = [];
   const toOffset = (line: number, column: number): number => {
     const lines = current.split('\n');
@@ -111,6 +129,16 @@ function makeFakeEditor(initial: string): FakeEditor {
       handler();
     }
   };
+  const applyEditOperations = (editOperations: readonly FakeEditOperation[]): void => {
+    undoStack.push({ value: current, alternativeVersionId });
+    for (const editOperation of editOperations) {
+      const start = toOffset(editOperation.range.startLineNumber, editOperation.range.startColumn);
+      const end = toOffset(editOperation.range.endLineNumber, editOperation.range.endColumn);
+      current = current.substring(0, start) + editOperation.text + current.substring(end);
+    }
+    alternativeVersionId += 1;
+    emitModelContentChange();
+  };
   const model: FakeModel = {
     id: 'fake-model',
     getValue: () => current,
@@ -119,6 +147,32 @@ function makeFakeEditor(initial: string): FakeEditor {
       const end = toOffset(range.endLineNumber, range.endColumn);
       return current.substring(start, end);
     },
+    getFullModelRange: () => {
+      const endPosition = toPosition(current.length);
+      return {
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: endPosition.lineNumber,
+        endColumn: endPosition.column,
+      };
+    },
+    getAlternativeVersionId: jasmine
+      .createSpy('getAlternativeVersionId')
+      .and.callFake(() => alternativeVersionId),
+    pushEditOperations: jasmine
+      .createSpy('pushEditOperations')
+      .and.callFake(
+        (
+          _beforeCursorState: readonly FakeSelection[],
+          editOperations: readonly FakeEditOperation[],
+          _cursorStateComputer: (
+            _inverseEditOperations: readonly FakeEditOperation[],
+          ) => FakeSelection[] | null,
+        ) => {
+          applyEditOperations(editOperations);
+          return null;
+        },
+      ),
     getOffsetAt: jasmine
       .createSpy('getOffsetAt')
       .and.callFake((position: { lineNumber: number; column: number }) =>
@@ -133,6 +187,7 @@ function makeFakeEditor(initial: string): FakeEditor {
     setValue: jasmine.createSpy('setValue').and.callFake((v: string) => {
       current = v;
       undoStack.length = 0;
+      alternativeVersionId += 1;
       emitModelContentChange();
     }),
     getModel: jasmine.createSpy('getModel').and.returnValue(model),
@@ -150,36 +205,24 @@ function makeFakeEditor(initial: string): FakeEditor {
     }),
     updateOptions: jasmine.createSpy('updateOptions'),
     dispose: jasmine.createSpy('dispose'),
-    executeEdits: jasmine.createSpy('executeEdits').and.callFake(
-      (
-        _source: string,
-        edits: Array<{
-          range: FakeRange;
-          text: string;
-          forceMoveMarkers?: boolean;
-        }>,
-      ) => {
-        undoStack.push(current);
-        for (const edit of edits) {
-          const start = toOffset(edit.range.startLineNumber, edit.range.startColumn);
-          const end = toOffset(edit.range.endLineNumber, edit.range.endColumn);
-          current = current.substring(0, start) + edit.text + current.substring(end);
-        }
-        emitModelContentChange();
+    executeEdits: jasmine
+      .createSpy('executeEdits')
+      .and.callFake((_source: string, edits: readonly FakeEditOperation[]) => {
+        applyEditOperations(edits);
         return true;
-      },
-    ),
+      }),
     trigger: jasmine
       .createSpy('trigger')
       .and.callFake((_source: string, handlerId: string, _payload: unknown) => {
         if (handlerId !== 'undo') {
           return;
         }
-        const previousValue = undoStack.pop();
-        if (previousValue === undefined) {
+        const previousState = undoStack.pop();
+        if (previousState === undefined) {
           return;
         }
-        current = previousValue;
+        current = previousState.value;
+        alternativeVersionId = previousState.alternativeVersionId;
         emitModelContentChange();
       }),
     layout: jasmine.createSpy('layout'),
@@ -616,7 +659,71 @@ describe('JsonEditorComponent', () => {
     });
   });
 
-  describe('applyEdit and undo helpers', () => {
+  describe('replaceAll, applyEdit, and undo helpers', () => {
+    it('replaceAll returns false and does not mutate when editor is not yet initialized', async () => {
+      delete (window as unknown as { monaco?: unknown }).monaco;
+      __resetMonacoLoaderForTesting();
+      let resolveLoader!: (value: typeof MonacoNS) => void;
+      const deferred = new Promise<typeof MonacoNS>((resolve) => {
+        resolveLoader = resolve;
+      });
+      __setMonacoLoaderPromiseForTesting(deferred);
+
+      const earlyFixture = await createFixtureWithoutSettling('{"a":1}');
+
+      expect(earlyFixture.componentInstance.replaceAll('{"a":2}', 'spec-replace-all')).toBeFalse();
+      expect(editor.executeEdits).not.toHaveBeenCalled();
+      expect(editor.getValue()).toBe('{"a":1}');
+
+      earlyFixture.destroy();
+      resolveLoader(monaco as unknown as typeof MonacoNS);
+      await deferred;
+      await Promise.resolve();
+    });
+
+    it('replaceAll returns false and does not mutate when text equals current model value', async () => {
+      const component = await create('{"a":1}');
+      const model = editor.getModel() as FakeModel;
+      const beforeAlternativeVersionId = model.getAlternativeVersionId();
+      editor.revealRangeInCenterIfOutsideViewport.calls.reset();
+
+      expect(component.replaceAll('{"a":1}', 'spec-replace-all')).toBeFalse();
+      expect(editor.executeEdits).not.toHaveBeenCalled();
+      expect(editor.getValue()).toBe('{"a":1}');
+      expect(model.getAlternativeVersionId()).toBe(beforeAlternativeVersionId);
+      expect(editor.revealRangeInCenterIfOutsideViewport).not.toHaveBeenCalled();
+    });
+
+    it('replaceAll replaces full model content and returns true on different text', async () => {
+      const component = await create('{"a":1}');
+      const model = editor.getModel() as FakeModel;
+      const fullRange = model.getFullModelRange();
+      editor.revealRangeInCenterIfOutsideViewport.calls.reset();
+
+      expect(component.replaceAll('{"a":2}', 'spec-replace-all')).toBeTrue();
+      expect(editor.getValue()).toBe('{"a":2}');
+      expect(editor.executeEdits).toHaveBeenCalledTimes(1);
+      const [editsSource, editOperations] = editor.executeEdits.calls.mostRecent().args;
+      expect(editsSource).toBe('spec-replace-all');
+      expect(editOperations.length).toBe(1);
+      const edit = editOperations[0];
+      expect(edit.text).toBe('{"a":2}');
+      expect(edit.range.startLineNumber).toBe(fullRange.startLineNumber);
+      expect(edit.range.startColumn).toBe(fullRange.startColumn);
+      expect(edit.range.endLineNumber).toBe(fullRange.endLineNumber);
+      expect(edit.range.endColumn).toBe(fullRange.endColumn);
+      expect(editor.revealRangeInCenterIfOutsideViewport).not.toHaveBeenCalled();
+    });
+
+    it('replaceAll preserves alternativeVersionId behavior (advances on edit)', async () => {
+      const component = await create('{"a":1}');
+      const model = editor.getModel() as FakeModel;
+      const beforeAlternativeVersionId = model.getAlternativeVersionId();
+
+      expect(component.replaceAll('{"a":2}', 'spec-replace-all')).toBeTrue();
+      expect(model.getAlternativeVersionId()).toBeGreaterThan(beforeAlternativeVersionId);
+    });
+
     it('splices text via executeEdits and preserves undo history', async () => {
       const component = await create('{"a":1}');
 

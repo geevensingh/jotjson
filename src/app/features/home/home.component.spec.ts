@@ -4265,7 +4265,9 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     await fixture.componentInstance.onUpload(file);
     await waitForDoubleAnimationFrame();
     expect(fixture.componentInstance.content()).toBe(text);
-    expect(snack.open).not.toHaveBeenCalled();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('Uploaded sample.json');
+    expect(snack.open.calls.mostRecent().args[1]).toBe('Undo');
     expect(eventSpy).toHaveBeenCalledOnceWith(
       'upload.handle',
       { sizeBytesBucket: bucketBytes(file.size), source: 'pick' },
@@ -4308,7 +4310,9 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
     expect(fixture.componentInstance.content()).toBe(text);
-    expect(snack.open).not.toHaveBeenCalled();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('Uploaded b.json');
+    expect(snack.open.calls.mostRecent().args[1]).toBe('Undo');
     expect(eventSpy).toHaveBeenCalledOnceWith(
       'upload.handle',
       { sizeBytesBucket: bucketBytes(file.size), source: 'drag' },
@@ -5280,7 +5284,14 @@ describe('HomeComponent upload-error banner (#36)', () => {
     expect(err!.filename).toBe('broken.json');
     expect(fixture.componentInstance.uploadErrorVisible()).toBe(true);
     expect(fixture.componentInstance.uploadErrorFilename()).toBe('broken.json');
-    expect(snack.open).not.toHaveBeenCalled();
+    // The malformed-JSON upload still wholesale-replaces the editor
+    // content, so the new issue #313 Undo snackbar fires alongside the
+    // upload-error banner. The two affordances are complementary:
+    // dismissing the banner does not restore the prior content, but
+    // the snackbar's Undo button does.
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('Uploaded broken.json');
+    expect(snack.open.calls.mostRecent().args[1]).toBe('Undo');
   });
 
   it('toolbar onUpload with valid JSON does not set uploadError', async () => {
@@ -5564,8 +5575,11 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     const goodFile = new File(['{"after":true}'], 'good.json');
     await fixture.componentInstance.onUpload(goodFile);
     expect(fixture.componentInstance.content()).toBe('{"after":true}');
-    // Snackbar from binary upload is still the most recent open call (no toast for the success).
-    expect(snack.open).toHaveBeenCalledTimes(1);
+    // Binary rejection toast + issue #313 Uploaded-snackbar on the
+    // subsequent successful upload = 2 total `snack.open` calls.
+    expect(snack.open).toHaveBeenCalledTimes(2);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('Uploaded good.json');
+    expect(snack.open.calls.mostRecent().args[1]).toBe('Undo');
   });
 });
 
@@ -6666,6 +6680,347 @@ describe('HomeComponent banner-extract undo (M7v)', () => {
       pasteSource: 'paste',
       undoLatencyMsBucket: '<1s',
     });
+  });
+});
+
+describe('HomeComponent upload/format/minify undo (issue #313)', () => {
+  setupMinimalMonacoStub();
+
+  interface SnackHarness {
+    action: Subject<void>;
+    dismissed: Subject<unknown>;
+    dismissSpy: jasmine.Spy;
+    ref: MatSnackBarRef<TextOnlySnackBar>;
+  }
+
+  function createSnackHarness(): SnackHarness {
+    const action = new Subject<void>();
+    const dismissed = new Subject<unknown>();
+    const dismissSpy = jasmine.createSpy('dismiss').and.callFake(() => dismissed.next(undefined));
+    const ref: Partial<MatSnackBarRef<TextOnlySnackBar>> = {
+      onAction: () => action.asObservable(),
+      afterDismissed: () =>
+        dismissed.asObservable() as unknown as ReturnType<
+          MatSnackBarRef<TextOnlySnackBar>['afterDismissed']
+        >,
+      dismiss: dismissSpy,
+    };
+    return {
+      action,
+      dismissed,
+      dismissSpy,
+      ref: ref as unknown as MatSnackBarRef<TextOnlySnackBar>,
+    };
+  }
+
+  interface ReplaceEditorStub {
+    replaceAll: jasmine.Spy<(text: string, source: string) => boolean>;
+  }
+
+  /**
+   * Editor stub for issue #313 specs. Mirrors `replaceAll`'s production
+   * contract: returns false on no-op, returns true and forwards the new
+   * text into `component.onValueChange(...)` to mimic Monaco's
+   * model-content-change event firing on a real edit.
+   */
+  function createEditorStub(component: HomeComponent): ReplaceEditorStub {
+    return {
+      replaceAll: jasmine.createSpy('replaceAll').and.callFake((text: string): boolean => {
+        if (component.content() === text) return false;
+        component.onValueChange(text);
+        return true;
+      }),
+    };
+  }
+
+  interface SetupOptions {
+    initialContent?: string;
+    initialMode?: 'json' | 'jsonc';
+    initialHighlights?: readonly BlobHighlight[];
+    initialLastFilename?: string | null;
+    initialUploadError?: { filename: string } | null;
+    /**
+     * Each call to `snack.open` returns the next harness in the queue.
+     * The default is one harness that all calls reuse, which is the
+     * single-action case. Tests that exercise cross-surface
+     * replacement (snackbar A is shown, then snackbar B replaces it)
+     * need two distinct harnesses so the dismiss spy on A is
+     * separable from B.
+     */
+    snackHarnesses?: readonly SnackHarness[];
+  }
+
+  interface SetupResult {
+    fixture: ComponentFixture<HomeComponent>;
+    component: HomeComponent;
+    snackOpenSpy: jasmine.Spy<
+      (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
+    >;
+    snackHarnesses: readonly SnackHarness[];
+    editorStub: ReplaceEditorStub;
+    eventSpy: jasmine.Spy;
+    warnSpy: jasmine.Spy;
+  }
+
+  function setup(options: SetupOptions = {}): SetupResult {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+    TestBed.resetTestingModule();
+    const harnesses: readonly SnackHarness[] = options.snackHarnesses ?? [createSnackHarness()];
+    let harnessIndex = 0;
+    const snackOpenSpy = jasmine.createSpy('open').and.callFake(() => {
+      const harness = harnesses[Math.min(harnessIndex, harnesses.length - 1)] ?? harnesses[0]!;
+      harnessIndex += 1;
+      return harness.ref;
+    }) as jasmine.Spy<
+      (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
+    >;
+    const snack = { open: snackOpenSpy };
+    TestBed.configureTestingModule({
+      imports: [HomeComponent],
+      providers: [
+        ...provideFakeAuth(),
+        provideRouter([]),
+        { provide: MatSnackBar, useValue: snack },
+      ],
+    });
+    const logger = TestBed.inject(LoggerService);
+    const eventSpy = spyOn(logger, 'event');
+    const warnSpy = spyOn(logger, 'warn');
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    if (options.initialContent !== undefined) {
+      component.content.set(options.initialContent);
+    }
+    if (options.initialMode !== undefined) {
+      component.mode.set(options.initialMode);
+    }
+    if (options.initialHighlights !== undefined) {
+      component.highlights.set([...options.initialHighlights]);
+    }
+    if (options.initialLastFilename !== undefined) {
+      component.lastFilename.set(options.initialLastFilename);
+    }
+    if (options.initialUploadError !== undefined) {
+      component.uploadError.set(options.initialUploadError);
+    }
+    const editorStub = createEditorStub(component);
+    (component as unknown as { editor: () => ReplaceEditorStub }).editor = () => editorStub;
+    return {
+      fixture,
+      component,
+      snackOpenSpy,
+      snackHarnesses: harnesses,
+      editorStub,
+      eventSpy,
+      warnSpy,
+    };
+  }
+
+  afterEach(() => {
+    localStorage.removeItem(PREFS_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(SPLIT_KEY);
+    localStorage.removeItem(PANE_VIS_KEY);
+  });
+
+  // --------------------------------------------------------------------
+  // Upload: snackbar Undo restores all six side-state fields
+  // --------------------------------------------------------------------
+
+  it('upload + snackbar Undo restores text, lastFilename, highlights, mutatedPaths, suggestedTitles, extractedCandidate, and uploadError', async () => {
+    const priorText = '{"prior":true}';
+    const priorHighlights: readonly BlobHighlight[] = [
+      { path: 'prior', color: '#ff0000', cascade: false },
+    ];
+    const priorUploadError = { filename: 'old.json' };
+    const priorSuggestedTitles = [
+      { value: 'Prior Title', source: 'firstChars' as const, confidence: 1 },
+    ];
+    const priorExtractedCandidate = {
+      data: { text: '{"prior":true}', blockCount: 1, preservesComments: true, hasComments: false },
+      sourceVersion: 0,
+      source: 'upload.pick' as const,
+    };
+    const { component, snackHarnesses, editorStub, eventSpy } = setup({
+      initialContent: priorText,
+      initialLastFilename: 'old.json',
+      initialHighlights: priorHighlights,
+      initialUploadError: priorUploadError,
+    });
+    const privateAccess = component as unknown as {
+      mutatedPaths: ReturnType<typeof signal<Set<string>>>;
+    };
+    privateAccess.mutatedPaths.set(new Set(['prior']));
+    component.suggestedTitlesForMenu.set(priorSuggestedTitles);
+    component.extractedCandidate.set(priorExtractedCandidate);
+
+    const uploadFile = new File(['{"next":1}'], 'next.json');
+    await component.onUpload(uploadFile);
+
+    expect(editorStub.replaceAll).toHaveBeenCalledWith('{"next":1}', 'jotjson-upload');
+    expect(component.content()).toBe('{"next":1}');
+    expect(component.lastFilename()).toBe('next.json');
+
+    eventSpy.calls.reset();
+    snackHarnesses[0]!.action.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.lastFilename()).toBe('old.json');
+    expect(component.highlights()).toEqual(priorHighlights);
+    expect(privateAccess.mutatedPaths()).toEqual(new Set(['prior']));
+    expect(component.suggestedTitlesForMenu()).toEqual(priorSuggestedTitles);
+    expect(component.extractedCandidate()).toEqual(priorExtractedCandidate);
+    expect(component.uploadError()).toEqual(priorUploadError);
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.upload.undo',
+      jasmine.objectContaining({ source: 'snackbar', trigger: 'pick' }),
+      jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
+    );
+  });
+
+  it('upload + Ctrl+Z (re-emitted onValueChange) restores side-state with source=ctrlZ', async () => {
+    const priorText = '{"prior":true}';
+    const { fixture, component, snackHarnesses, eventSpy } = setup({
+      initialContent: priorText,
+      initialLastFilename: 'old.json',
+    });
+
+    const uploadFile = new File(['{"next":2}'], 'next.json');
+    await component.onUpload(uploadFile);
+    expect(component.content()).toBe('{"next":2}');
+
+    eventSpy.calls.reset();
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.lastFilename()).toBe('old.json');
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.upload.undo',
+      jasmine.objectContaining({ source: 'ctrlZ', trigger: 'pick' }),
+      jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
+    );
+    // Snackbar should be dismissed when Ctrl+Z fires the undo path.
+    expect(snackHarnesses[0]!.dismissSpy).toHaveBeenCalled();
+  });
+
+  // --------------------------------------------------------------------
+  // Format: snackbar Undo restores text
+  // --------------------------------------------------------------------
+
+  it('format + snackbar Undo restores priorText and emits home.format.undo with source=snackbar', () => {
+    const priorText = '{"a":1,"b":2}';
+    const { component, snackHarnesses, editorStub, eventSpy } = setup({
+      initialContent: priorText,
+    });
+
+    component.onFormat();
+
+    expect(editorStub.replaceAll).toHaveBeenCalledTimes(1);
+    expect(component.content()).not.toBe(priorText);
+    expect(component.content()).toContain('\n');
+
+    eventSpy.calls.reset();
+    snackHarnesses[0]!.action.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.format.undo',
+      jasmine.objectContaining({ source: 'snackbar' }),
+      jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
+    );
+  });
+
+  it('format does not bump viewResetToken (preserves tree scroll / cursor)', () => {
+    const { component } = setup({ initialContent: '{"a":1,"b":2}' });
+    const before = component.viewResetTokenValue();
+    component.onFormat();
+    expect(component.viewResetTokenValue()).toBe(before);
+  });
+
+  // --------------------------------------------------------------------
+  // Minify: snackbar Undo restores text + mode
+  // --------------------------------------------------------------------
+
+  it('minify + snackbar Undo restores priorText and priorMode (jsonc -> json -> jsonc)', () => {
+    const priorText = '{\n  "a": 1\n}';
+    const { component, snackHarnesses, editorStub, eventSpy } = setup({
+      initialContent: priorText,
+      initialMode: 'jsonc',
+    });
+
+    component.onMinify();
+
+    expect(editorStub.replaceAll).toHaveBeenCalledTimes(1);
+    expect(component.content()).toBe('{"a":1}');
+    expect(component.mode()).toBe('json');
+
+    eventSpy.calls.reset();
+    snackHarnesses[0]!.action.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.mode()).toBe('jsonc');
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.minify.undo',
+      jasmine.objectContaining({ source: 'snackbar', priorMode: 'jsonc' }),
+      jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
+    );
+  });
+
+  it('minify is a no-op (and does not install a snackbar) when already minified', () => {
+    const alreadyMinified = '{"a":1}';
+    const { component, snackOpenSpy, editorStub } = setup({ initialContent: alreadyMinified });
+    component.onMinify();
+    expect(editorStub.replaceAll).not.toHaveBeenCalled();
+    expect(snackOpenSpy).not.toHaveBeenCalled();
+    expect(component.content()).toBe(alreadyMinified);
+  });
+
+  // --------------------------------------------------------------------
+  // Cross-surface interlock: dismisses prior snackbar + emits
+  // home.replaceUndo.snackbarReplaced
+  // --------------------------------------------------------------------
+
+  it('upload -> format within the cap dismisses the upload snackbar and emits home.replaceUndo.snackbarReplaced with {from:upload, to:format}', async () => {
+    const harnesses = [createSnackHarness(), createSnackHarness()];
+    const { component, snackHarnesses, eventSpy } = setup({
+      initialContent: '{"prior":true}',
+      snackHarnesses: harnesses,
+    });
+
+    const uploadFile = new File(['{"a":1,"b":2}'], 'next.json');
+    await component.onUpload(uploadFile);
+    expect(snackHarnesses[0]!.dismissSpy).not.toHaveBeenCalled();
+
+    eventSpy.calls.reset();
+    component.onFormat();
+
+    expect(snackHarnesses[0]!.dismissSpy).toHaveBeenCalled();
+    expect(eventSpy).toHaveBeenCalledWith('home.replaceUndo.snackbarReplaced', {
+      from: 'upload',
+      to: 'format',
+    });
+  });
+
+  // --------------------------------------------------------------------
+  // Paste does NOT install a Format snackbar (regression guard for
+  // the onPaste -> formatText inline change in home.component.ts).
+  // --------------------------------------------------------------------
+
+  it('onPaste auto-format does NOT install a Format snackbar (regression guard for onPaste inline formatText)', async () => {
+    const { component, snackOpenSpy } = setup({ initialContent: '' });
+    const escaped = '{\\r\\n    \\"a\\": 1\\r\\n}';
+    spyOn(navigator.clipboard, 'readText').and.returnValue(Promise.resolve(escaped));
+    await component.onPaste();
+    // The paste path may format the unescaped text, but must not open
+    // a Format snackbar. If it did, the user would see a stale "Undo"
+    // affordance after every paste.
+    expect(snackOpenSpy).not.toHaveBeenCalled();
   });
 });
 

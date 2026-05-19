@@ -21,13 +21,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
-import {
-  applyEdits,
-  createScanner,
-  findNodeAtLocation,
-  format as jsoncFormat,
-  Node as JsoncNode,
-} from 'jsonc-parser';
+import { createScanner, findNodeAtLocation, Node as JsoncNode } from 'jsonc-parser';
 import {
   debounceTime,
   firstValueFrom,
@@ -52,6 +46,7 @@ import {
   ClipboardPollingService,
   type ClipboardGrantedReadResult,
 } from '../../core/clipboard/clipboard-polling.service';
+import { formatText } from '../../core/json/format-text';
 import {
   ExtractedJson,
   IndentSize,
@@ -158,14 +153,116 @@ const COLD_BOOT_CLIPBOARD_TIMEOUT_MS = 150;
 const COLD_BOOT_CLIPBOARD_MAX_BYTES = 1 * 1024 * 1024;
 
 /**
- * Wall-clock cap on `pendingExtractUndo` retention. After this window,
+ * Discriminator for `pendingReplaceUndo`. Every wholesale-replacement
+ * surface that wants a snackbar Undo + Ctrl+Z gate routes through the
+ * shared `installPendingReplace` / `openReplaceUndoSnack` helpers; the
+ * `kind` tag drives the per-kind branches in `emitUndoTelemetry` and
+ * `restoreSideStateFromPending`.
+ *
+ * `coldBoot` is reserved for a future consolidation of the cold-boot
+ * clipboard snackbar into the same coordinator; it is not used today.
+ */
+type ReplaceUndoKind =
+  | 'upload'
+  | 'format'
+  | 'minify'
+  | 'extract.banner'
+  | 'extract.tree'
+  | 'coldBoot';
+
+/**
+ * Closed-enum reason for `home.<surface>.applyFailed` telemetry. Maps
+ * to the three failure modes the new `replaceAll`-backed fallback can
+ * surface: editor not mounted, model unavailable, or `replaceAll`
+ * itself rejecting (never observed in practice today but kept for
+ * forward-compat).
+ */
+type ReplaceApplyFailedReason = 'editorNotReady' | 'modelNull' | 'editsRejected';
+
+/**
+ * The shape of the `extractedCandidate` signal payload. Extracted so
+ * `PendingReplaceUndoUploadExtras` can snapshot the pre-upload value
+ * for restoration on undo.
+ */
+type ExtractedCandidate = {
+  data: ExtractedJson;
+  sourceVersion: number;
+  source: ExtractSource;
+};
+
+/**
+ * Fields shared by every `pendingReplaceUndo` kind. The `kind`
+ * discriminator narrows to the appropriate extras union member when
+ * accessing per-surface fields.
+ */
+type PendingReplaceUndoBase = {
+  priorText: string;
+  startMs: number;
+  undoneViaSnackbar: boolean;
+  /**
+   * Phantom-undo gate. Surfaces that bump `viewResetToken` at install
+   * time capture the post-bump value so the constructor effect can
+   * distinguish a Monaco Ctrl+Z (token unchanged) from a user re-
+   * pasting / re-uploading the same `priorText` (token bumped again).
+   * `extract.tree` doesn't bump the token, so the gate is a no-op for
+   * that kind (matched on the discriminator in the effect).
+   */
+  viewResetTokenAtAccept: number;
+};
+
+type PendingReplaceUndoUploadExtras = {
+  kind: 'upload';
+  /** Source filename at install time, restored on undo. */
+  priorLastFilename: string | null;
+  priorHighlights: readonly BlobHighlight[];
+  priorMutatedPaths: ReadonlySet<string>;
+  priorSuggestedTitles: readonly SuggestionCandidate[];
+  priorExtractedCandidate: ExtractedCandidate | null;
+  priorUploadError: { filename: string } | null;
+  /** Whether the upload originated from the file-picker or a drag-drop. */
+  uploadTrigger: UploadSource;
+};
+
+type PendingReplaceUndoFormatExtras = {
+  kind: 'format';
+};
+
+type PendingReplaceUndoMinifyExtras = {
+  kind: 'minify';
+  /** Editor mode at install time. Minify always flips to 'json'. */
+  priorMode: EditorMode;
+};
+
+type PendingReplaceUndoExtractBannerExtras = {
+  kind: 'extract.banner';
+  pasteSource: ExtractSource | null;
+  /**
+   * Banner-only snapshots: `resetHighlightsForDocumentReplacement`
+   * moves highlights into `mutatedPaths` on accept, so the user
+   * would lose their highlights permanently after undo. Capture
+   * both pre-accept signals so undo can restore them.
+   */
+  highlightsSnapshot: readonly BlobHighlight[];
+  mutatedPathsAtAccept: ReadonlySet<string>;
+};
+
+type PendingReplaceUndoExtractTreeExtras = {
+  kind: 'extract.tree';
+};
+
+type PendingReplaceUndoColdBootExtras = {
+  kind: 'coldBoot';
+};
+
+/**
+ * Wall-clock cap on `pendingReplaceUndo` retention. After this window,
  * the captured `priorText` snapshot is released regardless of user
  * activity, so a user who extracts and then walks away from the tab
  * cannot hold an arbitrarily large snapshot in memory indefinitely.
  * Reverts past this window (background-tab throttling, etc.) collapse
  * into the `'5s+'` `bucketUndoLatency` bucket.
  */
-const EXTRACT_UNDO_CAP_MS = 30_000;
+const REPLACE_UNDO_CAP_MS = 30_000;
 
 /**
  * Tree-pane debounce window. Live consumers (errors, dirty, status
@@ -270,57 +367,37 @@ export class HomeComponent implements OnInit, OnDestroy {
    * Cleared on dismiss.
    */
   private coldBootClipboardSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
-  private extractUndoSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
+  private replaceUndoSnackRef: MatSnackBarRef<TextOnlySnackBar> | null = null;
   /**
-   * Kind tag for the currently-visible extract Undo snackbar. Set
-   * atomically with `extractUndoSnackRef` and cleared on dismiss.
-   * Used to populate `from` / `to` on `tree.extract.snackbarReplaced`
-   * when a new extract supersedes a still-visible snackbar.
+   * Kind tag for the currently-visible Replace Undo snackbar. Set
+   * atomically with `replaceUndoSnackRef` and cleared on dismiss.
+   * Used to populate `from` / `to` on `home.replaceUndo.snackbarReplaced`
+   * (and the legacy `tree.extract.snackbarReplaced` dual-emit for
+   * extract-only pairs) when a new replacement supersedes a still-
+   * visible snackbar.
    */
-  private extractUndoSnackKind: 'tree' | 'banner' | null = null;
-  private pendingExtractUndo: {
-    priorText: string;
-    startMs: number;
-    undoneViaSnackbar: boolean;
-    /**
-     * Discriminates the entry surface so the constructor effect and
-     * `openExtractUndoSnack`'s `onAction` route to the right
-     * telemetry messageId and decide whether to restore highlights
-     * and re-arm the banner on undo.
-     */
-    kind: 'tree' | 'banner';
-    /**
-     * Banner-only: the paste-origin enum captured at accept time.
-     * Used to re-arm the banner with the same source after undo and
-     * to populate `pasteSource` on `home.extract.banner.undo`. Null
-     * for `kind: 'tree'`.
-     */
-    pasteSource: ExtractSource | null;
-    /**
-     * Banner-only snapshots: `resetHighlightsForDocumentReplacement`
-     * moves highlights into `mutatedPaths` on accept, so the user
-     * would lose their highlights permanently after undo. Capture
-     * both pre-accept signals so undo can restore them. Empty for
-     * `kind: 'tree'` (which doesn't reset highlights).
-     */
-    highlightsSnapshot: readonly BlobHighlight[];
-    mutatedPathsAtAccept: ReadonlySet<string>;
-    /**
-     * Phantom-undo gate (banner only). `replaceDocument` /
-     * banner-accept bump `viewResetToken`; capture the post-bump
-     * value so the constructor effect can distinguish a Monaco
-     * Ctrl+Z (token unchanged) from a user re-pasting the same
-     * `priorText` (token bumped again). Tree-extract doesn't bump
-     * the token, so the field is informational for `kind: 'tree'`.
-     */
-    viewResetTokenAtAccept: number;
-  } | null = null;
-  // Single owner of the 30s `pendingExtractUndo` cap. Cleared atomically
-  // with `pendingExtractUndo` via `clearPendingExtractUndo()`; never null
+  private replaceUndoSnackKind: ReplaceUndoKind | null = null;
+  /**
+   * Single discriminated-union pending snapshot for ALL wholesale-
+   * replacement surfaces that opt into snackbar Undo + Ctrl+Z. The
+   * shared base fields cover the gate logic; the kind-specific union
+   * branches carry the side-state each surface needs to restore on
+   * undo. See `ReplaceUndoKind` for the discriminator.
+   */
+  private pendingReplaceUndo:
+    | (PendingReplaceUndoBase & PendingReplaceUndoUploadExtras)
+    | (PendingReplaceUndoBase & PendingReplaceUndoFormatExtras)
+    | (PendingReplaceUndoBase & PendingReplaceUndoMinifyExtras)
+    | (PendingReplaceUndoBase & PendingReplaceUndoExtractBannerExtras)
+    | (PendingReplaceUndoBase & PendingReplaceUndoExtractTreeExtras)
+    | (PendingReplaceUndoBase & PendingReplaceUndoColdBootExtras)
+    | null = null;
+  // Single owner of the 30s `pendingReplaceUndo` cap. Cleared atomically
+  // with `pendingReplaceUndo` via `clearPendingReplaceUndo()`; never null
   // it directly. Background-tab throttling can delay the callback past
   // 30s -- the helper is idempotent so a late firing after a manual
   // clear is a safe no-op.
-  private pendingExtractUndoTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingReplaceUndoTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Blob hydrated by the /s/:slug resolver. When present, the editor starts
@@ -341,11 +418,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    * version so any subsequent content mutation auto-hides the banner
    * without needing an effect.
    */
-  readonly extractedCandidate = signal<{
-    data: ExtractedJson;
-    sourceVersion: number;
-    source: ExtractSource;
-  } | null>(null);
+  readonly extractedCandidate = signal<ExtractedCandidate | null>(null);
   private readonly contentVersion = signal(0);
   private readonly viewResetToken = signal(0);
   readonly viewResetTokenValue = this.viewResetToken.asReadonly();
@@ -975,85 +1048,61 @@ export class HomeComponent implements OnInit, OnDestroy {
 
     effect(() => {
       const currentContent = this.content();
-      const pendingExtractUndo = this.pendingExtractUndo;
-      if (!pendingExtractUndo) {
+      const pending = this.pendingReplaceUndo;
+      if (!pending) {
         return;
       }
-      const undoLatencyMs = performance.now() - pendingExtractUndo.startMs;
-      // Case 1: snackbar Undo already ran (`openExtractUndoSnack` sets the
-      // flag and calls `replaceDocument(priorText)`); the resulting
-      // content-match re-enters this effect. Telemetry was emitted in
-      // the action callback; just clear the pending state.
-      if (pendingExtractUndo.undoneViaSnackbar && currentContent === pendingExtractUndo.priorText) {
-        this.clearPendingExtractUndo();
+      const undoLatencyMs = performance.now() - pending.startMs;
+      // Case 1: snackbar Undo already ran (the install helper's
+      // `onAction` set the flag and called `replaceDocument(priorText)`);
+      // the resulting content-match re-enters this effect. Telemetry was
+      // emitted in the action callback; just clear the pending state.
+      if (pending.undoneViaSnackbar && currentContent === pending.priorText) {
+        this.clearPendingReplaceUndo();
         return;
       }
-      // Phantom-undo gate (banner kind only). The banner-accept path
-      // bumps `viewResetToken` to force a tree-pane re-fit; a Monaco
-      // Ctrl+Z leaves the token unchanged because it goes through
-      // `applyEdit` -> `valueChange` -> `setContent` (no bump). A user
-      // re-pasting the same `priorText` from the clipboard goes
-      // through `replaceDocument` which DOES bump the token again, so
-      // the captured `viewResetTokenAtAccept` no longer matches. Tree-
-      // extract doesn't bump the token at accept, so it doesn't need
-      // this gate.
+      // Phantom-undo gate (applies to every kind that bumps
+      // `viewResetToken` at install time). A Monaco Ctrl+Z goes through
+      // `applyEdit`/`replaceAll` -> `valueChange` -> `setContent` and
+      // does NOT bump the token, while a user re-uploading or
+      // re-pasting the same `priorText` goes through `replaceDocument`
+      // which DOES bump the token again, so the captured
+      // `viewResetTokenAtAccept` no longer matches and we bail.
+      // `extract.tree` doesn't bump the token at install, so it is
+      // exempt; `coldBoot` is reserved for a future folding-in (no
+      // install path today).
       if (
-        pendingExtractUndo.kind === 'banner' &&
-        this.viewResetToken() !== pendingExtractUndo.viewResetTokenAtAccept
+        pending.kind !== 'extract.tree' &&
+        pending.kind !== 'coldBoot' &&
+        this.viewResetToken() !== pending.viewResetTokenAtAccept
       ) {
         return;
       }
       // Case 2: content reverted to priorText via some non-snackbar
       // path (Ctrl+Z is the dominant case). Fire ctrlZ telemetry,
-      // clear pending state, and dismiss any still-visible snackbar
-      // so the offer to undo disappears once the undo is observable.
-      // The 30s wall-clock timer in `clearPendingExtractUndo()` is
-      // the single owner of the cap -- once it fires, `pendingExtractUndo`
-      // is null and this branch returns early at the top guard above.
-      if (
-        !pendingExtractUndo.undoneViaSnackbar &&
-        currentContent === pendingExtractUndo.priorText
-      ) {
-        if (pendingExtractUndo.kind === 'banner') {
-          this.logger.event('home.extract.banner.undo', {
-            source: 'ctrlZ',
-            pasteSource: pendingExtractUndo.pasteSource ?? 'paste',
-            undoLatencyMsBucket: bucketUndoLatency(undoLatencyMs),
-          });
-          // Restore the pre-accept highlights and `mutatedPaths` (the
-          // accept path called `resetHighlightsForDocumentReplacement`,
-          // which moved highlights into `mutatedPaths`). Re-arm the
-          // banner per spec policy "snackbar plus Ctrl+Z are the
-          // recovery affordances" (DESIGN_SPEC.md M7v) - the user is
-          // back at the mixed text, so the banner should re-offer.
-          this.highlights.set([...pendingExtractUndo.highlightsSnapshot]);
-          this.mutatedPaths.set(new Set(pendingExtractUndo.mutatedPathsAtAccept));
-          const pasteSource = pendingExtractUndo.pasteSource;
-          this.clearPendingExtractUndo();
-          this.extractUndoSnackRef?.dismiss();
-          if (pasteSource !== null) {
-            this.runExtractorOnCurrentContent(pasteSource);
-          }
-          return;
-        }
-        this.logger.event('tree.extract.undo', {
-          source: 'ctrlZ',
-          undoLatencyMsBucket: bucketUndoLatency(undoLatencyMs),
-        });
-        this.clearPendingExtractUndo();
-        this.extractUndoSnackRef?.dismiss();
+      // restore side-state, clear pending state, and dismiss any
+      // still-visible snackbar so the offer to undo disappears once
+      // the undo is observable. The 30s wall-clock timer in
+      // `clearPendingReplaceUndo()` is the single owner of the cap --
+      // once it fires, `pendingReplaceUndo` is null and this branch
+      // returns early at the top guard above.
+      if (!pending.undoneViaSnackbar && currentContent === pending.priorText) {
+        this.emitUndoTelemetry(pending, 'ctrlZ', undoLatencyMs);
+        this.restoreSideStateFromPending(pending);
+        this.clearPendingReplaceUndo();
+        this.replaceUndoSnackRef?.dismiss();
         return;
       }
     });
 
-    // The 30s `setTimeout` that backs `pendingExtractUndoTimer` survives
+    // The 30s `setTimeout` that backs `pendingReplaceUndoTimer` survives
     // component destruction if not cleaned up - the callback would then
     // touch a destroyed component's field and keep the instance alive
     // for the remainder of the window. Register the helper so the timer
     // (and any captured `priorText` snapshot) is released promptly on
     // teardown.
     this.destroyRef.onDestroy(() => {
-      this.clearPendingExtractUndo();
+      this.clearPendingReplaceUndo();
     });
 
     this.treeValueChanges$
@@ -1340,97 +1389,314 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Atomically clear the `pendingExtractUndo` snapshot and any
-   * scheduled wall-clock timer. Idempotent: safe to call when neither
-   * field is set (e.g., the timer callback racing with an effect-
-   * driven clear). Always pair every `pendingExtractUndo` write with
-   * this helper; never null the field directly.
+   * Atomically clear the `pendingReplaceUndo` snapshot and any
+   * outstanding wall-clock cap timer. Idempotent (safe to call when
+   * already null, e.g. from a late-firing timer after a synchronous-
+   * driven clear). Always pair every `pendingReplaceUndo` write with
+   * this helper rather than touching the timer directly.
    */
-  private clearPendingExtractUndo(): void {
-    if (this.pendingExtractUndoTimer !== null) {
-      clearTimeout(this.pendingExtractUndoTimer);
-      this.pendingExtractUndoTimer = null;
+  private clearPendingReplaceUndo(): void {
+    if (this.pendingReplaceUndoTimer !== null) {
+      clearTimeout(this.pendingReplaceUndoTimer);
+      this.pendingReplaceUndoTimer = null;
     }
-    this.pendingExtractUndo = null;
+    this.pendingReplaceUndo = null;
   }
 
-  private openExtractUndoSnack(priorText: string): void {
-    if (this.extractUndoSnackRef) {
-      const fromKind = this.extractUndoSnackKind ?? 'tree';
-      const toKind = this.pendingExtractUndo?.kind ?? 'tree';
-      this.extractUndoSnackRef.dismiss();
-      this.logger.event('tree.extract.snackbarReplaced', {
+  /**
+   * Install a new `pendingReplaceUndo` snapshot, replacing any prior
+   * pending. Pair this with `openReplaceUndoSnack` after the actual
+   * `replaceAll`/`applyEdit` attempt so the snackbar reflects the
+   * post-edit state. The install ALWAYS happens BEFORE the edit so a
+   * synchronously-flushed effect that re-enters the constructor's
+   * content-watch effect sees the snapshot rather than a null
+   * pending field.
+   */
+  private installPendingReplace(newPending: NonNullable<typeof this.pendingReplaceUndo>): void {
+    this.clearPendingReplaceUndo();
+    this.pendingReplaceUndo = newPending;
+    this.pendingReplaceUndoTimer = setTimeout(
+      () => this.clearPendingReplaceUndo(),
+      REPLACE_UNDO_CAP_MS,
+    );
+  }
+
+  /**
+   * Open the Replace Undo snackbar for the currently-installed
+   * `pendingReplaceUndo`. If a prior snackbar is still visible, dismiss
+   * it and emit `home.replaceUndo.snackbarReplaced { from, to }` so
+   * dashboards can see the supersede-rate. For extract-only `{from,to}`
+   * pairs we ALSO emit the legacy `tree.extract.snackbarReplaced` event
+   * (with the legacy `'tree' | 'banner'` enum) for dashboard continuity
+   * during one release of dual-emit, then it can be deprecated.
+   */
+  private openReplaceUndoSnack(snackMessage: string, snackUndoLabel: string): void {
+    if (this.replaceUndoSnackRef !== null) {
+      const fromKind: ReplaceUndoKind = this.replaceUndoSnackKind ?? 'extract.tree';
+      const toKind: ReplaceUndoKind = this.pendingReplaceUndo?.kind ?? 'extract.tree';
+      this.replaceUndoSnackRef.dismiss();
+      this.logger.event('home.replaceUndo.snackbarReplaced', {
         from: fromKind,
         to: toKind,
       });
-      this.extractUndoSnackRef = null;
-      this.extractUndoSnackKind = null;
+      const fromIsExtract = fromKind === 'extract.tree' || fromKind === 'extract.banner';
+      const toIsExtract = toKind === 'extract.tree' || toKind === 'extract.banner';
+      if (fromIsExtract && toIsExtract) {
+        this.logger.event('tree.extract.snackbarReplaced', {
+          from: fromKind === 'extract.tree' ? 'tree' : 'banner',
+          to: toKind === 'extract.tree' ? 'tree' : 'banner',
+        });
+      }
+      this.replaceUndoSnackRef = null;
+      this.replaceUndoSnackKind = null;
     }
-    const pendingExtractUndo = this.pendingExtractUndo;
-    if (!pendingExtractUndo) {
+    const pending = this.pendingReplaceUndo;
+    if (pending === null) {
       return;
     }
-    const snackRef: MatSnackBarRef<TextOnlySnackBar> = this.snack.open(
-      $localize`:@@home.extract.snackbar.applied:Extracted embedded JSON into the document.`,
-      $localize`:@@home.extract.snackbar.undo:Undo`,
-      { duration: 8000, politeness: 'assertive' },
-    );
-    this.extractUndoSnackRef = snackRef;
-    this.extractUndoSnackKind = pendingExtractUndo.kind;
+    // M7v extract surfaces shipped with a 8-second snackbar duration
+    // and `politeness: 'assertive'` so a screen reader announces the
+    // Undo offer immediately. The new upload/format/minify surfaces
+    // use a 30-second snackbar (matching `REPLACE_UNDO_CAP_MS`, the
+    // wall-clock cap on `priorText` retention) so the Undo affordance
+    // remains visible for the full window during which Ctrl+Z still
+    // works, and use the default politeness to match every other
+    // user-initiated-action snackbar in the app (cold-boot, save,
+    // blob load, etc.); a Format toast does not need to interrupt
+    // an in-progress reader announcement. The longer pending cap
+    // (`REPLACE_UNDO_CAP_MS = 30_000`) is the single owner of the
+    // snapshot lifetime; the snackbar duration is purely about
+    // visibility of the affordance.
+    const isExtract = pending.kind === 'extract.banner' || pending.kind === 'extract.tree';
+    const snackRef: MatSnackBarRef<TextOnlySnackBar> | undefined = isExtract
+      ? this.snack.open(snackMessage, snackUndoLabel, { duration: 8000, politeness: 'assertive' })
+      : this.snack.open(snackMessage, snackUndoLabel, { duration: REPLACE_UNDO_CAP_MS });
+    // Test environments that don't care about the Undo affordance can
+    // stub `MatSnackBar.open` as a Jasmine spy that returns undefined.
+    // In production `MatSnackBar.open` always returns a `MatSnackBarRef`.
+    // When the stub returns undefined, we still want the pending snapshot
+    // installed (Ctrl+Z still works) but skip the snackbar's `onAction`
+    // wiring rather than crash.
+    if (!snackRef) {
+      return;
+    }
+    this.replaceUndoSnackRef = snackRef;
+    this.replaceUndoSnackKind = pending.kind;
     snackRef
       .onAction()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         // Race guard: if Ctrl+Z fired the effect's `dismiss()` while
         // the user's click was queued, the field has already been
-        // cleared (or replaced by a subsequent extract). The captured
-        // local `pendingExtractUndo` still references the original
-        // heap object, so an identity mismatch means we lost the race
-        // - treat the action as a no-op to avoid double-firing
-        // telemetry and re-applying the (now redundant) revert.
-        if (this.pendingExtractUndo !== pendingExtractUndo) {
+        // cleared (or replaced by a subsequent replacement). The
+        // captured local `pending` still references the original heap
+        // object, so an identity mismatch means we lost the race -
+        // treat the action as a no-op to avoid double-firing telemetry
+        // and re-applying the (now redundant) revert.
+        if (this.pendingReplaceUndo !== pending) {
           return;
         }
-        pendingExtractUndo.undoneViaSnackbar = true;
+        pending.undoneViaSnackbar = true;
         // Full-doc swap (not a surgical reverse-edit via
-        // `JsonEditorComponent.applyEdit`). Trade-off: this clobbers
-        // Monaco's redo stack, so Ctrl+Y / Ctrl+Shift+Z cannot reach
-        // the post-extract state after snackbar Undo. Accepted because
-        // the captured `priorText` is the entire pre-extract document
-        // and a surgical reverse splice would still need to invalidate
-        // any post-extract typing - same observable outcome with more
-        // code.
-        this.replaceDocument(priorText);
-        if (pendingExtractUndo.kind === 'banner') {
-          this.logger.event('home.extract.banner.undo', {
-            source: 'snackbar',
-            pasteSource: pendingExtractUndo.pasteSource ?? 'paste',
-            undoLatencyMsBucket: bucketUndoLatency(performance.now() - pendingExtractUndo.startMs),
-          });
-          // Restore pre-accept highlights / mutated paths and re-arm
-          // the extract banner so the user lands at the mixed text
-          // with the same offer they had before clicking Extract.
-          this.highlights.set([...pendingExtractUndo.highlightsSnapshot]);
-          this.mutatedPaths.set(new Set(pendingExtractUndo.mutatedPathsAtAccept));
-          if (pendingExtractUndo.pasteSource !== null) {
-            this.runExtractorOnCurrentContent(pendingExtractUndo.pasteSource);
-          }
-        } else {
-          this.logger.event('tree.extract.undo', {
-            source: 'snackbar',
-            undoLatencyMsBucket: bucketUndoLatency(performance.now() - pendingExtractUndo.startMs),
-          });
-        }
+        // `JsonEditorComponent.applyEdit` / `replaceAll`). Trade-off:
+        // this clobbers Monaco's redo stack, so Ctrl+Y / Ctrl+Shift+Z
+        // cannot reach the post-action state after snackbar Undo.
+        // Accepted because the captured `priorText` is the entire pre-
+        // action document and a surgical reverse splice would still
+        // need to invalidate any post-action typing - same observable
+        // outcome with more code.
+        this.replaceDocument(pending.priorText);
+        const latency = performance.now() - pending.startMs;
+        this.emitUndoTelemetry(pending, 'snackbar', latency);
+        this.restoreSideStateFromPending(pending);
       });
     snackRef
       .afterDismissed()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
-        if (this.extractUndoSnackRef === snackRef) {
-          this.extractUndoSnackRef = null;
-          this.extractUndoSnackKind = null;
+        if (this.replaceUndoSnackRef === snackRef) {
+          this.replaceUndoSnackRef = null;
+          this.replaceUndoSnackKind = null;
         }
       });
+  }
+
+  /**
+   * Emit the per-kind Undo telemetry event. Called by both the
+   * snackbar `onAction` (source='snackbar') and the constructor effect
+   * when content reverts to priorText (source='ctrlZ'). Per AGENTS.md
+   * Sec 4 telemetry rules, props use closed enums and numeric latency
+   * goes through `bucketUndoLatency`.
+   */
+  private emitUndoTelemetry(
+    pending: NonNullable<typeof this.pendingReplaceUndo>,
+    source: 'snackbar' | 'ctrlZ',
+    undoLatencyMs: number,
+  ): void {
+    const undoLatencyMsBucket = bucketUndoLatency(undoLatencyMs);
+    switch (pending.kind) {
+      case 'upload':
+        this.logger.event(
+          'home.upload.undo',
+          {
+            source,
+            trigger: pending.uploadTrigger,
+            undoLatencyMsBucket,
+          },
+          { undoLatencyMs },
+        );
+        return;
+      case 'format':
+        this.logger.event('home.format.undo', { source, undoLatencyMsBucket }, { undoLatencyMs });
+        return;
+      case 'minify':
+        this.logger.event(
+          'home.minify.undo',
+          { source, priorMode: pending.priorMode, undoLatencyMsBucket },
+          { undoLatencyMs },
+        );
+        return;
+      case 'extract.banner':
+        this.logger.event('home.extract.banner.undo', {
+          source,
+          pasteSource: pending.pasteSource ?? 'paste',
+          undoLatencyMsBucket,
+        });
+        return;
+      case 'extract.tree':
+        this.logger.event('tree.extract.undo', {
+          source,
+          undoLatencyMsBucket,
+        });
+        return;
+      case 'coldBoot':
+        // Reserved for a future cold-boot consolidation; no telemetry
+        // path today (cold-boot has its own messaging via
+        // `home.clipboard.coldBoot.*`).
+        return;
+    }
+  }
+
+  /**
+   * Restore the pre-action side-state captured at install time. Called
+   * by both the snackbar `onAction` and the constructor effect after
+   * `replaceDocument(priorText)` has rolled the content back. Per-kind
+   * branches mirror what each surface's install path snapshotted.
+   */
+  private restoreSideStateFromPending(pending: NonNullable<typeof this.pendingReplaceUndo>): void {
+    switch (pending.kind) {
+      case 'upload':
+        this.lastFilename.set(pending.priorLastFilename);
+        this.highlights.set([...pending.priorHighlights]);
+        this.mutatedPaths.set(new Set(pending.priorMutatedPaths));
+        this.suggestedTitlesForMenu.set([...pending.priorSuggestedTitles]);
+        this.extractedCandidate.set(pending.priorExtractedCandidate);
+        this.uploadError.set(pending.priorUploadError);
+        return;
+      case 'format':
+        // No side-state to restore: Format only touches editor text.
+        return;
+      case 'minify':
+        this.mode.set(pending.priorMode);
+        return;
+      case 'extract.banner':
+        // Restore the pre-accept highlights / mutated paths and re-arm
+        // the extract banner so the user lands at the mixed text with
+        // the same offer they had before clicking Extract.
+        this.highlights.set([...pending.highlightsSnapshot]);
+        this.mutatedPaths.set(new Set(pending.mutatedPathsAtAccept));
+        if (pending.pasteSource !== null) {
+          this.runExtractorOnCurrentContent(pending.pasteSource);
+        }
+        return;
+      case 'extract.tree':
+        // No side-state to restore: tree-extract is a surgical edit
+        // that preserves highlights and mutatedPaths.
+        return;
+      case 'coldBoot':
+        return;
+    }
+  }
+
+  /**
+   * Attempt to replace the entire document via `JsonEditorComponent.replaceAll`,
+   * preserving Monaco's undo stack. Falls back to the legacy `setContent`
+   * path (which clobbers undo via `model.setValue`) when the editor is not
+   * mounted or rejects the edit, and emits the per-surface `applyFailed`
+   * telemetry so the rate is observable. The snackbar Undo affordance still
+   * works on the fallback path via the `pendingReplaceUndo.priorText`
+   * snapshot.
+   *
+   * Token-bump policy mirrors today's pre-issue-#313 behavior so view state
+   * is preserved on actions that don't fundamentally restructure the
+   * document:
+   * - `upload`: bumps `viewResetToken` (a new file is a wholesale change;
+   *   matches today's `replaceDocument`).
+   * - `format` and `minify`: do NOT bump (whitespace and serialization
+   *   changes preserve tree structure; preserves the user's tree
+   *   scroll position / cursor).
+   */
+  private applyReplaceWithFallback(
+    next: string,
+    editorSource: string,
+    surface: 'upload' | 'format' | 'minify',
+  ): void {
+    const logApplyFailed = (reason: ReplaceApplyFailedReason): void => {
+      switch (surface) {
+        case 'upload':
+          this.logger.warn('home.upload.applyFailed', { reason });
+          return;
+        case 'format':
+          this.logger.warn('home.format.applyFailed', { reason });
+          return;
+        case 'minify':
+          this.logger.warn('home.minify.applyFailed', { reason });
+          return;
+      }
+    };
+    const bumpToken = surface === 'upload';
+    const editor = this.editor();
+    if (!editor) {
+      logApplyFailed('editorNotReady');
+      // No editor mounted; the legacy path still flushes `content` to
+      // the (eventual) Monaco model when it mounts. The captured
+      // `priorText` snapshot keeps snackbar Undo working.
+      this.setContent(next);
+      this.treeFlush$.next();
+      if (bumpToken) {
+        this.viewResetToken.update((token) => token + 1);
+      }
+      return;
+    }
+    const applied = editor.replaceAll(next, editorSource);
+    if (!applied) {
+      logApplyFailed('modelNull');
+      this.setContent(next);
+      this.treeFlush$.next();
+      if (bumpToken) {
+        this.viewResetToken.update((token) => token + 1);
+      }
+      return;
+    }
+    // `replaceAll` only mutates the Monaco model; mirror the
+    // side-effects `setContent`/`replaceDocument` perform so the rest
+    // of the app (tree pane, view-reset listeners) sees the same state.
+    this.treeFlush$.next();
+    if (bumpToken) {
+      this.viewResetToken.update((token) => token + 1);
+    }
+  }
+
+  /**
+   * Snackbar-display hygiene for an arbitrary filename. Strips ASCII C0
+   * + C1 control chars (so a maliciously-named upload cannot inject
+   * BEL/CR/etc. into a screen-reader announcement) and truncates to a
+   * 40-character cap with an ASCII ellipsis. Telemetry never receives
+   * the filename - it is display-only.
+   */
+  private formatFilenameForSnack(filename: string): string {
+    const cleaned = filename.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+    return cleaned.length > 40 ? cleaned.slice(0, 37) + '...' : cleaned;
   }
 
   private applyLoadedBlob(blob: JsonBlob): void {
@@ -1970,25 +2236,21 @@ export class HomeComponent implements OnInit, OnDestroy {
     // (A then B within 30s) cannot leave A's wall-clock timer queued -
     // it would later wipe B's snapshot mid-window. The helper is
     // idempotent when no prior state exists.
-    this.clearPendingExtractUndo();
-    this.pendingExtractUndo = {
+    this.installPendingReplace({
       priorText,
       startMs: performance.now(),
       undoneViaSnackbar: false,
-      kind: 'tree',
-      pasteSource: null,
-      highlightsSnapshot: [],
-      mutatedPathsAtAccept: new Set(),
+      kind: 'extract.tree',
       // Tree-extract doesn't bump `viewResetToken`; record the
       // current value so the phantom-undo gate in the effect is a
-      // no-op for `kind: 'tree'`.
+      // no-op for `kind: 'extract.tree'` (gate explicitly exempts
+      // this kind anyway).
       viewResetTokenAtAccept: this.viewResetToken(),
-    };
-    this.pendingExtractUndoTimer = setTimeout(
-      () => this.clearPendingExtractUndo(),
-      EXTRACT_UNDO_CAP_MS,
+    });
+    this.openReplaceUndoSnack(
+      $localize`:@@home.extract.snackbar.applied:Extracted embedded JSON into the document.`,
+      $localize`:@@home.extract.snackbar.undo:Undo`,
     );
-    this.openExtractUndoSnack(priorText);
   }
 
   onToggleSelectionSync(): void {
@@ -2095,8 +2357,16 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.suggestedTitlesForMenu.set([]);
     if (changed) {
       // Pretty-print the newly-unescaped payload so the user sees the real
-      // structure rather than a single dense line (per issue #38).
-      this.onFormat();
+      // structure rather than a single dense line (per issue #38). Call
+      // `formatText` inline instead of `this.onFormat()` so paste does NOT
+      // open a Format snackbar on top of the (already-no-snackbar) paste
+      // UX. Issue #313 changed `onFormat` to install a pending-undo +
+      // snackbar; recursing through it here would leak a stray "Formatted
+      // document" snackbar after every paste of an escaped string.
+      const formatted = formatText(unescaped, this.prefs.prefs().editorTabSize);
+      if (formatted !== unescaped) {
+        this.setContent(formatted);
+      }
     }
 
     this.runExtractorOnCurrentContent('paste');
@@ -2218,12 +2488,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     // Install pending state BEFORE `applyEdit` so any synchronously-
     // flushed effect that reaches the constructor's content-watch
     // effect sees the snapshot rather than a null pending field.
-    this.clearPendingExtractUndo();
-    this.pendingExtractUndo = {
+    this.installPendingReplace({
       priorText,
       startMs: performance.now(),
       undoneViaSnackbar: false,
-      kind: 'banner',
+      kind: 'extract.banner',
       pasteSource,
       highlightsSnapshot,
       mutatedPathsAtAccept,
@@ -2233,11 +2502,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       // a Monaco Ctrl+Z (token unchanged) from a user re-pasting the
       // same `priorText` (token bumped again).
       viewResetTokenAtAccept: this.viewResetToken() + 1,
-    };
-    this.pendingExtractUndoTimer = setTimeout(
-      () => this.clearPendingExtractUndo(),
-      EXTRACT_UNDO_CAP_MS,
-    );
+    });
 
     const editor = this.editor();
     const applied =
@@ -2266,7 +2531,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.resetHighlightsForDocumentReplacement();
     }
 
-    this.openExtractUndoSnack(priorText);
+    this.openReplaceUndoSnack(
+      $localize`:@@home.extract.snackbar.applied:Extracted embedded JSON into the document.`,
+      $localize`:@@home.extract.snackbar.undo:Undo`,
+    );
   }
 
   onExtractDismiss(): void {
@@ -2343,15 +2611,59 @@ export class HomeComponent implements OnInit, OnDestroy {
         const parseStartedAt = performance.now();
         const { unescaped } = this.parser.tryUnescape(result.text);
         const parseMs = this.durationSince(parseStartedAt);
-        this.replaceDocument(unescaped);
-        this.resetHighlightsForDocumentReplacement();
-        // M7p title-suggester: remember the source filename so the
-        // wand button can offer it as a candidate. The UX rule is
-        // "covers both upload-picker AND drag-drop"; this is the
-        // shared chokepoint.
-        this.lastFilename.set(filename);
-        this.suggestedTitlesForMenu.set([]);
-        this.runExtractorOnCurrentContent(source === 'pick' ? 'upload.pick' : 'upload.drag');
+        // No-op short-circuit: identical content + filename means no
+        // user-observable change. Skip the pending-undo install so a
+        // Ctrl+Z does not accidentally consume a stale snackbar.
+        const priorText = this.content();
+        if (unescaped === priorText && this.lastFilename() === filename) {
+          // Still run the extractor + run telemetry below; just skip
+          // the pending-undo + snackbar install.
+          this.suggestedTitlesForMenu.set([]);
+          this.runExtractorOnCurrentContent(source === 'pick' ? 'upload.pick' : 'upload.drag');
+        } else {
+          // Capture the full pre-upload side-state for snackbar Undo /
+          // Ctrl+Z. Six fields mutated by the happy path:
+          // `lastFilename`, `highlights`, `mutatedPaths`,
+          // `suggestedTitlesForMenu`, `extractedCandidate`,
+          // `uploadError`. The first four are touched in-line below;
+          // the latter two are touched by `runExtractorOnCurrentContent`
+          // / the inline `uploadError.set(...)`.
+          const priorLastFilename = this.lastFilename();
+          const priorHighlights = this.highlights();
+          const priorMutatedPaths = this.mutatedPaths();
+          const priorSuggestedTitles = this.suggestedTitlesForMenu();
+          const priorExtractedCandidate = this.extractedCandidate();
+          const priorUploadError = this.uploadError();
+          this.installPendingReplace({
+            priorText,
+            startMs: performance.now(),
+            undoneViaSnackbar: false,
+            kind: 'upload',
+            priorLastFilename,
+            priorHighlights,
+            priorMutatedPaths,
+            priorSuggestedTitles,
+            priorExtractedCandidate,
+            priorUploadError,
+            uploadTrigger: source,
+            // `applyReplaceWithFallback` bumps `viewResetToken` (either
+            // via `replaceAll`'s mirror at line 1672 or the legacy
+            // `setContent`+token bump fallback). Record the post-bump
+            // value so the phantom-undo gate distinguishes Ctrl+Z
+            // (token unchanged) from a user re-uploading the same
+            // file (token bumped again).
+            viewResetTokenAtAccept: this.viewResetToken() + 1,
+          });
+          this.applyReplaceWithFallback(unescaped, 'jotjson-upload', 'upload');
+          this.resetHighlightsForDocumentReplacement();
+          this.lastFilename.set(filename);
+          this.suggestedTitlesForMenu.set([]);
+          this.runExtractorOnCurrentContent(source === 'pick' ? 'upload.pick' : 'upload.drag');
+          this.openReplaceUndoSnack(
+            $localize`:@@home.upload.snackbar.uploaded:Uploaded ${this.formatFilenameForSnack(filename)}:filename:.`,
+            $localize`:@@home.upload.snackbar.undo:Undo`,
+          );
+        }
         // Surface upload-source validation errors as a persistent in-pane
         // banner (issue #36, spec §294). parseResult() shares its memoized
         // parse with the editor's render path, so this is not an extra
@@ -2619,25 +2931,62 @@ export class HomeComponent implements OnInit, OnDestroy {
   onFormat(): void {
     const text = this.content();
     if (!text) return;
-    const edits = jsoncFormat(text, undefined, {
-      tabSize: this.prefs.prefs().editorTabSize,
-      insertSpaces: true,
-      eol: '\n',
+    const next = formatText(text, this.prefs.prefs().editorTabSize);
+    if (next === text) return;
+    this.installPendingReplace({
+      priorText: text,
+      startMs: performance.now(),
+      undoneViaSnackbar: false,
+      kind: 'format',
+      // Format doesn't bump `viewResetToken` (matches today's pre-#313
+      // behavior - whitespace changes preserve tree structure). The
+      // gate in the constructor effect therefore expects the same
+      // token at undo time as at install time; capturing the current
+      // value makes the gate a no-op for Format (same precedent as
+      // `extract.tree`). Phantom-undo via user typing the same text
+      // back is theoretically possible here but practically astronomical.
+      viewResetTokenAtAccept: this.viewResetToken(),
     });
-    const next = applyEdits(text, edits);
-    if (next !== text) this.setContent(next);
+    this.applyReplaceWithFallback(next, 'jotjson-format', 'format');
+    this.openReplaceUndoSnack(
+      $localize`:@@home.format.snackbar.applied:Formatted document.`,
+      $localize`:@@home.format.snackbar.undo:Undo`,
+    );
   }
 
   onMinify(): void {
     const parsed = this.parseResult();
     if (parsed.empty || parsed.errors.length > 0) return;
+    let next: string;
     try {
-      this.setContent(JSON.stringify(parsed.value));
-      // Minified output has no comments -> switch back to JSON mode.
-      this.mode.set('json');
+      next = JSON.stringify(parsed.value);
     } catch {
-      /* ignore */
+      return;
     }
+    const text = this.content();
+    const priorMode = this.mode();
+    // No-op short-circuit: already-minified content + already-JSON mode
+    // means no observable change. Skip the pending-undo install so a
+    // Ctrl+Z does not accidentally consume a stale snackbar.
+    if (next === text && priorMode === 'json') return;
+    this.installPendingReplace({
+      priorText: text,
+      startMs: performance.now(),
+      undoneViaSnackbar: false,
+      kind: 'minify',
+      priorMode,
+      // Minify doesn't bump `viewResetToken` (same view-preservation
+      // rationale as Format); capture current value so the gate is a
+      // no-op for this kind.
+      viewResetTokenAtAccept: this.viewResetToken(),
+    });
+    this.applyReplaceWithFallback(next, 'jotjson-minify', 'minify');
+    // Minified output has no comments -> switch back to JSON mode.
+    this.mode.set('json');
+    this.openReplaceUndoSnack(
+      $localize`:@@home.minify.snackbar.applied:Minified document.`,
+      $localize`:@@home.minify.snackbar.undo:Undo`,
+    );
   }
 
   /**
