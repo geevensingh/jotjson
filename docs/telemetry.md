@@ -321,85 +321,95 @@ land in the `customEvents` (classic AI) / `AppEvents` (LAW) table.
 
 ### Event catalog
 
-#### `update.versionReady`
+#### `sw.registered`
 
 **Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
 
-Fired when Angular's service worker reports a new version is ready and
-`AppUpdateService` chooses the silent-apply vs snackbar path. This is
-the main funnel event for verifying that users recover from stale
-service-worker manifests after the issue #167 fix.
+Fired when `navigator.serviceWorker.register('/sw.js')` resolves.
+Queued to `sessionStorage` (key `jotjson.sw.events`) during
+pre-bootstrap and drained by `LoggerService.flushSwEvents()` on the
+first SDK connect; after the drain, subsequent emits go direct to
+the SDK.
 
 **Properties:**
 
 | name | type | values |
 | --- | --- | --- |
-| userInteracted | string | `true` or `false`; whether the user interacted before the ready event. |
-| guardClaimed | string | `true` or `false`; whether the session auto-apply guard was claimed. |
-| pathTaken | string | `silentApply` or `snackbar`. |
-| fromSha | string | Current Angular service-worker `appData.buildSha`; may be empty for older manifests. |
-| toSha | string | Latest Angular service-worker `appData.buildSha`; may be empty for older manifests. |
+| version | string | `BUILD_INFO.version` captured at queue time. |
+| sha | string | `BUILD_INFO.sha` captured at queue time. |
+| branch | string | `BUILD_INFO.branch` captured at queue time. |
+| buildNumber | string | `BUILD_INFO.buildNumber` captured at queue time. |
 
-**Measurements:**
-
-| name | type | meaning |
-| --- | --- | --- |
-| msSinceBoot | number | Raw `performance.now()` elapsed time when the branch decision is made. |
-
-#### `update.check.result`
-
-**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
-
-Fires on every `checkForUpdate()` settle or short-circuit through the
-single `AppUpdateService.maybeCheck()` funnel. The `result` enum shows
-whether the check saw no change, found a new version, failed, or skipped
-because the service worker was not ready.
-
-**Properties:**
-
-| name | type | values |
-| --- | --- | --- |
-| reason | string | `init`, `visibility`, or `focus`. |
-| result | string | `noChange`, `newVersion`, `error`, or `swNotReady`. |
-
-**Measurements:**
-
-| name | type | meaning |
-| --- | --- | --- |
-| durationMs | number | Raw wall-clock duration from check start to settle or short-circuit. |
-
-#### `update.unrecoverable.event`
-
-**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
-
-Fires before `hardReload()` when Angular reports an unrecoverable
-service-worker state. The event keeps the analytics path closed-enum by
-bucketizing Angular's free-form reason into `reasonBucket`; the separate
-`update.unrecoverable` warning trace keeps the raw diagnostic text.
-
-**Properties:**
-
-| name | type | values |
-| --- | --- | --- |
-| reasonBucket | string | `hashMismatch`, `fetchFailed`, or `other`. |
+`LoggerService` does NOT auto-attach build identity (only
+`privacyInitializer` is registered with the SDK); these properties
+are passed explicitly so the `customDimensions.buildNumber`
+discriminator in saved KQL works.
 
 **Measurements:** none.
 
-#### `update.swState`
+#### `sw.activated`
 
 **Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
 
-Fires once per browser-side `AppUpdateService` init. It records whether
-Angular service-worker support is enabled and whether the page already
-has a controlling service worker, which helps distinguish fresh users
-from stale controlled sessions.
+Fired when the registered SW transitions to the `'activated'` state.
+This is THE canonical "migration succeeded" signal -- without it,
+`sw.registered` alone can't discriminate "registered but stuck in
+waiting" from "actually controlling clients."
+
+Closure-guarded so it fires at most once per `(page-load,
+SW-activation)` pair, and filtered by
+`sw.scriptURL.endsWith('/sw.js')` so the legacy SW being briefly
+`reg.active` mid-migration is not double-counted. An `updatefound`
+listener resets the guard so subsequent activations within the same
+page-load (e.g., a forced `reg.update()` returning new bytes) also
+re-fire.
+
+**Properties:** `version`, `sha`, `branch`, `buildNumber` (same
+contract as `sw.registered`). Saved KQL uses
+`customDimensions.buildNumber` (int) as the era discriminator.
+
+**Measurements:** none.
+
+#### `sw.registerFailed`
+
+**Kind:** warn   **Level:** warn   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired when `navigator.serviceWorker.register('/sw.js')` rejects.
 
 **Properties:**
 
 | name | type | values |
 | --- | --- | --- |
-| swEnabled | string | `true` or `false`. |
-| swHasController | string | `true` or `false`. |
+| version, sha, branch, buildNumber | string | Build identity (same contract as `sw.registered`). |
+| reason | string | Closed-enum 7-bucket classification: `security`, `syntax`, `fetch`, `type`, `network`, `abort`, `other`. |
+
+No raw error message (closed-enum dimensions per privacy contract).
+
+**Measurements:** none.
+
+#### `sw.legacyCacheWiped`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+THE canonical "stuck user successfully migrated" signal. The
+minimal SW writes an IndexedDB sentinel
+(`jotjson-sw-migration/sentinel/legacyCacheWiped`) on
+activate-with-non-empty-cache; the next boot of the new `main.ts`
+reads the sentinel via `readAndClearLegacyCacheSentinel()` and
+queues this event. The sentinel is deleted on read so the event
+fires exactly once per stuck-user migration.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| version, sha, branch, buildNumber | string | Build identity. |
+| browser | string | Closed-enum: `chrome`, `edge`, `firefox`, `safari`, `other`. |
+| os | string | Closed-enum: `windows`, `mac`, `linux`, `android`, `ios`, `other`. |
+
+`browser` and `os` discriminate stuck-cohort health by platform so
+cohort-specific regressions (e.g., a Safari Monaco bug) are visible
+even though the stuck cohort lands LAST on the new build.
 
 **Measurements:** none.
 
@@ -586,40 +596,61 @@ customEvents
             count_ = count()
 ```
 
-### Stale version diagnostics
+### SW migration verification
 
-After the "jotjson.com shows old version on new tab" fix shipped
-(issue #167), this query helps detect any residual stuck-user
-population by comparing recent boot SHAs with service-worker update
-signals.
+After the `@angular/service-worker` -> minimal pass-through SW
+migration (v0.29.0, issue #167), the queries below verify the
+stuck-cohort drain and detect regressions. The companion runbook
+lives at [`docs/sw-migration.md`](sw-migration.md).
 
 ```kusto
-// Are users stuck on old builds?
+// What fraction of sessions are running the post-migration SW?
 //
-// Inner: collect each toSha seen by `update.versionReady` (the SW
-// telling us "I have detected a newer build with this toSha"). Note
-// we deliberately do NOT include `update.applied` here: that event
-// only carries `{ trigger }`, not `toSha`, so joining on it would
-// collapse all its rows into an empty-string bucket.
-//
-// Outer: every recent `app.boot` sha. Left-join finds the latest
-// time we saw a `versionReady` toSha matching the user's bootSha.
-// `bootSha`s with no recent matching `versionReady` indicate users
-// who may be running a build no live SW has detected as the target.
+// IMPORTANT: ships with placeholder `cutoverBuildNumber = 999999999`.
+// Replace post-merge with the actual `git rev-list --count origin/main`
+// per the runbook. The LOUD fail-safe direction is deliberate: every
+// session lands in 'pre', so the dashboard reads 0% post-migration
+// after we just shipped the migration AND the scheduled alert fires
+// (every session matches `buildNumber < 999_999_999`). A `0`
+// placeholder would silently put every session in 'post' and silence
+// the alert -- inverted fail-safe.
+let cutoverBuildNumber = 999999999;  // <-- replace post-merge.
 customEvents
-| where name == "app.boot"
-| extend bootSha = tostring(customDimensions.sha)
-| where isnotempty(bootSha)
-| summarize lastSeen=max(timestamp), bootCount=count() by bootSha
-| join kind=leftouter (
-    customEvents
-    | where name == "update.versionReady"
-    | extend toSha = tostring(customDimensions.toSha)
-    | where isnotempty(toSha)
-    | summarize lastUpdate=max(timestamp) by toSha
-  ) on $left.bootSha == $right.toSha
-| where lastSeen > ago(7d)
-| order by lastSeen desc
+| where timestamp > ago(7d)
+| where name == "sw.activated"
+| extend buildNumber = toint(customDimensions.buildNumber)
+| where isnotnull(buildNumber)
+| summarize sessions = dcount(session_Id)
+            by bin(timestamp, 1d),
+               era = iff(buildNumber >= cutoverBuildNumber, "post", "pre")
+| order by timestamp desc
+```
+
+```kusto
+// Stuck-user migration signal: how many users completed the
+// `legacyCacheWiped` IDB-sentinel handshake in the last 7 days?
+// Bucketed by browser/os so a cohort-specific regression (e.g.,
+// Safari Monaco bug) shows up even though the stuck cohort lands
+// LAST on the new build.
+customEvents
+| where timestamp > ago(7d)
+| where name == "sw.legacyCacheWiped"
+| extend browser = tostring(customDimensions.browser),
+         os = tostring(customDimensions.os)
+| summarize sessions = dcount(session_Id) by browser, os
+| order by sessions desc
+```
+
+```kusto
+// SW registration failures by reason (closed-enum 7-bucket).
+// `syntax` is the §3c broken-SW canary; `security` indicates a
+// CSP / scope / cross-origin mismatch.
+customEvents
+| where timestamp > ago(7d)
+| where name == "sw.registerFailed"
+| extend reason = tostring(customDimensions.reason)
+| summarize sessions = dcount(session_Id) by reason
+| order by sessions desc
 ```
 
 ---

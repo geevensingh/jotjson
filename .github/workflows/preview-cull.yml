@@ -1,0 +1,76 @@
+name: Preview env - scheduled cull
+
+# ----------------------------------------------------------------------
+# Background housekeeping for stale per-PR preview environments on
+# `swa-jotjson-nonprod`. Belt-and-suspenders to the in-deploy cull step
+# in cd-preview.yml: bounds a missed-teardown leak (see PR #268 class
+# of failure) to at most ~24h regardless of PR cadence.
+#
+# Trigger: daily cron + manual workflow_dispatch for incident response.
+# The cron runs even when no PRs are being touched, so stale envs from
+# closed PRs that slip past the in-deploy cull (e.g., long quiet periods
+# with no internal PRs deploying) still get cleaned up within a day.
+#
+# Auth (Azure): federated SP `gh-actions-jotjson` via
+# `environment: nonprod` matching the federated cred
+# `repo:geevensingh/jotjson:environment:nonprod`. Role: Contributor on
+# `rg-jotjson-nonprod` only (same as cd-preview.yml).
+#
+# Implementation: shells out to scripts/cull-stale-previews.mjs (same
+# script the in-deploy step uses, so the two paths never drift). The
+# script writes a culled/kept/failed tally to $GITHUB_STEP_SUMMARY and
+# emits ::warning:: on partial failure; the cron job's exit code is the
+# script's exit code (0 = enumerated state successfully, even if some
+# individual deletes failed; non-zero = hard failure to read state).
+# ----------------------------------------------------------------------
+
+on:
+  schedule:
+    - cron: '17 4 * * *' # 04:17 UTC daily (off-peak, away from CI nights)
+  workflow_dispatch: # allow manual cull for incident response
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: read
+
+env:
+  COSMOS_ACCOUNT: cosmos-jotjson-nonprod
+  NONPROD_RG: rg-jotjson-nonprod
+  SWA_NAME: swa-jotjson-nonprod
+
+jobs:
+  cull:
+    name: Cull stale preview envs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: nonprod
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_NONPROD }}
+
+      - name: Cull stale preview envs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/cull-stale-previews.mjs \
+            --swa-name="$SWA_NAME" \
+            --rg="$NONPROD_RG" \
+            --cosmos-account="$COSMOS_ACCOUNT" \
+            --paired-cosmos
+
+      - name: Azure logout
+        if: ${{ always() }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true

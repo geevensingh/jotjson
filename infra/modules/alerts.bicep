@@ -173,3 +173,56 @@ AppEvents
     autoMitigate: true
   }
 }
+
+// SW migration verification alert. Fires hourly if any session
+// emits `sw.activated` with `buildNumber < cutoverBuildNumber`,
+// i.e. is still running the pre-migration build. The placeholder
+// `999999999` is the LOUD fail-safe direction: until backfilled
+// post-merge per docs/sw-migration.md, every session matches and
+// the alert fires on every evaluation. A backfilled value gives
+// a quiet alarm during normal operation and a loud alarm if a
+// stuck cohort plateaus above threshold.
+resource swMigrationStuckCohortAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
+  name: 'alert-${namePrefix}-sw-migration-stuck-cohort'
+  location: location
+  tags: tags
+  kind: 'LogAlert'
+  properties: {
+    description: 'JotJSON sessions still running pre-migration SW build. See docs/sw-migration.md for the cutover-backfill procedure and observation schedule.'
+    severity: 2
+    enabled: true
+    evaluationFrequency: 'PT1H'
+    windowSize: 'PT1H'
+    scopes: [
+      workspaceId
+    ]
+    criteria: {
+      allOf: [
+        {
+          query: '''
+let cutoverBuildNumber = 999999999;
+AppEvents
+| where TimeGenerated > ago(1h)
+| where Name == 'sw.activated'
+| extend buildNumber = toint(Properties.buildNumber)
+| where isnotnull(buildNumber)
+| where buildNumber < cutoverBuildNumber
+| summarize hourly = dcount(SessionId) '''
+          timeAggregation: 'Count'
+          threshold: 10
+          operator: 'GreaterThan'
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        actionGroupId
+      ]
+    }
+    autoMitigate: true
+  }
+}
