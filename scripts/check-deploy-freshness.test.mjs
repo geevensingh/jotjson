@@ -78,6 +78,19 @@ test('parseCliOptions rejects non-https origins', () => {
   );
 });
 
+test('parseCliOptions rejects unknown arguments', () => {
+  // Regression test for the post-PR-#330 CI break: the workflow
+  // callsites were passing `--expected-sha=<sha>`, but the script's
+  // strict `requireNoUnknownArgs` rejects anything outside `--origin`
+  // / `--local-sw`. Asserting the rejection prevents a future
+  // re-introduction of unknown flags from going unnoticed at PR-review
+  // time. See `.github/workflows/cd.yml` -- "Check deploy freshness".
+  assert.throws(
+    () => parseCliOptions(['--expected-sha=abc123', '--origin=https://example.com'], {}),
+    /Unknown argument '--expected-sha=abc123'/,
+  );
+});
+
 test('waitForPropagation retries until the SW body byte-matches', async () => {
   const fetchUrls = [];
   const delays = [];
