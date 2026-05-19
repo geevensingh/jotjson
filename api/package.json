@@ -1,6 +1,6 @@
 {
   "name": "jotjson-api",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "JotJSON API - Azure Functions (Node.js v4, TypeScript). Deployed as SWA managed functions.",
   "private": true,
   "main": "dist/src/functions/*.js",
