@@ -13,9 +13,12 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
 import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 
+import { TitleStrategy } from '@angular/router';
 import { routes } from './app.routes';
 import { AuthService } from './core/auth/auth.service';
 import { MSAL_INSTANCE, createMsalInstance } from './core/auth/msal-instance';
+import { provideEnvIndicatorInitializer } from './core/env/env-indicator.initializer';
+import { EnvPrefixedTitleStrategy } from './core/env/env-prefixed-title-strategy';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { TelemetryErrorHandler } from './core/telemetry/error-handler';
@@ -46,6 +49,12 @@ export const sharedProviders: Array<Provider | EnvironmentProviders> = [
   provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
   provideAnimationsAsync(),
   { provide: ErrorHandler, useClass: TelemetryErrorHandler },
+  // Custom TitleStrategy that prefixes every route-declared title
+  // with `[<env-label>] ` on nonprod / preview / dev / unknown
+  // hosts. Lives in `sharedProviders` so prerender goes through the
+  // same path -- on server platform, EnvLabelService returns 'prod'
+  // and withPrefix() is identity, so SSR output is unchanged.
+  { provide: TitleStrategy, useClass: EnvPrefixedTitleStrategy },
   // Hide the Material 17+ selection-indicator checkmark on every
   // mat-button-toggle-group. Selection is already conveyed by the
   // highlighted background, and the indicator wastes ~24px per
@@ -72,6 +81,13 @@ export const appConfig: ApplicationConfig = {
     { provide: MSAL_INSTANCE, useFactory: createMsalInstance },
     MsalService,
     MsalBroadcastService,
+    // Env-indicator favicon swap. Runs BEFORE the auth initializer so MSAL's
+    // `handleRedirectPromise()` (which can take hundreds of ms on a
+    // returning redirect) does not delay the visual indicator. Synchronous
+    // and non-blocking; the inline pre-bootstrap script in `src/index.html`
+    // does the same swap earlier (this initializer is the Angular-side
+    // idempotent safety net).
+    provideEnvIndicatorInitializer(),
     // Block Angular bootstrap until MSAL has processed any returning redirect
     // and primed `AuthService.userSignal` from its account cache. Without
     // this, the router begins activating routes (and resolvers fire HTTP

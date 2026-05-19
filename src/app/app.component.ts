@@ -1,6 +1,7 @@
 import { isPlatformBrowser } from '@angular/common';
 import { afterNextRender, Component, inject, Injector, OnInit, PLATFORM_ID } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { EnvLabelService } from './core/env/env-label.service';
 import { LoadingSplashService } from './core/loading-splash/loading-splash.service';
 import { NavigationProgressService } from './core/navigation/navigation-progress.service';
 import { RouteFocusService } from './core/navigation/route-focus.service';
@@ -128,6 +129,7 @@ export class AppComponent implements OnInit {
       // before telemetry is ready.
       routeTracker.start();
       const loggerService = this.injector.get(loggerModule.LoggerService);
+      const envLabel = this.injector.get(EnvLabelService);
       loggerService.event(
         'app.boot',
         {
@@ -135,6 +137,7 @@ export class AppComponent implements OnInit {
           sha: buildInfoModule.BUILD_INFO.sha,
           branch: buildInfoModule.BUILD_INFO.branch,
           buildNumber: buildInfoModule.BUILD_INFO.buildNumber,
+          envLabel: envLabel.label,
         },
         undefined,
       );
