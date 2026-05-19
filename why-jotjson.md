@@ -233,8 +233,8 @@ is closed-enum counts only - never your keys, values, paths, or text.
 ## Install it
 
 JotJSON is a Progressive Web App. Install it from the browser's address
-bar to get a standalone window that works offline; previously opened blobs
-and queued local changes drain when you come back online.
+bar to get a standalone window pinned to your taskbar or dock; previously
+opened blobs and queued local changes drain when you come back online.
 
 ---
 

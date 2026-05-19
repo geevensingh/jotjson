@@ -60,7 +60,6 @@
               ],
               "outputHashing": "all",
               "sourceMap": true,
-              "serviceWorker": "ngsw-config.json",
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",

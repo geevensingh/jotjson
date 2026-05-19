@@ -3410,19 +3410,30 @@ export class JsonTreeComponent {
       DecodedValueDialogResult
     >(DecodedValueDialogComponent, {
       data,
-      // Viewport-relative width follows the v0.23.1 tree-value tooltip
-      // approach in `src/styles/_material.scss` (the `.jj-tooltip-wide`
-      // surface uses `max-width: 90vw` and rejects fixed pixel caps).
-      // Tooltips and this dialog are two tiers of viewer for the same
-      // content kind (long monospace strings); the dialog is the
-      // committed-inspection mode, so the same percentage-only rule
-      // applies here. Other MatDialog callers in this app (history,
-      // blobs, formatting-rules, etc.) keep their fixed `420px` form
-      // dialogs; this pattern is specific to dialogs rendering
-      // pre-wrap monospace user content where horizontal real estate
-      // matters.
-      width: '90vw',
-      maxWidth: '95vw',
+      // Width sizes to content with `max-width: 90vw` as the cap,
+      // mirroring the height model (`max-height: 70vh; overflow: auto`
+      // on `.decoded-content`). This aligns the dialog with the
+      // `.jj-tooltip-wide` rule in `src/styles/_material.scss` (which
+      // also uses `max-width: 90vw` and no fixed `width`); tooltips
+      // and this dialog are two tiers of viewer for the same content
+      // kind (long monospace strings), so they share the cap-only
+      // sizing model. Prior versions (<= v0.23.x) pinned `width:
+      // '90vw'`, which made narrow escaped strings render in a very
+      // wide dialog.
+      //
+      // Floor note: Material 21's M3 dialog tokens still impose
+      // `min-width: 280px` on `.cdk-overlay-pane.mat-mdc-dialog-panel`
+      // via `--mat-dialog-container-min-width` (see
+      // `node_modules/@angular/material/dialog/_m3-dialog.scss:21`).
+      // We do not override that token here because the action row's
+      // intrinsic width (Copy + Close ~= 330px; Extract + Copy +
+      // Close ~= 450px) is always wider than 280px, so the M3 floor
+      // never effectively bites for this dialog. Other MatDialog
+      // callers (history, blobs, formatting-rules, etc.) keep their
+      // fixed `420px` form-dialog widths; this content-sized pattern
+      // is specific to viewers rendering pre-wrap monospace user
+      // content where horizontal real estate matters.
+      maxWidth: '90vw',
       autoFocus: 'dialog',
     });
     dialogRef

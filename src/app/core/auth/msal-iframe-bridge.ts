@@ -8,12 +8,12 @@
 //
 // Caveat (skeptic Medium #4): the early-return in main.ts skips
 // bootstrapApplication and the entire provider tree instantiation
-// (router, AppUpdateService, MSAL provider factory, APP_INITIALIZER,
-// SW registration). It does NOT skip parse of `AppComponent`,
-// `appConfig`, and their transitive imports - those static imports at
-// the top of main.ts evaluate on every load. If measured impact
-// warrants it later, a pre-bootstrap inline script in index.html
-// could push detection even earlier; deferred until measured.
+// (router, MSAL provider factory, APP_INITIALIZER, SW registration).
+// It does NOT skip parse of `AppComponent`, `appConfig`, and their
+// transitive imports - those static imports at the top of main.ts
+// evaluate on every load. If measured impact warrants it later, a
+// pre-bootstrap inline script in index.html could push detection
+// even earlier; deferred until measured.
 
 import type { broadcastResponseToMainFrame } from '@azure/msal-browser/redirect-bridge';
 
