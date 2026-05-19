@@ -11,6 +11,7 @@ describe('EnvLabelService', () => {
     });
     const service = TestBed.inject(EnvLabelService);
     expect(service.label).toBe('prod');
+    expect(service.prNumber).toBeNull();
     expect(service.withPrefix('Blobs - JotJSON')).toBe('Blobs - JotJSON');
   });
 
@@ -18,6 +19,8 @@ describe('EnvLabelService', () => {
     TestBed.configureTestingModule({});
     const service = TestBed.inject(EnvLabelService);
     expect(service.label).toBe('dev');
+    // Karma serves on localhost; not a preview host -> no PR number.
+    expect(service.prNumber).toBeNull();
   });
 
   it('withPrefix is identity on prod', () => {

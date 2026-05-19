@@ -1,4 +1,4 @@
-import { NONPROD_SWA_STEM, getEnvLabel, type EnvLabel } from './env-label';
+import { NONPROD_SWA_STEM, getEnvLabel, getPreviewPrNumber, type EnvLabel } from './env-label';
 
 describe('getEnvLabel', () => {
   // Stem-drift guard. If this fails, update infra/README.md's nonprod
@@ -33,13 +33,41 @@ describe('getEnvLabel', () => {
       expected: 'nonprod',
     },
 
-    // preview: stem + `-<slug>` (SWA preview-env shape)
+    // preview: stem + `-<slug>` (SWA preview-env shape).
+    //
+    // Keep the legacy `-pr-<n>` form as classifier-only coverage:
+    // Azure historically may have emitted that shape (and could
+    // again if deployment_environment naming changes). The
+    // `getPreviewPrNumber` block below verifies that the same row
+    // returns `null` -- the indicator falls back to plain
+    // `[preview]` for slugs that don't match the strict numeric
+    // contract.
     {
       hostname: 'calm-flower-01969880f-pr-123.eastus2.7.azurestaticapps.net',
       expected: 'preview',
     },
     {
       hostname: 'calm-flower-01969880f-pr-1.westus2.azurestaticapps.net',
+      expected: 'preview',
+    },
+    // Actual Azure URL shape today: `<stem>-<pr-number>.<region>...`.
+    // cd-preview.yml's `PREVIEW_ENV: pr-${{ pull_request.number }}`
+    // is passed to Azure SWA as `deployment_environment`; Azure
+    // strips the `pr-` prefix.
+    {
+      hostname: 'calm-flower-01969880f-123.eastus2.7.azurestaticapps.net',
+      expected: 'preview',
+    },
+    // Non-numeric slug (e.g., a manually-named SWA preview slot)
+    // still classifies as preview but yields null PR number below.
+    {
+      hostname: 'calm-flower-01969880f-staging.eastus2.7.azurestaticapps.net',
+      expected: 'preview',
+    },
+    // Multi-segment slug (`1-2`) -- pins the contract that the
+    // regex captures up to the first `.`, not greedily past `-`.
+    {
+      hostname: 'calm-flower-01969880f-1-2.eastus2.7.azurestaticapps.net',
       expected: 'preview',
     },
 
@@ -70,4 +98,56 @@ describe('getEnvLabel', () => {
   it('rejects a hostname that contains the stem but does not start with it', () => {
     expect(getEnvLabel('attacker-calm-flower-01969880f.7.azurestaticapps.net')).toBe('unknown');
   });
+});
+
+describe('getPreviewPrNumber', () => {
+  const prCases: ReadonlyArray<{ hostname: string; expected: number | null }> = [
+    // Canonical Azure preview shape: stem + `-<number>.<region>.azurestaticapps.net`.
+    { hostname: 'calm-flower-01969880f-1.eastus2.7.azurestaticapps.net', expected: 1 },
+    { hostname: 'calm-flower-01969880f-7.eastus2.7.azurestaticapps.net', expected: 7 },
+    { hostname: 'calm-flower-01969880f-123.eastus2.7.azurestaticapps.net', expected: 123 },
+    { hostname: 'calm-flower-01969880f-332.eastus2.7.azurestaticapps.net', expected: 332 },
+    { hostname: 'calm-flower-01969880f-9999.westus2.azurestaticapps.net', expected: 9999 },
+
+    // Legacy `-pr-<n>` shape -> null (the indicator falls back to
+    // `[preview]`). The classifier above still returns 'preview' for
+    // these, but no per-PR rendering happens.
+    {
+      hostname: 'calm-flower-01969880f-pr-123.eastus2.7.azurestaticapps.net',
+      expected: null,
+    },
+    {
+      hostname: 'calm-flower-01969880f-pr-1.westus2.azurestaticapps.net',
+      expected: null,
+    },
+
+    // Non-numeric slug -> null. Manually-named SWA preview slots
+    // (e.g., `staging`, `feature-x`) keep the plain `[preview]`
+    // indicator.
+    {
+      hostname: 'calm-flower-01969880f-staging.eastus2.7.azurestaticapps.net',
+      expected: null,
+    },
+
+    // Multi-segment slug (`1-2`) -> null. Pins the no-greedy-overflow
+    // contract: the regex requires `.` immediately after the digits.
+    {
+      hostname: 'calm-flower-01969880f-1-2.eastus2.7.azurestaticapps.net',
+      expected: null,
+    },
+
+    // Non-preview hosts -> null.
+    { hostname: 'jotjson.com', expected: null },
+    { hostname: 'www.jotjson.com', expected: null },
+    { hostname: 'localhost', expected: null },
+    { hostname: 'calm-flower-01969880f.eastus2.7.azurestaticapps.net', expected: null },
+    { hostname: 'example.com', expected: null },
+    { hostname: '', expected: null },
+  ];
+
+  for (const { hostname, expected } of prCases) {
+    it(`extracts ${expected ?? 'null'} from "${hostname}"`, () => {
+      expect(getPreviewPrNumber(hostname)).toBe(expected);
+    });
+  }
 });

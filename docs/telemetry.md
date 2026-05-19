@@ -936,6 +936,27 @@ exceptions
 | order by timestamp desc
 ```
 
+### Preview per-PR title regression detector
+
+`app.boot` emits `previewHasPrNumber: 'true' | 'false'` only when
+`envLabel === 'preview'`. A sudden spike of `'false'` on preview
+means Azure or `.github/workflows/cd-preview.yml` changed the
+preview-URL slug shape and the per-PR indicator silently regressed
+to plain `[preview]`.
+
+```kusto
+customEvents
+| where timestamp > ago(7d)
+| where name == "app.boot"
+| where customDimensions.envLabel == "preview"
+| summarize
+    total = count(),
+    withPr = countif(customDimensions.previewHasPrNumber == "true"),
+    withoutPr = countif(customDimensions.previewHasPrNumber == "false")
+    by bin(timestamp, 1h)
+| order by timestamp desc
+```
+
 ### Slowest API dependencies, p95
 
 ```kusto

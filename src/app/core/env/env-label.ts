@@ -40,6 +40,33 @@ export const NONPROD_SWA_STEM = 'calm-flower-01969880f';
 
 const SWA_HOSTNAME_SUFFIX = '.azurestaticapps.net';
 
+// Static load-time assertion that `NONPROD_SWA_STEM` contains no regex
+// metacharacters. `PREVIEW_PR_RE` below interpolates the stem unescaped;
+// if Azure ever recreates the SWA with a stem containing `.+*?()[]\^$|`,
+// the regex would silently match the wrong thing. Fails loud at module
+// load so a future stem change cannot quietly corrupt the indicator.
+const REGEX_META_RE = /[.+*?()[\]\\^$|]/;
+if (REGEX_META_RE.test(NONPROD_SWA_STEM)) {
+  throw new Error(
+    `NONPROD_SWA_STEM contains a regex metacharacter and would corrupt PREVIEW_PR_RE: ` +
+      `${NONPROD_SWA_STEM}. Escape the stem before interpolation in env-label.ts.`,
+  );
+}
+
+/**
+ * Matches SWA preview hostnames that carry a PR number in the slug.
+ *
+ * Azure SWA emits preview URLs as
+ * `${NONPROD_SWA_STEM}-<previewname>.<region>.azurestaticapps.net`,
+ * stripping the `pr-` prefix from cd-preview.yml's `PREVIEW_ENV`
+ * (`pr-${{ pull_request.number }}` at
+ * `.github/workflows/cd-preview.yml:95`). The capture group is the
+ * PR number; non-numeric slugs (e.g. `-staging`) and multi-segment
+ * slugs (e.g. `-1-2`) deliberately fail to match and fall back to
+ * the plain `[preview]` indicator.
+ */
+const PREVIEW_PR_RE = new RegExp(`^${NONPROD_SWA_STEM}-(\\d+)\\.`);
+
 /**
  * Classify a hostname into a coarse environment label.
  *
@@ -59,4 +86,29 @@ export function getEnvLabel(hostname: string): EnvLabel {
     if (stem.startsWith(`${NONPROD_SWA_STEM}-`)) return 'preview';
   }
   return 'unknown';
+}
+
+/**
+ * Extract the PR number from a SWA preview hostname.
+ *
+ * Returns `null` when the hostname is not a preview hostname, or
+ * when the slug between the stem and the next `.` is not a single
+ * positive integer. Callers should fall back to the plain
+ * `[preview]` indicator in the null case.
+ *
+ * The regex is intentionally strict (`^stem-(\d+)\.`): it rejects
+ * non-numeric slugs (`-staging`), multi-segment slugs (`-1-2`),
+ * and the legacy `-pr-<n>` shape (older Azure SWA preview slots
+ * that did not strip the `pr-` prefix). All three fall back to
+ * the unprefixed `[preview]` indicator.
+ */
+export function getPreviewPrNumber(hostname: string): number | null {
+  if (!hostname) return null;
+  const match = PREVIEW_PR_RE.exec(hostname);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[1], 10);
+  // PR numbers cannot be 0; reject 0 / negative / NaN as corruption
+  // and fall back to [preview]. Azure cannot emit 0 in the slug
+  // because GitHub PR numbers start at 1, but defensive guard.
+  return parsed > 0 ? parsed : null;
 }
