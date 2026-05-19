@@ -1142,10 +1142,23 @@ ran) and ask whether to revert, follow-up-fix, or accept.
 
 ## 9. Scope Discipline
 
-- Make surgical changes that fully address the request. Do not refactor
-  unrelated code, rename files, or reformat untouched areas.
+- **Scope discipline governs plan execution, not option weighing.**
+  Once a plan is approved, stick to it: make surgical changes that
+  fully address the request, and do not refactor unrelated code,
+  rename files, or reformat untouched areas. This rule does **not**
+  apply to the option-weighing / recommendation phase -- see §11
+  "Don't default to the minimal change".
+- **Plans must scope to the user's stated request plus tightly-
+  coupled work.** A plan can legitimately include a larger, cleaner
+  refactor when the refactor is on the path of the request or
+  genuinely tightly coupled to it. Refactors of code **not** on
+  that path require the user to explicitly request or accept the
+  refactor as scope -- not just rubber-stamp a plan that happens
+  to include it. The user's described scope is the **outer** bound
+  on what the agent recommends; "architecturally correct" is not
+  a license to inflate beyond architectural necessity.
 - If you find a tightly-coupled bug caused by the code you're changing, fix it.
-  Otherwise, note it and move on.
+  Otherwise, file an issue and move on.
 - Prefer ecosystem tooling (`ng generate`, `npm init`, codemods) over manual
   file creation.
 
@@ -1162,7 +1175,15 @@ ran) and ask whether to revert, follow-up-fix, or accept.
   "execute", "approved, please ship", "go ahead" -- before touching
   code. Picking option B from a multiple-choice you offered is the user
   choosing a direction, not authorizing the change.
-- Prefer the simpler, spec-aligned option over a clever alternative.
+- **Prefer the simpler, spec-aligned option over a clever
+  alternative.** "Simpler" means less mechanical complexity --
+  fewer special cases, less hidden state, less reader cognitive
+  load -- **not** smaller diff. A clean refactor with more lines
+  changed is often simpler than a patch that layers a workaround
+  on a workaround. `DESIGN_SPEC.md` alignment still wins over
+  "architecturally cleaner" when the two conflict (§1 source of
+  truth). See §11 "Don't default to the minimal change" for the
+  related rule on option-weighing.
 
 ## 11. Planning, Critical Thinking & Proactive Feedback
 
@@ -1288,7 +1309,15 @@ ran) and ask whether to revert, follow-up-fix, or accept.
     explicit adversarial framing ("find at least one weakness; if
     you genuinely cannot, say so explicitly"), and (b) be quoted
     (or summarized in one line if long) in the plan alongside the
-    findings so its quality is auditable.
+    findings so its quality is auditable. (c) For plans that
+    present two or more architectural options, the prompt must
+    explicitly include the principle that "smaller diff is not by
+    itself a recommendation argument" and that any scope-separation
+    finding must rest on a substantive architectural reason. This
+    prevents the critic from generating bare "do not fold X"
+    verdicts that the calling agent would then have to discount
+    during option weighing (see "Don't default to the minimal
+    change" above).
 
   - **Critic invocation failure is not a fallback.** If the critic
     invocation times out, errors, or is refused, surface the
@@ -1427,6 +1456,52 @@ ran) and ask whether to revert, follow-up-fix, or accept.
   the concern, explain it, and let the user decide. After the user
   decides, follow their decision unless they ask you to push back
   again.
+- **Don't default to the minimal change.** Recommending the smaller
+  of two competing options because it has less churn is risk-
+  aversion masquerading as pragmatism. Judge options on long-term
+  architectural fit, not diff size. **This rule is bidirectional:**
+  it forbids defaulting to the smaller option on diff-size grounds,
+  but equally forbids inflating scope beyond architectural
+  necessity. "Architecturally correct" is the option that fits
+  long-term structure -- sometimes that is the smaller change,
+  sometimes the larger; the rule is about reasoning on fit, not
+  on size in either direction.
+
+  When recommending the smaller of competing options, the
+  rationale must reference a long-term architectural property of
+  the codebase (module boundary, stored shape, dependency
+  direction, release-cadence separation, code-owner separation)
+  -- not a tactical property of the change (size, churn, risk of
+  breakage, "captures most of the benefit", "minimal / surgical /
+  conservative path"). Tactical phrasings like those are a tell
+  that the reasoning is size-based, not fit-based; treat them as
+  exemplars rather than an exhaustive list and stop to re-evaluate
+  whenever your reasoning leans on any equivalent framing.
+
+  Present the architecturally-correct option as the recommendation;
+  the user can still choose the conservative path, but they should
+  choose it knowingly, not because the recommendation pre-baked
+  the bias. The user's described scope sets the **outer** bound
+  on what gets recommended -- if the architecturally-cleaner
+  option exceeds that scope, present the in-scope option as the
+  recommendation **and** call out the larger option as out-of-
+  scope work the user can choose to fold in.
+
+  This rule applies to the option-weighing / recommendation phase
+  only; once a plan is approved, §9 Scope Discipline still governs
+  execution. It does **not** alter §8 PR-review-feedback handling:
+  reviewer comments proposing refactors remain out-of-scope per
+  §8 unless the user has authorized expanding the PR's scope.
+
+  Rubber-duck critic findings (e.g., a `:architect` "file Y as a
+  separate follow-up issue" remark) carry no special authority
+  here. They are proposals to be evaluated on merit per the
+  existing §11 `ADOPT / SET ASIDE / OUT OF SCOPE` classification
+  -- the *architectural* reason for separation is what matters
+  (independent module, different stored shape, different release
+  cadence, different code owner). A bare scope-separation verdict
+  without a substantive architectural reason is not a
+  recommendation argument.
 - Critical thinking applies to your own prior recommendations too.
   If new evidence (test output, file contents, a rubber-duck review,
   a user correction) suggests an earlier suggestion was wrong,
