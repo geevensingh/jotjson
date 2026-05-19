@@ -11,6 +11,7 @@ import { test } from 'node:test';
 
 import {
   cullStalePreviews,
+  getPrState,
   isStaleEnvName,
   parseCliOptions,
   pickCullable,
@@ -30,8 +31,13 @@ function silentLogger() {
   };
 }
 
+// makeRunner builds a mock spawnSync runner that dispatches by predicate.
+// Each entry's `match(file, args) => bool` is evaluated in order; the
+// first match wins. The mock supports the per-PR `gh pr view <n>` path
+// added in PR #329's review-feedback fix: tests pass an explicit
+// matcher per PR number, so a missing matcher throws and surfaces a
+// dispatch gap immediately.
 function makeRunner(plan) {
-  // plan is an array of { match: (file, args) => bool, response: { status, stdout?, stderr? } }
   const calls = [];
   const runner = (file, args) => {
     calls.push({ file, args });
@@ -49,6 +55,30 @@ function makeRunner(plan) {
   return { runner, calls };
 }
 
+function ghPrViewMatcher(prNumber) {
+  return (file, args) =>
+    file === 'gh' && args[0] === 'pr' && args[1] === 'view' && args[2] === String(prNumber);
+}
+
+function swaListMatcher() {
+  return (file, args) =>
+    file === 'az' && args[0] === 'staticwebapp' && args[1] === 'environment' && args[2] === 'list';
+}
+
+function swaDeleteMatcher() {
+  return (file, args) =>
+    file === 'az' &&
+    args[0] === 'staticwebapp' &&
+    args[1] === 'environment' &&
+    args[2] === 'delete';
+}
+
+function cosmosDeleteMatcher() {
+  return (file, args) => file === 'az' && args[0] === 'cosmosdb' && args.includes('delete');
+}
+
+// --- parseCliOptions --------------------------------------------------
+
 test('parseCliOptions accepts all valid flags and validates required ones', () => {
   const options = parseCliOptions([
     '--swa-name=swa-x',
@@ -60,12 +90,25 @@ test('parseCliOptions accepts all valid flags and validates required ones', () =
     swaName: 'swa-x',
     resourceGroup: 'rg-x',
     cosmosAccount: 'cos-x',
+    skipEnv: '',
     dryRun: false,
     pairedCosmos: true,
   });
 });
 
-test('parseCliOptions throws when --swa-name is missing', () => {
+test('parseCliOptions accepts space-separated flag values', () => {
+  // PR #329 review: `--swa-name foo` previously hit the "Missing required
+  // flag" path; now mirrors the `--swa-name=foo` form.
+  const options = parseCliOptions(['--swa-name', 'swa-x', '--rg', 'rg-x']);
+  assert.equal(options.swaName, 'swa-x');
+  assert.equal(options.resourceGroup, 'rg-x');
+});
+
+test('parseCliOptions throws when --swa-name has no value (bare flag at end)', () => {
+  assert.throws(() => parseCliOptions(['--rg=rg-x', '--swa-name']), /Missing value for --swa-name/);
+});
+
+test('parseCliOptions throws when --swa-name is missing entirely', () => {
   assert.throws(() => parseCliOptions(['--rg=rg-x']), /--swa-name/);
 });
 
@@ -97,6 +140,20 @@ test('parseCliOptions rejects empty flag values', () => {
   assert.throws(() => parseCliOptions(['--swa-name=', '--rg=rg-x']), /Empty value.*--swa-name/);
 });
 
+test('parseCliOptions rejects empty --skip-env value', () => {
+  assert.throws(
+    () => parseCliOptions(['--swa-name=swa-x', '--rg=rg-x', '--skip-env=']),
+    /Empty value.*--skip-env/,
+  );
+});
+
+test('parseCliOptions accepts --skip-env=<n>', () => {
+  const options = parseCliOptions(['--swa-name=swa-x', '--rg=rg-x', '--skip-env=329']);
+  assert.equal(options.skipEnv, '329');
+});
+
+// --- isStaleEnvName / pickCullable -----------------------------------
+
 test('isStaleEnvName matches bare numeric env names only', () => {
   assert.equal(isStaleEnvName('268'), true);
   assert.equal(isStaleEnvName('1'), true);
@@ -110,61 +167,148 @@ test('isStaleEnvName matches bare numeric env names only', () => {
 });
 
 test('pickCullable returns SKIP for non-numeric env names', () => {
-  const decision = pickCullable('default', new Map());
+  const decision = pickCullable('default', null);
   assert.equal(decision.action, 'skip');
 });
 
+test('pickCullable returns SKIP when env is in skipSet', () => {
+  const decision = pickCullable('329', { ok: true, state: 'OPEN' }, new Set(['329']));
+  assert.equal(decision.action, 'skip');
+  assert.match(decision.reason, /--skip-env/);
+});
+
 test('pickCullable returns KEEP for OPEN PRs', () => {
-  const prMap = new Map([[268, 'OPEN']]);
-  const decision = pickCullable('268', prMap);
+  const decision = pickCullable('268', { ok: true, state: 'OPEN' });
   assert.equal(decision.action, 'keep');
   assert.match(decision.reason, /OPEN/);
 });
 
 test('pickCullable returns CULL for CLOSED PRs', () => {
-  const prMap = new Map([[268, 'CLOSED']]);
-  const decision = pickCullable('268', prMap);
+  const decision = pickCullable('268', { ok: true, state: 'CLOSED' });
   assert.equal(decision.action, 'cull');
   assert.match(decision.reason, /CLOSED/);
 });
 
 test('pickCullable returns CULL for MERGED PRs', () => {
-  const prMap = new Map([[317, 'MERGED']]);
-  const decision = pickCullable('317', prMap);
+  const decision = pickCullable('317', { ok: true, state: 'MERGED' });
   assert.equal(decision.action, 'cull');
   assert.match(decision.reason, /MERGED/);
 });
 
-test('pickCullable returns KEEP defensively when PR is not in the list', () => {
-  const decision = pickCullable('999', new Map());
+test('pickCullable returns KEEP defensively when PR does not exist (definitive not-found)', () => {
+  const decision = pickCullable('999', {
+    ok: false,
+    transient: false,
+    reason: 'PR #999 does not exist on this repo (anomalous; keeping env defensively)',
+  });
   assert.equal(decision.action, 'keep');
-  assert.match(decision.reason, /not found/);
+  assert.match(decision.reason, /does not exist/);
 });
 
-test('cullStalePreviews keeps OPEN PRs, culls CLOSED/MERGED PRs, skips default', async () => {
-  const prListJson = JSON.stringify([
-    { number: 268, state: 'CLOSED' },
-    { number: 299, state: 'OPEN' },
-    { number: 317, state: 'MERGED' },
+test('pickCullable returns FAIL on transient gh failure', () => {
+  const decision = pickCullable('268', {
+    ok: false,
+    transient: true,
+    reason: 'gh pr view 268 failed (exit 1): network error',
+  });
+  assert.equal(decision.action, 'fail');
+  assert.match(decision.reason, /network error/);
+});
+
+test('pickCullable returns KEEP on unrecognized PR state', () => {
+  const decision = pickCullable('268', { ok: true, state: 'DRAFT' });
+  assert.equal(decision.action, 'keep');
+  assert.match(decision.reason, /unrecognized/);
+});
+
+// --- getPrState ------------------------------------------------------
+
+test('getPrState returns ok=true with state on gh success', () => {
+  const { runner } = makeRunner([
+    {
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
+    },
   ]);
+  const result = getPrState(268, runner);
+  assert.deepEqual(result, { ok: true, state: 'CLOSED' });
+});
+
+test('getPrState returns ok=false transient=false on definitive not-found', () => {
+  const { runner } = makeRunner([
+    {
+      match: ghPrViewMatcher(999),
+      response: {
+        status: 1,
+        stderr: 'GraphQL: Could not resolve to a PullRequest with the number of 999.',
+      },
+    },
+  ]);
+  const result = getPrState(999, runner);
+  assert.equal(result.ok, false);
+  assert.equal(result.transient, false);
+  assert.match(result.reason, /does not exist/);
+});
+
+test('getPrState returns ok=false transient=true on network failure', () => {
+  const { runner } = makeRunner([
+    {
+      match: ghPrViewMatcher(268),
+      response: { status: 1, stderr: 'connection refused' },
+    },
+  ]);
+  const result = getPrState(268, runner);
+  assert.equal(result.ok, false);
+  assert.equal(result.transient, true);
+  assert.match(result.reason, /connection refused/);
+});
+
+test('getPrState returns ok=false transient=true on malformed JSON', () => {
+  const { runner } = makeRunner([
+    {
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: 'not-json{' },
+    },
+  ]);
+  const result = getPrState(268, runner);
+  assert.equal(result.ok, false);
+  assert.equal(result.transient, true);
+  assert.match(result.reason, /invalid JSON/);
+});
+
+test('getPrState returns ok=false transient=true on unrecognized state', () => {
+  const { runner } = makeRunner([
+    {
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'DRAFT' }) },
+    },
+  ]);
+  const result = getPrState(268, runner);
+  assert.equal(result.ok, false);
+  assert.equal(result.transient, true);
+  assert.match(result.reason, /unexpected JSON/);
+});
+
+// --- cullStalePreviews -----------------------------------------------
+
+test('cullStalePreviews keeps OPEN PRs, culls CLOSED/MERGED PRs, skips default', async () => {
   const swaListOutput = ['default', '268', '299', '317'].join('\n');
   const { runner, calls } = makeRunner([
     {
-      match: (file, args) => file === 'gh' && args[0] === 'pr',
-      response: { status: 0, stdout: prListJson },
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
     },
     {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'list',
-      response: { status: 0, stdout: swaListOutput },
+      match: ghPrViewMatcher(299),
+      response: { status: 0, stdout: JSON.stringify({ state: 'OPEN' }) },
     },
     {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'delete',
-      response: { status: 0, stdout: '' },
+      match: ghPrViewMatcher(317),
+      response: { status: 0, stdout: JSON.stringify({ state: 'MERGED' }) },
     },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'cosmosdb',
-      response: { status: 0, stdout: '' },
-    },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
+    { match: swaDeleteMatcher(), response: { status: 0, stdout: '' } },
+    { match: cosmosDeleteMatcher(), response: { status: 0, stdout: '' } },
   ]);
 
   const logger = silentLogger();
@@ -174,6 +318,7 @@ test('cullStalePreviews keeps OPEN PRs, culls CLOSED/MERGED PRs, skips default',
       swaName: SWA_NAME,
       resourceGroup: RESOURCE_GROUP,
       cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
       dryRun: false,
       pairedCosmos: true,
     },
@@ -185,67 +330,106 @@ test('cullStalePreviews keeps OPEN PRs, culls CLOSED/MERGED PRs, skips default',
     },
   });
 
-  assert.deepEqual(result, { culled: 2, kept: 1, skipped: 1, failed: 0 });
-  // Verify one SWA delete per culled env (268, 317) and one Cosmos delete per culled env
+  assert.deepEqual(result, {
+    culled: 2,
+    kept: 1,
+    skipped: 1,
+    failed: 0,
+    systemicFailure: false,
+  });
   const deleteCalls = calls.filter((c) => c.file === 'az' && c.args[2] === 'delete');
   assert.equal(deleteCalls.length, 2);
   const cosmosCalls = calls.filter((c) => c.file === 'az' && c.args[0] === 'cosmosdb');
   assert.equal(cosmosCalls.length, 2);
-  // Summary should be written exactly once
   assert.equal(summaryEntries.length, 1);
   assert.match(summaryEntries[0].content, /culled=2 kept=1 skipped=1 failed=0/);
 });
 
-test('cullStalePreviews dry-run does not call delete commands', async () => {
-  const prListJson = JSON.stringify([{ number: 268, state: 'CLOSED' }]);
-  const swaListOutput = '268\n';
+test('cullStalePreviews honors --skip-env (current PR own env)', async () => {
+  // Scenario: cd-preview is deploying PR #329, which has just been
+  // closed (race). Without --skip-env, cull would delete its own env
+  // mid-deploy. With --skip-env=329, the deploy's own env is skipped.
+  const swaListOutput = ['default', '268', '329'].join('\n');
   const { runner, calls } = makeRunner([
     {
-      match: (file, args) => file === 'gh' && args[0] === 'pr',
-      response: { status: 0, stdout: prListJson },
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
     },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'list',
-      response: { status: 0, stdout: swaListOutput },
-    },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
+    { match: swaDeleteMatcher(), response: { status: 0, stdout: '' } },
   ]);
 
-  const logger = silentLogger();
   const result = await cullStalePreviews({
     options: {
       swaName: SWA_NAME,
       resourceGroup: RESOURCE_GROUP,
       cosmosAccount: COSMOS_ACCOUNT,
-      dryRun: true,
-      pairedCosmos: true,
+      skipEnv: '329',
+      dryRun: false,
+      pairedCosmos: false,
     },
-    logger,
+    logger: silentLogger(),
     env: {},
     runner,
   });
 
-  assert.deepEqual(result, { culled: 1, kept: 0, skipped: 0, failed: 0 });
-  // Only list calls expected; no deletes
+  // Only 268 evaluated; 329 skipped, default skipped.
+  assert.deepEqual(result, {
+    culled: 1,
+    kept: 0,
+    skipped: 2,
+    failed: 0,
+    systemicFailure: false,
+  });
+  // Critical assertion: no `gh pr view 329` call ever happens.
+  const view329 = calls.filter((c) => c.file === 'gh' && c.args[0] === 'pr' && c.args[2] === '329');
+  assert.equal(view329.length, 0);
+});
+
+test('cullStalePreviews dry-run does not call delete commands', async () => {
+  const swaListOutput = '268\n';
+  const { runner, calls } = makeRunner([
+    {
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
+    },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
+  ]);
+
+  const result = await cullStalePreviews({
+    options: {
+      swaName: SWA_NAME,
+      resourceGroup: RESOURCE_GROUP,
+      cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
+      dryRun: true,
+      pairedCosmos: true,
+    },
+    logger: silentLogger(),
+    env: {},
+    runner,
+  });
+
+  assert.deepEqual(result, {
+    culled: 1,
+    kept: 0,
+    skipped: 0,
+    failed: 0,
+    systemicFailure: false,
+  });
   const deleteCalls = calls.filter((c) => c.args.includes('delete'));
   assert.equal(deleteCalls.length, 0);
 });
 
-test('cullStalePreviews counts failures and emits warning but returns', async () => {
-  const prListJson = JSON.stringify([{ number: 268, state: 'CLOSED' }]);
+test('cullStalePreviews counts SWA delete failure and emits warning', async () => {
   const swaListOutput = '268\n';
   const { runner } = makeRunner([
     {
-      match: (file, args) => file === 'gh' && args[0] === 'pr',
-      response: { status: 0, stdout: prListJson },
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
     },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'list',
-      response: { status: 0, stdout: swaListOutput },
-    },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'delete',
-      response: { status: 1, stderr: 'transient azure error' },
-    },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
+    { match: swaDeleteMatcher(), response: { status: 1, stderr: 'transient azure error' } },
   ]);
 
   const logger = silentLogger();
@@ -254,6 +438,7 @@ test('cullStalePreviews counts failures and emits warning but returns', async ()
       swaName: SWA_NAME,
       resourceGroup: RESOURCE_GROUP,
       cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
       dryRun: false,
       pairedCosmos: false,
     },
@@ -262,7 +447,16 @@ test('cullStalePreviews counts failures and emits warning but returns', async ()
     runner,
   });
 
-  assert.deepEqual(result, { culled: 0, kept: 0, skipped: 0, failed: 1 });
+  // Note: when SWA delete fails, this counts as both 0 culled and
+  // 1 failed; since culled+kept===0 and failed>0, this trips
+  // systemicFailure (only one numeric env, all attempts failed).
+  assert.deepEqual(result, {
+    culled: 0,
+    kept: 0,
+    skipped: 0,
+    failed: 1,
+    systemicFailure: true,
+  });
   assert.ok(
     logger.messages.some((m) => m.includes('::warning::')),
     'expected ::warning:: annotation on failure',
@@ -270,75 +464,171 @@ test('cullStalePreviews counts failures and emits warning but returns', async ()
 });
 
 test('cullStalePreviews treats already-absent SWA env as success', async () => {
-  const prListJson = JSON.stringify([{ number: 268, state: 'CLOSED' }]);
   const swaListOutput = '268\n';
   const { runner } = makeRunner([
     {
-      match: (file, args) => file === 'gh' && args[0] === 'pr',
-      response: { status: 0, stdout: prListJson },
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
     },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
     {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'list',
-      response: { status: 0, stdout: swaListOutput },
-    },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'delete',
+      match: swaDeleteMatcher(),
       response: { status: 1, stderr: 'ResourceNotFound: env does not exist' },
     },
   ]);
 
-  const logger = silentLogger();
   const result = await cullStalePreviews({
     options: {
       swaName: SWA_NAME,
       resourceGroup: RESOURCE_GROUP,
       cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
       dryRun: false,
       pairedCosmos: false,
     },
-    logger,
+    logger: silentLogger(),
     env: {},
     runner,
   });
 
-  assert.deepEqual(result, { culled: 1, kept: 0, skipped: 0, failed: 0 });
+  assert.deepEqual(result, {
+    culled: 1,
+    kept: 0,
+    skipped: 0,
+    failed: 0,
+    systemicFailure: false,
+  });
 });
 
-test('cullStalePreviews throws hard when gh pr list fails', async () => {
+test('cullStalePreviews keeps env defensively when gh reports PR not found', async () => {
+  // Anomalous: SWA env named "999" but no PR #999 on the repo. We err
+  // toward KEEP rather than risk deleting an env that was created
+  // outside our naming convention.
+  const swaListOutput = '999\n';
   const { runner } = makeRunner([
     {
-      match: (file, args) => file === 'gh' && args[0] === 'pr',
-      response: { status: 1, stderr: 'gh: not authenticated' },
+      match: ghPrViewMatcher(999),
+      response: {
+        status: 1,
+        stderr: 'GraphQL: Could not resolve to a PullRequest with the number of 999.',
+      },
     },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
   ]);
 
-  await assert.rejects(
-    () =>
-      cullStalePreviews({
-        options: {
-          swaName: SWA_NAME,
-          resourceGroup: RESOURCE_GROUP,
-          cosmosAccount: COSMOS_ACCOUNT,
-          dryRun: false,
-          pairedCosmos: false,
-        },
-        logger: silentLogger(),
-        env: {},
-        runner,
-      }),
-    /gh pr list failed/,
-  );
+  const result = await cullStalePreviews({
+    options: {
+      swaName: SWA_NAME,
+      resourceGroup: RESOURCE_GROUP,
+      cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
+      dryRun: false,
+      pairedCosmos: false,
+    },
+    logger: silentLogger(),
+    env: {},
+    runner,
+  });
+
+  assert.deepEqual(result, {
+    culled: 0,
+    kept: 1,
+    skipped: 0,
+    failed: 0,
+    systemicFailure: false,
+  });
+});
+
+test('cullStalePreviews single transient gh failure among many is partial (not systemic)', async () => {
+  // 268 closed, 299 transient gh failure, 317 merged - mix of
+  // successes and one transient failure. Cull proceeds for 268+317;
+  // 299 counted as failed. systemicFailure stays false because we have
+  // conclusive answers (culled+kept > 0).
+  const swaListOutput = '268\n299\n317\n';
+  const { runner } = makeRunner([
+    {
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
+    },
+    {
+      match: ghPrViewMatcher(299),
+      response: { status: 1, stderr: 'connection refused' },
+    },
+    {
+      match: ghPrViewMatcher(317),
+      response: { status: 0, stdout: JSON.stringify({ state: 'MERGED' }) },
+    },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
+    { match: swaDeleteMatcher(), response: { status: 0, stdout: '' } },
+  ]);
+
+  const result = await cullStalePreviews({
+    options: {
+      swaName: SWA_NAME,
+      resourceGroup: RESOURCE_GROUP,
+      cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
+      dryRun: false,
+      pairedCosmos: false,
+    },
+    logger: silentLogger(),
+    env: {},
+    runner,
+  });
+
+  assert.deepEqual(result, {
+    culled: 2,
+    kept: 0,
+    skipped: 0,
+    failed: 1,
+    systemicFailure: false,
+  });
+});
+
+test('cullStalePreviews flags systemicFailure when every gh query fails', async () => {
+  // All gh pr view calls fail transiently - likely auth issue. Tally
+  // is 0 culled, 0 kept, N failed; the caller can use systemicFailure
+  // to exit non-zero so the cron run is loudly red.
+  const swaListOutput = '268\n299\n';
+  const { runner } = makeRunner([
+    {
+      match: ghPrViewMatcher(268),
+      response: { status: 4, stderr: 'gh: error: not authenticated' },
+    },
+    {
+      match: ghPrViewMatcher(299),
+      response: { status: 4, stderr: 'gh: error: not authenticated' },
+    },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
+  ]);
+
+  const result = await cullStalePreviews({
+    options: {
+      swaName: SWA_NAME,
+      resourceGroup: RESOURCE_GROUP,
+      cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
+      dryRun: false,
+      pairedCosmos: false,
+    },
+    logger: silentLogger(),
+    env: {},
+    runner,
+  });
+
+  assert.deepEqual(result, {
+    culled: 0,
+    kept: 0,
+    skipped: 0,
+    failed: 2,
+    systemicFailure: true,
+  });
 });
 
 test('cullStalePreviews throws hard when az env list fails', async () => {
-  const prListJson = JSON.stringify([]);
   const { runner } = makeRunner([
     {
-      match: (file, args) => file === 'gh' && args[0] === 'pr',
-      response: { status: 0, stdout: prListJson },
-    },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'list',
+      match: swaListMatcher(),
       response: { status: 1, stderr: 'az: subscription not found' },
     },
   ]);
@@ -350,6 +640,7 @@ test('cullStalePreviews throws hard when az env list fails', async () => {
           swaName: SWA_NAME,
           resourceGroup: RESOURCE_GROUP,
           cosmosAccount: COSMOS_ACCOUNT,
+          skipEnv: '',
           dryRun: false,
           pairedCosmos: false,
         },
@@ -362,21 +653,14 @@ test('cullStalePreviews throws hard when az env list fails', async () => {
 });
 
 test('cullStalePreviews skips Cosmos delete when --paired-cosmos absent', async () => {
-  const prListJson = JSON.stringify([{ number: 268, state: 'CLOSED' }]);
   const swaListOutput = '268\n';
   const { runner, calls } = makeRunner([
     {
-      match: (file, args) => file === 'gh' && args[0] === 'pr',
-      response: { status: 0, stdout: prListJson },
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
     },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'list',
-      response: { status: 0, stdout: swaListOutput },
-    },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'delete',
-      response: { status: 0, stdout: '' },
-    },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
+    { match: swaDeleteMatcher(), response: { status: 0, stdout: '' } },
   ]);
 
   const result = await cullStalePreviews({
@@ -384,6 +668,7 @@ test('cullStalePreviews skips Cosmos delete when --paired-cosmos absent', async 
       swaName: SWA_NAME,
       resourceGroup: RESOURCE_GROUP,
       cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
       dryRun: false,
       pairedCosmos: false,
     },
@@ -392,29 +677,28 @@ test('cullStalePreviews skips Cosmos delete when --paired-cosmos absent', async 
     runner,
   });
 
-  assert.deepEqual(result, { culled: 1, kept: 0, skipped: 0, failed: 0 });
+  assert.deepEqual(result, {
+    culled: 1,
+    kept: 0,
+    skipped: 0,
+    failed: 0,
+    systemicFailure: false,
+  });
   const cosmosCalls = calls.filter((c) => c.file === 'az' && c.args[0] === 'cosmosdb');
   assert.equal(cosmosCalls.length, 0);
 });
 
 test('cullStalePreviews counts SWA-deleted-but-Cosmos-failed as partial failure', async () => {
-  const prListJson = JSON.stringify([{ number: 268, state: 'CLOSED' }]);
   const swaListOutput = '268\n';
   const { runner } = makeRunner([
     {
-      match: (file, args) => file === 'gh' && args[0] === 'pr',
-      response: { status: 0, stdout: prListJson },
+      match: ghPrViewMatcher(268),
+      response: { status: 0, stdout: JSON.stringify({ state: 'CLOSED' }) },
     },
+    { match: swaListMatcher(), response: { status: 0, stdout: swaListOutput } },
+    { match: swaDeleteMatcher(), response: { status: 0, stdout: '' } },
     {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'list',
-      response: { status: 0, stdout: swaListOutput },
-    },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'staticwebapp' && args[2] === 'delete',
-      response: { status: 0, stdout: '' },
-    },
-    {
-      match: (file, args) => file === 'az' && args[0] === 'cosmosdb',
+      match: cosmosDeleteMatcher(),
       response: { status: 1, stderr: 'cosmos transient error' },
     },
   ]);
@@ -424,6 +708,7 @@ test('cullStalePreviews counts SWA-deleted-but-Cosmos-failed as partial failure'
       swaName: SWA_NAME,
       resourceGroup: RESOURCE_GROUP,
       cosmosAccount: COSMOS_ACCOUNT,
+      skipEnv: '',
       dryRun: false,
       pairedCosmos: true,
     },
@@ -432,6 +717,15 @@ test('cullStalePreviews counts SWA-deleted-but-Cosmos-failed as partial failure'
     runner,
   });
 
-  // SWA delete succeeded but Cosmos failed -> not counted as culled, counted as failed
-  assert.deepEqual(result, { culled: 0, kept: 0, skipped: 0, failed: 1 });
+  // SWA delete succeeded but Cosmos failed -> not counted as culled,
+  // counted as failed. Only numeric env tried, no conclusive answer
+  // (no culled, no kept), so this is also systemic in this minimal
+  // test fixture.
+  assert.deepEqual(result, {
+    culled: 0,
+    kept: 0,
+    skipped: 0,
+    failed: 1,
+    systemicFailure: true,
+  });
 });

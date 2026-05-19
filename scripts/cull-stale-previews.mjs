@@ -13,18 +13,32 @@
 // with a non-numeric name are NEVER touched.
 //
 // For each numeric env, we look up the corresponding PR's state via a
-// single bulk `gh pr list --state all --limit 300 --json number,state`
-// call. If the PR is CLOSED or MERGED, the env is culled. If the PR is
-// OPEN or not present in the list at all, the env is KEPT (the
-// "not-present" case is anomalous and we err toward false-negative cull
-// rather than risk deleting a live env).
+// per-PR `gh pr view <n> --json state` call. If the PR is CLOSED or
+// MERGED, the env is culled. If the PR is OPEN, the env is KEPT. If
+// `gh` reports the PR does not exist on this repo, the env is KEPT
+// defensively - by convention SWA env names always derive from real
+// PR numbers, so a "not found" answer is anomalous and we err on the
+// side of false-negative cull rather than risk deleting a live env.
+// If `gh` fails transiently (network, rate limit, malformed JSON), the
+// env is counted as `failed` and KEPT for this run; the daily cron is
+// the safety net.
+//
+// We previously used a bulk `gh pr list --state all --limit 300` call
+// to fetch all states at once. The bulk window meant any leaked env
+// older than the most recent 300 PRs could never be culled (Copilot
+// review on PR #329). Per-env queries scale linearly with env count
+// (capped at 10 by the SWA Standard tier) so the GraphQL spend is
+// bounded.
 //
 // CALLERS: invoked from `cd-preview.yml`'s `build-and-deploy` job as a
-// best-effort just-in-time step before SWA deploy, and from
+// best-effort just-in-time step before SWA deploy (with
+// `--skip-env=<current-PR-number>` so the cull never races against
+// the same workflow's own upcoming deploy), and from
 // `preview-cull.yml`'s daily cron job as a background safety net. Both
 // callers wrap this script with `continue-on-error: true` and rely on
 // the final exit code (0 on success / partial failure, non-zero on
-// hard failure to enumerate state).
+// hard failure to enumerate state, or a systemic failure where every
+// per-PR gh query failed).
 
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
@@ -32,49 +46,88 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 const STALE_ENV_NAME_PATTERN = /^[0-9]+$/;
-const PR_LIST_LIMIT = 300;
 const VALID_PR_STATES = new Set(['OPEN', 'CLOSED', 'MERGED']);
 
-function readRequiredFlag(args, flagName) {
-  const exactPrefix = `${flagName}=`;
-  for (const argument of args) {
+function readOptionWithOptionalValue(args, optionName) {
+  // Adapted from scripts/check-deploy-freshness.mjs. Supports both the
+  // `--flag=value` and `--flag value` forms. Unlike the reference helper,
+  // this version preserves the cull-script's empty-value rejection so
+  // `--swa-name=` (or `--swa-name ''`) still throws a clear error rather
+  // than being silently treated as "flag absent".
+  const exactPrefix = `${optionName}=`;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
     if (argument.startsWith(exactPrefix)) {
-      const value = argument.slice(exactPrefix.length).trim();
-      if (!value) {
-        throw new Error(`Empty value for ${flagName}. Use ${flagName}=<value>.`);
+      return {
+        value: argument.slice(exactPrefix.length),
+        consumedIndexes: new Set([index]),
+      };
+    }
+    if (argument === optionName) {
+      const nextIndex = index + 1;
+      const value = args[nextIndex];
+      if (value === undefined || value.startsWith('--')) {
+        throw new Error(
+          `Missing value for ${optionName}. Use ${optionName}=<value> or ${optionName} <value>.`,
+        );
       }
-      return value;
+      return { value, consumedIndexes: new Set([index, nextIndex]) };
     }
   }
-  return null;
+  return { value: null, consumedIndexes: new Set() };
 }
 
-function hasBooleanFlag(args, flagName) {
-  return args.some((argument) => argument === flagName);
+function readBooleanFlag(args, flagName) {
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === flagName) {
+      return { value: true, consumedIndexes: new Set([index]) };
+    }
+  }
+  return { value: false, consumedIndexes: new Set() };
 }
 
 export function parseCliOptions(args = process.argv.slice(2)) {
-  const swaName = readRequiredFlag(args, '--swa-name');
-  const resourceGroup = readRequiredFlag(args, '--rg');
-  const cosmosAccount = readRequiredFlag(args, '--cosmos-account');
-  const dryRun = hasBooleanFlag(args, '--dry-run');
-  const pairedCosmos = hasBooleanFlag(args, '--paired-cosmos');
+  const swaNameOption = readOptionWithOptionalValue(args, '--swa-name');
+  const rgOption = readOptionWithOptionalValue(args, '--rg');
+  const cosmosAccountOption = readOptionWithOptionalValue(args, '--cosmos-account');
+  const skipEnvOption = readOptionWithOptionalValue(args, '--skip-env');
+  const dryRunOption = readBooleanFlag(args, '--dry-run');
+  const pairedCosmosOption = readBooleanFlag(args, '--paired-cosmos');
 
-  const validFlags = new Set([
-    '--swa-name',
-    '--rg',
-    '--cosmos-account',
-    '--dry-run',
-    '--paired-cosmos',
+  const consumed = new Set([
+    ...swaNameOption.consumedIndexes,
+    ...rgOption.consumedIndexes,
+    ...cosmosAccountOption.consumedIndexes,
+    ...skipEnvOption.consumedIndexes,
+    ...dryRunOption.consumedIndexes,
+    ...pairedCosmosOption.consumedIndexes,
   ]);
-  for (const argument of args) {
-    const flagName = argument.includes('=') ? argument.slice(0, argument.indexOf('=')) : argument;
-    if (!validFlags.has(flagName)) {
+  for (let index = 0; index < args.length; index += 1) {
+    if (!consumed.has(index)) {
       throw new Error(
-        `Unknown argument '${argument}'. Valid flags: --swa-name=, --rg=, --cosmos-account=, --dry-run, --paired-cosmos.`,
+        `Unknown argument '${args[index]}'. Valid flags: --swa-name=, --rg=, --cosmos-account=, --skip-env=, --dry-run, --paired-cosmos.`,
       );
     }
   }
+
+  // Reject explicit empty values (e.g. `--swa-name=`) with a clearer
+  // error than the "missing required flag" path below; preserves
+  // existing test contract.
+  for (const [optionName, option] of [
+    ['--swa-name', swaNameOption],
+    ['--rg', rgOption],
+    ['--cosmos-account', cosmosAccountOption],
+    ['--skip-env', skipEnvOption],
+  ]) {
+    if (option.consumedIndexes.size > 0 && (option.value ?? '').trim() === '') {
+      throw new Error(`Empty value for ${optionName}. Use ${optionName}=<value>.`);
+    }
+  }
+
+  const swaName = swaNameOption.value?.trim() ?? '';
+  const resourceGroup = rgOption.value?.trim() ?? '';
+  const cosmosAccount = cosmosAccountOption.value?.trim() ?? '';
+  const skipEnv = skipEnvOption.value?.trim() ?? '';
 
   if (!swaName) {
     throw new Error('Missing required flag --swa-name=<name>.');
@@ -82,7 +135,7 @@ export function parseCliOptions(args = process.argv.slice(2)) {
   if (!resourceGroup) {
     throw new Error('Missing required flag --rg=<resource-group>.');
   }
-  if (pairedCosmos && !cosmosAccount) {
+  if (pairedCosmosOption.value && !cosmosAccount) {
     throw new Error(
       'Missing required flag --cosmos-account=<account> (required with --paired-cosmos).',
     );
@@ -92,8 +145,9 @@ export function parseCliOptions(args = process.argv.slice(2)) {
     swaName,
     resourceGroup,
     cosmosAccount,
-    dryRun,
-    pairedCosmos,
+    skipEnv,
+    dryRun: dryRunOption.value,
+    pairedCosmos: pairedCosmosOption.value,
   };
 }
 
@@ -102,27 +156,46 @@ export function isStaleEnvName(envName) {
   return STALE_ENV_NAME_PATTERN.test(envName);
 }
 
-export function pickCullable(envName, prStateMap) {
+// pickCullable classifies a single env name + (optionally) its PR state
+// result. Pure function for test ergonomics; the orchestrator is
+// responsible for the actual gh I/O via getPrState.
+//
+// `prStateResult` shape:
+//   - `null` when envName is non-numeric (no state needed; SKIP)
+//   - `{ ok: true, state: 'OPEN' | 'CLOSED' | 'MERGED' }`
+//   - `{ ok: false, transient: false, reason: string }` - definitive
+//     "PR does not exist on this repo". By convention SWA env names
+//     always derive from real PR numbers, so this is anomalous; we
+//     KEEP defensively to avoid deleting a live env behind a naming
+//     drift we don't yet understand.
+//   - `{ ok: false, transient: true, reason: string }` - transient
+//     gh failure (network, malformed JSON, unexpected exit). Counted
+//     as FAIL by the caller; KEEP for this run.
+export function pickCullable(envName, prStateResult, skipSet = new Set()) {
   if (!isStaleEnvName(envName)) {
     return { action: 'skip', reason: 'non-numeric env name (e.g. default); never touched' };
   }
-  const prNumber = Number(envName);
-  const state = prStateMap.get(prNumber);
-  if (state === undefined) {
-    return {
-      action: 'keep',
-      reason: `PR #${prNumber} not found in PR list (anomalous; keeping defensively)`,
-    };
+  if (skipSet.has(envName)) {
+    return { action: 'skip', reason: 'env explicitly excluded via --skip-env' };
   }
-  if (state === 'OPEN') {
-    return { action: 'keep', reason: `PR #${prNumber} is OPEN` };
+  if (prStateResult === null || prStateResult === undefined) {
+    throw new Error(`pickCullable: missing prStateResult for env '${envName}'`);
   }
-  if (state === 'CLOSED' || state === 'MERGED') {
-    return { action: 'cull', reason: `PR #${prNumber} is ${state}` };
+  if (!prStateResult.ok) {
+    if (prStateResult.transient) {
+      return { action: 'fail', reason: prStateResult.reason };
+    }
+    return { action: 'keep', reason: prStateResult.reason };
+  }
+  if (prStateResult.state === 'OPEN') {
+    return { action: 'keep', reason: `PR #${envName} is OPEN` };
+  }
+  if (prStateResult.state === 'CLOSED' || prStateResult.state === 'MERGED') {
+    return { action: 'cull', reason: `PR #${envName} is ${prStateResult.state}` };
   }
   return {
     action: 'keep',
-    reason: `PR #${prNumber} has unrecognized state '${state}' (keeping defensively)`,
+    reason: `PR #${envName} has unrecognized state '${prStateResult.state}' (keeping defensively)`,
   };
 }
 
@@ -142,45 +215,50 @@ function runCommand(file, args, options = {}) {
   };
 }
 
-function listPrs(runner = runCommand) {
-  const result = runner('gh', [
-    'pr',
-    'list',
-    '--state',
-    'all',
-    '--limit',
-    String(PR_LIST_LIMIT),
-    '--json',
-    'number,state',
-  ]);
-  if (result.status !== 0) {
-    throw new Error(
-      `gh pr list failed (exit ${result.status}): ${result.stderr.trim() || result.stdout.trim()}`,
-    );
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(result.stdout);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`gh pr list returned invalid JSON: ${message}`);
-  }
-  if (!Array.isArray(parsed)) {
-    throw new Error(`gh pr list returned non-array JSON: ${typeof parsed}`);
-  }
-  const stateMap = new Map();
-  for (const entry of parsed) {
-    if (
-      entry &&
-      typeof entry === 'object' &&
-      typeof entry.number === 'number' &&
-      typeof entry.state === 'string' &&
-      VALID_PR_STATES.has(entry.state)
-    ) {
-      stateMap.set(entry.number, entry.state);
+export function getPrState(prNumber, runner = runCommand) {
+  const result = runner('gh', ['pr', 'view', String(prNumber), '--json', 'state']);
+  if (result.status === 0) {
+    let parsed;
+    try {
+      parsed = JSON.parse(result.stdout);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        transient: true,
+        reason: `gh pr view ${prNumber} returned invalid JSON: ${message}`,
+      };
     }
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof parsed.state === 'string' &&
+      VALID_PR_STATES.has(parsed.state)
+    ) {
+      return { ok: true, state: parsed.state };
+    }
+    return {
+      ok: false,
+      transient: true,
+      reason: `gh pr view ${prNumber} returned unexpected JSON: ${(result.stdout || '').trim()}`,
+    };
   }
-  return stateMap;
+  const combined = `${result.stderr || ''}\n${result.stdout || ''}`.trim();
+  // gh CLI surfaces a missing PR via stderr text. We match the common
+  // shapes - GraphQL "Could not resolve to a PullRequest", REST "no
+  // pull requests found", and the generic "not found" string.
+  if (/could not resolve|no pull requests|not found/i.test(combined)) {
+    return {
+      ok: false,
+      transient: false,
+      reason: `PR #${prNumber} does not exist on this repo (anomalous; keeping env defensively)`,
+    };
+  }
+  return {
+    ok: false,
+    transient: true,
+    reason: `gh pr view ${prNumber} failed (exit ${result.status}): ${combined}`,
+  };
 }
 
 function listSwaEnvs(swaName, resourceGroup, runner = runCommand) {
@@ -282,12 +360,10 @@ export async function cullStalePreviews({
   summaryWriter = null,
 }) {
   logger.log(
-    `cull-stale-previews: swa=${options.swaName} rg=${options.resourceGroup} cosmos=${options.cosmosAccount || '(none)'} dry-run=${options.dryRun} paired-cosmos=${options.pairedCosmos}`,
+    `cull-stale-previews: swa=${options.swaName} rg=${options.resourceGroup} cosmos=${options.cosmosAccount || '(none)'} skip-env=${options.skipEnv || '(none)'} dry-run=${options.dryRun} paired-cosmos=${options.pairedCosmos}`,
   );
 
-  const prStateMap = listPrs(runner);
-  logger.log(`cull-stale-previews: fetched ${prStateMap.size} PR states`);
-
+  const skipSet = options.skipEnv ? new Set([options.skipEnv]) : new Set();
   const envNames = listSwaEnvs(options.swaName, options.resourceGroup, runner);
   logger.log(`cull-stale-previews: found ${envNames.length} SWA envs total`);
 
@@ -295,13 +371,29 @@ export async function cullStalePreviews({
   let kept = 0;
   let skipped = 0;
   let failed = 0;
+  let numericEnvsQueried = 0;
   const detailLines = [];
 
   for (const envName of envNames) {
-    const decision = pickCullable(envName, prStateMap);
-    if (decision.action === 'skip') {
+    if (!isStaleEnvName(envName)) {
       skipped += 1;
-      logger.log(`cull-stale-previews: SKIP env=${envName} (${decision.reason})`);
+      logger.log(`cull-stale-previews: SKIP env=${envName} (non-numeric)`);
+      continue;
+    }
+    if (skipSet.has(envName)) {
+      skipped += 1;
+      logger.log(`cull-stale-previews: SKIP env=${envName} (--skip-env: current deploy's own env)`);
+      continue;
+    }
+
+    numericEnvsQueried += 1;
+    const prStateResult = getPrState(Number(envName), runner);
+    const decision = pickCullable(envName, prStateResult, skipSet);
+
+    if (decision.action === 'fail') {
+      failed += 1;
+      logger.log(`cull-stale-previews: FAIL env=${envName}: ${decision.reason}`);
+      detailLines.push(`- FAIL env \`${envName}\` PR state lookup: ${decision.reason}`);
       continue;
     }
     if (decision.action === 'keep') {
@@ -371,16 +463,27 @@ export async function cullStalePreviews({
 
   if (failed > 0) {
     logger.log(
-      `::warning::cull-stale-previews: ${failed} delete operation(s) failed. See step log for details.`,
+      `::warning::cull-stale-previews: ${failed} operation(s) failed. See step log for details.`,
     );
   }
 
-  return { culled, kept, skipped, failed };
+  // Systemic failure: every numeric env we tried to evaluate produced
+  // a transient gh failure (or downstream Azure failure with zero
+  // successes). Distinguishes "cull was a no-op because nothing to do"
+  // from "cull was a no-op because the whole pipeline is broken".
+  const systemicFailure = numericEnvsQueried > 0 && failed > 0 && culled === 0 && kept === 0;
+
+  return { culled, kept, skipped, failed, systemicFailure };
 }
 
 export async function main(args = process.argv.slice(2), env = process.env) {
   const options = parseCliOptions(args);
-  await cullStalePreviews({ options, env });
+  const result = await cullStalePreviews({ options, env });
+  if (result.systemicFailure) {
+    throw new Error(
+      `systemic failure: ${result.failed} per-PR gh queries failed with 0 conclusive answers. Likely auth/network issue; investigate manually.`,
+    );
+  }
 }
 
 const invokedDirectly = (() => {

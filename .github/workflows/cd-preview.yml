@@ -61,14 +61,27 @@ on:
     types: [opened, synchronize, reopened, closed]
 
 concurrency:
-  group: cd-preview-pr-${{ github.event.pull_request.number }}
-  # Newer commits on the same PR cancel older runs, BUT a `closed`
-  # event is terminal and must never be cancelled by a tail
-  # `synchronize` (root-cause class for the PR #268 missed-teardown:
-  # a synchronize-then-close race with unconditional
-  # `cancel-in-progress: true` could cancel the queued teardown,
-  # leaking the SWA env + per-PR Cosmos DB until manual cleanup).
-  cancel-in-progress: ${{ github.event.action != 'closed' }}
+  # Action-keyed groups: `closed`-event teardown runs in a separate
+  # concurrency group from active-cycle (opened/synchronize/reopened)
+  # runs. This guarantees that a synchronize-then-close race cannot
+  # cause a queued/in-progress teardown to be cancelled by the newer
+  # event (the prior root-cause class for the PR #268 missed-teardown:
+  # `cancel-in-progress` is evaluated on the newer run, so even with
+  # `${{ ... != 'closed' }}` a later synchronize could still cancel a
+  # queued closed-event teardown if they hashed to the same group).
+  # The trade-off: a `closed` event arriving mid-deploy will start
+  # teardown in parallel with the still-running deploy, briefly racing
+  # on SWA env state. Mitigations: (a) the in-deploy cull step passes
+  # `--skip-env=<current-PR>` so the deploy run never deletes its own
+  # env; (b) the daily cron in preview-cull.yml bounds any residual
+  # leak to ~24h.
+  #
+  # Note: the action allowlist is `[opened, synchronize, reopened,
+  # closed]` (see `on.pull_request.types` above). If a future change
+  # extends that list, the new action joins the `active` group by
+  # default; reviewer should confirm it should not get its own group.
+  group: cd-preview-pr-${{ github.event.pull_request.number }}-${{ github.event.action == 'closed' && 'teardown' || 'active' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -198,6 +211,15 @@ jobs:
         # The daily cron in preview-cull.yml is the primary safety net;
         # this in-deploy step is the just-in-time backstop. continue-on-
         # error so a transient cull failure does not block the deploy.
+        #
+        # `--skip-env` excludes the current PR's own env from cull
+        # consideration. The action-keyed concurrency group above
+        # allows a `closed`-event teardown run to execute in parallel
+        # with this deploy. Without `--skip-env`, a close mid-deploy
+        # would flip PR state to CLOSED, this step would observe that,
+        # delete the env we're about to deploy to, and then the SWA
+        # deploy step would re-provision it - leaking a fresh env for
+        # a closed PR until the next teardown or daily cull.
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -206,6 +228,7 @@ jobs:
             --swa-name="$SWA_NAME" \
             --rg="$NONPROD_RG" \
             --cosmos-account="$COSMOS_ACCOUNT" \
+            --skip-env="${{ github.event.pull_request.number }}" \
             --paired-cosmos
 
       - name: Provision per-PR Cosmos database
