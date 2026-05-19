@@ -183,11 +183,22 @@ AppEvents
 // `metricMeasureColumn: 'StuckSessions'` so the threshold is
 // compared against the value of the StuckSessions column (a
 // `dcount(SessionId)`), not the row count of the query results.
+//
+// Why per-session dedup instead of raw events: a single stuck
+// client that reloads on every keystroke could emit hundreds of
+// `sw.activated` events per hour. Thresholding against raw event
+// count (the simpler "drop `summarize` and let Count count rows"
+// alternative) would inflate the apparent cohort size and fire on
+// one chatty client. `dcount(SessionId)` measures the metric we
+// actually care about: how many DISTINCT users are still on the
+// pre-cutover SW build.
+//
 // An earlier shape (no `metricMeasureColumn` + `timeAggregation:
 // 'Count'` on a `summarize`-reduced single-row result) was
 // structurally unable to fire because Count counted result rows
-// (always 1) and `1 > 10` is false. See follow-up issue for the
-// design rationale.
+// (always 1) and `1 > 10` is false. See
+// `docs/telemetry.md` (Alert query gotcha section) for the
+// row-vs-aggregate pattern reference.
 //
 // To update for a future SW migration, see docs/sw-migration.md.
 resource swMigrationStuckCohortAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {

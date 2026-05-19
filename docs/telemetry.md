@@ -1256,9 +1256,13 @@ AppRequests
 ```
 
 If you need to compare against an aggregate value instead of a row
-count, set `timeAggregation: 'Total'` and `metricMeasureColumn:
-'<column>'`. We don't currently use that pattern; see the 5/1
-incident retrospective in commit history for context.
+count -- which is rare; drop `summarize` first if it works for your
+use case -- set `timeAggregation: 'Total'` and `metricMeasureColumn:
+'<column>'`. For a working example, see `swMigrationStuckCohortAlert`
+in `infra/modules/alerts.bicep`, which thresholds against
+`dcount(SessionId)` of pre-cutover sessions; the alert's inline
+comment block explains why per-session dedup is the right shape
+there.
 
 ### Receivers (action group)
 
