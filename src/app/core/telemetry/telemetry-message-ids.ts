@@ -80,6 +80,12 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Bounded-frequency: bounded by Monaco editor lifecycle events
    *   (mount / dispose / completion-provider teardown). Can be high
    *   during chatty editor sessions but not unbounded.
+   * Console mirror: SUPPRESSED. This ID is in `QUIET_CONSOLE_IDS`
+   *   (`core/telemetry/logger.service.ts`) so the per-cancellation
+   *   `console.info` line is dropped; App Insights dispatch is
+   *   unaffected. The whole point of this counter is to filter
+   *   noise out of dev DevTools while keeping it queryable in
+   *   `customEvents`.
    */
   'errorHandler.suppressed',
 

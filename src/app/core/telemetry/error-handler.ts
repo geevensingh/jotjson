@@ -6,12 +6,13 @@ import { classifyError } from './noise-filter';
  * Angular `ErrorHandler` override.
  *
  * For confirmed-benign noise (e.g. Monaco's `CancellationError` during
- * editor disposal), classify-and-suppress before `super.handleError`,
- * and emit a `logger.event('errorHandler.suppressed', { reasonBucket })`
- * counter so cancellation volume regressions stay queryable in App
- * Insights `customEvents`. Suppressed errors do NOT hit the dev
- * `console.error` either -- the cancellations are routine Monaco
- * lifecycle signals and consuming console space adds no signal.
+ * editor disposal), classify-and-suppress before `super.handleError`.
+ * Suppressed errors emit only a `logger.event('errorHandler.suppressed',
+ * { reasonBucket })` counter -- they do NOT land in the App Insights
+ * `exceptions` table and do NOT produce any dev console output. The
+ * counter mirror to `console.info` is opted out via the
+ * `QUIET_CONSOLE_IDS` set in `logger.service.ts`; volume regressions
+ * remain queryable in `customEvents`.
  *
  * For everything else, preserve the default `console.error` output via
  * `super.handleError` and forward to `LoggerService.error` so it lands
