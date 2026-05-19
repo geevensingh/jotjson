@@ -13,6 +13,26 @@ const BUFFER_CAP = 100;
 const BOOT_FAIL_KEY = 'jotjson.bootErr';
 const BRIDGE_FAIL_KEY = 'jotjson.msalBridgeErr';
 
+/**
+ * Message IDs whose `console.*` mirror is intentionally suppressed.
+ * The App Insights sink is unaffected -- these still land in
+ * `customEvents` / `traces` / `exceptions` as usual.
+ *
+ * Today this carries one ID: `errorHandler.suppressed`. That counter
+ * is emitted every time `TelemetryErrorHandler` drops a benign-noise
+ * exception (e.g. Monaco's `CancellationError` during editor
+ * disposal). Letting it mirror to `console.info` would defeat the
+ * suppression's purpose by re-introducing one console line per
+ * cancellation in dev DevTools.
+ *
+ * Add new entries here when a new high-volume counter would only
+ * pollute dev DevTools without aiding diagnosis. Document the choice
+ * in the corresponding entry in `telemetry-message-ids.ts`.
+ */
+const QUIET_CONSOLE_IDS: ReadonlySet<TelemetryMessageId> = new Set<TelemetryMessageId>([
+  'errorHandler.suppressed',
+]);
+
 type Severity = 'info' | 'warn' | 'error';
 
 interface PendingEntry {
@@ -35,8 +55,11 @@ interface PendingEntry {
  * Public facade for application logging. All call sites should use this
  * service rather than `console.*` directly. Two parallel sinks:
  *
- * - `console.*` - always (so DevTools shows everything in dev).
- * - App Insights - once `TelemetryService.connect()` resolves.
+ * - `console.*` - by default (so DevTools shows everything in dev).
+ *   Message IDs listed in `QUIET_CONSOLE_IDS` opt out of the console
+ *   mirror -- see that constant for the rationale.
+ * - App Insights - once `TelemetryService.connect()` resolves. The
+ *   quiet-set does NOT affect App Insights dispatch.
  *
  * Three App Insights destinations, selected by which method is called:
  * - `info` / `warn` -> `trackTrace` (`traces` table).
@@ -204,6 +227,9 @@ export class LoggerService {
     props?: TelemetryProps,
     error?: NormalizedError,
   ): void {
+    if (QUIET_CONSOLE_IDS.has(messageId)) {
+      return;
+    }
     // eslint-disable-next-line no-console
     const fn =
       severity === 'error' ? console.error : severity === 'warn' ? console.warn : console.info;
@@ -219,6 +245,9 @@ export class LoggerService {
     props?: TelemetryProps,
     measurements?: TelemetryMeasurements,
   ): void {
+    if (QUIET_CONSOLE_IDS.has(messageId)) {
+      return;
+    }
     // eslint-disable-next-line no-console
     console.info(`[event:${messageId}]`, props ?? {}, measurements ?? {});
   }

@@ -20,6 +20,15 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import { loadMonaco } from './monaco-loader';
 
+/**
+ * Discriminated outcome of {@link JsonEditorComponent.replaceAll}. Lets
+ * callers map cleanly onto telemetry's closed-enum failure reasons
+ * (issue #313 PR review): success vs. no-op vs. model-unavailable vs.
+ * Monaco-rejected-the-edit, without conflating them through a single
+ * `boolean`.
+ */
+export type ReplaceAllResult = 'applied' | 'noOp' | 'modelNull' | 'editsRejected';
+
 @Component({
   selector: 'jj-json-editor',
   standalone: true,
@@ -278,17 +287,61 @@ export class JsonEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * Localized in-document edit that preserves Monaco's undo stack. Prefer this
-   * for partial-content mutations (e.g. extract-embedded-json). Use the `value`
-   * input + the existing setValue effect for whole-document replacement (paste,
-   * load, clear) - the 17 existing setContent callers in HomeComponent are not
-   * migrating in this PR.
+   * Whole-document replacement that preserves Monaco's undo stack.
+   * Prefer this for wholesale swaps (upload, format, minify) where the entire
+   * model changes at once. Use `applyEdit` for offset-based surgical edits:
+   * its length-equality guard protects offset callers, but can reject a whole
+   * document range after Monaco normalizes CRLF to LF or strips a BOM.
    *
-   * Whole-document edits (range `[0, model length]`) are also supported when
-   * undo preservation is the goal; `executeEdits` with a single operation
-   * lands as one undo entry on Monaco's stack regardless of range size. The
-   * banner-extract accept path uses this property to make Ctrl+Z reverse a
-   * full-document swap from mixed text to extracted JSON.
+   * Implemented on top of `executeEdits` (rather than `pushEditOperations`)
+   * for the same reason `applyEdit` is: it is the API surface our test
+   * Monaco stubs implement (real Monaco supports both, with identical
+   * undo-stack semantics). The whole-document range is computed from the
+   * current model length so we never rely on `getFullModelRange`.
+   *
+   * Returns a discriminated outcome so callers can map cleanly onto
+   * telemetry's closed-enum reasons (issue #313 PR review):
+   * - `'applied'`: `executeEdits` reported the edit was applied.
+   * - `'noOp'`: model already holds the requested text; no edit needed.
+   * - `'modelNull'`: editor / Monaco namespace / model not available
+   *   (component mounted but Monaco still loading, or model disposed).
+   * - `'editsRejected'`: `executeEdits` returned `false` despite a valid
+   *   range and non-equal text.
+   */
+  replaceAll(text: string, source: string): ReplaceAllResult {
+    const editor = this.editor;
+    const monaco = this.monaco;
+    const model = editor?.getModel();
+    if (!editor || !monaco || !model) return 'modelNull';
+    if (model.getValue() === text) return 'noOp';
+
+    let didApply = false;
+    this.zone.runOutsideAngular(() => {
+      const startPosition = model.getPositionAt(0);
+      const endPosition = model.getPositionAt(model.getValue().length);
+      const range = new monaco.Range(
+        startPosition.lineNumber,
+        startPosition.column,
+        endPosition.lineNumber,
+        endPosition.column,
+      );
+      const applied = editor.executeEdits(source, [{ range, text, forceMoveMarkers: false }]);
+      if (!applied) return;
+      didApply = true;
+    });
+    return didApply ? 'applied' : 'editsRejected';
+  }
+
+  /**
+   * Localized in-document edit that preserves Monaco's undo stack. Prefer this
+   * for offset-based surgical mutations (e.g. extract-embedded-json); use
+   * `replaceAll` for wholesale swaps that replace the entire document.
+   *
+   * `applyEdit` intentionally guards the requested offsets by checking that the
+   * range text length matches `endOffset - startOffset`. That protects offset-
+   * based callers, but it can reject whole-document ranges after Monaco
+   * normalizes CRLF to LF or strips a BOM. That is why `replaceAll` exists
+   * separately instead of routing whole-document callers through `applyEdit`.
    */
   applyEdit(startOffset: number, endOffset: number, text: string, source: string): boolean {
     const editor = this.editor;
