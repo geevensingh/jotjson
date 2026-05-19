@@ -93,23 +93,42 @@ let directEmit: ((event: SwEvent) => void) | undefined;
 /**
  * Called by `LoggerService.flushSessionStorage()` once the App
  * Insights SDK has connected. Reads any pre-bootstrap events from
- * `sessionStorage`, then flips the module-scoped flag so subsequent
- * `queueSwEvent` calls emit directly via the supplied callback
- * instead of touching `sessionStorage`.
+ * `sessionStorage`, drains them via the supplied callback, then
+ * flips the module-scoped flag so subsequent `queueSwEvent` calls
+ * emit directly instead of touching `sessionStorage`.
  *
- * Per skeptic v5 S1: the safety-belt read MUST happen even when the
- * stored queue is empty, so the caller can dispatch to the
- * pre-bootstrap queue without losing direct-emit attachment. Per
- * skeptic v5 S4: each emit is wrapped in its own try/catch so a
- * single throwing dispatch does NOT drop the rest of the batch.
- * Per SP4 (v5): the flag is flipped AFTER the read+drain to prevent
- * a sync re-entrant queue write from bypassing both the
- * sessionStorage path AND the safety-belt re-read.
+ * Invariants:
+ * - **Idempotent**: a second call is a no-op so a future code path
+ *   that accidentally re-invokes attach (e.g., a retry after
+ *   auth-bridge late-init) cannot drop in-flight events or
+ *   double-drain.
+ * - **Exception-safe**: any `sessionStorage` failure (private mode,
+ *   blocked storage, quota / SecurityError) is swallowed; direct-
+ *   emit attachment ALWAYS completes so post-bootstrap events still
+ *   flow even when the pre-bootstrap queue is unreachable.
+ * - Per skeptic v5 S1: direct-emit attachment runs even when the
+ *   stored queue is empty, so post-bootstrap events for the
+ *   dominant non-stuck cohort do not silently re-queue to a
+ *   never-drained sessionStorage slot.
+ * - Per skeptic v5 S4: each emit is wrapped in its own try/catch so
+ *   a single throwing dispatch does NOT drop the rest of the batch.
+ * - Per SP4 (v5): the flag is flipped AFTER the read+drain to
+ *   prevent a sync re-entrant queue write from bypassing both the
+ *   sessionStorage path AND the safety-belt re-read.
  */
 export function attachSwEventDirectEmit(emit: (event: SwEvent) => void): void {
-  const raw = sessionStorage.getItem(SW_EVENTS_KEY);
-  if (raw) {
-    sessionStorage.removeItem(SW_EVENTS_KEY);
+  if (loggerConnected) return;
+
+  let raw: string | null = null;
+  try {
+    raw = sessionStorage.getItem(SW_EVENTS_KEY);
+    if (raw !== null) sessionStorage.removeItem(SW_EVENTS_KEY);
+  } catch {
+    // sessionStorage unavailable (private mode, blocked, quota /
+    // SecurityError). Continue: direct-emit attachment below is
+    // unconditional so post-bootstrap events still flow.
+  }
+  if (raw !== null) {
     try {
       const events: unknown = JSON.parse(raw);
       if (Array.isArray(events)) {

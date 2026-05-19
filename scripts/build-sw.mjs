@@ -30,7 +30,7 @@
 
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
@@ -130,7 +130,7 @@ export function main() {
 const invokedDirectly = (() => {
   try {
     if (!process.argv[1]) return false;
-    return pathToFileURL(process.argv[1]).href === import.meta.url;
+    return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url;
   } catch {
     return false;
   }

@@ -112,6 +112,64 @@ describe('sw-registration', () => {
       queueSwEvent({ name: 'sw.registered' });
       expect(emit).toHaveBeenCalledTimes(1);
     });
+
+    it('attaches direct-emit even when sessionStorage.getItem throws', () => {
+      // Simulate private-mode / blocked-storage / SecurityError on read.
+      const original = Storage.prototype.getItem;
+      Storage.prototype.getItem = function thrower(): string | null {
+        throw new DOMException('blocked', 'SecurityError');
+      };
+      try {
+        const emit = jasmine.createSpy<(event: SwEvent) => void>('emit');
+        // Must not throw despite storage failure.
+        expect(() => attachSwEventDirectEmit(emit)).not.toThrow();
+        expect(emit).not.toHaveBeenCalled();
+      } finally {
+        Storage.prototype.getItem = original;
+      }
+      // Direct-emit is wired: post-attach events bypass sessionStorage.
+      const directSpy = jasmine.createSpy<(event: SwEvent) => void>('directSpy');
+      // The first attach already won (idempotent). Force a fresh attach
+      // here for the wiring assertion by resetting state.
+      __resetSwRegistrationForTesting();
+      attachSwEventDirectEmit(directSpy);
+      queueSwEvent({ name: 'sw.registered' });
+      expect(directSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('attaches direct-emit even when sessionStorage.removeItem throws', () => {
+      // Pre-populate the queue so removeItem is reached.
+      queueSwEvent({ name: 'sw.registered' });
+      const original = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function thrower(): void {
+        throw new DOMException('blocked', 'SecurityError');
+      };
+      try {
+        const emit = jasmine.createSpy<(event: SwEvent) => void>('emit');
+        // Must not throw despite removeItem failure. The queued event
+        // is NOT drained because removeItem threw before parse/dispatch.
+        expect(() => attachSwEventDirectEmit(emit)).not.toThrow();
+      } finally {
+        Storage.prototype.removeItem = original;
+      }
+      // Direct-emit is still wired so post-attach events flow.
+      const directSpy = jasmine.createSpy<(event: SwEvent) => void>('directSpy');
+      __resetSwRegistrationForTesting();
+      attachSwEventDirectEmit(directSpy);
+      queueSwEvent({ name: 'sw.activated' });
+      expect(directSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('is idempotent: a second attach call is a no-op', () => {
+      const first = jasmine.createSpy<(event: SwEvent) => void>('first');
+      const second = jasmine.createSpy<(event: SwEvent) => void>('second');
+      attachSwEventDirectEmit(first);
+      // Re-invoke; should NOT switch the emit target or re-drain.
+      attachSwEventDirectEmit(second);
+      queueSwEvent({ name: 'sw.registered' });
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).not.toHaveBeenCalled();
+    });
   });
 
   describe('classifyRegistrationError', () => {

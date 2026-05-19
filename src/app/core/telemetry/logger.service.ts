@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { msalBridge } from './msal-bridge';
 import { HttpErrorContext, NormalizedError, normalizeError } from './normalize-error';
-import { attachSwEventDirectEmit, isSwEvent, SW_EVENTS_KEY, SwEvent } from './sw-registration';
+import { attachSwEventDirectEmit, SwEvent } from './sw-registration';
 import { TelemetryMessageId } from './telemetry-message-ids';
 import {
   TelemetryMeasurements,
@@ -298,14 +298,19 @@ export class LoggerService {
    * `flushSessionStorage()` after the App Insights SDK has connected.
    *
    * Per skeptic v5 S1 BLOCKER fix: `attachSwEventDirectEmit(dispatch)`
-   * runs UNCONDITIONALLY (before any early return), so direct-emit is
-   * attached for every user, regardless of whether the pre-bootstrap
-   * queue happened to be empty. Without this, `sw.activated` is lost
-   * for every non-stuck user (the dominant cohort) because their
-   * post-bootstrap events write to `sessionStorage` and never drain.
+   * runs UNCONDITIONALLY (the helper itself is exception-safe and
+   * idempotent), so direct-emit is attached for every user,
+   * regardless of whether the pre-bootstrap queue happened to be
+   * empty. Without this, `sw.activated` is lost for every non-stuck
+   * user (the dominant cohort) because their post-bootstrap events
+   * write to `sessionStorage` and never drain.
    *
-   * Per skeptic v5 S4: per-event try/catch in the drain loop so one
-   * throwing emit does not drop the rest of the batch.
+   * The drain itself lives in `attachSwEventDirectEmit` (with
+   * per-event try/catch per skeptic v5 S4). A previously-duplicated
+   * drain here was removed: it created a double-dispatch path on
+   * transient `removeItem` failures (storage that throws on remove
+   * but not on get) which would double-count `sw.*` events for the
+   * exact cohort the migration alert is meant to measure.
    */
   private flushSwEvents(): void {
     const dispatch = (event: SwEvent): void => {
@@ -315,25 +320,13 @@ export class LoggerService {
         this.event(event.name, { ...event.props });
       }
     };
-    attachSwEventDirectEmit(dispatch);
-
+    // Forward-defense belt-and-braces: attach is exception-safe today,
+    // but any future regression that re-introduces a throw here must
+    // never abort logger init for the dominant non-stuck cohort.
     try {
-      const raw = sessionStorage.getItem(SW_EVENTS_KEY);
-      if (!raw) return;
-      sessionStorage.removeItem(SW_EVENTS_KEY);
-      const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
-      for (const entry of parsed) {
-        if (!isSwEvent(entry)) continue;
-        try {
-          dispatch(entry);
-        } catch {
-          // Intentional swallow: one throwing emit must not drop others.
-        }
-      }
+      attachSwEventDirectEmit(dispatch);
     } catch {
-      // Malformed queue; drop silently. Direct-emit is attached above so
-      // future events still flow.
+      // intentional swallow: attach must never break logger startup.
     }
   }
 

@@ -33,7 +33,7 @@ const distRoot = resolve(repoRoot, 'dist/jotjson/browser');
 
 const SW_SOURCE = resolve(repoRoot, 'src/sw.worker.ts');
 const EXPECTED_SW_SOURCE_SHA256 =
-  'bdedb0e2c260c3aca55e87c84c29f17eb657f38c54d2ea0141daa39f63f84a48';
+  '55658452dbed6641104795903decdfe8b0b2694a37fb36fa84171cc1af382135';
 
 const REQUIRED_RUNTIME_SUBSTRINGS = [
   'skipWaiting',
@@ -56,7 +56,18 @@ function fail(message) {
 
 export function checkSourceHash() {
   const sourceBytes = readFileSync(SW_SOURCE);
-  const actualSha = createHash('sha256').update(sourceBytes).digest('hex');
+  // Normalize before hashing so the gate is stable across:
+  //   - .gitattributes `* text=auto` + core.autocrlf on Windows (CRLF
+  //     in working tree, LF in the git index; Linux/Mac/CI see LF).
+  //   - Editors that prepend a UTF-8 BOM (e.g., VSCode with
+  //     `files.encoding: utf8bom`).
+  //   - Legacy editors that save lone CR (older Mac tooling).
+  // The expected hash is the LF, BOM-less form.
+  const normalized = sourceBytes
+    .toString('utf8')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n');
+  const actualSha = createHash('sha256').update(normalized, 'utf8').digest('hex');
   if (actualSha !== EXPECTED_SW_SOURCE_SHA256) {
     return fail(
       `src/sw.worker.ts has changed. Expected SHA-256 ${EXPECTED_SW_SOURCE_SHA256}, got ${actualSha}.\n` +
