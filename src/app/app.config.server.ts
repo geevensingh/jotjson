@@ -114,11 +114,11 @@ class MsalBroadcastServiceServerStub {
 const serverOnlyConfig: ApplicationConfig = {
   providers: [
     provideServerRendering(withRoutes(serverRoutes)),
-    // Override MSAL providers with server-safe stubs. Any other
-    // browser-only provider (provideServiceWorker,
+    // Override MSAL providers with server-safe stubs. The
+    // browser-only providers (the SW registration in main.ts and
     // provideAppInitializer for AuthService.initializeFromRedirect)
-    // is intentionally NOT in `sharedProviders`, so it never reaches
-    // the server bootstrap.
+    // are intentionally NOT in `sharedProviders`, so they never
+    // reach the server bootstrap.
     { provide: MSAL_INSTANCE, useFactory: createMsalServerStub },
     { provide: MsalService, useClass: MsalServiceServerStub },
     { provide: MsalBroadcastService, useClass: MsalBroadcastServiceServerStub },
@@ -128,8 +128,9 @@ const serverOnlyConfig: ApplicationConfig = {
 /**
  * Composed configuration used by `main.server.ts`. Built from the
  * platform-shared providers plus server-specific overrides; keeps the
- * browser-only providers (service worker, MSAL real instance,
- * AuthService initializer) out of the server bootstrap entirely.
+ * browser-only providers (MSAL real instance, AuthService
+ * initializer; the SW registration in main.ts also stays out of the
+ * server bootstrap entirely.
  */
 export const config = mergeApplicationConfig(
   { providers: sharedProviders } satisfies ApplicationConfig,
