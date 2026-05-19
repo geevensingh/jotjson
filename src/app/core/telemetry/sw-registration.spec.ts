@@ -137,21 +137,30 @@ describe('sw-registration', () => {
       expect(directSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('attaches direct-emit even when sessionStorage.removeItem throws', () => {
+    it('skips drain but still attaches direct-emit when sessionStorage.removeItem throws', () => {
       // Pre-populate the queue so removeItem is reached.
       queueSwEvent({ name: 'sw.registered' });
+      const queuedRaw = sessionStorage.getItem('jotjson.sw.events');
+      expect(queuedRaw).not.toBeNull();
       const original = Storage.prototype.removeItem;
       Storage.prototype.removeItem = function thrower(): void {
         throw new DOMException('blocked', 'SecurityError');
       };
+      const emit = jasmine.createSpy<(event: SwEvent) => void>('emit');
       try {
-        const emit = jasmine.createSpy<(event: SwEvent) => void>('emit');
-        // Must not throw despite removeItem failure. The queued event
-        // is NOT drained because removeItem threw before parse/dispatch.
+        // Must not throw despite removeItem failure.
         expect(() => attachSwEventDirectEmit(emit)).not.toThrow();
       } finally {
         Storage.prototype.removeItem = original;
       }
+      // Per the canDrain invariant: the queue was NOT cleared, so
+      // the queued event is NOT drained on this attach. This is the
+      // defense against double-emit when the same queue is read
+      // again on the next page load.
+      expect(emit).not.toHaveBeenCalled();
+      // The queue must still be in sessionStorage so a later attach
+      // (next page load) can drain it once if removeItem succeeds.
+      expect(sessionStorage.getItem('jotjson.sw.events')).toBe(queuedRaw);
       // Direct-emit is still wired so post-attach events flow.
       const directSpy = jasmine.createSpy<(event: SwEvent) => void>('directSpy');
       __resetSwRegistrationForTesting();

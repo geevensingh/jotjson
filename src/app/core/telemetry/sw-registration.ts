@@ -106,6 +106,17 @@ let directEmit: ((event: SwEvent) => void) | undefined;
  *   blocked storage, quota / SecurityError) is swallowed; direct-
  *   emit attachment ALWAYS completes so post-bootstrap events still
  *   flow even when the pre-bootstrap queue is unreachable.
+ * - **Drain-only-on-clear**: events are dispatched ONLY when the
+ *   `removeItem` clear succeeded. If `getItem` returned a queue but
+ *   `removeItem` threw, the queue remains in sessionStorage and the
+ *   drain is skipped on this attach so the same envelopes are not
+ *   emitted twice on the next page load (where `removeItem` may
+ *   succeed). Tradeoff: a user who hits the rare `getItem-ok /
+ *   removeItem-fail` sequence AND closes the tab before the next
+ *   navigation loses those queued envelopes. Acceptable: tab-bounded
+ *   sessionStorage wipes them anyway, and clean once-per-event
+ *   semantics matter more to the migration alert thresholds than
+ *   over-counting noise.
  * - Per skeptic v5 S1: direct-emit attachment runs even when the
  *   stored queue is empty, so post-bootstrap events for the
  *   dominant non-stuck cohort do not silently re-queue to a
@@ -120,15 +131,22 @@ export function attachSwEventDirectEmit(emit: (event: SwEvent) => void): void {
   if (loggerConnected) return;
 
   let raw: string | null = null;
+  let canDrain = false;
   try {
     raw = sessionStorage.getItem(SW_EVENTS_KEY);
-    if (raw !== null) sessionStorage.removeItem(SW_EVENTS_KEY);
+    if (raw !== null) {
+      sessionStorage.removeItem(SW_EVENTS_KEY);
+      canDrain = true;
+    }
   } catch {
-    // sessionStorage unavailable (private mode, blocked, quota /
-    // SecurityError). Continue: direct-emit attachment below is
-    // unconditional so post-bootstrap events still flow.
+    // sessionStorage unavailable OR removeItem failed after getItem
+    // succeeded. In the latter case, raw is non-null but canDrain is
+    // still false; the queued envelopes stay in sessionStorage so
+    // the next page load can drain them once instead of this load
+    // emitting + the next load re-emitting. Direct-emit attachment
+    // below is unconditional so post-bootstrap events still flow.
   }
-  if (raw !== null) {
+  if (canDrain && raw !== null) {
     try {
       const events: unknown = JSON.parse(raw);
       if (Array.isArray(events)) {
