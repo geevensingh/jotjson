@@ -6055,7 +6055,7 @@ describe('JsonTreeComponent', () => {
     });
 
     describe('opening the dialog', () => {
-      it('pill click opens with viewport-relative width matching the v0.23.1 tooltip principle', async () => {
+      it('pill click opens with content-sized width capped at 90vw, mirroring the height behavior', async () => {
         await createWith({ note: 'first\nsecond' });
         cmp.expandAll();
         fixture.detectChanges();
@@ -6063,16 +6063,21 @@ describe('JsonTreeComponent', () => {
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
         expect(open).toHaveBeenCalledTimes(1);
-        // jasmine.objectContaining guards intent without freezing the
-        // shape of the config object: future PRs may add panelClass /
-        // restoreFocus / other MatDialogConfig keys, and this
-        // assertion should keep firing on the dimensions only. The
-        // sibling `jj-tooltip-wide` rule in `src/styles/_material.scss`
-        // uses `max-width: 90vw` for the same reasoning.
-        expect(open).toHaveBeenCalledWith(
-          DecodedValueDialogComponent,
-          jasmine.objectContaining({ width: '90vw', maxWidth: '95vw' }),
-        );
+        // Two explicit assertions instead of `jasmine.objectContaining`:
+        // the latter only checks listed keys and does NOT assert
+        // absence, so a future PR re-introducing `width: '90vw'`
+        // would silently satisfy `objectContaining({ maxWidth: '90vw' })`
+        // and re-introduce the "narrow content, wide dialog" bug.
+        // Pinning `config.width` to `undefined` plus `config.maxWidth`
+        // to `'90vw'` matches the intent: content-sized, capped at
+        // 90vw (the same model the `.jj-tooltip-wide` rule in
+        // `src/styles/_material.scss` uses).
+        const config = open.calls.mostRecent().args[1] as {
+          width?: string;
+          maxWidth?: string;
+        };
+        expect(config.width).toBeUndefined();
+        expect(config.maxWidth).toBe('90vw');
       });
 
       it('pill click opens without extractCandidate when the row is not extractable', async () => {
