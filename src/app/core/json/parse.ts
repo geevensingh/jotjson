@@ -233,14 +233,14 @@ function harvestComments(text: string): {
     }
   };
 
-  const flushPendingAsLeading = (path: string): void => {
+  const flushPending = (path: string, slot: 'leading' | 'closeLeading'): void => {
     if (pendingLeading.length === 0) return;
-    for (const body of pendingLeading) appendBody(path, 'leading', body);
+    for (const body of pendingLeading) appendBody(path, slot, body);
     pendingLeading.length = 0;
   };
 
   const onValueStart = (path: string): void => {
-    flushPendingAsLeading(path);
+    flushPending(path, 'leading');
     closeJustSeenPath = null;
   };
 
@@ -253,10 +253,7 @@ function harvestComments(text: string): {
   const onContainerEnd = (offset: number, length: number, startLine: number): void => {
     const path = containerPathStack.pop();
     if (path === undefined) return;
-    if (pendingLeading.length > 0) {
-      for (const body of pendingLeading) appendBody(path, 'closeLeading', body);
-      pendingLeading.length = 0;
-    }
+    flushPending(path, 'closeLeading');
     const endOffset = offset + length;
     closeJustSeenPath = path;
     closeJustSeenOffset = endOffset;
