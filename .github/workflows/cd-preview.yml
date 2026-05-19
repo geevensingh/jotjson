@@ -62,10 +62,13 @@ on:
 
 concurrency:
   group: cd-preview-pr-${{ github.event.pull_request.number }}
-  # Newer commits on the same PR cancel older runs. Teardown on `closed`
-  # is the final event for a PR, so collateral cancellation isn't a
-  # concern.
-  cancel-in-progress: true
+  # Newer commits on the same PR cancel older runs, BUT a `closed`
+  # event is terminal and must never be cancelled by a tail
+  # `synchronize` (root-cause class for the PR #268 missed-teardown:
+  # a synchronize-then-close race with unconditional
+  # `cancel-in-progress: true` could cancel the queued teardown,
+  # leaking the SWA env + per-PR Cosmos DB until manual cleanup).
+  cancel-in-progress: ${{ github.event.action != 'closed' }}
 
 permissions:
   contents: read
@@ -82,9 +85,18 @@ env:
 jobs:
   build-and-deploy:
     name: Build and deploy preview (pr-${{ github.event.pull_request.number }})
+    # NOTE: bot-authored PRs (dependabot[bot] today; future Renovate / Snyk
+    # / Mend covered structurally by user.type rather than user.login) do
+    # NOT get preview deploys. They held 9 of 10 SWA staging slots on
+    # `swa-jotjson-nonprod` and starved internal PRs of the cap. CI
+    # remains the correctness gate for dep bumps. The matching `teardown`
+    # job below intentionally has NO bot filter so any env created before
+    # this filter landed (or before a future revert) still gets cleaned
+    # up on close.
     if: >-
       github.event.action != 'closed' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: nonprod
@@ -179,6 +191,23 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_NONPROD }}
 
+      - name: Cull stale preview envs (just-in-time)
+        # Best-effort cap-pressure relief: deletes SWA envs for CLOSED /
+        # MERGED PRs (and their paired Cosmos DBs) so the upcoming SWA
+        # deploy step does not hit the Standard-tier 10-env staging cap.
+        # The daily cron in preview-cull.yml is the primary safety net;
+        # this in-deploy step is the just-in-time backstop. continue-on-
+        # error so a transient cull failure does not block the deploy.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/cull-stale-previews.mjs \
+            --swa-name="$SWA_NAME" \
+            --rg="$NONPROD_RG" \
+            --cosmos-account="$COSMOS_ACCOUNT" \
+            --paired-cosmos
+
       - name: Provision per-PR Cosmos database
         # Idempotent: --throughput omitted (account-default serverless).
         # If the database already exists, `az cosmosdb sql database create`
@@ -272,9 +301,13 @@ jobs:
   e2e-preview:
     name: Smoke e2e against preview (shadow)
     needs: build-and-deploy
+    # Same bot filter as build-and-deploy (see rationale there). Without
+    # this, e2e-preview would queue against a non-existent preview URL
+    # for bot PRs and fail noisily.
     if: >-
       github.event.action != 'closed' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Shadow mode: this job runs but does not gate the PR. The test step
