@@ -105,6 +105,18 @@ jobs:
         id: lint-swa-config
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:swa-config
+      - name: Lint - SW shape
+        # Asserts (1) the source SHA-256 of src/sw.worker.ts matches the
+        # value committed in scripts/check-sw-shape.mjs (mechanical
+        # forcing function: every edit to the SW source must be paired
+        # with a hash update visible in review), and (2) post-build
+        # byte-identity of dist/jotjson/browser/sw.js vs every legacy
+        # alias plus the inert ngsw.json stub. The build-output
+        # assertions only fire when dist/ exists, so this step is safe
+        # to run pre-build.
+        id: lint-sw-shape
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:sw-shape
       - name: Lint - Prettier formatting
         id: lint-format
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
@@ -150,6 +162,7 @@ jobs:
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
           OUTCOME_CSP: ${{ steps.lint-csp-hashes.outcome }}
           OUTCOME_SWA_CONFIG: ${{ steps.lint-swa-config.outcome }}
+          OUTCOME_SW_SHAPE: ${{ steps.lint-sw-shape.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
           OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
           OUTCOME_TEST_PERF_SCRIPTS: ${{ steps.test-perf-scripts.outcome }}
@@ -178,6 +191,7 @@ jobs:
             emit "Production patterns"     "$OUTCOME_PROD"         "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
             emit "CSP hashes (source)"     "$OUTCOME_CSP"          "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
             emit "SWA config"              "$OUTCOME_SWA_CONFIG"   "npm run lint:swa-config - fix the assertion failure printed above; see scripts/check-swa-config.mjs"
+            emit "SW shape"                "$OUTCOME_SW_SHAPE"     "npm run lint:sw-shape - if src/sw.worker.ts changed intentionally, update EXPECTED_SW_SOURCE_SHA256 in scripts/check-sw-shape.mjs"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
             emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
             emit "Perf script tests"       "$OUTCOME_TEST_PERF_SCRIPTS" "npm run test:perf-scripts - then fix the failing assertion in perf/fixtures/*.test.mjs"
@@ -185,7 +199,7 @@ jobs:
             if [ "$fail" -eq 1 ]; then
               echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 10 gates passed (8 lint + script tests + perf script tests)."
+              echo "All 11 gates passed (9 lint + script tests + perf script tests)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts

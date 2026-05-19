@@ -393,5 +393,17 @@ jobs:
       - name: Check deploy freshness
         if: ${{ success() && steps.deploy_swa.outcome == 'success' }}
         timeout-minutes: 10
-        run: npm run check:deploy-freshness -- --expected-sha=${{ github.sha }} --origin=https://jotjson.com
+        # NOTE: Do not re-add --expected-sha=${{ github.sha }} -- in
+        # workflow_run context `github.sha` resolves to the
+        # default-branch HEAD at trigger time, NOT the built SHA
+        # (which is `workflow_run.head_sha`, used at line 105 above).
+        # The current freshness check verifies edge propagation via
+        # byte-match against the locally-built `dist/jotjson/browser/sw.js`.
+        # That match is structural, not SHA-tied: `src/sw.worker.ts`
+        # has no per-commit values, so the SW bytes are deterministic
+        # across commits that don't touch SW source. Restoring true
+        # SHA-tied verification needs a build-time SHA marker that the
+        # script can probe (e.g., a generated `/build-info.json`).
+        # Tracked as a follow-up issue (see PR description).
+        run: npm run check:deploy-freshness -- --origin=https://jotjson.com
 
