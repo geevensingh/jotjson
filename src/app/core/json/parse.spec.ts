@@ -175,7 +175,7 @@ describe('parse (pure)', () => {
 
     it('pushes onto an existing slot rather than replacing it (case 3)', () => {
       // Stacked leading comments exercise the "path exists, slot exists,
-      // push" branch. The `flushPendingAsLeading` drain calls `appendBody`
+      // push" branch. The `flushPending` drain calls `appendBody`
       // twice for the same path+slot; the second call must push to the
       // existing array, not overwrite it.
       const result = parse('{\n  // first\n  // second\n  "x": 1\n}');
