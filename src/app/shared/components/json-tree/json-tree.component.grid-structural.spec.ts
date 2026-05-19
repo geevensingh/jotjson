@@ -806,4 +806,246 @@ describe('JsonTreeComponent (.tree-row Grid template invariants -- v0.26.1)', ()
       .withContext('the brace span of an empty array must render the literal `[]`')
       .toBe('[]');
   });
+
+  // 19. Issue #282 (v0.28.2): close-row structural parity. The close
+  //     row's firstElementChild must be `.tree-row-leading`, and the
+  //     leading wrapper's first child must be the chevron-sized
+  //     `.tree-twisty.tree-spacer` placeholder. This pins the
+  //     wrapper-count-and-order so a future contributor who reorders
+  //     close-row children regresses loudly.
+  it('issue #282: close row starts with .tree-row-leading > .tree-twisty.tree-spacer', async () => {
+    const value = await loadFixture('MidKeyMidValue.json');
+    const fixture = await configure(value, 800);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const closeRow = host.querySelector<HTMLElement>('.tree-row.tree-row--close');
+    expect(closeRow)
+      .withContext('at least one .tree-row--close must render after expandAll')
+      .not.toBeNull();
+
+    const firstChild = closeRow!.firstElementChild as HTMLElement | null;
+    expect(firstChild).withContext('close row must have at least one child element').not.toBeNull();
+    expect(firstChild!.classList.contains('tree-row-leading'))
+      .withContext(
+        `close row's firstElementChild must be .tree-row-leading; got class="${firstChild!.className}". ` +
+          `Reordering children regresses the issue #282 alignment fix because the spacer column ` +
+          `placement depends on this being first.`,
+      )
+      .toBe(true);
+
+    const leadingFirstChild = firstChild!.firstElementChild as HTMLElement | null;
+    expect(leadingFirstChild)
+      .withContext('.tree-row-leading on a close row must contain a child element')
+      .not.toBeNull();
+    expect(leadingFirstChild!.classList.contains('tree-twisty'))
+      .withContext(
+        `.tree-row-leading's first child on a close row must be .tree-twisty (the spacer); ` +
+          `got class="${leadingFirstChild!.className}".`,
+      )
+      .toBe(true);
+    expect(leadingFirstChild!.classList.contains('tree-spacer'))
+      .withContext(
+        `the close-row twisty must carry the .tree-spacer modifier (opacity:0 placeholder, ` +
+          `not a real chevron button). got class="${leadingFirstChild!.className}".`,
+      )
+      .toBe(true);
+  });
+
+  // 20. Issue #282 (v0.28.2): the close-row brace's left edge must
+  //     align with the left edge of a sibling row's key at the same
+  //     indent level. This is the direct, screenshot-driven
+  //     invariant that the v0.28.1 bug violated (brace sat one
+  //     chevron-width LEFT of sibling keys because the close row had
+  //     no leading spacer).
+  //
+  //     Fixture is built inline to guarantee a sibling leaf at the
+  //     same indent level as the close row: `{ arr: [1, 2], next: 'x' }`
+  //     after expand produces a level-1 close row for `arr` and a
+  //     level-1 leaf row for `next`. They share `padding-left.em =
+  //     1.25 * 1 = 1.25em`, so any horizontal misalignment is
+  //     attributable to the in-row wrapper structure.
+  it('issue #282: close-row brace left edge equals sibling-key left edge at same indent level', async () => {
+    const fixture = await configure({ arr: [1, 2], next: 'x' }, 800);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const closeRow = host.querySelector<HTMLElement>('.tree-row.tree-row--close');
+    expect(closeRow).withContext('close row for `arr` must render').not.toBeNull();
+    const brace = closeRow!.querySelector<HTMLElement>('.tree-value-brace');
+    expect(brace).withContext('close-row brace must render').not.toBeNull();
+
+    const siblingLeaf = host.querySelector<HTMLElement>('[data-path="$.next"]');
+    expect(siblingLeaf)
+      .withContext('level-1 sibling leaf row `next` must render at same indent as `arr` close')
+      .not.toBeNull();
+    const siblingKey = siblingLeaf!.querySelector<HTMLElement>('.tree-key');
+    expect(siblingKey).withContext('sibling leaf must have a .tree-key element').not.toBeNull();
+
+    const braceLeft = brace!.getBoundingClientRect().left;
+    const siblingKeyLeft = siblingKey!.getBoundingClientRect().left;
+    const delta = Math.abs(braceLeft - siblingKeyLeft);
+    expect(delta)
+      .withContext(
+        `closeBrace.left=${braceLeft.toFixed(2)} vs siblingKey.left=${siblingKeyLeft.toFixed(2)} ` +
+          `(delta=${delta.toFixed(2)}). The issue #282 alignment fix requires the close-row brace ` +
+          `to sit at the same x-position as sibling-row keys at the same indent level. Before the ` +
+          `fix the delta was ~1.1em (one chevron-width); after the fix it must be within 1px ` +
+          `(sub-pixel rounding only).`,
+      )
+      .toBeLessThanOrEqual(1);
+  });
+
+  // 21. Issue #282 (v0.28.2): close-row height must still match the
+  //     probe within sub-pixel rounding. The probe at html:245-288
+  //     already contains a `.tree-row-leading > .tree-twisty` chevron
+  //     (a REAL chevron, taller than the close row's `.tree-spacer`
+  //     placeholder if the two differed in height), so the probe is
+  //     a strict upper bound on close-row height. CDK virtual-scroll
+  //     uses the probe to drive `itemSize`; a regression here would
+  //     cause rows to overlap or leave gaps.
+  it('issue #282: close-row height equals probe row height within 2 px', async () => {
+    const value = await loadFixture('MidKeyMidValue.json');
+    const fixture = await configure(value, 800);
+    teardown = attachFixtureToBody(fixture, 'dark');
+    await drainViewport(fixture);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const probe = probeRow(host);
+    const closeRow = host.querySelector<HTMLElement>('.tree-row.tree-row--close');
+    expect(probe).withContext('probe row must render').not.toBeNull();
+    expect(closeRow).withContext('a close row must render after expandAll').not.toBeNull();
+
+    const probeHeight = probe!.getBoundingClientRect().height;
+    const closeHeight = closeRow!.getBoundingClientRect().height;
+    expect(Math.abs(probeHeight - closeHeight))
+      .withContext(
+        `probeHeight=${probeHeight.toFixed(2)} vs closeHeight=${closeHeight.toFixed(2)}. ` +
+          `The .tree-twisty.tree-spacer placeholder in the close-row leading wrapper must ` +
+          `match the natural row height (the probe's real chevron is the strict upper bound). ` +
+          `A mismatch beyond sub-pixel rounding regresses CDK virtual-scroll itemSize.`,
+      )
+      .toBeLessThanOrEqual(2);
+  });
+
+  // 22. Issue #282 (v0.28.2): a long leading-close comment at a
+  //     deeply-nested level under narrow-pane pressure must (i) not
+  //     cause the close row to horizontally overflow, and (ii)
+  //     ellipsify the comment inside the leading wrapper. This is
+  //     the test the rubber-duck skeptic flagged as the highest-risk
+  //     coverage gap: putting the leading-close comment INSIDE
+  //     `.tree-row-leading` (alongside the spacer) means the comment
+  //     and spacer share the wrapper's shrink budget, mirroring the
+  //     open-row pattern. Without this test, a future regression
+  //     could leave the leading-close comment OUTSIDE the wrapper as
+  //     a sibling flex item, where it would overflow under pressure.
+  it('issue #282: long leading-close comment at level 4 + 360px viewport: no overflow, ellipsifies', async () => {
+    // Level-4 close row: $.a.b.c.items close (items is the array).
+    const fixture = await configure({ a: { b: { c: { items: [1, 2, 3] } } } }, 360);
+    teardown = attachFixtureToBody(fixture, 'dark');
+
+    // Reset prefs explicitly: tests earlier in the suite may
+    // have changed treeFontSize (e.g. test #17 sets it to 20), and
+    // PreferencesService can leak across TestBed.resetTestingModule
+    // calls because it backs to localStorage. The em-based
+    // padding-left math depends on the default font-size for this
+    // assertion's shrink budget.
+    const prefs = TestBed.inject(PreferencesService);
+    prefs.reset();
+
+    await drainViewport(fixture);
+
+    // Apply the long leading-close comment AFTER initial render
+    // (mirrors test #10's pattern: setting commentsByPath before
+    // attach + drain occasionally races with CDK virtual-scroll's
+    // first measurement pass under full-suite GC pressure).
+    fixture.componentRef.setInput(
+      'commentsByPath',
+      new Map([
+        [
+          '$.a.b.c.items',
+          {
+            closeLeading: [
+              'this is an intentionally extremely long leading-close comment that should ellipsify ' +
+                'under wrapper pressure and must not push the brace or the row past the panel edge. '.repeat(
+                  3,
+                ),
+            ],
+          },
+        ],
+      ]),
+    );
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const closeRow = host.querySelector<HTMLElement>(
+      '.tree-row.tree-row--close[data-close-path="$.a.b.c.items"]',
+    );
+    expect(closeRow)
+      .withContext('the level-4 close row for `items` must render with the leading-close comment')
+      .not.toBeNull();
+
+    const leadingComment = closeRow!.querySelector<HTMLElement>(
+      '.tree-comment-leading.tree-comment-leading--close',
+    );
+    expect(leadingComment)
+      .withContext('the leading-close comment must render inside the close row')
+      .not.toBeNull();
+
+    // Structural invariant: leading-close comment lives INSIDE
+    // .tree-row-leading (not as a sibling). This is the structural
+    // half of the issue #282 fix that makes the comment share the
+    // wrapper's shrink budget with the spacer, mirroring the
+    // open-row pattern.
+    const leadingWrapper = closeRow!.querySelector<HTMLElement>('.tree-row-leading');
+    expect(leadingWrapper).withContext('close row must carry a .tree-row-leading').not.toBeNull();
+    expect(leadingWrapper!.contains(leadingComment!))
+      .withContext(
+        "leading-close comment must live INSIDE .tree-row-leading so it shares the spacer's " +
+          'shrink budget; without this it would overflow under wrapper pressure as a sibling flex item',
+      )
+      .toBe(true);
+
+    // Computed-style invariant: the comment carries the ellipsify
+    // trio + min-width:0 (inherited from .tree-comment at scss:764-779).
+    // This is the SCSS contract that makes shrinkage possible at all.
+    // We assert it directly because a regression here (e.g. someone
+    // overrides .tree-comment-leading--close with white-space:normal)
+    // would prevent ellipsification even if the structure is right.
+    const commentStyles = getComputedStyle(leadingComment!);
+    expect(commentStyles.overflowX)
+      .withContext('.tree-comment-leading--close must inherit overflow:hidden from .tree-comment')
+      .toBe('hidden');
+    expect(commentStyles.textOverflow)
+      .withContext('.tree-comment-leading--close must inherit text-overflow:ellipsis')
+      .toBe('ellipsis');
+    expect(commentStyles.whiteSpace)
+      .withContext('.tree-comment-leading--close must inherit white-space:nowrap')
+      .toBe('nowrap');
+    expect(commentStyles.minWidth)
+      .withContext(
+        '.tree-comment must declare min-width:0 so the inline-flex .tree-row-leading wrapper ' +
+          'can shrink it below intrinsic',
+      )
+      .toBe('0px');
+
+    // Behavioral invariant: under narrow-pane pressure the comment
+    // actually IS clipped (scrollWidth > clientWidth on the comment
+    // span). This proves the shrink machinery fires for real, not
+    // just that the SCSS contract is in place. Combined with the
+    // structural + computed-style checks above, this is the full
+    // S3-coverage the rubber-duck skeptic flagged.
+    expect(leadingComment!.scrollWidth)
+      .withContext(
+        `leading-close comment.scrollWidth=${leadingComment!.scrollWidth} vs ` +
+          `clientWidth=${leadingComment!.clientWidth}. Under narrow-pane pressure the comment ` +
+          `must be clipped (scrollWidth > clientWidth); if equal, the comment is rendering ` +
+          `at intrinsic width which means the shrink machinery never fired.`,
+      )
+      .toBeGreaterThan(leadingComment!.clientWidth);
+  });
 });
