@@ -606,15 +606,13 @@ lives at [`docs/sw-migration.md`](sw-migration.md).
 ```kusto
 // What fraction of sessions are running the post-migration SW?
 //
-// IMPORTANT: ships with placeholder `cutoverBuildNumber = 999999999`.
-// Replace post-merge with the actual `git rev-list --count origin/main`
-// per the runbook. The LOUD fail-safe direction is deliberate: every
-// session lands in 'pre', so the dashboard reads 0% post-migration
-// after we just shipped the migration AND the scheduled alert fires
-// (every session matches `buildNumber < 999_999_999`). A `0`
-// placeholder would silently put every session in 'post' and silence
-// the alert -- inverted fail-safe.
-let cutoverBuildNumber = 999999999;  // <-- replace post-merge.
+// The cutoverBuildNumber below is `646`, the `git rev-list --count`
+// of the SW migration squash-merge commit `2b1704c` (PR #330,
+// 2026-05-19). For future SW migrations, replace per the runbook
+// procedure at docs/sw-migration.md (the LOUD-fail-safe placeholder
+// pattern: ship `999999999` until backfilled post-merge with the
+// rev count of the SW-migration squash-merge commit).
+let cutoverBuildNumber = 646;
 customEvents
 | where timestamp > ago(7d)
 | where name == "sw.activated"

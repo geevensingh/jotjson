@@ -174,21 +174,29 @@ AppEvents
   }
 }
 
-// SW migration verification alert. Fires hourly if any session
-// emits `sw.activated` with `buildNumber < cutoverBuildNumber`,
-// i.e. is still running the pre-migration build. The placeholder
-// `999999999` is the LOUD fail-safe direction: until backfilled
-// post-merge per docs/sw-migration.md, every session matches and
-// the alert fires on every evaluation. A backfilled value gives
-// a quiet alarm during normal operation and a loud alarm if a
-// stuck cohort plateaus above threshold.
+// SW migration verification alert. Fires hourly when more than
+// 10 distinct sessions in the last hour emit `sw.activated` with
+// `buildNumber < 646` (the SW migration cutover, established by
+// PR #330 squash-merge commit `2b1704c`, backfilled 2026-05-19).
+//
+// Threshold semantics: the criteria below sets
+// `metricMeasureColumn: 'StuckSessions'` so the threshold is
+// compared against the value of the StuckSessions column (a
+// `dcount(SessionId)`), not the row count of the query results.
+// An earlier shape (no `metricMeasureColumn` + `timeAggregation:
+// 'Count'` on a `summarize`-reduced single-row result) was
+// structurally unable to fire because Count counted result rows
+// (always 1) and `1 > 10` is false. See follow-up issue for the
+// design rationale.
+//
+// To update for a future SW migration, see docs/sw-migration.md.
 resource swMigrationStuckCohortAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
   name: 'alert-${namePrefix}-sw-migration-stuck-cohort'
   location: location
   tags: tags
   kind: 'LogAlert'
   properties: {
-    description: 'JotJSON sessions still running pre-migration SW build. See docs/sw-migration.md for the cutover-backfill procedure and observation schedule.'
+    description: 'JotJSON sessions still running pre-migration SW build. See docs/sw-migration.md for the cutover history and observation schedule.'
     severity: 2
     enabled: true
     evaluationFrequency: 'PT1H'
@@ -200,15 +208,16 @@ resource swMigrationStuckCohortAlert 'Microsoft.Insights/scheduledQueryRules@202
       allOf: [
         {
           query: '''
-let cutoverBuildNumber = 999999999;
+let cutoverBuildNumber = 646;
 AppEvents
 | where TimeGenerated > ago(1h)
 | where Name == 'sw.activated'
 | extend buildNumber = toint(Properties.buildNumber)
 | where isnotnull(buildNumber)
 | where buildNumber < cutoverBuildNumber
-| summarize hourly = dcount(SessionId) '''
-          timeAggregation: 'Count'
+| summarize StuckSessions = dcount(SessionId) '''
+          metricMeasureColumn: 'StuckSessions'
+          timeAggregation: 'Total'
           threshold: 10
           operator: 'GreaterThan'
           failingPeriods: {
