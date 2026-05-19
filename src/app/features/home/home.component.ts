@@ -46,6 +46,7 @@ import {
   ClipboardPollingService,
   type ClipboardGrantedReadResult,
 } from '../../core/clipboard/clipboard-polling.service';
+import { EnvLabelService } from '../../core/env/env-label.service';
 import { formatText } from '../../core/json/format-text';
 import {
   ExtractedJson,
@@ -347,6 +348,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly titleService = inject(Title);
+  private readonly envLabel = inject(EnvLabelService);
   private readonly seo = inject(SeoService);
   private readonly quota = inject(QuotaNotificationService);
   private readonly dialog = inject(MatDialog);
@@ -998,7 +1000,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       const title = this.title();
       const dirtyPrefix = this.dirty() ? '* ' : '';
       if (!blob) {
-        this.titleService.setTitle(`${dirtyPrefix}${this.homepageTitle}`);
+        this.titleService.setTitle(this.envLabel.withPrefix(`${dirtyPrefix}${this.homepageTitle}`));
         // Skip on server prerender so the static OG defaults from
         // index.html survive into the prerendered HTML. Crawlers see the
         // homepage's og:title / og:description / og:type / og:url /
@@ -1010,7 +1012,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
       const label =
         title.trim().length > 0 ? title.trim() : $localize`:@@app.title.untitled:Untitled`;
-      this.titleService.setTitle(`${dirtyPrefix}${label} | JotJSON`);
+      this.titleService.setTitle(this.envLabel.withPrefix(`${dirtyPrefix}${label} | JotJSON`));
       if (this.isBrowser) {
         if (blob.isPublic) {
           this.seo.setOpenGraphForBlob(blob);

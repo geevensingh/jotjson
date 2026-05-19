@@ -75,14 +75,41 @@ export const REQUIRED_ASSET_EXTENSIONS = Object.freeze([
   'webmanifest',
 ]);
 
-// Service worker gateway: the manifest and the worker script itself.
-// These MUST be `no-store` (not `no-cache, must-revalidate`) because
-// Azure SWA returns a stuck ETag ("20260402") that makes conditional
-// GETs perpetually return 304, freezing the Angular SW update flow.
-// See issue #167 and DESIGN_SPEC.md cache-header rationale.
-export const SW_GATEWAY_PATHS = Object.freeze(['/ngsw.json', '/ngsw-worker.js']);
+// Service worker gateway: the manifest plus the canonical and legacy
+// worker scripts. These MUST be `no-store` (not `no-cache,
+// must-revalidate`) because Azure SWA returns a stuck ETag
+// ("20260402") that makes conditional GETs perpetually return 304,
+// freezing the service-worker update flow. See issue #167 and
+// DESIGN_SPEC.md cache-header rationale.
+//
+// `/sw.js` is the canonical URL the new minimal SW registers at.
+// `/ngsw-worker.js` is the permanent passthrough alias - the URL
+// the OLD `@angular/service-worker` cohort is registered on; the
+// browser's 24h byte-revalidation against this URL delivers the new
+// minimal SW bytes (byte-identical to `/sw.js` per `scripts/
+// build-sw.mjs`) so stuck users unstick. `/ngsw.json` is a
+// build-emitted `{}` stub kept alive so the OLD ngsw's periodic
+// poll returns 200 with an inert manifest rather than entering the
+// `unrecoverable` failure state mid-migration.
+export const SW_GATEWAY_PATHS = Object.freeze(['/sw.js', '/ngsw-worker.js', '/ngsw.json']);
 
 export const SW_GATEWAY_CACHE_CONTROL = 'no-store';
+
+// Hashed-asset immutable cache rules. Angular emits hashed filenames
+// like `main-A1B2C3D4.js` directly in `dist/jotjson/browser/`; serving
+// them with `Cache-Control: public, max-age=31536000, immutable`
+// closes the gap between losing ngsw's cached-asset story and the
+// previous "fresh-from-network on every visit" SWA default
+// (`must-revalidate, max-age=30`). CRITICAL ORDERING: these rules
+// MUST come AFTER all `SW_GATEWAY_PATHS` and `SHELL_PATHS` entries in
+// `staticwebapp.config.json`. SWA processes routes top-to-bottom; if
+// `/*.js` preceded `/sw.js`, the SW gateway would get `immutable`
+// headers and the 24h byte-revalidation could not see new bytes for
+// a year - bricking the whole migration mechanism. The
+// route-order assertion in `checkRoutes` catches this drift.
+export const IMMUTABLE_ASSET_PATHS = Object.freeze(['/*.js', '/*.css', '/*.woff2']);
+
+export const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 // HTML shell paths: must revalidate but stay on `no-cache, must-revalidate`
 // (not `no-store`) to preserve bfcache eligibility on the prerendered `/`
@@ -448,12 +475,50 @@ export function checkMimeTypes(config) {
   return errors;
 }
 
+export function checkImmutableAssets(config) {
+  const errors = [];
+  const routes = Array.isArray(config?.routes) ? config.routes : [];
+  if (routes.length === 0) {
+    // checkRoutes already reports the missing-routes case.
+    return errors;
+  }
+  for (const path of IMMUTABLE_ASSET_PATHS) {
+    const route = routes.find((entry) => entry?.route === path);
+    if (!route) {
+      errors.push(
+        `routes is missing the '${path}' immutable-asset Cache-Control rule. ` +
+          `Hashed Angular asset filenames rely on this rule for repeat-visit ` +
+          `speed; without it, SWA's default (must-revalidate, max-age=30) ` +
+          `removes the perf benefit ngsw's cached-asset story used to provide.`,
+      );
+      continue;
+    }
+    const cacheControl = route?.headers?.['Cache-Control'];
+    if (cacheControl !== IMMUTABLE_ASSET_CACHE_CONTROL) {
+      errors.push(
+        `routes['${path}'].headers['Cache-Control'] must be ` +
+          `'${IMMUTABLE_ASSET_CACHE_CONTROL}' for immutable hashed assets ` +
+          `(got: ${JSON.stringify(cacheControl)}).`,
+      );
+    }
+    const methods = Array.isArray(route?.methods) ? route.methods : null;
+    if (!methods || !methods.includes('GET')) {
+      errors.push(
+        `routes['${path}'].methods must include 'GET' so only safe reads ` +
+          `pick up the immutable header (got: ${JSON.stringify(methods)}).`,
+      );
+    }
+  }
+  return errors;
+}
+
 // Aggregates all assertion blocks. Returns { ok, errors }.
 export function checkConfig(config) {
   const errors = [
     ...checkGlobalHeaders(config),
     ...checkNavigationFallback(config),
     ...checkRoutes(config),
+    ...checkImmutableAssets(config),
     ...checkPlatform(config),
     ...checkMimeTypes(config),
   ];

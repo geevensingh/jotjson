@@ -284,6 +284,57 @@
         }
       })();
     </script>
+    <script>
+      /*
+       * Cold-boot environment indicator. Classifies the runtime host
+       * and, when not on prod, swaps the favicon <link> hrefs and the
+       * document <title> BEFORE the browser fetches favicons or paints
+       * the splash. The same SWA production bundle ships to prod,
+       * nonprod, PR-preview, and is also served from localhost during
+       * dev; runtime detection is what makes the indicator work
+       * without per-env bundles.
+       *
+       * Mirror of `src/app/core/env/env-label.ts`. Keep the two in
+       * sync. The TS helper is unit-tested; this inline copy is
+       * covered by the CSP-hash lint (source + dist).
+       *
+       * Wrapped in try/catch defensively - a broken indicator is
+       * worse than a missing one.
+       */
+      (function () {
+        try {
+          var hostname = window.location.hostname;
+          if (!hostname) return;
+          var prodHosts = { 'jotjson.com': 1, 'www.jotjson.com': 1 };
+          var devHosts = { localhost: 1, '127.0.0.1': 1, '[::1]': 1 };
+          var swaSuffix = '.azurestaticapps.net';
+          var swaStem = 'calm-flower-01969880f';
+          var label = 'unknown';
+          if (prodHosts[hostname]) {
+            label = 'prod';
+          } else if (devHosts[hostname]) {
+            label = 'dev';
+          } else if (hostname.endsWith(swaSuffix)) {
+            var stem = hostname.slice(0, hostname.length - swaSuffix.length);
+            if (stem.startsWith(swaStem + '.')) label = 'nonprod';
+            else if (stem.startsWith(swaStem + '-')) label = 'preview';
+          }
+          if (label === 'prod') return;
+          var swaps = [
+            ['link[rel="icon"][type="image/x-icon"]', 'favicon-nonprod.ico'],
+            ['link[rel="icon"][type="image/svg+xml"]', 'icons/icon-nonprod.svg'],
+            ['link[rel="apple-touch-icon"]', 'icons/icon-nonprod-192.png'],
+          ];
+          for (var i = 0; i < swaps.length; i++) {
+            var el = document.querySelector(swaps[i][0]);
+            if (el) el.setAttribute('href', swaps[i][1]);
+          }
+          document.title = '[' + label + '] ' + document.title;
+        } catch (e) {
+          /* never break boot */
+        }
+      })();
+    </script>
     <div id="jot-static-splash" class="jot-splash" role="status" aria-live="polite">
       <div class="jot-splash__bar" aria-hidden="true"></div>
       <svg
