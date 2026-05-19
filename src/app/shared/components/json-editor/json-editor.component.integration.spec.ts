@@ -190,6 +190,29 @@ describe('JsonEditorComponent (browser integration)', () => {
     }
   });
 
+  it('replaceAll preserves Monaco undo history for wholesale swaps', async () => {
+    const { fixture, hostEl, component } = await mountSizedFixture('foo');
+    try {
+      const editor = probe(component).editor;
+      expect(editor).toBeDefined();
+      const model = editor!.getModel();
+      expect(model).not.toBeNull();
+
+      const beforeAlternativeVersionId = model!.getAlternativeVersionId();
+      expect(component.replaceAll('bar', 'test')).toBe('applied');
+      expect(model!.getValue()).toBe('bar');
+      const afterEditAlternativeVersionId = model!.getAlternativeVersionId();
+      expect(afterEditAlternativeVersionId).toBeGreaterThan(beforeAlternativeVersionId);
+
+      editor!.trigger('test', 'undo', null);
+      expect(model!.getValue()).toBe('foo');
+      expect(model!.getAlternativeVersionId()).toBe(beforeAlternativeVersionId);
+    } finally {
+      fixture.destroy();
+      hostEl.remove();
+    }
+  });
+
   // --------------------------------------------------------------------
   // M7g-3c: explicit a11y options on monaco.editor.create()
   // --------------------------------------------------------------------
