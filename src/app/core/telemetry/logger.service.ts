@@ -1,6 +1,7 @@
-import { Injectable, inject } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { msalBridge } from './msal-bridge';
 import { HttpErrorContext, NormalizedError, normalizeError } from './normalize-error';
+import { attachSwEventDirectEmit, SwEvent } from './sw-registration';
 import { TelemetryMessageId } from './telemetry-message-ids';
 import {
   TelemetryMeasurements,
@@ -286,6 +287,46 @@ export class LoggerService {
       }
     } catch {
       // ignore
+    }
+    this.flushSwEvents();
+  }
+
+  /**
+   * Drains the pre-bootstrap SW telemetry queue and attaches the
+   * direct-emit dispatcher so subsequent `queueSwEvent` calls bypass
+   * `sessionStorage` and emit directly. Called from
+   * `flushSessionStorage()` after the App Insights SDK has connected.
+   *
+   * Per skeptic v5 S1 BLOCKER fix: `attachSwEventDirectEmit(dispatch)`
+   * runs UNCONDITIONALLY (the helper itself is exception-safe and
+   * idempotent), so direct-emit is attached for every user,
+   * regardless of whether the pre-bootstrap queue happened to be
+   * empty. Without this, `sw.activated` is lost for every non-stuck
+   * user (the dominant cohort) because their post-bootstrap events
+   * write to `sessionStorage` and never drain.
+   *
+   * The drain itself lives in `attachSwEventDirectEmit` (with
+   * per-event try/catch per skeptic v5 S4). A previously-duplicated
+   * drain here was removed: it created a double-dispatch path on
+   * transient `removeItem` failures (storage that throws on remove
+   * but not on get) which would double-count `sw.*` events for the
+   * exact cohort the migration alert is meant to measure.
+   */
+  private flushSwEvents(): void {
+    const dispatch = (event: SwEvent): void => {
+      if (event.name === 'sw.registerFailed') {
+        this.warn(event.name, { ...event.props });
+      } else {
+        this.event(event.name, { ...event.props });
+      }
+    };
+    // Forward-defense belt-and-braces: attach is exception-safe today,
+    // but any future regression that re-introduces a throw here must
+    // never abort logger init for the dominant non-stuck cohort.
+    try {
+      attachSwEventDirectEmit(dispatch);
+    } catch {
+      // intentional swallow: attach must never break logger startup.
     }
   }
 
