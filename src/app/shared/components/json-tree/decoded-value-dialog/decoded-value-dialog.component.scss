@@ -26,9 +26,18 @@
 .decoded-title__path {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  // The dialog auto-sizes to content (see the dialog.open() comment in
+  // json-tree.component.ts -> openDecodedDialog). A `white-space:
+  // nowrap` path with `min-width: 0` only shrinks when the parent
+  // imposes a width constraint -- which the auto-sized dialog does
+  // not -- so a long path would otherwise become the dialog's
+  // width-driver and produce the exact "wide dialog with narrow body"
+  // we are trying to eliminate. Wrap the path instead so the body
+  // (or actions row) drives width. `break-all` handles paths without
+  // natural break points (UUIDs, long array indices). The full path
+  // remains available verbatim via the `matTooltip` on the span.
+  white-space: normal;
+  word-break: break-all;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 13px;
   color: var(--mat-sys-on-surface-variant, #aeb6c2);
