@@ -1286,6 +1286,130 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
+   *           snackbar Undo click in `openReplaceUndoSnack` and in the
+   *           constructor effect when the editor content reverts to the
+   *           pre-upload text via Ctrl+Z (or another non-snackbar undo
+   *           path) while the pending replace-undo window is still open.
+   * Volume control: bounded-frequency. One event per upload replace
+   *   action that is undone.
+   * Props: { source: 'snackbar' | 'ctrlZ'; trigger: 'pick' | 'drag';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          `source` distinguishes the undo entry path; `trigger`
+   *          preserves whether the original replacement came from the
+   *          file picker or drag-drop; `undoLatencyMsBucket` supports
+   *          misclick-rate queries without using raw time as a
+   *          dimension.
+   * Measurements: { undoLatencyMs?: number }. Raw wall-clock latency
+   *   from replacement apply to undo when available.
+   * Privacy: no filenames or document contents.
+   */
+  'home.upload.undo',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) when
+   *           the upload-replacement path cannot apply Monaco edits in
+   *           place and falls back to a full document replacement,
+   *           which preserves the uploaded content but loses
+   *           Monaco-native Ctrl+Z.
+   * Volume control: bounded-frequency. One warn per upload replace
+   *   action that falls back to full replacement. Not emitted on the
+   *   no-op path (when uploaded content equals the current editor
+   *   content): that branch short-circuits silently with no warn and
+   *   no fallback.
+   * Props: { reason: 'editorNotReady' | 'modelNull' | 'editsRejected' }.
+   *   Closed-enum reason for the in-place apply failure.
+   *   `editorNotReady`: the wrapper editor signal returned null.
+   *   `modelNull`: `replaceAll` returned `'modelNull'` (Monaco
+   *   namespace or model unavailable). `editsRejected`: `replaceAll`
+   *   returned `'editsRejected'` (Monaco's `executeEdits` reported the
+   *   edit did not apply).
+   */
+  'home.upload.applyFailed',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
+   *           snackbar Undo click in `openReplaceUndoSnack` and in the
+   *           constructor effect when the editor content reverts to the
+   *           pre-format text via Ctrl+Z (or another non-snackbar undo
+   *           path) while the pending replace-undo window is still open.
+   * Volume control: bounded-frequency. One event per format replace
+   *   action that is undone.
+   * Props: { source: 'snackbar' | 'ctrlZ';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          `source` distinguishes the undo entry path;
+   *          `undoLatencyMsBucket` supports misclick-rate queries
+   *          without using raw time as a dimension.
+   * Measurements: { undoLatencyMs?: number }. Raw wall-clock latency
+   *   from replacement apply to undo when available.
+   * Privacy: no document contents.
+   */
+  'home.format.undo',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) when
+   *           the format-replacement path cannot apply Monaco edits in
+   *           place and falls back to a full document replacement,
+   *           which preserves the formatted content but loses
+   *           Monaco-native Ctrl+Z.
+   * Volume control: bounded-frequency. One warn per format replace
+   *   action that falls back to full replacement. Not emitted on the
+   *   no-op path (when the formatter output equals the current editor
+   *   content): `onFormat` short-circuits at the caller before this
+   *   path is reached.
+   * Props: { reason: 'editorNotReady' | 'modelNull' | 'editsRejected' }.
+   *   Closed-enum reason for the in-place apply failure. See
+   *   `home.upload.applyFailed` for the reason semantics.
+   */
+  'home.format.applyFailed',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
+   *           snackbar Undo click in `openReplaceUndoSnack` and in the
+   *           constructor effect when the editor content reverts to the
+   *           pre-minify text via Ctrl+Z (or another non-snackbar undo
+   *           path) while the pending replace-undo window is still open.
+   * Volume control: bounded-frequency. One event per minify replace
+   *   action that is undone.
+   * Props: { source: 'snackbar' | 'ctrlZ'; priorMode: 'json' | 'jsonc';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          `source` distinguishes the undo entry path; `priorMode`
+   *          preserves whether minify replaced JSON or JSONC text;
+   *          `undoLatencyMsBucket` supports misclick-rate queries
+   *          without using raw time as a dimension.
+   * Measurements: { undoLatencyMs?: number }. Raw wall-clock latency
+   *   from replacement apply to undo when available.
+   * Privacy: no document contents.
+   */
+  'home.minify.undo',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) when
+   *           the minify-replacement path cannot apply Monaco edits in
+   *           place and falls back to a full document replacement,
+   *           which preserves the minified content but loses
+   *           Monaco-native Ctrl+Z.
+   * Volume control: bounded-frequency. One warn per minify replace
+   *   action that falls back to full replacement. Not emitted on the
+   *   no-op path. `onMinify` short-circuits at the caller when the
+   *   minifier output equals the current editor content *and* the
+   *   mode is already `'json'`; the JSONC-mode-already-minified case
+   *   falls through into `applyReplaceWithFallback`, where the inner
+   *   `'noOp'` branch suppresses the warn so the only observable
+   *   change (mode flip) still gets its snackbar.
+   * Props: { reason: 'editorNotReady' | 'modelNull' | 'editsRejected' }.
+   *   Closed-enum reason for the in-place apply failure. See
+   *   `home.upload.applyFailed` for the reason semantics.
+   */
+  'home.minify.applyFailed',
+
+  /**
+   * Kind: event
    * Fired by: `JsonTreeComponent.onDecodedButtonClick` /
    *           `JsonTreeComponent.onDecodedMenuClick`
    *           (`shared/components/json-tree/json-tree.component.ts`)
@@ -1326,6 +1450,27 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Privacy: no content.
    */
   'tree.extract.snackbarReplaced',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.openReplaceUndoSnack`
+   *           (`features/home/home.component.ts`) when a second
+   *           replace-undo snackbar opens while the prior snackbar ref
+   *           is still live; the prior snackbar is dismissed before the
+   *           new one opens.
+   * Volume control: bounded-frequency. One event per replace-undo
+   *   snackbar replacement while a prior snackbar is still active.
+   * Props: { from: 'upload' | 'format' | 'minify' | 'extract.banner'
+   *          | 'extract.tree' | 'coldBoot'; to: 'upload' | 'format'
+   *          | 'minify' | 'extract.banner' | 'extract.tree'
+   *          | 'coldBoot' }.
+   *          `from` is the snackbar being dismissed; `to` is the new
+   *          snackbar taking its place. Cross-surface combos explain
+   *          which replace action interrupted which prior undo window.
+   * Measurements: none.
+   * Privacy: no document contents.
+   */
+  'home.replaceUndo.snackbarReplaced',
 
   // Tree row context menu (M7q)
 
