@@ -50,6 +50,18 @@
 //      and casts dodge the match; intentional circumvention is
 //      visible in review.
 //
+//   5. `'@angular/service-worker'` (any subpath, any import form)
+//      The `@angular/service-worker` (ngsw) package was removed when
+//      we migrated to a minimal pass-through service worker (see
+//      DESIGN_SPEC.md -> Versioning history + plan.md SW migration).
+//      Re-introducing it would re-open the stuck-cohort bug class
+//      (issue #167) AND the lint chain's lockfile gate would fail
+//      (the package is no longer in package.json). The regex matches
+//      static, side-effect, subpath, dynamic (`import('...')`), and
+//      require-style imports. Specs would fail tsc with "Cannot
+//      find module" but this gate surfaces the policy-level message
+//      first, which is more actionable.
+//
 // File scope:
 //   - frontend production: `src/**/*.ts`
 //   - backend production:  `api/src/**/*.ts`
@@ -150,6 +162,23 @@ export const RULES = [
     // No `paths` filter: fires repo-wide. The only legitimate
     // writers live in json-tree.component.ts and that file is
     // covered by pragmaAllowedPaths.
+  },
+  {
+    // Matches static, side-effect, subpath, dynamic, and require-style
+    // imports of @angular/service-worker. The package was removed in
+    // the SW migration; re-introducing it would re-open the
+    // stuck-cohort class (issue #167). The optional subpath group
+    // `(?:\/[^'"\s]*)?` covers imports like
+    // `@angular/service-worker/config` without matching unrelated
+    // packages that happen to start with the same prefix.
+    pattern: /['"]@angular\/service-worker(?:\/[^'"\s]*)?['"]/g,
+    message:
+      "Import of '@angular/service-worker' is forbidden. The package was" +
+      ' removed in the SW migration; re-introducing it would re-open the' +
+      ' stuck-cohort bug class (issue #167) and break the lockfile lint.' +
+      ' See DESIGN_SPEC.md -> Versioning history. If you genuinely need' +
+      ' to revisit this decision, amend DESIGN_SPEC.md and this rule in' +
+      ' the same PR.',
   },
 ];
 

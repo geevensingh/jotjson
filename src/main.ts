@@ -4,11 +4,17 @@ import { bootstrapApplication } from '@angular/platform-browser';
 import { AppComponent } from './app/app.component';
 import { appConfig } from './app/app.config';
 import { isInMsalSilentIframe, postAuthResponseToParent } from './app/core/auth/msal-iframe-bridge';
+import {
+  queueSwEvent,
+  readAndClearLegacyCacheSentinel,
+  registerServiceWorker,
+} from './app/core/telemetry/sw-registration';
 // Type-only import: erased at runtime so it does NOT pull
 // LoggerService (and the App Insights SDK) into the entry bundle.
 // LoggerService itself is loaded dynamically below, only when the
 // perf-harness shim is installed.
 import type { PerfHarnessEvent } from './app/core/telemetry/logger.service';
+import { environment } from './environments/environment';
 
 declare global {
   interface Window {
@@ -27,6 +33,27 @@ declare global {
   }
 }
 
+// Cache the iframe check so we only evaluate it once.
+const inMsalIframe = isInMsalSilentIframe();
+
+// Service worker registration runs pre-bootstrap (above the
+// `isInMsalSilentIframe()` gate below) so the stuck-cohort unstick
+// fires even when bootstrap fails on a broken cached bundle. See
+// `src/app/core/telemetry/sw-registration.ts` for the full mechanism;
+// see plan.md (SW migration) for the migration rationale.
+if (environment.production && 'serviceWorker' in navigator && !inMsalIframe) {
+  // Read the IndexedDB sentinel written by the SW on
+  // activate-with-non-empty-cache and queue the "stuck-user
+  // successfully migrated" telemetry. Best-effort: a sentinel read
+  // failure does not block boot.
+  void readAndClearLegacyCacheSentinel().then((wasSet) => {
+    if (wasSet) {
+      queueSwEvent({ name: 'sw.legacyCacheWiped' });
+    }
+  });
+  registerServiceWorker();
+}
+
 // LEGACY: compensating code for `redirectUri = origin root`. When the
 // /blank.html redirect URI migration (issue #230) ships, iframes will
 // load /blank.html instead of main.ts and this branch becomes dead
@@ -34,7 +61,7 @@ declare global {
 // silent-refresh iframe from bootstrapping the full SPA and instead
 // posts the auth response back to the parent over BroadcastChannel.
 // See msal-iframe-bridge.ts.
-if (isInMsalSilentIframe()) {
+if (inMsalIframe) {
   void postAuthResponseToParent();
 } else {
   bootstrapApplication(AppComponent, appConfig)
