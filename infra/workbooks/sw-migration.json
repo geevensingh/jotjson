@@ -1,0 +1,88 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# JotJSON SW migration verification\n\nDashboard for the post-migration verification window. See `docs/sw-migration.md` for the runbook (cutover-backfill steps, observation schedule, sunset criteria). Environment: __ENVIRONMENT_NAME__.\n\n**Cutover backfill required**: replace the placeholder `999999999` in the era-discriminator queries below with `git rev-list --count origin/main` taken AFTER squash-merge. While the placeholder is in place, every session reads as `pre` (this is the deliberate LOUD fail-safe -- a dashboard that shows 0% post-migration immediately after deploying the migration is obviously wrong)."
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 1. Era distribution\n\nFraction of sessions whose `sw.activated` event reports a `buildNumber` >= the cutover. Expect the `pre` bar to drop sharply within 24-48h of deploy."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let cutoverBuildNumber = 999999999;\ncustomEvents\n| where timestamp > ago(7d)\n| where name == 'sw.activated'\n| extend buildNumber = toint(customDimensions.buildNumber)\n| where isnotnull(buildNumber)\n| summarize sessions = dcount(session_Id) by bin(timestamp, 1d), era = iff(buildNumber >= cutoverBuildNumber, 'post', 'pre')\n| render barchart with (kind=stacked)",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "barchart"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 2. Stuck-cohort browser breakdown\n\nWhich browsers / OSes were in the stuck cohort? `sw.legacyCacheWiped` fires exactly once per stuck-user migration, with `browser` and `os` closed-enum buckets. Use this to identify cohort-specific regressions (e.g., a Safari Monaco bug that becomes visible only because the stuck cohort lands LAST on the new build)."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(7d)\n| where name == 'sw.legacyCacheWiped'\n| summarize migrations = count() by browser = tostring(customDimensions.browser), os = tostring(customDimensions.os)\n| order by migrations desc",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(7d)\n| where name == 'sw.legacyCacheWiped'\n| summarize migrations = count() by bin(timestamp, 1h)\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 3. Registration failure rate\n\nRate of `sw.registerFailed` by closed-enum `reason` bucket. `syntax` is the canary for a broken transpile (catastrophic -- the migration would silently brick the cohort). `security`/`network`/`type`/`abort`/`fetch` are routine browser-side failures with bounded impact. `other` is the catch-all for anything not unambiguously attributable -- a non-zero `other` rate warrants investigation."
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(7d)\n| where name == 'sw.registerFailed'\n| summarize failures = count() by bin(timestamp, 1h), reason = tostring(customDimensions.reason)\n| render timechart",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customEvents\n| where timestamp > ago(24h)\n| where name == 'sw.registerFailed'\n| summarize failures = count() by reason = tostring(customDimensions.reason)\n| order by failures desc",
+        "size": 0,
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "piechart"
+      }
+    }
+  ],
+  "fallbackResourceIds": [
+    "__COMPONENT_ID__"
+  ],
+  "fromTemplateId": "ArmTemplates-Microsoft.Insights-components-sw-migration"
+}

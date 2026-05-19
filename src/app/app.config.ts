@@ -5,14 +5,12 @@ import {
   ErrorHandler,
   Provider,
   inject,
-  isDevMode,
   provideAppInitializer,
   provideZoneChangeDetection,
 } from '@angular/core';
 import { MAT_BUTTON_TOGGLE_DEFAULT_OPTIONS } from '@angular/material/button-toggle';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
-import { provideServiceWorker } from '@angular/service-worker';
 import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 
 import { routes } from './app.routes';
@@ -29,9 +27,14 @@ import { TelemetryErrorHandler } from './core/telemetry/error-handler';
  * `document`, `localStorage`, `matchMedia`, `navigator`, etc. at
  * construction time.
  *
- * Browser-only providers (MSAL, service worker, AuthService
- * initializer) live in {@link appConfig}'s tail. The server config
- * supplies its own equivalents (or no-op stubs) where needed.
+ * Browser-only providers (MSAL, AuthService initializer) live in
+ * {@link appConfig}'s tail. The server config supplies its own
+ * equivalents (or no-op stubs) where needed.
+ *
+ * Service worker registration is handled outside Angular DI by the
+ * pre-bootstrap block in `src/main.ts` (see
+ * `src/app/core/telemetry/sw-registration.ts`) so the stuck-cohort
+ * unstick fires even when bootstrap fails.
  */
 export const sharedProviders: Array<Provider | EnvironmentProviders> = [
   provideZoneChangeDetection({ eventCoalescing: true }),
@@ -61,17 +64,6 @@ export const sharedProviders: Array<Provider | EnvironmentProviders> = [
 export const appConfig: ApplicationConfig = {
   providers: [
     ...sharedProviders,
-    provideServiceWorker('ngsw-worker.js', {
-      enabled: !isDevMode(),
-      // SSR-heavy apps commonly leave the stable-registration timeout at
-      // 30000ms, which delayed the first checkForUpdate() long enough that
-      // users closing the tab inside that window never saw new builds. Use
-      // 5000ms to close that gap while still waiting for ApplicationRef
-      // stability so SW registration does not race initial rendering. This is
-      // defense in depth; the primary stale-version fix is no-store on
-      // /ngsw.json (see staticwebapp.config.json, issue #167, and plan.md).
-      registrationStrategy: 'registerWhenStable:5000',
-    }),
     // MSAL wiring - deliberately NOT using `MsalRedirectComponent` or the
     // `MSAL_GUARD_CONFIG`/`MSAL_INTERCEPTOR_CONFIG` bundles, which assume an
     // NgModule bootstrap. Standalone apps drive redirect handling themselves

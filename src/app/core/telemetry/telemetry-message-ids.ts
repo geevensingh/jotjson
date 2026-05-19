@@ -26,10 +26,10 @@
  * `./buckets.ts` (`bucketBytes`, `bucketCount`) for numeric size /
  * count dimensions; pair the bucket dimension with the raw number as
  * a measurement when both are useful. Narrow exception: build-identity
- * dimensions (`version`, `sha`, `branch`, `dirty` on `app.boot`) are
- * exempt because they take at most one value per deploy across all
- * sessions; total dimension cardinality is bounded by deploy count,
- * not session count.
+ * dimensions (`version`, `sha`, `branch`, `buildNumber` on `app.boot`
+ * and `sw.*`) are exempt because they take at most one value per
+ * deploy across all sessions; total dimension cardinality is bounded
+ * by deploy count, not session count.
  *
  * Each token has a JSDoc block documenting:
  * - **Severity / kind**: `info` | `warn` | `error` | `event`. Drives
@@ -341,6 +341,17 @@ export const TELEMETRY_MESSAGE_IDS = [
   'api.error',
 
   // Service worker / updates
+  //
+  // The seven `update.*` tokens below are FROZEN FOR HISTORY. The
+  // `AppUpdateService` (and the `@angular/service-worker` dependency
+  // it wrapped) were removed when ngsw was replaced with a minimal
+  // pass-through service worker (see plan.md - SW migration). The
+  // tokens stay in this literal-union so KQL queries that joined on
+  // them across the cutover still parse, but they have no emit sites
+  // in production code. The `scripts/check-deprecated-telemetry.mjs`
+  // lint gate fails CI if any production code re-emits them. The
+  // post-migration replacements live below under "Service worker
+  // (post-migration)".
 
   /**
    * Severity: event
@@ -444,6 +455,105 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Measurements: none.
    */
   'update.applied',
+
+  // Service worker (post-migration)
+
+  /**
+   * Severity: event
+   * Fired by: `registerServiceWorker`
+   *           (`core/telemetry/sw-registration.ts`), invoked from
+   *           the pre-bootstrap block in `src/main.ts`. Queued to
+   *           `sessionStorage` (key `jotjson.sw.events`) until
+   *           `LoggerService.flushSwEvents()` drains the queue on
+   *           first SDK connect; subsequent calls emit directly via
+   *           `attachSwEventDirectEmit`.
+   * Props: { version: string; sha: string; branch: string;
+   *   buildNumber: string }. Build identity is captured at queue
+   *   time from `BUILD_INFO` and passed through the drain as
+   *   `props`; `LoggerService` does NOT auto-attach build identity
+   *   (only `privacyInitializer` is registered with the SDK), so
+   *   every `sw.*` token must carry the dimensions explicitly per
+   *   the build-identity carve-out in the preamble.
+   * Measurements: none.
+   * Bounded-frequency: one per page load.
+   */
+  'sw.registered',
+
+  /**
+   * Severity: event
+   * Fired by: `reportActivatedOnce` closure inside
+   *           `registerServiceWorker` (`core/telemetry/
+   *           sw-registration.ts`). Guarded by a per-page-load
+   *           closure boolean so it fires at most once even when
+   *           both `reg.active.state === 'activated'` and a later
+   *           `statechange` to `'activated'` would otherwise both
+   *           dispatch. The closure guard resets on `updatefound`
+   *           so a second activation within the same page load
+   *           (e.g. forced `reg.update()` returning new bytes)
+   *           re-fires. Also filtered by
+   *           `sw.scriptURL.endsWith('/sw.js')` so the legacy-
+   *           alias worker briefly being `reg.active` mid-migration
+   *           does NOT count.
+   *
+   * THE canonical "migration succeeded" signal. KQL queries
+   *   discriminate the pre-/post-migration eras via
+   *   `customDimensions.buildNumber` (see `docs/telemetry.md` and
+   *   `docs/sw-migration.md`).
+   * Props: { version: string; sha: string; branch: string;
+   *   buildNumber: string }. Explicitly carried in payload per the
+   *   build-identity carve-out in the preamble.
+   * Measurements: none.
+   * Bounded-frequency: at-most-once per (page load, SW activation)
+   *   pair - typically once per page load.
+   */
+  'sw.activated',
+
+  /**
+   * Severity: warn
+   * Fired by: rejection path of
+   *           `navigator.serviceWorker.register('/sw.js')` in
+   *           `registerServiceWorker`
+   *           (`core/telemetry/sw-registration.ts`).
+   * Props:
+   *   - { version, sha, branch, buildNumber }: build identity per
+   *     the carve-out in the preamble.
+   *   - { reason: 'security' | 'syntax' | 'fetch' | 'type'
+   *               | 'network' | 'abort' | 'other' }. Closed-enum
+   *     classification via `classifyRegistrationError(err)`. No
+   *     raw error message is logged (closed-enum rule).
+   * Measurements: none.
+   * Bounded-frequency: one per page load.
+   */
+  'sw.registerFailed',
+
+  /**
+   * Severity: event
+   * Fired by: `src/main.ts` pre-bootstrap block when
+   *           `readAndClearLegacyCacheSentinel()` resolves true.
+   *           The SW writes the IndexedDB sentinel
+   *           (`jotjson-sw-migration/sentinel/legacyCacheWiped`) on
+   *           activate-with-non-empty-cache; NEW `main.ts` reads
+   *           and deletes the sentinel at boot. The sentinel
+   *           survives the navigation boundary from OLD `main.ts`
+   *           (which has no message listener) to NEW `main.ts` -
+   *           a postMessage from the SW would be silently dropped
+   *           on that boundary, so IndexedDB is the only mechanism
+   *           that works.
+   *
+   * THE canonical "stuck user successfully migrated" signal.
+   * Props:
+   *   - { version, sha, branch, buildNumber }: build identity per
+   *     the carve-out in the preamble.
+   *   - { browser: 'chrome' | 'edge' | 'firefox' | 'safari'
+   *               | 'other';
+   *       os: 'windows' | 'mac' | 'linux' | 'android' | 'ios'
+   *           | 'other' }. Closed-enum buckets so cohort-specific
+   *     regressions (e.g. Safari-only Monaco bug) are visible.
+   * Measurements: none.
+   * Bounded-frequency: at-most-once per stuck-user migration
+   *   (lifetime bounded; the OLD ngsw cohort is finite).
+   */
+  'sw.legacyCacheWiped',
 
   // Editor
 

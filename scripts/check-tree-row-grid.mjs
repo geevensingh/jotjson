@@ -1050,7 +1050,7 @@ function emitDiagnostics(violations, scriptPathForCi) {
 // idiom shared with `check-deploy-freshness.mjs`,
 // `check-csp-hashes.mjs`, `check-prod-patterns.mjs`,
 // `check-lockfile.mjs`, `check-swa-config.mjs`, and
-// `write-ngsw-appdata.mjs`: convert `process.argv[1]` to a file URL
+// `build-sw.mjs`: convert `process.argv[1]` to a file URL
 // via `pathToFileURL` (handles backslashes / drive letters / the
 // triple-slash boundary correctly on every platform) after resolving
 // symlinks via `realpathSync` (so a script invoked through a symlink
