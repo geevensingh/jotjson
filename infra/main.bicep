@@ -134,6 +134,26 @@ module productAnalyticsWorkbook 'modules/workbook.bicep' = {
   }
 }
 
+var swMigrationContentTemplate = loadTextContent('workbooks/sw-migration.json')
+var swMigrationContent = replace(
+  replace(swMigrationContentTemplate, '__ENVIRONMENT_NAME__', environmentName),
+  '__COMPONENT_ID__',
+  insights.outputs.componentId
+)
+
+module swMigrationWorkbook 'modules/workbook.bicep' = {
+  name: 'swMigrationWorkbook'
+  params: {
+    displayName: 'JotJSON SW migration verification'
+    serializedContent: swMigrationContent
+    resourceNameSeed: '${resourceSuffix}-sw-migration'
+    location: location
+    componentId: insights.outputs.componentId
+    purpose: 'sw-migration'
+    tags: tags
+  }
+}
+
 module monitoringAlerts 'modules/alerts.bicep' = {
   name: 'monitoringAlerts'
   params: {
@@ -196,3 +216,4 @@ output storageAccountName string = storage.outputs.accountName
 output appInsightsConnectionString string = insights.outputs.connectionString
 output operatorWorkbookId string = operatorWorkbook.outputs.id
 output productAnalyticsWorkbookId string = productAnalyticsWorkbook.outputs.id
+output swMigrationWorkbookId string = swMigrationWorkbook.outputs.id

@@ -1279,10 +1279,10 @@ tripwires together make IfMatch protection the default for every
   `seo.setNoindex(true)` and `seo.clearBlobTags()`, both of which fire
   during the `/404` prerender so the emitted HTML carries
   `<meta name="robots" content="noindex">` for crawlers.
-- **Service worker config.** `ngsw-config.json` `index` is `/shell.html` so
-  the SW falls back to the SPA shell for unknown navigation URLs.
+- **Navigation fallback.** SWA's `navigationFallback.rewrite` points at
+  `/shell.html` so unknown navigation URLs land on the SPA shell.
   Prerendered `/index.html` and `/404/index.html`, plus `og.png`,
-  `robots.txt`, and `sitemap.xml`, are precached.
+  `robots.txt`, and `sitemap.xml`, are served directly.
 - **Build-time integration check.** `scripts/check-prerender.mjs`
   (npm `check:prerender`) validates the dist layout, marker placement,
   brand text, OG defaults, noindex, and asset presence after every build.
@@ -1351,20 +1351,47 @@ cannot confuse them for prod:
     - `theme_color` and `background_color` matching the app's dark/light theme.
     - Icons at standard sizes: 192x192, 512x512 (maskable + any).
     - `categories`: `["developer-tools", "utilities"]`
-  - **Service Worker** via Angular's `@angular/service-worker`, registered in `app.config.ts` with `registerWhenStable:30000` and disabled in dev mode. Configured via `ngsw-config.json` with cache-first for app-shell assets (HTML, CSS, JS, fonts, icons) so the editor/tree view load offline once the app has been visited.
-  - **Network-first cache for `/api/**`** via `ngsw-config.json` `dataGroups`: strategy `freshness`, 5-second network timeout, 1-hour `maxAge`, 100-entry `maxSize` - the SW serves fresh responses when the network is available and transparently falls back to the cached copy otherwise.
-  - **Update prompt**: `AppUpdateService` (in `core/update/`) is eagerly constructed at app bootstrap (injected as a normal field on `AppComponent`, not lazy-imported) so its `SwUpdate.versionUpdates` and `SwUpdate.unrecoverable` subscriptions are wired before any postMessage from the SW can arrive - `versionUpdates` is not a `ReplaySubject`, so a late subscriber would lose early `VERSION_READY` events. The service proactively calls `swUpdate.checkForUpdate()` from a single `maybeCheck(reason)` funnel (entry-gated 30-second debounce) on three triggers: once at the end of `initialize()`, on `document.visibilitychange` -> visible, and on `window.focus`. The visibility / focus triggers are the key signal for installed PWAs, where the SW process can survive across launches and Angular's built-in registration-time check therefore doesn't re-fire. On `VERSION_READY` the service distinguishes *cold launch* (no user input yet, no prior silent-apply this session) from *mid-session*: cold launch silently calls `activateUpdate()` + reload (no UX), mid-session surfaces a non-dismissing Material snackbar ("A new version of JotJSON is available.") with a Reload action. The cold-launch silent path is gated on a `userInteracted` flag (flipped on first `pointerdown` / `keydown` / `touchstart` via `{ once: true, passive: true }` listeners) and a per-session `sessionStorage` loop guard (`jotjson.update.autoApplied`) so at most one silent auto-apply happens per browser session - any subsequent `VERSION_READY` falls through to the snackbar regardless of activity state. `update.applied` carries a `trigger: 'snackbar' | 'autoApply'` closed-enum dimension so the two paths are queryable separately. Also subscribes to `SwUpdate.unrecoverable` and hard-reloads with a cache-busting query so a mid-deploy CDN race on a force-refresh cannot leave the user on a stalled page.
+  - **Service Worker** - a minimal pass-through SW (`src/sw.worker.ts`,
+    built to `dist/jotjson/browser/sw.js` AND `dist/jotjson/browser/ngsw-worker.js`
+    as byte-identical files via `scripts/build-sw.mjs`). The SW exists
+    solely to satisfy Chromium's PWA installability check, which
+    requires a registered SW with a `fetch` handler. The handler
+    intentionally does nothing (`self.addEventListener('fetch', () => {})`),
+    so every request falls through to the network unmodified - no
+    cache, no app-shell strategy, no asset precache. On `install` the
+    SW calls `skipWaiting()`; on `activate` it wipes any leftover
+    `@angular/service-worker` caches (`caches.keys()` then
+    `Promise.all(...caches.delete...)`) and writes a one-shot IndexedDB
+    sentinel (`jotjson-sw-migration/sentinel/legacyCacheWiped`) so the
+    page can emit `sw.legacyCacheWiped` telemetry on the next boot of
+    the new `main.ts`. The `/ngsw-worker.js` build target is
+    **permanent passthrough infrastructure** - byte-identical to
+    `/sw.js` so the stuck cohort's 24-hour byte-revalidation against
+    the URL their old registration is anchored to delivers the new
+    minimal SW.
+  - **No in-app update prompt.** Updates are delivered silently on
+    the next navigation via `Cache-Control: no-cache, must-revalidate`
+    on the HTML shells; there is no snackbar, no Reload button, no
+    `SwUpdate.versionUpdates` subscription, and no `AppUpdateService`.
   - **Deployment cache headers**: `staticwebapp.config.json` deliberately splits deployment Cache-Control directives into two groups after the issue #167 stale-version investigation:
-    1. `Cache-Control: no-store` on `/ngsw.json` and `/ngsw-worker.js` (the service-worker gateway). Azure Static Web Apps currently returns a stuck ETag `"20260402"` on every file; conditional GETs can therefore perpetually return `304 Not Modified`, so Angular service worker `checkForUpdate()` sees no manifest change and never tries to upgrade. `no-store` forces a full `200 OK` response with a fresh body on every fetch, bypassing the ETag short-circuit.
-    2. `Cache-Control: no-cache, must-revalidate` on the three HTML shells: `/index.html`, `/shell.html`, and `/404/index.html`. These shells are downstream of the service-worker manifest decision, so revalidation is sufficient once the gateway files always fetch fresh bytes. JotJSON deliberately does **not** use `no-store` here because that would disqualify the prerendered `/` route from bfcache in Chrome (`MainResourceHasCacheControlNoStore`), regressing landing-page back-button performance.
-    `scripts/check-swa-config.mjs` (lint chain) asserts both groups via `SW_GATEWAY_PATHS` with expected `no-store` and `SHELL_PATHS` with expected `no-cache, must-revalidate`, and still verifies that no wildcard route precedes them (route-order shadowing would silently re-open the stale-shell class without deleting the rules themselves).
-  - **Known operational characteristic - stale-SW CSP context after CSP-only deploys**: `ngsw-worker.js` runs in an environment whose CSP is set by the response that delivered the SW script. Subresource fetches initiated by the SW (the `safeFetch` passthrough, asset prefetch / refresh) are governed by that environment's CSP, not the document's current CSP. Because a CSP-only deploy does not change `ngsw-worker.js` bytes or `ngsw.json`'s `hashTable`, neither the browser's 24h SW-script byte-revalidation nor `AppUpdateService.checkForUpdate()` will pick up the new CSP on its own - returning users with an installed SW may therefore see violation messages against the prior policy until some unrelated code change ships and triggers an SW update. New visitors and fresh-browser sessions are unaffected. Issue #167 tracks mitigation options.
+    1. `Cache-Control: no-store` on `/sw.js`, `/ngsw-worker.js`, and `/ngsw.json` (the SW gateway pair plus a build-emitted `{}` stub at `/ngsw.json` that drains any still-polling legacy `@angular/service-worker` cleanly). Azure Static Web Apps currently returns a stuck ETag `"20260402"` on every file; conditional GETs can therefore perpetually return `304 Not Modified`, so the browser's SW byte-revalidation sees no manifest change and never tries to upgrade. `no-store` forces a full `200 OK` response with a fresh body on every fetch, bypassing the ETag short-circuit.
+    2. `Cache-Control: no-cache, must-revalidate` on the three HTML shells: `/index.html`, `/shell.html`, and `/404/index.html`. These shells are downstream of the SW gateway, so revalidation is sufficient once the gateway files always fetch fresh bytes. JotJSON deliberately does **not** use `no-store` here because that would disqualify the prerendered `/` route from bfcache in Chrome (`MainResourceHasCacheControlNoStore`), regressing landing-page back-button performance.
+    3. `Cache-Control: public, max-age=31536000, immutable` on hashed JS / CSS / woff2 assets (`/*.js`, `/*.css`, `/*.woff2`). These rules MUST appear AFTER the SW gateway and shell rules in `staticwebapp.config.json` route order so they cannot shadow the no-store / no-cache entries above - otherwise the byte-revalidation that drives the migration mechanism would not see new bytes for a year. `scripts/check-swa-config.mjs` asserts both the headers and the route-order invariant.
+    `scripts/check-swa-config.mjs` (lint chain) asserts both groups via `SW_GATEWAY_PATHS` with expected `no-store` and `SHELL_PATHS` with expected `no-cache, must-revalidate`, plus the immutable-cache assertion above, and still verifies that no wildcard route precedes them (route-order shadowing would silently re-open the stale-shell class without deleting the rules themselves).
+  - **Stale-SW CSP bug class dissolved** (issue #167 closed by this
+    migration): the minimal SW initiates **zero** subresource fetches
+    (empty `fetch` handler, no asset prefetch, no `safeFetch` proxy),
+    so it cannot trigger CSP violations against a stale embedded
+    policy. The bug class dissolves because of the no-fetch behavior,
+    not because of "CSP context elimination" - the SW still has its
+    own CSP context at script evaluation, that's how service workers
+    work; it just never makes a fetch that would be subject to that
+    context.
 - **Planned polish (post-v1):**
-  - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed.
+  - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed. Today users get Chrome's omnibox install icon, which requires the minimal SW above - this is the **sole functional purpose** of `src/sw.worker.ts`. If Chromium ever decouples installability from the SW requirement, the SW becomes a candidate for deletion.
   - **Manifest screenshots**: add at least one wide and one narrow `screenshots` entry to the manifest for richer install prompts (not yet present in `manifest.webmanifest`).
-  - **Offline banner**: show a persistent banner driven by `navigator.onLine` + SW status when network is unavailable, auto-dismiss when connectivity returns.
-  - **Offline fallbacks for API-dependent features** (save, share, history, formatting rules): show a "You're offline" state and queue actions for sync.
-  - **Background sync**: flush queued blob saves when connectivity is restored (needs a custom SW integration on top of ngsw).
+  - **Offline banner**: show a persistent banner driven by `navigator.onLine` when network is unavailable, auto-dismiss when connectivity returns.
+  - **Background sync**: flush queued blob saves when connectivity is restored (would need a custom SW with a `sync` event handler; the current minimal SW intentionally has none).
 
 ---
 
@@ -1872,12 +1899,11 @@ shipping a deploy with broken AI symbolication. `--overwrite true`
 on `az storage blob upload-batch` accommodates Angular's
 `outputHashing: all` (vendor chunks reuse hashes across builds).
 
-The Angular service worker glob list does not over-match `.map`
-files: `globToRegex` in
-`@angular/service-worker/fesm2022/config.mjs` wraps every pattern
-as `'^' + ... + '$'` (lines 178/183), so `/*.js` becomes
-`^/[^/]*\.js$` and excludes `main.js.map`. No `ngsw-config.json`
-change is needed.
+The minimal pass-through SW (`src/sw.worker.ts`) has an empty
+`fetch` handler and does not precache anything, so source-map
+files are not at risk of being SW-cached or over-matched -
+unlike the prior `@angular/service-worker` configuration this
+section originally documented.
 
 ### Local development
 
@@ -2057,6 +2083,37 @@ Out of scope (for v1):
 
 - **Initial**: `0.5.0` (set when M7n landed, acknowledging substantial
   pre-V1 development).
+- **0.29.0**: Service worker migration. Replaces `@angular/service-worker`
+  (`ngsw`) with a minimal pass-through SW at `src/sw.worker.ts`, built
+  to `dist/jotjson/browser/sw.js` AND `dist/jotjson/browser/ngsw-worker.js`
+  as byte-identical files via `scripts/build-sw.mjs`. The legacy
+  `/ngsw-worker.js` build target is **permanent passthrough
+  infrastructure** so the stuck-cohort's 24-hour byte-revalidation
+  against the URL their old registration is anchored to delivers the
+  new minimal SW. The 7 `update.*` telemetry tokens are removed from
+  emit sites (literal-union entries retained with frozen-for-history
+  JSDoc to keep grep history intact); four new `sw.*` tokens
+  (`sw.registered`, `sw.activated`, `sw.registerFailed`,
+  `sw.legacyCacheWiped`) replace them. `AppUpdateService` and
+  `ngsw-config.json` are deleted; in-app update prompt (snackbar +
+  Reload button) is removed - updates land silently on the next
+  navigation via `no-cache` revalidation on the HTML shells. Issue
+  #167 (stale-SW CSP context) closes: the new SW initiates zero
+  subresource fetches, so it cannot trigger CSP violations against
+  a stale embedded policy.
+
+  **Meta-lesson**: framework features that introduce persistent
+  client-side state (caches, registrations, ServiceWorkers,
+  IndexedDB schemas, localStorage envelopes) require an **explicit
+  rollback plan that works against dirty client state** before
+  adoption. `@angular/service-worker` did not have one;
+  re-mediating the resulting two-week stuck-cohort incident cost a
+  multi-panel rubber-duck plan and a multi-file migration. The
+  cost of front-loading the rollback question is far lower than
+  the cost of discovering it post-incident. Applies to: caching
+  infrastructure, offline-first APIs, push notifications,
+  background sync, any feature whose documentation includes
+  phrases like "transparent to the user" or "automatic".
 - **0.6.0**: M7r title suggester (wand button) - new user-visible
   feature on the home toolbar.
 - **0.7.0**: Pair-rule formatting - `kind: simple|pair` rules with

@@ -18,6 +18,7 @@ param componentId string
   'operator-monitoring'
   'product-analytics'
   'telemetry-hygiene'
+  'sw-migration'
 ])
 param purpose string
 

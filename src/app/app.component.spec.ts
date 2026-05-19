@@ -6,7 +6,6 @@ import { provideFakeAuth } from '../testing/auth.testing';
 import { AppComponent } from './app.component';
 import { LoggerService } from './core/telemetry/logger.service';
 import { RouteTracker } from './core/telemetry/route-tracker';
-import { AppUpdateService } from './core/update/app-update.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import * as staticSplashRemoval from './static-splash-removal';
 
@@ -21,16 +20,12 @@ function waitForDoubleAnimationFrame(): Promise<void> {
 describe('AppComponent', () => {
   let loggerServiceSpy: jasmine.SpyObj<LoggerService>;
   let routeTrackerSpy: jasmine.SpyObj<RouteTracker>;
-  let appUpdateServiceSpy: jasmine.SpyObj<AppUpdateService>;
   let teardown: (() => void) | undefined;
 
   beforeEach(async () => {
     loggerServiceSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'connect']);
     loggerServiceSpy.connect.and.resolveTo();
     routeTrackerSpy = jasmine.createSpyObj<RouteTracker>('RouteTracker', ['start', 'flushPending']);
-    appUpdateServiceSpy = jasmine.createSpyObj<AppUpdateService>('AppUpdateService', [
-      'initialize',
-    ]);
 
     // Stub DocumentDropController so we don't attach real document-level
     // drag/drop listeners that would leak across the Karma test run after
@@ -48,7 +43,6 @@ describe('AppComponent', () => {
         provideRouter([]),
         { provide: LoggerService, useValue: loggerServiceSpy },
         { provide: RouteTracker, useValue: routeTrackerSpy },
-        { provide: AppUpdateService, useValue: appUpdateServiceSpy },
         { provide: DocumentDropController, useValue: dropControllerStub },
         ...provideFakeAuth(),
       ],
@@ -95,16 +89,14 @@ describe('AppComponent', () => {
     expect(controller.dropActive()).toBe(false);
   });
 
-  it('eagerly initializes AppUpdateService during ngOnInit so SW listeners wire up before any user-visible work', () => {
+  it('eagerly initializes services during ngOnInit so subscribers wire up before any user-visible work', () => {
+    // Smoke-test that the lifecycle runs cleanly. The previous form of
+    // this test asserted that AppUpdateService.initialize was called;
+    // that service was removed when @angular/service-worker was replaced
+    // with the minimal pass-through SW (see plan: SW migration).
     const fixture = TestBed.createComponent(AppComponent);
-    expect(appUpdateServiceSpy.initialize).not.toHaveBeenCalled();
-    // detectChanges drives the component lifecycle including ngOnInit,
-    // which is browser-only and calls appUpdate.initialize() directly
-    // (no lazy import) so the SwUpdate subscriptions in the service's
-    // constructor have already been wired by the time the first
-    // VERSION_READY postMessage from the SW could possibly arrive.
     fixture.detectChanges();
-    expect(appUpdateServiceSpy.initialize).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance).toBeTruthy();
   });
 
   it('emits app.boot before telemetry connects during lazy initialization', async () => {
