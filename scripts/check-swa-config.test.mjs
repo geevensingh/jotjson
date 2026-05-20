@@ -257,8 +257,22 @@ test('navigationFallback.exclude split into multiple entries passes', () => {
     '/*.woff',
     '/*.woff2',
     '/*.webmanifest',
+    '/*.json',
   ];
   assert.deepEqual(checkNavigationFallback(config), []);
+});
+
+test('navigationFallback.exclude missing the json extension fails', () => {
+  // Regression test for issue #336: build-info.json is the per-deploy
+  // SHA marker. Without `json` in the exclude list, a missing file would
+  // be rewritten to /shell.html and the freshness gate would see SPA
+  // HTML when it expected JSON.
+  const config = cloneConfig();
+  config.navigationFallback.exclude = [
+    '/api/*',
+    '/*.{js,css,map,svg,ico,png,jpg,webp,woff,woff2,webmanifest}',
+  ];
+  assertHasErrorMatching(checkNavigationFallback(config), /json/);
 });
 
 // --- Negative: /api/* allowedRoles ----------------------------------------
@@ -361,6 +375,26 @@ for (const path of SHELL_PATHS) {
     assert.deepEqual(routeErrors, []);
   });
 }
+
+// --- Negative: build-info.json Cache-Control ------------------------------
+// Issue #336 -- per-deploy SHA marker that the freshness gate polls.
+// `no-store` is required so an intermediate CDN cache cannot pin a stale
+// marker and let the gate report a stale deploy as fresh.
+
+test('build-info.json Cache-Control rule removed fails', () => {
+  const config = cloneConfig();
+  config.routes = config.routes.filter((entry) => entry.route !== '/build-info.json');
+  assertHasErrorMatching(checkRoutes(config), /\/build-info\.json.*build-info marker/);
+});
+
+test('build-info.json Cache-Control value drift fails', () => {
+  const config = cloneConfig();
+  const route = config.routes.find((entry) => entry.route === '/build-info.json');
+  assert.ok(route, "expected base config to contain a '/build-info.json' route");
+  assert.ok(route.headers, "expected '/build-info.json' route to have a headers object");
+  route.headers['Cache-Control'] = 'public, max-age=60';
+  assertHasErrorMatching(checkRoutes(config), /\/build-info\.json.*no-store.*build-info marker/);
+});
 
 // --- Negative: platform.apiRuntime ----------------------------------------
 
