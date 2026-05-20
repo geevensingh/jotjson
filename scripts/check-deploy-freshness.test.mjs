@@ -492,7 +492,7 @@ test('assertBuildInfoJson passes when body.sha matches and Cache-Control is no-s
   });
 });
 
-test('assertBuildInfoJson fails on canonical URL (no probe= query)', async () => {
+test('assertBuildInfoJson hits canonical URL (no probe= query)', async () => {
   // Substantive value: propagation poll uses ?probe= to defeat caches;
   // this assertion exercises the CANONICAL URL the SPA bundle / downstream
   // tooling actually fetch.

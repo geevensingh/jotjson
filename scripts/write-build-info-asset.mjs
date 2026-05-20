@@ -49,12 +49,13 @@ const REQUIRED_PAYLOAD_FIELDS = Object.freeze([
 
 // Matches `export const BUILD_INFO: BuildInfo = { ... };` -- the
 // exact form `scripts/write-build-info.mjs` emits via
-// `JSON.stringify(payload, null, 2)`. The captured group covers the
-// multi-line JSON object literal; the non-greedy stop at `};` is
-// safe because the payload contains only string-valued fields and
-// JSON.stringify escapes any internal quotes/braces.
+// `JSON.stringify(payload, null, 2)`. We use a greedy capture anchored
+// to the trailing `};` so embedded `}` inside string values (e.g., a
+// branch name containing braces) do not terminate the match early.
+// This is safe because the generated file contains exactly one
+// `export const BUILD_INFO` statement.
 const BUILD_INFO_LITERAL_REGEX =
-  /export\s+const\s+BUILD_INFO\s*:\s*BuildInfo\s*=\s*(\{[\s\S]*?\})\s*;/;
+  /export\s+const\s+BUILD_INFO\s*:\s*BuildInfo\s*=\s*(\{[\s\S]*\})\s*;/;
 
 export function extractBuildInfoPayload(tsSource) {
   if (typeof tsSource !== 'string') {

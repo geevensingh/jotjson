@@ -34,18 +34,6 @@ jobs:
         run: npm run check:deploy-freshness -- --origin=https://example.com --expected-sha=\${{ github.event.workflow_run.head_sha || github.sha }}
 `;
 
-const REPO_WORKFLOWS_OK = (() => {
-  const cd = `
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check deploy freshness
-        run: npm run check:deploy-freshness -- --origin=https://example.com --expected-sha=\${{ github.sha }}
-`;
-  return cd;
-})();
-
 test('checkFreshnessCli accepts allowlisted SHA expression', () => {
   withTempWorkflow(STRICT_WORKFLOW, (file) => {
     const result = checkFreshnessCli({

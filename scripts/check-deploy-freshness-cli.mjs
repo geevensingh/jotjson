@@ -19,9 +19,8 @@
 //   --allow-byte-match-only                                  (opt-out)
 //
 // The strict mode is the default for CI; the opt-out is reserved for
-// local-dev probes against a deployed origin and is rejected here
-// unless the workflow file carries an explicit allowlist comment of
-// the form `# allow-byte-match-only: <reason>` on the same step.
+// local-dev probes against a deployed origin and is unconditionally
+// rejected here (CI callsites must always use --expected-sha).
 
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
