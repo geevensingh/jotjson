@@ -3,6 +3,7 @@ import { environment } from '../../../environments/environment';
 import { LoggerService } from './logger.service';
 import { msalBridge } from './msal-bridge';
 import { normalizeError } from './normalize-error';
+import { __resetSwRegistrationForTesting, SW_EVENTS_KEY } from './sw-registration';
 import { TelemetryService } from './telemetry.service';
 
 describe('LoggerService', () => {
@@ -14,6 +15,7 @@ describe('LoggerService', () => {
   beforeEach(() => {
     originalCs = environment.appInsightsConnectionString;
     environment.appInsightsConnectionString = '';
+    __resetSwRegistrationForTesting();
     msalBridge.reset();
     spyOn(console, 'info');
     spyOn(console, 'warn');
@@ -22,6 +24,7 @@ describe('LoggerService', () => {
 
   afterEach(() => {
     environment.appInsightsConnectionString = originalCs;
+    __resetSwRegistrationForTesting();
   });
 
   function makeWithFakeTelemetry(disabled: boolean) {
@@ -310,6 +313,40 @@ describe('LoggerService', () => {
       const log = makeWithFakeTelemetry(false);
       log.event('app.unhandled', { foo: 'bar' });
       expect(console.info).toHaveBeenCalledWith('[event:app.unhandled]', { foo: 'bar' }, {});
+    });
+
+    it('isolates from a leaked sw event queue in sessionStorage (CI flake regression)', async () => {
+      // Reproduce the cross-spec leak that caused CI flake #26133806241:
+      // a prior spec leaves sw.* events in sessionStorage. Without the
+      // beforeEach reset (Layer B), loggerConnected stays true from a
+      // prior connect() call and attachSwEventDirectEmit short-circuits.
+      // With the fix, loggerConnected is reset to false so the drain
+      // path activates and processes the seeded events deterministically.
+      sessionStorage.setItem(
+        SW_EVENTS_KEY,
+        JSON.stringify([
+          {
+            name: 'sw.registered',
+            props: { version: 'x', sha: 'y', branch: 'z', buildNumber: 'n' },
+            timestamp: 0,
+          },
+          {
+            name: 'sw.activated',
+            props: { version: 'x', sha: 'y', branch: 'z', buildNumber: 'n' },
+            timestamp: 1,
+          },
+        ]),
+      );
+
+      const log = makeWithFakeTelemetry(false);
+      log.event('errorHandler.suppressed', { reasonBucket: 'monacoCanceled' });
+      await log.connect();
+
+      // 2 drained sw.* events + 1 buffered errorHandler.suppressed = 3
+      expect(trackEvent).toHaveBeenCalledTimes(3);
+      expect(trackEvent.calls.argsFor(0)[0]).toBe('sw.registered');
+      expect(trackEvent.calls.argsFor(1)[0]).toBe('sw.activated');
+      expect(trackEvent.calls.argsFor(2)[0]).toBe('errorHandler.suppressed');
     });
   });
 });
