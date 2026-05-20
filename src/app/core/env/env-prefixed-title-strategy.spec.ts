@@ -1,21 +1,18 @@
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { Router, RouterStateSnapshot, provideRouter } from '@angular/router';
-import { EnvLabelService } from './env-label.service';
+import { provideStubEnvLabel } from '../../../testing/env.testing';
+import { type EnvLabel } from './env-label';
 import { EnvPrefixedTitleStrategy } from './env-prefixed-title-strategy';
 
 describe('EnvPrefixedTitleStrategy', () => {
   let strategy: EnvPrefixedTitleStrategy;
   let title: Title;
 
-  function configure(stubLabel: 'prod' | 'nonprod'): void {
-    const stub = {
-      label: stubLabel,
-      withPrefix: (text: string) => (stubLabel === 'prod' ? text : `[${stubLabel}] ${text}`),
-    };
+  function configure(stubLabel: EnvLabel, prNumber: number | null = null): void {
     TestBed.configureTestingModule({
       providers: [
-        { provide: EnvLabelService, useValue: stub },
+        ...provideStubEnvLabel(stubLabel, prNumber),
         EnvPrefixedTitleStrategy,
         provideRouter([]),
       ],
@@ -52,6 +49,20 @@ describe('EnvPrefixedTitleStrategy', () => {
     spyOn(strategy, 'buildTitle').and.returnValue('Blobs - JotJSON');
     strategy.updateTitle(snapshotWith('Blobs - JotJSON'));
     expect(title.getTitle()).toBe('[nonprod] Blobs - JotJSON');
+  });
+
+  it('prefixes the title with [preview] when on preview without a PR number', () => {
+    configure('preview', null);
+    spyOn(strategy, 'buildTitle').and.returnValue('Blobs - JotJSON');
+    strategy.updateTitle(snapshotWith('Blobs - JotJSON'));
+    expect(title.getTitle()).toBe('[preview] Blobs - JotJSON');
+  });
+
+  it('prefixes the title with [pr-<n>] when on preview with a PR number', () => {
+    configure('preview', 332);
+    spyOn(strategy, 'buildTitle').and.returnValue('Blobs - JotJSON');
+    strategy.updateTitle(snapshotWith('Blobs - JotJSON'));
+    expect(title.getTitle()).toBe('[pr-332] Blobs - JotJSON');
   });
 
   it('leaves the document title untouched when the route declares no title', () => {

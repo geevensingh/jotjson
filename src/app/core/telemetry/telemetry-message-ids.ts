@@ -115,6 +115,7 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   branch: string;
    *   buildNumber: string;
    *   envLabel: 'prod' | 'nonprod' | 'preview' | 'dev' | 'unknown';
+   *   previewHasPrNumber?: 'true' | 'false';
    * }
    *   `version`, `sha`, `branch`, `buildNumber` sourced from
    *   `BUILD_INFO` (`src/generated/build-info.ts`). `buildNumber` is
@@ -127,6 +128,16 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   of five values; answers "how often do real users hit the
    *   nonprod URL?" and "are we ever misclassifying prod as
    *   'unknown'?". Always 'prod' on server-platform (prerender).
+   *   `previewHasPrNumber` is emitted ONLY when `envLabel ===
+   *   'preview'` (the prop is omitted from the envelope otherwise).
+   *   Closed-enum `'true' | 'false'` indicates whether
+   *   `EnvLabelService` could extract a PR number from the SWA
+   *   preview hostname slug. Answers "did the regex-vs-cd-preview.yml
+   *   slug contract drift?" -- a sudden spike of `'false'` on preview
+   *   means Azure or `.github/workflows/cd-preview.yml` changed the
+   *   URL slug shape and the per-PR title indicator silently
+   *   regressed to plain `[preview]`. Low-cardinality (two values);
+   *   bounded-frequency (one event per session).
    * Measurements: none.
    */
   'app.boot',
