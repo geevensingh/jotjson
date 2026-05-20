@@ -310,14 +310,29 @@
           var swaSuffix = '.azurestaticapps.net';
           var swaStem = 'calm-flower-01969880f';
           var label = 'unknown';
+          var prNumber = null;
           if (prodHosts[hostname]) {
             label = 'prod';
           } else if (devHosts[hostname]) {
             label = 'dev';
           } else if (hostname.endsWith(swaSuffix)) {
             var stem = hostname.slice(0, hostname.length - swaSuffix.length);
-            if (stem.startsWith(swaStem + '.')) label = 'nonprod';
-            else if (stem.startsWith(swaStem + '-')) label = 'preview';
+            if (stem.startsWith(swaStem + '.')) {
+              label = 'nonprod';
+            } else if (stem.startsWith(swaStem + '-')) {
+              label = 'preview';
+              // Extract PR number from `<stem>-<n>.<region>...`. Mirrors
+              // PREVIEW_PR_RE in env-label.ts; keep the two in sync.
+              // Non-numeric slugs (`-staging`) and multi-segment slugs
+              // (`-1-2`) fall through; the indicator renders plain
+              // `[preview]`.
+              var prRe = new RegExp('^' + swaStem + '-(\\d+)\\.');
+              var match = prRe.exec(hostname);
+              if (match) {
+                var parsed = parseInt(match[1], 10);
+                if (parsed > 0) prNumber = parsed;
+              }
+            }
           }
           if (label === 'prod') return;
           var swaps = [
@@ -329,7 +344,8 @@
             var el = document.querySelector(swaps[i][0]);
             if (el) el.setAttribute('href', swaps[i][1]);
           }
-          document.title = '[' + label + '] ' + document.title;
+          var prefix = prNumber !== null ? '[pr-' + prNumber + '] ' : '[' + label + '] ';
+          document.title = prefix + document.title;
         } catch (e) {
           /* never break boot */
         }
