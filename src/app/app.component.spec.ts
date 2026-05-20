@@ -122,6 +122,10 @@ describe('AppComponent', () => {
         branch: jasmine.any(String),
         buildNumber: jasmine.any(String),
         envLabel: jasmine.stringMatching(/^(prod|nonprod|preview|dev|unknown)$/),
+        // Karma serves on localhost -> envLabel === 'dev' -> previewHasPrNumber
+        // is omitted (undefined). App Insights drops undefined keys from
+        // customDimensions, but in-process the spy sees the literal undefined.
+        previewHasPrNumber: undefined,
       },
       undefined,
     );
