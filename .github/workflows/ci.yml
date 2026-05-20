@@ -105,6 +105,15 @@ jobs:
         id: lint-swa-config
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:swa-config
+      - name: Lint - deploy freshness CLI
+        # Issue #336 -- parses .github/workflows/cd.yml and cd-nonprod.yml
+        # and replays every `npm run check:deploy-freshness` argv through
+        # parseCliOptions to catch workflow-vs-script CLI drift at PR
+        # review time. Also rejects empty-string runtime substitution
+        # (e.g. `--expected-sha=${{ vars.MISSING }}`).
+        id: lint-deploy-freshness-cli
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm run lint:deploy-freshness-cli
       - name: Lint - SW shape
         # Asserts (1) the source SHA-256 of src/sw.worker.ts matches the
         # value committed in scripts/check-sw-shape.mjs (mechanical
@@ -148,7 +157,7 @@ jobs:
         # because failure() is job-wide and would fire for every later
         # gate once any earlier gate failed.
         #
-        # Covers the 8 lint gates plus the Script tests step, which sits
+        # Covers the 9 lint gates plus the Script tests step, which sits
         # in this same fast-check phase of the web job. Without wiring
         # test-scripts in here, a Script tests failure would still let
         # this summary print "all gates passed" because of the custom
@@ -162,6 +171,7 @@ jobs:
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
           OUTCOME_CSP: ${{ steps.lint-csp-hashes.outcome }}
           OUTCOME_SWA_CONFIG: ${{ steps.lint-swa-config.outcome }}
+          OUTCOME_FRESHNESS_CLI: ${{ steps.lint-deploy-freshness-cli.outcome }}
           OUTCOME_SW_SHAPE: ${{ steps.lint-sw-shape.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
           OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
@@ -191,6 +201,7 @@ jobs:
             emit "Production patterns"     "$OUTCOME_PROD"         "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
             emit "CSP hashes (source)"     "$OUTCOME_CSP"          "npm run lint:csp-hashes - paste the printed hash into script-src in staticwebapp.config.json"
             emit "SWA config"              "$OUTCOME_SWA_CONFIG"   "npm run lint:swa-config - fix the assertion failure printed above; see scripts/check-swa-config.mjs"
+            emit "Deploy freshness CLI"    "$OUTCOME_FRESHNESS_CLI" "npm run lint:deploy-freshness-cli - workflow argv must match scripts/check-deploy-freshness.mjs CLI; see error printed above"
             emit "SW shape"                "$OUTCOME_SW_SHAPE"     "npm run lint:sw-shape - if src/sw.worker.ts changed intentionally, update EXPECTED_SW_SOURCE_SHA256 in scripts/check-sw-shape.mjs"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
             emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
@@ -199,7 +210,7 @@ jobs:
             if [ "$fail" -eq 1 ]; then
               echo "One or more gates failed. See the failing step above and the inline annotations on the PR Files Changed tab for details."
             else
-              echo "All 11 gates passed (9 lint + script tests + perf script tests)."
+              echo "All 12 gates passed (10 lint + script tests + perf script tests)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bake production auth config into environment.prod.ts
@@ -252,7 +263,13 @@ jobs:
             echo "::error::One or more ENTRA_* secrets are missing - aborting build."
             exit 1
           fi
-      - run: npm run build -- --configuration=production
+      - env:
+          # workflow_run.head_sha is unset for push triggers; github.sha
+          # is the push commit. Pins BUILD_INFO.sha so the deployed
+          # bundle's encoded SHA matches what the freshness gate later
+          # asserts. See cd.yml for the workflow_run/dispatch case.
+          JOTJSON_BUILD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: npm run build -- --configuration=production
       - name: CSP - verify hashes against built bundle
         # Authoritative CSP hash gate. `npm run lint:csp-hashes` only sees
         # the source index.html; this re-runs against the bytes that will
