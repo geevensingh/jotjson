@@ -1,110 +1,52 @@
 #!/usr/bin/env node
-// Build-info generator for JotJSON.
+// scripts/write-build-info.mjs
 //
-// Reads package.json version/repository metadata, CI-provided
-// GITHUB_SHA / GITHUB_REF_NAME values, and a git-derived
-// buildNumber (`git rev-list --count HEAD`), then writes them into
-// src/generated/build-info.ts so the Angular bundle can surface a
-// "what am I running?" indicator in the status bar.
+// PREBUILD: writes `src/generated/build-info.ts` (the typed
+// BUILD_INFO constant the Angular bundle imports for the "what am I
+// running?" status-bar indicator). Runs from npm lifecycle hooks
+// (prebuild/prestart/prelint/pretest/prewatch); never runs at app
+// runtime.
 //
-// This script is invoked from npm lifecycle hooks
-// (prebuild/prestart/prelint/pretest/prewatch); it never runs at app runtime.
-// Runs with zero dependencies on Node 24+.
+// The matching `dist/jotjson/browser/build-info.json` postbuild
+// asset is emitted by `scripts/write-build-info-asset.mjs` from
+// the SAME TS file (read back as text, not recomputed) so the
+// deployed bundle's BUILD_INFO and the public /build-info.json
+// carry bytewise-identical payload. See
+// `scripts/write-build-info-asset.mjs` and
+// `scripts/check-deploy-freshness.mjs` for the freshness gate that
+// depends on this invariant.
+//
+// SHA precedence: JOTJSON_BUILD_SHA (set in CD workflows from
+// `${{ github.event.workflow_run.head_sha || github.sha }}`) ->
+// GITHUB_SHA (fallback for local invocations under a CI context
+// that only sets the default vars) -> 'dev' (ordinary developer
+// builds). See `scripts/build-info-payload.mjs` ->
+// resolveBuildShaFromEnv for the exact resolution rule.
 //
 // Fallbacks:
-//   - No GITHUB_SHA -> sha: 'dev'
+//   - No SHA env vars -> sha: 'dev'
 //   - No GITHUB_REF_NAME -> branch: ''
 //   - No package.json repository.url -> repoUrl: ''
 //   - Shallow git checkout / git unavailable -> buildNumber: 'unknown'
 //   - The generated file is gitignored; each build regenerates it.
+//
+// Runs with zero dependencies on Node 24+.
 
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { computeBuildInfoPayload, resolveBuildShaFromEnv } from './build-info-payload.mjs';
+
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, '..');
 const outputPath = resolve(repositoryRoot, 'src', 'generated', 'build-info.ts');
-const packageJsonPath = resolve(repositoryRoot, 'package.json');
 
-function normalizeRepositoryUrl(rawRepositoryUrl) {
-  if (typeof rawRepositoryUrl !== 'string' || rawRepositoryUrl.trim() === '') {
-    return '';
-  }
-
-  let repositoryUrl = rawRepositoryUrl.trim();
-
-  if (repositoryUrl.startsWith('git+')) {
-    repositoryUrl = repositoryUrl.slice('git+'.length);
-  }
-
-  repositoryUrl = repositoryUrl.replace(/\.git$/iu, '');
-
-  const sshProtocolMatch = /^ssh:\/\/git@github\.com\/([^/]+\/[^/]+)$/iu.exec(repositoryUrl);
-  if (sshProtocolMatch !== null) {
-    return `https://github.com/${sshProtocolMatch[1]}`;
-  }
-
-  const sshShortcutMatch = /^git@github\.com:([^/]+\/[^/]+)$/iu.exec(repositoryUrl);
-  if (sshShortcutMatch !== null) {
-    return `https://github.com/${sshShortcutMatch[1]}`;
-  }
-
-  return repositoryUrl;
-}
-
-// Computes a monotonically non-decreasing build counter on `main`.
-// Returns 'unknown' (and warns) on shallow checkouts or when git is
-// unavailable -- a fake '0' would silently pollute telemetry. The
-// post-build assertion in ci.yml fails the workflow if a shipped
-// artifact contains 'unknown', surfacing a missing fetch-depth: 0.
-function getBuildNumber() {
-  try {
-    const isShallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
-      cwd: repositoryRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    if (isShallow === 'true') {
-      console.warn(
-        "write-build-info: shallow git checkout detected; buildNumber set to 'unknown'. " +
-          'Set actions/checkout fetch-depth: 0 if this is the build that ships.',
-      );
-      return 'unknown';
-    }
-    const count = execFileSync('git', ['rev-list', '--count', 'HEAD'], {
-      cwd: repositoryRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    if (count === '' || !/^\d+$/u.test(count)) {
-      console.warn(
-        `write-build-info: unexpected git rev-list output ${JSON.stringify(count)}; ` +
-          "buildNumber set to 'unknown'.",
-      );
-      return 'unknown';
-    }
-    return count;
-  } catch (error) {
-    console.warn(
-      `write-build-info: failed to derive buildNumber from git (${error?.message ?? error}); ` +
-        "buildNumber set to 'unknown'.",
-    );
-    return 'unknown';
-  }
-}
-
-const packageMetadata = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
-const repositoryUrl = normalizeRepositoryUrl(packageMetadata.repository?.url);
-const payload = {
-  version: packageMetadata.version,
-  sha: process.env.GITHUB_SHA?.toLowerCase() || 'dev',
-  branch: process.env.GITHUB_REF_NAME || '',
-  builtAt: new Date().toISOString(),
-  repoUrl: repositoryUrl,
-  buildNumber: getBuildNumber(),
-};
+const payload = computeBuildInfoPayload({
+  repoRoot: repositoryRoot,
+  sha: resolveBuildShaFromEnv(process.env),
+  branch: process.env.GITHUB_REF_NAME ?? '',
+});
 
 const contents =
   '// AUTO-GENERATED by scripts/write-build-info.mjs. Do not edit by hand.\n' +

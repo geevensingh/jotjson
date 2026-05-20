@@ -55,8 +55,28 @@ const shellHtml = readOrFail('shell.html');
 const robotsTxt = readOrFail('robots.txt');
 const sitemapXml = readOrFail('sitemap.xml');
 const ogPng = resolve(browserDirectory, 'og.png');
+const buildInfoJsonText = readOrFail('build-info.json');
 
 const PRERENDER_MARKER = '<meta name="prerendered" content="true">';
+
+// --- build-info.json: postbuild-emit regression test.
+// Issue #336 -- /build-info.json is the per-deploy SHA marker that the
+// freshness gate's lockstep poll relies on. A regression that quietly
+// stops emitting it (e.g., postbuild step accidentally removed or moved
+// before `ng build`) would let the gate fail at the CDN edge instead
+// of here at build time.
+check(
+  'build-info.json missing or invalid JSON',
+  (() => {
+    if (!buildInfoJsonText) return false;
+    try {
+      const parsed = JSON.parse(buildInfoJsonText);
+      return typeof parsed?.sha === 'string' && parsed.sha.length > 0;
+    } catch {
+      return false;
+    }
+  })(),
+);
 
 // --- Prerender marker: present in / and /404, absent in shell.
 check('index.html missing prerender marker', indexHtml.includes(PRERENDER_MARKER));
@@ -123,5 +143,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  'check-prerender: OK (index.html / 404/index.html / shell.html / robots.txt / sitemap.xml / og.png).',
+  'check-prerender: OK (index.html / 404/index.html / shell.html / robots.txt / sitemap.xml / og.png / build-info.json).',
 );
