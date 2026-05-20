@@ -36,4 +36,19 @@ export const SW_LEGACY_ALIAS_URLS = ['/ngsw-worker.js'];
 // routes cannot return JSON literal bodies).
 export const NGSW_JSON_STUB_URL = '/ngsw.json';
 
+// Per-deploy freshness marker emitted by
+// `scripts/write-build-info-asset.mjs` (postbuild). The deployed
+// file's payload is BYTEWISE-IDENTICAL to the SPA bundle's
+// `BUILD_INFO` constant because postbuild reads back the prebuild-
+// emitted `src/generated/build-info.ts` rather than recomputing.
+// `scripts/check-deploy-freshness.mjs` polls this URL during the
+// post-deploy gate and asserts `body.sha === expectedSha` to verify
+// edge propagation is tied to the deployed commit (not merely
+// byte-matching a SW source file that is locked to a constant SHA
+// by `scripts/check-sw-shape.mjs`). MUST be served with
+// `Cache-Control: no-store` -- asserted by
+// `scripts/check-swa-config.mjs` against
+// `staticwebapp.config.json`.
+export const BUILD_INFO_ASSET_URL = '/build-info.json';
+
 export const SW_ALL_URLS = [SW_CANONICAL_URL, ...SW_LEGACY_ALIAS_URLS];
