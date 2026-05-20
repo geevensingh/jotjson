@@ -1,7 +1,8 @@
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideStubEnvLabel } from '../../../testing/env.testing';
 import { provideEnvIndicatorInitializer } from './env-indicator.initializer';
-import { EnvLabelService } from './env-label.service';
+import { type EnvLabel } from './env-label';
 
 interface FaviconLinkSetup {
   ico: HTMLLinkElement;
@@ -38,10 +39,9 @@ describe('provideEnvIndicatorInitializer', () => {
     TestBed.resetTestingModule();
   });
 
-  function runInitializerWith(label: 'prod' | 'nonprod' | 'preview' | 'dev' | 'unknown'): void {
-    const stub = { label, withPrefix: (s: string) => s };
+  function runInitializerWith(label: EnvLabel): void {
     TestBed.configureTestingModule({
-      providers: [{ provide: EnvLabelService, useValue: stub }, provideEnvIndicatorInitializer()],
+      providers: [...provideStubEnvLabel(label), provideEnvIndicatorInitializer()],
     });
     // Force initializer execution.
     TestBed.inject(ApplicationRef);
