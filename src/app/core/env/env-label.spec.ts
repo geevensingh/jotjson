@@ -143,6 +143,22 @@ describe('getPreviewPrNumber', () => {
     { hostname: 'calm-flower-01969880f.eastus2.7.azurestaticapps.net', expected: null },
     { hostname: 'example.com', expected: null },
     { hostname: '', expected: null },
+
+    // Cross-domain attack shapes -- a host that contains the stem
+    // plus a digit slug but lives under a different apex must NOT
+    // return a PR number. The suffix gate is the line of defense;
+    // without it, the regex would match the stem+digit prefix and
+    // silently violate the documented contract.
+    {
+      hostname: 'calm-flower-01969880f-332.evil.example.com',
+      expected: null,
+    },
+    // Suffix-suffix attack: the SWA suffix appears in the middle,
+    // not at the end. `endsWith` rejects this regardless of stem.
+    {
+      hostname: 'calm-flower-01969880f-332.azurestaticapps.net.evil.example.com',
+      expected: null,
+    },
   ];
 
   for (const { hostname, expected } of prCases) {

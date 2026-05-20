@@ -2,49 +2,72 @@ import { expect, test } from '@playwright/test';
 
 /**
  * Deployed-only spec: validates that the document title on a SWA
- * preview environment is prefixed with `[pr-<number>] `, where
- * `<number>` is the GitHub PR number Azure SWA encoded in the
- * preview hostname slug.
+ * preview environment is prefixed with `[pr-<EXPECTED_PR_NUMBER>] `,
+ * where `<EXPECTED_PR_NUMBER>` is the ground-truth GitHub PR number
+ * injected into the e2e job from the workflow's
+ * `github.event.pull_request.number` (see `.github/workflows/cd-preview.yml`
+ * `EXPECTED_PR_NUMBER` env var).
  *
- * This is the CI gate against the regex-vs-cd-preview.yml contract:
+ * This is the workflow-to-SPA contract check:
  *
- *   - `src/app/core/env/env-label.ts` PREVIEW_PR_RE = `^${stem}-(\d+)\.`
- *   - `.github/workflows/cd-preview.yml:95` sets
- *     `PREVIEW_ENV: pr-${{ pull_request.number }}` and passes it to
- *     Azure as `deployment_environment`. Azure strips the `pr-`
- *     prefix and emits hostnames like
- *     `<stem>-332.<region>.azurestaticapps.net`.
+ *   GitHub PR number
+ *     -> `cd-preview.yml:95` `PREVIEW_ENV: pr-<n>`
+ *     -> Azure SWA strips `pr-` prefix
+ *     -> hostname slug `<stem>-<n>.<region>.azurestaticapps.net`
+ *     -> SPA `EnvLabelService.prNumber`
+ *     -> `EnvLabelService.withPrefix` rendering
+ *     -> `document.title` `[pr-<n>] ...`
  *
- * If either side of that contract drifts (Azure changes the
- * slug-stripping rule, or cd-preview.yml renames PREVIEW_ENV) the
- * SPA silently regresses to plain `[preview]`. The
- * `previewHasPrNumber` dimension on the `app.boot` telemetry event
- * is the in-flight observability signal; this spec is the
- * pre-merge gate.
+ * Why ground-truth-from-workflow (not derive-from-URL):
+ *   Deriving the expected PR number from the preview URL hostname
+ *   would be self-confirming. A typo in `PREVIEW_ENV` at
+ *   `cd-preview.yml:95` (e.g., off-by-one, wrong template literal)
+ *   would emit a wrong slug AND a wrong expected value -- both
+ *   sides of the regex contract drift in lockstep and the test
+ *   false-passes. With the workflow-injected env var, the spec
+ *   catches the typo end-to-end.
  *
- * Skipped when `PLAYWRIGHT_BASE_URL` is unset (i.e. CI `e2e` job or
- * any local `npm run test:e2e` against the locally-served `dist/`).
- * The local `serve --single` runs on `localhost` -> envLabel ===
- * 'dev' -> title prefix is `[dev] `, not `[pr-N] `.
+ * Skip conditions:
+ *   - `PLAYWRIGHT_BASE_URL` unset (local `npm run test:e2e`
+ *     against the locally-served `dist/` runs on `localhost` ->
+ *     envLabel === 'dev' -> `[dev]` prefix, not `[pr-N]`).
+ *   - `EXPECTED_PR_NUMBER` unset (e.g., local `npm run test:e2e`
+ *     against a manually-targeted preview URL without the
+ *     workflow context). The deployed cd-preview.yml job always
+ *     sets both; missing one of the two is an explicit local
+ *     scenario.
+ *   - Preview slot reached via CNAME (e.g., a hypothetical
+ *     `pr-332.preview.jotjson.com` alias): the SPA still renders
+ *     `[pr-332]` because `EnvLabelService` runs against the
+ *     Azure-emitted preview hostname, but this spec skips when
+ *     either env var is missing. CNAMEs are not currently in use;
+ *     re-evaluate this docblock if one is added.
  */
 
 const baseUrl = process.env['PLAYWRIGHT_BASE_URL']?.trim();
+const expectedPrRaw = process.env['EXPECTED_PR_NUMBER']?.trim();
+const expectedPr = expectedPrRaw ? Number.parseInt(expectedPrRaw, 10) : NaN;
+const expectedPrValid = Number.isInteger(expectedPr) && expectedPr > 0;
 
 test.describe('Preview environment per-PR title prefix', () => {
   test.skip(
-    !baseUrl,
-    'preview-title.spec.ts requires PLAYWRIGHT_BASE_URL to point at a ' +
-      'deployed SWA preview host (where the hostname slug carries the ' +
-      'GitHub PR number). Skipping when targeting the local dist/ serve.',
+    !baseUrl || !expectedPrValid,
+    'preview-title.spec.ts requires both PLAYWRIGHT_BASE_URL (the ' +
+      'deployed SWA preview host) and EXPECTED_PR_NUMBER (a positive ' +
+      'integer; injected by cd-preview.yml from ' +
+      'github.event.pull_request.number). Skipping when either is ' +
+      'unset or invalid -- this is the local-run path.',
   );
 
-  test('GET / document title is prefixed with [pr-<number>]', async ({ page }) => {
+  test('GET / document title is prefixed with [pr-<EXPECTED_PR_NUMBER>]', async ({ page }) => {
     await page.goto('/');
-    // Wait for the inline boot script + Angular bootstrap to settle.
-    // The inline script in src/index.html sets document.title
+    // The inline boot script in `src/index.html` sets document.title
     // synchronously before first paint; Angular's
     // EnvPrefixedTitleStrategy then re-applies on route resolution.
-    // Either way the final title carries the prefix.
-    await expect(page).toHaveTitle(/^\[pr-\d+\] /);
+    // Either way the final title carries the prefix. Regex form
+    // (not exact literal) because the title also carries the route's
+    // own title text after the prefix.
+    const expectedPrefix = new RegExp(`^\\[pr-${expectedPr}\\] `);
+    await expect(page).toHaveTitle(expectedPrefix);
   });
 });

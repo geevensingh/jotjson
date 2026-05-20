@@ -91,19 +91,36 @@ export function getEnvLabel(hostname: string): EnvLabel {
 /**
  * Extract the PR number from a SWA preview hostname.
  *
- * Returns `null` when the hostname is not a preview hostname, or
- * when the slug between the stem and the next `.` is not a single
+ * Returns `null` when the hostname is not a preview hostname (i.e.
+ * does not end with the SWA `.azurestaticapps.net` suffix), or when
+ * the slug between the stem and the next `.` is not a single
  * positive integer. Callers should fall back to the plain
  * `[preview]` indicator in the null case.
  *
+ * The function gates on `endsWith(SWA_HOSTNAME_SUFFIX)` before
+ * matching the regex, mirroring the inline boot script at
+ * `src/index.html` which has carried the same gate since the
+ * indicator landed. Without the suffix gate, a hostname like
+ * `calm-flower-01969880f-123.evil.example.com` would parse to
+ * `123` and violate the documented contract -- even though the
+ * only in-tree caller (`EnvLabelService`) already pre-gates via
+ * `label === 'preview'`, the helper is an exported pure function
+ * and a future caller could read it directly.
+ *
  * The regex is intentionally strict (`^stem-(\d+)\.`): it rejects
  * non-numeric slugs (`-staging`), multi-segment slugs (`-1-2`),
- * and the legacy `-pr-<n>` shape (older Azure SWA preview slots
- * that did not strip the `pr-` prefix). All three fall back to
- * the unprefixed `[preview]` indicator.
+ * the legacy `-pr-<n>` shape (older Azure SWA preview slots that
+ * did not strip the `pr-` prefix), and cross-domain shapes that
+ * use the same stem under a different apex. All four fall back
+ * to the unprefixed `[preview]` indicator.
  */
 export function getPreviewPrNumber(hostname: string): number | null {
   if (!hostname) return null;
+  // Suffix gate -- keeps the helper's documented "non-preview
+  // hostname -> null" contract honest. Mirrors the inline boot
+  // script at `src/index.html`, which already gates the PR-number
+  // regex behind the same `endsWith` check.
+  if (!hostname.endsWith(SWA_HOSTNAME_SUFFIX)) return null;
   const match = PREVIEW_PR_RE.exec(hostname);
   if (!match) return null;
   const parsed = Number.parseInt(match[1], 10);
