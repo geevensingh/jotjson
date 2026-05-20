@@ -287,6 +287,12 @@ jobs:
 
       - name: Build SPA
         if: steps.pin.outputs.should_deploy == 'true'
+        env:
+          # See cd.yml for full rationale. Pins the prebuild's
+          # BUILD_INFO.sha to the checked-out ref so the post-deploy
+          # freshness gate's --expected-sha agrees with the deployed
+          # bundle.
+          JOTJSON_BUILD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: npm run build -- --configuration=production
 
       - name: Copy SWA config into bundle
@@ -357,7 +363,9 @@ jobs:
       - name: Check deploy freshness
         if: ${{ steps.pin.outputs.should_deploy == 'true' && success() && steps.deploy_swa.outcome == 'success' }}
         timeout-minutes: 10
-        run: npm run check:deploy-freshness -- --origin=${{ vars.NONPROD_DEPLOY_REDIRECT_URI }}
+        # SHA-tied verification: see cd.yml's "Check deploy freshness"
+        # step for the rationale on workflow_run.head_sha vs github.sha.
+        run: npm run check:deploy-freshness -- --origin=${{ vars.NONPROD_DEPLOY_REDIRECT_URI }} --expected-sha=${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Summary
         if: ${{ always() && !cancelled() && steps.pin.outputs.should_deploy == 'true' }}

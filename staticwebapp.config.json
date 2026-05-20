@@ -5,7 +5,7 @@
   },
   "navigationFallback": {
     "rewrite": "/shell.html",
-    "exclude": ["/api/*", "/*.{js,css,map,svg,ico,png,jpg,webp,woff,woff2,webmanifest}"]
+    "exclude": ["/api/*", "/*.{js,css,map,svg,ico,png,jpg,webp,woff,woff2,webmanifest,json}"]
   },
   "routes": [
     {
@@ -44,6 +44,12 @@
     },
     {
       "route": "/sw.js",
+      "headers": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "route": "/build-info.json",
       "headers": {
         "Cache-Control": "no-store"
       }
