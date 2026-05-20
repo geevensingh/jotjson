@@ -58,8 +58,19 @@ on:
   workflow_dispatch: {}
 
 concurrency:
-  group: swa-deploy-nonprod-${{ github.ref }}
-  cancel-in-progress: true
+  # Single group across ALL refs (no ${{ github.ref }} in the key) so manual
+  # dispatches from feature branches and workflow_run from main serialize
+  # against the SAME nonprod SWA. Otherwise the pin check has a TOCTOU race:
+  # both a manual dispatch and a workflow_run can pass their pin check
+  # concurrently and then race on which upload writes `sourceBranch` last,
+  # silently defeating the pin. Matches the queue-not-cancel pattern already
+  # used by `infra.yml` and `infra-nonprod.yml`. This is INTENTIONALLY
+  # different from `cd.yml`, which uses per-ref keying because prod has no
+  # pin-aware semantics. cancel-in-progress: false because cancellation
+  # mid-SWA-upload can leave `sourceBranch` indeterminate and defeat the
+  # pin/unpin mechanism; we queue instead.
+  group: swa-deploy-nonprod
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -131,25 +142,13 @@ jobs:
               ;;
           esac
 
-      - uses: actions/checkout@v6
-        with:
-          # Deploy the exact commit that passed CI when triggered via
-          # workflow_run; fall back to github.sha for workflow_dispatch.
-          # Without this, a second push to main between CI completion
-          # and this workflow firing would race the checkout to the
-          # newer (untested) SHA. Mirrors cd.yml:100-112.
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          submodules: true
-          lfs: false
-          # Full history so the inline `npm run build` produces a real
-          # `buildNumber`. Mirrors cd.yml's workflow_dispatch path.
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-
+      # Azure login + pin check are hoisted ABOVE checkout/setup-node so
+      # pinned workflow_run runs skip the heavy clone + Node setup entirely.
+      # The cheap local guards above (Check for deploy token, Validate
+      # redirect URI) stay BEFORE the pin check as fail-fast tripwires so
+      # secret/var misconfig surfaces immediately even on pinned runs -
+      # silent failure of those guards on every CI-green-on-main would let
+      # misconfig stay latent until the next unpin.
       - name: Azure login
         uses: azure/login@v3
         with:
@@ -182,6 +181,13 @@ jobs:
               --query sourceBranch -o tsv 2>/tmp/az.err); then
             echo "::error::az staticwebapp environment show failed; cannot determine pin state."
             cat /tmp/az.err
+            {
+              echo "## Pin check failed"
+              echo ""
+              echo "Could not query SWA's default-env \`sourceBranch\`. The deploy was aborted because the pin state is unknown."
+              echo ""
+              echo "See the error annotation above for the underlying \`az\` failure."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           # Normalise: trim whitespace + CRLF, case-fold, strip
@@ -189,7 +195,7 @@ jobs:
           NORMALISED=$(echo "$BRANCH" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
           NORMALISED="${NORMALISED#refs/heads/}"
           case "$NORMALISED" in
-            ""|none|main)
+            "" | none | main)
               echo "Env sourceBranch is '$BRANCH' (normalised: '$NORMALISED'); proceeding with auto-deploy."
               echo "should_deploy=true" >> "$GITHUB_OUTPUT"
               ;;
@@ -205,6 +211,29 @@ jobs:
               echo "should_deploy=false" >> "$GITHUB_OUTPUT"
               ;;
           esac
+
+      - uses: actions/checkout@v6
+        if: steps.pin.outputs.should_deploy == 'true'
+        with:
+          # Deploy the exact commit that passed CI when triggered via
+          # workflow_run; fall back to github.sha for workflow_dispatch.
+          # Without this, a second push to main between CI completion
+          # and this workflow firing would race the checkout to the
+          # newer (untested) SHA. Mirrors cd.yml:100-112. The Summary
+          # step below uses the SAME expression - if you change one,
+          # change both so reported SHA matches deployed SHA.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          submodules: true
+          lfs: false
+          # Full history so the inline `npm run build` produces a real
+          # `buildNumber`. Mirrors cd.yml's workflow_dispatch path.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        if: steps.pin.outputs.should_deploy == 'true'
+        with:
+          node-version: 24
+          cache: npm
 
       - name: Install web deps
         if: steps.pin.outputs.should_deploy == 'true'
@@ -334,6 +363,12 @@ jobs:
         if: ${{ always() && !cancelled() && steps.pin.outputs.should_deploy == 'true' }}
         env:
           REDIRECT_URI: ${{ vars.NONPROD_DEPLOY_REDIRECT_URI }}
+          # Report the SAME SHA that the checkout step deployed. On the
+          # workflow_run path, github.sha is the default-branch HEAD at
+          # trigger time, NOT the built SHA (which is workflow_run.head_sha).
+          # Keep this expression in sync with the actions/checkout `ref:`
+          # above. Same gotcha is documented in cd.yml:396-407.
+          DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           if [[ "${{ job.status }}" == "success" ]]; then
             {
@@ -342,14 +377,14 @@ jobs:
               echo "- SWA: swa-jotjson-nonprod"
               echo "- Redirect URI: $REDIRECT_URI"
               echo "- Subscription: nonprod (VS Enterprise)"
-              echo "- Commit: ${{ github.sha }}"
+              echo "- Commit: $DEPLOYED_SHA"
             } >> "$GITHUB_STEP_SUMMARY"
           else
             {
               echo "## Deploy failed (nonprod)"
               echo ""
               echo "- SWA: swa-jotjson-nonprod"
-              echo "- Commit: ${{ github.sha }}"
+              echo "- Commit: $DEPLOYED_SHA"
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 

@@ -1612,10 +1612,7 @@ Cosmos + App Insights deployment without burning the production budget.
     service records the dispatching branch on each upload.
 
   To inspect the current pin without running a deploy, an operator
-  with Azure access can run
-  `az staticwebapp environment show --name swa-jotjson-nonprod
-  --resource-group rg-jotjson-nonprod --environment-name default
-  --query sourceBranch -o tsv`.
+  with Azure access can run `az staticwebapp environment show --name swa-jotjson-nonprod --resource-group rg-jotjson-nonprod --environment-name default --query sourceBranch -o tsv`.
 - **Cost control:** a subscription-scoped Azure budget
   (`jotjson-nonprod-monthly`, $100/mo) with an 80%-actual email alert
   to the project admin. SWA Standard has a ~$9/mo per-app base price;
