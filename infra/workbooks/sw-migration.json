@@ -4,7 +4,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# JotJSON SW migration verification\n\nDashboard for the post-migration verification window. See `docs/sw-migration.md` for the runbook (cutover-backfill steps, observation schedule, sunset criteria). Environment: __ENVIRONMENT_NAME__.\n\n**Cutover backfill required**: replace the placeholder `999999999` in the era-discriminator queries below with `git rev-list --count origin/main` taken AFTER squash-merge. While the placeholder is in place, every session reads as `pre` (this is the deliberate LOUD fail-safe -- a dashboard that shows 0% post-migration immediately after deploying the migration is obviously wrong)."
+        "json": "# JotJSON SW migration verification\n\nDashboard for the post-migration verification window. See `docs/sw-migration.md` for the runbook (observation schedule, sunset criteria). Environment: __ENVIRONMENT_NAME__.\n\n**Cutover**: `cutoverBuildNumber = 646` (SW migration squash-merge commit `2b1704c`, backfilled 2026-05-19). Sessions with `buildNumber >= 646` are the post-migration cohort; sessions with `buildNumber < 646` are the legacy pre-migration cohort being drained."
       }
     },
     {
@@ -17,7 +17,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "let cutoverBuildNumber = 999999999;\ncustomEvents\n| where timestamp > ago(7d)\n| where name == 'sw.activated'\n| extend buildNumber = toint(customDimensions.buildNumber)\n| where isnotnull(buildNumber)\n| summarize sessions = dcount(session_Id) by bin(timestamp, 1d), era = iff(buildNumber >= cutoverBuildNumber, 'post', 'pre')\n| render barchart with (kind=stacked)",
+        "query": "let cutoverBuildNumber = 646;\ncustomEvents\n| where timestamp > ago(7d)\n| where name == 'sw.activated'\n| extend buildNumber = toint(customDimensions.buildNumber)\n| where isnotnull(buildNumber)\n| summarize sessions = dcount(session_Id) by bin(timestamp, 1d), era = iff(buildNumber >= cutoverBuildNumber, 'post', 'pre')\n| render barchart with (kind=stacked)",
         "size": 0,
         "queryType": 0,
         "resourceType": "microsoft.insights/components",
