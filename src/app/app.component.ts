@@ -138,6 +138,14 @@ export class AppComponent implements OnInit {
           branch: buildInfoModule.BUILD_INFO.branch,
           buildNumber: buildInfoModule.BUILD_INFO.buildNumber,
           envLabel: envLabel.label,
+          // Only emitted when the env is 'preview'. App Insights drops
+          // undefined values, so non-preview envs never carry the prop.
+          previewHasPrNumber:
+            envLabel.label === 'preview'
+              ? envLabel.prNumber != null
+                ? 'true'
+                : 'false'
+              : undefined,
         },
         undefined,
       );
