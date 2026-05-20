@@ -24,6 +24,8 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+import { BUILD_INFO_ASSET_URL } from './sw-urls.mjs';
+
 export const SWA_CONFIG = 'staticwebapp.config.json';
 
 // ---------------------------------------------------------------------------
@@ -59,8 +61,13 @@ export const REQUIRED_NAVIGATION_REWRITE = '/shell.html';
 // call gets rewritten to the shell.
 export const REQUIRED_API_EXCLUDE = '/api/*';
 
-// The static-asset extensions the service worker prefetches; if any of
-// these gets rewritten to the shell, the SW asset pipeline breaks.
+// Extensions covered by `navigationFallback.exclude` so a missing
+// file 404s at the edge instead of returning the SPA shell. Originally
+// scoped to SW-prefetched assets, but the same exclusion is what
+// keeps a missing `/build-info.json` (per-deploy SHA marker emitted by
+// scripts/write-build-info-asset.mjs) surfacing as a clear 404 rather
+// than a confusing "SHA mismatch: got `<!DOCTYPE html>`..." failure
+// in the freshness gate.
 export const REQUIRED_ASSET_EXTENSIONS = Object.freeze([
   'js',
   'css',
@@ -73,6 +80,7 @@ export const REQUIRED_ASSET_EXTENSIONS = Object.freeze([
   'woff',
   'woff2',
   'webmanifest',
+  'json',
 ]);
 
 // Service worker gateway: the manifest plus the canonical and legacy
@@ -385,6 +393,16 @@ export function checkRoutes(config) {
       groupName: 'HTML shell',
       paths: SHELL_PATHS,
       requiredCacheControl: SHELL_CACHE_CONTROL,
+    },
+    {
+      // Per-deploy SHA marker emitted by scripts/write-build-info-asset.mjs.
+      // `no-store` is required so the post-deploy freshness gate's
+      // canonical-URL assertion (assertBuildInfoJson) can rely on the edge
+      // serving the latest deploy's marker without any intermediate cache
+      // pinning a stale value. See issue #336.
+      groupName: 'build-info marker',
+      paths: [BUILD_INFO_ASSET_URL],
+      requiredCacheControl: 'no-store',
     },
   ];
 
