@@ -15,6 +15,10 @@ describe('sw-registration', () => {
     sessionStorage.removeItem(SW_EVENTS_KEY);
   });
 
+  afterEach(() => {
+    __resetSwRegistrationForTesting();
+  });
+
   describe('queueSwEvent + sessionStorage queue', () => {
     it('writes a queued event with BuildIdentity in props', () => {
       queueSwEvent({ name: 'sw.registered' });
