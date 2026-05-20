@@ -396,7 +396,7 @@ jobs:
       - name: Mergify CI Upload (api unit)
         if: steps.run-api-tests.outcome == 'success' || steps.run-api-tests.outcome == 'failure'
         continue-on-error: true
-        uses: mergifyio/gha-mergify-ci@v17
+        uses: mergifyio/gha-mergify-ci@v18
         with:
           token: ${{ secrets.MERGIFY_TOKEN }}
           report_path: api/test-results/api/junit.xml
@@ -511,7 +511,7 @@ jobs:
       - name: Mergify CI Upload (api integration)
         if: (steps.run-api-integration.outcome == 'success' || steps.run-api-integration.outcome == 'failure') && steps.cosmos-preflight.outputs.enabled == 'true'
         continue-on-error: true
-        uses: mergifyio/gha-mergify-ci@v17
+        uses: mergifyio/gha-mergify-ci@v18
         with:
           token: ${{ secrets.MERGIFY_TOKEN }}
           report_path: api/test-results/api-integration/junit.xml
@@ -634,7 +634,7 @@ jobs:
       - name: Mergify CI Upload (web unit)
         if: steps.run-web-tests.outcome == 'success' || steps.run-web-tests.outcome == 'failure'
         continue-on-error: true
-        uses: mergifyio/gha-mergify-ci@v17
+        uses: mergifyio/gha-mergify-ci@v18
         with:
           token: ${{ secrets.MERGIFY_TOKEN }}
           report_path: test-results/web/junit.xml
@@ -715,7 +715,7 @@ jobs:
       - name: Mergify CI Upload (e2e)
         if: steps.run-e2e-tests.outcome == 'success' || steps.run-e2e-tests.outcome == 'failure'
         continue-on-error: true
-        uses: mergifyio/gha-mergify-ci@v17
+        uses: mergifyio/gha-mergify-ci@v18
         with:
           token: ${{ secrets.MERGIFY_TOKEN }}
           report_path: test-results/e2e/junit.xml
