@@ -37,31 +37,61 @@ tripwire), the owner of this runbook becomes a shared list.
 
 ## Cutover backfill (one-shot, post-merge)
 
-The plan ships with placeholder `let cutoverBuildNumber = 999999999;`
-in both:
+**Status: Completed 2026-05-19.** Cutover backfilled to
+`cutoverBuildNumber = 646` (rev count of the SW migration
+squash-merge commit `2b1704c`). Three placeholder sites were
+updated in a single follow-up PR:
+`infra/modules/alerts.bicep`, `infra/workbooks/sw-migration.json`,
+and `docs/telemetry.md`.
 
-1. `infra/workbooks/sw-migration.json` (workbook tile)
-2. `infra/modules/alerts.bicep` resource
-   `alert-${namePrefix}-sw-migration-stuck-cohort`
+### Procedure for the next SW migration
+
+The plan ships placeholder `let cutoverBuildNumber = 999999999;`
+in three sites:
+
+1. `infra/workbooks/sw-migration.json` (workbook tile + banner)
+2. `infra/modules/alerts.bicep` (`alert-${namePrefix}-sw-migration-stuck-cohort`)
+3. `docs/telemetry.md` (canonical KQL reference)
 
 The placeholder is the **LOUD fail-safe direction**: every
 session lands in `'pre'` (dashboard shows 0% post-migration
-the day after we ship; obviously wrong), AND the alert fires
-on every session (operator cannot miss it). After PR
-squash-merge lands on `main`, run:
+the day after we ship; obviously wrong). Operators reading the
+dashboard or the canonical KQL reference cannot miss it.
+
+After the SW migration PR squash-merges on `main`, compute the
+buildNumber to use from the **squash-merge SHA of the SW
+migration PR** -- NOT from `origin/main` HEAD. By the time the
+backfill PR lands, HEAD may be one or more commits ahead. If
+any of those commits are SW-byte-identical (e.g., workflow-only
+fixes), a higher buildNumber would incorrectly file the SW
+migration commit itself into `era = pre` (off-by-one false
+positive on the dashboard and alert):
 
 ```sh
-git fetch origin main
-git rev-list --count origin/main
+# Replace <sw-migration-sha> with the squash-merge SHA of the
+# SW migration PR (NOT origin/main HEAD).
+git rev-list --count <sw-migration-sha>
 # -> N
 ```
 
-Then edit both files, replace `999999999` with `<N>`, and commit
-as a one-file follow-up PR. The follow-up PR is eligible for
-proactive auto-merge per `AGENTS.md` §8 (infra/docs change, no
-`dependencies` or `devDependencies` touched, no `src/`
-touched). `infra.yml`'s `what-if` gate validates the Bicep
-diff.
+If subsequent commits have landed between the SW migration merge
+and the backfill PR, verify they didn't ship new SW bytes:
+
+```sh
+git diff <sw-migration-sha>..origin/main -- \
+  src/sw.worker.ts scripts/build-sw.mjs scripts/sw-urls.mjs
+# Expect: empty. If non-empty, recompute against the LATEST
+# SW-touching commit's SHA.
+```
+
+Then edit all three files, replace `999999999` with `<N>`, and
+commit as a follow-up PR. This PR class is **not** eligible for
+proactive auto-merge per `AGENTS.md` §8: Bicep + workbook JSON
+have runtime behavior and are not in the docs-only / lint-only /
+patch-dep-bump / typo-fix allowlist. `infra.yml`'s `what-if`
+gate validates schema correctness of the Bicep diff but cannot
+verify the chosen integer is the right integer -- that's a
+code-review responsibility.
 
 ## Observation schedule (active monitoring, owner-driven)
 
