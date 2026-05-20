@@ -1310,11 +1310,15 @@ cannot confuse them for prod:
   not `'prod'`. PWA manifest icons are intentionally NOT swapped;
   installed PWAs continue to show the prod icon.
 - **Document title prefix.** Every route's `<title>` is prefixed
-  `[nonprod] `, `[preview] `, `[dev] `, or `[unknown] ` (anything
-  else) via a custom `EnvPrefixedTitleStrategy` (route titles) and
-  `EnvLabelService.withPrefix()` (the dynamic home-component title).
-  The prefix is the outermost wrapper, sibling to the existing
-  dirty-marker `'* '` prefix.
+  `[nonprod] `, `[preview] `, `[pr-<n>] `, `[dev] `, or `[unknown] `
+  (anything else) via a custom `EnvPrefixedTitleStrategy` (route
+  titles) and `EnvLabelService.withPrefix()` (the dynamic
+  home-component title). The `[pr-<n>] ` variant fires only on SWA
+  preview environments where the hostname slug is a single positive
+  integer; non-numeric / multi-segment slugs (e.g., manually-named
+  preview slots) fall back to plain `[preview] `. The prefix is the
+  outermost wrapper, sibling to the existing dirty-marker `'* '`
+  prefix.
 - **Hostname-driven classification.** `src/app/core/env/env-label.ts`
   classifies `window.location.hostname` into one of
   `'prod' | 'nonprod' | 'preview' | 'dev' | 'unknown'`. Prod is
@@ -1323,7 +1327,16 @@ cannot confuse them for prod:
   `calm-flower-01969880f.<region>.azurestaticapps.net`; preview is
   the same stem with a `-<slug>` suffix. Anything else is
   `'unknown'` (fail-noisy: a misclassified prod alias shows
-  `[unknown]` rather than silently looking like prod).
+  `[unknown]` rather than silently looking like prod). The same
+  module also exports `getPreviewPrNumber(hostname)`, which returns
+  the captured PR number for preview hostnames whose slug is a bare
+  positive integer (the actual shape Azure SWA emits today), or
+  `null` otherwise. The URL slug `<pr-number>` is produced by Azure
+  SWA stripping the `pr-` prefix from cd-preview.yml's
+  `PREVIEW_ENV` (currently `pr-${{ pull_request.number }}` at
+  `.github/workflows/cd-preview.yml:95`); changing that workflow
+  value can break the per-PR indicator. Update both sides
+  together.
 - **Pre-bootstrap swap.** An inline boot script in `src/index.html`
   classifies the hostname and rewrites `<link>` `href`s + the
   document title BEFORE the browser fetches the favicon and before
@@ -1339,7 +1352,13 @@ cannot confuse them for prod:
 - **Telemetry.** The existing `app.boot` event carries an
   `envLabel` closed-enum dimension (`prod | nonprod | preview |
   dev | unknown`), so any unexpected `'unknown'` classification
-  on prod is queryable from App Insights.
+  on prod is queryable from App Insights. When `envLabel ===
+  'preview'`, a second `previewHasPrNumber: 'true' | 'false'`
+  dimension is attached, indicating whether `EnvLabelService`
+  could extract a PR number from the preview hostname slug. A
+  sudden spike of `'false'` on preview means Azure or
+  `cd-preview.yml` changed the URL slug shape and the per-PR
+  indicator silently regressed to plain `[preview]`.
 
 ### Progressive Web App (PWA)
 - The site is installable as a **browser app** (PWA) on desktop and mobile.
