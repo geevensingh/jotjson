@@ -99,7 +99,7 @@
     "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.60.0",
     "@types/jasmine": "~6.0.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.12.4",
     "axe-core": "^4.11.4",
     "husky": "^9.1.7",
     "jasmine-core": "~6.2.0",
@@ -111,7 +111,7 @@
     "karma-jasmine-html-reporter": "~2.2.0",
     "karma-junit-reporter": "^2.0.1",
     "karma-spec-reporter": "^0.0.36",
-    "lint-staged": "^17.0.4",
+    "lint-staged": "^17.0.5",
     "prettier": "^3.8.3",
     "prettier-plugin-organize-imports": "^4.3.0",
     "typescript": "~5.9.3"
