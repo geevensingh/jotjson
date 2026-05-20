@@ -5,11 +5,16 @@ name: Deploy (SWA) - nonprod
 # Mirrors cd.yml's `workflow_dispatch` (manual) path but targets the
 # nonprod SWA (`swa-jotjson-nonprod`) under AZURE_SUBSCRIPTION_ID_NONPROD.
 #
-# Trigger: `workflow_dispatch` only. There is no `workflow_run` path -
-# nonprod does not auto-deploy on push to main (Phase 2 cd-preview.yml
-# handles PR-driven deploys; nonprod is the stable "what main looks like
-# when manually promoted" env). Future automation can be added once the
-# manual flow is proven.
+# Triggers: `workflow_run` (CI succeeded on main) and `workflow_dispatch`
+# (manual override). The workflow_run path auto-deploys main to nonprod
+# UNLESS the SWA's `default` env is currently pinned to a non-main branch
+# (i.e., the `sourceBranch` property on the env is anything other than
+# `main`). Pinning happens by manually dispatching this workflow from a
+# feature branch; unpinning happens by manually dispatching from main.
+# The check is empirically grounded: `az staticwebapp environment show
+# --query sourceBranch -o tsv` returns the branch that the SWA service
+# recorded on the most recent upload, and a manual dispatch from main
+# (or any other branch) updates that field.
 #
 # Auth (Azure): uses federated SP `gh-actions-jotjson`
 # (appId c4866b60-d20b-43f1-b81e-ca01dac6e102) via
@@ -41,18 +46,29 @@ name: Deploy (SWA) - nonprod
 # ----------------------------------------------------------------------
 
 run-name: >-
-  [nonprod] ${{ github.event.head_commit.message || github.sha }}
+  [nonprod] ${{ github.event.workflow_run.display_title
+      || github.event.head_commit.message
+      || github.sha }}
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch: {}
 
 concurrency:
-  group: swa-deploy-nonprod
+  group: swa-deploy-nonprod-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
   id-token: write
+  # Required if the workflow_run path ever needs cross-workflow artifact
+  # reads. Today this workflow rebuilds inline rather than downloading
+  # CI artifacts (mirrors the manual-dispatch flow), but keep the scope
+  # parity with cd.yml for future symmetry.
+  actions: read
 
 jobs:
   deploy:
@@ -60,6 +76,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: nonprod
+    # Only deploy when CI succeeded on a push to main, or when a human
+    # triggers a manual redeploy. PR-triggered CI runs (workflow_run.event
+    # == 'pull_request') are excluded so opening a PR never ships to
+    # nonprod's default env (PR-driven deploys go through cd-preview.yml
+    # to per-PR preview envs instead).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     steps:
       - name: Check for deploy token
         id: check
@@ -107,6 +133,12 @@ jobs:
 
       - uses: actions/checkout@v6
         with:
+          # Deploy the exact commit that passed CI when triggered via
+          # workflow_run; fall back to github.sha for workflow_dispatch.
+          # Without this, a second push to main between CI completion
+          # and this workflow firing would race the checkout to the
+          # newer (untested) SHA. Mirrors cd.yml:100-112.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           submodules: true
           lfs: false
           # Full history so the inline `npm run build` produces a real
@@ -118,13 +150,72 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Azure login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_NONPROD }}
+
+      - name: Check nonprod env pin
+        id: pin
+        env:
+          SWA_NAME: swa-jotjson-nonprod
+          RG_NAME: rg-jotjson-nonprod
+        run: |
+          # workflow_dispatch is the operator's pin/unpin mechanism:
+          # dispatching from main flips sourceBranch back to main;
+          # dispatching from a feature branch pins. Either way, manual
+          # always proceeds without checking the env's current state.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual dispatch; bypassing pin check."
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # workflow_run path: read the env's current sourceBranch.
+          # Hard-fail on `az` errors (auth, network, env missing) so
+          # we never silently deploy when we cannot confirm intent.
+          if ! BRANCH=$(az staticwebapp environment show \
+              --name "$SWA_NAME" \
+              --resource-group "$RG_NAME" \
+              --environment-name default \
+              --query sourceBranch -o tsv 2>/tmp/az.err); then
+            echo "::error::az staticwebapp environment show failed; cannot determine pin state."
+            cat /tmp/az.err
+            exit 1
+          fi
+          # Normalise: trim whitespace + CRLF, case-fold, strip
+          # refs/heads/ prefix if Azure ever returns the long form.
+          NORMALISED=$(echo "$BRANCH" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+          NORMALISED="${NORMALISED#refs/heads/}"
+          case "$NORMALISED" in
+            ""|none|main)
+              echo "Env sourceBranch is '$BRANCH' (normalised: '$NORMALISED'); proceeding with auto-deploy."
+              echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::warning::nonprod default env is pinned to '$BRANCH' (not main); skipping auto-deploy."
+              {
+                echo "## Auto-deploy skipped (nonprod is pinned)"
+                echo ""
+                echo "- Current sourceBranch: \`$BRANCH\`"
+                echo "- To unpin: manually run this workflow from main (Actions UI -> Run workflow -> Branch: main)."
+                echo "- To re-pin to a different branch: manually run this workflow from that branch."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       - name: Install web deps
+        if: steps.pin.outputs.should_deploy == 'true'
         run: npm ci
 
       - name: Materialize environment.ts
+        if: steps.pin.outputs.should_deploy == 'true'
         run: cp src/environments/environment.example.ts src/environments/environment.ts
 
       - name: Bake nonprod auth config into environment.prod.ts
+        if: steps.pin.outputs.should_deploy == 'true'
         env:
           ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
           ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY }}
@@ -166,12 +257,15 @@ jobs:
           fi
 
       - name: Build SPA
+        if: steps.pin.outputs.should_deploy == 'true'
         run: npm run build -- --configuration=production
 
       - name: Copy SWA config into bundle
+        if: steps.pin.outputs.should_deploy == 'true'
         run: cp staticwebapp.config.json dist/jotjson/browser/staticwebapp.config.json
 
       - name: Sanity-check production bundle
+        if: steps.pin.outputs.should_deploy == 'true'
         run: |
           if [ ! -f dist/jotjson/browser/index.html ]; then
             echo "::error::dist/jotjson/browser/index.html missing"
@@ -186,13 +280,8 @@ jobs:
             exit 1
           fi
 
-      - name: Azure login (sourcemap upload)
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_NONPROD }}
       - name: Upload sourcemaps to Azure Blob Storage
+        if: steps.pin.outputs.should_deploy == 'true'
         env:
           STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT_NONPROD }}
         run: |
@@ -208,20 +297,20 @@ jobs:
             --pattern '*.map' \
             --auth-mode login \
             --overwrite true
-      - name: Azure logout (sourcemap upload)
-        if: ${{ always() }}
-        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true
 
       - name: Install API full deps
+        if: steps.pin.outputs.should_deploy == 'true'
         working-directory: api
         run: npm ci
 
       - name: Build API
+        if: steps.pin.outputs.should_deploy == 'true'
         working-directory: api
         run: npm run build
 
       - name: Deploy to Azure Static Web Apps
         id: deploy_swa
+        if: steps.pin.outputs.should_deploy == 'true'
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_NONPROD }}
@@ -237,12 +326,12 @@ jobs:
           skip_api_build: true
 
       - name: Check deploy freshness
-        if: ${{ success() && steps.deploy_swa.outcome == 'success' }}
+        if: ${{ steps.pin.outputs.should_deploy == 'true' && success() && steps.deploy_swa.outcome == 'success' }}
         timeout-minutes: 10
         run: npm run check:deploy-freshness -- --origin=${{ vars.NONPROD_DEPLOY_REDIRECT_URI }}
 
       - name: Summary
-        if: ${{ always() && !cancelled() }}
+        if: ${{ always() && !cancelled() && steps.pin.outputs.should_deploy == 'true' }}
         env:
           REDIRECT_URI: ${{ vars.NONPROD_DEPLOY_REDIRECT_URI }}
         run: |
@@ -263,3 +352,7 @@ jobs:
               echo "- Commit: ${{ github.sha }}"
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Azure logout
+        if: ${{ always() }}
+        run: az logout --username "${{ secrets.AZURE_CLIENT_ID }}" || true

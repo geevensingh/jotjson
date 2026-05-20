@@ -1594,11 +1594,28 @@ Cosmos + App Insights deployment without burning the production budget.
   `cd-nonprod.yml` via a strict-allowlist guard so the deploy fails if
   somebody points it elsewhere.
 - **CI/CD:** `infra-nonprod.yml` (manual dispatch only, applies Bicep)
-  and `cd-nonprod.yml` (manual dispatch only, deploys the SPA +
-  Functions bundle) both use a dedicated repo environment with its own
+  and `cd-nonprod.yml` use a dedicated repo environment with its own
   OIDC federated credential, SWA deploy token secret, and App Insights
-  connection-string secret. **No automatic deploys** - this env is
-  driven from the Actions UI.
+  connection-string secret. `cd-nonprod.yml` has two trigger paths:
+  - **`workflow_run` on CI-green for `main`:** auto-deploys main to
+    nonprod, **gated on the env's current `sourceBranch`**. The
+    workflow queries
+    `az staticwebapp environment show ... --query sourceBranch -o tsv`
+    on the SWA's `default` env; if the value is `main`, `refs/heads/main`,
+    empty, or `none`, the deploy proceeds. Anything else (i.e., the env
+    is currently pinned to a feature branch) emits a `::warning::` and
+    skips the deploy without failing the job.
+  - **`workflow_dispatch` (manual):** always proceeds without checking
+    the pin. This is the **pin/unpin mechanism**: dispatching from a
+    feature branch pins (sets `sourceBranch` to that branch);
+    dispatching from `main` unpins (sets it back to `main`). The SWA
+    service records the dispatching branch on each upload.
+
+  To inspect the current pin without running a deploy, an operator
+  with Azure access can run
+  `az staticwebapp environment show --name swa-jotjson-nonprod
+  --resource-group rg-jotjson-nonprod --environment-name default
+  --query sourceBranch -o tsv`.
 - **Cost control:** a subscription-scoped Azure budget
   (`jotjson-nonprod-monthly`, $100/mo) with an 80%-actual email alert
   to the project admin. SWA Standard has a ~$9/mo per-app base price;
