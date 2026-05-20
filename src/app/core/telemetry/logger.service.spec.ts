@@ -3,7 +3,7 @@ import { environment } from '../../../environments/environment';
 import { LoggerService } from './logger.service';
 import { msalBridge } from './msal-bridge';
 import { normalizeError } from './normalize-error';
-import { __resetSwRegistrationForTesting } from './sw-registration';
+import { __resetSwRegistrationForTesting, SW_EVENTS_KEY } from './sw-registration';
 import { TelemetryService } from './telemetry.service';
 
 describe('LoggerService', () => {
@@ -24,6 +24,7 @@ describe('LoggerService', () => {
 
   afterEach(() => {
     environment.appInsightsConnectionString = originalCs;
+    __resetSwRegistrationForTesting();
   });
 
   function makeWithFakeTelemetry(disabled: boolean) {
@@ -322,7 +323,7 @@ describe('LoggerService', () => {
       // With the fix, loggerConnected is reset to false so the drain
       // path activates and processes the seeded events deterministically.
       sessionStorage.setItem(
-        'jotjson.sw.events',
+        SW_EVENTS_KEY,
         JSON.stringify([
           {
             name: 'sw.registered',

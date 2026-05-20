@@ -12,7 +12,6 @@ import {
 describe('sw-registration', () => {
   beforeEach(() => {
     __resetSwRegistrationForTesting();
-    sessionStorage.removeItem(SW_EVENTS_KEY);
   });
 
   afterEach(() => {
