@@ -37,11 +37,25 @@ import { expect, test } from '@playwright/test';
  *     sets both; missing one of the two is an explicit local
  *     scenario.
  *   - Preview slot reached via CNAME (e.g., a hypothetical
- *     `pr-332.preview.jotjson.com` alias): the SPA still renders
- *     `[pr-332]` because `EnvLabelService` runs against the
- *     Azure-emitted preview hostname, but this spec skips when
- *     either env var is missing. CNAMEs are not currently in use;
- *     re-evaluate this docblock if one is added.
+ *     `pr-332.preview.jotjson.com` alias): per-PR title rendering
+ *     does NOT work via CNAME. `EnvLabelService` reads
+ *     `window.location.hostname`, which on a CNAME access is the
+ *     CNAME -- not the underlying Azure host. `getEnvLabel` gates
+ *     on `hostname.endsWith('.azurestaticapps.net')` at
+ *     `env-label.ts:83-87`, so a CNAME falls through to
+ *     `'unknown'` and the title would be `[unknown] ...`, not
+ *     `[pr-332] ...`. The cross-domain attack cases in
+ *     `env-label.spec.ts` pin this contract. Per-PR rendering
+ *     therefore requires the native Azure preview hostname.
+ *
+ *     This spec already skips when either env var is missing
+ *     (the safe default for local runs). If a future maintainer
+ *     sets BOTH env vars AND points `PLAYWRIGHT_BASE_URL` at a
+ *     CNAME alias, the skip predicate does NOT fire and the
+ *     title assertion fails noisily with `[unknown] ...` --
+ *     deliberate, so the misconfiguration surfaces rather than
+ *     hides. CNAMEs are not currently in use; re-evaluate this
+ *     docblock if one is added.
  */
 
 const baseUrl = process.env['PLAYWRIGHT_BASE_URL']?.trim();

@@ -76,6 +76,11 @@ describe('getEnvLabel', () => {
     { hostname: 'some-other-app.azurestaticapps.net', expected: 'unknown' },
     { hostname: 'evil-jotjson.com', expected: 'unknown' },
     { hostname: 'example.com', expected: 'unknown' },
+    // unknown: CNAME-shape host that mimics the per-PR slug but
+    // lives under a non-SWA apex. Pins the docblock contract at
+    // `e2e/preview/preview-title.spec.ts:39` that per-PR title
+    // rendering requires the native Azure preview hostname.
+    { hostname: 'pr-332.preview.jotjson.com', expected: 'unknown' },
 
     // unknown: exact-suffix boundary cases. Pins the contract that
     // dropping the `hostname.length > swaSuffix.length` guard in the
@@ -159,6 +164,11 @@ describe('getPreviewPrNumber', () => {
       hostname: 'calm-flower-01969880f-332.azurestaticapps.net.evil.example.com',
       expected: null,
     },
+    // CNAME-shape host that mimics the per-PR slug under a non-SWA
+    // apex. Pins the docblock contract at
+    // `e2e/preview/preview-title.spec.ts:39` that per-PR title
+    // rendering requires the native Azure preview hostname.
+    { hostname: 'pr-332.preview.jotjson.com', expected: null },
   ];
 
   for (const { hostname, expected } of prCases) {

@@ -40,17 +40,28 @@ export const NONPROD_SWA_STEM = 'calm-flower-01969880f';
 
 const SWA_HOSTNAME_SUFFIX = '.azurestaticapps.net';
 
-// Static load-time assertion that `NONPROD_SWA_STEM` contains no regex
-// metacharacters. `PREVIEW_PR_RE` below interpolates the stem unescaped;
-// if Azure ever recreates the SWA with a stem containing `.+*?()[]\^$|`,
-// the regex would silently match the wrong thing. Fails loud at module
-// load so a future stem change cannot quietly corrupt the indicator.
-const REGEX_META_RE = /[.+*?()[\]\\^$|]/;
-if (REGEX_META_RE.test(NONPROD_SWA_STEM)) {
-  throw new Error(
-    `NONPROD_SWA_STEM contains a regex metacharacter and would corrupt PREVIEW_PR_RE: ` +
-      `${NONPROD_SWA_STEM}. Escape the stem before interpolation in env-label.ts.`,
-  );
+/**
+ * Escape regex metacharacters in `s` so it can be safely interpolated
+ * into a `new RegExp(...)` pattern as a literal. Defends
+ * `PREVIEW_PR_RE` against future drift in `NONPROD_SWA_STEM`: if
+ * Azure ever recreates the SWA with a stem containing regex
+ * metacharacters (e.g. `foo{3}` or `bar.baz`), the escaped form
+ * matches the literal stem instead of silently corrupting the regex
+ * grammar. The character class matches the canonical ECMA-262
+ * metacharacter set (`. * + ? ^ $ { } ( ) | [ ] \`).
+ *
+ * Previous design used a load-time `REGEX_META_RE.test(...)` guard
+ * that threw on metachar-bearing stems. That pattern is structurally
+ * fragile -- its own implementation must enumerate every metachar
+ * (and it missed `{` `}` until PR #340 review). Escaping at the
+ * construction site eliminates the bug class.
+ *
+ * The inline boot-script mirror at `src/index.html:329` does NOT
+ * yet have an equivalent escape; tracked as a separate follow-up
+ * (the dual-source "keep in sync" contract at the top of this file).
+ */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -65,7 +76,7 @@ if (REGEX_META_RE.test(NONPROD_SWA_STEM)) {
  * slugs (e.g. `-1-2`) deliberately fail to match and fall back to
  * the plain `[preview]` indicator.
  */
-const PREVIEW_PR_RE = new RegExp(`^${NONPROD_SWA_STEM}-(\\d+)\\.`);
+const PREVIEW_PR_RE = new RegExp(`^${escapeRegex(NONPROD_SWA_STEM)}-(\\d+)\\.`);
 
 /**
  * Classify a hostname into a coarse environment label.
