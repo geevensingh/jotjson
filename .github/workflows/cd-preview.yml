@@ -367,6 +367,15 @@ jobs:
         continue-on-error: true
         env:
           PLAYWRIGHT_BASE_URL: ${{ needs.build-and-deploy.outputs.preview_url }}
+          # Ground-truth PR number from GitHub, passed to the
+          # `preview-title.spec.ts` gate so it can assert the exact
+          # `[pr-<n>] ` prefix in the title without deriving the
+          # expected number from the preview URL hostname itself
+          # (which would be self-confirming: a PREVIEW_ENV typo at
+          # `:95` would produce a wrong slug AND a wrong expected
+          # value, false-passing the e2e). With this env var the
+          # workflow-to-SPA contract is checked end-to-end.
+          EXPECTED_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: npm run test:e2e
       - name: Upload Playwright HTML report
         if: failure() || steps.run-e2e-tests.outcome == 'failure'
