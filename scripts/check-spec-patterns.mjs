@@ -26,7 +26,13 @@
 //   rule enforces that every `__reset*ForTesting` call inside a
 //   `beforeEach` has a matching `__reset*ForTesting` call (same
 //   identifier) inside an `afterEach` in the same `describe` block (or
-//   file scope), and vice versa.
+//   file scope).
+//
+//   The rule is deliberately one-way: only `beforeEach`-only resets
+//   are flagged. An `afterEach`-only reset is the canonical set/reset
+//   pair pattern (a `__setX...ForTesting` in `beforeEach` paired with
+//   `__resetX...ForTesting` in `afterEach`) and is legitimate
+//   cleanup-of-self -- the cross-test leak risk does not apply.
 //
 //   Not enforced: `__set*` / `__attach*` / `__load*` / `__flush*`
 //   helpers (the `ForTesting` suffix alone is not enough -- e.g.,
@@ -139,8 +145,11 @@ export function scanRegex(text, normalizedPath) {
  * asymmetry violations. The walker tracks each enclosing `describe`
  * scope (a stack of node ids) and, within each scope, the set of
  * reset-helper identifiers called in `beforeEach` bodies and the set
- * called in `afterEach` bodies. After the walk, any identifier in one
- * set but not the other becomes a violation.
+ * called in `afterEach` bodies. After the walk, any identifier in the
+ * `beforeEach` set without a matching entry in the `afterEach` set
+ * becomes a violation. The reverse direction (`afterEach`-only) is
+ * deliberately allowed -- it is the canonical set/reset pair cleanup
+ * pattern. See file-top docstring (Rule #2) for the rationale.
  *
  * `describe.skip`, `xdescribe`, `fdescribe` are all treated as
  * describes. `it`, `xit`, `fit`, `it.skip`, async arrow bodies, and

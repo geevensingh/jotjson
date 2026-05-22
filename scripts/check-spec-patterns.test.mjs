@@ -11,13 +11,14 @@
 //  - Regex rule still fires on the existing `spyOnProperty(navigator,
 //    'clipboard', ...)` pattern.
 //  - AST rule (`__reset*ForTesting` symmetry) catches:
-//     - reset call in `beforeEach` only
-//     - reset call in `afterEach` only
+//     - reset call in `beforeEach` only (the bug pattern)
 //     - asymmetric reset in a nested `describe`
+//     - file-level (top-of-file) hook scoped asymmetries
 //  - AST rule passes (no violation) on:
 //     - symmetric reset in both hooks
 //     - no resets at all
-//     - set/reset pair with different identifiers
+//     - set/reset pair (`__setX...` in beforeEach + `__resetX...` in
+//       afterEach is the canonical pattern; afterEach-only is allowed)
 //     - reset call inside an `it` body (not `beforeEach`/`afterEach`)
 //     - `__set*` / `__attach*` / `__load*` / `__flush*` helpers
 //       (narrowed regex excludes them)
