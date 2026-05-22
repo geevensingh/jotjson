@@ -37,7 +37,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { scanRegex, scanText } from './check-spec-patterns.mjs';
+import { REGEX_RULES, scanRegex, scanText, validateRules } from './check-spec-patterns.mjs';
 
 const SPEC_PATH = 'src/example.spec.ts';
 
@@ -476,4 +476,92 @@ describe('x', () => {
   assert.equal(violations.length, 1);
   assert.match(violations[0].message, /__resetFooForTesting/);
   assert.match(violations[0].message, /beforeEach only/);
+});
+
+// --- validateRules (rule-shape contract) ---------------------------------
+// PR #370 panel: enforce at module load what the docstring already
+// promises (id required, message required, pattern is a RegExp, no
+// duplicate ids). The /g flag is NOT validated here -- V8's matchAll
+// throws on non-global at engine call time with a better stack trace.
+
+test('validateRules rejects a rule with missing id', () => {
+  assert.throws(
+    () => validateRules([{ pattern: /foo/g, message: 'msg' }]),
+    /missing a non-empty `id`/,
+  );
+});
+
+test('validateRules rejects a rule with empty id', () => {
+  assert.throws(
+    () => validateRules([{ id: '', pattern: /foo/g, message: 'msg' }]),
+    /missing a non-empty `id`/,
+  );
+});
+
+test('validateRules rejects a rule with non-RegExp pattern', () => {
+  assert.throws(
+    () => validateRules([{ id: 'x', pattern: 'foo', message: 'msg' }]),
+    /pattern must be a RegExp/,
+  );
+});
+
+test('validateRules rejects a rule with missing message', () => {
+  assert.throws(
+    () => validateRules([{ id: 'x', pattern: /foo/g }]),
+    /message must be a non-empty string/,
+  );
+});
+
+test('validateRules rejects two rules sharing the same id', () => {
+  assert.throws(
+    () =>
+      validateRules([
+        { id: 'dup', pattern: /a/g, message: 'm1' },
+        { id: 'dup', pattern: /b/g, message: 'm2' },
+      ]),
+    /two rules with id "dup"/,
+  );
+});
+
+// --- Engine termination (PR #370 bot finding regression test) ---------
+// The previous `while ((m = rule.pattern.exec(text)) !== null)` engine
+// would hang on the first match if a rule forgot `/g`. The matchAll
+// engine throws a TypeError at call time instead. These tests are
+// the actual canary for the bot's concern -- they prove the scan
+// loop terminates on multi-match input AND that a non-global pattern
+// fails loudly with a message that names the rule and points at the
+// fix.
+
+test('scanRegex terminates on multiple matches (not just the first)', { timeout: 2000 }, () => {
+  const text = `
+describe('a', () => {
+  it('b', () => spyOnProperty(navigator, 'clipboard', 'get'));
+  it('c', () => spyOnProperty(navigator, 'clipboard', 'get'));
+});
+`;
+  const violations = scanRegex(text, SPEC_PATH);
+  assert.equal(violations.length, 2);
+  assert.equal(violations[0].ruleId, 'spy-on-navigator-clipboard');
+  assert.equal(violations[1].ruleId, 'spy-on-navigator-clipboard');
+});
+
+test('scanRegex throws actionable error if a rule pattern is non-global', () => {
+  const savedPattern = REGEX_RULES[0].pattern;
+  // Mutate the existing rule in place to bypass validateRules (which
+  // would have rejected the bad shape at module load). This simulates
+  // the failure mode for a rule that somehow has a non-global RegExp
+  // at scan time -- the engine itself rejects it.
+  REGEX_RULES[0].pattern = /spyOnProperty/;
+  try {
+    assert.throws(
+      () => scanRegex('spyOnProperty(navigator, "clipboard", "get")', SPEC_PATH),
+      (err) =>
+        err instanceof TypeError &&
+        /spy-on-navigator-clipboard/.test(err.message) &&
+        /matchAll requires \/g/.test(err.message) &&
+        /scripts\/check-spec-patterns\.mjs/.test(err.message),
+    );
+  } finally {
+    REGEX_RULES[0].pattern = savedPattern;
+  }
 });

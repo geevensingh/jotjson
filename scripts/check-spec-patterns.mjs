@@ -70,19 +70,25 @@
 //
 // Adding new rules:
 //   For regex rules: push a `{ id, pattern, message }` onto
-//   REGEX_RULES. The `id` is required -- it becomes `ruleId` on
-//   emitted violations and is used by downstream consumers (test
-//   filters, future GitHub Actions annotations). Omitting `id`
-//   silently produces `ruleId: undefined`.
+//   REGEX_RULES. `validateRules(REGEX_RULES)` runs at module load and
+//   throws a loud TypeError if any rule is missing `id` / `message`
+//   or has a non-RegExp `pattern`, or if two rules share the same
+//   `id`. The `/g` flag itself is enforced by `scanRegex`'s use of
+//   `String.prototype.matchAll`, which V8 rejects with a TypeError
+//   when given a non-global RegExp -- so rule authors who forget
+//   `/g` get a loud failure on the first scan instead of a silent
+//   `while (exec(...))` infinite-loop hang. See PR #370 panel
+//   discussion for why engine-enforcement was preferred over a
+//   handwritten `validateRegexRules({ global })` check.
 //   For AST-based rules: extend `scanAst` directly. The AST scanner
 //   exposes the spec file's TypeScript AST so a new rule can walk it
 //   with the full structural context that regex cannot see.
 //
 // Exports:
-//   - `REGEX_RULES`, `scanRegex`, `scanAst`, `scan`, `listSpecFiles`,
-//     `main` are exported so unit tests (`scripts/check-spec-patterns.test.mjs`)
-//     can drive them against in-memory fixtures without touching the
-//     filesystem.
+//   - `REGEX_RULES`, `validateRules`, `scanRegex`, `scanAst`, `scan`,
+//     `listSpecFiles`, `main` are exported so unit tests
+//     (`scripts/check-spec-patterns.test.mjs`) can drive them against
+//     in-memory fixtures without touching the filesystem.
 //
 // Runs on Node 24+. The AST rule requires `typescript` (already a
 // transitive dev dep via `@angular-devkit/build-angular`). Invoke
@@ -105,6 +111,56 @@ export const REGEX_RULES = [
       ' which Linux headless Chrome does not expose for navigator.clipboard.',
   },
 ];
+
+/**
+ * Asserts that each rule has the shape `{ id: string, pattern: RegExp,
+ * message: string }` with non-empty id/message, and that no two rules
+ * share an id. Throws a loud TypeError at module load if any rule
+ * fails -- matches the file's "loud false-positive over silent
+ * false-negative" calibration (see docstring). Pure: no I/O.
+ *
+ * The `/g` flag on `pattern` is intentionally NOT checked here. V8's
+ * `String.prototype.matchAll` throws a TypeError on a non-global
+ * RegExp on the first scan, which gives a better stack trace
+ * pointing at the actual call site (scanRegex). See PR #370 panel
+ * discussion. Exported for unit-test use.
+ */
+export function validateRules(rules) {
+  const seenIds = new Set();
+  for (const rule of rules) {
+    if (typeof rule.id !== 'string' || rule.id.length === 0) {
+      throw new TypeError(
+        `check-spec-patterns: REGEX_RULES entry is missing a non-empty \`id\`` +
+          ` (required for violation reporting and test filtering). See` +
+          ` "Adding new rules" in scripts/check-spec-patterns.mjs.`,
+      );
+    }
+    if (seenIds.has(rule.id)) {
+      throw new TypeError(
+        `check-spec-patterns: REGEX_RULES has two rules with id "${rule.id}".` +
+          ` Each rule id must be unique. See scripts/check-spec-patterns.mjs.`,
+      );
+    }
+    seenIds.add(rule.id);
+    if (!(rule.pattern instanceof RegExp)) {
+      throw new TypeError(
+        `check-spec-patterns: rule "${rule.id}" pattern must be a RegExp,` +
+          ` got ${typeof rule.pattern}. See scripts/check-spec-patterns.mjs.`,
+      );
+    }
+    if (typeof rule.message !== 'string' || rule.message.length === 0) {
+      throw new TypeError(
+        `check-spec-patterns: rule "${rule.id}" message must be a non-empty` +
+          ` string. See scripts/check-spec-patterns.mjs.`,
+      );
+    }
+  }
+}
+
+// Validate at module load: throws loudly if any rule shape is broken.
+// Pure check (no I/O), so this does not violate the "no CLI side
+// effects on import" invariant called out in the file-top docstring.
+validateRules(REGEX_RULES);
 
 // Only `__reset*ForTesting` callees are subject to the symmetry rule.
 // Narrowed from `__\w+ForTesting` so `__set*`, `__attach*`, `__load*`,
@@ -141,13 +197,30 @@ export function listSpecFiles() {
  * Run the regex-based rules on the file's text. Pure function: takes
  * the text and the normalized path, returns violations. Exported for
  * unit-test use.
+ *
+ * Engine choice: `String.prototype.matchAll` over `while (exec(...))`.
+ * matchAll throws `TypeError: String.prototype.matchAll called with
+ * a non-global RegExp argument` if a rule forgets `/g`. The legacy
+ * `while ((m = rule.pattern.exec(text)) !== null)` form would
+ * instead hang forever on the first match (exec restarts at
+ * lastIndex=0 for non-global regex), turning a rule-authoring typo
+ * into a silent CI infinite-loop. See PR #370 panel discussion.
  */
 export function scanRegex(text, normalizedPath) {
   const violations = [];
   for (const rule of REGEX_RULES) {
-    rule.pattern.lastIndex = 0;
-    let m;
-    while ((m = rule.pattern.exec(text)) !== null) {
+    let matches;
+    try {
+      matches = text.matchAll(rule.pattern);
+    } catch (cause) {
+      throw new TypeError(
+        `check-spec-patterns: rule "${rule.id}" pattern is not a global RegExp` +
+          ` (matchAll requires /g). Add the /g flag to ${rule.pattern} in` +
+          ` scripts/check-spec-patterns.mjs and re-run \`npm run test:scripts\`.`,
+        { cause },
+      );
+    }
+    for (const m of matches) {
       const upToMatch = text.slice(0, m.index);
       const line = upToMatch.split('\n').length;
       const lastNl = upToMatch.lastIndexOf('\n');

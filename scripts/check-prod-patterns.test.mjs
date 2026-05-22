@@ -15,7 +15,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { matchesPragma, scanText } from './check-prod-patterns.mjs';
+import { matchesPragma, RULES, scanText, validateRules } from './check-prod-patterns.mjs';
 
 // --- matchesPragma --------------------------------------------------------
 
@@ -229,4 +229,67 @@ test('cosmos-replace: string pragma in non-allow-listed file is rejected', () =>
   const text = `await container.item('id', 'pk').replace<Doc>(updated); // allow:cosmos-replace internal-only\n`;
   const violations = scanText(text, 'api/src/blobs/index.ts');
   assert.equal(violations.length, 1);
+});
+
+// --- validateRules (rule-shape contract) ---------------------------------
+// PR #370 panel: enforce at module load that each rule has a RegExp
+// pattern and a non-empty message. The /g flag is NOT validated
+// here -- V8's matchAll throws on non-global at engine call time
+// with a better stack trace.
+
+test('validateRules rejects a rule with non-RegExp pattern', () => {
+  assert.throws(
+    () => validateRules([{ pattern: 'foo', message: 'msg' }]),
+    /pattern must be a RegExp/,
+  );
+});
+
+test('validateRules rejects a rule with missing message', () => {
+  assert.throws(() => validateRules([{ pattern: /foo/g }]), /missing or empty `message`/);
+});
+
+test('validateRules rejects a rule with empty message', () => {
+  assert.throws(
+    () => validateRules([{ pattern: /foo/g, message: '' }]),
+    /missing or empty `message`/,
+  );
+});
+
+// --- Engine termination (PR #370 bot finding regression test) ---------
+// The previous `while ((m = rule.pattern.exec(text)) !== null)` engine
+// would hang on the first match if a rule forgot `/g`. The matchAll
+// engine throws a TypeError at call time instead. These tests are
+// the actual canary for the bot's concern -- they prove the scan
+// loop terminates on multi-match input AND that a non-global pattern
+// fails loudly with a message that points at the fix.
+
+test('scanText terminates on multiple matches (not just the first)', { timeout: 2000 }, () => {
+  const text = `
+const a = foo as TelemetryMessageId;
+const b = bar as TelemetryMessageId;
+const c = baz as TelemetryMessageId;
+`;
+  const violations = scanText(text, 'src/app/example.ts');
+  assert.equal(violations.length, 3);
+});
+
+test('scanText throws actionable error if a rule pattern is non-global', () => {
+  // Find the TelemetryMessageId rule (rule #1, no `paths` filter so
+  // it fires on any src/ path).
+  const telemetryRule = RULES.find((r) => /TelemetryMessageId/.test(r.pattern.source));
+  assert.ok(telemetryRule, 'expected a TelemetryMessageId rule');
+  const savedPattern = telemetryRule.pattern;
+  // Mutate the existing rule in place to bypass validateRules.
+  telemetryRule.pattern = /TelemetryMessageId/;
+  try {
+    assert.throws(
+      () => scanText('const x = y as TelemetryMessageId;', 'src/app/example.ts'),
+      (err) =>
+        err instanceof TypeError &&
+        /matchAll requires \/g/.test(err.message) &&
+        /scripts\/check-prod-patterns\.mjs/.test(err.message),
+    );
+  } finally {
+    telemetryRule.pattern = savedPattern;
+  }
 });
