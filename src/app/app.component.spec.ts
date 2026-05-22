@@ -114,7 +114,7 @@ describe('AppComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+    expect(loggerServiceSpy.event).toHaveBeenCalledWith(
       'app.boot',
       {
         version: jasmine.any(String),
@@ -129,6 +129,13 @@ describe('AppComponent', () => {
       },
       undefined,
     );
+    // PreferencesService also emits `theme.applied` (source: 'boot') during
+    // construction, so the spy receives more than one call. Verify
+    // `app.boot` itself was emitted exactly once.
+    const appBootCalls = loggerServiceSpy.event.calls
+      .allArgs()
+      .filter((args) => args[0] === 'app.boot');
+    expect(appBootCalls.length).toBe(1);
     expect(callOrder).toEqual(['event', 'connect']);
   });
 

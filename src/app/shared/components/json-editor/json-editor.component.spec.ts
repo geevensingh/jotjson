@@ -417,10 +417,17 @@ describe('JsonEditorComponent', () => {
     installMonacoLoaderScriptPlaceholder();
     installRequireThatLoadsFakeMonaco();
     await create();
-    expect(logger.event).toHaveBeenCalledOnceWith('monaco.loaded', undefined, {
+    expect(logger.event).toHaveBeenCalledWith('monaco.loaded', undefined, {
       loadTimeMs: jasmine.any(Number),
     });
-    const measurements = logger.event.calls.mostRecent().args[2];
+    // PreferencesService also emits `theme.applied` (source: 'boot')
+    // during construction, so the spy receives more than one call.
+    // Verify `monaco.loaded` itself was emitted exactly once.
+    const monacoLoadedCalls = logger.event.calls
+      .allArgs()
+      .filter((args) => args[0] === 'monaco.loaded');
+    expect(monacoLoadedCalls.length).toBe(1);
+    const measurements = monacoLoadedCalls[0]?.[2];
     if (!measurements) {
       fail('monaco.loaded measurements were not captured');
       return;

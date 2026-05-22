@@ -1240,6 +1240,54 @@ export const TELEMETRY_MESSAGE_IDS = [
    */
   'pref.changed',
 
+  /**
+   * Kind: event
+   * Fired by: `PreferencesService` (`core/preferences/preferences.service.ts`)
+   *           at the three lifecycle moments when the resolved
+   *           ("effective") color theme has been applied to the
+   *           user's view:
+   *           - Once at service construction (`source: 'boot'`),
+   *             browser-only.
+   *           - When the OS `prefers-color-scheme` flips while the
+   *             stored preference is `'system'` (`source: 'osChange'`).
+   *           - When `applyPrefs` mutates state in a way that moves
+   *             the effective theme; `source` mirrors the
+   *             upstream `PreferenceChangeSource` (`'user' | 'init'
+   *             | 'sync'`) so sign-in hydration and a future
+   *             server-pushed sync are correctly distinguished from
+   *             a user click. `'init'` covers both sign-in
+   *             hydration and sign-out reset.
+   *
+   * This event exists because `pref.changed` records the stored
+   * preference (`'system' | 'dark' | 'light'`), which is dominated
+   * by `'system'` (the default) -- so it cannot answer "what color
+   * scheme is actually being rendered?". `theme.applied` records
+   * the resolved value after `matchMedia('(prefers-color-scheme:
+   * light)')` is consulted.
+   *
+   * Dedupe: emits only when the resolved theme differs from the
+   * last emitted value, except `source: 'boot'` always emits (so
+   * every session has a baseline data point). The dedupe means
+   * `applyPrefs` calls that don't move the effective theme
+   * (e.g., `dark` -> `system` on a dark-mode OS) do NOT fire.
+   *
+   * Volume control: bounded-frequency. Boot is one-shot per
+   * service-instance (~1 per browser tab). OS-flips and user pref
+   * clicks are user-bounded; `init` is bounded by auth-state
+   * transitions per session.
+   *
+   * Props: {
+   *   effective: 'dark' | 'light';
+   *   pref: 'system' | 'dark' | 'light';
+   *   source: 'boot' | 'osChange' | 'user' | 'init' | 'sync';
+   * }
+   *   All closed-enum. Cardinality bound: 2 x 3 x 5 = 30 combos;
+   *   reachable combos are fewer because `pref in {dark, light}`
+   *   pins `effective`. No PII, no per-user / per-session IDs.
+   * Measurements: none.
+   */
+  'theme.applied',
+
   // Formatting rule sets (M6g-1)
 
   /**
