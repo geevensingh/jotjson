@@ -51,6 +51,68 @@ describe('parse (pure)', () => {
     });
   });
 
+  describe('issue #365: __proto__ preservation', () => {
+    it('retains __proto__ as an own enumerable key', () => {
+      const result = parse('{"__proto__":1,"a":2}');
+      expect(result.errors).toEqual([]);
+      const value = result.value as Record<string, unknown>;
+      expect(Object.keys(value)).toEqual(['__proto__', 'a']);
+      expect(Object.prototype.hasOwnProperty.call(value, '__proto__')).toBe(true);
+      expect(value['__proto__']).toBe(1);
+      expect(value['a']).toBe(2);
+    });
+
+    it('retains __proto__ in nested objects', () => {
+      const result = parse('{"outer":{"__proto__":1}}');
+      const outer = (result.value as { outer: Record<string, unknown> }).outer;
+      expect(Object.keys(outer)).toEqual(['__proto__']);
+      expect(outer['__proto__']).toBe(1);
+    });
+
+    it('retains __proto__ in nested array elements', () => {
+      const result = parse('{"a":[{"__proto__":1}]}');
+      const inner = (result.value as { a: Record<string, unknown>[] }).a[0];
+      expect(Object.keys(inner)).toEqual(['__proto__']);
+      expect(inner['__proto__']).toBe(1);
+
+      const arrayRoot = parse('[{"__proto__":1}]').value as Record<string, unknown>[];
+      expect(Object.keys(arrayRoot[0])).toEqual(['__proto__']);
+      expect(arrayRoot[0]['__proto__']).toBe(1);
+    });
+
+    it('retains __proto__: null as a data property without setting the prototype', () => {
+      const result = parse('{"__proto__":null}');
+      const value = result.value as Record<string, unknown>;
+      expect(value['__proto__']).toBeNull();
+      // The recipient uses `Object.create(null)`, so the prototype is
+      // already null; the JSON value `null` lands as an own data
+      // property and does not "re-set" any prototype chain.
+      expect(Object.getPrototypeOf(value)).toBeNull();
+    });
+
+    it('round-trips __proto__ through JSON.stringify', () => {
+      const result = parse('{"__proto__":1,"a":2}');
+      expect(JSON.stringify(result.value)).toBe('{"__proto__":1,"a":2}');
+    });
+
+    it('pins Jasmine deep-equality across plain vs null prototype', () => {
+      // Regression guard for skeptic finding H1 (issue #365 plan).
+      // `parseResult().value` returns null-prototype objects after
+      // the #365 fix; existing specs at home.component.spec.ts:1020
+      // and :1147 use `expect(...).toEqual({ ... })` with plain-object
+      // literal expectations. Jasmine 6.2's `eq_` short-circuits the
+      // constructor-mismatch gate when either constructor is
+      // `undefined` (which is the case for null-prototype objects).
+      // Mirror that exact pattern -- a null-prototype LHS deep-equal
+      // to a plain object literal RHS -- so a future Jasmine upgrade
+      // that tightens the gate fails this spec first instead of
+      // breaking the broader suite silently.
+      const result = parse('{"seed":2}');
+      expect(Object.getPrototypeOf(result.value)).toBeNull();
+      expect(result.value).toEqual({ seed: 2 });
+    });
+  });
+
   describe('JSONC extensions', () => {
     it('accepts // and /* */ comments and surfaces commentCount', () => {
       const result = parse(`{
