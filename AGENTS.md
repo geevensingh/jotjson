@@ -1297,18 +1297,27 @@ ran) and ask whether to revert, follow-up-fix, or accept.
     **three-agent panel**: `deep-review:skeptic` (attack mindset)
     + `deep-review:advocate` (defense mindset)
     + `deep-review:architect` (direction mindset), invoked in
-    parallel on every plan presented to the user. **There is no
-    non-panel mode.** Token and wall-clock cost are explicitly
-    accepted as the price of catching the failure modes a solo
-    critic misses (over-adoption of one perspective, missed
-    direction concerns, missed defense rebuttals). `general-purpose`
-    is permitted **only** to substitute for one missing
-    `deep-review:*` agent in a runtime that lacks it, and its prompt
-    must be explicitly adversarial and explicitly take the missing
-    role. **`explore` is not a critic** -- it is a research agent;
-    do not use it for rubber-duck. **`deep-review:advocate` remains
-    forbidden as a solo critic**: its role is to defend, so a
-    solo-advocate gate is not adversarial.
+    parallel on every plan presented to the user. **The default
+    is panel-only**; solo, paired, or otherwise reduced panels
+    are not permitted as a default. A reduced panel is allowed
+    only as the explicit failure-mode exception documented in
+    "Panelist failure is not a fallback" below, and that
+    exception requires user authorization in the same turn.
+    Token and wall-clock cost are explicitly accepted as the
+    price of catching the failure modes a solo critic misses
+    (over-adoption of one perspective, missed direction concerns,
+    missed defense rebuttals). `general-purpose` is permitted to
+    substitute for **at most one** missing `deep-review:*` agent
+    in a runtime that lacks it, and its prompt must be explicitly
+    adversarial and explicitly take the missing role. If two or
+    more `deep-review:*` agents are unavailable, do not present
+    the plan; surface the situation to the user and require
+    explicit authorization for the substitute configuration (the
+    same "reduced panel" exception above). **`explore` is not a
+    critic** -- it is a research agent; do not use it for
+    rubber-duck. **`deep-review:advocate` remains forbidden as a
+    solo critic**: its role is to defend, so a solo-advocate gate
+    is not adversarial.
 
   - **Critic prompt requirements.** The prompt must (a) include
     explicit adversarial framing ("find at least one weakness; if
@@ -1335,17 +1344,20 @@ ran) and ask whether to revert, follow-up-fix, or accept.
     generation, no matter how rigorous, does not satisfy this
     rule under any circumstance.
 
-  - **Quote findings in full.** Quote each panelist's findings
-    verbatim in the plan; do not paraphrase, do not elide, do not
-    truncate. If a panelist's output is unwieldy (over ~1500 chars),
-    save the full transcript as `plan.critic-<role>.md` (where
+  - **Quote findings.** Each panelist's **full transcript** must
+    be preserved verbatim in `plan.critic-<role>.md` (where
     `<role>` is `skeptic`, `advocate`, or `architect`) alongside
-    `plan.md` and link from the gate section, but still inline a
-    full verbatim copy of the findings list. **Single-listing rule**:
-    list each distinct finding once under the panelist who raised it
-    most directly; if another panelist raised the same concern, note
-    it in the cross-critic synthesis (Agreements) rather than
-    re-listing.
+    `plan.md`; this is the per-panelist record and must not be
+    paraphrased, elided, or truncated. In the inline
+    `Pre-presentation gate` section, each *distinct* finding is
+    listed once under the panelist who raised it most directly,
+    **verbatim from that panelist's output** (the selected quote
+    must not be paraphrased, elided, or truncated). If another
+    panelist raised the same concern, note it in the cross-critic
+    synthesis (Agreements) by panelist name rather than re-listing
+    the finding text. This preserves the full per-panelist record
+    in the transcript files without ballooning the inline gate
+    with duplicate text.
 
   - **Tag each finding's disposition**: `ADOPT` (link to the plan
     section that was changed), `SET ASIDE` (one-line reason), or
@@ -1432,22 +1444,28 @@ ran) and ask whether to revert, follow-up-fix, or accept.
   - **Prompt**: <one-line summary, or "see plan.critic-skeptic.md">
   - **Conclusion**: <one-line, e.g. "12 findings raised" or
     "no material weaknesses found">
-  - **Findings**: (verbatim, one per bullet)
-    - <finding> -- <ADOPT | SET ASIDE | OUT OF SCOPE> -- <one-line>
+  - **Findings**: (one bullet per distinct finding; finding text
+    quoted verbatim from this panelist's output, followed by
+    disposition + one-line reason)
+    - "<verbatim finding text>" -- <ADOPT | SET ASIDE | OUT OF SCOPE> -- <one-line>
 
   ### Advocate
   - **Invocation**: <one-line summary>
   - **Prompt**: <one-line summary, or "see plan.critic-advocate.md">
   - **Conclusion**: <one-line>
-  - **Findings**: (verbatim, one per bullet)
-    - <finding> -- <ADOPT | SET ASIDE | OUT OF SCOPE> -- <one-line>
+  - **Findings**: (one bullet per distinct finding; finding text
+    quoted verbatim from this panelist's output, followed by
+    disposition + one-line reason)
+    - "<verbatim finding text>" -- <ADOPT | SET ASIDE | OUT OF SCOPE> -- <one-line>
 
   ### Architect
   - **Invocation**: <one-line summary>
   - **Prompt**: <one-line summary, or "see plan.critic-architect.md">
   - **Conclusion**: <one-line>
-  - **Findings**: (verbatim, one per bullet)
-    - <finding> -- <ADOPT | SET ASIDE | OUT OF SCOPE> -- <one-line>
+  - **Findings**: (one bullet per distinct finding; finding text
+    quoted verbatim from this panelist's output, followed by
+    disposition + one-line reason)
+    - "<verbatim finding text>" -- <ADOPT | SET ASIDE | OUT OF SCOPE> -- <one-line>
 
   ### Cross-critic synthesis
   - **Agreements**: <findings raised by 2+ panelists, listed once
