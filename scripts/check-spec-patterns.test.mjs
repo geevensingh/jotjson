@@ -26,6 +26,13 @@
 //    block comments containing `beforeEach` tokens,
 //    `describe.skip` / `xdescribe` / `fdescribe`, `xit` / `fit`,
 //    async-arrow callbacks, function-expression callbacks.
+//  - Concise-arrow describe body coverage: `describe('x', () =>
+//    beforeEach(...))` (the body is a CallExpression, not a Block).
+//  - Inline-helper coverage (deliberate calibration -- see PR #370):
+//    a helper defined inside the hook body whose body contains a
+//    `__reset*` call is treated as if the hook ran the reset, even
+//    when the helper is never invoked. Accepted false-positive in
+//    exchange for catching the common DRY pattern.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -382,4 +389,91 @@ test('violation includes line and column from the offending node', () => {
   assert.equal(violations[0].line, 2); // line 2 has the beforeEach call
   assert.equal(typeof violations[0].col, 'number');
   assert.ok(violations[0].col > 0);
+});
+
+// --- AST rule: concise-arrow describe body (PR #370 review feedback) --
+
+test('concise-arrow describe body: detects beforeEach-only reset (no Block wrapper)', () => {
+  // `describe('x', () => beforeEach(...))` -- the arrow body is the
+  // CallExpression itself, not a Block. The walker must dispatch on
+  // the body as a node, not just its children. Regression guard for
+  // the line-251 bug fixed in this PR. Currently no spec in the
+  // codebase uses this shape, but the soundness of the rule should
+  // not depend on stylistic uniformity.
+  const text = `describe('x', () => beforeEach(() => __resetFooForTesting()));`;
+  const violations = scanText(text, SPEC_PATH).filter((v) => v.ruleId === 'reset-helper-symmetry');
+  assert.equal(violations.length, 1);
+  assert.match(violations[0].message, /__resetFooForTesting/);
+  assert.match(violations[0].message, /beforeEach only/);
+});
+
+test('concise-arrow describe body with both hooks: symmetric, no violation', () => {
+  // The corollary: concise-arrow describe with symmetric set/reset
+  // pair must still be accepted (proves the fix did not over-flag).
+  // Here the describe body is a parenthesized SequenceExpression-like
+  // shape: the arrow body is a single CallExpression that returns
+  // the result of the last hook -- not idiomatic, but valid TS.
+  const text = `
+describe('x', () => {
+  beforeEach(() => __resetFooForTesting());
+  afterEach(() => __resetFooForTesting());
+});
+`;
+  const violations = scanText(text, SPEC_PATH).filter((v) => v.ruleId === 'reset-helper-symmetry');
+  assert.equal(violations.length, 0);
+});
+
+// --- AST rule: inline-helper semantics (PR #370 deliberate calibration)
+
+test('inline helper defined and called from beforeEach: flagged when afterEach missing', () => {
+  // Common DRY pattern: extract setup into a helper defined inside
+  // the hook and call it. The walker recurses into the helper body
+  // and records the __reset call against the enclosing beforeEach.
+  // Without a matching afterEach this should be flagged. This is
+  // the TRUE-POSITIVE side of the deliberate over-inclusion
+  // documented in check-spec-patterns.mjs file-top "Helper-call
+  // semantics" section. Do NOT change findResetCallsIn to skip
+  // FunctionDeclaration recursion without revisiting that trade-off.
+  const text = `
+describe('x', () => {
+  beforeEach(() => {
+    function setup() {
+      __resetFooForTesting();
+    }
+    setup();
+  });
+  it('y', () => {});
+});
+`;
+  const violations = scanText(text, SPEC_PATH).filter((v) => v.ruleId === 'reset-helper-symmetry');
+  assert.equal(violations.length, 1);
+  assert.match(violations[0].message, /__resetFooForTesting/);
+  assert.match(violations[0].message, /beforeEach only/);
+});
+
+test('inline helper defined but NEVER called from beforeEach: still flagged (accepted false positive)', () => {
+  // The companion to the test above: a helper defined inside the
+  // hook but never invoked. A static linter cannot tell this case
+  // apart from the defined-and-called case without dataflow
+  // analysis. We accept this false-positive because the alternative
+  // (skip nested function bodies) would silently miss the common
+  // defined-and-called case above. Loud false-positive in a single
+  // spec is cheap to fix; silent false-negative leaks across the
+  // suite (the original #350 bug class). See check-spec-patterns.mjs
+  // file-top "Helper-call semantics" section.
+  const text = `
+describe('x', () => {
+  beforeEach(() => {
+    function deadHelper() {
+      __resetFooForTesting();
+    }
+    // deadHelper is intentionally never invoked here.
+  });
+  it('y', () => {});
+});
+`;
+  const violations = scanText(text, SPEC_PATH).filter((v) => v.ruleId === 'reset-helper-symmetry');
+  assert.equal(violations.length, 1);
+  assert.match(violations[0].message, /__resetFooForTesting/);
+  assert.match(violations[0].message, /beforeEach only/);
 });

@@ -43,12 +43,37 @@
 //   constrained on the `__set*` side -- the rule lints `__reset*`
 //   placement only.
 //
-//   Not enforced: indirect calls through helper functions. A helper
-//   that internally calls `__resetX` is opaque to the rule. Spec
-//   authors who hide setup in helpers accept the blind spot.
+//   Helper-call semantics (deliberate calibration -- see PR #370
+//   panel discussion):
+//
+//   * Helpers *defined outside* the hook body (e.g., a top-level
+//     `function setup() { __resetX(); }` called from `beforeEach`)
+//     are opaque to the rule. Spec authors who hide setup in
+//     external helpers accept the blind spot.
+//   * Helpers *defined inline inside* the hook body have their
+//     bodies walked: any `__reset*` call inside an inline helper IS
+//     recorded against the enclosing hook, even if the helper is
+//     never invoked. This is an accepted false-positive in exchange
+//     for catching the common DRY pattern of extracting setup into a
+//     helper defined and called from the same `beforeEach`. A
+//     static linter cannot distinguish "helper defined" from
+//     "helper defined and called" without dataflow analysis;
+//     calibrating toward false-positives is consistent with the
+//     one-way bias above (loud false-positive in a single spec is
+//     cheap; silent false-negative leaks across the suite).
+//
+//   See also: `src/testing/global-hooks.spec.ts` is the runtime
+//   counterpart -- it catches storage/`Storage.prototype` leaks
+//   that the lint rule cannot see (since they have no
+//   `__reset*ForTesting` name). The two mechanisms cover disjoint
+//   bug classes; neither is a superset of the other.
 //
 // Adding new rules:
-//   For regex rules: push a `{ pattern, message }` onto REGEX_RULES.
+//   For regex rules: push a `{ id, pattern, message }` onto
+//   REGEX_RULES. The `id` is required -- it becomes `ruleId` on
+//   emitted violations and is used by downstream consumers (test
+//   filters, future GitHub Actions annotations). Omitting `id`
+//   silently produces `ruleId: undefined`.
 //   For AST-based rules: extend `scanAst` directly. The AST scanner
 //   exposes the spec file's TypeScript AST so a new rule can walk it
 //   with the full structural context that regex cannot see.
@@ -185,6 +210,17 @@ export function scanAst(sourceFile, normalizedPath) {
   }
 
   function findResetCallsIn(node, sink) {
+    // Deliberate over-inclusion: this walker recurses through ALL
+    // descendants, including bodies of functions declared inline
+    // inside the hook callback. A static linter cannot tell a
+    // helper that is defined-and-called from one that is
+    // defined-and-never-called; we accept the false-positive on the
+    // dead-helper case in exchange for catching the common DRY
+    // pattern where setup is extracted into a helper defined and
+    // called from the same hook. See the file-top docstring
+    // "Helper-call semantics" section for full rationale (PR #370
+    // panel discussion). Do NOT add `ts.isFunctionDeclaration`
+    // skip-recursion without revisiting that trade-off.
     function walk(n) {
       if (ts.isCallExpression(n)) {
         const callee = n.expression;
@@ -248,7 +284,13 @@ export function scanAst(sourceFile, normalizedPath) {
         const callback = node.arguments[1];
         if (callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {
           scopes.push({ node, before: new Map(), after: new Map() });
-          ts.forEachChild(callback.body, visit);
+          // visit(callback.body), not ts.forEachChild(callback.body, visit):
+          // for a concise-arrow describe (`describe('x', () => beforeEach(...))`)
+          // the body is itself a CallExpression. forEachChild would walk its
+          // arguments and miss the top-level call. visit() falls through to
+          // ts.forEachChild for Block bodies (no behavior change there) and
+          // correctly dispatches on CallExpression bodies.
+          visit(callback.body);
           const popped = scopes.pop();
           emitScopeViolations(popped);
           return;
