@@ -54,6 +54,7 @@ import {
   JsonExtractorService,
 } from '../../core/json/json-extractor.service';
 import { JsonParseResult, JsonParserService } from '../../core/json/json-parser.service';
+import { sortKeysDeep } from '../../core/json/sort-keys';
 import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
 import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
@@ -62,7 +63,7 @@ import { persistedSignal } from '../../core/preferences/persisted-signal';
 import { PreferencesService } from '../../core/preferences/preferences.service';
 import { QuotaNotificationService } from '../../core/quota/quota-notification.service';
 import { SeoService } from '../../core/seo/seo.service';
-import { bucketBytes, bucketUndoLatency } from '../../core/telemetry/buckets';
+import { bucketBytes, bucketCount, bucketUndoLatency } from '../../core/telemetry/buckets';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
 import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
@@ -79,6 +80,7 @@ import { highlightsEqual } from '../../shared/components/json-tree/highlight-res
 import {
   JsonTreeComponent,
   type TreeExtractRequest,
+  type TreeSortKeysRequest,
 } from '../../shared/components/json-tree/json-tree.component';
 import { PaneLayout, ToolbarComponent } from '../../shared/components/toolbar/toolbar.component';
 import {
@@ -96,6 +98,7 @@ import type { PatchResult } from './extract-json-patcher';
 import { patchExtractedValue } from './extract-json-patcher';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
+import { patchSortKeysAtPath, type SortPatchResult } from './sort-json-patcher';
 import { StatusBarComponent } from './status-bar/status-bar.component';
 import { collectStringLeaves } from './string-leaf-collector';
 import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
@@ -167,6 +170,8 @@ type ReplaceUndoKind =
   | 'upload'
   | 'format'
   | 'minify'
+  | 'sort.toolbar'
+  | 'sort.tree'
   | 'extract.banner'
   | 'extract.tree'
   | 'coldBoot';
@@ -238,6 +243,16 @@ type PendingReplaceUndoMinifyExtras = {
   kind: 'minify';
   /** Editor mode at install time. Minify always flips to 'json'. */
   priorMode: EditorMode;
+};
+
+type PendingReplaceUndoSortToolbarExtras = {
+  kind: 'sort.toolbar';
+  /** Editor mode at install time. Sort always flips to 'json' (drops comments). */
+  priorMode: EditorMode;
+};
+
+type PendingReplaceUndoSortTreeExtras = {
+  kind: 'sort.tree';
 };
 
 type PendingReplaceUndoExtractBannerExtras = {
@@ -396,6 +411,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     | (PendingReplaceUndoBase & PendingReplaceUndoUploadExtras)
     | (PendingReplaceUndoBase & PendingReplaceUndoFormatExtras)
     | (PendingReplaceUndoBase & PendingReplaceUndoMinifyExtras)
+    | (PendingReplaceUndoBase & PendingReplaceUndoSortToolbarExtras)
+    | (PendingReplaceUndoBase & PendingReplaceUndoSortTreeExtras)
     | (PendingReplaceUndoBase & PendingReplaceUndoExtractBannerExtras)
     | (PendingReplaceUndoBase & PendingReplaceUndoExtractTreeExtras)
     | (PendingReplaceUndoBase & PendingReplaceUndoColdBootExtras)
@@ -1462,9 +1479,9 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (pending === null) {
       return;
     }
-    // M7v extract surfaces shipped with a 8-second snackbar duration
+    // Extract and tree-sort surfaces use an 8-second snackbar duration
     // and `politeness: 'assertive'` so a screen reader announces the
-    // Undo offer immediately. The new upload/format/minify surfaces
+    // Undo offer immediately. Upload/format/minify/toolbar-sort surfaces
     // use a 30-second snackbar (matching `REPLACE_UNDO_CAP_MS`, the
     // wall-clock cap on `priorText` retention) so the Undo affordance
     // remains visible for the full window during which Ctrl+Z still
@@ -1475,8 +1492,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     // (`REPLACE_UNDO_CAP_MS = 30_000`) is the single owner of the
     // snapshot lifetime; the snackbar duration is purely about
     // visibility of the affordance.
-    const isExtract = pending.kind === 'extract.banner' || pending.kind === 'extract.tree';
-    const snackRef: MatSnackBarRef<TextOnlySnackBar> | undefined = isExtract
+    const isShortAssertive =
+      pending.kind === 'extract.banner' ||
+      pending.kind === 'extract.tree' ||
+      pending.kind === 'sort.tree';
+    const snackRef: MatSnackBarRef<TextOnlySnackBar> | undefined = isShortAssertive
       ? this.snack.open(snackMessage, snackUndoLabel, { duration: 8000, politeness: 'assertive' })
       : this.snack.open(snackMessage, snackUndoLabel, { duration: REPLACE_UNDO_CAP_MS });
     // Test environments that don't care about the Undo affordance can
@@ -1564,6 +1584,16 @@ export class HomeComponent implements OnInit, OnDestroy {
           { undoLatencyMs },
         );
         return;
+      case 'sort.toolbar':
+        this.logger.event(
+          'home.sort.undo',
+          { source, priorMode: pending.priorMode, undoLatencyMsBucket },
+          { undoLatencyMs },
+        );
+        return;
+      case 'sort.tree':
+        this.logger.event('tree.sortKeys.undo', { source, undoLatencyMsBucket }, { undoLatencyMs });
+        return;
       case 'extract.banner':
         this.logger.event('home.extract.banner.undo', {
           source,
@@ -1607,6 +1637,12 @@ export class HomeComponent implements OnInit, OnDestroy {
       case 'minify':
         this.mode.set(pending.priorMode);
         return;
+      case 'sort.toolbar':
+        this.mode.set(pending.priorMode);
+        return;
+      case 'sort.tree':
+        // No side-state to restore; right-click sort is a surgical edit.
+        return;
       case 'extract.banner':
         // Restore the pre-accept highlights / mutated paths and re-arm
         // the extract banner so the user lands at the mixed text with
@@ -1640,14 +1676,14 @@ export class HomeComponent implements OnInit, OnDestroy {
    * document:
    * - `upload`: bumps `viewResetToken` (a new file is a wholesale change;
    *   matches today's `replaceDocument`).
-   * - `format` and `minify`: do NOT bump (whitespace and serialization
-   *   changes preserve tree structure; preserves the user's tree
-   *   scroll position / cursor).
+   * - `format`, `minify`, and `sort`: do NOT bump (whitespace and
+   *   serialization changes preserve tree structure; preserves the user's
+   *   tree scroll position / cursor).
    */
   private applyReplaceWithFallback(
     next: string,
     editorSource: string,
-    surface: 'upload' | 'format' | 'minify',
+    surface: 'upload' | 'format' | 'minify' | 'sort',
   ): void {
     const logApplyFailed = (reason: ReplaceApplyFailedReason): void => {
       switch (surface) {
@@ -1659,6 +1695,9 @@ export class HomeComponent implements OnInit, OnDestroy {
           return;
         case 'minify':
           this.logger.warn('home.minify.applyFailed', { reason });
+          return;
+        case 'sort':
+          this.logger.warn('home.sort.applyFailed', { reason });
           return;
       }
     };
@@ -2278,6 +2317,67 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.openReplaceUndoSnack(
       $localize`:@@home.extract.snackbar.applied:Extracted embedded JSON into the document.`,
       $localize`:@@home.extract.snackbar.undo:Undo`,
+    );
+  }
+
+  onSortKeysRequest(event: TreeSortKeysRequest): void {
+    const priorText = this.content();
+    let result: SortPatchResult;
+    try {
+      result = patchSortKeysAtPath(priorText, event.path);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : null;
+      switch (reason) {
+        case 'sort.patch.parse-failed':
+          this.logger.warn('tree.sortKeys.applyFailed', { reason: 'parseFailed' });
+          return;
+        case 'sort.patch.path-not-found':
+          this.logger.warn('tree.sortKeys.applyFailed', { reason: 'pathNotFound' });
+          return;
+        case 'sort.patch.not-object':
+          this.logger.warn('tree.sortKeys.applyFailed', { reason: 'notObject' });
+          return;
+        case 'sort.patch.empty-or-single':
+          return;
+        default:
+          return;
+      }
+    }
+
+    const ast = this.parseResult().ast;
+    const targetNode = ast ? findNodeAtLocation(ast, [...event.path]) : null;
+    const keyCountAtPath = targetNode?.type === 'object' ? (targetNode.children?.length ?? 0) : 0;
+    const keyCountBucket = bucketCount(keyCountAtPath);
+    if (result.patched === priorText) {
+      this.logger.event('tree.sortKeys.click', { alreadySorted: 'true', keyCountBucket });
+      return;
+    }
+
+    const editor = this.editor();
+    if (!editor) {
+      this.logger.warn('tree.sortKeys.applyFailed', { reason: 'editorUnavailable' });
+      return;
+    }
+    const startOffset = result.targetOffset;
+    const endOffset = startOffset + result.targetLength;
+    if (!editor.applyEdit(startOffset, endOffset, result.replacementText, 'jotjson-sort')) {
+      this.logger.warn('tree.sortKeys.applyFailed', { reason: 'applyEditFailed' });
+      return;
+    }
+
+    this.logger.event('tree.sortKeys.click', { alreadySorted: 'false', keyCountBucket });
+    this.treeFlush$.next();
+    this.tree()?.expandNodeAtPath(event.path);
+    this.installPendingReplace({
+      priorText,
+      startMs: performance.now(),
+      undoneViaSnackbar: false,
+      kind: 'sort.tree',
+      viewResetTokenAtAccept: this.viewResetToken(),
+    });
+    this.openReplaceUndoSnack(
+      $localize`:@@home.sortKeys.snackbar.applied:Sorted this object's keys.`,
+      $localize`:@@home.sortKeys.snackbar.undo:Undo`,
     );
   }
 
@@ -3019,6 +3119,43 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.openReplaceUndoSnack(
       $localize`:@@home.minify.snackbar.applied:Minified document.`,
       $localize`:@@home.minify.snackbar.undo:Undo`,
+    );
+  }
+
+  onSort(): void {
+    const parsed = this.parseResult();
+    if (parsed.empty || parsed.errors.length > 0) return;
+    let sortedValue: unknown;
+    try {
+      sortedValue = sortKeysDeep(parsed.value);
+    } catch {
+      return;
+    }
+    let next: string;
+    try {
+      next = formatText(JSON.stringify(sortedValue), this.prefs.prefs().editorTabSize);
+    } catch {
+      return;
+    }
+    const text = this.content();
+    const priorMode = this.mode();
+    if (next === text && priorMode === 'json') return;
+    const rootKeyCount =
+      isRecord(parsed.value) && !Array.isArray(parsed.value) ? Object.keys(parsed.value).length : 0;
+    this.logger.event('home.sort.click', { keyCountBucket: bucketCount(rootKeyCount) });
+    this.installPendingReplace({
+      priorText: text,
+      startMs: performance.now(),
+      undoneViaSnackbar: false,
+      kind: 'sort.toolbar',
+      priorMode,
+      viewResetTokenAtAccept: this.viewResetToken(),
+    });
+    this.applyReplaceWithFallback(next, 'jotjson-sort', 'sort');
+    this.mode.set('json');
+    this.openReplaceUndoSnack(
+      $localize`:@@home.sort.snackbar.applied:Sorted keys.`,
+      $localize`:@@home.sort.snackbar.undo:Undo`,
     );
   }
 

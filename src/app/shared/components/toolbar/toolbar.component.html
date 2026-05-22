@@ -88,6 +88,19 @@
   <button
     type="button"
     mat-icon-button
+    matTooltip="Sort keys"
+    i18n-matTooltip="@@toolbar.sort.tooltip"
+    aria-label="Sort keys"
+    i18n-aria-label="@@toolbar.sort.aria"
+    [disabled]="!hasContent()"
+    (click)="onSortClick()"
+  >
+    <jj-icon name="sort" />
+  </button>
+
+  <button
+    type="button"
+    mat-icon-button
     matTooltip="Clear editor"
     i18n-matTooltip="@@toolbar.clear.tooltip"
     aria-label="Clear editor"

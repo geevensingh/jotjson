@@ -129,6 +129,10 @@ const TYPE_LABELS: Record<ValueClassification, string> = {
   undefined: $localize`:@@tree.type.undefined:undefined`,
 };
 
+export interface TreeSortKeysRequest {
+  path: (string | number)[];
+}
+
 export interface TreeExtractRequest {
   path: (string | number)[];
   sourceVersion: number;
@@ -674,6 +678,7 @@ export class JsonTreeComponent {
    */
   readonly selectionChange = output<readonly (string | number)[] | null>();
   readonly extractRequest = output<TreeExtractRequest>();
+  readonly sortKeysRequest = output<TreeSortKeysRequest>();
   readonly highlightsChange = output<BlobHighlight[]>();
 
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
@@ -3278,6 +3283,18 @@ export class JsonTreeComponent {
     return map.get(node.value) ?? null;
   }
 
+  sortKeysCandidate(node: TreeNode): boolean {
+    if (
+      node.type !== 'object' ||
+      node.value === null ||
+      typeof node.value !== 'object' ||
+      Array.isArray(node.value)
+    ) {
+      return false;
+    }
+    return Object.keys(node.value).length >= 2;
+  }
+
   onExtractButtonClick(node: TreeNode, event: MouseEvent): void {
     event.stopPropagation();
     this.emitExtract(node, 'rowPillPrimitiveArray');
@@ -3290,6 +3307,12 @@ export class JsonTreeComponent {
     // separately.
     this.logger.info('tree.contextMenu.extract');
     this.emitExtract(node, 'contextMenu');
+  }
+
+  onSortKeysMenuClick(node: TreeNode): void {
+    this.logger.info('tree.contextMenu.sortKeys');
+    if (!this.sortKeysCandidate(node)) return;
+    this.sortKeysRequest.emit({ path: node.path });
   }
 
   private emitExtract(
