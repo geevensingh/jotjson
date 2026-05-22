@@ -3284,15 +3284,7 @@ export class JsonTreeComponent {
   }
 
   sortKeysCandidate(node: TreeNode): boolean {
-    if (
-      node.type !== 'object' ||
-      node.value === null ||
-      typeof node.value !== 'object' ||
-      Array.isArray(node.value)
-    ) {
-      return false;
-    }
-    return Object.keys(node.value).length >= 2;
+    return node.type === 'object' && (node.children?.length ?? 0) >= 2;
   }
 
   onExtractButtonClick(node: TreeNode, event: MouseEvent): void {

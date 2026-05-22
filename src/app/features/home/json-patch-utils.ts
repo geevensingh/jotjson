@@ -1,6 +1,8 @@
 /**
- * Returns 1 if `text` starts with a UTF-8 BOM (U+FEFF), else 0. Used
- * to keep parse-tree offsets aligned with the original-bytes offsets
+ * Returns 1 if the first code unit of `text` is U+FEFF (the BOM
+ * marker), else 0. Only the first code unit is inspected; BOM
+ * characters appearing later in the string are ignored. Used to
+ * keep parse-tree offsets aligned with the original string offsets
  * downstream consumers index against.
  */
 export function bomShift(text: string): 0 | 1 {
@@ -8,9 +10,12 @@ export function bomShift(text: string): 0 | 1 {
 }
 
 /**
- * Returns the column (count of characters since the last `\n`) of
- * the character at byte index `offset`. Backward-scans from
- * `offset - 1`. Counts UTF-16 code units, not graphemes.
+ * Returns the column (count of code units since the last line break)
+ * of the character at string offset `offset`. Backward-scans from
+ * `offset - 1`. Counts UTF-16 code units, not graphemes. Treats
+ * `\n` (LF) as the only line terminator; bare `\r` (CR) is treated
+ * as a regular character, so a CR-only document (legacy classic-Mac
+ * EOL) collapses to a single logical line.
  */
 export function computeColumn(text: string, offset: number): number {
   let column = 0;

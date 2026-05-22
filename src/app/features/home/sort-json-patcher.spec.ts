@@ -149,4 +149,32 @@ describe('patchSortKeysAtPath', () => {
     expect(result.targetOffset).toBe(1);
     expect(result.replacementText).toBe('{"a":2,"b":1}');
   });
+
+  it('preserves CRLF newlines across a 3-key object', () => {
+    const text = '{\r\n  "c": 3,\r\n  "b": 2,\r\n  "a": 1\r\n}';
+
+    const result = patchSortKeysAtPath(text, []);
+
+    expect(result.patched).toBe('{\r\n  "a": 1,\r\n  "b": 2,\r\n  "c": 3\r\n}');
+    expect(result.patched).not.toMatch(/[^\r]\n/);
+    expect((result.patched.match(/\r\n/g) ?? []).length).toBe((text.match(/\r\n/g) ?? []).length);
+  });
+
+  it('preserves CRLF newlines with a leading BOM', () => {
+    const text = '\uFEFF{\r\n  "b": 2,\r\n  "a": 1\r\n}';
+
+    const result = patchSortKeysAtPath(text, []);
+
+    expect(result.patched).toBe('\uFEFF{\r\n  "a": 1,\r\n  "b": 2\r\n}');
+    expect(result.patched).not.toMatch(/[^\r]\n/);
+  });
+
+  it('preserves CRLF newlines with tab indentation', () => {
+    const text = '{\r\n\t"b": 2,\r\n\t"a": 1\r\n}';
+
+    const result = patchSortKeysAtPath(text, []);
+
+    expect(result.patched).toBe('{\r\n\t"a": 1,\r\n\t"b": 2\r\n}');
+    expect(result.patched).not.toMatch(/[^\r]\n/);
+  });
 });

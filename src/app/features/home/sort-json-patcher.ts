@@ -22,7 +22,9 @@ interface PropertySlice {
  * uses byte-splicing to preserve number precision (e.g.,
  * 9007199254740993 stays as the original digits, not the
  * round-tripped 9007199254740992), escape forms ("\u0041" stays
- * "\u0041" not "A"), and nested comments inside property values.
+ * "\u0041" not "A"), nested comments inside property values, and
+ * the prevailing newline style (LF vs CRLF) of the targeted
+ * object's prefix.
  *
  * Inter-property comments inside the targeted object body are
  * lost - they are not associated with any property and the
@@ -126,9 +128,14 @@ function toPropertySlice(text: string, shift: 0 | 1, propertyNode: Node): Proper
 }
 
 function synthesizeSeparator(prefix: string): string {
+  // The synthesized separator matches the EOL of the existing prefix
+  // (CRLF if any `\r\n` is present, else LF). Document-wide
+  // newline-style consistency is the caller's responsibility; this
+  // function preserves only the prefix-local style.
   if (prefix.includes('\n')) {
     const indentation = prefix.substring(prefix.lastIndexOf('\n') + 1);
-    return ',\n' + indentation;
+    const newline = prefix.includes('\r\n') ? '\r\n' : '\n';
+    return ',' + newline + indentation;
   }
 
   return /^\s+$/.test(prefix) ? ', ' : ',';
