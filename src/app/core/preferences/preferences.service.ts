@@ -473,11 +473,15 @@ export class PreferencesService {
       media.addEventListener?.('change', () => {
         if (this._prefs().theme === 'system') {
           this._prefs.set({ ...this._prefs() });
-          this.emitThemeApplied(
-            resolveEffectiveTheme(this._prefs().theme),
-            this._prefs().theme,
-            'osChange',
-          );
+          // The spread above is load-bearing: it produces a new object
+          // reference, which (with default Object.is equality on the
+          // `_prefs` signal) invalidates the `effectiveTheme` computed
+          // so the next read recomputes from the new matchMedia state.
+          // Do NOT remove the resignal and do NOT add a custom `equal`
+          // to `_prefs` without rewriting this listener.
+          const effective = this.effectiveTheme();
+          const pref = this._prefs().theme;
+          this.emitThemeApplied(effective, pref, 'osChange');
         }
       });
     }
@@ -516,10 +520,15 @@ export class PreferencesService {
 
     // Emit the boot baseline last so all constructor wiring is in
     // place first (matchMedia listener, auth effect, sync effect).
+    // Read `effectiveTheme()` (the cached computed) rather than
+    // `resolveEffectiveTheme` directly so the matchMedia call is
+    // shared with the body-class / highlight-color effects' first
+    // reads of the same computed on their initial flush.
     // Browser-only via `emitThemeApplied`'s own `isBrowser` guard;
     // prerender skips this emit.
-    const bootPref = this._prefs().theme;
-    this.emitThemeApplied(resolveEffectiveTheme(bootPref), bootPref, 'boot');
+    const effective = this.effectiveTheme();
+    const pref = this._prefs().theme;
+    this.emitThemeApplied(effective, pref, 'boot');
   }
 
   update(patch: Partial<UserPreferences>): void {
@@ -535,14 +544,14 @@ export class PreferencesService {
     const mergedPreferences = mergePreferencePatch(previousPreferences, next);
     this.emitPreferenceChanges(previousPreferences, mergedPreferences, source);
     this._prefs.set(mergedPreferences);
-    // After `_prefs.set` so `resolveEffectiveTheme` reads the post-mutation
-    // pref. Helper dedupes against `lastEmittedTheme`, so a pref change
-    // that doesn't move the resolved theme is a no-op here.
-    this.emitThemeApplied(
-      resolveEffectiveTheme(mergedPreferences.theme),
-      mergedPreferences.theme,
-      source,
-    );
+    // Read the cached `effectiveTheme()` computed after `_prefs.set`
+    // so the matchMedia call is shared with the body-class /
+    // highlight-color effects' reads of the same computed. The helper
+    // dedupes against `lastEmittedTheme`, so a pref change that
+    // doesn't move the resolved theme is a no-op here.
+    const effective = this.effectiveTheme();
+    const pref = mergedPreferences.theme;
+    this.emitThemeApplied(effective, pref, source);
   }
 
   private emitPreferenceChanges(

@@ -822,10 +822,13 @@ describe('PreferencesService', () => {
      * returned `fireChange()` invokes every registered `'change'`
      * listener once.
      */
-    function stubMatchMedia(initialPrefersLight: boolean): { fireChange: () => void } {
+    function stubMatchMedia(initialPrefersLight: boolean): {
+      fireChange: () => void;
+      matchMediaSpy: jasmine.Spy<typeof window.matchMedia>;
+    } {
       let prefersLight = initialPrefersLight;
       const changeListeners: Array<EventListenerOrEventListenerObject> = [];
-      spyOn(window, 'matchMedia').and.callFake(
+      const matchMediaSpy = spyOn(window, 'matchMedia').and.callFake(
         (query: string): MediaQueryList => ({
           get matches(): boolean {
             // Only the `(prefers-color-scheme: light)` query is
@@ -857,6 +860,7 @@ describe('PreferencesService', () => {
             else listener.handleEvent(event);
           }
         },
+        matchMediaSpy,
       };
     }
 
@@ -971,7 +975,6 @@ describe('PreferencesService', () => {
 
       // Fire the synthetic change WITHOUT toggling prefersLight: the
       // listener resignals but `effectiveTheme()` is still 'dark'.
-      void prefersLight;
       for (const listener of changeListeners) {
         const event = new Event('change');
         if (typeof listener === 'function') listener(event);
@@ -1049,6 +1052,29 @@ describe('PreferencesService', () => {
       TestBed.inject(PreferencesService);
 
       expect(themeAppliedCalls()).toEqual([]);
+    });
+
+    it('applyPrefs reads cached effectiveTheme to avoid redundant matchMedia (regression guard for #374)', () => {
+      // Perf invariant: when a user edits a non-theme preference
+      // while `theme === 'system'`, `applyPrefs` must consult the OS
+      // (`matchMedia`) at most once via the cached `effectiveTheme()`
+      // computed. The emit's read seeds the cache; the body-class
+      // and highlight-color effects then hit cache. If a future
+      // change reverts the emit to call `resolveEffectiveTheme`
+      // directly, this assertion catches it.
+      const { matchMediaSpy } = stubMatchMedia(false);
+      const svc = TestBed.inject(PreferencesService);
+      // Explicit precondition: the assertion below assumes the
+      // resolved-theme code path actually consults matchMedia, which
+      // only happens when `pref === 'system'`. If `DEFAULT_PREFERENCES`
+      // ever drifts away from 'system', this guard surfaces it.
+      expect(svc.prefs().theme).toBe('system');
+      matchMediaSpy.calls.reset();
+
+      svc.update({ editorFontSize: 18 });
+      TestBed.flushEffects();
+
+      expect(matchMediaSpy.calls.count()).toBe(1);
     });
   });
 
