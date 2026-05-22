@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal } from '@angular/core';
+import { PLATFORM_ID, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import type { User, UserPreferences } from '../api/models';
@@ -433,12 +433,24 @@ describe('PreferencesService', () => {
   });
 
   describe('pref.changed telemetry', () => {
-    it('emits a string event for a changed theme', () => {
+    // The PreferencesService constructor emits a `theme.applied`
+    // event with `source: 'boot'` (see `theme.applied telemetry`
+    // describe below). Tests in this block focus on `pref.changed`
+    // and reset the spy after construction so existing assertions
+    // about the call count / shape of `pref.changed` are not
+    // affected by the boot emit.
+    function injectPrefs(): PreferencesService {
       const svc = TestBed.inject(PreferencesService);
+      logger.event.calls.reset();
+      return svc;
+    }
+
+    it('emits a string event for a changed theme', () => {
+      const svc = injectPrefs();
 
       svc.update({ theme: 'dark' });
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
         { key: 'theme', source: 'user', kind: 'string', value: 'dark' },
         undefined,
@@ -446,7 +458,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a string event for a changed coldBootClipboardAutoPaste', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ coldBootClipboardAutoPaste: 'always' });
 
@@ -463,7 +475,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a string event for a changed searchMatchMode', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ searchMatchMode: 'starts_with' });
 
@@ -475,7 +487,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a number event with bucket and measurement for editorFontSize', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ editorFontSize: 18 });
 
@@ -487,7 +499,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a count event with bucket and measurement for activeRuleSetIds', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ activeRuleSetIds: ['a', 'b'] });
 
@@ -499,7 +511,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a count event with enabled-unit measurement for treeDateAnnotationUnits', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update(makeTreeDateAnnotationUnitsPatch({ year: false, second: false }));
 
@@ -516,7 +528,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits boolean dimensions as strings', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ treeShowTypeLabels: false });
 
@@ -528,7 +540,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a boolean event for treeDateAnnotationFriendlyForms', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ treeDateAnnotationFriendlyForms: false });
 
@@ -545,7 +557,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits only the changed treeHighlightColors leaf', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update(makeTreeHighlightPatch({ dark: { selectionColor: '#ff0000' } }));
 
@@ -563,7 +575,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a color event when dark manualHighlightColor changes', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update(makeTreeHighlightPatch({ dark: { manualHighlightColor: '#ff0000' } }));
 
@@ -581,7 +593,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a color event when light manualHighlightColor changes', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update(makeTreeHighlightPatch({ light: { manualHighlightColor: '#00ff00' } }));
 
@@ -599,20 +611,22 @@ describe('PreferencesService', () => {
     });
 
     it('reset emits one user-sourced event per key that differs from defaults', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
       svc.update({ theme: 'dark', editorFontSize: 18, treeShowTypeLabels: false });
       logger.event.calls.reset();
 
       svc.reset();
 
-      const calls = logger.event.calls.allArgs();
-      expect(calls.length).toBe(3);
-      expect(calls.map((callArguments) => callArguments[1]?.['source'])).toEqual([
+      const prefChangedCalls = logger.event.calls
+        .allArgs()
+        .filter((args) => args[0] === 'pref.changed');
+      expect(prefChangedCalls.length).toBe(3);
+      expect(prefChangedCalls.map((callArguments) => callArguments[1]?.['source'])).toEqual([
         'user',
         'user',
         'user',
       ]);
-      expect(calls.map((callArguments) => callArguments[1]?.['key'])).toEqual([
+      expect(prefChangedCalls.map((callArguments) => callArguments[1]?.['key'])).toEqual([
         'theme',
         'editorFontSize',
         'treeShowTypeLabels',
@@ -620,14 +634,17 @@ describe('PreferencesService', () => {
     });
 
     it('sign-in hydration emits init-sourced events for remote preference diffs', async () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
       api.getMe.and.returnValue(of(makeUserResponse({ theme: 'dark', editorFontSize: 18 })));
 
       auth.signInAs('u-1');
       TestBed.flushEffects();
       await svc.__waitForSync();
 
-      expect(logger.event).toHaveBeenCalledTimes(2);
+      const prefChangedCalls = logger.event.calls
+        .allArgs()
+        .filter((args) => args[0] === 'pref.changed');
+      expect(prefChangedCalls.length).toBe(2);
       expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
         { key: 'theme', source: 'init', kind: 'string', value: 'dark' },
@@ -641,7 +658,7 @@ describe('PreferencesService', () => {
     });
 
     it('sign-out reset emits init-sourced events for non-default current prefs', async () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
       api.getMe.and.returnValue(of(makeUserResponse({ theme: 'dark', editorFontSize: 18 })));
       auth.signInAs('u-1');
       TestBed.flushEffects();
@@ -651,7 +668,10 @@ describe('PreferencesService', () => {
       auth.signOut();
       TestBed.flushEffects();
 
-      expect(logger.event).toHaveBeenCalledTimes(2);
+      const prefChangedCalls = logger.event.calls
+        .allArgs()
+        .filter((args) => args[0] === 'pref.changed');
+      expect(prefChangedCalls.length).toBe(2);
       expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
         { key: 'theme', source: 'init', kind: 'string', value: 'system' },
@@ -665,11 +685,14 @@ describe('PreferencesService', () => {
     });
 
     it('emits one event for each changed key in a multi-key patch', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ theme: 'dark', editorFontSize: 18 });
 
-      expect(logger.event).toHaveBeenCalledTimes(2);
+      const prefChangedCalls = logger.event.calls
+        .allArgs()
+        .filter((args) => args[0] === 'pref.changed');
+      expect(prefChangedCalls.length).toBe(2);
       expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
         { key: 'theme', source: 'user', kind: 'string', value: 'dark' },
@@ -683,7 +706,7 @@ describe('PreferencesService', () => {
     });
 
     it('does not emit when theme is already system', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ theme: 'system' });
 
@@ -691,7 +714,7 @@ describe('PreferencesService', () => {
     });
 
     it('does not emit for an empty patch', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({});
 
@@ -699,17 +722,23 @@ describe('PreferencesService', () => {
     });
 
     it('does not emit when editorFontSize is unchanged', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ editorFontSize: 14 });
 
       expect(logger.event).not.toHaveBeenCalled();
     });
 
-    it('does not emit during constructor initial load', () => {
+    it('does not emit pref.changed during constructor initial load', () => {
       TestBed.inject(PreferencesService);
 
-      expect(logger.event).not.toHaveBeenCalled();
+      // The constructor emits exactly one `theme.applied` boot event;
+      // it must NOT emit any `pref.changed` events because no
+      // preference actually changed (only resolution happened).
+      const prefChangedCalls = logger.event.calls
+        .allArgs()
+        .filter((args) => args[0] === 'pref.changed');
+      expect(prefChangedCalls.length).toBe(0);
     });
 
     it('does not emit when matchMedia recomputes the system theme', () => {
@@ -750,11 +779,15 @@ describe('PreferencesService', () => {
       TestBed.flushEffects();
 
       expect(svc.prefs().theme).toBe('system');
+      // matchMedia.matches stays true across the synthetic change, so
+      // effective theme stays 'light' and `theme.applied` dedupes
+      // away. `pref.changed` never fires either because the stored
+      // pref didn't change.
       expect(logger.event).not.toHaveBeenCalled();
     });
 
     it('does not emit when a treeHighlightColors leaf is unchanged', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update(makeTreeHighlightPatch({ dark: { selectionColor: '#264f78' } }));
 
@@ -762,7 +795,7 @@ describe('PreferencesService', () => {
     });
 
     it('emits a boolean event for treeAutoFitToWindow', () => {
-      const svc = TestBed.inject(PreferencesService);
+      const svc = injectPrefs();
 
       svc.update({ treeAutoFitToWindow: false });
 
@@ -771,6 +804,243 @@ describe('PreferencesService', () => {
         { key: 'treeAutoFitToWindow', source: 'user', kind: 'boolean', value: 'false' },
         undefined,
       );
+    });
+  });
+
+  describe('theme.applied telemetry', () => {
+    /**
+     * Stubs `window.matchMedia` deterministically so dedupe behavior
+     * across boot / osChange / pref-change emits is observable. The
+     * returned `fireChange()` invokes every registered `'change'`
+     * listener once.
+     */
+    function stubMatchMedia(initialPrefersLight: boolean): { fireChange: () => void } {
+      let prefersLight = initialPrefersLight;
+      const changeListeners: Array<EventListenerOrEventListenerObject> = [];
+      spyOn(window, 'matchMedia').and.callFake(
+        (query: string): MediaQueryList => ({
+          get matches(): boolean {
+            // Only the `(prefers-color-scheme: light)` query is
+            // meaningful for this test; default everything else to false.
+            return query.includes('light') ? prefersLight : false;
+          },
+          media: query,
+          onchange: null,
+          addEventListener: (
+            type: string,
+            listener: EventListenerOrEventListenerObject | null,
+          ): void => {
+            if (type === 'change' && listener !== null) {
+              changeListeners.push(listener);
+            }
+          },
+          removeEventListener: (): void => undefined,
+          dispatchEvent: (): boolean => true,
+          addListener: (): void => undefined,
+          removeListener: (): void => undefined,
+        }),
+      );
+      return {
+        fireChange: (): void => {
+          prefersLight = !prefersLight;
+          const event = new Event('change');
+          for (const listener of changeListeners) {
+            if (typeof listener === 'function') listener(event);
+            else listener.handleEvent(event);
+          }
+        },
+      };
+    }
+
+    function themeAppliedCalls(): Array<{
+      effective: 'dark' | 'light';
+      pref: UserPreferences['theme'];
+      source: string;
+    }> {
+      return logger.event.calls.allArgs().reduce<
+        Array<{
+          effective: 'dark' | 'light';
+          pref: UserPreferences['theme'];
+          source: string;
+        }>
+      >((acc, args) => {
+        if (args[0] !== 'theme.applied') return acc;
+        const props = args[1] as {
+          effective: 'dark' | 'light';
+          pref: UserPreferences['theme'];
+          source: string;
+        };
+        acc.push({ effective: props.effective, pref: props.pref, source: props.source });
+        return acc;
+      }, []);
+    }
+
+    it('boot emit on explicit dark pref', () => {
+      stubMatchMedia(true);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: 'dark' }));
+
+      TestBed.inject(PreferencesService);
+
+      expect(themeAppliedCalls()).toEqual([{ effective: 'dark', pref: 'dark', source: 'boot' }]);
+    });
+
+    it('boot emit on system pref reads matchMedia', () => {
+      stubMatchMedia(true);
+
+      TestBed.inject(PreferencesService);
+
+      expect(themeAppliedCalls()).toEqual([{ effective: 'light', pref: 'system', source: 'boot' }]);
+    });
+
+    it('boot emit falls back to dark when matchMedia is absent', () => {
+      // Older browsers / non-DOM contexts. The fallback at
+      // resolveEffectiveTheme line 124 returns 'dark'.
+      const originalMatchMedia = window.matchMedia;
+      (window as { matchMedia?: typeof window.matchMedia }).matchMedia =
+        undefined as unknown as typeof window.matchMedia;
+      try {
+        TestBed.inject(PreferencesService);
+
+        expect(themeAppliedCalls()).toEqual([
+          { effective: 'dark', pref: 'system', source: 'boot' },
+        ]);
+      } finally {
+        window.matchMedia = originalMatchMedia;
+      }
+    });
+
+    it('boot emit still fires when localStorage is corrupt (defaults apply)', () => {
+      stubMatchMedia(false);
+      localStorage.setItem(STORAGE_KEY, '{not json');
+
+      TestBed.inject(PreferencesService);
+
+      // mergeWithDefaults wraps in try/catch and yields DEFAULTS
+      // (`theme: 'system'`); matchMedia stub returns dark.
+      expect(themeAppliedCalls()).toEqual([{ effective: 'dark', pref: 'system', source: 'boot' }]);
+    });
+
+    it('osChange emit on matchMedia flip while pref is system', () => {
+      const { fireChange } = stubMatchMedia(false);
+
+      TestBed.inject(PreferencesService);
+      logger.event.calls.reset();
+
+      fireChange();
+      TestBed.flushEffects();
+
+      expect(themeAppliedCalls()).toEqual([
+        { effective: 'light', pref: 'system', source: 'osChange' },
+      ]);
+    });
+
+    it('osChange dedupes when effective theme does not change', () => {
+      // matchMedia change fires but `matches` stays the same:
+      // effective is still dark, dedupe skips the emit.
+      let prefersLight = false;
+      const changeListeners: Array<EventListenerOrEventListenerObject> = [];
+      spyOn(window, 'matchMedia').and.callFake(
+        (query: string): MediaQueryList => ({
+          get matches(): boolean {
+            return query.includes('light') ? prefersLight : false;
+          },
+          media: query,
+          onchange: null,
+          addEventListener: (
+            type: string,
+            listener: EventListenerOrEventListenerObject | null,
+          ): void => {
+            if (type === 'change' && listener !== null) changeListeners.push(listener);
+          },
+          removeEventListener: (): void => undefined,
+          dispatchEvent: (): boolean => true,
+          addListener: (): void => undefined,
+          removeListener: (): void => undefined,
+        }),
+      );
+      TestBed.inject(PreferencesService);
+      logger.event.calls.reset();
+
+      // Fire the synthetic change WITHOUT toggling prefersLight: the
+      // listener resignals but `effectiveTheme()` is still 'dark'.
+      void prefersLight;
+      for (const listener of changeListeners) {
+        const event = new Event('change');
+        if (typeof listener === 'function') listener(event);
+        else listener.handleEvent(event);
+      }
+      TestBed.flushEffects();
+
+      expect(themeAppliedCalls()).toEqual([]);
+    });
+
+    it('user-source emit when pref change moves effective theme', () => {
+      stubMatchMedia(false);
+      const svc = TestBed.inject(PreferencesService);
+      logger.event.calls.reset();
+
+      svc.update({ theme: 'light' });
+
+      expect(themeAppliedCalls()).toEqual([{ effective: 'light', pref: 'light', source: 'user' }]);
+    });
+
+    it('dedupes when pref change does not move effective theme', () => {
+      // matchMedia returns dark; boot emits dark. User flips
+      // pref to 'system' -- effective resolves to dark again, so
+      // the dedupe drops the emit.
+      stubMatchMedia(false);
+      const svc = TestBed.inject(PreferencesService);
+      logger.event.calls.reset();
+
+      svc.update({ theme: 'system' });
+
+      expect(themeAppliedCalls()).toEqual([]);
+    });
+
+    it('init-source emit on sign-in hydration that moves effective theme', async () => {
+      stubMatchMedia(true); // boot resolves to 'light'
+      const svc = TestBed.inject(PreferencesService);
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'dark' })));
+      logger.event.calls.reset();
+
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      await svc.__waitForSync();
+
+      expect(themeAppliedCalls()).toEqual([{ effective: 'dark', pref: 'dark', source: 'init' }]);
+    });
+
+    it('init-source emit on sign-out reset that moves effective theme', async () => {
+      stubMatchMedia(true); // anon resolves to 'light' on system pref
+      const svc = TestBed.inject(PreferencesService);
+      api.getMe.and.returnValue(of(makeUserResponse({ theme: 'dark' })));
+      auth.signInAs('u-1');
+      TestBed.flushEffects();
+      await svc.__waitForSync();
+      logger.event.calls.reset();
+
+      auth.signOut();
+      TestBed.flushEffects();
+
+      // Defaults reapply (theme: 'system'); matchMedia stub returns
+      // 'light', so effective swings dark -> light.
+      expect(themeAppliedCalls()).toEqual([{ effective: 'light', pref: 'system', source: 'init' }]);
+    });
+
+    it('does not emit on the server platform', () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          { provide: AuthService, useValue: auth },
+          { provide: UserApiService, useValue: api },
+          { provide: LoggerService, useValue: logger },
+          { provide: PLATFORM_ID, useValue: 'server' },
+        ],
+      });
+
+      TestBed.inject(PreferencesService);
+
+      expect(themeAppliedCalls()).toEqual([]);
     });
   });
 

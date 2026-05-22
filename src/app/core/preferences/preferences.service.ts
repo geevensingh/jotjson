@@ -207,6 +207,18 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
 }
 
 type PreferenceChangeSource = 'user' | 'init' | 'sync';
+
+/**
+ * Source dimension for the `theme.applied` event. Extends
+ * `PreferenceChangeSource` with two lifecycle moments that do not
+ * flow through `applyPrefs`:
+ * - `'boot'`: synchronous emit in the constructor for the initial
+ *   resolved theme; always emits (skips dedupe) so every session
+ *   has a baseline data point.
+ * - `'osChange'`: the matchMedia `'change'` handler fired while
+ *   the stored pref is `'system'`.
+ */
+type ThemeAppliedSource = 'boot' | 'osChange' | PreferenceChangeSource;
 type TopLevelPreferenceKey = Exclude<keyof UserPreferences, 'treeHighlightColors'>;
 type TreeDateAnnotationUnits = UserPreferences['treeDateAnnotationUnits'];
 type PartialTreeDateAnnotationUnits = Partial<TreeDateAnnotationUnits>;
@@ -391,6 +403,15 @@ export class PreferencesService {
   private pendingDirty = false;
   private lastUserId: string | null = null;
 
+  /**
+   * Last resolved theme that `emitThemeApplied` actually emitted.
+   * Used to dedupe `osChange` / `user` / `init` / `sync` emits so a
+   * pref or OS change that doesn't move the effective theme (e.g.,
+   * `dark` -> `system` on a dark-mode OS) does NOT fire. `'boot'`
+   * always emits and updates this baseline.
+   */
+  private lastEmittedTheme: 'dark' | 'light' | null = null;
+
   private readonly events = new Subject<PreferencesEvent>();
   /**
    * Emits when a write is rejected with 412 because preferences were
@@ -452,6 +473,11 @@ export class PreferencesService {
       media.addEventListener?.('change', () => {
         if (this._prefs().theme === 'system') {
           this._prefs.set({ ...this._prefs() });
+          this.emitThemeApplied(
+            resolveEffectiveTheme(this._prefs().theme),
+            this._prefs().theme,
+            'osChange',
+          );
         }
       });
     }
@@ -487,6 +513,13 @@ export class PreferencesService {
         if (document.visibilityState === 'hidden') flushOnHide();
       });
     }
+
+    // Emit the boot baseline last so all constructor wiring is in
+    // place first (matchMedia listener, auth effect, sync effect).
+    // Browser-only via `emitThemeApplied`'s own `isBrowser` guard;
+    // prerender skips this emit.
+    const bootPref = this._prefs().theme;
+    this.emitThemeApplied(resolveEffectiveTheme(bootPref), bootPref, 'boot');
   }
 
   update(patch: Partial<UserPreferences>): void {
@@ -502,6 +535,14 @@ export class PreferencesService {
     const mergedPreferences = mergePreferencePatch(previousPreferences, next);
     this.emitPreferenceChanges(previousPreferences, mergedPreferences, source);
     this._prefs.set(mergedPreferences);
+    // After `_prefs.set` so `resolveEffectiveTheme` reads the post-mutation
+    // pref. Helper dedupes against `lastEmittedTheme`, so a pref change
+    // that doesn't move the resolved theme is a no-op here.
+    this.emitThemeApplied(
+      resolveEffectiveTheme(mergedPreferences.theme),
+      mergedPreferences.theme,
+      source,
+    );
   }
 
   private emitPreferenceChanges(
@@ -708,6 +749,26 @@ export class PreferencesService {
       { key, source, kind: 'count', countBucket: bucketCount(count) },
       { count },
     );
+  }
+
+  /**
+   * Emits a `theme.applied` event for the resolved color theme. See
+   * the JSDoc for `'theme.applied'` in
+   * `core/telemetry/telemetry-message-ids.ts` for the contract.
+   *
+   * Takes `effective` and `pref` as explicit arguments rather than
+   * reading `effectiveTheme()` / `_prefs()` to avoid stale reads
+   * from callers that emit between mutation steps.
+   */
+  private emitThemeApplied(
+    effective: 'dark' | 'light',
+    pref: UserPreferences['theme'],
+    source: ThemeAppliedSource,
+  ): void {
+    if (!this.isBrowser) return;
+    if (source !== 'boot' && effective === this.lastEmittedTheme) return;
+    this.lastEmittedTheme = effective;
+    this.loggerService.event('theme.applied', { effective, pref, source }, undefined);
   }
 
   private loadLocal(): UserPreferences {
