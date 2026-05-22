@@ -207,6 +207,18 @@ function mergeWithDefaults(remote: Partial<UserPreferences>): UserPreferences {
 }
 
 type PreferenceChangeSource = 'user' | 'init' | 'sync';
+
+/**
+ * Source dimension for the `theme.applied` event. Extends
+ * `PreferenceChangeSource` with two lifecycle moments that do not
+ * flow through `applyPrefs`:
+ * - `'boot'`: synchronous emit in the constructor for the initial
+ *   resolved theme; always emits (skips dedupe) so every session
+ *   has a baseline data point.
+ * - `'osChange'`: the matchMedia `'change'` handler fired while
+ *   the stored pref is `'system'`.
+ */
+type ThemeAppliedSource = 'boot' | 'osChange' | PreferenceChangeSource;
 type TopLevelPreferenceKey = Exclude<keyof UserPreferences, 'treeHighlightColors'>;
 type TreeDateAnnotationUnits = UserPreferences['treeDateAnnotationUnits'];
 type PartialTreeDateAnnotationUnits = Partial<TreeDateAnnotationUnits>;
@@ -391,6 +403,15 @@ export class PreferencesService {
   private pendingDirty = false;
   private lastUserId: string | null = null;
 
+  /**
+   * Last resolved theme that `emitThemeApplied` actually emitted.
+   * Used to dedupe `osChange` / `user` / `init` / `sync` emits so a
+   * pref or OS change that doesn't move the effective theme (e.g.,
+   * `dark` -> `system` on a dark-mode OS) does NOT fire. `'boot'`
+   * always emits and updates this baseline.
+   */
+  private lastEmittedTheme: 'dark' | 'light' | null = null;
+
   private readonly events = new Subject<PreferencesEvent>();
   /**
    * Emits when a write is rejected with 412 because preferences were
@@ -452,6 +473,15 @@ export class PreferencesService {
       media.addEventListener?.('change', () => {
         if (this._prefs().theme === 'system') {
           this._prefs.set({ ...this._prefs() });
+          // The spread above is load-bearing: it produces a new object
+          // reference, which (with default Object.is equality on the
+          // `_prefs` signal) invalidates the `effectiveTheme` computed
+          // so the next read recomputes from the new matchMedia state.
+          // Do NOT remove the resignal and do NOT add a custom `equal`
+          // to `_prefs` without rewriting this listener.
+          const effective = this.effectiveTheme();
+          const pref = this._prefs().theme;
+          this.emitThemeApplied(effective, pref, 'osChange');
         }
       });
     }
@@ -487,6 +517,18 @@ export class PreferencesService {
         if (document.visibilityState === 'hidden') flushOnHide();
       });
     }
+
+    // Emit the boot baseline last so all constructor wiring is in
+    // place first (matchMedia listener, auth effect, sync effect).
+    // Read `effectiveTheme()` (the cached computed) rather than
+    // `resolveEffectiveTheme` directly so the matchMedia call is
+    // shared with the body-class / highlight-color effects' first
+    // reads of the same computed on their initial flush.
+    // Browser-only via `emitThemeApplied`'s own `isBrowser` guard;
+    // prerender skips this emit.
+    const effective = this.effectiveTheme();
+    const pref = this._prefs().theme;
+    this.emitThemeApplied(effective, pref, 'boot');
   }
 
   update(patch: Partial<UserPreferences>): void {
@@ -502,6 +544,14 @@ export class PreferencesService {
     const mergedPreferences = mergePreferencePatch(previousPreferences, next);
     this.emitPreferenceChanges(previousPreferences, mergedPreferences, source);
     this._prefs.set(mergedPreferences);
+    // Read the cached `effectiveTheme()` computed after `_prefs.set`
+    // so the matchMedia call is shared with the body-class /
+    // highlight-color effects' reads of the same computed. The helper
+    // dedupes against `lastEmittedTheme`, so a pref change that
+    // doesn't move the resolved theme is a no-op here.
+    const effective = this.effectiveTheme();
+    const pref = mergedPreferences.theme;
+    this.emitThemeApplied(effective, pref, source);
   }
 
   private emitPreferenceChanges(
@@ -708,6 +758,26 @@ export class PreferencesService {
       { key, source, kind: 'count', countBucket: bucketCount(count) },
       { count },
     );
+  }
+
+  /**
+   * Emits a `theme.applied` event for the resolved color theme. See
+   * the JSDoc for `'theme.applied'` in
+   * `core/telemetry/telemetry-message-ids.ts` for the contract.
+   *
+   * Takes `effective` and `pref` as explicit arguments rather than
+   * reading `effectiveTheme()` / `_prefs()` to avoid stale reads
+   * from callers that emit between mutation steps.
+   */
+  private emitThemeApplied(
+    effective: 'dark' | 'light',
+    pref: UserPreferences['theme'],
+    source: ThemeAppliedSource,
+  ): void {
+    if (!this.isBrowser) return;
+    if (source !== 'boot' && effective === this.lastEmittedTheme) return;
+    this.lastEmittedTheme = effective;
+    this.loggerService.event('theme.applied', { effective, pref, source }, undefined);
   }
 
   private loadLocal(): UserPreferences {

@@ -596,6 +596,65 @@ customEvents
             count_ = count()
 ```
 
+#### `theme.applied`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired from `PreferencesService` (`core/preferences/preferences.service.ts`)
+at the lifecycle moments when the resolved (effective) color theme
+has been applied to the user's view:
+
+- Once at service construction (`source: 'boot'`), browser-only.
+  Always emits; this is the per-session baseline so every session
+  has one data point regardless of subsequent activity.
+- When the OS `prefers-color-scheme` flips while the stored pref
+  is `'system'` (`source: 'osChange'`). Dedupe drops the emit when
+  the resolved theme is unchanged.
+- When `applyPrefs` mutates state in a way that moves the effective
+  theme; `source` mirrors the upstream `PreferenceChangeSource`
+  (`'user' | 'init' | 'sync'`) so a user clicking the theme toggle
+  is distinguished from sign-in hydration / sign-out reset
+  (`'init'`) and a future server-pushed sync (`'sync'`). Dedupe
+  drops the emit when the resolved theme is unchanged.
+
+This event exists because `pref.changed` records the stored
+preference (`'system' | 'dark' | 'light'`), which is dominated by
+`'system'` (the default) -- so it cannot answer "what color scheme
+is actually being rendered?". `theme.applied` records the resolved
+value after `matchMedia('(prefers-color-scheme: light)')` is
+consulted.
+
+Bounded-frequency: boot is one-shot per service instance (~1 per
+browser tab). OS-flips and user pref clicks are user-bounded;
+`init` is bounded by auth-state transitions per session.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| effective | string | `'dark'` or `'light'` -- the resolved theme actually applied to `document.body`. |
+| pref | string | `'system'`, `'dark'`, or `'light'` -- the stored `UserPreferences.theme` value at emit time. |
+| source | string | `'boot'`, `'osChange'`, `'user'`, `'init'`, or `'sync'` -- which lifecycle moment caused the emit. |
+
+**Measurements:** none.
+
+**Example: dark vs light distribution at session start**
+
+```kusto
+customEvents
+| where name == "theme.applied" and customDimensions.source == "boot"
+| summarize sessions = dcount(session_Id)
+    by effective = tostring(customDimensions.effective)
+```
+
+**Example: how often does the OS flip the theme mid-session?**
+
+```kusto
+customEvents
+| where name == "theme.applied" and customDimensions.source == "osChange"
+| summarize flips = count(), sessions = dcount(session_Id)
+```
+
 ### SW migration verification
 
 After the `@angular/service-worker` -> minimal pass-through SW
