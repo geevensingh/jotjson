@@ -72,6 +72,25 @@ describe('buildTree (pure)', () => {
     expect(buildTree({}).nodeCount).toBe(1);
     expect(buildTree([]).nodeCount).toBe(1);
   });
+
+  it('includes __proto__ as a child node when present in the parsed value (#365)', () => {
+    // Regression guard for issue #365: `nodeToValue` uses
+    // `Object.create(null)` so `__proto__` is an own enumerable
+    // key on the parsed value. `buildChildren` must surface it
+    // as a normal tree row. Constructed directly with
+    // `Object.create(null)` + bracket assignment to mirror what
+    // `parse('{"__proto__":1,"a":2}').value` returns without
+    // taking a cross-module dependency here.
+    const parsed: Record<string, unknown> = Object.create(null);
+    parsed['__proto__'] = 1;
+    parsed['a'] = 2;
+    const result = buildTree(parsed);
+    expect(result.root.children?.map((c) => c.segment)).toEqual(['__proto__', 'a']);
+    const protoNode = result.root.children?.[0] as TreeNode;
+    expect(protoNode.value).toBe(1);
+    expect(protoNode.type).toBe('number');
+    expect(protoNode.pathString).toBe('$.__proto__');
+  });
 });
 
 describe('buildChildren / buildNode', () => {

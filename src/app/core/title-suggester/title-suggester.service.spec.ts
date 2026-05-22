@@ -166,6 +166,30 @@ describe('TitleSuggesterService', () => {
       const result = service.suggest(inputFor('{"name":"foo","version":"1.0"}', 'random.json'));
       expect(result.find((c) => c.source === 'packageJson')).toBeUndefined();
     });
+
+    it('handles null-prototype parsed inputs (#365 regression guard)', () => {
+      // Production parser (`JsonParserService.parse`) returns
+      // null-prototype objects after the #365 fix. `JSON.parse`
+      // (used by `inputFor` above) returns plain-prototype
+      // objects, so the existing tests do not exercise the
+      // null-prototype path. Construct one directly and verify
+      // the strategies (isPlainObject + Object.prototype.
+      // hasOwnProperty.call) still work end-to-end.
+      const parsed: Record<string, unknown> = Object.create(null);
+      parsed['name'] = 'jotjson';
+      parsed['version'] = '0.5.0';
+      const scripts: Record<string, unknown> = Object.create(null);
+      scripts['build'] = '';
+      parsed['scripts'] = scripts;
+      const result = service.suggest({
+        jsonText: JSON.stringify(parsed),
+        parsed,
+        hasParseErrors: false,
+        filename: null,
+      });
+      const entry = result.find((c) => c.source === 'packageJson');
+      expect(entry?.value).toBe('jotjson@0.5.0');
+    });
   });
 
   describe('kubernetes strategy', () => {
