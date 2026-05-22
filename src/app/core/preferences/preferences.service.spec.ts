@@ -450,6 +450,14 @@ describe('PreferencesService', () => {
 
       svc.update({ theme: 'dark' });
 
+      // `update({ theme: 'dark' })` also triggers `theme.applied` when
+      // the effective theme moves, so the global spy can see more than
+      // one call. Still assert exactly one `pref.changed` so a
+      // regression that duplicates the pref-change emit would fail.
+      const prefChangedCalls = logger.event.calls
+        .allArgs()
+        .filter((args) => args[0] === 'pref.changed');
+      expect(prefChangedCalls.length).toBe(1);
       expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
         { key: 'theme', source: 'user', kind: 'string', value: 'dark' },
