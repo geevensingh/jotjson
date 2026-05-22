@@ -574,6 +574,26 @@ describe('HomeComponent (unit-level)', () => {
     expect(eventSpy).not.toHaveBeenCalled();
   });
 
+  it('onMinify preserves __proto__ keys (#365)', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{\n  "__proto__": 1,\n  "a": 2\n}');
+    fixture.componentInstance.onMinify();
+    expect(fixture.componentInstance.content()).toBe('{"__proto__":1,"a":2}');
+  });
+
+  it('onFormat preserves __proto__ keys (#365 regression guard)', () => {
+    // Format is text-based via jsoncFormat + applyEdits, not via
+    // `parseResult().value`, so it never went through the
+    // null-prototype recipient bug. This spec locks that behavior
+    // in so a future Format refactor through the parsed value
+    // does not silently re-introduce the bug.
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{"__proto__":1,"a":2}');
+    fixture.componentInstance.onFormat();
+    expect(fixture.componentInstance.content()).toContain('"__proto__"');
+    expect(fixture.componentInstance.content()).toContain('"a"');
+  });
+
   it('onCopy writes the editor text to the clipboard', async () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{"a":1}');
