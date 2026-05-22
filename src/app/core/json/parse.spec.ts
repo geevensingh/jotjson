@@ -98,15 +98,20 @@ describe('parse (pure)', () => {
     it('pins Jasmine deep-equality across plain vs null prototype', () => {
       // Regression guard for skeptic finding H1 (issue #365 plan).
       // `parseResult().value` returns null-prototype objects after
-      // the #365 fix; existing specs at home.component.spec.ts:1020
-      // and :1147 use `expect(...).toEqual({ ... })` with plain-object
-      // literal expectations. Jasmine 6.2's `eq_` short-circuits the
-      // constructor-mismatch gate when either constructor is
-      // `undefined` (which is the case for null-prototype objects).
-      // Mirror that exact pattern -- a null-prototype LHS deep-equal
-      // to a plain object literal RHS -- so a future Jasmine upgrade
-      // that tightens the gate fails this spec first instead of
-      // breaking the broader suite silently.
+      // the #365 fix; existing specs in home.component.spec.ts --
+      // notably "onValueChange does not update treePaneInputs
+      // synchronously when editor is non-empty" and "onFormat
+      // preserves the existing parseResult shape so tree selection
+      // can survive", plus any other spec that uses
+      // `expect(...parseResult().value).toEqual({ ... })` with a
+      // plain-object literal -- depend on this equivalence.
+      // Jasmine 6.2's `eq_` short-circuits the constructor-mismatch
+      // gate when either constructor is `undefined` (which is the
+      // case for null-prototype objects). Mirror that exact pattern
+      // here -- a null-prototype LHS deep-equal to a plain object
+      // literal RHS -- so a future Jasmine upgrade that tightens
+      // the gate fails this spec first instead of breaking the
+      // broader suite silently.
       const result = parse('{"seed":2}');
       expect(Object.getPrototypeOf(result.value)).toBeNull();
       expect(result.value).toEqual({ seed: 2 });
