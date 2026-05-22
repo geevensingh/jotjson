@@ -1,4 +1,4 @@
-import { patchSortKeysAtPath } from './sort-json-patcher';
+import { patchSortKeysAtPath, patchSortKeysDeep } from './sort-json-patcher';
 
 describe('patchSortKeysAtPath', () => {
   it('sorts a compact object', () => {
@@ -176,5 +176,152 @@ describe('patchSortKeysAtPath', () => {
 
     expect(result.patched).toBe('{\r\n\t"a": 1,\r\n\t"b": 2\r\n}');
     expect(result.patched).not.toMatch(/[^\r]\n/);
+  });
+});
+
+describe('patchSortKeysDeep', () => {
+  it('preserves number precision while sorting at the root', () => {
+    const text = '{"b":9007199254740993,"a":1}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.changed).toBe(true);
+    expect(result.patched).toBe('{"a":1,"b":9007199254740993}');
+    expect(result.patched).toContain('9007199254740993');
+    expect(result.patched).not.toContain('9007199254740992');
+  });
+
+  it('preserves escape forms while sorting at the root', () => {
+    const text = '{"b":"\\u0041","a":1}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('{"a":1,"b":"\\u0041"}');
+    expect(result.patched).toContain('"\\u0041"');
+    expect(result.patched).not.toContain('"b":"A"');
+  });
+
+  it('preserves a trailing comma while sorting at the root', () => {
+    const text = '{"b":1,"a":2,}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('{"a":2,"b":1,}');
+  });
+
+  it('preserves a leading-document comment', () => {
+    const text = '// header\n{"b":1,"a":2}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('// header\n{"a":2,"b":1}');
+    expect(result.patched).toContain('// header');
+  });
+
+  it('preserves a value-internal block comment while sorting', () => {
+    const text = '{\n  "b": /* keep */ 2,\n  "a": 1\n}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('{\n  "a": 1,\n  "b": /* keep */ 2\n}');
+    expect(result.patched).toContain('/* keep */');
+  });
+
+  it('recurses into nested objects', () => {
+    const text = '{"outer":{"y":2,"x":1},"a":1}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('{"a":1,"outer":{"x":1,"y":2}}');
+  });
+
+  it('handles an array root containing an object', () => {
+    const text = '[{"b":2,"a":1}]';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('[{"a":1,"b":2}]');
+    expect(result.changed).toBe(true);
+  });
+
+  it('is a no-op for a scalar root', () => {
+    const text = '42';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('42');
+    expect(result.changed).toBe(false);
+  });
+
+  it('is a no-op for a single-key root object', () => {
+    const text = '{"a":1}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('{"a":1}');
+    expect(result.changed).toBe(false);
+  });
+
+  it('throws when the source text cannot be parsed', () => {
+    expect(() => patchSortKeysDeep('{"a":}')).toThrowError('sort.patch.parse-failed');
+  });
+
+  it('sorts sibling objects independently', () => {
+    const text = '{"b":{"y":1,"x":2},"a":{"d":3,"c":4}}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('{"a":{"c":4,"d":3},"b":{"x":2,"y":1}}');
+  });
+
+  it('sorts objects nested inside arrays', () => {
+    const text = '[{"b":2,"a":1},{"d":4,"c":3}]';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('[{"a":1,"b":2},{"c":3,"d":4}]');
+  });
+
+  it('preserves CRLF newlines while recursing', () => {
+    const text = '{\r\n  "outer": {\r\n    "y": 2,\r\n    "x": 1\r\n  },\r\n  "a": 1\r\n}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe(
+      '{\r\n  "a": 1,\r\n  "outer": {\r\n    "x": 1,\r\n    "y": 2\r\n  }\r\n}',
+    );
+    expect(result.patched).not.toMatch(/[^\r]\n/);
+  });
+
+  it('preserves a leading BOM while recursing', () => {
+    const text = '\uFEFF{"b":{"y":2,"x":1},"a":1}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('\uFEFF{"a":1,"b":{"x":1,"y":2}}');
+  });
+
+  it('preserves compact whitespace style (Sort does not re-pretty-print compact input)', () => {
+    const text = '{"b":2,"a":1}';
+
+    const result = patchSortKeysDeep(text);
+
+    expect(result.patched).toBe('{"a":1,"b":2}');
+    expect(result.patched).not.toContain('\n');
+  });
+
+  it('throws parse-failed for a comment-only document with no JSON value', () => {
+    expect(() => patchSortKeysDeep('// just a comment\n')).toThrowError('sort.patch.parse-failed');
+  });
+
+  it('supports a custom comparator override', () => {
+    const text = '{"b":2,"a":1}';
+
+    const result = patchSortKeysDeep(text, (left, right) =>
+      left < right ? 1 : left > right ? -1 : 0,
+    );
+
+    expect(result.patched).toBe('{"b":2,"a":1}');
+    expect(result.changed).toBe(false);
   });
 });

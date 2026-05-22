@@ -20,7 +20,6 @@ import {
   type ClipboardGrantedReadResult,
   type ClipboardPermissionState,
 } from '../../core/clipboard/clipboard-polling.service';
-import { formatText } from '../../core/json/format-text';
 import type { ParseJsonCandidate } from '../../core/json/json-extractor.core';
 import { extractFromMixedText as extractFromMixedTextCore } from '../../core/json/json-extractor.core';
 import type { ExtractedJson } from '../../core/json/json-extractor.service';
@@ -539,20 +538,68 @@ describe('HomeComponent (unit-level)', () => {
     expect(fixture.componentInstance.content()).toBe(broken);
   });
 
-  it('onSort sorts an unsorted JSON document and flips mode to json', () => {
+  it('onSort sorts via the byte-splice patcher and re-derives mode from content', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentInstance.content.set('{\n  "b": 2,\n  "a": 1\n}');
     fixture.componentInstance.mode.set('jsonc');
 
     fixture.componentInstance.onSort();
 
-    expect(fixture.componentInstance.content()).toBe(
-      formatText(
-        JSON.stringify({ a: 1, b: 2 }),
-        TestBed.inject(PreferencesService).prefs().editorTabSize,
-      ),
-    );
+    // Byte-splicer preserves the pretty-printed formatting; the only
+    // reordering is the keys inside the object body.
+    expect(fixture.componentInstance.content()).toBe('{\n  "a": 1,\n  "b": 2\n}');
+    // The detectMode effect re-derives mode from the patched content.
+    // Post-Sort content has no comments -> detectMode flips to 'json'.
+    TestBed.flushEffects();
     expect(fixture.componentInstance.mode()).toBe('json');
+  });
+
+  it('onSort preserves a leading-document comment and keeps mode jsonc', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('// header\n{\n  "b": 2,\n  "a": 1\n}');
+    fixture.componentInstance.mode.set('jsonc');
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe('// header\n{\n  "a": 1,\n  "b": 2\n}');
+    TestBed.flushEffects();
+    // The comment survives, so detectMode keeps mode as 'jsonc'.
+    expect(fixture.componentInstance.mode()).toBe('jsonc');
+  });
+
+  it('onSort preserves number precision above MAX_SAFE_INTEGER', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const priorText = '{\n  "b": 9007199254740993,\n  "a": 1\n}';
+    fixture.componentInstance.content.set(priorText);
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe('{\n  "a": 1,\n  "b": 9007199254740993\n}');
+  });
+
+  it('onSort recurses into nested objects', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set(
+      '{\n  "outer": {\n    "y": 2,\n    "x": 1\n  },\n  "a": 1\n}',
+    );
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe(
+      '{\n  "a": 1,\n  "outer": {\n    "x": 1,\n    "y": 2\n  }\n}',
+    );
+  });
+
+  it('onSort is a no-op on an array root', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const priorText = '[3, 1, 2]';
+    fixture.componentInstance.content.set(priorText);
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe(priorText);
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 
   it('onSort is a silent no-op when content is empty', () => {
@@ -7276,6 +7323,9 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
     });
 
     component.onSort();
+    // Detect-mode effect re-derives mode from patched content (no comments
+    // survive in this small input) -> mode flips to 'json'.
+    TestBed.flushEffects();
 
     expect(component.mode()).toBe('json');
     eventSpy.calls.reset();

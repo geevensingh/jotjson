@@ -13,9 +13,10 @@ test.use({ colorScheme: 'light' });
  *
  * Validates:
  *  - Production bundle boots and Monaco loads in a real browser.
- *  - Compact unsorted JSON entered into Monaco renders in the tree pane.
- *  - The toolbar "Sort keys" button sorts the whole document and reformats it
- *    with the default 2-space indentation.
+ *  - Pretty-printed unsorted JSON entered into Monaco renders in the tree pane.
+ *  - The toolbar "Sort keys" button sorts the whole document via the
+ *    byte-splice patcher, preserving the document's whitespace style and
+ *    leading comments.
  *  - The success snackbar announces "Sorted keys."
  *  - No serious/critical axe-core violations remain on the final loaded state.
  *
@@ -24,13 +25,25 @@ test.use({ colorScheme: 'light' });
  * home.component.spec.ts and json-tree.component.spec.ts, while Playwright
  * context-menu interactions are a known headless flake source.
  */
-test('sort-keys toolbar smoke sorts the whole document', async ({ page }) => {
+test('sort-keys toolbar smoke sorts the whole document and preserves whitespace style', async ({
+  page,
+}) => {
   await page.goto('/');
 
   const editor = page.getByRole('textbox', { name: 'JSON editor' });
   await expect(editor).toBeVisible();
-  await editor.focus();
-  await page.keyboard.insertText('{"b":2,"a":1}');
+  // Seed pretty-printed input directly via the Monaco model. Going
+  // through `keyboard.insertText` triggers Monaco's auto-indent on
+  // newlines, which warps the expected whitespace; setting the model
+  // value bypasses that. The byte-splice patcher preserves the
+  // document's whitespace style: pretty in -> pretty out (Sort no
+  // longer re-pretty-prints compact input).
+  await page.evaluate(() => {
+    const monacoWindow = globalThis as typeof globalThis & {
+      monaco?: { editor?: { getModels(): Array<{ setValue(text: string): void }> } };
+    };
+    monacoWindow.monaco?.editor?.getModels()?.[0]?.setValue('{\n  "b": 2,\n  "a": 1\n}');
+  });
 
   const treePane = page.locator('section[aria-label="Tree view"]');
   await expect(treePane).toContainText('a');
@@ -69,4 +82,42 @@ test('sort-keys toolbar smoke sorts the whole document', async ({ page }) => {
   // This is a pre-existing tree-row styling bug independent of Sort;
   // tracked in issue #366. Remove this override once #366 lands.
   await assertNoSeriousA11yViolations(page, { disableRules: ['color-contrast'] });
+});
+
+test('sort-keys toolbar preserves a leading-document comment', async ({ page }) => {
+  await page.goto('/');
+
+  const editor = page.getByRole('textbox', { name: 'JSON editor' });
+  await expect(editor).toBeVisible();
+  // Leading-document comment lives outside any object body and must
+  // survive Sort (byte-splice patcher only rewrites object bodies).
+  // Set via the Monaco model to bypass auto-indent.
+  await page.evaluate(() => {
+    const monacoWindow = globalThis as typeof globalThis & {
+      monaco?: { editor?: { getModels(): Array<{ setValue(text: string): void }> } };
+    };
+    monacoWindow.monaco?.editor?.getModels()?.[0]?.setValue('// header\n{"b":2,"a":1}');
+  });
+
+  const sortButton = page.getByRole('button', { name: 'Sort keys' });
+  await expect(sortButton).toBeEnabled();
+  await sortButton.click();
+
+  const readEditorText = async (): Promise<string> =>
+    page.evaluate(() => {
+      const monacoWindow = globalThis as typeof globalThis & {
+        monaco?: { editor?: { getModels(): Array<{ getValue(): string }> } };
+      };
+      return monacoWindow.monaco?.editor?.getModels()?.[0]?.getValue() ?? '';
+    });
+
+  await expect.poll(readEditorText).toContain('// header');
+  await expect.poll(readEditorText).toContain('"a":1');
+
+  const editorText = await readEditorText();
+  const normalizedEditorText = editorText.replace(/\r\n/g, '\n');
+  expect(normalizedEditorText).toBe('// header\n{"a":1,"b":2}');
+
+  const snackbar = page.getByText('Sorted keys.');
+  await expect(snackbar).toBeVisible();
 });

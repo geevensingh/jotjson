@@ -1641,7 +1641,11 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   produces a replacement.
    * Props: { keyCountBucket: CountBucket }.
    *   `keyCountBucket` comes from `bucketCount` over the root object's
-   *   top-level key count, or 0 when the root is not an object.
+   *   top-level key count, or 0 when the root is not an object. Note:
+   *   the whole-document Sort recursively reorders every multi-key
+   *   object body, so the actual count of sorted objects may be much
+   *   higher than the root key count. This dimension reflects root
+   *   surface area, not total work.
    * Privacy: no document contents, no key names.
    */
   'home.sort.click',

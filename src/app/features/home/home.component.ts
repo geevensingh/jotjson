@@ -54,7 +54,6 @@ import {
   JsonExtractorService,
 } from '../../core/json/json-extractor.service';
 import { JsonParseResult, JsonParserService } from '../../core/json/json-parser.service';
-import { sortKeysDeep } from '../../core/json/sort-keys';
 import { TreeStringExtractorService } from '../../core/json/tree-string-extractor.service';
 import { createNarrowViewportSignal } from '../../core/layout/narrow-viewport';
 import { LoadingSplashService } from '../../core/loading-splash/loading-splash.service';
@@ -98,7 +97,12 @@ import type { PatchResult } from './extract-json-patcher';
 import { patchExtractedValue } from './extract-json-patcher';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
-import { patchSortKeysAtPath, type SortPatchResult } from './sort-json-patcher';
+import {
+  patchSortKeysAtPath,
+  patchSortKeysDeep,
+  type SortDocumentResult,
+  type SortPatchResult,
+} from './sort-json-patcher';
 import { StatusBarComponent } from './status-bar/status-bar.component';
 import { collectStringLeaves } from './string-leaf-collector';
 import { UploadErrorBannerComponent } from './upload-error-banner/upload-error-banner.component';
@@ -3133,23 +3137,22 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   onSort(): void {
+    const text = this.content();
+    if (!text) return;
     const parsed = this.parseResult();
     if (parsed.empty || parsed.errors.length > 0) return;
-    let sortedValue: unknown;
+
+    let result: SortDocumentResult;
     try {
-      sortedValue = sortKeysDeep(parsed.value);
+      result = patchSortKeysDeep(text);
     } catch {
+      // 'sort.patch.parse-failed' -> silent no-op (matches today's
+      // parse-error gate; we also gated above on parsed.errors).
       return;
     }
-    let next: string;
-    try {
-      next = formatText(JSON.stringify(sortedValue), this.prefs.prefs().editorTabSize);
-    } catch {
-      return;
-    }
-    const text = this.content();
+    if (!result.changed) return;
+
     const priorMode = this.mode();
-    if (next === text && priorMode === 'json') return;
     const rootKeyCount =
       isRecord(parsed.value) && !Array.isArray(parsed.value) ? Object.keys(parsed.value).length : 0;
     this.logger.event('home.sort.click', { keyCountBucket: bucketCount(rootKeyCount) });
@@ -3161,8 +3164,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       priorMode,
       viewResetTokenAtAccept: this.viewResetToken(),
     });
-    this.applyReplaceWithFallback(next, 'jotjson-sort', 'sort');
-    this.mode.set('json');
+    this.applyReplaceWithFallback(result.patched, 'jotjson-sort', 'sort');
+    // No explicit mode.set('json'). The detectMode effect at lines ~983-989
+    // re-derives mode from the patched content, which preserves comments
+    // when they survive Sort (so JSONC stays JSONC if any comment survives).
     this.openReplaceUndoSnack(
       $localize`:@@home.sort.snackbar.applied:Sorted keys.`,
       $localize`:@@home.sort.snackbar.undo:Undo`,
