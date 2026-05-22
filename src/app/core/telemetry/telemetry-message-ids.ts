@@ -1433,6 +1433,29 @@ export const TELEMETRY_MESSAGE_IDS = [
   'tree.sortKeys.applyFailed',
 
   /**
+   * Severity: error
+   * Fired by: `HomeComponent.onSortKeysRequest`
+   *           (`features/home/home.component.ts`) default branch of the
+   *           patcher-error switch, when the thrown error does not match
+   *           any of the four documented `sort.patch.*` discriminators.
+   * Props: { source: 'patcher' }. Closed-enum; no raw exception message
+   *   leaks into `customDimensions`. The original cause is captured in
+   *   App Insights `exceptions` via `logger.error`'s second argument.
+   * Exception: any value caught from `patchSortKeysAtPath(...)` whose
+   *   `error.message` is not one of `sort.patch.parse-failed`,
+   *   `sort.patch.path-not-found`, `sort.patch.not-object`, or
+   *   `sort.patch.empty-or-single`. Indicates either a patcher contract
+   *   regression (e.g. a new throw added without updating the handler)
+   *   or an unexpected runtime fault (e.g. an internal jsonc-parser
+   *   error, OOM). Distinct from `applyFailed` warnings to keep the
+   *   closed-enum `warn` channel clean of unknown-shape signals.
+   * Privacy: stack and message land in `exceptions` (not
+   *   `customDimensions`), where the privacy initializer in
+   *   `TelemetryService` continues to apply.
+   */
+  'tree.sortKeys.unexpectedError',
+
+  /**
    * Kind: event
    * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
    *           snackbar Undo click or content revert via Ctrl+Z.

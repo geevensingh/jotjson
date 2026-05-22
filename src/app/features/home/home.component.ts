@@ -2339,8 +2339,18 @@ export class HomeComponent implements OnInit, OnDestroy {
           return;
         case 'sort.patch.empty-or-single':
           return;
-        default:
+        default: {
+          // Patcher's documented contract is the four `sort.patch.*` cases
+          // above; if a fifth throw appears (patcher regression) or an
+          // unexpected runtime fault leaks through (e.g. an internal
+          // jsonc-parser error, OOM), log via `error` so the cause is
+          // preserved in App Insights `exceptions` without leaking the
+          // raw message into `customDimensions`. Closed-enum `source`
+          // prop keeps the warn channel's reason union clean.
+          const cause = error instanceof Error ? error : new Error(String(error));
+          this.logger.error('tree.sortKeys.unexpectedError', cause, { source: 'patcher' });
           return;
+        }
       }
     }
 

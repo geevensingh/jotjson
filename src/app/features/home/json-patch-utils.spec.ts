@@ -32,6 +32,31 @@ describe('json-patch-utils', () => {
     it('counts from the last newline only when multiple newlines are present', () => {
       expect(computeColumn('ab\ncd\nef', 8)).toBe(2);
     });
+
+    // Regression guard: a leading U+FEFF BOM is treated as zero-width
+    // when the backward scan reaches index 0 of a BOM-prefixed string,
+    // so callers passing full-text offsets get correctly-aligned
+    // columns. Without this, BOM-prefixed compact JSON like
+    // '\uFEFF{...}' would over-indent multi-line replacements by 1.
+    it('treats a leading BOM as zero-width on line 1', () => {
+      expect(computeColumn('\uFEFF{}', 2)).toBe(1);
+    });
+
+    it('returns 0 at the offset immediately after a leading BOM', () => {
+      expect(computeColumn('\uFEFF{}', 1)).toBe(0);
+    });
+
+    it('returns 0 at offset 1 of a BOM-only string', () => {
+      expect(computeColumn('\uFEFF', 1)).toBe(0);
+    });
+
+    it('is unaffected by a leading BOM on offsets past the first newline', () => {
+      expect(computeColumn('\uFEFF{\n  "a":1}', 5)).toBe(2);
+    });
+
+    it('still counts a mid-string BOM as a regular code unit', () => {
+      expect(computeColumn('a\uFEFFb', 3)).toBe(3);
+    });
   });
 
   describe('reindentReplacement', () => {

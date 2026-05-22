@@ -44,6 +44,14 @@ export function patchSortKeysAtPath(
   path: (string | number)[],
   comparator: (a: string, b: string) => number = compareKeysCodeunit,
 ): SortPatchResult {
+  return patchSortKeysAtPathImpl(text, path, comparator);
+}
+
+function realPatchSortKeysAtPath(
+  text: string,
+  path: (string | number)[],
+  comparator: (a: string, b: string) => number = compareKeysCodeunit,
+): SortPatchResult {
   const shift = bomShift(text);
   const parseText = shift > 0 ? text.slice(shift) : text;
   const errors: ParseError[] = [];
@@ -139,4 +147,32 @@ function synthesizeSeparator(prefix: string): string {
   }
 
   return /^\s+$/.test(prefix) ? ', ' : ',';
+}
+
+type PatchSortKeysAtPathImpl = (
+  text: string,
+  path: (string | number)[],
+  comparator?: (a: string, b: string) => number,
+) => SortPatchResult;
+
+let patchSortKeysAtPathImpl: PatchSortKeysAtPathImpl = realPatchSortKeysAtPath;
+
+/**
+ * Test seam: replace the patcher implementation used by
+ * `patchSortKeysAtPath`. Allows specs to force unexpected throws
+ * (errors outside the four documented `sort.patch.*` discriminators)
+ * to exercise the default branch in `HomeComponent.onSortKeysRequest`.
+ * Production code must never call this.
+ */
+export function __setPatchSortKeysAtPathImplForTesting(impl: PatchSortKeysAtPathImpl): void {
+  patchSortKeysAtPathImpl = impl;
+}
+
+/**
+ * Test seam: restore the production patcher implementation. Pair every
+ * `__setPatchSortKeysAtPathImplForTesting` call with this in a
+ * `finally` (or `afterEach`) to prevent cross-spec leakage.
+ */
+export function __resetPatchSortKeysAtPathImplForTesting(): void {
+  patchSortKeysAtPathImpl = realPatchSortKeysAtPath;
 }

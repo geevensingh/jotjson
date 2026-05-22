@@ -10,16 +10,23 @@ export function bomShift(text: string): 0 | 1 {
 }
 
 /**
- * Returns the column (count of code units since the last line break)
- * of the character at string offset `offset`. Backward-scans from
- * `offset - 1`. Counts UTF-16 code units, not graphemes. Treats
+ * Returns the column (count of UTF-16 code units since the last line
+ * break) of the character at string offset `offset`. Backward-scans
+ * from `offset - 1`. Counts UTF-16 code units, not graphemes. Treats
  * `\n` (LF) as the only line terminator; bare `\r` (CR) is treated
  * as a regular character, so a CR-only document (legacy classic-Mac
  * EOL) collapses to a single logical line.
+ *
+ * A leading U+FEFF BOM is treated as zero-width: when the backward
+ * scan would otherwise reach index 0 of a BOM-prefixed string, the
+ * BOM character is skipped so callers passing full-text offsets get
+ * correctly-aligned columns regardless of BOM presence. Mid-string
+ * U+FEFF characters are still counted as regular code units.
  */
 export function computeColumn(text: string, offset: number): number {
+  const floor = bomShift(text);
   let column = 0;
-  for (let index = offset - 1; index >= 0; index--) {
+  for (let index = offset - 1; index >= floor; index--) {
     const character = text[index];
     if (character === '\n') break;
     column++;

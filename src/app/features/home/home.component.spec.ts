@@ -47,6 +47,10 @@ import {
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { EDITOR_COMMIT_DEBOUNCE_MS, HomeComponent } from './home.component';
+import {
+  __resetPatchSortKeysAtPathImplForTesting,
+  __setPatchSortKeysAtPathImplForTesting,
+} from './sort-json-patcher';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -5973,6 +5977,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     editorStub: ExtractEditorStub;
     eventSpy: jasmine.Spy;
     warnSpy: jasmine.Spy;
+    errorSpy: jasmine.Spy;
   } {
     clearHomeStorage();
     TestBed.resetTestingModule();
@@ -5993,6 +5998,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     const logger = TestBed.inject(LoggerService);
     const eventSpy = spyOn(logger, 'event');
     const warnSpy = spyOn(logger, 'warn');
+    const errorSpy = spyOn(logger, 'error');
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.detectChanges();
     const component = fixture.componentInstance;
@@ -6008,6 +6014,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
       editorStub,
       eventSpy,
       warnSpy,
+      errorSpy,
     };
   }
 
@@ -6513,6 +6520,25 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     expect(warnSpy).toHaveBeenCalledWith('tree.sortKeys.applyFailed', {
       reason: 'parseFailed',
     });
+  });
+
+  it('onSortKeysRequest forwards unexpected patcher throws to logger.error', () => {
+    const { component, errorSpy, snack } = setup();
+    component.onValueChange('{"a":1}');
+    const cause = new Error('synthetic patcher failure');
+    __setPatchSortKeysAtPathImplForTesting(() => {
+      throw cause;
+    });
+    try {
+      component.onSortKeysRequest(sortKeysRequest([]));
+    } finally {
+      __resetPatchSortKeysAtPathImplForTesting();
+    }
+
+    expect(errorSpy).toHaveBeenCalledWith('tree.sortKeys.unexpectedError', cause, {
+      source: 'patcher',
+    });
+    expect(snack.open).not.toHaveBeenCalled();
   });
 
   it('onSortKeysRequest opens an assertive undo snackbar after a successful sort', () => {
