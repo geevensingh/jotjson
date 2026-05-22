@@ -161,6 +161,27 @@ function toError(parseError: ParseError, originalText: string, bomShift: number)
   };
 }
 
+/**
+ * Returns a freshly-allocated object for use as a parsed-JSON object
+ * recipient.
+ *
+ * Uses `Object.create(null)` (no prototype) so that assignments to
+ * any key whose name collides with an inherited `Object.prototype`
+ * setter create an own enumerable data property rather than
+ * invoking the setter. The motivating key is `__proto__`: with a
+ * plain `{}` recipient, `obj['__proto__'] = value` invokes
+ * `Object.prototype.__proto__`'s setter and the key vanishes from
+ * the returned object, silently dropping user data (see issue #365).
+ *
+ * **Invariant**: all future code that reconstructs a parsed-JSON-
+ * shaped object (e.g. a key-sort pass on `parseResult().value`)
+ * MUST use this helper to preserve the round-trip. Allocating a
+ * plain `{}` and copying keys re-introduces the bug.
+ */
+export function createJsonObject(): Record<string, unknown> {
+  return Object.create(null);
+}
+
 function nodeToValue(node: JsoncNode): unknown {
   switch (node.type) {
     case 'null':
@@ -172,7 +193,7 @@ function nodeToValue(node: JsoncNode): unknown {
     case 'array':
       return (node.children ?? []).map((c) => nodeToValue(c));
     case 'object': {
-      const obj: Record<string, unknown> = {};
+      const obj = createJsonObject();
       for (const prop of node.children ?? []) {
         const [keyNode, valueNode] = prop.children ?? [];
         if (keyNode && valueNode) {
