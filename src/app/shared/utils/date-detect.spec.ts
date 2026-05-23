@@ -8,6 +8,7 @@ import {
 
 describe('date-detect', () => {
   beforeEach(() => __resetLocaleOrderCacheForTesting());
+  afterEach(() => __resetLocaleOrderCacheForTesting());
 
   describe('parseAsDate - ISO 8601 with time', () => {
     it('parses ISO with Z', () => {
