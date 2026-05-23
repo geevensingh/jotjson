@@ -171,6 +171,7 @@ strings are read as UTC or local.
 ## Plus the basics, done well
 
 - Format / minify, with a comment-preserving formatter (`jsonc-parser`)
+- Sort object keys alphabetically -- whole document from the toolbar, single object from the right-click menu
 - One-click smart-paste button that lights up when the clipboard contains JSON
 - Cold-boot auto-paste: opt in once and JotJSON quietly loads JSON from the
   clipboard on every fresh launch, with one-click Undo

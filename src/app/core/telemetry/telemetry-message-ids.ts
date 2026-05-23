@@ -1455,6 +1455,71 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
+   * Fired by: `HomeComponent.onSortKeysRequest`
+   *           (`features/home/home.component.ts`) when the right-click
+   *           Sort patcher succeeds or reports `alreadySorted: true`.
+   * Volume control: bounded-frequency. One per non-throwing right-click
+   *   Sort attempt.
+   * Props: { alreadySorted: 'true' | 'false';
+   *          keyCountBucket: CountBucket }.
+   *          `alreadySorted` is a closed-enum string, not a boolean;
+   *          `keyCountBucket` comes from `bucketCount` over the targeted
+   *          object's immediate-key count.
+   * Privacy: no path, no key names, no document contents.
+   */
+  'tree.sortKeys.click',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent.onSortKeysRequest`
+   *           (`features/home/home.component.ts`) when the patcher throws
+   *           or `editor().applyEdit(...)` fails.
+   * Props: { reason: 'parseFailed' | 'pathNotFound' | 'notObject'
+   *   | 'editorUnavailable' | 'applyEditFailed' }.
+   * Privacy: no path, no document contents.
+   */
+  'tree.sortKeys.applyFailed',
+
+  /**
+   * Severity: error
+   * Fired by: `HomeComponent.onSortKeysRequest`
+   *           (`features/home/home.component.ts`) default branch of the
+   *           patcher-error switch, when the thrown error does not match
+   *           any of the four documented `sort.patch.*` discriminators.
+   * Props: { source: 'patcher' }. Closed-enum; no raw exception message
+   *   leaks into `customDimensions`. The original cause is captured in
+   *   App Insights `exceptions` via `logger.error`'s second argument.
+   * Exception: any value caught from `patchSortKeysAtPath(...)` whose
+   *   `error.message` is not one of `sort.patch.parse-failed`,
+   *   `sort.patch.path-not-found`, `sort.patch.not-object`, or
+   *   `sort.patch.empty-or-single`. Indicates either a patcher contract
+   *   regression (e.g. a new throw added without updating the handler)
+   *   or an unexpected runtime fault (e.g. an internal jsonc-parser
+   *   error, OOM). Distinct from `applyFailed` warnings to keep the
+   *   closed-enum `warn` channel clean of unknown-shape signals.
+   * Privacy: stack and message land in `exceptions` (not
+   *   `customDimensions`), where the privacy initializer in
+   *   `TelemetryService` continues to apply.
+   */
+  'tree.sortKeys.unexpectedError',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
+   *           snackbar Undo click or content revert via Ctrl+Z.
+   * Volume control: bounded-frequency. One per right-click Sort that
+   *   gets undone.
+   * Props: { source: 'snackbar' | 'ctrlZ';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          Mirrors `tree.extract.undo`.
+   * Measurements: { undoLatencyMs?: number }. Raw wall-clock latency
+   *   from apply to undo when available.
+   * Privacy: no path, no document contents.
+   */
+  'tree.sortKeys.undo',
+
+  /**
+   * Kind: event
    * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
    *           snackbar Undo click or when Ctrl+Z (or any other content
    *           reset that restores the pre-extract text without bumping
@@ -1615,6 +1680,49 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   `home.upload.applyFailed` for the reason semantics.
    */
   'home.minify.applyFailed',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.onSort` (`features/home/home.component.ts`)
+   *           after a successful toolbar Sort replacement.
+   * Volume control: bounded-frequency. One per Sort button click that
+   *   produces a replacement.
+   * Props: { keyCountBucket: CountBucket }.
+   *   `keyCountBucket` comes from `bucketCount` over the root object's
+   *   top-level key count, or 0 when the root is not an object. Note:
+   *   the whole-document Sort recursively reorders every multi-key
+   *   object body, so the actual count of sorted objects may be much
+   *   higher than the root key count. This dimension reflects root
+   *   surface area, not total work.
+   * Privacy: no document contents, no key names.
+   */
+  'home.sort.click',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
+   *           snackbar Undo click or when Ctrl+Z reverts the editor to
+   *           the pre-sort text within the pending-replace-undo window.
+   * Volume control: bounded-frequency. One per toolbar Sort that gets
+   *   undone; capped at 30 s via `REPLACE_UNDO_CAP_MS`.
+   * Props: { source: 'snackbar' | 'ctrlZ'; priorMode: 'json' | 'jsonc';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          Mirrors `home.minify.undo`.
+   * Measurements: { undoLatencyMs?: number }. Raw wall-clock latency
+   *   from replacement apply to undo when available.
+   * Privacy: no document contents.
+   */
+  'home.sort.undo',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent.onSort` / `applyReplaceWithFallback`
+   *           (`features/home/home.component.ts`) when Monaco edits
+   *           cannot be applied. Not emitted for parse-error or
+   *           empty-doc early returns, matching `onMinify` / `onFormat`.
+   * Props: { reason: 'editorNotReady' | 'modelNull' | 'editsRejected' }.
+   */
+  'home.sort.applyFailed',
 
   /**
    * Kind: event
@@ -1937,6 +2045,19 @@ export const TELEMETRY_MESSAGE_IDS = [
    *        buckets when the extraction succeeds.
    */
   'tree.contextMenu.extract',
+
+  /**
+   * Severity: info
+   * Fired by: `JsonTreeComponent.onSortKeysMenuClick`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           when the user clicks the right-click menu item.
+   * Volume control: bounded-frequency. Bounded by user clicks.
+   *   Distinct from the success event so unsuccessful clicks are still
+   *   counted.
+   * Props: none.
+   * Privacy: no path, no key names.
+   */
+  'tree.contextMenu.sortKeys',
 
   /**
    * Severity: info

@@ -37,6 +37,7 @@ import type { ReplaceAllResult } from '../../shared/components/json-editor/json-
 import {
   JsonTreeComponent,
   type TreeExtractRequest,
+  type TreeSortKeysRequest,
 } from '../../shared/components/json-tree/json-tree.component';
 import {
   ColdBootClipboardBannerComponent,
@@ -45,6 +46,10 @@ import {
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { EDITOR_COMMIT_DEBOUNCE_MS, HomeComponent } from './home.component';
+import {
+  __resetPatchSortKeysAtPathImplForTesting,
+  __setPatchSortKeysAtPathImplForTesting,
+} from './sort-json-patcher';
 
 const PREFS_KEY = 'jotjson.preferences.v1';
 const DRAFT_KEY = 'jotjson.draft.v1';
@@ -531,6 +536,124 @@ describe('HomeComponent (unit-level)', () => {
     fixture.componentInstance.content.set(broken);
     fixture.componentInstance.onMinify();
     expect(fixture.componentInstance.content()).toBe(broken);
+  });
+
+  it('onSort sorts via the byte-splice patcher and re-derives mode from content', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('{\n  "b": 2,\n  "a": 1\n}');
+    fixture.componentInstance.mode.set('jsonc');
+
+    fixture.componentInstance.onSort();
+
+    // Byte-splicer preserves the pretty-printed formatting; the only
+    // reordering is the keys inside the object body.
+    expect(fixture.componentInstance.content()).toBe('{\n  "a": 1,\n  "b": 2\n}');
+    // The detectMode effect re-derives mode from the patched content.
+    // Post-Sort content has no comments -> detectMode flips to 'json'.
+    TestBed.flushEffects();
+    expect(fixture.componentInstance.mode()).toBe('json');
+  });
+
+  it('onSort preserves a leading-document comment and keeps mode jsonc', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set('// header\n{\n  "b": 2,\n  "a": 1\n}');
+    fixture.componentInstance.mode.set('jsonc');
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe('// header\n{\n  "a": 1,\n  "b": 2\n}');
+    TestBed.flushEffects();
+    // The comment survives, so detectMode keeps mode as 'jsonc'.
+    expect(fixture.componentInstance.mode()).toBe('jsonc');
+  });
+
+  it('onSort preserves number precision above MAX_SAFE_INTEGER', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const priorText = '{\n  "b": 9007199254740993,\n  "a": 1\n}';
+    fixture.componentInstance.content.set(priorText);
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe('{\n  "a": 1,\n  "b": 9007199254740993\n}');
+  });
+
+  it('onSort recurses into nested objects', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    fixture.componentInstance.content.set(
+      '{\n  "outer": {\n    "y": 2,\n    "x": 1\n  },\n  "a": 1\n}',
+    );
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe(
+      '{\n  "a": 1,\n  "outer": {\n    "x": 1,\n    "y": 2\n  }\n}',
+    );
+  });
+
+  it('onSort preserves all 9 comments in the user nested example', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const text =
+      '{  // what about A?\n' +
+      '  "b": /* this comment stays */ 2,  // what about B?\n' +
+      '  "a": [ // what about C?\n' +
+      '    1,  // what about D?\n' +
+      '    // this stays too\n' +
+      '    2 // what about E?\n' +
+      '  ]  // what about F?\n' +
+      '}  // what about G?';
+    const expected =
+      '{  // what about A?\n' +
+      '  "a": [ // what about C?\n' +
+      '    1,  // what about D?\n' +
+      '    // this stays too\n' +
+      '    2 // what about E?\n' +
+      '  ],  // what about F?\n' +
+      '  "b": /* this comment stays */ 2  // what about B?\n' +
+      '}  // what about G?';
+    fixture.componentInstance.content.set(text);
+    fixture.componentInstance.mode.set('jsonc');
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe(expected);
+    TestBed.flushEffects();
+    // Comments survive, so detectMode keeps mode as 'jsonc'.
+    expect(fixture.componentInstance.mode()).toBe('jsonc');
+  });
+
+  it('onSort is a no-op on an array root', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const priorText = '[3, 1, 2]';
+    fixture.componentInstance.content.set(priorText);
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe(priorText);
+    expect(eventSpy).not.toHaveBeenCalled();
+  });
+
+  it('onSort is a silent no-op when content is empty', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    fixture.componentInstance.content.set('');
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe('');
+    expect(eventSpy).not.toHaveBeenCalled();
+  });
+
+  it('onSort is a silent no-op when parse errors exist', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const broken = '{"a":}';
+    fixture.componentInstance.content.set(broken);
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe(broken);
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 
   it('onMinify preserves __proto__ keys (#365)', () => {
@@ -5824,6 +5947,10 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     };
   }
 
+  function sortKeysRequest(path: (string | number)[] = ['payload']): TreeSortKeysRequest {
+    return { path };
+  }
+
   const parseJsonCandidate: ParseJsonCandidate = (candidateText: string) => {
     const errors: ParseError[] = [];
     const value: unknown = parse(candidateText, errors, {
@@ -5928,6 +6055,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     editorStub: ExtractEditorStub;
     eventSpy: jasmine.Spy;
     warnSpy: jasmine.Spy;
+    errorSpy: jasmine.Spy;
   } {
     clearHomeStorage();
     TestBed.resetTestingModule();
@@ -5948,6 +6076,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     const logger = TestBed.inject(LoggerService);
     const eventSpy = spyOn(logger, 'event');
     const warnSpy = spyOn(logger, 'warn');
+    const errorSpy = spyOn(logger, 'error');
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.detectChanges();
     const component = fixture.componentInstance;
@@ -5963,6 +6092,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
       editorStub,
       eventSpy,
       warnSpy,
+      errorSpy,
     };
   }
 
@@ -6387,6 +6517,171 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     expect(snack.open).not.toHaveBeenCalled();
   });
 
+  it('onSortKeysRequest sorts the targeted nested object only', () => {
+    const { component } = setup();
+    component.onValueChange('{"outer":{"b":2,"a":1},"z":0}');
+
+    component.onSortKeysRequest(sortKeysRequest(['outer']));
+
+    expect(component.content()).toBe('{"outer":{"a":1,"b":2},"z":0}');
+  });
+
+  it('onSortKeysRequest preserves all 9 comments in the user nested example', () => {
+    const { component } = setup();
+    const text =
+      '{  // what about A?\n' +
+      '  "b": /* this comment stays */ 2,  // what about B?\n' +
+      '  "a": [ // what about C?\n' +
+      '    1,  // what about D?\n' +
+      '    // this stays too\n' +
+      '    2 // what about E?\n' +
+      '  ]  // what about F?\n' +
+      '}  // what about G?';
+    const expected =
+      '{  // what about A?\n' +
+      '  "a": [ // what about C?\n' +
+      '    1,  // what about D?\n' +
+      '    // this stays too\n' +
+      '    2 // what about E?\n' +
+      '  ],  // what about F?\n' +
+      '  "b": /* this comment stays */ 2  // what about B?\n' +
+      '}  // what about G?';
+    component.onValueChange(text);
+
+    component.onSortKeysRequest(sortKeysRequest([]));
+
+    expect(component.content()).toBe(expected);
+  });
+
+  it('onSortKeysRequest preserves number precision above MAX_SAFE_INTEGER', () => {
+    const { component } = setup();
+    component.onValueChange('{"b": 9007199254740993, "a": 1}');
+
+    component.onSortKeysRequest(sortKeysRequest([]));
+
+    expect(component.content()).toContain('9007199254740993');
+    expect(component.content()).not.toContain('9007199254740992');
+  });
+
+  it("onSortKeysRequest emits tree.sortKeys.click with alreadySorted='false' on success", () => {
+    const { component, eventSpy } = setup();
+    component.onValueChange('{"b":2,"a":1}');
+    eventSpy.calls.reset();
+
+    component.onSortKeysRequest(sortKeysRequest([]));
+
+    expect(eventSpy).toHaveBeenCalledWith('tree.sortKeys.click', {
+      alreadySorted: 'false',
+      keyCountBucket: '<100',
+    });
+  });
+
+  it("onSortKeysRequest emits tree.sortKeys.click with alreadySorted='true' on already-sorted input", () => {
+    const { component, eventSpy, snack } = setup();
+    const sortedText = '{"a":1,"b":2}';
+    component.onValueChange(sortedText);
+    eventSpy.calls.reset();
+
+    component.onSortKeysRequest(sortKeysRequest([]));
+
+    expect(component.content()).toBe(sortedText);
+    expect(eventSpy).toHaveBeenCalledWith('tree.sortKeys.click', {
+      alreadySorted: 'true',
+      keyCountBucket: '<100',
+    });
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it("onSortKeysRequest emits tree.sortKeys.applyFailed { reason: 'pathNotFound' }", () => {
+    const { component, warnSpy } = setup();
+    const before = '{"a":1,"b":2}';
+    component.onValueChange(before);
+
+    component.onSortKeysRequest(sortKeysRequest(['missing']));
+
+    expect(component.content()).toBe(before);
+    expect(warnSpy).toHaveBeenCalledWith('tree.sortKeys.applyFailed', {
+      reason: 'pathNotFound',
+    });
+  });
+
+  it("onSortKeysRequest emits tree.sortKeys.applyFailed { reason: 'notObject' }", () => {
+    const { component, warnSpy } = setup();
+    component.onValueChange('{"value":[1,2]}');
+
+    component.onSortKeysRequest(sortKeysRequest(['value']));
+
+    expect(warnSpy).toHaveBeenCalledWith('tree.sortKeys.applyFailed', {
+      reason: 'notObject',
+    });
+  });
+
+  it("onSortKeysRequest emits tree.sortKeys.applyFailed { reason: 'parseFailed' }", () => {
+    const { component, warnSpy } = setup();
+    component.onValueChange('{"a":}');
+
+    component.onSortKeysRequest(sortKeysRequest([]));
+
+    expect(warnSpy).toHaveBeenCalledWith('tree.sortKeys.applyFailed', {
+      reason: 'parseFailed',
+    });
+  });
+
+  it('onSortKeysRequest forwards unexpected patcher throws to logger.error', () => {
+    const { component, errorSpy, snack } = setup();
+    component.onValueChange('{"a":1}');
+    const cause = new Error('synthetic patcher failure');
+    __setPatchSortKeysAtPathImplForTesting(() => {
+      throw cause;
+    });
+    try {
+      component.onSortKeysRequest(sortKeysRequest([]));
+    } finally {
+      __resetPatchSortKeysAtPathImplForTesting();
+    }
+
+    expect(errorSpy).toHaveBeenCalledWith('tree.sortKeys.unexpectedError', cause, {
+      source: 'patcher',
+    });
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it('onSortKeysRequest opens an assertive undo snackbar after a successful sort', () => {
+    const { component, snack } = setup();
+    component.onValueChange('{"b":2,"a":1}');
+
+    component.onSortKeysRequest(sortKeysRequest([]));
+
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    const [message, action, config] = snack.open.calls.mostRecent().args;
+    expect(message).toBe("Sorted this object's keys.");
+    expect(action).toBe('Undo');
+    expect(config).toEqual(jasmine.objectContaining({ duration: 8000, politeness: 'assertive' }));
+  });
+
+  it('snackbar Undo after onSortKeysRequest restores the prior document and emits tree.sortKeys.undo', () => {
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const { component, snackAction, eventSpy } = setup();
+    const priorText = '{"outer":{"b":2,"a":1},"z":0}';
+    component.onValueChange(priorText);
+
+    nowMs = 1500;
+    component.onSortKeysRequest(sortKeysRequest(['outer']));
+    expect(component.content()).toBe('{"outer":{"a":1,"b":2},"z":0}');
+    eventSpy.calls.reset();
+
+    nowMs = 2500;
+    snackAction.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(eventSpy).toHaveBeenCalledWith(
+      'tree.sortKeys.undo',
+      { source: 'snackbar', undoLatencyMsBucket: '1-5s' },
+      jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
+    );
+  });
+
   it('debounces tree string scans after treeValue changes', fakeAsync(() => {
     const { fixture, component, treeExtractor } = setup();
 
@@ -6750,7 +7045,7 @@ describe('HomeComponent banner-extract undo (M7v)', () => {
   });
 });
 
-describe('HomeComponent upload/format/minify undo (issue #313)', () => {
+describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
   setupMinimalMonacoStub();
 
   interface SnackHarness {
@@ -7048,6 +7343,68 @@ describe('HomeComponent upload/format/minify undo (issue #313)', () => {
     expect(editorStub.replaceAll).not.toHaveBeenCalled();
     expect(snackOpenSpy).not.toHaveBeenCalled();
     expect(component.content()).toBe(alreadyMinified);
+  });
+
+  // --------------------------------------------------------------------
+  // Sort: click telemetry, pendingReplaceUndo shape, applyFailed, and
+  // snackbar Undo restores text + mode
+  // --------------------------------------------------------------------
+
+  it('onSort emits home.sort.click with keyCountBucket', () => {
+    const { component, eventSpy } = setup({ initialContent: '{"b":2,"a":1}' });
+    eventSpy.calls.reset();
+
+    component.onSort();
+
+    expect(eventSpy).toHaveBeenCalledWith('home.sort.click', { keyCountBucket: '<100' });
+  });
+
+  it('onSort installs a pending replace with kind sort.toolbar and priorMode', () => {
+    const { component } = setup({ initialContent: '{"b":2,"a":1}', initialMode: 'jsonc' });
+
+    component.onSort();
+
+    const pending = (
+      component as unknown as {
+        pendingReplaceUndo: { kind: string; priorMode?: string } | null;
+      }
+    ).pendingReplaceUndo;
+    expect(pending?.kind).toBe('sort.toolbar');
+    expect(pending?.priorMode).toBe('jsonc');
+  });
+
+  it('onSort undo restores the prior mode to jsonc', () => {
+    const priorText = '{\n  "b": 2,\n  "a": 1\n}';
+    const { component, snackHarnesses, eventSpy } = setup({
+      initialContent: priorText,
+      initialMode: 'jsonc',
+    });
+
+    component.onSort();
+    // Detect-mode effect re-derives mode from patched content (no comments
+    // survive in this small input) -> mode flips to 'json'.
+    TestBed.flushEffects();
+
+    expect(component.mode()).toBe('json');
+    eventSpy.calls.reset();
+    snackHarnesses[0]!.action.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.mode()).toBe('jsonc');
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.sort.undo',
+      jasmine.objectContaining({ source: 'snackbar', priorMode: 'jsonc' }),
+      jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
+    );
+  });
+
+  it('emits home.sort.applyFailed with reason=modelNull when replaceAll returns modelNull', () => {
+    const { component, editorStub, warnSpy } = setup({ initialContent: '{"b":2,"a":1}' });
+    editorStub.replaceAll.and.returnValue('modelNull');
+
+    component.onSort();
+
+    expect(warnSpy).toHaveBeenCalledWith('home.sort.applyFailed', { reason: 'modelNull' });
   });
 
   // --------------------------------------------------------------------
