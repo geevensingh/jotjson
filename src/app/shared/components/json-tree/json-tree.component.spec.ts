@@ -27,7 +27,11 @@ import {
   type DecodedValueDialogResult,
 } from './decoded-value-dialog/decoded-value-dialog.component';
 import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
-import { JsonTreeComponent, type TreeExtractRequest } from './json-tree.component';
+import {
+  JsonTreeComponent,
+  type TreeExtractRequest,
+  type TreeSortKeysRequest,
+} from './json-tree.component';
 
 const STORAGE_KEY = 'jotjson.preferences.v1';
 const TREE_SEARCH_STORAGE_KEY = 'jotjson.treeSearch.v1';
@@ -5672,6 +5676,29 @@ describe('JsonTreeComponent', () => {
       );
     }
 
+    function sortKeysMenuItem(): HTMLButtonElement | null {
+      return (
+        Array.from(
+          document.body.querySelectorAll<HTMLButtonElement>('button.mat-mdc-menu-item'),
+        ).find((item) => (item.textContent ?? '').includes('Sort keys')) ?? null
+      );
+    }
+
+    function treeNodeAt(pathString: string): NonNullable<ReturnType<JsonTreeComponent['root']>> {
+      const stack: Array<NonNullable<ReturnType<JsonTreeComponent['root']>>> = [];
+      const root = cmp.root();
+      if (root) stack.push(root);
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        if (node.pathString === pathString) return node;
+        for (const child of node.children ?? []) {
+          stack.push(child);
+        }
+      }
+      throw new Error(`No node found at ${pathString}`);
+    }
+
     function closeOpenMenus(): void {
       document.body
         .querySelectorAll('.cdk-overlay-backdrop')
@@ -5786,6 +5813,67 @@ describe('JsonTreeComponent', () => {
       } finally {
         closeOpenMenus();
       }
+    });
+
+    describe('sortKeysCandidate predicate', () => {
+      it('is true for object nodes with at least two keys', async () => {
+        await createWith({ sortable: { b: 2, a: 1 } });
+
+        expect(cmp.sortKeysCandidate(treeNodeAt('$.sortable'))).toBe(true);
+      });
+
+      it('is false for arrays, primitives, null, empty objects, and single-key objects', async () => {
+        await createWith({
+          arrayValue: [1, 2],
+          primitiveValue: 1,
+          nullValue: null,
+          emptyObject: {},
+          singleKeyObject: { a: 1 },
+        });
+
+        expect(cmp.sortKeysCandidate(treeNodeAt('$.arrayValue'))).toBe(false);
+        expect(cmp.sortKeysCandidate(treeNodeAt('$.primitiveValue'))).toBe(false);
+        expect(cmp.sortKeysCandidate(treeNodeAt('$.nullValue'))).toBe(false);
+        expect(cmp.sortKeysCandidate(treeNodeAt('$.emptyObject'))).toBe(false);
+        expect(cmp.sortKeysCandidate(treeNodeAt('$.singleKeyObject'))).toBe(false);
+      });
+    });
+
+    it('renders the context-menu sort-keys item only for object nodes with at least two keys', async () => {
+      await createWith({ sortable: { b: 2, a: 1 }, singleKeyObject: { a: 1 } });
+      cmp.expandAll();
+      fixture.detectChanges();
+
+      try {
+        await openMenuFor('$.sortable');
+        expect(sortKeysMenuItem()).not.toBeNull();
+        closeOpenMenus();
+
+        await openMenuFor('$.singleKeyObject');
+        expect(sortKeysMenuItem()).toBeNull();
+      } finally {
+        closeOpenMenus();
+      }
+    });
+
+    it('onSortKeysMenuClick emits sortKeysRequest with the node path when the node is sortable', async () => {
+      await createWith({ sortable: { b: 2, a: 1 } });
+      const events: TreeSortKeysRequest[] = [];
+      cmp.sortKeysRequest.subscribe((request) => events.push(request));
+
+      cmp.onSortKeysMenuClick(treeNodeAt('$.sortable'));
+
+      expect(events).toEqual([{ path: ['sortable'] }]);
+    });
+
+    it('onSortKeysMenuClick does not emit sortKeysRequest when the node is not sortable', async () => {
+      await createWith({ emptyObject: {} });
+      const events: TreeSortKeysRequest[] = [];
+      cmp.sortKeysRequest.subscribe((request) => events.push(request));
+
+      cmp.onSortKeysMenuClick(treeNodeAt('$.emptyObject'));
+
+      expect(events).toEqual([]);
     });
 
     it('clicking the context-menu extract item emits extractRequest with contextMenu source', async () => {
@@ -8511,6 +8599,16 @@ describe('JsonTreeComponent', () => {
         // so spy on the call.
         cmp.onExtractMenuClick(nodeAt('$.payload'));
         expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.extract');
+      });
+
+      it('emits tree.contextMenu.sortKeys from the menu-driven entry point', async () => {
+        const logger = await createWithLoggerSpy({ sortable: { b: 2, a: 1 } });
+        cmp.expandAll();
+        fixture.detectChanges();
+
+        cmp.onSortKeysMenuClick(nodeAt('$.sortable'));
+
+        expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.sortKeys');
       });
     });
 
