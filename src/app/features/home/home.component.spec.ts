@@ -590,6 +590,37 @@ describe('HomeComponent (unit-level)', () => {
     );
   });
 
+  it('onSort preserves all 9 comments in the user nested example', () => {
+    const fixture = TestBed.createComponent(HomeComponent);
+    const text =
+      '{  // what about A?\n' +
+      '  "b": /* this comment stays */ 2,  // what about B?\n' +
+      '  "a": [ // what about C?\n' +
+      '    1,  // what about D?\n' +
+      '    // this stays too\n' +
+      '    2 // what about E?\n' +
+      '  ]  // what about F?\n' +
+      '}  // what about G?';
+    const expected =
+      '{  // what about A?\n' +
+      '  "a": [ // what about C?\n' +
+      '    1,  // what about D?\n' +
+      '    // this stays too\n' +
+      '    2 // what about E?\n' +
+      '  ],  // what about F?\n' +
+      '  "b": /* this comment stays */ 2  // what about B?\n' +
+      '}  // what about G?';
+    fixture.componentInstance.content.set(text);
+    fixture.componentInstance.mode.set('jsonc');
+
+    fixture.componentInstance.onSort();
+
+    expect(fixture.componentInstance.content()).toBe(expected);
+    TestBed.flushEffects();
+    // Comments survive, so detectMode keeps mode as 'jsonc'.
+    expect(fixture.componentInstance.mode()).toBe('jsonc');
+  });
+
   it('onSort is a no-op on an array root', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
@@ -6493,6 +6524,33 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     component.onSortKeysRequest(sortKeysRequest(['outer']));
 
     expect(component.content()).toBe('{"outer":{"a":1,"b":2},"z":0}');
+  });
+
+  it('onSortKeysRequest preserves all 9 comments in the user nested example', () => {
+    const { component } = setup();
+    const text =
+      '{  // what about A?\n' +
+      '  "b": /* this comment stays */ 2,  // what about B?\n' +
+      '  "a": [ // what about C?\n' +
+      '    1,  // what about D?\n' +
+      '    // this stays too\n' +
+      '    2 // what about E?\n' +
+      '  ]  // what about F?\n' +
+      '}  // what about G?';
+    const expected =
+      '{  // what about A?\n' +
+      '  "a": [ // what about C?\n' +
+      '    1,  // what about D?\n' +
+      '    // this stays too\n' +
+      '    2 // what about E?\n' +
+      '  ],  // what about F?\n' +
+      '  "b": /* this comment stays */ 2  // what about B?\n' +
+      '}  // what about G?';
+    component.onValueChange(text);
+
+    component.onSortKeysRequest(sortKeysRequest([]));
+
+    expect(component.content()).toBe(expected);
   });
 
   it('onSortKeysRequest preserves number precision above MAX_SAFE_INTEGER', () => {

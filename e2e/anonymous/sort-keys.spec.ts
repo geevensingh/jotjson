@@ -121,3 +121,45 @@ test('sort-keys toolbar preserves a leading-document comment', async ({ page }) 
   const snackbar = page.getByText('Sorted keys.');
   await expect(snackbar).toBeVisible();
 });
+
+test('sort-keys toolbar preserves inter-property line comments', async ({ page }) => {
+  await page.goto('/');
+
+  const editor = page.getByRole('textbox', { name: 'JSON editor' });
+  await expect(editor).toBeVisible();
+  // Inter-property comments inside the sorted object body must
+  // survive Sort and travel with the property they are attributed
+  // to (gap-split on first non-comment newline). The trailing
+  // `// what about B?` on the source-first property "b" should
+  // stay glued to "b" after the sort moves "a" before it.
+  await page.evaluate(() => {
+    const monacoWindow = globalThis as typeof globalThis & {
+      monaco?: { editor?: { getModels(): Array<{ setValue(text: string): void }> } };
+    };
+    monacoWindow.monaco?.editor
+      ?.getModels()?.[0]
+      ?.setValue('{\n  "b": 2, // what about B?\n  "a": 1\n}');
+  });
+
+  const sortButton = page.getByRole('button', { name: 'Sort keys' });
+  await expect(sortButton).toBeEnabled();
+  await sortButton.click();
+
+  const readEditorText = async (): Promise<string> =>
+    page.evaluate(() => {
+      const monacoWindow = globalThis as typeof globalThis & {
+        monaco?: { editor?: { getModels(): Array<{ getValue(): string }> } };
+      };
+      return monacoWindow.monaco?.editor?.getModels()?.[0]?.getValue() ?? '';
+    });
+
+  await expect.poll(readEditorText).toContain('// what about B?');
+  await expect.poll(readEditorText).toContain('"a": 1');
+
+  const editorText = await readEditorText();
+  const normalizedEditorText = editorText.replace(/\r\n/g, '\n');
+  expect(normalizedEditorText).toBe('{\n  "a": 1,\n  "b": 2 // what about B?\n}');
+
+  const snackbar = page.getByText('Sorted keys.');
+  await expect(snackbar).toBeVisible();
+});
