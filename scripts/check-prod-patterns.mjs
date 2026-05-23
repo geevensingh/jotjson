@@ -72,10 +72,18 @@
 //
 // Adding new rules:
 //   Push a `{ pattern, message, pragma?, pragmaAllowedPaths? }` onto
-//   RULES. `pattern` is a RegExp (use `/.../g` so the scanner can
-//   iterate matches). Keep messages actionable - point at the approved
-//   alternative.  When `pragma` is set, the scanner allows matches on
-//   lines that contain the pragma string AND whose path matches one of
+//   RULES. `pattern` must be a RegExp; `message` must be a non-empty
+//   string. `validateRules(RULES)` runs at module load and throws a
+//   loud TypeError if either is missing or malformed. The `/g` flag
+//   itself is enforced by `scanText`'s use of
+//   `String.prototype.matchAll`, which V8 rejects with a TypeError
+//   on a non-global RegExp -- a rule author who forgets `/g` gets a
+//   loud failure on the first scan instead of a silent
+//   `while (exec(...))` infinite-loop hang. See PR #370 panel
+//   discussion for why engine-enforcement was preferred over a
+//   handwritten `validateRegexRules({ global })` check.
+//   When `pragma` is set, the scanner allows matches on lines that
+//   contain the pragma string AND whose path matches one of
 //   `pragmaAllowedPaths` (forward-slash form) - this keeps the
 //   safe-harbor narrow.
 //
@@ -182,6 +190,40 @@ export const RULES = [
   },
 ];
 
+/**
+ * Asserts that each rule has the shape `{ pattern: RegExp, message:
+ * string, ... }` with a RegExp pattern and a non-empty message.
+ * Throws a loud TypeError at module load if any rule fails. Pure: no
+ * I/O.
+ *
+ * The `/g` flag on `pattern` is intentionally NOT checked here. V8's
+ * `String.prototype.matchAll` throws a TypeError on a non-global
+ * RegExp on the first scan, which gives a better stack trace
+ * pointing at the actual call site (scanText). See PR #370 panel
+ * discussion. Exported for unit-test use.
+ */
+export function validateRules(rules) {
+  for (const rule of rules) {
+    if (!(rule.pattern instanceof RegExp)) {
+      throw new TypeError(
+        `check-prod-patterns: rule pattern must be a RegExp, got ${typeof rule.pattern}.` +
+          ` See "Adding new rules" in scripts/check-prod-patterns.mjs.`,
+      );
+    }
+    if (typeof rule.message !== 'string' || rule.message.length === 0) {
+      throw new TypeError(
+        `check-prod-patterns: rule for pattern ${rule.pattern} has missing or empty` +
+          ` \`message\`. See scripts/check-prod-patterns.mjs.`,
+      );
+    }
+  }
+}
+
+// Validate at module load: throws loudly if any rule shape is broken.
+// Pure check (no I/O), so this does not violate the "no CLI side
+// effects on import" invariant called out at the foot of this file.
+validateRules(RULES);
+
 export function listProdFiles() {
   const out = execFileSync(
     'git',
@@ -235,6 +277,14 @@ export function scan(path) {
  * Pure-function variant of `scan` that takes the file's text and
  * normalized path directly. Exported so unit tests can exercise the
  * scanner against in-memory fixtures without touching the filesystem.
+ *
+ * Engine choice: `String.prototype.matchAll` over `while (exec(...))`.
+ * matchAll throws `TypeError: String.prototype.matchAll called with
+ * a non-global RegExp argument` if a rule forgets `/g`. The legacy
+ * `while ((m = rule.pattern.exec(text)) !== null)` form would
+ * instead hang forever on the first match (exec restarts at
+ * lastIndex=0 for non-global regex), turning a rule-authoring typo
+ * into a silent CI infinite-loop. See PR #370 panel discussion.
  */
 export function scanText(text, normalizedPath) {
   const violations = [];
@@ -242,9 +292,18 @@ export function scanText(text, normalizedPath) {
     if (rule.paths && !rule.paths.some((re) => re.test(normalizedPath))) {
       continue;
     }
-    rule.pattern.lastIndex = 0;
-    let m;
-    while ((m = rule.pattern.exec(text)) !== null) {
+    let matches;
+    try {
+      matches = text.matchAll(rule.pattern);
+    } catch (cause) {
+      throw new TypeError(
+        `check-prod-patterns: rule pattern ${rule.pattern} is not a global RegExp` +
+          ` (matchAll requires /g). Add the /g flag to the rule in` +
+          ` scripts/check-prod-patterns.mjs and re-run \`npm run test:scripts\`.`,
+        { cause },
+      );
+    }
+    for (const m of matches) {
       const upToMatch = text.slice(0, m.index);
       const lastNl = upToMatch.lastIndexOf('\n');
       const line = upToMatch.split('\n').length;
