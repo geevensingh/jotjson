@@ -790,7 +790,7 @@
     </button>
     <!-- Transform section: Extract / Decode (conditional). Existing
          icons preserved here; Phase 3 adds icons elsewhere. -->
-    @if (extractCandidate(cn) || decodedCandidate(cn)) {
+    @if (extractCandidate(cn) || decodedCandidate(cn) || sortKeysCandidate(cn)) {
       <mat-divider />
     }
     @if (extractCandidate(cn)) {
@@ -803,6 +803,12 @@
       <button mat-menu-item type="button" (click)="onDecodedMenuClick(cn)">
         <jj-icon name="decoded" [size]="18" />
         <span>{{ decodedOpenDialogMenuLabel }}</span>
+      </button>
+    }
+    @if (sortKeysCandidate(cn)) {
+      <button mat-menu-item type="button" (click)="onSortKeysMenuClick(cn)">
+        <jj-icon name="sort" [size]="18" />
+        <span i18n="@@tree.sortKeys.menu.label">Sort keys</span>
       </button>
     }
     <!-- Mark section: single-row Highlight + Remove highlight.

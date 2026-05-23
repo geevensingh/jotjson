@@ -17,6 +17,7 @@ describe('IconComponent', () => {
     'download',
     'format',
     'minify',
+    'sort',
     'clear',
     'layout-horizontal',
     'layout-vertical',

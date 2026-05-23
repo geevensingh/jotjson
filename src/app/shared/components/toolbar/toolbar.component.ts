@@ -29,6 +29,7 @@ type ToolbarAction =
   | 'download'
   | 'format'
   | 'minify'
+  | 'sort'
   | 'clear'
   | 'save'
   | 'copyShareLink'
@@ -149,6 +150,7 @@ export class ToolbarComponent {
   readonly clear = output<void>();
   readonly format = output<void>();
   readonly minify = output<void>();
+  readonly sort = output<void>();
   readonly toggleTheme = output<void>();
   readonly toggleSelectionSync = output<void>();
   readonly paneLayoutChange = output<PaneLayout>();
@@ -347,6 +349,11 @@ export class ToolbarComponent {
   onMinifyClick(): void {
     this.emitToolbarAction('minify');
     this.minify.emit();
+  }
+
+  onSortClick(): void {
+    this.emitToolbarAction('sort');
+    this.sort.emit();
   }
 
   onClearClick(): void {
