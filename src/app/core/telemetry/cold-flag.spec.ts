@@ -5,6 +5,10 @@ describe('cold-flag', () => {
     __resetColdFlagsForTesting();
   });
 
+  afterEach(() => {
+    __resetColdFlagsForTesting();
+  });
+
   it('returns true on the first call for a token', () => {
     expect(isColdAndMark('parse.slow')).toBe(true);
   });
