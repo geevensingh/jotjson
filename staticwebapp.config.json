@@ -55,6 +55,12 @@
       }
     },
     {
+      "route": "/assets/maintenance-banner.json",
+      "headers": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
       "route": "/*.js",
       "methods": ["GET"],
       "headers": {
