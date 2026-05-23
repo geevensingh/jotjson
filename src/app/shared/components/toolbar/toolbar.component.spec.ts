@@ -18,6 +18,7 @@ type ToolbarAction =
   | 'download'
   | 'format'
   | 'minify'
+  | 'sort'
   | 'clear'
   | 'save'
   | 'copyShareLink'
@@ -930,6 +931,7 @@ describe('ToolbarComponent', () => {
       'download',
       'format',
       'minify',
+      'sort',
       'clear',
       'save',
       'copyShareLink',
@@ -1050,6 +1052,11 @@ describe('ToolbarComponent', () => {
       fixture.detectChanges();
     }
 
+    function triggerSortButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
+      findButtonByAriaLabel(fixture, 'Sort keys').click();
+      fixture.detectChanges();
+    }
+
     function triggerClearButtonClick(fixture: ComponentFixture<ToolbarComponent>): void {
       findButtonByAriaLabel(fixture, 'Clear editor').click();
       fixture.detectChanges();
@@ -1144,6 +1151,7 @@ describe('ToolbarComponent', () => {
         ['download', () => triggerDownloadButtonClick(fixture)],
         ['format', () => triggerFormatButtonClick(fixture)],
         ['minify', () => triggerMinifyButtonClick(fixture)],
+        ['sort', () => triggerSortButtonClick(fixture)],
         ['clear', () => triggerClearButtonClick(fixture)],
         ['save', () => triggerSaveButtonClick(fixture)],
         ['copyShareLink', () => triggerCopyShareLinkMenuClick(fixture)],
@@ -1200,6 +1208,9 @@ describe('ToolbarComponent', () => {
         case 'minify':
           component.minify.subscribe(() => outputSpy());
           break;
+        case 'sort':
+          component.sort.subscribe(() => outputSpy());
+          break;
         case 'clear':
           component.clear.subscribe(() => outputSpy());
           break;
@@ -1248,6 +1259,38 @@ describe('ToolbarComponent', () => {
         expect(orderedCalls).toEqual(['event', 'output']);
       });
     }
+
+    it('onSortClick emits the sort output', async () => {
+      const { fixture } = await create();
+      const sortSpy = jasmine.createSpy('sort');
+      fixture.componentInstance.sort.subscribe(sortSpy);
+
+      fixture.componentInstance.onSortClick();
+
+      expect(sortSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('clicking the Sort keys button calls onSortClick', async () => {
+      const { fixture } = await create();
+      configureActionFixture(fixture);
+      const onSortClickSpy = spyOn(fixture.componentInstance, 'onSortClick').and.callThrough();
+
+      triggerSortButtonClick(fixture);
+
+      expect(onSortClickSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('Sort keys button is disabled when empty and enabled when content exists', async () => {
+      const { fixture } = await create();
+
+      fixture.componentRef.setInput('hasContent', false);
+      fixture.detectChanges();
+      expect(findButtonByAriaLabel(fixture, 'Sort keys').disabled).toBeTrue();
+
+      fixture.componentRef.setInput('hasContent', true);
+      fixture.detectChanges();
+      expect(findButtonByAriaLabel(fixture, 'Sort keys').disabled).toBeFalse();
+    });
 
     it('emits toolbar.action save before save when Enter is pressed in the title field', async () => {
       const { fixture, logger } = await create({ signedIn: true });

@@ -12,6 +12,7 @@ export type JjIconName =
   | 'download'
   | 'format'
   | 'minify'
+  | 'sort'
   | 'clear'
   | 'layout-horizontal'
   | 'layout-vertical'
@@ -156,6 +157,13 @@ export type JjIconSize = number | 'auto';
           <path d="M4 15h5v5" />
           <path d="M20 20l-5-5" />
           <path d="M20 15h-5v5" />
+        }
+        @case ('sort') {
+          <path d="M4 6h12" />
+          <path d="M4 12h8" />
+          <path d="M4 18h4" />
+          <path d="M19 8v11" />
+          <path d="M16 16l3 3 3-3" />
         }
         @case ('clear') {
           <path d="M4 7h16" />
