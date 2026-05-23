@@ -1,6 +1,8 @@
+import { HttpClient } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 import { attachFixtureToBody, expectNoStrictA11yViolations } from '../testing/a11y';
 import { provideFakeAuth } from '../testing/auth.testing';
 import { AppComponent } from './app.component';
@@ -18,11 +20,14 @@ function waitForDoubleAnimationFrame(): Promise<void> {
 }
 
 describe('AppComponent', () => {
+  let httpClientSpy: jasmine.SpyObj<HttpClient>;
   let loggerServiceSpy: jasmine.SpyObj<LoggerService>;
   let routeTrackerSpy: jasmine.SpyObj<RouteTracker>;
   let teardown: (() => void) | undefined;
 
   beforeEach(async () => {
+    httpClientSpy = jasmine.createSpyObj<HttpClient>('HttpClient', ['get']);
+    httpClientSpy.get.and.returnValue(of({ active: false, message: '' }));
     loggerServiceSpy = jasmine.createSpyObj<LoggerService>('LoggerService', ['event', 'connect']);
     loggerServiceSpy.connect.and.resolveTo();
     routeTrackerSpy = jasmine.createSpyObj<RouteTracker>('RouteTracker', ['start', 'flushPending']);
@@ -41,6 +46,7 @@ describe('AppComponent', () => {
       imports: [AppComponent],
       providers: [
         provideRouter([]),
+        { provide: HttpClient, useValue: httpClientSpy },
         { provide: LoggerService, useValue: loggerServiceSpy },
         { provide: RouteTracker, useValue: routeTrackerSpy },
         { provide: DocumentDropController, useValue: dropControllerStub },
