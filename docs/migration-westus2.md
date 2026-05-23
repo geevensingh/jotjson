@@ -314,7 +314,10 @@ v6 was vague):
   `{container, id, partitionKey, reason, oldTs, newTs,
   oldEtag, newEtag, attemptedAt}`. `reason` is one of:
   `'old-fresher'` (oldDoc._ts >= newDoc._ts), `'concurrent-write'`
-  (412 on If-Match), `'unknown'` (other errors).
+  (412/409 from replace or items.create), `'malformed-source'`
+  (source doc failed id / partition-key / _ts validation; operator
+  must investigate manually because the script could not classify
+  it), `'unknown'` (other errors, including 5xx from read or write).
 - Operator runs `jq` queries against the JSONL during
   reconciliation (e.g., `jq 'select(.reason=="concurrent-write")'
   conflicts.jsonl`).
@@ -906,12 +909,20 @@ rollback decision are NOT on the old stack. Specifically:
    custom domain; on `swa-jotjson-dev` add it via "Custom domain
    on Azure DNS". Eats another 1-15 min cert-reissuance window.
 3. **Run back-sync** via the pre-built `scripts/cosmos-back-sync.mjs`
-   (PR-D), passing the cutover-instant Unix timestamp:
+   (PR-D), passing the cutover-instant Unix timestamp. `--src-rg`,
+   `--dst-rg`, and `--accept-delete-loss` are required: the script
+   refuses to run without all of them. `--accept-delete-loss` is the
+   operator's explicit acknowledgment of the
+   "delete-loss budget" item below -- standard Cosmos change feed
+   does not replay deletes.
    ```
    node scripts/cosmos-back-sync.mjs \
      --src cosmos-jotjson-prod \
+     --src-rg rg-jotjson-prod \
      --dst cosmos-jotjson-dev \
-     --cutover-instant-unix-seconds <ts>
+     --dst-rg rg-jotjson-dev \
+     --cutover-instant-unix-seconds <ts> \
+     --accept-delete-loss
    ```
    This iterates the change feed on the new account filtered to
    `_ts >= <cutover-instant>`, and per-doc:

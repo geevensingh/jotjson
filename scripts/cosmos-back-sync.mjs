@@ -65,7 +65,17 @@
 //   One JSON object per line. Fields:
 //     {container, id, partitionKey, reason, oldTs, newTs,
 //      oldEtag, newEtag, attemptedAt}
-//   reason: 'old-fresher' | 'concurrent-write' | 'unknown'.
+//   reason:
+//     'old-fresher'       - oldDoc._ts >= newDoc._ts; left in place.
+//     'concurrent-write'  - 412/409 from replace/items.create.
+//     'malformed-source'  - source doc failed id / partition-key /
+//                           _ts validation; logged with id
+//                           '<unknown>' when the id itself is bad.
+//                           Operators reconciling rollbacks must
+//                           investigate these rows manually because
+//                           the script could not classify them.
+//     'unknown'           - other errors (e.g. 5xx from read or
+//                           write); manual investigation required.
 //
 // Authentication:
 //   Key-only. Provide COSMOS_SRC_KEY and COSMOS_DST_KEY in the
