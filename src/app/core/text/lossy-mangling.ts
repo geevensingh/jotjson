@@ -106,8 +106,14 @@ export function detectLossyMangling(value: string): LossyManglingDetection {
  * further caching is needed at v1 scale.
  */
 export function decodeLossyMangling(value: string, kind: LossyManglingKind): string {
-  if (kind === 'none') return value;
-  return decodeHttpFraming(value);
+  switch (kind) {
+    case 'none':
+      return value;
+    case 'httpFraming':
+      return decodeHttpFraming(value);
+  }
+  const exhaustiveKind: never = kind;
+  return exhaustiveKind;
 }
 
 function decodeHttpFraming(value: string): string {
