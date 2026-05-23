@@ -54,6 +54,13 @@
  *     descriptor because some properties are non-configurable in
  *     some environments; one rogue test must not brick the hook
  *     for every later spec.
+ *   - `restoreStoragePrototype()` runs *before* the `localStorage` /
+ *     `sessionStorage` clears in the `afterEach`. A spec that
+ *     patches `Storage.prototype.clear` (e.g., to a no-op or to
+ *     throw) would otherwise defeat the cleanup, because the global
+ *     `clear()` calls would inherit the patch. Restoring the
+ *     prototype first ensures `clear()` invokes the original
+ *     implementation.
  */
 
 const cleanStorageProto: Readonly<Record<string, PropertyDescriptor>> = Object.freeze({
@@ -97,9 +104,9 @@ function descriptorsEqual(
 }
 
 afterEach(() => {
+  restoreStoragePrototype();
   localStorage.clear();
   sessionStorage.clear();
-  restoreStoragePrototype();
 });
 
 /**
@@ -153,5 +160,40 @@ describe('global test isolation hook -- Storage.prototype restore', () => {
   it('observes original Storage.prototype.setItem restored', () => {
     localStorage.setItem(SENTINEL_KEY, 'real-write');
     expect(localStorage.getItem(SENTINEL_KEY)).toBe('real-write');
+  });
+});
+
+/**
+ * Permanent verifier for `Storage.prototype.clear`-patch ordering:
+ * patches `Storage.prototype.clear` to a no-op in one spec, leaks
+ * data, and asserts the next spec sees clean state. Proves the
+ * `afterEach` ordering (`restoreStoragePrototype()` before the
+ * `clear()` calls) works: even with `clear` patched, the prototype
+ * is restored first, so the subsequent global `clear()` calls
+ * invoke the original implementation and remove the leaked data.
+ *
+ * If a future refactor swaps the ordering back to `clear; clear;
+ * restore`, this verifier fails.
+ */
+describe('global test isolation hook -- clear-patch ordering', () => {
+  const SENTINEL_KEY = 'jj-clear-patch-verifier';
+
+  it('patches Storage.prototype.clear to a no-op and leaks data (deliberate)', () => {
+    Storage.prototype.clear = function noopClear(this: Storage): void {
+      // Deliberately a no-op. If the afterEach clears storage
+      // *before* restoring Storage.prototype, this patch would
+      // silently defeat the global cleanup.
+    } as Storage['clear'];
+
+    localStorage.setItem(SENTINEL_KEY, 'leaked-under-patched-clear');
+    sessionStorage.setItem(SENTINEL_KEY, 'leaked-under-patched-clear');
+
+    expect(localStorage.getItem(SENTINEL_KEY)).toBe('leaked-under-patched-clear');
+    expect(sessionStorage.getItem(SENTINEL_KEY)).toBe('leaked-under-patched-clear');
+  });
+
+  it('observes clean state (restore must run before clear in afterEach)', () => {
+    expect(localStorage.getItem(SENTINEL_KEY)).toBeNull();
+    expect(sessionStorage.getItem(SENTINEL_KEY)).toBeNull();
   });
 });
