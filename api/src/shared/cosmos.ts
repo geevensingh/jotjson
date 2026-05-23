@@ -160,11 +160,24 @@ export class CosmosInvariantError extends Error {
  * True when the given thrown value is a Cosmos 412 PreconditionFailed.
  * Cosmos surfaces this as either `code: 412` (numeric) or
  * `code: 'PreconditionFailed'` (string) depending on SDK version.
+ * Digit-string `'412'` is intentionally NOT accepted here: it has
+ * never been observed from the `Items#replace` call this helper
+ * catches, and broadening the predicate without evidence would add
+ * an untested behavior path to the api's 412 -> VersionConflictError
+ * translation.
  *
- * SYNC WITH `scripts/cosmos-back-sync.mjs:getErrorCode` -- both
- * helpers must accept the same `code` shapes (412 numeric /
- * digit-string / 'PreconditionFailed' string) when adding future
- * Cosmos error-code aliases.
+ * Broader Cosmos error-code normalization (covering 404/409/412 in
+ * numeric, digit-string, and named-alias shapes) lives in
+ * `scripts/cosmos-back-sync.mjs:getErrorCode`. The two helpers
+ * deliberately have different accepted-shape sets: this helper is a
+ * single-purpose 412 classifier used only by `replaceWithIfMatch`,
+ * while `getErrorCode` is a multi-shape normalizer used at multiple
+ * call sites (read 404, write 409/412). The cross-reference is for
+ * navigation, not shape parity.
+ *
+ * If a future SDK release adds a new string alias for 412
+ * (analogous to `'PreconditionFailed'`), register it in both
+ * helpers in the same change.
  */
 export function isCosmosPreconditionFailed(error: unknown): boolean {
   if (error === null || typeof error !== 'object') return false;

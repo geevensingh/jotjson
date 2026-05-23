@@ -335,10 +335,19 @@ const COSMOS_ERROR_CODE_ALIASES = Object.freeze({
  * (readDestinationDocument, the write-path classifier, etc.) sees a
  * consistent numeric code.
  *
- * SYNC WITH `api/src/shared/cosmos.ts:isCosmosPreconditionFailed` --
- * both helpers must accept the same `code` shapes (412 numeric /
- * digit-string / 'PreconditionFailed' string) when adding future
- * Cosmos error-code aliases.
+ * This helper is intentionally broader than
+ * `api/src/shared/cosmos.ts:isCosmosPreconditionFailed`, which only
+ * classifies 412 because that is the only shape `replaceWithIfMatch`
+ * needs. `getErrorCode` covers 404/409/412 across number,
+ * digit-string, and named-alias shapes because the back-sync script
+ * calls it from multiple sites (the destination read, the write
+ * conflict classifier, the malformed-source fallback). The
+ * cross-reference is for navigation, not shape parity.
+ *
+ * If a future SDK release adds a new string alias for 412
+ * (analogous to `'PreconditionFailed'`), register it in both
+ * helpers in the same change. Other aliases (404, 409, etc.) belong
+ * here only; the api helper does not need them.
  */
 export function getErrorCode(error) {
   if (error === null || typeof error !== 'object') {
@@ -465,7 +474,9 @@ function logConflict({
   );
 }
 
-async function syncDocument({
+// Exported for tests in scripts/cosmos-back-sync.write-path.test.mjs.
+// Not part of the script's CLI contract; the entry point is `main`.
+export async function syncDocument({
   sourceDocument,
   containerName,
   destinationContainer,
