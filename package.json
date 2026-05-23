@@ -97,6 +97,7 @@
     "@angular/compiler-cli": "^21.2.14",
     "@angular/localize": "^21.2.14",
     "@axe-core/playwright": "^4.11.3",
+    "@azure/cosmos": "^4.9.3",
     "@playwright/test": "^1.60.0",
     "@types/jasmine": "~6.0.0",
     "@types/node": "^24.12.4",
