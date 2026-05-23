@@ -56,9 +56,15 @@ payloads, GUIDs) are awkward in any tree. JotJSON marks those rows
 with a small pill (and a matching `Open decoded value` entry in the
 row's right-click menu); one click opens a dedicated viewer dialog
 that shows the raw string with line numbers, a Copy button, and a
-larger monospace font - mobile-friendly even for long payloads. The
-tree row itself stays one line tall: the dialog never shifts the
-layout. Purely visual; copy still gives you the literal raw string.
+larger monospace font - mobile-friendly even for long payloads. When
+the dialog detects a string that looks like an HTTP request or
+response whose line breaks were lossily transcoded into `??`
+(common in Microsoft/Azure dependent-service log payloads), it
+offers an opt-in toggle to render the framing as multi-line - body
+content is preserved verbatim, and a second `Copy with line breaks`
+button appears so you can grab either form. The tree row itself
+stays one line tall: the dialog never shifts the layout. Purely
+visual; copy still gives you the literal raw string.
 
 ### Tree view that doesn't freeze on multi-MB blobs
 

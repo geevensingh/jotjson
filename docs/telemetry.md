@@ -488,6 +488,7 @@ toggle).
 | reason | string | `escape` (value matches the pre-existing predicate: contains a newline / carriage return / tab / embedded `"` / `\`) or `long` (value matches the new length-only predicate: `length > 256`). Lets us see how often the long-only widening is what makes the dialog reachable. |
 | pathDepth | string | Bucketed depth (number of path segments) of the originating row: `1`, `2-5`, `6-20`, `21-100`, `100+`. Bucketed via the shared `bucketCount` helper. |
 | lineCountBucket | string | Bucketed line count of the string at open time: `1`, `2-5`, `6-20`, `21-100`, `100+`. CRLF counts as one line break. Preserved from the prior `tree.decoded.click` event. |
+| manglingKind | string | Heuristic detection of lossy-transcoded mangling shapes inside the value. `none` when no detection fires (today this is the vast majority); `httpFraming` when the value contains >= 3 HTTP-header-shaped `??Name: value` matches (Microsoft/Azure dependent-service traces where CRLFs were replaced with `??`). Closed-enum; forward-compatible with future detection kinds (`stackTrace`, `pem`, ...) added additively. Drives the visibility of the Decode toggle in the dialog. |
 
 **Measurements:** none (line count and path depth are reported as
 closed-enum buckets to keep the schema small).
@@ -498,6 +499,40 @@ closed-enum buckets to keep the schema small).
 customEvents
 | where name == "tree.decoded.viewerOpened"
 | summarize count() by tostring(customDimensions.source)
+```
+
+#### `tree.decoded.manglingToggle`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired each time the user flips the Decode toggle inside the
+Inspect-string-value dialog. The toggle only appears when
+`tree.decoded.viewerOpened`'s `manglingKind` was non-`none`; this event
+confirms whether users engage with the affordance when it surfaces.
+Bounded-frequency (one fire per click). No raw value content, no path,
+no PII.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| to | string | `decoded` (turning the toggle on; the dialog re-renders the value with the prefix decoder substituting `??` -> `\n` in the header section) or `raw` (turning the toggle back off). |
+
+**Measurements:** none.
+
+**Example: engagement rate when the toggle surfaces**
+
+```kusto
+customEvents
+| where name == "tree.decoded.viewerOpened"
+| where tostring(customDimensions.manglingKind) != "none"
+| summarize opened = count()
+| extend toggled = toscalar(
+    customEvents
+    | where name == "tree.decoded.manglingToggle"
+    | where tostring(customDimensions.to) == "decoded"
+    | summarize count())
+| extend engagementRate = round(100.0 * toggled / opened, 1)
 ```
 
 #### Extract source rename / undo KQL

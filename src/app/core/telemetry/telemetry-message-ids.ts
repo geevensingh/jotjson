@@ -1382,13 +1382,21 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Props: { source: 'rowButton' | 'contextMenu';
    *          reason: 'escape' | 'long';
    *          pathDepth: '<100' | '100-1K' | '1K-10K' | '>10K';
-   *          lineCountBucket: '1' | '2-5' | '6-20' | '21-100' | '100+' }.
+   *          lineCountBucket: '1' | '2-5' | '6-20' | '21-100' | '100+';
+   *          manglingKind: 'none' | 'httpFraming' }.
    *          `source` distinguishes the in-row pill from the kebab
    *          context-menu entry; `reason` says whether the predicate
    *          matched escape characters (`escape`) or only the
    *          length > 256 fallback (`long`); `pathDepth` is the
-   *          bucketed depth of the originating row's path; user
-   *          string contents and raw paths are never logged.
+   *          bucketed depth of the originating row's path;
+   *          `manglingKind` is the result of
+   *          `detectLossyMangling(value).kind` (see
+   *          `core/text/lossy-mangling.ts`) and tells us how often the
+   *          dialog opens onto a string that the lossy-mangling
+   *          decoder would recognize. The prop is forward-compatible:
+   *          future kinds (`stackTrace`, `pem`, ...) extend the
+   *          enum additively. User string contents and raw paths are
+   *          never logged.
    *
    * Note: this event's `source: 'rowButton'` cohort remains the row
    * Decoded pill click and is NOT comparable to
@@ -1396,6 +1404,28 @@ export const TELEMETRY_MESSAGE_IDS = [
    * milestone. Cross-event joins on `source` must use the new mapping.
    */
   'tree.decoded.viewerOpened',
+
+  /**
+   * Kind: event
+   * Fired by: `DecodedValueDialogComponent.toggleDecoded`
+   *           (`shared/components/json-tree/decoded-value-dialog/...`)
+   *           when the user flips the "Decode HTTP `??` framing"
+   *           slide toggle in the Inspect-string-value dialog. The
+   *           toggle is only visible when `detectLossyMangling(value)`
+   *           returns a non-`none` kind, so a fire of this event
+   *           necessarily implies a `manglingKind != 'none'` viewer
+   *           open earlier in the same dialog session.
+   * Volume control: bounded-frequency. Fires once per user toggle
+   * flip - capped at "a few times" per dialog open in practice. The
+   * gate (`manglingActive` only when `detectLossyMangling` fires)
+   * keeps the event's overall volume tightly bounded.
+   * Props: { to: 'raw' | 'decoded' }.
+   *          `to` is the post-flip state. The pre-flip state is the
+   *          binary complement; a `from`/`to` pair would be redundant
+   *          cardinality for a two-state toggle. No raw value content,
+   *          no path, no user-derived identifier is logged.
+   */
+  'tree.decoded.manglingToggle',
 
   /**
    * Kind: event

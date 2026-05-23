@@ -49,6 +49,7 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
 import { isColdAndMark } from '../../../core/telemetry/cold-flag';
 import { LoggerService } from '../../../core/telemetry/logger.service';
+import { detectLossyMangling } from '../../../core/text/lossy-mangling';
 import { OverflowDetectorDirective } from '../../directives/overflow-detector.directive';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import { JsonValueType } from '../../pipes/json-type.pipe';
@@ -3482,6 +3483,7 @@ export class JsonTreeComponent {
       reason,
       pathDepth: bucketCount(node.path.length),
       lineCountBucket: bucketLineCount(value),
+      manglingKind: detectLossyMangling(value).kind,
     });
   }
 

@@ -2,11 +2,24 @@
   <span class="decoded-title__label">{{ titleLabel }}</span>
   <span class="decoded-title__path" [matTooltip]="data.pathString">{{ data.pathString }}</span>
 </h2>
-<mat-dialog-content class="decoded-content">
+<mat-dialog-content class="decoded-content" tabindex="0">
   <pre
     class="decoded-pre"
   ><code class="decoded-code">@for (line of lines(); track line.index) {<span class="decoded-line"><span class="decoded-line__no" aria-hidden="true">{{ line.index }}</span><span class="decoded-line__text">{{ line.text }}</span></span>}</code></pre>
 </mat-dialog-content>
+@if (manglingActive()) {
+  <div class="decoded-sub-header">
+    <mat-slide-toggle
+      class="decoded-sub-header__toggle"
+      [checked]="decoded()"
+      (change)="toggleDecoded($event.checked)"
+      [matTooltip]="manglingToggleTooltip"
+      matTooltipPosition="above"
+    >
+      {{ manglingToggleLabel }}
+    </mat-slide-toggle>
+  </div>
+}
 <mat-dialog-actions align="end" class="decoded-actions">
   @if (canExtract()) {
     <button
@@ -18,6 +31,17 @@
     >
       <jj-icon name="extract" [size]="18" />
       <span i18n="@@tree.extract.menu.label">Extract embedded JSON</span>
+    </button>
+  }
+  @if (manglingActive() && decoded()) {
+    <button
+      mat-button
+      type="button"
+      class="decoded-actions__copy-with-line-breaks"
+      (click)="copyWithLineBreaks()"
+    >
+      <jj-icon name="copy" [size]="18" />
+      <span i18n="@@tree.decoded.dialog.copyWithLineBreaks">Copy with line breaks</span>
     </button>
   }
   <button mat-button type="button" class="decoded-actions__copy" (click)="copy()">

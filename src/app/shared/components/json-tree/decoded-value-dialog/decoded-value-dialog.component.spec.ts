@@ -1,7 +1,9 @@
+import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ClipboardCopyService } from '../../../../core/clipboard/clipboard-copy.service';
 import type { ExtractedJson } from '../../../../core/json/json-extractor.service';
+import { LoggerService } from '../../../../core/telemetry/logger.service';
 import {
   DecodedValueDialogComponent,
   type DecodedValueDialogData,
@@ -10,6 +12,8 @@ import {
 describe('DecodedValueDialogComponent', () => {
   let close: jasmine.Spy;
   let copyWithToast: jasmine.Spy;
+  let loggerEvent: jasmine.Spy;
+  let liveAnnounce: jasmine.Spy;
 
   const extractCandidate = {
     text: '{"a":1}',
@@ -22,6 +26,8 @@ describe('DecodedValueDialogComponent', () => {
   function createWith(data: DecodedValueDialogData) {
     close = jasmine.createSpy('ref.close');
     copyWithToast = jasmine.createSpy('copyWithToast').and.resolveTo(true);
+    loggerEvent = jasmine.createSpy('logger.event');
+    liveAnnounce = jasmine.createSpy('liveAnnouncer.announce').and.resolveTo();
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [DecodedValueDialogComponent],
@@ -29,6 +35,8 @@ describe('DecodedValueDialogComponent', () => {
         { provide: MatDialogRef, useValue: { close } },
         { provide: MAT_DIALOG_DATA, useValue: data },
         { provide: ClipboardCopyService, useValue: { copyWithToast } },
+        { provide: LoggerService, useValue: { event: loggerEvent } },
+        { provide: LiveAnnouncer, useValue: { announce: liveAnnounce } },
       ],
     });
     const fixture = TestBed.createComponent(DecodedValueDialogComponent);
@@ -104,6 +112,11 @@ describe('DecodedValueDialogComponent', () => {
           { provide: MatDialogRef, useValue: { close: jasmine.createSpy('close') } },
           { provide: MAT_DIALOG_DATA, useValue: { value: 'a', pathString: '$.x' } },
           { provide: ClipboardCopyService, useValue: { copyWithToast } },
+          { provide: LoggerService, useValue: { event: jasmine.createSpy('event') } },
+          {
+            provide: LiveAnnouncer,
+            useValue: { announce: jasmine.createSpy('announce').and.resolveTo() },
+          },
         ],
       });
       const fixture = TestBed.createComponent(DecodedValueDialogComponent);
@@ -124,6 +137,11 @@ describe('DecodedValueDialogComponent', () => {
           { provide: MatDialogRef, useValue: { close: jasmine.createSpy('close') } },
           { provide: MAT_DIALOG_DATA, useValue: { value: 'a', pathString: '$.x' } },
           { provide: ClipboardCopyService, useValue: { copyWithToast } },
+          { provide: LoggerService, useValue: { event: jasmine.createSpy('event') } },
+          {
+            provide: LiveAnnouncer,
+            useValue: { announce: jasmine.createSpy('announce').and.resolveTo() },
+          },
         ],
       });
       const fixture = TestBed.createComponent(DecodedValueDialogComponent);
@@ -212,6 +230,133 @@ describe('DecodedValueDialogComponent', () => {
       expect(closeBtn).toBeTruthy();
       closeBtn!.click();
       expect(close).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('mangling decode toggle', () => {
+    const MANGLED_RESPONSE =
+      '200 OK??Pragma: no-cache' +
+      '??Strict-Transport-Security: max-age=63072000' +
+      '??x-ms-request-id: e4786c1a-d489-4a6e-99ac-0d91ffb2711b' +
+      '??Cache-Control: no-cache??Content-Type: application/json' +
+      '????{"organizationId":"e674a4a6","note":"body has ??token=abc embedded"}';
+
+    function toggleElement(fixture: ReturnType<typeof createWith>) {
+      return (fixture.nativeElement as HTMLElement).querySelector('.decoded-sub-header__toggle');
+    }
+
+    function lineTexts(fixture: ReturnType<typeof createWith>): string[] {
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.decoded-line__text'),
+      ).map((node) => node.textContent ?? '');
+    }
+
+    it('does not render the toggle when the heuristic returns kind="none"', () => {
+      const fixture = createWith({ value: 'plain prose, no framing', pathString: '$.x' });
+      expect(toggleElement(fixture)).toBeNull();
+    });
+
+    it('renders the toggle in the off state when the heuristic fires', () => {
+      const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
+      const toggle = toggleElement(fixture);
+      expect(toggle).toBeTruthy();
+      expect(fixture.componentInstance.decoded()).toBeFalse();
+      // Default raw mode: body still rendered as one line containing the raw ?? framing.
+      expect(lineTexts(fixture).length).toBe(1);
+      expect(lineTexts(fixture)[0]).toContain('200 OK??Pragma: no-cache');
+    });
+
+    it('exposes the documented accessible name on the toggle', () => {
+      const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
+      const toggle = toggleElement(fixture);
+      expect(toggle?.textContent?.replace(/\s+/g, ' ').trim()).toContain(
+        'Decode HTTP "??" framing as line breaks',
+      );
+    });
+
+    it('re-renders multi-line when the toggle is flipped on', () => {
+      const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
+      const cmp = fixture.componentInstance;
+      cmp.toggleDecoded(true);
+      fixture.detectChanges();
+      const texts = lineTexts(fixture);
+      // Expect at least the status line, several header lines, a blank, and the body line.
+      expect(texts.length).toBeGreaterThan(5);
+      expect(texts[0]).toBe('200 OK');
+      expect(texts).toContain('Pragma: no-cache');
+      // Body is preserved verbatim (the embedded `??token=abc` survives).
+      const bodyLine = texts.find((line) => line.includes('organizationId'));
+      expect(bodyLine).toBeTruthy();
+      expect(bodyLine).toContain('??token=abc');
+    });
+
+    it('raw Copy button copies the raw value in both toggle states', () => {
+      const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
+      const cmp = fixture.componentInstance;
+      const rawCopy = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '.decoded-actions__copy',
+      );
+      expect(rawCopy).toBeTruthy();
+      rawCopy!.click();
+      expect(copyWithToast).toHaveBeenCalledTimes(1);
+      expect(copyWithToast.calls.mostRecent().args[0]).toBe(MANGLED_RESPONSE);
+
+      cmp.toggleDecoded(true);
+      fixture.detectChanges();
+      const rawCopyAfter = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '.decoded-actions__copy',
+      );
+      rawCopyAfter!.click();
+      expect(copyWithToast.calls.count()).toBe(2);
+      expect(copyWithToast.calls.mostRecent().args[0]).toBe(MANGLED_RESPONSE);
+    });
+
+    it('shows the Copy-with-line-breaks button only in decoded mode and copies the decoded form', () => {
+      const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
+      const cmp = fixture.componentInstance;
+      // Off by default -> button absent.
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          '.decoded-actions__copy-with-line-breaks',
+        ),
+      ).toBeNull();
+
+      cmp.toggleDecoded(true);
+      fixture.detectChanges();
+      const btn = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+        '.decoded-actions__copy-with-line-breaks',
+      );
+      expect(btn).toBeTruthy();
+      btn!.click();
+      expect(copyWithToast).toHaveBeenCalledTimes(1);
+      const copied = copyWithToast.calls.mostRecent().args[0] as string;
+      expect(copied).not.toBe(MANGLED_RESPONSE);
+      expect(copied).toContain('200 OK\nPragma: no-cache');
+      // Body preserved verbatim, including its own ?? content.
+      expect(copied).toContain('??token=abc');
+    });
+
+    it('announces the new state via LiveAnnouncer on every flip', () => {
+      const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
+      const cmp = fixture.componentInstance;
+      cmp.toggleDecoded(true);
+      cmp.toggleDecoded(false);
+      expect(liveAnnounce).toHaveBeenCalledTimes(2);
+      expect(liveAnnounce.calls.argsFor(0)[0]).toBe('Showing HTTP framing as multi-line.');
+      expect(liveAnnounce.calls.argsFor(1)[0]).toBe('Showing raw value.');
+    });
+
+    it('emits tree.decoded.manglingToggle with the post-flip "to" prop on every flip', () => {
+      const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
+      const cmp = fixture.componentInstance;
+      cmp.toggleDecoded(true);
+      cmp.toggleDecoded(false);
+      const calls = loggerEvent.calls
+        .allArgs()
+        .filter((args) => args[0] === 'tree.decoded.manglingToggle');
+      expect(calls.length).toBe(2);
+      expect(calls[0]?.[1]).toEqual({ to: 'decoded' });
+      expect(calls[1]?.[1]).toEqual({ to: 'raw' });
     });
   });
 });

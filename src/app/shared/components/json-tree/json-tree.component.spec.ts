@@ -6406,6 +6406,7 @@ describe('JsonTreeComponent', () => {
           reason: 'escape',
           pathDepth: bucketCount(2),
           lineCountBucket: '2-5',
+          manglingKind: 'none',
         });
       });
 
@@ -6423,6 +6424,7 @@ describe('JsonTreeComponent', () => {
           reason: 'long',
           pathDepth: bucketCount(2),
           lineCountBucket: '1',
+          manglingKind: 'none',
         });
       });
 
@@ -6443,10 +6445,32 @@ describe('JsonTreeComponent', () => {
             reason: 'escape',
             pathDepth: bucketCount(2),
             lineCountBucket: '2-5',
+            manglingKind: 'none',
           });
         } finally {
           closeOpenMenus();
         }
+      });
+
+      it('logs tree.decoded.viewerOpened with manglingKind="httpFraming" for ??-mangled HTTP framing', async () => {
+        const responseDetails =
+          '200 OK??Pragma: no-cache' +
+          '??Strict-Transport-Security: max-age=63072000' +
+          '??x-ms-request-id: e4786c1a-d489-4a6e-99ac-0d91ffb2711b' +
+          '??Cache-Control: no-cache??Content-Type: application/json' +
+          '????{"organizationId":"e674a4a6"}';
+        await createWith({ details: responseDetails });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const event = spyOn(TestBed.inject(LoggerService), 'event');
+        spyOnDialogOpen();
+        decodedButtonFor('$.details')!.click();
+        fixture.detectChanges();
+        const callArgs = event.calls
+          .allArgs()
+          .find((args) => args[0] === 'tree.decoded.viewerOpened');
+        expect(callArgs).toBeTruthy();
+        expect(callArgs?.[1]).toEqual(jasmine.objectContaining({ manglingKind: 'httpFraming' }));
       });
     });
   });
