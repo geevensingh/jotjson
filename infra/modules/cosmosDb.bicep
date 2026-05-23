@@ -3,6 +3,10 @@ param location string
 param tags object
 param databaseName string = 'jotjson'
 
+@description('Backup policy type. "Periodic" preserves Azure default; "Continuous" enables Continuous7Days PITR. Continuous->Periodic is one-way; choose carefully.')
+@allowed(['Periodic', 'Continuous'])
+param backupPolicyType string = 'Periodic'
+
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: accountName
   location: location
@@ -24,6 +28,19 @@ resource account 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
     }
     enableAutomaticFailover: false
     enableMultipleWriteLocations: false
+    backupPolicy: backupPolicyType == 'Continuous' ? {
+      type: 'Continuous'
+      continuousModeProperties: {
+        tier: 'Continuous7Days'
+      }
+    } : {
+      type: 'Periodic'
+      periodicModeProperties: {
+        backupIntervalInMinutes: 240
+        backupRetentionIntervalInHours: 8
+        backupStorageRedundancy: 'Geo'
+      }
+    }
   }
 }
 
