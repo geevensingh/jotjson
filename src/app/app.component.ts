@@ -8,12 +8,18 @@ import { RouteFocusService } from './core/navigation/route-focus.service';
 import { PreferencesNotificationService } from './core/preferences/preferences-notification.service';
 import { DocumentDropController } from './core/upload/document-drop-controller.service';
 import { LoadingSplashComponent } from './shared/components/loading-splash/loading-splash.component';
+import { MaintenanceBannerComponent } from './shared/components/maintenance-banner/maintenance-banner.component';
 import { RouteProgressBarComponent } from './shared/components/route-progress-bar/route-progress-bar.component';
 import { scheduleStaticSplashRemoval } from './static-splash-removal';
 
 @Component({
   selector: 'app-root',
-  imports: [LoadingSplashComponent, RouteProgressBarComponent, RouterOutlet],
+  imports: [
+    LoadingSplashComponent,
+    MaintenanceBannerComponent,
+    RouteProgressBarComponent,
+    RouterOutlet,
+  ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
