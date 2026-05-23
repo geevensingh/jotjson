@@ -26,6 +26,7 @@
       (clear)="onClear()"
       (format)="onFormat()"
       (minify)="onMinify()"
+      (sort)="onSort()"
       (paneLayoutChange)="onPaneLayoutChange($event)"
       (toggleTheme)="onToggleTheme()"
       (toggleSelectionSync)="onToggleSelectionSync()"
@@ -113,6 +114,7 @@
             [extractSourceVersion]="treeStringExtractor.currentVersion()"
             (selectionChange)="onTreeSelectionChange($event)"
             (extractRequest)="onExtractRequest($event)"
+            (sortKeysRequest)="onSortKeysRequest($event)"
             (highlightsChange)="onHighlightsChange($event)"
           ></jj-json-tree>
         </section>
