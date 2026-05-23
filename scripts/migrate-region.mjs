@@ -3,8 +3,16 @@
 //
 // Region migration cutover runbook. Idempotent, fails loudly.
 //
-// Phases of the cutover (each phase is a separate flag):
-//   --preflight        Validate prerequisites without making changes.
+// Phases of the cutover. Preflight checks (Node version, paramfile
+// readability, App Insights paramfile-pair contract, and -- when an
+// az-using phase is requested -- az CLI authentication, plus
+// azcopy-on-PATH when --azcopy-blobs is requested) always run first
+// as an implicit safety gate. The --preflight flag means "run only
+// the preflight checks; do nothing else" -- preflight runs whether
+// or not this flag is passed.
+//
+// Operational phase flags (each is independent; combine as needed):
+//   --preflight        Run only the preflight checks; do nothing else.
 //   --predelete-cosmos Delete the Phase-1-created cosmos-jotjson-prod
 //                      and any rehearse account. Polls until names freed.
 //   --restore-cosmos   Invoke az cosmosdb restore against the captured
@@ -26,6 +34,8 @@
 //   --expected-sha <git-sha>       Required for --verify-sha.
 //   --new-swa-hostname <host>      Required for --verify-sha.
 //   --paramfile <path>             prod.bicepparam for pre-flight check.
+//                                  Relative paths resolve against the
+//                                  repository root (not CWD).
 //
 // Additional phase-specific args:
 //   --new-swa-name <name>          Required for --regrant-cosmos-role.
@@ -92,6 +102,12 @@ Flags:
   --rehearsal-pinned-minutes <minutes>
   --paramfile <path>
 
+Notes:
+  - Relative --paramfile paths resolve against the repository root,
+    not the current working directory. Absolute paths are honored.
+  - Preflight checks run unconditionally as a safety gate before any
+    other phase; --preflight by itself means "preflight only."
+
 Abort notes:
   - PITR cannot be cancelled once az cosmosdb restore starts.
   - If restore runtime exceeds 2x the rehearsal-pinned estimate, the script
@@ -126,8 +142,9 @@ function trimString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function resolveRequiredPath(pathValue) {
-  return pathValue ? resolve(pathValue) : '';
+export function resolveRepoRelativePath(pathValue) {
+  if (!pathValue) return '';
+  return resolve(REPO_ROOT, pathValue);
 }
 
 function stderrLine(message, runtime = defaultRuntime()) {
@@ -206,17 +223,48 @@ export function validateRestoreTimestamp(restoreTimestamp, earliestRestorableTim
   };
 }
 
-function normalizeHostname(hostname) {
+export function normalizeHostname(hostname) {
   const raw = trimString(hostname);
   if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) {
-    const parsed = new URL(raw);
-    if (!parsed.hostname) {
-      throw new Error(`Invalid --new-swa-hostname ${JSON.stringify(hostname)}.`);
-    }
-    return parsed.host;
+  if (/^http:\/\//i.test(raw)) {
+    throw new Error(
+      `Invalid --new-swa-hostname ${JSON.stringify(hostname)}: explicit http:// scheme not allowed; use https:// or omit the scheme.`,
+    );
   }
-  return raw.replace(/\/+$/, '');
+  const hasHttpsScheme = /^https:\/\//i.test(raw);
+  const toParse = hasHttpsScheme ? raw : `https://${raw}`;
+  let parsed;
+  try {
+    parsed = new URL(toParse);
+  } catch {
+    throw new Error(
+      `Invalid --new-swa-hostname ${JSON.stringify(hostname)}: not a valid hostname.`,
+    );
+  }
+  if (!parsed.hostname) {
+    throw new Error(`Invalid --new-swa-hostname ${JSON.stringify(hostname)}: hostname is empty.`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error(
+      `Invalid --new-swa-hostname ${JSON.stringify(hostname)}: userinfo (user:pass@) is not allowed.`,
+    );
+  }
+  if (parsed.pathname && parsed.pathname !== '/') {
+    throw new Error(
+      `Invalid --new-swa-hostname ${JSON.stringify(hostname)}: path components are not allowed.`,
+    );
+  }
+  if (parsed.search) {
+    throw new Error(
+      `Invalid --new-swa-hostname ${JSON.stringify(hostname)}: query string is not allowed.`,
+    );
+  }
+  if (parsed.hash) {
+    throw new Error(
+      `Invalid --new-swa-hostname ${JSON.stringify(hostname)}: fragment is not allowed.`,
+    );
+  }
+  return parsed.host;
 }
 
 function parsePositiveInteger(value, label) {
@@ -268,7 +316,7 @@ export function parseCliOptions(args = process.argv.slice(2)) {
       values['rehearsal-pinned-minutes'],
       '--rehearsal-pinned-minutes',
     ),
-    paramfile: resolveRequiredPath(trimString(values.paramfile)),
+    paramfile: resolveRepoRelativePath(trimString(values.paramfile)),
   };
 
   if (options.help) {
@@ -367,6 +415,21 @@ function defaultRuntime() {
   return runtimeSingleton;
 }
 
+export function normalizeSpawnResult(rawResult, file, args) {
+  if (rawResult.error) {
+    throw new Error(`Failed to spawn ${commandToString(file, args)}: ${rawResult.error.message}`);
+  }
+  if (rawResult.status === null) {
+    const signal = rawResult.signal ? ` by signal ${rawResult.signal}` : '';
+    throw new Error(`${commandToString(file, args)} terminated${signal} without an exit status.`);
+  }
+  return {
+    status: rawResult.status,
+    stdout: rawResult.stdout ?? '',
+    stderr: rawResult.stderr ?? '',
+  };
+}
+
 export function runCommand(file, args, options = {}) {
   const result = spawnSync(file, args, {
     encoding: 'utf8',
@@ -374,14 +437,7 @@ export function runCommand(file, args, options = {}) {
     cwd: options.cwd ?? REPO_ROOT,
     stdio: options.stdio ?? 'pipe',
   });
-  if (result.error) {
-    throw new Error(`Failed to spawn ${commandToString(file, args)}: ${result.error.message}`);
-  }
-  return {
-    status: result.status ?? 0,
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
-  };
+  return normalizeSpawnResult(result, file, args);
 }
 
 function runChecked(runtime, file, args, options = {}) {
@@ -432,15 +488,23 @@ export async function runPreflight(options, runtime = defaultRuntime()) {
     `[preflight] existingAppInsights pair is ${pair.nameIsSet ? 'both set' : 'both empty or absent'}.`,
     runtime,
   );
-  checkCliAuthentication(runtime);
-  stderrLine('[preflight] az CLI is installed and authenticated.', runtime);
+  const azRequired = options.predeleteCosmos || options.restoreCosmos || options.regrantCosmosRole;
+  if (azRequired) {
+    checkCliAuthentication(runtime);
+    stderrLine('[preflight] az CLI is installed and authenticated.', runtime);
+  }
   if (options.azcopyBlobs) {
     checkAzcopyOnPath(runtime);
     stderrLine('[preflight] azcopy is installed.', runtime);
   }
   emitProgress(
     'phase.complete',
-    { phase: 'preflight', paramfile: options.paramfile, azcopyRequired: options.azcopyBlobs },
+    {
+      phase: 'preflight',
+      paramfile: options.paramfile,
+      azRequired,
+      azcopyRequired: options.azcopyBlobs,
+    },
     runtime,
   );
 }
@@ -619,8 +683,8 @@ export function deriveEarliestRestorable(restorableAccounts, srcAccount) {
       if (!entry || typeof entry !== 'object') {
         return null;
       }
-      const createdTime = trimString(entry.createdTime);
-      return createdTime || null;
+      const creationTime = trimString(entry.creationTime);
+      return creationTime || null;
     })
     .filter((value) => value !== null);
   if (timestamps.length === 0) {
@@ -752,7 +816,7 @@ export async function runRestoreCosmos(options, runtime = defaultRuntime()) {
     '-l',
     sourceLocation,
     '--query',
-    `[?accountName=='${options.srcAccount}'].{name:name,createdTime:creationTime}`,
+    `[?accountName=='${options.srcAccount}'].{creationTime:creationTime}`,
     '-o',
     'json',
   ]);
