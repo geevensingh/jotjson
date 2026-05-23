@@ -251,7 +251,14 @@ type PendingReplaceUndoMinifyExtras = {
 
 type PendingReplaceUndoSortToolbarExtras = {
   kind: 'sort.toolbar';
-  /** Editor mode at install time. Sort always flips to 'json' (drops comments). */
+  /**
+   * Editor mode at install time. Sort uses the byte-splice patcher
+   * which preserves comments, so post-Sort mode is auto-derived by
+   * the detectMode effect from the patched content: a JSONC document
+   * whose comments survive Sort stays in JSONC mode; a plain-JSON
+   * document stays in 'json'. We still snapshot the prior mode so
+   * Undo restores the exact mode that was in effect before Sort.
+   */
   priorMode: EditorMode;
 };
 
