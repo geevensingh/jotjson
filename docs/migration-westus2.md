@@ -960,6 +960,24 @@ loss of:
   inspection required).
 - Any 412 conflicts during back-sync (concurrent writes); logged
   for manual reconciliation.
+- **Any Cosmos document deleted on the NEW account between
+  cutover and back-sync will resurrect on the OLD account**
+  after rollback. The standard Cosmos change feed (latest-
+  version mode) does not emit deletes, so `cosmos-back-sync.mjs`
+  cannot replay them. The `AllVersionsAndDeletes` mode would
+  capture deletes but requires `changeFeedPolicy.retentionDuration`
+  to be enabled on the container BEFORE the deletes happen
+  (forward-looking only) and is not enabled on the current
+  migration's containers. Affected containers: `blobs`,
+  `history`, `rule-sets`. The `users` container has no delete
+  path in production code and is unaffected. Resurrected
+  deletes produce zero rows in the back-sync conflicts file --
+  the script's audit trail is incomplete by design for this
+  failure mode. After the back-sync run, perform a per-container
+  diff: list document IDs that exist on OLD but not on NEW
+  (after the back-sync writes complete), filter to IDs the user
+  could have deleted post-cutover, and either re-delete them or
+  surface them for manual review.
 
 If the rollback window extends past 24-48 hours after cutover,
 the back-sync cost (manual reconciliation, user-visible

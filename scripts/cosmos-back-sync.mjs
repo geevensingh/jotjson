@@ -16,13 +16,39 @@
 //   --src-rg <rg-name>                NEW account RG.
 //   --dst <account-name>              OLD account (write to).
 //   --dst-rg <rg-name>                OLD account RG.
-//   --cutover-instant-unix-seconds N  Cutover moment. Per-doc filter
-//                                     ignores docs with _ts < this value
-//                                     (perf optimization; not correctness).
+//   --cutover-instant-unix-seconds N  Cutover moment. The per-doc
+//                                     filter at sourceDocument._ts <
+//                                     cutoverInstantUnixSeconds is
+//                                     CORRECTNESS, not just perf: the
+//                                     Cosmos change feed has ~1-second
+//                                     resolution and may emit docs
+//                                     whose _ts is slightly before the
+//                                     requested instant. Removing the
+//                                     filter would replay pre-cutover
+//                                     writes.
+//   --accept-delete-loss              REQUIRED opt-in. The standard
+//                                     Cosmos change feed does NOT
+//                                     emit deletes. Without this flag
+//                                     the script refuses to run. See
+//                                     "Known limitation" below.
 //   --database <name>                 Cosmos database name (default 'jotjson').
 //   --containers <comma-separated>    Optional. Default: all four
 //                                     (blobs,users,history,rule-sets).
 //   --dry-run                         Print planned ops; don't write.
+//
+// Known limitation - deletes are not replayed:
+//   The Cosmos change feed in standard (latest-version) mode emits
+//   only live document versions. Documents deleted on the NEW account
+//   between cutover and back-sync are invisible to this script and
+//   will resurrect on the OLD account after rollback. The
+//   AllVersionsAndDeletes change-feed mode would capture deletes but
+//   requires changeFeedPolicy.retentionDuration to be set on the
+//   container BEFORE the deletes happen; retention is forward-looking
+//   only and cannot recover deletes that already occurred. Affected
+//   containers: blobs, history, rule-sets. The users container has no
+//   delete path in production code and is unaffected. After running
+//   the back-sync, perform a post-rollback diff reconciliation per
+//   container to surface resurrected documents for manual review.
 //
 // Per-doc strategy:
 //   For each doc in the NEW account's change feed (filtered to
@@ -54,7 +80,7 @@ import { parseArgs } from 'node:util';
 export const DEFAULT_CONTAINERS = Object.freeze(['blobs', 'users', 'history', 'rule-sets']);
 
 export const USAGE = `Usage:
-  node scripts/cosmos-back-sync.mjs --src <account-name> --src-rg <rg-name> --dst <account-name> --dst-rg <rg-name> --cutover-instant-unix-seconds <unix-seconds> [--database <name>] [--containers <comma-separated>] [--dry-run]
+  node scripts/cosmos-back-sync.mjs --src <account-name> --src-rg <rg-name> --dst <account-name> --dst-rg <rg-name> --cutover-instant-unix-seconds <unix-seconds> --accept-delete-loss [--database <name>] [--containers <comma-separated>] [--dry-run]
   node scripts/cosmos-back-sync.mjs --help
 
 Options:
@@ -62,7 +88,11 @@ Options:
   --src-rg <rg-name>                NEW account RG.
   --dst <account-name>              OLD account (write to).
   --dst-rg <rg-name>                OLD account RG.
-  --cutover-instant-unix-seconds N  Cutover moment.
+  --cutover-instant-unix-seconds N  Cutover moment (non-negative integer).
+  --accept-delete-loss              REQUIRED. Acknowledges that the
+                                    standard Cosmos change feed does
+                                    not replay deletes; the script
+                                    refuses to run without this flag.
   --database <name>                 Cosmos database name (default: jotjson).
   --containers <comma-separated>    Optional. Default: blobs,users,history,rule-sets.
   --dry-run                         Print planned ops; do not write.
@@ -114,6 +144,7 @@ export function parseCliOptions(args = process.argv.slice(2)) {
         dst: { type: 'string' },
         'dst-rg': { type: 'string' },
         'cutover-instant-unix-seconds': { type: 'string' },
+        'accept-delete-loss': { type: 'boolean' },
         database: { type: 'string' },
         containers: { type: 'string' },
         'dry-run': { type: 'boolean' },
@@ -154,6 +185,11 @@ export function parseCliOptions(args = process.argv.slice(2)) {
     throw new UsageError(`Missing required arguments: ${missingArguments.join(', ')}`);
   }
 
+  if (!/^\d+$/u.test(cutoverInstantRaw)) {
+    throw new UsageError(
+      'The --cutover-instant-unix-seconds value must be a base-10 non-negative integer (digits only).',
+    );
+  }
   const cutoverInstantUnixSeconds = Number.parseInt(cutoverInstantRaw, 10);
   if (!Number.isSafeInteger(cutoverInstantUnixSeconds) || cutoverInstantUnixSeconds < 0) {
     throw new UsageError(
@@ -172,6 +208,7 @@ export function parseCliOptions(args = process.argv.slice(2)) {
     cutoverInstantUnixSeconds,
     databaseName,
     containerNames: parseContainerNames(values.containers),
+    acceptDeleteLoss: values['accept-delete-loss'] === true,
     dryRun: values['dry-run'] === true,
   };
 }
@@ -256,12 +293,68 @@ function getRequiredKey(variableName, accountName, resourceGroup) {
   );
 }
 
-function getErrorCode(error) {
-  if (typeof error?.code === 'number' && Number.isFinite(error.code)) {
-    return error.code;
+/**
+ * Emits the deletes-not-replayed warning to the provided stderr-like
+ * stream. Extracted so unit tests can inject a capturing stream
+ * instead of asserting against process.stderr. See "Known limitation"
+ * in the header for the full mechanism description.
+ */
+export function warnDeletesNotReplayed(stderr = process.stderr) {
+  stderr.write(
+    'WARNING: The standard Cosmos change feed does NOT replay deletes. ' +
+      'Documents deleted on the NEW account between cutover and back-sync are invisible ' +
+      'to this script and will resurrect on the OLD account after rollback. ' +
+      'Affected containers: blobs, history, rule-sets. The users container has no ' +
+      'delete path in production code and is unaffected. ' +
+      'After running the back-sync, perform a post-rollback per-container diff ' +
+      'reconciliation to surface resurrected documents for manual review.\n',
+  );
+}
+
+/**
+ * Normalized Cosmos string-code aliases to numeric HTTP-status codes.
+ * Cosmos surfaces error codes as one of three shapes depending on SDK
+ * version and code path: a number (e.g. 412), a digit-string (e.g.
+ * '412'), or a named alias string. Only aliases with explicit
+ * production evidence are mapped here. 'Conflict' is intentionally
+ * not in this set until SDK source evidence emerges (see follow-up
+ * issue noted in the PR-D rubber-duck gate).
+ */
+const COSMOS_ERROR_CODE_ALIASES = Object.freeze({
+  __proto__: null,
+  PreconditionFailed: 412,
+  NotFound: 404,
+});
+
+/**
+ * Returns the numeric HTTP-status code from a Cosmos error, or null if
+ * the error has no recognizable code. Cosmos surfaces the code as
+ * either a number (e.g. 412), a digit-string (e.g. '412'), or a
+ * string alias (e.g. 'PreconditionFailed' for 412, 'NotFound' for
+ * 404). Normalizing here means every call site
+ * (readDestinationDocument, the write-path classifier, etc.) sees a
+ * consistent numeric code.
+ *
+ * SYNC WITH `api/src/shared/cosmos.ts:isCosmosPreconditionFailed` --
+ * both helpers must accept the same `code` shapes (412 numeric /
+ * digit-string / 'PreconditionFailed' string) when adding future
+ * Cosmos error-code aliases.
+ */
+export function getErrorCode(error) {
+  if (error === null || typeof error !== 'object') {
+    return null;
   }
-  if (typeof error?.code === 'string' && /^\d+$/u.test(error.code)) {
-    return Number.parseInt(error.code, 10);
+  const { code } = error;
+  if (typeof code === 'number' && Number.isFinite(code)) {
+    return code;
+  }
+  if (typeof code === 'string') {
+    if (/^\d+$/u.test(code)) {
+      return Number.parseInt(code, 10);
+    }
+    if (code in COSMOS_ERROR_CODE_ALIASES) {
+      return COSMOS_ERROR_CODE_ALIASES[code];
+    }
   }
   return null;
 }
@@ -386,47 +479,91 @@ async function syncDocument({
     return;
   }
 
-  const { id } = sourceDocument;
-  if (typeof id !== 'string' || id.trim() === '') {
-    throw new Error(
-      `Encountered a source document without a valid id in container ${containerName}.`,
-    );
-  }
+  // Outer try/catch covers the two non-network throw sites that live
+  // outside the inner read/write try blocks: id validation,
+  // extractPartitionKeyValue (line ~396 pre-fix), and decideAction
+  // (line ~429 pre-fix). Without this, a single malformed source doc
+  // (missing partition-key path, non-numeric _ts, missing id) crashes
+  // the entire rollback by propagating to syncContainer's iterator
+  // loop and then to main's container loop. With it, the bad doc is
+  // logged as 'malformed-source' and processing continues.
+  let id = null;
+  let partitionKey = null;
+  let destinationDocument = null;
+  let action = null;
 
-  const partitionKey = extractPartitionKeyValue(sourceDocument, partitionKeyPaths);
-  summary.docsProcessed += 1;
-
-  let destinationDocument;
   try {
-    destinationDocument = await readDestinationDocument(destinationContainer, id, partitionKey);
+    ({ id } = sourceDocument);
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new Error(
+        `Encountered a source document without a valid id in container ${containerName}.`,
+      );
+    }
+
+    partitionKey = extractPartitionKeyValue(sourceDocument, partitionKeyPaths);
+    summary.docsProcessed += 1;
+
+    try {
+      destinationDocument = await readDestinationDocument(destinationContainer, id, partitionKey);
+    } catch (error) {
+      logConflict({
+        conflictsFilePath,
+        summary,
+        container: containerName,
+        id,
+        partitionKey,
+        reason: 'unknown',
+        newDoc: sourceDocument,
+      });
+      writeJsonLine(
+        process.stdout,
+        createDocumentEvent({
+          container: containerName,
+          id,
+          partitionKey,
+          action: 'inspect',
+          result: 'failed',
+          dryRun,
+          newDoc: sourceDocument,
+          reason: 'unknown',
+          errorCode: getErrorCode(error),
+        }),
+      );
+      return;
+    }
+
+    action = decideAction(destinationDocument, sourceDocument);
   } catch (error) {
+    summary.docsMalformed += 1;
+    const fallbackId = typeof id === 'string' && id.trim() !== '' ? id : '<unknown>';
     logConflict({
       conflictsFilePath,
       summary,
       container: containerName,
-      id,
+      id: fallbackId,
       partitionKey,
-      reason: 'unknown',
+      reason: 'malformed-source',
+      oldDoc: destinationDocument,
       newDoc: sourceDocument,
     });
     writeJsonLine(
       process.stdout,
       createDocumentEvent({
         container: containerName,
-        id,
+        id: fallbackId,
         partitionKey,
         action: 'inspect',
         result: 'failed',
         dryRun,
+        oldDoc: destinationDocument,
         newDoc: sourceDocument,
-        reason: 'unknown',
-        errorCode: getErrorCode(error),
+        reason: 'malformed-source',
+        errorCode: error instanceof Error ? error.message : String(error),
       }),
     );
     return;
   }
 
-  const action = decideAction(destinationDocument, sourceDocument);
   if (action === 'skip-old-fresher') {
     summary.docsSkippedOldFresher += 1;
     logConflict({
@@ -588,6 +725,7 @@ async function syncContainer({
     docsCreated: 0,
     docsUpdated: 0,
     docsSkippedOldFresher: 0,
+    docsMalformed: 0,
     conflicts: 0,
   };
 
@@ -595,40 +733,47 @@ async function syncContainer({
     changeFeedStartFrom: ChangeFeedStartFrom.Time(new Date(cutoverInstantUnixSeconds * 1000)),
   });
 
-  for (;;) {
-    const response = await iterator.readNext();
-    if (response.statusCode === NOT_MODIFIED_STATUS_CODE || response.count === 0) {
-      break;
-    }
+  // try/finally so the per-container summary is emitted even when the
+  // change-feed iterator throws mid-stream. Without this, a transient
+  // SDK error during readNext() loses the partial-progress accounting
+  // for that container; the operator has no record of how many docs
+  // were processed before the failure.
+  try {
+    for (;;) {
+      const response = await iterator.readNext();
+      if (response.statusCode === NOT_MODIFIED_STATUS_CODE || response.count === 0) {
+        break;
+      }
 
-    for (const sourceDocument of response.result) {
-      await syncDocument({
-        sourceDocument,
-        containerName,
-        destinationContainer,
-        partitionKeyPaths: sourcePartitionKeyPaths,
-        cutoverInstantUnixSeconds,
-        dryRun,
-        conflictsFilePath,
-        summary,
-      });
+      for (const sourceDocument of response.result) {
+        await syncDocument({
+          sourceDocument,
+          containerName,
+          destinationContainer,
+          partitionKeyPaths: sourcePartitionKeyPaths,
+          cutoverInstantUnixSeconds,
+          dryRun,
+          conflictsFilePath,
+          summary,
+        });
+      }
     }
+  } finally {
+    process.stderr.write(
+      `Completed ${containerName}: processed=${summary.docsProcessed}, created=${summary.docsCreated}, updated=${summary.docsUpdated}, skippedOldFresher=${summary.docsSkippedOldFresher}, malformed=${summary.docsMalformed}, conflicts=${summary.conflicts}\n`,
+    );
+    writeJsonLine(process.stdout, summary);
   }
-
-  process.stderr.write(
-    `Completed ${containerName}: processed=${summary.docsProcessed}, created=${summary.docsCreated}, updated=${summary.docsUpdated}, skippedOldFresher=${summary.docsSkippedOldFresher}, conflicts=${summary.conflicts}\n`,
-  );
-  writeJsonLine(process.stdout, summary);
 }
 
-export async function main(args = process.argv.slice(2)) {
+export async function main(args = process.argv.slice(2), { stderr = process.stderr } = {}) {
   let options;
   try {
     options = parseCliOptions(args);
   } catch (error) {
     if (error instanceof UsageError) {
-      process.stderr.write(`${error.message}\n\n`);
-      writeUsage(process.stderr);
+      stderr.write(`${error.message}\n\n`);
+      stderr.write(`${USAGE}\n`);
       process.exitCode = 1;
       return;
     }
@@ -639,6 +784,24 @@ export async function main(args = process.argv.slice(2)) {
     writeUsage(process.stdout);
     return;
   }
+
+  // Required opt-in gate. The deletes-not-replayed limitation is
+  // permanent for this rollback window (AllVersionsAndDeletes retention
+  // is forward-looking and was not enabled pre-cutover). Refusing to
+  // run without explicit acknowledgement forces the operator to read
+  // the warning instead of scrolling past it.
+  if (!options.acceptDeleteLoss) {
+    warnDeletesNotReplayed(stderr);
+    stderr.write(
+      'Refusing to run without --accept-delete-loss. Pass --accept-delete-loss after ' +
+        'reading the deletes-not-replayed warning above and planning the post-rollback ' +
+        'per-container diff reconciliation.\n',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  warnDeletesNotReplayed(stderr);
 
   const sourceEndpoint = `https://${options.sourceAccount}.documents.azure.com:443/`;
   const destinationEndpoint = `https://${options.destinationAccount}.documents.azure.com:443/`;
@@ -654,8 +817,20 @@ export async function main(args = process.argv.slice(2)) {
   );
 
   const conflictsFilePath = buildConflictFilePath({ dryRun: options.dryRun });
-  writeFileSync(conflictsFilePath, '', 'utf8');
-  process.stderr.write(`Conflicts file: ${conflictsFilePath}\n`);
+  // Exclusive create (flag: 'wx') so a second run started in the same
+  // second (timestamp granularity) refuses rather than silently
+  // truncating the prior run's audit trail.
+  try {
+    writeFileSync(conflictsFilePath, '', { flag: 'wx', encoding: 'utf8' });
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      throw new Error(
+        `Conflicts file already exists: ${conflictsFilePath}. Wait one second and re-run, or move the existing file aside.`,
+      );
+    }
+    throw error;
+  }
+  stderr.write(`Conflicts file: ${conflictsFilePath}\n`);
 
   const sourceClient = new CosmosClient({ endpoint: sourceEndpoint, key: sourceKey });
   const destinationClient = new CosmosClient({
@@ -665,15 +840,32 @@ export async function main(args = process.argv.slice(2)) {
   const sourceDatabase = sourceClient.database(options.databaseName);
   const destinationDatabase = destinationClient.database(options.databaseName);
 
+  // Per-container try/catch so one container's failure does not abort
+  // the rest of the rollback. The first error is preserved and
+  // re-raised after the loop so the script exits non-zero.
+  let firstContainerError = null;
   for (const containerName of options.containerNames) {
-    await syncContainer({
-      sourceDatabase,
-      destinationDatabase,
-      containerName,
-      cutoverInstantUnixSeconds: options.cutoverInstantUnixSeconds,
-      dryRun: options.dryRun,
-      conflictsFilePath,
-    });
+    try {
+      await syncContainer({
+        sourceDatabase,
+        destinationDatabase,
+        containerName,
+        cutoverInstantUnixSeconds: options.cutoverInstantUnixSeconds,
+        dryRun: options.dryRun,
+        conflictsFilePath,
+      });
+    } catch (error) {
+      stderr.write(
+        `Container ${containerName} failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+      );
+      if (firstContainerError === null) {
+        firstContainerError = error;
+      }
+    }
+  }
+
+  if (firstContainerError !== null) {
+    process.exitCode = 1;
   }
 }
 

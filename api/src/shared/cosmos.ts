@@ -160,6 +160,11 @@ export class CosmosInvariantError extends Error {
  * True when the given thrown value is a Cosmos 412 PreconditionFailed.
  * Cosmos surfaces this as either `code: 412` (numeric) or
  * `code: 'PreconditionFailed'` (string) depending on SDK version.
+ *
+ * SYNC WITH `scripts/cosmos-back-sync.mjs:getErrorCode` -- both
+ * helpers must accept the same `code` shapes (412 numeric /
+ * digit-string / 'PreconditionFailed' string) when adding future
+ * Cosmos error-code aliases.
  */
 export function isCosmosPreconditionFailed(error: unknown): boolean {
   if (error === null || typeof error !== 'object') return false;
