@@ -155,6 +155,7 @@ describe('JsonTreeComponent', () => {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TREE_SEARCH_STORAGE_KEY);
     detachAllFixtureWrappers();
+    __resetColdFlagsForTesting();
   });
 
   // Phase 2 (issue #95) -- `<cdk-virtual-scroll-viewport>` reads
