@@ -169,6 +169,34 @@ const FILE_INGRESS_TO_EXTRACT_SOURCE: Readonly<Record<FileIngressSource, Extract
   osLaunch: 'upload.osLaunch',
 };
 
+/**
+ * Closed-enum label for the `trigger` prop on `home.upload.undo`
+ * telemetry. Declared as its own type (rather than a passthrough of
+ * `FileIngressSource`) so the next `FileIngressSource` widen forces a
+ * compile-time decision at `FILE_INGRESS_TO_UNDO_TRIGGER` below
+ * rather than silently widening the documented closed-enum on
+ * `home.upload.undo.trigger` via `pending.uploadTrigger`. Mirrors the
+ * boundary discipline already established by
+ * `FILE_INGRESS_TO_EXTRACT_SOURCE` (six lines above) for
+ * `home.extract.banner.*.pasteSource`.
+ */
+type UploadTriggerLabel = 'drag' | 'pick' | 'osLaunch';
+
+/**
+ * Closed-enum mapping from a `FileIngressSource` (user action that
+ * delivered the files) to the `trigger` prop on `home.upload.undo`
+ * telemetry. Identity-mapped today; the indirection exists so the
+ * next `FileIngressSource` addition (e.g., a future Web Share Target
+ * ingress) fails to compile here rather than silently flowing through
+ * `pending.uploadTrigger` into the telemetry event. Mirrors
+ * `FILE_INGRESS_TO_EXTRACT_SOURCE` above.
+ */
+const FILE_INGRESS_TO_UNDO_TRIGGER: Readonly<Record<FileIngressSource, UploadTriggerLabel>> = {
+  drag: 'drag',
+  pick: 'pick',
+  osLaunch: 'osLaunch',
+};
+
 type SignInRestoreSnapshot = {
   slug: string | null;
   content: string;
@@ -264,7 +292,7 @@ type PendingReplaceUndoUploadExtras = {
   priorExtractedCandidate: ExtractedCandidate | null;
   priorUploadError: { filename: string } | null;
   /** Whether the upload originated from the file-picker, a drag-drop, or an OS launch. */
-  uploadTrigger: FileIngressSource;
+  uploadTrigger: UploadTriggerLabel;
 };
 
 type PendingReplaceUndoFormatExtras = {
@@ -2842,7 +2870,7 @@ export class HomeComponent implements OnInit, OnDestroy {
             priorSuggestedTitles,
             priorExtractedCandidate,
             priorUploadError,
-            uploadTrigger: source,
+            uploadTrigger: FILE_INGRESS_TO_UNDO_TRIGGER[source],
             // `applyReplaceWithFallback` bumps `viewResetToken` (either
             // via `replaceAll`'s mirror at line 1672 or the legacy
             // `setContent`+token bump fallback). Record the post-bump

@@ -1596,11 +1596,16 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           path) while the pending replace-undo window is still open.
    * Volume control: bounded-frequency. One event per upload replace
    *   action that is undone.
-   * Props: { source: 'snackbar' | 'ctrlZ'; trigger: 'pick' | 'drag';
-   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   * Props: { source: 'snackbar' | 'ctrlZ'; trigger: 'pick' | 'drag'
+   *          | 'osLaunch'; undoLatencyMsBucket: '<1s' | '1-5s'
+   *          | '5s+' }.
    *          `source` distinguishes the undo entry path; `trigger`
    *          preserves whether the original replacement came from the
-   *          file picker or drag-drop; `undoLatencyMsBucket` supports
+   *          file picker, drag-drop, or OS file-association launch
+   *          (PWA `file_handlers` + `launchQueue`; Chromium-only,
+   *          requires PWA install). Additive enum extension: existing
+   *          dashboards filtering on `'pick'` / `'drag'` continue to
+   *          return correct results. `undoLatencyMsBucket` supports
    *          misclick-rate queries without using raw time as a
    *          dimension.
    * Measurements: { undoLatencyMs?: number }. Raw wall-clock latency

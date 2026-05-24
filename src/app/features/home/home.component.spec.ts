@@ -7071,6 +7071,42 @@ describe('HomeComponent banner-extract undo (M7v)', () => {
     });
   });
 
+  it('snackbar Undo on an upload.osLaunch-sourced banner emits home.extract.banner.undo with pasteSource=upload.osLaunch', () => {
+    const { component, snackHarness, eventSpy } = setup();
+    let nowMs = 1000;
+    spyOn(performance, 'now').and.callFake(() => nowMs);
+    const priorText = 'INFO log {"a":1}';
+    const candidateText = '{ "a": 1 }';
+    component.onValueChange(priorText);
+    component.extractedCandidate.set({
+      data: {
+        text: candidateText,
+        blockCount: 1,
+        preservesComments: true,
+        hasComments: false,
+      },
+      sourceVersion: 0,
+      source: 'upload.osLaunch',
+    });
+
+    nowMs = 1200;
+    component.onExtractAccept();
+    expect(component.content()).toBe(candidateText);
+
+    eventSpy.calls.reset();
+    nowMs = 2500;
+    snackHarness.action.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.extractBannerVisible()).toBe(true);
+    expect(component.extractedCandidate()?.source).toBe('upload.osLaunch');
+    expect(eventSpy).toHaveBeenCalledWith('home.extract.banner.undo', {
+      source: 'snackbar',
+      pasteSource: 'upload.osLaunch',
+      undoLatencyMsBucket: '1-5s',
+    });
+  });
+
   it('content reverting to priorText (Ctrl+Z) emits home.extract.banner.undo with source=ctrlZ and re-arms the banner', () => {
     const { fixture, component, snackHarness, eventSpy } = setup();
     let nowMs = 1000;
@@ -7222,6 +7258,18 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
     };
   }
 
+  class FakeLaunchQueueController {
+    registeredHandler?: LaunchHandler;
+    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
+    readonly dispose = jasmine.createSpy('disposeLaunch');
+    readonly registerHandler = jasmine
+      .createSpy('registerHandler')
+      .and.callFake((handler: LaunchHandler) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
   interface ReplaceEditorStub {
     replaceAll: jasmine.Spy<(text: string, source: string) => ReplaceAllResult>;
   }
@@ -7271,6 +7319,7 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
     editorStub: ReplaceEditorStub;
     eventSpy: jasmine.Spy;
     warnSpy: jasmine.Spy;
+    launch: FakeLaunchQueueController;
   }
 
   function setup(options: SetupOptions = {}): SetupResult {
@@ -7289,12 +7338,14 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
       (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
     >;
     const snack = { open: snackOpenSpy };
+    const fakeLaunch = new FakeLaunchQueueController();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
       providers: [
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: MatSnackBar, useValue: snack },
+        { provide: LaunchQueueController, useValue: fakeLaunch },
       ],
     });
     const logger = TestBed.inject(LoggerService);
@@ -7328,6 +7379,7 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
       editorStub,
       eventSpy,
       warnSpy,
+      launch: fakeLaunch,
     };
   }
 
@@ -7417,6 +7469,69 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
       jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
     );
     // Snackbar should be dismissed when Ctrl+Z fires the undo path.
+    expect(snackHarnesses[0]!.dismissSpy).toHaveBeenCalled();
+  });
+
+  // --------------------------------------------------------------------
+  // OS-launch (PWA file_handlers + launchQueue) upload undo: ensure the
+  // `'osLaunch'` value flows through `FILE_INGRESS_TO_UNDO_TRIGGER` into
+  // `home.upload.undo.trigger` on both the snackbar-Undo and Ctrl+Z
+  // branches. These two emit sites are structurally independent
+  // (snackbar callback in `openReplaceUndoSnack` vs constructor
+  // `effect()` watching `priorText` revert), so both need explicit
+  // coverage to prevent silent regression when the FileIngressSource
+  // union widens further.
+  // --------------------------------------------------------------------
+
+  it('OS-launch upload + snackbar Undo emits home.upload.undo with trigger=osLaunch', async () => {
+    const priorText = '{"prior":true}';
+    const { component, snackHarnesses, eventSpy, launch } = setup({
+      initialContent: priorText,
+      initialLastFilename: 'old.json',
+    });
+
+    expect(launch.registeredHandler).toBeDefined();
+    const file = new File(['{"next":1}'], 'launched.json');
+    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    expect(component.content()).toBe('{"next":1}');
+    expect(component.lastFilename()).toBe('launched.json');
+
+    eventSpy.calls.reset();
+    snackHarnesses[0]!.action.next();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.lastFilename()).toBe('old.json');
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.upload.undo',
+      jasmine.objectContaining({ source: 'snackbar', trigger: 'osLaunch' }),
+      jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
+    );
+  });
+
+  it('OS-launch upload + Ctrl+Z (re-emitted onValueChange) emits home.upload.undo with trigger=osLaunch', async () => {
+    const priorText = '{"prior":true}';
+    const { fixture, component, snackHarnesses, eventSpy, launch } = setup({
+      initialContent: priorText,
+      initialLastFilename: 'old.json',
+    });
+
+    expect(launch.registeredHandler).toBeDefined();
+    const file = new File(['{"next":2}'], 'launched.json');
+    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    expect(component.content()).toBe('{"next":2}');
+
+    eventSpy.calls.reset();
+    component.onValueChange(priorText);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+
+    expect(component.content()).toBe(priorText);
+    expect(component.lastFilename()).toBe('old.json');
+    expect(eventSpy).toHaveBeenCalledWith(
+      'home.upload.undo',
+      jasmine.objectContaining({ source: 'ctrlZ', trigger: 'osLaunch' }),
+      jasmine.objectContaining({ undoLatencyMs: jasmine.any(Number) }),
+    );
     expect(snackHarnesses[0]!.dismissSpy).toHaveBeenCalled();
   });
 
