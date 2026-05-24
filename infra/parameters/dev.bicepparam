@@ -10,6 +10,17 @@ param staticWebAppSku = 'Standard'
 param customDomain = ''
 param dnsZoneName = 'jotjson.com'
 
+// DNS zone jotjson.com is not managed by this template; the `dns`
+// module is suppressed while `existingDnsZoneRg` is non-empty. The
+// zone's current resource group and the operator-run relocation
+// sequence are documented in docs/migration-westus2.md Phase 0
+// step 6. Removing this line or clearing its value would re-enable
+// the `dns` module and have the next deploy attempt to manage
+// `jotjson.com` in rg-jotjson-dev, conflicting with the live zone
+// managed outside this template -- the textbook split-brain DNS
+// failure mode.
+param existingDnsZoneRg = 'rg-jotjson-dns'
+
 // Entra External ID - populate via `-p` overrides or env-specific param file.
 // Keep these empty in the committed dev params; JWT validation is disabled
 // until values are provided.
