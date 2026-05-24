@@ -87,17 +87,25 @@ export function detectLossyMangling(value: string): LossyManglingDetection {
  * returns the input unchanged (idempotent for values where no shape
  * was detected). `kind === 'httpFraming'` returns a prefix-decoded
  * variant where `??` between header-shaped segments is replaced with
- * `\n`; the body (the portion after the first `????`, or after the
- * run of header-shaped segments ends in the fallback case) is
- * preserved verbatim, so any `??` inside the body survives.
+ * `\r\n` (canonical HTTP CRLF framing); the body (the portion after
+ * the first `????`, or after the run of header-shaped segments ends
+ * in the fallback case) is preserved verbatim, so any `??` inside
+ * the body survives.
+ *
+ * The dialog preview's line-splitter (`/\r\n|\r|\n/`) handles both
+ * CRLF and LF so the rendered output is visually identical regardless
+ * of the byte form. The CRLF choice matters when Apply writes the
+ * decoded value back into the JSON source (so any tool that later
+ * round-trips the string through a real HTTP parser gets spec-canonical
+ * framing).
  *
  * Worked example (HTTP response):
  *   in:  `200 OK??Pragma: no-cache??Expires: -1????{"body":"..."}`
- *   out: `200 OK\nPragma: no-cache\nExpires: -1\n\n{"body":"..."}`
+ *   out: `200 OK\r\nPragma: no-cache\r\nExpires: -1\r\n\r\n{"body":"..."}`
  *
  * Worked example with `??` in the body:
  *   in:  `200 OK??Foo: a??Bar: b??Baz: c????GET /x?a??b=1`
- *   out: `200 OK\nFoo: a\nBar: b\nBaz: c\n\nGET /x?a??b=1`
+ *   out: `200 OK\r\nFoo: a\r\nBar: b\r\nBaz: c\r\n\r\nGET /x?a??b=1`
  *
  * Performance: O(n) over input length. The dialog's existing `lines`
  * computed re-runs its line-splitter over the decoded output - also
@@ -120,12 +128,14 @@ function decodeHttpFraming(value: string): string {
   const bodyStart = value.indexOf(HTTP_BODY_SEPARATOR);
   if (bodyStart >= 0) {
     // Standard case: header block then `????` then body. Substitute
-    // `??` -> `\n` only inside the header block; preserve the body
+    // `??` -> `\r\n` only inside the header block; preserve the body
     // verbatim (so URLs, base64, or recursively-mangled content in the
-    // body are not silently corrupted).
-    const headerPart = value.slice(0, bodyStart).split('??').join('\n');
+    // body are not silently corrupted). `????` -> `\r\n\r\n` is
+    // spec-canonical HTTP framing (blank line separating headers from
+    // body, where the blank line is itself CRLF).
+    const headerPart = value.slice(0, bodyStart).split('??').join('\r\n');
     const bodyPart = value.slice(bodyStart + HTTP_BODY_SEPARATOR.length);
-    return headerPart + '\n\n' + bodyPart;
+    return headerPart + '\r\n\r\n' + bodyPart;
   }
 
   // Fallback: no `????` separator. Walk `??`-separated segments and
@@ -145,7 +155,7 @@ function decodeHttpFraming(value: string): string {
     // not have classified this as `httpFraming`, but be defensive.
     return value;
   }
-  const head = segments.slice(0, lastHeaderIndex + 1).join('\n');
+  const head = segments.slice(0, lastHeaderIndex + 1).join('\r\n');
   const tail = segments.slice(lastHeaderIndex + 1).join('??');
-  return tail.length > 0 ? head + '\n' + tail : head;
+  return tail.length > 0 ? head + '\r\n' + tail : head;
 }

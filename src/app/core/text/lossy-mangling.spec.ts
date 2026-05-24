@@ -88,20 +88,22 @@ describe('decodeLossyMangling', () => {
     it('decodes a standard response with body separator', () => {
       const value = '200 OK??A: x??B: y??C: z????body content';
       expect(decodeLossyMangling(value, 'httpFraming')).toBe(
-        '200 OK\nA: x\nB: y\nC: z\n\nbody content',
+        '200 OK\r\nA: x\r\nB: y\r\nC: z\r\n\r\nbody content',
       );
     });
 
     it('preserves "??" inside the body verbatim', () => {
       const value = '200 OK??Foo: a??Bar: b??Baz: c????GET /x?token=abc??ver=1';
       expect(decodeLossyMangling(value, 'httpFraming')).toBe(
-        '200 OK\nFoo: a\nBar: b\nBaz: c\n\nGET /x?token=abc??ver=1',
+        '200 OK\r\nFoo: a\r\nBar: b\r\nBaz: c\r\n\r\nGET /x?token=abc??ver=1',
       );
     });
 
     it('preserves an empty body verbatim (trailing separator only)', () => {
       const value = '200 OK??A: 1??B: 2??C: 3????';
-      expect(decodeLossyMangling(value, 'httpFraming')).toBe('200 OK\nA: 1\nB: 2\nC: 3\n\n');
+      expect(decodeLossyMangling(value, 'httpFraming')).toBe(
+        '200 OK\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\n',
+      );
     });
 
     it('decodes the user-supplied request payload', () => {
@@ -112,19 +114,19 @@ describe('decodeLossyMangling', () => {
         '??MS-CV: 6O12PmSAc0mVnJrl.1' +
         '??Authorization: Authorization value hash = 784522372????<none>';
       expect(decodeLossyMangling(value, 'httpFraming')).toBe(
-        'GET https://example.com/path?includeJarvisAccountId=true\n' +
-          'api-version: 2019-05-31\n' +
-          'x-ms-correlation-id: e4786c1a-d489-4a6e-99ac-0d91ffb2711b\n' +
-          'MS-CV: 6O12PmSAc0mVnJrl.1\n' +
-          'Authorization: Authorization value hash = 784522372\n' +
-          '\n' +
+        'GET https://example.com/path?includeJarvisAccountId=true\r\n' +
+          'api-version: 2019-05-31\r\n' +
+          'x-ms-correlation-id: e4786c1a-d489-4a6e-99ac-0d91ffb2711b\r\n' +
+          'MS-CV: 6O12PmSAc0mVnJrl.1\r\n' +
+          'Authorization: Authorization value hash = 784522372\r\n' +
+          '\r\n' +
           '<none>',
       );
     });
 
     it('falls back to header-run walk when no body separator is present', () => {
       const value = '200 OK??A: x??B: y??C: z';
-      expect(decodeLossyMangling(value, 'httpFraming')).toBe('200 OK\nA: x\nB: y\nC: z');
+      expect(decodeLossyMangling(value, 'httpFraming')).toBe('200 OK\r\nA: x\r\nB: y\r\nC: z');
     });
 
     it('stops the header walk at the first non-header segment in the fallback path', () => {
@@ -133,7 +135,7 @@ describe('decodeLossyMangling', () => {
       // is re-joined with `??` so internal `??` survives.
       const value = '200 OK??A: x??B: y??C: z??not a header??still tail';
       expect(decodeLossyMangling(value, 'httpFraming')).toBe(
-        '200 OK\nA: x\nB: y\nC: z\nnot a header??still tail',
+        '200 OK\r\nA: x\r\nB: y\r\nC: z\r\nnot a header??still tail',
       );
     });
 
@@ -145,7 +147,9 @@ describe('decodeLossyMangling', () => {
       // With the body separator present, the prefix is rewritten by
       // plain split/join, preserving the leading `?` in segment 1.
       const value = '???A: x??B: y??C: z????body';
-      expect(decodeLossyMangling(value, 'httpFraming')).toBe('\n?A: x\nB: y\nC: z\n\nbody');
+      expect(decodeLossyMangling(value, 'httpFraming')).toBe(
+        '\r\n?A: x\r\nB: y\r\nC: z\r\n\r\nbody',
+      );
     });
 
     it('handles "?????" runs (five ?s) by reading the leading "????" as body separator', () => {
@@ -175,7 +179,7 @@ describe('decodeLossyMangling', () => {
       const kind = detectLossyMangling(value).kind;
       expect(kind).toBe('httpFraming');
       const decoded = decodeLossyMangling(value, kind);
-      expect(decoded.split('\n').length).toBeGreaterThan(1);
+      expect(decoded.split('\r\n').length).toBeGreaterThan(1);
     });
   });
 });

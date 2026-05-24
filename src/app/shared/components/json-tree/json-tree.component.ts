@@ -49,7 +49,7 @@ import { PreferencesService } from '../../../core/preferences/preferences.servic
 import { bucketCount, bucketLineCount } from '../../../core/telemetry/buckets';
 import { isColdAndMark } from '../../../core/telemetry/cold-flag';
 import { LoggerService } from '../../../core/telemetry/logger.service';
-import { detectLossyMangling } from '../../../core/text/lossy-mangling';
+import { detectLossyMangling, type LossyManglingKind } from '../../../core/text/lossy-mangling';
 import { OverflowDetectorDirective } from '../../directives/overflow-detector.directive';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import { JsonValueType } from '../../pipes/json-type.pipe';
@@ -139,6 +139,25 @@ export interface TreeExtractRequest {
   sourceVersion: number;
   replacement: ExtractedJson;
   source: 'rowPillPrimitiveArray' | 'contextMenu' | 'decodedDialog';
+}
+
+/**
+ * Emitted when the user authorizes a same-path, same-version replacement
+ * of a lossy-mangled string leaf with its prefix-decoded form. The
+ * patcher (`patchDecodedString`) re-derives the decoded value from the
+ * current document text + {@link manglingKind}, so the request envelope
+ * is intentionally lean: no `decodedValue` field is carried across the
+ * boundary. Mirrors the {@link TreeSortKeysRequest} precedent where the
+ * mutation rule (sort) lives in the patcher and the request carries
+ * only what cannot be re-derived (`path`). The `sourceVersion` is
+ * captured at the *re-validation* moment in the tree-side
+ * `afterClosed` handler (not at dialog-open time), so a stale Apply
+ * after the document moved on never reaches the home patcher.
+ */
+export interface TreeApplyDecodedRequest {
+  path: (string | number)[];
+  sourceVersion: number;
+  manglingKind: LossyManglingKind;
 }
 
 /**
@@ -680,6 +699,7 @@ export class JsonTreeComponent {
   readonly selectionChange = output<readonly (string | number)[] | null>();
   readonly extractRequest = output<TreeExtractRequest>();
   readonly sortKeysRequest = output<TreeSortKeysRequest>();
+  readonly applyDecodedRequest = output<TreeApplyDecodedRequest>();
   readonly highlightsChange = output<BlobHighlight[]>();
 
   readonly expandLabel = $localize`:@@tree.node.expand:Expand`;
@@ -3456,7 +3476,7 @@ export class JsonTreeComponent {
       .afterClosed()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((result) => {
-        if (result?.extract === true) {
+        if (result?.kind === 'extract') {
           const currentSourceVersion = this.extractSourceVersion() ?? -1;
           const currentCandidate = this.extractCandidate(node);
           const staleDialogClose =
@@ -3473,6 +3493,38 @@ export class JsonTreeComponent {
               sourceVersion: currentSourceVersion,
               replacement: currentCandidate,
               source: 'decodedDialog',
+            });
+          }
+        } else if (result?.kind === 'applyDecoded') {
+          // Re-derive everything from the live tree state. Three
+          // invariants must hold for a non-stale Apply: the source
+          // version must still match, the node identity in the
+          // index must still match (guards against rebuild/replace),
+          // AND the current value at this path must byte-equal the
+          // value captured into the dialog data. The content check
+          // is the asymmetric strength over the Extract branch
+          // (Extract compares candidate text, which encodes content)
+          // and protects against the rare same-node-different-value
+          // path through partial document edits.
+          const currentSourceVersion = this.extractSourceVersion() ?? -1;
+          const currentNode = this.nodeIndex().get(node.pathString);
+          const currentValue = typeof currentNode?.value === 'string' ? currentNode.value : null;
+          const liveDetection = currentValue !== null ? detectLossyMangling(currentValue) : null;
+          const staleApplyClose =
+            currentSourceVersion !== capturedSourceVersion ||
+            currentNode !== node ||
+            currentValue !== value ||
+            liveDetection === null ||
+            liveDetection.kind === 'none';
+          if (staleApplyClose) {
+            this.logger.event('tree.decoded.apply.staleClose', {
+              manglingKind: liveDetection?.kind ?? 'none',
+            });
+          } else {
+            this.applyDecodedRequest.emit({
+              path: node.path,
+              sourceVersion: currentSourceVersion,
+              manglingKind: liveDetection.kind,
             });
           }
         }

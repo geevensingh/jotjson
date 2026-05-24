@@ -1459,6 +1459,37 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
+   * Fired by: `DecodedValueDialogComponent.applyDecoded`
+   *           (`shared/components/json-tree/decoded-value-dialog/...`)
+   *           when the user clicks the Apply button in the
+   *           Inspect-string-value dialog. The button is only visible
+   *           when `manglingActive && decoded` -- i.e. the heuristic
+   *           fired AND the user already flipped the decode toggle on,
+   *           so a fire of this event necessarily implies a
+   *           `manglingKind != 'none'` viewer open earlier in the same
+   *           dialog session.
+   *
+   * The dialog only emits this event + a screen-reader announcement;
+   * the actual document mutation happens in
+   * `HomeComponent.onApplyDecodedRequest` and is observable via
+   * `home.decodedApply.applied`. The pair (`tree.decoded.apply` ->
+   * `home.decodedApply.applied`) is the dialog-click-to-doc-mutation
+   * funnel; the gap is the tree-side re-validation that can drop the
+   * request as stale (`tree.decoded.apply.staleClose`).
+   *
+   * Volume control: bounded-frequency. At most one fire per dialog
+   * close (the dialog closes on Apply click).
+   * Props: { manglingKind: 'httpFraming' }.
+   *          Closed-enum; `'none'` is impossible here because the
+   *          visibility gate forbids it. Forward-compatible with future
+   *          `LossyManglingKind` variants (`'stackTrace'`, `'pem'`, ...).
+   * Privacy: no string contents, no path, no PII. The closed-enum
+   *          `manglingKind` is content-derived but bounded-cardinality.
+   */
+  'tree.decoded.apply',
+
+  /**
+   * Kind: event
    * Fired by: `HomeComponent.onExtractRequest`
    *           (`features/home/home.component.ts`) after a non-stale tree
    *           extract click patches the editor text successfully.
@@ -1616,6 +1647,60 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   `tree.extract.applyFailed`.
    */
   'home.extract.banner.applyFailed',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.onApplyDecodedRequest`
+   *           (`features/home/home.component.ts`) after a successful
+   *           non-stale dialog Apply patches the editor text in place
+   *           via `editor.applyEdit` with the `jotjson-decoded-apply`
+   *           named undo group.
+   * Volume control: bounded-frequency. One per successful Apply; a
+   *   stale or no-op request fires `tree.decoded.apply.staleClose` or
+   *   `home.decodedApply.applyFailed` instead.
+   * Props: { source: 'decodedDialog';
+   *          manglingKind: 'httpFraming' }.
+   *          `source` is a single-value closed-enum today (the dialog
+   *          is the only entry point), kept as an enum for forward-
+   *          compat. `manglingKind` mirrors `tree.decoded.apply` for
+   *          a clean funnel join. No path, no string content.
+   */
+  'home.decodedApply.applied',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent.onApplyDecodedRequest`
+   *           (`features/home/home.component.ts`) when the Apply path
+   *           cannot reach a successful `editor.applyEdit`: the source
+   *           version drifted after `afterClosed`, the patcher threw,
+   *           the editor was not mounted, or `applyEdit` reported the
+   *           edit did not apply.
+   * Props: { reason: 'staleVersion' | 'parseFailed' | 'pathNotFound'
+   *   | 'notString' | 'editorUnavailable' | 'applyEditFailed' | 'unknown' }.
+   *          Closed-enum; `'parseFailed'`, `'pathNotFound'`, `'notString'`
+   *          come from the three documented `decoded.apply.*` throws of
+   *          `patchDecodedString`. `'unknown'` is the catch-all for
+   *          unexpected error messages.
+   */
+  'home.decodedApply.applyFailed',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.emitUndoTelemetry` (case `'decoded.apply'`)
+   *           on snackbar Undo click or when Ctrl+Z (acting on the
+   *           `jotjson-decoded-apply` named undo group) brings the
+   *           editor back to the pre-apply text within ~30s of a
+   *           successful Apply.
+   * Volume control: bounded-frequency. At most one undo per Apply;
+   *   capped at 30s by `pendingReplaceUndo`'s `REPLACE_UNDO_CAP_MS`.
+   * Props: { source: 'snackbar' | 'ctrlZ';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          Mirrors `tree.extract.undo` so a misclick-rate KQL works
+   *          the same way across both mutating dialog surfaces.
+   * Measurements: { undoLatencyMs: number }.
+   * Privacy: no string contents or paths.
+   */
+  'home.decodedApply.undo',
 
   /**
    * Kind: event
@@ -1805,6 +1890,32 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Privacy: no content.
    */
   'tree.extract.dialog.staleClose',
+
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent.openDecodedDialog`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           inside the `dialogRef.afterClosed()` subscription when
+   *           the user clicks the dialog's Apply button but at least
+   *           one of the three stale-detection invariants has been
+   *           violated since dialog-open: (a) the captured
+   *           `sourceVersion` no longer matches
+   *           `extractSourceVersion()`; or (b) the tree-node identity
+   *           in `nodeIndex` has changed (tree rebuild / replace); or
+   *           (c) the current value at this path no longer byte-equals
+   *           the captured `data.value` (a different mutation landed
+   *           at the same path during the dialog session); or the
+   *           live detection returned `'none'` (the mangling was
+   *           already cleared).
+   * Volume control: bounded-frequency. Bounded by decoded-dialog
+   * Apply click frequency.
+   * Props: { manglingKind: 'none' | 'httpFraming' }.
+   *          The live detection's kind, snapshotted at close time.
+   *          `'none'` here is meaningful: it indicates the mangling
+   *          was already cleared by an earlier action.
+   * Privacy: no content.
+   */
+  'tree.decoded.apply.staleClose',
 
   /**
    * Kind: event

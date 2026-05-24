@@ -35,18 +35,21 @@
   }
   @if (manglingActive() && decoded()) {
     <button
-      mat-button
+      mat-stroked-button
       type="button"
-      class="decoded-actions__copy-with-line-breaks"
-      (click)="copyWithLineBreaks()"
+      color="primary"
+      class="decoded-actions__apply"
+      (click)="applyDecoded()"
+      [matTooltip]="applyTooltip"
+      matTooltipPosition="above"
     >
-      <jj-icon name="copy" [size]="18" />
-      <span i18n="@@tree.decoded.dialog.copyWithLineBreaks">Copy with line breaks</span>
+      <jj-icon name="check" [size]="18" />
+      <span i18n="@@tree.decoded.dialog.apply.label">Replace ?? with line breaks</span>
     </button>
   }
   <button mat-button type="button" class="decoded-actions__copy" (click)="copy()">
     <jj-icon name="copy" [size]="18" />
-    <span i18n="@@tree.decoded.dialog.copy">Copy decoded value</span>
+    <span i18n="@@tree.contextMenu.copyValue">Copy value</span>
   </button>
   <button
     mat-flat-button

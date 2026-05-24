@@ -23,7 +23,7 @@ export interface DecodedValueDialogData {
   readonly pathString: string;
   /**
    * Optional. When present, the dialog renders an 'Extract embedded JSON'
-   * button that closes the dialog with `{ extract: true }`. The tree
+   * button that closes the dialog with `{ kind: 'extract' }`. The tree
    * component re-validates at close time.
    */
   readonly extractCandidate?: ExtractedJson;
@@ -37,7 +37,10 @@ export interface DecodedValueDialogData {
   readonly extractPath?: readonly (string | number)[];
 }
 
-export type DecodedValueDialogResult = { extract: true } | undefined;
+export type DecodedValueDialogResult =
+  | { readonly kind: 'extract' }
+  | { readonly kind: 'applyDecoded' }
+  | undefined;
 
 interface DecodedLine {
   readonly index: number;
@@ -136,32 +139,40 @@ export class DecodedValueDialogComponent {
 
   readonly manglingToggleLabel = $localize`:@@tree.decoded.dialog.manglingToggle.label:Decode HTTP "??" framing as line breaks`;
   readonly manglingToggleTooltip = $localize`:@@tree.decoded.dialog.manglingToggle.tooltip:This string looks like it contains HTTP request or response framing whose line breaks were replaced with "??". Toggle to render the framing as multi-line. Body content is preserved verbatim.`;
+  readonly applyTooltip = $localize`:@@tree.decoded.dialog.apply.tooltip:Replaces the "??" markers in this string with real line breaks in the JSON source. Can be undone via the snackbar or Ctrl+Z.`;
 
   extract(): void {
-    this.ref.close({ extract: true });
+    this.ref.close({ kind: 'extract' });
   }
 
   copy(): void {
     void this.clipboardCopy.copyWithToast(this.data.value, {
-      success: $localize`:@@tree.decoded.dialog.copied:Decoded value copied to clipboard.`,
-      failed: $localize`:@@tree.decoded.dialog.copyFailed:Failed to copy decoded value.`,
-      unsupported: $localize`:@@tree.decoded.dialog.copyUnsupported:Copy is not supported in this browser.`,
+      success: $localize`:@@tree.contextMenu.copy.success.value:Value copied to clipboard.`,
+      failed: $localize`:@@tree.contextMenu.copy.failed.value:Failed to copy value.`,
+      unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`,
     });
   }
 
   /**
-   * Copies the prefix-decoded form (with real line breaks) of the raw
-   * value to the clipboard. Visible only when the decode toggle is on.
-   * The raw {@link copy} button continues to copy `data.value`
-   * verbatim, preserving the DESIGN_SPEC §502 copy invariant
-   * ("the dialog's Copy button writes the raw string").
+   * Closes the dialog with `{ kind: 'applyDecoded' }`, signaling to the
+   * parent tree component that the user authorized a same-path,
+   * same-version replacement of the raw mangled string with the
+   * prefix-decoded form (CRLF for `httpFraming`).
+   *
+   * The dialog only emits the intent + a screen-reader announcement
+   * here; the actual document mutation, undo group, snackbar, and
+   * applied-event telemetry are owned by `HomeComponent`
+   * (`onApplyDecodedRequest`). Mirrors how `extract()` hands off to
+   * `HomeComponent.onExtractRequest`.
    */
-  copyWithLineBreaks(): void {
-    const decoded = decodeLossyMangling(this.data.value, this.detection().kind);
-    void this.clipboardCopy.copyWithToast(decoded, {
-      success: $localize`:@@tree.decoded.dialog.copyWithLineBreaks.copied:Decoded value with line breaks copied to clipboard.`,
-      failed: $localize`:@@tree.decoded.dialog.copyWithLineBreaks.failed:Failed to copy decoded value with line breaks.`,
-      unsupported: $localize`:@@tree.decoded.dialog.copyUnsupported:Copy is not supported in this browser.`,
+  applyDecoded(): void {
+    const manglingKind = this.detection().kind;
+    this.ref.close({ kind: 'applyDecoded' });
+    void this.liveAnnouncer.announce(
+      $localize`:@@tree.decoded.dialog.announceApplied:Applied decoded value to source. Use Undo or Ctrl+Z to revert.`,
+    );
+    this.logger.event('tree.decoded.apply', {
+      manglingKind,
     });
   }
 

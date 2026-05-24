@@ -98,9 +98,15 @@ describe('DecodedValueDialogComponent', () => {
       const args = copyWithToast.calls.mostRecent().args;
       expect(args[0]).toBe('multi\nline');
       const messages = args[1] as { success: string; failed: string; unsupported: string };
-      expect(messages.success.length).toBeGreaterThan(0);
-      expect(messages.failed.length).toBeGreaterThan(0);
+      expect(messages.success).toBe('Value copied to clipboard.');
+      expect(messages.failed).toBe('Failed to copy value.');
       expect(messages.unsupported.length).toBeGreaterThan(0);
+    });
+
+    it('renders the copy button with the row-level "Copy value" label', () => {
+      const fixture = createWith({ value: 'a', pathString: '$.x' });
+      const button = (fixture.nativeElement as HTMLElement).querySelector('.decoded-actions__copy');
+      expect(button?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Copy value');
     });
 
     it('does not throw when the underlying copy resolves to false (failed path)', () => {
@@ -217,7 +223,7 @@ describe('DecodedValueDialogComponent', () => {
       expect(extractButton).toBeTruthy();
       extractButton!.click();
       expect(close).toHaveBeenCalledTimes(1);
-      expect(close).toHaveBeenCalledWith({ extract: true });
+      expect(close).toHaveBeenCalledWith({ kind: 'extract' });
     });
   });
 
@@ -311,29 +317,40 @@ describe('DecodedValueDialogComponent', () => {
       expect(copyWithToast.calls.mostRecent().args[0]).toBe(MANGLED_RESPONSE);
     });
 
-    it('shows the Copy-with-line-breaks button only in decoded mode and copies the decoded form', () => {
+    it('shows the Apply button only in decoded mode, closes with applyDecoded, announces and logs', () => {
       const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
       const cmp = fixture.componentInstance;
       // Off by default -> button absent.
       expect(
-        (fixture.nativeElement as HTMLElement).querySelector(
-          '.decoded-actions__copy-with-line-breaks',
-        ),
+        (fixture.nativeElement as HTMLElement).querySelector('.decoded-actions__apply'),
       ).toBeNull();
 
       cmp.toggleDecoded(true);
       fixture.detectChanges();
+      // Reset the toggle-flip telemetry call so we can isolate the apply log below.
+      loggerEvent.calls.reset();
+      liveAnnounce.calls.reset();
+
       const btn = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
-        '.decoded-actions__copy-with-line-breaks',
+        '.decoded-actions__apply',
       );
       expect(btn).toBeTruthy();
+      expect(btn?.textContent?.replace(/\s+/g, ' ').trim()).toContain(
+        'Replace ?? with line breaks',
+      );
       btn!.click();
-      expect(copyWithToast).toHaveBeenCalledTimes(1);
-      const copied = copyWithToast.calls.mostRecent().args[0] as string;
-      expect(copied).not.toBe(MANGLED_RESPONSE);
-      expect(copied).toContain('200 OK\nPragma: no-cache');
-      // Body preserved verbatim, including its own ?? content.
-      expect(copied).toContain('??token=abc');
+
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledWith({ kind: 'applyDecoded' });
+      expect(liveAnnounce).toHaveBeenCalledTimes(1);
+      expect(liveAnnounce.calls.mostRecent().args[0]).toBe(
+        'Applied decoded value to source. Use Undo or Ctrl+Z to revert.',
+      );
+      const applyCalls = loggerEvent.calls
+        .allArgs()
+        .filter((args) => args[0] === 'tree.decoded.apply');
+      expect(applyCalls.length).toBe(1);
+      expect(applyCalls[0]?.[1]).toEqual({ manglingKind: 'httpFraming' });
     });
 
     it('announces the new state via LiveAnnouncer on every flip', () => {

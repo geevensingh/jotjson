@@ -171,7 +171,7 @@
 
 .decoded-actions__extract,
 .decoded-actions__copy,
-.decoded-actions__copy-with-line-breaks {
+.decoded-actions__apply {
   // Material 21 projects non-`mat-icon` button content into an
   // auto-injected `<span class="mdc-button__label">` wrapper, so any
   // `display: inline-flex; gap: 6px` applied to the button host never

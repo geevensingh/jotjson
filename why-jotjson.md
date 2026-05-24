@@ -61,10 +61,14 @@ the dialog detects a string that looks like an HTTP request or
 response whose line breaks were lossily transcoded into `??`
 (common in Microsoft/Azure dependent-service log payloads), it
 offers an opt-in toggle to render the framing as multi-line - body
-content is preserved verbatim, and a second `Copy with line breaks`
-button appears so you can grab either form. The tree row itself
-stays one line tall: the dialog never shifts the layout. Purely
-visual; copy still gives you the literal raw string.
+content is preserved verbatim. Once you've previewed the fix, a
+single **Apply** button rewrites the JSON in place (replacing the
+`??` markers with real CRLF line breaks in the source), with a full
+undo lifecycle: an 8-second snackbar Undo, plus native `Ctrl+Z` via
+a named undo group, so committing the fix is never a one-way trip.
+The tree row itself stays one line tall: the dialog never shifts the
+layout. The dialog's Copy button always grabs the literal raw string,
+preserved across toggle states.
 
 ### Tree view that doesn't freeze on multi-MB blobs
 
