@@ -3,45 +3,51 @@ param location string
 param tags object
 param databaseName string = 'jotjson'
 
-@description('Backup policy type. "Periodic" preserves Azure default; "Continuous" enables Continuous7Days PITR. Continuous->Periodic is one-way; choose carefully.')
+@description('Backup policy type. "Periodic" (default) leaves backup config unmanaged so existing Azure account-level settings are preserved on redeploy -- this is the no-op default for dev / nonprod where backupPolicy was historically unset. "Continuous" enables Continuous7Days PITR explicitly, which is required for Phase 1 of the region migration (see docs/migration-westus2.md). Continuous->Periodic is one-way; choose carefully. Note: PITR restores do not carry over backupPolicy (docs/migration-westus2.md Phase 2 step 4), so the restored account must be redeployed via this template under Continuous to re-state the policy.')
 @allowed(['Periodic', 'Continuous'])
 param backupPolicyType string = 'Periodic'
+
+// Emit backupPolicy ONLY on the Continuous branch via union(); on Periodic
+// (the default) we intentionally omit the property so ARM preserves the
+// existing account-level state. This keeps the no-op promise for the
+// committed dev.bicepparam and nonprod.bicepparam, neither of which sets
+// cosmosBackupPolicyType. See docs/migration-westus2.md "PR-A" section.
+var backupPolicyProperty = backupPolicyType == 'Continuous'
+  ? {
+      backupPolicy: {
+        type: 'Continuous'
+        continuousModeProperties: {
+          tier: 'Continuous7Days'
+        }
+      }
+    }
+  : {}
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: accountName
   location: location
   tags: tags
   kind: 'GlobalDocumentDB'
-  properties: {
-    databaseAccountOfferType: 'Standard'
-    locations: [
-      {
-        locationName: location
-        failoverPriority: 0
+  properties: union(
+    {
+      databaseAccountOfferType: 'Standard'
+      locations: [
+        {
+          locationName: location
+          failoverPriority: 0
+        }
+      ]
+      capabilities: [
+        { name: 'EnableServerless' }
+      ]
+      consistencyPolicy: {
+        defaultConsistencyLevel: 'Session'
       }
-    ]
-    capabilities: [
-      { name: 'EnableServerless' }
-    ]
-    consistencyPolicy: {
-      defaultConsistencyLevel: 'Session'
-    }
-    enableAutomaticFailover: false
-    enableMultipleWriteLocations: false
-    backupPolicy: backupPolicyType == 'Continuous' ? {
-      type: 'Continuous'
-      continuousModeProperties: {
-        tier: 'Continuous7Days'
-      }
-    } : {
-      type: 'Periodic'
-      periodicModeProperties: {
-        backupIntervalInMinutes: 240
-        backupRetentionIntervalInHours: 8
-        backupStorageRedundancy: 'Geo'
-      }
-    }
-  }
+      enableAutomaticFailover: false
+      enableMultipleWriteLocations: false
+    },
+    backupPolicyProperty
+  )
 }
 
 resource db 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' = {

@@ -15,7 +15,7 @@ param appName string = 'jotjson'
 @description('Custom domain for the Static Web App. Leave empty to skip domain binding.')
 param customDomain string = ''
 
-@description('Azure DNS zone name to create in this resource group, e.g. jotjson.com. Empty skips zone creation. Delegate at the registrar by pointing nameservers at the zone outputs.')
+@description('Azure DNS zone name to create in this resource group, e.g. jotjson.com. Empty skips zone creation. Delegate at the registrar by pointing nameservers at the zone outputs. Pairs with existingDnsZoneRg: leave both empty to skip DNS entirely, set dnsZoneName alone to deploy the zone inline, or set both to assume the zone already exists in the given RG and skip creation. Partial-config combinations are silent: the dns module is created only when (dnsZoneName non-empty AND existingDnsZoneRg empty); other combinations (e.g., existingDnsZoneRg set but dnsZoneName empty) leave the dnsNameServers output as an empty array.')
 param dnsZoneName string = ''
 
 @description('SKU tier for the Static Web App.')
@@ -40,13 +40,13 @@ param entraApiAudience string = ''
 @description('Email address to receive M7i operational alerts (boot.failed, app.unhandled, fn-5xx, auth-config). Empty disables email receivers; alerts still fire and surface in the Azure portal Alerts blade. See issue #94 for follow-up.')
 param notificationEmail string = ''
 
-@description('Existing App Insights resource name to reuse instead of creating a new one. When set, must be paired with existingAppInsightsRg. Used during region migration to share telemetry across environments. Leave empty (default) to create a new AI resource.')
+@description('Existing App Insights resource name to reuse instead of creating a new one. Must be paired with existingAppInsightsRg; pairing is enforced PRE-DEPLOY by scripts/migrate-region.mjs (the PR-C migration runbook). When this template is invoked directly via az deployment group create (bypassing the runbook) with only one of the two params set, this template silently treats it as "neither set" and creates a NEW App Insights -- a known footgun documented at docs/migration-westus2.md Phase 1 step 3. Leave empty (default) to create a new AI resource. Used during region migration to share telemetry across environments.')
 param existingAppInsightsName string = ''
 
-@description('Resource group of the existing App Insights resource (see existingAppInsightsName). Must be set when existingAppInsightsName is set; otherwise leave empty.')
+@description('Resource group of the existing App Insights resource (see existingAppInsightsName). Must be paired with existingAppInsightsName; pairing is enforced pre-deploy by scripts/migrate-region.mjs. Setting only this without existingAppInsightsName has no effect (this template silently falls back to creating a new AI). Leave empty (default) to create a new AI resource.')
 param existingAppInsightsRg string = ''
 
-@description('Existing Azure DNS zone resource group. When set, this template assumes the zone already exists in that RG and skips zone creation. Leave empty to deploy the zone inline (current behavior).')
+@description('Existing Azure DNS zone resource group. When set together with dnsZoneName, the template assumes the zone already exists in that RG and skips zone creation (used during region migration after Phase 0 step 6 relocates the zone to rg-jotjson-dns). Leave empty to deploy the zone inline (current behavior). Partial-config interactions with dnsZoneName are documented on that parameter.')
 param existingDnsZoneRg string = ''
 
 @description('When true (default), deploys workbooks, alerts, and action group. Set to false during region migrations to avoid double-deploying monitoring against shared App Insights. The permanent switch supports any future "infra without monitoring" scenario.')
@@ -66,6 +66,16 @@ var tags = {
   env: environmentName
   managedBy: 'bicep'
 }
+
+// External-AI mode: switch on when BOTH existingAppInsightsName and
+// existingAppInsightsRg are set (the documented contract). Pairing is
+// enforced pre-deploy by scripts/migrate-region.mjs; this template
+// itself treats partial config as "neither set" rather than failing,
+// per the boundary choice documented at docs/migration-westus2.md
+// lines 128-135 (deliberate single-source-of-truth for the contract).
+// Defined here -- ahead of its uses -- so a future maintainer touching
+// the AI wiring sees the semantics in one place.
+var useExternalAi = !empty(existingAppInsightsName) && !empty(existingAppInsightsRg)
 
 module cosmos 'modules/cosmosDb.bicep' = {
   name: 'cosmos'
@@ -96,12 +106,11 @@ module insights 'modules/appInsights.bicep' = if (!useExternalAi) {
   }
 }
 
-resource existingAi 'Microsoft.Insights/components@2020-02-02' existing = if (!empty(existingAppInsightsName) && !empty(existingAppInsightsRg)) {
+resource existingAi 'Microsoft.Insights/components@2020-02-02' existing = if (useExternalAi) {
   name: existingAppInsightsName
   scope: resourceGroup(existingAppInsightsRg)
 }
 
-var useExternalAi = !empty(existingAppInsightsName) && !empty(existingAppInsightsRg)
 var aiConnectionString = useExternalAi ? existingAi!.properties.ConnectionString : insights!.outputs.connectionString
 var aiResourceId = useExternalAi ? existingAi!.id : insights!.outputs.componentId
 var aiWorkspaceId = useExternalAi ? existingAi!.properties.WorkspaceResourceId : insights!.outputs.workspaceId
