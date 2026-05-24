@@ -15,7 +15,7 @@ param appName string = 'jotjson'
 @description('Custom domain for the Static Web App. Leave empty to skip domain binding.')
 param customDomain string = ''
 
-@description('Azure DNS zone name to create in this resource group, e.g. jotjson.com. Empty skips zone creation. Delegate at the registrar by pointing nameservers at the zone outputs.')
+@description('Azure DNS zone name to create in this resource group, e.g. jotjson.com. Empty skips zone creation. Delegate at the registrar by pointing nameservers at the zone outputs. Pairs with existingDnsZoneRg: leave both empty to skip DNS entirely, set dnsZoneName alone to deploy the zone inline, or set both to assume the zone already exists in the given RG and skip creation. Partial-config combinations are silent: the dns module is created only when (dnsZoneName non-empty AND existingDnsZoneRg empty); other combinations (e.g., existingDnsZoneRg set but dnsZoneName empty) leave the dnsNameServers output as an empty array.')
 param dnsZoneName string = ''
 
 @description('SKU tier for the Static Web App.')
@@ -40,6 +40,26 @@ param entraApiAudience string = ''
 @description('Email address to receive M7i operational alerts (boot.failed, app.unhandled, fn-5xx, auth-config). Empty disables email receivers; alerts still fire and surface in the Azure portal Alerts blade. See issue #94 for follow-up.')
 param notificationEmail string = ''
 
+@description('Existing App Insights resource name to reuse instead of creating a new one. Must be paired with existingAppInsightsRg; pairing is enforced PRE-DEPLOY by scripts/migrate-region.mjs (the PR-C migration runbook). When this template is invoked directly via az deployment group create (bypassing the runbook) with only one of the two params set, this template silently treats it as "neither set" and creates a NEW App Insights -- a known footgun documented at docs/migration-westus2.md Phase 1 step 3. Leave empty (default) to create a new AI resource. Used during region migration to share telemetry across environments.')
+param existingAppInsightsName string = ''
+
+@description('Resource group of the existing App Insights resource (see existingAppInsightsName). Must be paired with existingAppInsightsName; pairing is enforced pre-deploy by scripts/migrate-region.mjs. Setting only this without existingAppInsightsName has no effect (this template silently falls back to creating a new AI). Leave empty (default) to create a new AI resource.')
+param existingAppInsightsRg string = ''
+
+@description('Existing Azure DNS zone resource group. When set together with dnsZoneName, the template assumes the zone already exists in that RG and skips zone creation (used during region migration after Phase 0 step 6 relocates the zone to rg-jotjson-dns). Leave empty to deploy the zone inline (current behavior). Partial-config interactions with dnsZoneName are documented on that parameter.')
+param existingDnsZoneRg string = ''
+
+@description('When true (default), deploys workbooks, alerts, and action group. Set to false during region migrations to avoid double-deploying monitoring against shared App Insights. The permanent switch supports any future "infra without monitoring" scenario.')
+param deployMonitoring bool = true
+
+@description('Cosmos DB backup policy type, passed through to cosmosDb module. See module for details.')
+@allowed(['Periodic', 'Continuous'])
+param cosmosBackupPolicyType string = 'Periodic'
+
+@description('Storage account SKU, passed through to blobStorage module. See module for details.')
+@allowed(['Standard_LRS', 'Standard_GRS', 'Standard_ZRS', 'Standard_GZRS', 'Standard_RAGRS', 'Standard_RAGZRS'])
+param storageSku string = 'Standard_LRS'
+
 var resourceSuffix = toLower('${appName}-${environmentName}')
 var tags = {
   app: appName
@@ -47,12 +67,23 @@ var tags = {
   managedBy: 'bicep'
 }
 
+// External-AI mode: switch on when BOTH existingAppInsightsName and
+// existingAppInsightsRg are set (the documented contract). Pairing is
+// enforced pre-deploy by scripts/migrate-region.mjs; this template
+// itself treats partial config as "neither set" rather than failing,
+// per the boundary choice documented at docs/migration-westus2.md
+// lines 128-135 (deliberate single-source-of-truth for the contract).
+// Defined here -- ahead of its uses -- so a future maintainer touching
+// the AI wiring sees the semantics in one place.
+var useExternalAi = !empty(existingAppInsightsName) && !empty(existingAppInsightsRg)
+
 module cosmos 'modules/cosmosDb.bicep' = {
   name: 'cosmos'
   params: {
     accountName: 'cosmos-${resourceSuffix}'
     location: location
     tags: tags
+    backupPolicyType: cosmosBackupPolicyType
   }
 }
 
@@ -62,10 +93,11 @@ module storage 'modules/blobStorage.bicep' = {
     accountName: 'st${replace(resourceSuffix, '-', '')}'
     location: location
     tags: tags
+    sku: storageSku
   }
 }
 
-module insights 'modules/appInsights.bicep' = {
+module insights 'modules/appInsights.bicep' = if (!useExternalAi) {
   name: 'insights'
   params: {
     name: 'appi-${resourceSuffix}'
@@ -74,7 +106,20 @@ module insights 'modules/appInsights.bicep' = {
   }
 }
 
-module monitoringActions 'modules/actionGroup.bicep' = {
+resource existingAi 'Microsoft.Insights/components@2020-02-02' existing = if (useExternalAi) {
+  name: existingAppInsightsName
+  scope: resourceGroup(existingAppInsightsRg)
+}
+
+var aiConnectionString = useExternalAi ? existingAi!.properties.ConnectionString : insights!.outputs.connectionString
+var aiResourceId = useExternalAi ? existingAi!.id : insights!.outputs.componentId
+var aiWorkspaceId = useExternalAi ? existingAi!.properties.WorkspaceResourceId : insights!.outputs.workspaceId
+
+// deployMonitoring=false suppresses workbooks/alerts/action group. Used during
+// region migrations to avoid double-deploying monitoring against shared App
+// Insights. Defaults to true; the permanent switch supports any future
+// "infra without monitoring" scenario.
+module monitoringActions 'modules/actionGroup.bicep' = if (deployMonitoring) {
   name: 'monitoringActions'
   params: {
     name: 'ag-${resourceSuffix}'
@@ -98,17 +143,17 @@ var operatorWorkbookContentTemplate = loadTextContent('workbooks/monitoring.json
 var operatorWorkbookContent = replace(
   replace(operatorWorkbookContentTemplate, '__ENVIRONMENT_NAME__', environmentName),
   '__COMPONENT_ID__',
-  insights.outputs.componentId
+  aiResourceId
 )
 
-module operatorWorkbook 'modules/workbook.bicep' = {
+module operatorWorkbook 'modules/workbook.bicep' = if (deployMonitoring) {
   name: 'operatorWorkbook'
   params: {
     displayName: 'JotJSON operator monitoring'
     serializedContent: operatorWorkbookContent
     resourceNameSeed: resourceSuffix
     location: location
-    componentId: insights.outputs.componentId
+    componentId: aiResourceId
     purpose: 'operator-monitoring'
     tags: tags
   }
@@ -118,17 +163,17 @@ var productAnalyticsContentTemplate = loadTextContent('workbooks/product-analyti
 var productAnalyticsContent = replace(
   replace(productAnalyticsContentTemplate, '__ENVIRONMENT_NAME__', environmentName),
   '__COMPONENT_ID__',
-  insights.outputs.componentId
+  aiResourceId
 )
 
-module productAnalyticsWorkbook 'modules/workbook.bicep' = {
+module productAnalyticsWorkbook 'modules/workbook.bicep' = if (deployMonitoring) {
   name: 'productAnalyticsWorkbook'
   params: {
     displayName: 'JotJSON product analytics'
     serializedContent: productAnalyticsContent
     resourceNameSeed: '${resourceSuffix}-analytics'
     location: location
-    componentId: insights.outputs.componentId
+    componentId: aiResourceId
     purpose: 'product-analytics'
     tags: tags
   }
@@ -138,29 +183,29 @@ var swMigrationContentTemplate = loadTextContent('workbooks/sw-migration.json')
 var swMigrationContent = replace(
   replace(swMigrationContentTemplate, '__ENVIRONMENT_NAME__', environmentName),
   '__COMPONENT_ID__',
-  insights.outputs.componentId
+  aiResourceId
 )
 
-module swMigrationWorkbook 'modules/workbook.bicep' = {
+module swMigrationWorkbook 'modules/workbook.bicep' = if (deployMonitoring) {
   name: 'swMigrationWorkbook'
   params: {
     displayName: 'JotJSON SW migration verification'
     serializedContent: swMigrationContent
     resourceNameSeed: '${resourceSuffix}-sw-migration'
     location: location
-    componentId: insights.outputs.componentId
+    componentId: aiResourceId
     purpose: 'sw-migration'
     tags: tags
   }
 }
 
-module monitoringAlerts 'modules/alerts.bicep' = {
+module monitoringAlerts 'modules/alerts.bicep' = if (deployMonitoring) {
   name: 'monitoringAlerts'
   params: {
     namePrefix: resourceSuffix
     location: location
-    workspaceId: insights.outputs.workspaceId
-    actionGroupId: monitoringActions.outputs.id
+    workspaceId: aiWorkspaceId
+    actionGroupId: monitoringActions!.outputs.id
     tags: tags
   }
 }
@@ -180,7 +225,7 @@ module swa 'modules/staticWebApp.bicep' = {
       BLOB_STORAGE_ACCOUNT: storage.outputs.accountName
       AVATAR_CONTAINER: storage.outputs.avatarsContainer
       EXPORT_CONTAINER: storage.outputs.exportsContainer
-      APPLICATIONINSIGHTS_CONNECTION_STRING: insights.outputs.connectionString
+      APPLICATIONINSIGHTS_CONNECTION_STRING: aiConnectionString
       ENTRA_TENANT_ID: entraTenantId
       ENTRA_SPA_CLIENT_ID: entraSpaClientId
       ENTRA_API_CLIENT_ID: entraApiClientId
@@ -190,7 +235,7 @@ module swa 'modules/staticWebApp.bicep' = {
   }
 }
 
-module dns 'modules/dnsZone.bicep' = if (!empty(dnsZoneName)) {
+module dns 'modules/dnsZone.bicep' = if (!empty(dnsZoneName) && empty(existingDnsZoneRg)) {
   name: 'dns'
   params: {
     zoneName: dnsZoneName
@@ -210,10 +255,10 @@ module swaCosmosRole 'modules/cosmosRoleAssignment.bicep' = {
 
 output staticWebAppHostname string = swa.outputs.defaultHostname
 output staticWebAppPrincipalId string = swa.outputs.principalId
-output dnsNameServers array = empty(dnsZoneName) ? [] : dns.outputs.nameServers
+output dnsNameServers array = (empty(dnsZoneName) || !empty(existingDnsZoneRg)) ? [] : dns!.outputs.nameServers
 output cosmosEndpoint string = cosmos.outputs.endpoint
 output storageAccountName string = storage.outputs.accountName
-output appInsightsConnectionString string = insights.outputs.connectionString
-output operatorWorkbookId string = operatorWorkbook.outputs.id
-output productAnalyticsWorkbookId string = productAnalyticsWorkbook.outputs.id
-output swMigrationWorkbookId string = swMigrationWorkbook.outputs.id
+output appInsightsConnectionString string = aiConnectionString
+output operatorWorkbookId string = deployMonitoring ? operatorWorkbook!.outputs.id : ''
+output productAnalyticsWorkbookId string = deployMonitoring ? productAnalyticsWorkbook!.outputs.id : ''
+output swMigrationWorkbookId string = deployMonitoring ? swMigrationWorkbook!.outputs.id : ''
