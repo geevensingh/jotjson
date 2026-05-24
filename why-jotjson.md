@@ -67,8 +67,9 @@ single **Apply** button rewrites the JSON in place (replacing the
 undo lifecycle: an 8-second snackbar Undo, plus native `Ctrl+Z` via
 a named undo group, so committing the fix is never a one-way trip.
 The tree row itself stays one line tall: the dialog never shifts the
-layout. The dialog's Copy button always grabs the literal raw string,
-preserved across toggle states.
+layout. The dialog's Copy button is WYSIWYG: if you flipped to decoded
+view it gives you the CRLF-formatted text, if you left it raw it gives
+you the literal string with the `??` markers.
 
 ### Tree view that doesn't freeze on multi-MB blobs
 

@@ -146,7 +146,7 @@ export class DecodedValueDialogComponent {
   }
 
   copy(): void {
-    void this.clipboardCopy.copyWithToast(this.data.value, {
+    void this.clipboardCopy.copyWithToast(this.displayValue(), {
       success: $localize`:@@tree.contextMenu.copy.success.value:Value copied to clipboard.`,
       failed: $localize`:@@tree.contextMenu.copy.failed.value:Failed to copy value.`,
       unsupported: $localize`:@@tree.contextMenu.copy.unsupported:Copy is not supported in this browser.`,

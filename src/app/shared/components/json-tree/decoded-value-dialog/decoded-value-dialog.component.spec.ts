@@ -88,7 +88,7 @@ describe('DecodedValueDialogComponent', () => {
   });
 
   describe('copy', () => {
-    it('routes copy through ClipboardCopyService.copyWithToast with the raw value', () => {
+    it('routes copy through ClipboardCopyService.copyWithToast with the currently displayed value', () => {
       const fixture = createWith({ value: 'multi\nline', pathString: '$.note' });
       const button = (fixture.nativeElement as HTMLElement).querySelector(
         '.decoded-actions__copy',
@@ -296,25 +296,33 @@ describe('DecodedValueDialogComponent', () => {
       expect(bodyLine).toContain('??token=abc');
     });
 
-    it('raw Copy button copies the raw value in both toggle states', () => {
+    it('Copy button mirrors the toggle: raw when off, decoded when on', () => {
       const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
       const cmp = fixture.componentInstance;
       const rawCopy = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
         '.decoded-actions__copy',
       );
       expect(rawCopy).toBeTruthy();
+      // Toggle off (default): Copy writes the raw ??-mangled string verbatim.
       rawCopy!.click();
       expect(copyWithToast).toHaveBeenCalledTimes(1);
       expect(copyWithToast.calls.mostRecent().args[0]).toBe(MANGLED_RESPONSE);
 
       cmp.toggleDecoded(true);
       fixture.detectChanges();
-      const rawCopyAfter = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      const decodedCopy = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
         '.decoded-actions__copy',
       );
-      rawCopyAfter!.click();
+      // Toggle on: Copy writes the CRLF-decoded form (what the user is seeing).
+      decodedCopy!.click();
       expect(copyWithToast.calls.count()).toBe(2);
-      expect(copyWithToast.calls.mostRecent().args[0]).toBe(MANGLED_RESPONSE);
+      const written = copyWithToast.calls.mostRecent().args[0] as string;
+      expect(written).not.toBe(MANGLED_RESPONSE);
+      expect(written).toContain('200 OK\r\n');
+      expect(written).toContain('Pragma: no-cache\r\n');
+      // Body separator + body preservation (verifies displayValue, not just any decoded form).
+      expect(written).toContain('\r\n\r\n{"organizationId":"e674a4a6"');
+      expect(written).toContain('??token=abc');
     });
 
     it('shows the Apply button only in decoded mode, closes with applyDecoded, announces and logs', () => {
