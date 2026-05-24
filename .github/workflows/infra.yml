@@ -232,6 +232,15 @@ jobs:
           ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
           ENTRA_API_AUDIENCE: ${{ secrets.ENTRA_API_AUDIENCE }}
+        # NEVER add `--mode Complete` to this command. Complete mode
+        # deletes resources in rg-jotjson-dev that are not declared in
+        # this deployment template. The template intentionally does
+        # not manage Azure-auto-created resources such as Application
+        # Insights Smart Detection action groups; the `jotjson.com`
+        # DNS zone is also not managed by this template (suppressed via
+        # `existingDnsZoneRg` in infra/parameters/dev.bicepparam; see
+        # docs/migration-westus2.md Phase 0 step 6). Incremental mode
+        # (the default) leaves them alone.
         run: |
           az deployment group create \
             --resource-group rg-jotjson-dev \
