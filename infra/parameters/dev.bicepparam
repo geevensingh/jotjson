@@ -10,12 +10,15 @@ param staticWebAppSku = 'Standard'
 param customDomain = ''
 param dnsZoneName = 'jotjson.com'
 
-// Azure DNS zone for jotjson.com lives in rg-jotjson-dns (relocated in
-// Phase 0 of the westus2 migration -- see docs/migration-westus2.md
-// Phase 0 step 6). Removing this line or changing its value without
-// first moving the zone back will cause the next infra.yml deploy to
-// create a phantom authoritative zone for jotjson.com here, silently
-// split-braining DNS.
+// DNS zone jotjson.com is not managed by this template; the `dns`
+// module is suppressed while `existingDnsZoneRg` is non-empty. The
+// zone's current resource group and the operator-run relocation
+// sequence are documented in docs/migration-westus2.md Phase 0
+// step 6. Removing this line or clearing its value would re-enable
+// the `dns` module and have the next deploy attempt to manage
+// `jotjson.com` in rg-jotjson-dev, conflicting with the live zone
+// managed outside this template -- the textbook split-brain DNS
+// failure mode.
 param existingDnsZoneRg = 'rg-jotjson-dns'
 
 // Entra External ID - populate via `-p` overrides or env-specific param file.
