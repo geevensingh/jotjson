@@ -2,12 +2,16 @@ param accountName string
 param location string
 param tags object
 
+@description('Storage account SKU. Default Standard_LRS matches historical behavior; Standard_GZRS recommended for production.')
+@allowed(['Standard_LRS', 'Standard_GRS', 'Standard_ZRS', 'Standard_GZRS', 'Standard_RAGRS', 'Standard_RAGZRS'])
+param sku string = 'Standard_LRS'
+
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: accountName
   location: location
   tags: tags
   sku: {
-    name: 'Standard_LRS'
+    name: sku
   }
   kind: 'StorageV2'
   properties: {
