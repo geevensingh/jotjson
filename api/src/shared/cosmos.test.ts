@@ -230,6 +230,17 @@ describe('isCosmosPreconditionFailed', () => {
     expect(isCosmosPreconditionFailed(undefined)).toBe(false);
     expect(isCosmosPreconditionFailed('precondition')).toBe(false);
   });
+
+  it("does not match digit-string '412' (intentional asymmetry with scripts/cosmos-back-sync.mjs:getErrorCode)", () => {
+    // The script-side normalizer accepts digit-string codes because
+    // it spans multiple SDK call sites (read 404, write 409/412)
+    // where defensive normalization is justified. This helper only
+    // classifies the `Items#replace` 412 shape and has no observed
+    // evidence of digit-string emission. Pinning the asymmetry here
+    // ensures a future contributor reading the JSDoc cross-reference
+    // does not accidentally broaden the predicate to match.
+    expect(isCosmosPreconditionFailed({ code: '412' })).toBe(false);
+  });
 });
 
 describe('replaceWithIfMatch', () => {
