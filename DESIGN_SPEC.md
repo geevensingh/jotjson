@@ -1408,6 +1408,82 @@ cannot confuse them for prod:
     own CSP context at script evaluation, that's how service workers
     work; it just never makes a fetch that would be subject to that
     context.
+  - **File handlers** (`manifest.webmanifest` -> `file_handlers` +
+    `launch_handler`): once the user installs JotJSON as a PWA on a
+    Chromium-based browser (Chrome, Edge, Brave, Arc, etc.) the
+    install registers JotJSON with the OS as a handler for
+    `.json`, `.jsonc`, `.json5`, and `.webmanifest`. The user can
+    then:
+    - Double-click a `.json` file in Explorer / Finder / a Linux
+      file manager and have it open in JotJSON, or
+    - Right-click -> Open with -> JotJSON, or
+    - Run `start data.json` (Windows) / `open -a JotJSON data.json`
+      (macOS) / `xdg-open data.json` (Linux desktop) from a terminal.
+    Mechanism: `file_handlers[].action: "/"` lands launches on the
+    home route; the W3C Launch Handler API's `window.launchQueue`
+    delivers `FileSystemFileHandle`s into the running app via a
+    `setConsumer` callback that runs at app boot. The
+    `LaunchQueueController` singleton in `core/upload/` registers
+    `setConsumer` once at app boot (under `isPlatformBrowser`); the
+    `HomeComponent` registers a handler with the controller in
+    `ngOnInit` and unregisters in `ngOnDestroy`. The ingress flows
+    through the same `onFilesReceived(files, 'osLaunch')` path as
+    drag-and-drop and the toolbar Upload button, so all existing
+    safety nets apply (binary-content detector, 5 MB upload cap,
+    extract-from-mixed-text banner, draft-overwrite Undo).
+    - **`client_mode: "navigate-new"`**: every OS launch opens a
+      **fresh** PWA window. This preserves any `/s/:slug` editing
+      context, unsaved drafts, and the snackbar Undo affordance in
+      an already-open JotJSON window.
+    - **`launch_type` is intentionally omitted** from the manifest -
+      the per-handler `launch_type` member is not part of the
+      stable Chromium spec; the default (one window per launch)
+      gives the right semantics.
+    - **Chromium-only**: Firefox and Safari do not implement the
+      W3C Launch Handler API. Non-Chromium users see zero behavior
+      change and continue to use drag-and-drop / Upload button /
+      paste / share-link to ingest JSON.
+    - **Install-time disclosure**: Chromium's install UI surfaces
+      the registered file-type associations to the user before
+      install. Including `.webmanifest` in `file_handlers[].accept`
+      is a deliberate developer-convenience choice (JotJSON viewing
+      another PWA's install manifest is a sensible default); users
+      who prefer to keep their existing `.webmanifest` association
+      can simply not install JotJSON, or override per-file via
+      "Open with -> Choose another application".
+    - **Multi-file launches**: Chromium does not currently deliver
+      multiple files to a single launch consumer call, but the
+      W3C spec allows it. The controller truncates at the handle
+      layer (only `getFile()` on the first handle) to avoid the
+      OS permission-prompt flood. The downstream `tooMany`
+      validator never trips because the controller has already
+      reduced the launch to a single file.
+    - **Error feedback**: if `FileSystemFileHandle.getFile()`
+      rejects (permission decline, file moved/deleted between
+      Explorer click and PWA focus), the controller delivers an
+      error event to the handler; `HomeComponent` opens a
+      dismissable "Could not open the file." snackbar and the
+      controller logs the `home.fileHandler.readFailed`
+      telemetry token (no filename or path is captured).
+    - **Manual verification recipe**:
+      1. Build and serve the app locally (or open the deployed
+         site) in a Chromium-based browser.
+      2. Install the PWA via the omnibox install icon (or via
+         the `beforeinstallprompt` path once the install affordance
+         lands).
+      3. Open Explorer / Finder; locate a `.json` file.
+      4. Double-click the file (or right-click -> Open with ->
+         JotJSON; or `start data.json` from a terminal). Confirm
+         that a fresh JotJSON window opens with the file content
+         loaded in the editor and the "Opened data.json." snackbar
+         visible.
+    - **Forward-compatibility hook**: the controller exposes a
+      `currentFileHandle: Signal<FileSystemFileHandle | null>`
+      that is set on every launch. v1 does not consume it; it
+      is reserved for a future write-back path (via
+      `FileSystemFileHandle.createWritable()`) that would
+      let the user save edits directly back to the launched
+      file without re-prompting via picker.
 - **Planned polish (post-v1):**
   - **Install button**: handle `beforeinstallprompt` in the header to offer a subtle "Install JotJSON" affordance; hide once installed. Today users get Chrome's omnibox install icon, which requires the minimal SW above - this is the **sole functional purpose** of `src/sw.worker.ts`. If Chromium ever decouples installability from the SW requirement, the SW becomes a candidate for deletion.
   - **Manifest screenshots**: add at least one wide and one narrow `screenshots` entry to the manifest for richer install prompts (not yet present in `manifest.webmanifest`).
