@@ -2334,10 +2334,28 @@ export class HomeComponent implements OnInit, OnDestroy {
     try {
       result = patchExtractedValue(priorText, event.path, event.replacement);
     } catch (error) {
-      this.logger.warn('tree.extract.applyFailed', {
-        reason: error instanceof Error ? error.message : 'unknown',
-      });
-      return;
+      const reason = error instanceof Error ? error.message : null;
+      switch (reason) {
+        case 'extract.patch.parse-failed':
+          this.logger.warn('tree.extract.applyFailed', { reason: 'parseFailed' });
+          return;
+        case 'extract.patch.path-not-found':
+          this.logger.warn('tree.extract.applyFailed', { reason: 'pathNotFound' });
+          return;
+        default: {
+          // Patcher's documented contract is the two extract.patch.*
+          // cases above; if a third throw appears (patcher regression)
+          // or an unexpected runtime fault leaks through (e.g. an
+          // internal jsonc-parser error, OOM), log via `error` so the
+          // cause is preserved in App Insights `exceptions` without
+          // leaking the raw message into `customDimensions`. Closed-
+          // enum `source` prop keeps the warn channel's reason union
+          // clean. Mirrors `onSortKeysRequest`'s default branch.
+          const cause = error instanceof Error ? error : new Error(String(error));
+          this.logger.error('tree.extract.unexpectedError', cause, { source: 'patcher' });
+          return;
+        }
+      }
     }
 
     const editor = this.editor();
