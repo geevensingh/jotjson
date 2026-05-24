@@ -637,6 +637,27 @@ export const TELEMETRY_MESSAGE_IDS = [
   'home.upload.readFailed',
 
   /**
+   * Severity: error
+   * Fired by: `LaunchQueueController` (`core/upload/launch-queue-controller.service.ts`)
+   *           when `FileSystemFileHandle.getFile()` rejects after an OS
+   *           file-association launch (PWA `file_handlers` +
+   *           `launchQueue`). Causes include: the user declined the
+   *           read permission in Chromium's prompt; the file was
+   *           renamed / moved / deleted between OS click and PWA
+   *           focus; transient disk I/O failure.
+   * Volume control: bounded-frequency. One per OS launch, only on the
+   *   error path; happy path emits `upload.handle` with
+   *   `source='osLaunch'`.
+   * Privacy: no filename, no path; the underlying rejection lands in
+   *   `exceptions` via `logger.error`'s second argument and the
+   *   `TelemetryService` privacy initializer still strips URLs /
+   *   query strings.
+   * Exception: the unknown rejection value from
+   *   `FileSystemFileHandle.getFile()`.
+   */
+  'home.fileHandler.readFailed',
+
+  /**
    * Severity: info
    * Fired by: `HomeComponent.onFilesReceived` (`binary` branch)
    *           (`features/home/home.component.ts`)
@@ -706,9 +727,14 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           (`tooLarge`, `binary`, `readFailed`) keep their
    *           existing warn tokens; this event counts only
    *           successful uploads.
-   * Props: { sizeBytesBucket: SizeBucket; source: 'drag' | 'pick' }.
+   * Props: { sizeBytesBucket: SizeBucket; source: 'drag' | 'pick' | 'osLaunch' }.
    *   `'drag'` = files via the document drag-drop controller;
-   *   `'pick'` = the toolbar Upload button (`<input type="file">`).
+   *   `'pick'` = the toolbar Upload button (`<input type="file">`);
+   *   `'osLaunch'` = files delivered via the OS file-association launch
+   *     (PWA `file_handlers` + `launchQueue`; Chromium-only, requires
+   *     PWA install). Additive enum extension: existing dashboards
+   *     filtering on `'drag'` / `'pick'` continue to return correct
+   *     results.
    * Measurements: { sizeBytes: number; fileReadMs: number;
    *   parseMs: number; syncHandlerMs: number; firstPaintMs: number }.
    *   See `paste.handle` for `parseMs` / `syncHandlerMs` /
@@ -724,10 +750,12 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           extracted-JSON candidate is installed and the M7p
    *           extract banner therefore becomes visible.
    * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
-   *   | 'upload.drag' }. `'paste'` = toolbar Paste button (clipboard
-   *   read); `'editor.paste'` = native Monaco paste inside the
-   *   editor; `'upload.pick'` = toolbar Upload button; `'upload.drag'`
-   *   = files dropped onto the document.
+   *   | 'upload.drag' | 'upload.osLaunch' }. `'paste'` = toolbar Paste
+   *   button (clipboard read); `'editor.paste'` = native Monaco paste
+   *   inside the editor; `'upload.pick'` = toolbar Upload button;
+   *   `'upload.drag'` = files dropped onto the document;
+   *   `'upload.osLaunch'` = files delivered via the OS file-association
+   *   launch (PWA `file_handlers` + `launchQueue`).
    * Measurements: { blockCount: number; preservesComments: 0 | 1;
    *   hasComments: 0 | 1; proseSegments: number }. `blockCount` is the
    *   number of JSON blocks the extractor recovered from the mixed
@@ -757,7 +785,8 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           NOT additionally fire `home.extract.banner.dismiss`
    *           with `reason='content.changed'` for this candidate.
    * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
-   *   | 'upload.drag' } - mirrors `home.extract.banner.shown`.
+   *   | 'upload.drag' | 'upload.osLaunch' } - mirrors
+   *   `home.extract.banner.shown`.
    * Measurements: { blockCount: number; preservesComments: 0 | 1;
    *   hasComments: 0 | 1; proseSegments: number } - mirrors
    *   `home.extract.banner.shown` so accept-rate by block-count,
@@ -780,7 +809,8 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           Accept does NOT emit this event - see
    *           `home.extract.banner.accept`.
    * Props: { source: 'paste' | 'editor.paste' | 'upload.pick'
-   *   | 'upload.drag'; reason: 'user.click' | 'content.changed' }.
+   *   | 'upload.drag' | 'upload.osLaunch'; reason: 'user.click'
+   *   | 'content.changed' }.
    *   `source` is whatever path produced the candidate that is now
    *   being dismissed (carried on the `extractedCandidate` signal).
    * Measurements: { blockCount: number; proseSegments: number }.
@@ -1559,7 +1589,7 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Volume control: bounded-frequency. At most one undo per
    *   banner-accept extract; capped at 30s by `pendingExtractUndo`.
    * Props: { source: 'snackbar' | 'ctrlZ';
-   *          pasteSource: 'paste' | 'editor.paste' | 'upload.pick' | 'upload.drag';
+   *          pasteSource: 'paste' | 'editor.paste' | 'upload.pick' | 'upload.drag' | 'upload.osLaunch';
    *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
    *          `source` distinguishes the undo entry path; `pasteSource`
    *          mirrors `home.extract.banner.{shown,accept}` so an
@@ -1596,11 +1626,16 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           path) while the pending replace-undo window is still open.
    * Volume control: bounded-frequency. One event per upload replace
    *   action that is undone.
-   * Props: { source: 'snackbar' | 'ctrlZ'; trigger: 'pick' | 'drag';
-   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   * Props: { source: 'snackbar' | 'ctrlZ'; trigger: 'pick' | 'drag'
+   *          | 'osLaunch'; undoLatencyMsBucket: '<1s' | '1-5s'
+   *          | '5s+' }.
    *          `source` distinguishes the undo entry path; `trigger`
    *          preserves whether the original replacement came from the
-   *          file picker or drag-drop; `undoLatencyMsBucket` supports
+   *          file picker, drag-drop, or OS file-association launch
+   *          (PWA `file_handlers` + `launchQueue`; Chromium-only,
+   *          requires PWA install). Additive enum extension: existing
+   *          dashboards filtering on `'pick'` / `'drag'` continue to
+   *          return correct results. `undoLatencyMsBucket` supports
    *          misclick-rate queries without using raw time as a
    *          dimension.
    * Measurements: { undoLatencyMs?: number }. Raw wall-clock latency

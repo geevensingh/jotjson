@@ -172,6 +172,18 @@ months), and you can choose friendly phrases ("yesterday") vs. always-
 numeric ("in 1 day"). Plus separate toggles for whether unzoned ISO
 strings are read as UTC or local.
 
+### Install once, open `.json` from your OS
+
+Install JotJSON as a PWA in any Chromium-based browser and your OS
+registers it as a real handler for `.json`, `.jsonc`, `.json5`, and
+`.webmanifest`. Double-click a JSON file in Explorer or Finder, pick
+JotJSON from the right-click "Open with" menu, or run
+`start data.json` (Windows) / `open -a JotJSON data.json` (macOS) /
+`xdg-open data.json` (Linux desktop) from your terminal -- the file
+opens in a fresh JotJSON window with the editor already loaded.
+Competing online JSON tools don't register as a file handler, so
+they're locked behind a browser-tab + manual-upload step every time.
+
 ---
 
 ## Plus the basics, done well

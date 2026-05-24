@@ -543,6 +543,33 @@ retains `source: rowButton` for the decoded-pill cohort. Normalize the
 extract event before comparing pre- and post-deploy cohorts or joining
 across the two events.
 
+#### File-ingress source flow
+
+The `FileIngressSource` enum (`'pick'` / `'drag'` / `'osLaunch'`) is
+the canonical name for the upload-ingress dimension. Several
+telemetry events embed it verbatim or via a derived enum:
+
+| Event | Prop | Closed enum |
+|-------|------|-------------|
+| `upload.handle` | `source` | `'pick'` / `'drag'` / `'osLaunch'` |
+| `home.upload.undo` | `trigger` | `'pick'` / `'drag'` / `'osLaunch'` |
+| `home.extract.banner.{shown,accept,dismiss,undo}` | `pasteSource` | `'paste'` / `'editor.paste'` / `'upload.pick'` / `'upload.drag'` / `'upload.osLaunch'` |
+
+`'osLaunch'` (and the derived `'upload.osLaunch'`) was added in v1.2
+for files delivered via the PWA `file_handlers` + `launchQueue`
+ingress. The extension is additive: existing dashboards that filter
+on `'pick'` / `'drag'` (or `'upload.pick'` / `'upload.drag'`)
+continue to return correct counts but silently exclude the new
+bucket. To include OS-launched ingress, widen the filter or switch
+to a `startswith "upload."` / `in ('pick', 'drag', 'osLaunch')`
+predicate. `home.extract.banner.applyFailed` has no `pasteSource`
+prop and is correctly outside this cascade. Future ingress additions
+(e.g., a Web Share Target hook) should extend the
+`FileIngressSource` union at the source and update the three event
+prop docs above; the `FILE_INGRESS_TO_EXTRACT_SOURCE` and
+`FILE_INGRESS_TO_UNDO_TRIGGER` boundary maps in
+`home.component.ts` will fail to compile until updated.
+
 ```kusto
 customEvents
 | where name == "tree.extract.click"
