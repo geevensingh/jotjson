@@ -68,6 +68,7 @@ import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.servi
 import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
 import type { SuggestionCandidate } from '../../core/title-suggester/types';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
+import { LaunchQueueController } from '../../core/upload/launch-queue-controller.service';
 import { validateAndReadSingleFile } from '../../core/upload/upload-file-validator';
 import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { JsonEditorComponent } from '../../shared/components/json-editor/json-editor.component';
@@ -122,7 +123,20 @@ const SK_EOF = 17;
  * persisted shape is independent of the UI surface.
  */
 type PaneVisibility = 'both' | 'editor-only' | 'tree-only';
-type UploadSource = 'drag' | 'pick';
+/**
+ * The user-action that delivered files into the home editor. Closed-enum
+ * so telemetry dimensions are queryable:
+ * - `'drag'`: files dropped onto the document.
+ * - `'pick'`: toolbar Upload button (`<input type="file">`).
+ * - `'osLaunch'`: files delivered via the OS file-association launch
+ *   (PWA `file_handlers` + `launchQueue`; Chromium-only).
+ *
+ * Renamed from `UploadSource` after the M-PWA plan added `'osLaunch'`:
+ * the OS launch path isn't really an upload (no `<input type=file>`,
+ * no drop overlay), so the type name now describes the broader
+ * "anything that lands files in the editor" surface.
+ */
+type FileIngressSource = 'drag' | 'pick' | 'osLaunch';
 
 type ColdBootClipboardCandidate = {
   text: string;
@@ -139,7 +153,49 @@ type ColdBootClipboardReadRaceResult =
  * to gate the auto-focus-on-show behaviour (only `'paste'` auto-focuses
  * so Ctrl+V or drag-drop don't steal focus from a typing user).
  */
-type ExtractSource = 'paste' | 'editor.paste' | 'upload.pick' | 'upload.drag';
+type ExtractSource = 'paste' | 'editor.paste' | 'upload.pick' | 'upload.drag' | 'upload.osLaunch';
+
+/**
+ * Closed-enum mapping from a `FileIngressSource` (user action that
+ * delivered the files) to the `ExtractSource` dimension carried on the
+ * three `home.extract.banner.{shown,accept,dismiss}` telemetry events.
+ * Replaces the previous `source === 'pick' ? 'upload.pick' : 'upload.drag'`
+ * ternaries that silently mis-bucketed the new `'osLaunch'` value as
+ * `'upload.drag'` (advocate A1 in the M-PWA plan).
+ */
+const FILE_INGRESS_TO_EXTRACT_SOURCE: Readonly<Record<FileIngressSource, ExtractSource>> = {
+  drag: 'upload.drag',
+  pick: 'upload.pick',
+  osLaunch: 'upload.osLaunch',
+};
+
+/**
+ * Closed-enum label for the `trigger` prop on `home.upload.undo`
+ * telemetry. Declared as its own type (rather than a passthrough of
+ * `FileIngressSource`) so the next `FileIngressSource` widen forces a
+ * compile-time decision at `FILE_INGRESS_TO_UNDO_TRIGGER` below
+ * rather than silently widening the documented closed-enum on
+ * `home.upload.undo.trigger` via `pending.uploadTrigger`. Mirrors the
+ * boundary discipline already established by
+ * `FILE_INGRESS_TO_EXTRACT_SOURCE` (six lines above) for
+ * `home.extract.banner.*.pasteSource`.
+ */
+type UploadTriggerLabel = 'drag' | 'pick' | 'osLaunch';
+
+/**
+ * Closed-enum mapping from a `FileIngressSource` (user action that
+ * delivered the files) to the `trigger` prop on `home.upload.undo`
+ * telemetry. Identity-mapped today; the indirection exists so the
+ * next `FileIngressSource` addition (e.g., a future Web Share Target
+ * ingress) fails to compile here rather than silently flowing through
+ * `pending.uploadTrigger` into the telemetry event. Mirrors
+ * `FILE_INGRESS_TO_EXTRACT_SOURCE` above.
+ */
+const FILE_INGRESS_TO_UNDO_TRIGGER: Readonly<Record<FileIngressSource, UploadTriggerLabel>> = {
+  drag: 'drag',
+  pick: 'pick',
+  osLaunch: 'osLaunch',
+};
 
 type SignInRestoreSnapshot = {
   slug: string | null;
@@ -235,8 +291,8 @@ type PendingReplaceUndoUploadExtras = {
   priorSuggestedTitles: readonly SuggestionCandidate[];
   priorExtractedCandidate: ExtractedCandidate | null;
   priorUploadError: { filename: string } | null;
-  /** Whether the upload originated from the file-picker or a drag-drop. */
-  uploadTrigger: UploadSource;
+  /** Whether the upload originated from the file-picker, a drag-drop, or an OS launch. */
+  uploadTrigger: UploadTriggerLabel;
 };
 
 type PendingReplaceUndoFormatExtras = {
@@ -383,6 +439,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly clipboardCopy = inject(ClipboardCopyService);
   private readonly logger = inject(LoggerService);
   private readonly dropController = inject(DocumentDropController);
+  private readonly launchQueueController = inject(LaunchQueueController);
   private readonly beaconNav = inject(BeaconNavigationService);
   private readonly loadingSplash = inject(LoadingSplashService);
   protected readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
@@ -391,6 +448,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly dropActive = this.dropController.dropActive;
 
   private disposeDropHandler?: () => void;
+  private disposeLaunchHandler?: () => void;
   private destroyed = false;
   private coldBootClipboardEvaluated = false;
   private coldBootClipboardCandidate: ColdBootClipboardCandidate | null = null;
@@ -2736,19 +2794,32 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.disposeDropHandler = this.dropController.registerEditorHandler((files) => {
       void this.onFilesReceived(files, 'drag');
     });
+    this.disposeLaunchHandler = this.launchQueueController.registerHandler(async (event) => {
+      if (event.kind === 'error') {
+        this.snack.open(
+          $localize`:@@home.osLaunch.error.unreadable:Could not open the file.`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 6000 },
+        );
+        return;
+      }
+      await this.onFilesReceived(event.files, 'osLaunch');
+    });
   }
 
   ngOnDestroy(): void {
     this.destroyed = true;
     this.disposeDropHandler?.();
     this.disposeDropHandler = undefined;
+    this.disposeLaunchHandler?.();
+    this.disposeLaunchHandler = undefined;
   }
 
   async onUpload(file: File): Promise<void> {
     await this.onFilesReceived([file], 'pick');
   }
 
-  private async onFilesReceived(files: readonly File[], source: UploadSource): Promise<void> {
+  private async onFilesReceived(files: readonly File[], source: FileIngressSource): Promise<void> {
     const handlerStartedAt = performance.now();
     const fileReadStartedAt = performance.now();
     const result = await validateAndReadSingleFile(files);
@@ -2773,7 +2844,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         if (unescaped === priorText) {
           this.suggestedTitlesForMenu.set([]);
           this.lastFilename.set(filename);
-          this.runExtractorOnCurrentContent(source === 'pick' ? 'upload.pick' : 'upload.drag');
+          this.runExtractorOnCurrentContent(FILE_INGRESS_TO_EXTRACT_SOURCE[source]);
         } else {
           // Capture the full pre-upload side-state for snackbar Undo /
           // Ctrl+Z. Six fields mutated by the happy path:
@@ -2799,7 +2870,7 @@ export class HomeComponent implements OnInit, OnDestroy {
             priorSuggestedTitles,
             priorExtractedCandidate,
             priorUploadError,
-            uploadTrigger: source,
+            uploadTrigger: FILE_INGRESS_TO_UNDO_TRIGGER[source],
             // `applyReplaceWithFallback` bumps `viewResetToken` (either
             // via `replaceAll`'s mirror at line 1672 or the legacy
             // `setContent`+token bump fallback). Record the post-bump
@@ -2812,9 +2883,11 @@ export class HomeComponent implements OnInit, OnDestroy {
           this.resetHighlightsForDocumentReplacement();
           this.lastFilename.set(filename);
           this.suggestedTitlesForMenu.set([]);
-          this.runExtractorOnCurrentContent(source === 'pick' ? 'upload.pick' : 'upload.drag');
+          this.runExtractorOnCurrentContent(FILE_INGRESS_TO_EXTRACT_SOURCE[source]);
           this.openReplaceUndoSnack(
-            $localize`:@@home.upload.snackbar.uploaded:Uploaded ${this.formatFilenameForSnack(filename)}:filename:.`,
+            source === 'osLaunch'
+              ? $localize`:@@home.osLaunch.snackbar.opened:Opened ${this.formatFilenameForSnack(filename)}:filename:.`
+              : $localize`:@@home.upload.snackbar.uploaded:Uploaded ${this.formatFilenameForSnack(filename)}:filename:.`,
             $localize`:@@home.upload.snackbar.undo:Undo`,
           );
         }
