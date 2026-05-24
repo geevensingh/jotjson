@@ -516,7 +516,7 @@ no PII.
 
 | name | type | values |
 | --- | --- | --- |
-| to | string | `decoded` (turning the toggle on; the dialog re-renders the value with the prefix decoder substituting `??` -> `\n` in the header section) or `raw` (turning the toggle back off). |
+| to | string | `decoded` (turning the toggle on; the dialog re-renders the value with the prefix decoder substituting `??` -> CRLF: `\r\n` between header lines, `\r\n\r\n` at the header/body boundary) or `raw` (turning the toggle back off). The decoder writes CRLF *characters* into the string value; the JSON source keeps the canonical `\r\n` escape sequence form. |
 
 **Measurements:** none.
 
@@ -533,6 +533,127 @@ customEvents
     | where tostring(customDimensions.to) == "decoded"
     | summarize count())
 | extend engagementRate = round(100.0 * toggled / opened, 1)
+```
+
+#### `tree.decoded.apply`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired by `DecodedValueDialogComponent.applyDecoded` when the user
+clicks the **Apply** button (visible only in decoded mode, after the
+`tree.decoded.manglingToggle` flip to `decoded`). The dialog closes
+with an `applyDecoded` intent; the actual edit is owned by
+`HomeComponent.onApplyDecodedRequest`. Pairs with the downstream
+`home.decodedApply.applied` (success) / `home.decodedApply.applyFailed`
+(failure) / `tree.decoded.apply.staleClose` (revalidation gate)
+events to form the Apply funnel. Bounded-frequency (one fire per
+click). No raw value content, no path, no PII.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| manglingKind | string | The detection kind that gated the Apply button visible: today only `httpFraming`. Closed-enum, forward-compatible with future kinds (`stackTrace`, `pem`, ...) added additively. |
+
+**Measurements:** none.
+
+#### `tree.decoded.apply.staleClose`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired by `JsonTreeComponent`'s `afterClosed` handler when the dialog
+returned an `applyDecoded` intent but the tree-side re-validation
+finds the originating context has drifted while the dialog was open:
+the document source version changed, the node identity diverged, the
+captured raw value no longer matches the live node value, or the
+live detection no longer fires. Any of those guards aborts the
+`applyDecodedRequest` emit, so this event is the user-visible "the
+underlying data moved while you were deciding" counter. Bounded by
+the tree open-close cycle; no raw value content, no path, no PII.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| manglingKind | string | The detection kind at dialog-open time. Closed-enum: `none` / `httpFraming` (the `none` value can fire here when the live re-detection returned `none` because the document was edited under the open dialog). |
+
+**Measurements:** none.
+
+#### `home.decodedApply.applied`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired by `HomeComponent.onApplyDecodedRequest` after a successful
+`editor.applyEdit` rewrites the JSON literal in place using the
+`jotjson-decoded-apply` named undo group. The pre-apply text is held
+for ~30s in `pendingReplaceUndo` so the user can undo via the
+snackbar or Ctrl+Z; an undo within that window emits
+`home.decodedApply.undo`. No raw value content, no path, no PII.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| source | string | The Apply entry surface. Today only `decodedDialog` (the Apply button inside the Inspect-string-value dialog). Closed-enum, ready for future surfaces (`contextMenu`, banner) to extend without breaking dashboards. |
+| manglingKind | string | The detection kind the patcher ran. Closed-enum: today only `httpFraming`. |
+
+**Measurements:** none (latency is captured on the paired
+`home.decodedApply.undo`).
+
+#### `home.decodedApply.applyFailed`
+
+**Kind:** event   **Level:** warn   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired by `HomeComponent.onApplyDecodedRequest` when the Apply path
+cannot reach a successful `editor.applyEdit`: the source version
+drifted after `afterClosed`, the patcher threw one of its three
+documented errors, the Monaco editor was not mounted, or
+`applyEdit` reported the edit did not apply. The user sees a
+"Could not apply decoded value" snackbar (non-assertive); the
+document is unchanged.
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| reason | string | Closed-enum: `staleVersion` (source version drift between dialog close and home handler), `parseFailed` (patcher's `decoded.apply.parse-failed`), `pathNotFound` (`decoded.apply.path-not-found`), `notString` (`decoded.apply.not-string`), `editorUnavailable` (Monaco not mounted), `applyEditFailed` (Monaco refused the edit), `unknown` (catch-all). |
+
+**Measurements:** none.
+
+#### `home.decodedApply.undo`
+
+**Kind:** event   **Level:** info   **Cold flag:** no   **Sampling:** 100% (unsampled)
+
+Fired by `HomeComponent.emitUndoTelemetry` (case `'decoded.apply'`)
+on snackbar Undo click or when Ctrl+Z (acting on the
+`jotjson-decoded-apply` named undo group) brings the editor back to
+the pre-apply text within ~30 s of a successful Apply. Mirrors
+`tree.extract.undo` so a misclick-rate KQL works the same way across
+both mutating dialog surfaces. Bounded-frequency (at most one undo
+per Apply; capped at 30 s by `pendingReplaceUndo`'s
+`REPLACE_UNDO_CAP_MS`).
+
+**Properties:**
+
+| name | type | values |
+| --- | --- | --- |
+| source | string | Closed-enum: `snackbar` (user clicked Undo on the Apply snackbar) or `ctrlZ` (Monaco-native undo while the pending-replace window was still open). |
+| undoLatencyMsBucket | string | Bucketed time from Apply to undo: `<1s` / `1-5s` / `5s+`. |
+
+**Measurements:** `undoLatencyMs` (number) - raw latency in
+milliseconds; the bucket is for slicing while the raw measurement
+supports p50 / p90 / p99 calculations.
+
+**Example: Apply misclick rate**
+
+```kusto
+let applied = customEvents
+| where name == "home.decodedApply.applied"
+| count;
+let undone = customEvents
+| where name == "home.decodedApply.undo"
+| count;
+print misclickRatePct = round(100.0 * todouble(toscalar(undone)) / todouble(toscalar(applied)), 1)
 ```
 
 #### Extract source rename / undo KQL

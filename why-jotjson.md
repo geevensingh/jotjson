@@ -63,9 +63,11 @@ response whose line breaks were lossily transcoded into `??`
 offers an opt-in toggle to render the framing as multi-line - body
 content is preserved verbatim. Once you've previewed the fix, a
 single **Apply** button rewrites the JSON in place (replacing the
-`??` markers with real CRLF line breaks in the source), with a full
-undo lifecycle: an 8-second snackbar Undo, plus native `Ctrl+Z` via
-a named undo group, so committing the fix is never a one-way trip.
+`??` markers with CRLF line breaks in the *string value* - the JSON
+source still encodes them as `\r\n` escape sequences, so the file
+stays single-line at the source level), with a full undo lifecycle:
+an 8-second snackbar Undo, plus native `Ctrl+Z` via a named undo
+group, so committing the fix is never a one-way trip.
 The tree row itself stays one line tall: the dialog never shifts the
 layout. The dialog's Copy button is WYSIWYG: if you flipped to decoded
 view it gives you the CRLF-formatted text, if you left it raw it gives

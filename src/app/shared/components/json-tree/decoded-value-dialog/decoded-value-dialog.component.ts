@@ -139,7 +139,7 @@ export class DecodedValueDialogComponent {
 
   readonly manglingToggleLabel = $localize`:@@tree.decoded.dialog.manglingToggle.label:Decode HTTP "??" framing as line breaks`;
   readonly manglingToggleTooltip = $localize`:@@tree.decoded.dialog.manglingToggle.tooltip:This string looks like it contains HTTP request or response framing whose line breaks were replaced with "??". Toggle to render the framing as multi-line. Body content is preserved verbatim.`;
-  readonly applyTooltip = $localize`:@@tree.decoded.dialog.apply.tooltip:Replaces the "??" markers in this string with real line breaks in the JSON source. Can be undone via the snackbar or Ctrl+Z.`;
+  readonly applyTooltip = $localize`:@@tree.decoded.dialog.apply.tooltip:Replaces the "??" markers in this string with CRLF line breaks. Can be undone via the snackbar or Ctrl+Z.`;
 
   extract(): void {
     this.ref.close({ kind: 'extract' });
