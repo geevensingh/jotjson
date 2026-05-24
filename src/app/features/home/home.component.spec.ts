@@ -32,6 +32,11 @@ import { QuotaNotificationService } from '../../core/quota/quota-notification.se
 import { bucketBytes } from '../../core/telemetry/buckets';
 import { LoggerService } from '../../core/telemetry/logger.service';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
+import {
+  LaunchQueueController,
+  type LaunchEvent,
+  type LaunchHandler,
+} from '../../core/upload/launch-queue-controller.service';
 import { MAX_UPLOAD_BYTES } from '../../core/upload/upload-file-validator';
 import type { ReplaceAllResult } from '../../shared/components/json-editor/json-editor.component';
 import {
@@ -4391,6 +4396,18 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
       });
   }
 
+  class FakeLaunchQueueController {
+    registeredHandler?: LaunchHandler;
+    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
+    readonly dispose = jasmine.createSpy('disposeLaunch');
+    readonly registerHandler = jasmine
+      .createSpy('registerHandler')
+      .and.callFake((handler: LaunchHandler) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
   function setup() {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
@@ -4398,6 +4415,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     const fakeController = new FakeDropController();
+    const fakeLaunch = new FakeLaunchQueueController();
     const snack = { open: jasmine.createSpy('open') };
     TestBed.configureTestingModule({
       imports: [HomeComponent],
@@ -4405,12 +4423,13 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: DocumentDropController, useValue: fakeController },
+        { provide: LaunchQueueController, useValue: fakeLaunch },
         { provide: MatSnackBar, useValue: snack },
       ],
     });
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.componentRef.changeDetectorRef.detectChanges();
-    return { fixture, fakeController, snack };
+    return { fixture, fakeController, fakeLaunch, snack };
   }
 
   function makeOversizedFile(): File {
@@ -4571,6 +4590,68 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     fakeController.dropActive.set(false);
     fixture.componentRef.changeDetectorRef.detectChanges();
     expect(overlay.visible()).toBe(false);
+  });
+
+  it('registers a launch handler with LaunchQueueController on init', () => {
+    const { fakeLaunch } = setup();
+    expect(fakeLaunch.registerHandler).toHaveBeenCalledTimes(1);
+    const handler = fakeLaunch.registerHandler.calls.mostRecent().args[0];
+    expect(typeof handler).toBe('function');
+  });
+
+  it('disposes the registered launch handler on destroy', () => {
+    const { fixture, fakeLaunch } = setup();
+    expect(fakeLaunch.dispose).not.toHaveBeenCalled();
+    fixture.destroy();
+    expect(fakeLaunch.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('OS-launch files-kind event loads content and emits upload.handle with osLaunch source', async () => {
+    const { fixture, fakeLaunch, snack } = setup();
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const text = '{"a":1}';
+    const file = {
+      size: new Blob([text]).size,
+      name: 'opened.json',
+      text: () => Promise.resolve(text),
+      arrayBuffer: () => Promise.resolve(new TextEncoder().encode(text).buffer),
+    } as unknown as File;
+    const handler = fakeLaunch.registeredHandler!;
+    const event: LaunchEvent = { kind: 'files', files: [file] };
+    await handler(event);
+    await waitForTaskQueue();
+    await waitForDoubleAnimationFrame();
+    expect(fixture.componentInstance.content()).toBe(text);
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('Opened opened.json');
+    expect(snack.open.calls.mostRecent().args[1]).toBe('Undo');
+    expect(eventSpy).toHaveBeenCalledOnceWith(
+      'upload.handle',
+      { sizeBytesBucket: bucketBytes(file.size), source: 'osLaunch' },
+      jasmine.objectContaining({
+        sizeBytes: file.size,
+        fileReadMs: jasmine.any(Number),
+        parseMs: jasmine.any(Number),
+        syncHandlerMs: jasmine.any(Number),
+        firstPaintMs: jasmine.any(Number),
+      }),
+    );
+  });
+
+  it('OS-launch error-kind event opens the unreadable snackbar and does not mutate content', async () => {
+    const { fixture, fakeLaunch, snack } = setup();
+    const before = fixture.componentInstance.content();
+    const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
+    const handler = fakeLaunch.registeredHandler!;
+    const cause = new DOMException('Permission denied', 'NotAllowedError');
+    const event: LaunchEvent = { kind: 'error', cause };
+    await handler(event);
+    await Promise.resolve();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.calls.mostRecent().args[0]).toContain('Could not open the file');
+    expect(snack.open.calls.mostRecent().args[1]).toBe('Dismiss');
+    expect(fixture.componentInstance.content()).toBe(before);
+    expect(eventSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -4947,22 +5028,37 @@ describe('HomeComponent extract-banner telemetry', () => {
       });
   }
 
+  class FakeLaunchQueueController {
+    registeredHandler?: LaunchHandler;
+    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
+    readonly dispose = jasmine.createSpy('disposeLaunch');
+    readonly registerHandler = jasmine
+      .createSpy('registerHandler')
+      .and.callFake((handler: LaunchHandler) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
   function setupTelemetryBed(): {
     fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>;
     component: HomeComponent;
     eventSpy: jasmine.Spy;
     extractorSpy: jasmine.Spy;
     drop: FakeDropController;
+    launch: FakeLaunchQueueController;
   } {
     clearHomeStorage();
     TestBed.resetTestingModule();
     const drop = new FakeDropController();
+    const launch = new FakeLaunchQueueController();
     TestBed.configureTestingModule({
       imports: [HomeComponent],
       providers: [
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: DocumentDropController, useValue: drop },
+        { provide: LaunchQueueController, useValue: launch },
       ],
     });
     const fixture = TestBed.createComponent(HomeComponent);
@@ -4976,7 +5072,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     });
     fixture.detectChanges();
     const eventSpy = spyOn(TestBed.inject(LoggerService), 'event');
-    return { fixture, component, eventSpy, extractorSpy, drop };
+    return { fixture, component, eventSpy, extractorSpy, drop, launch };
   }
 
   function bannerCalls(spy: jasmine.Spy): unknown[][] {
@@ -5061,6 +5157,29 @@ describe('HomeComponent extract-banner telemetry', () => {
     expect(shownCalls[0]).toEqual([
       'home.extract.banner.shown',
       { source: 'upload.drag' },
+      { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
+    ]);
+  });
+
+  it('OS-launch fires shown with source="upload.osLaunch"', async () => {
+    const { eventSpy, launch } = setupTelemetryBed();
+    const file = new File(['INFO log {"a":1}'], 'capture.log', {
+      type: 'text/plain',
+    });
+    expect(launch.registeredHandler).toBeDefined();
+
+    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    await waitForTaskQueue();
+    await waitForTaskQueue();
+    await waitForDoubleAnimationFrame();
+
+    const shownCalls = bannerCalls(eventSpy).filter(
+      (args) => args[0] === 'home.extract.banner.shown',
+    );
+    expect(shownCalls.length).toBe(1);
+    expect(shownCalls[0]).toEqual([
+      'home.extract.banner.shown',
+      { source: 'upload.osLaunch' },
       { blockCount: 2, preservesComments: 0, hasComments: 0, proseSegments: 0 },
     ]);
   });
@@ -5435,6 +5554,18 @@ describe('HomeComponent upload-error banner (#36)', () => {
       });
   }
 
+  class FakeLaunchQueueController {
+    registeredHandler?: LaunchHandler;
+    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
+    readonly dispose = jasmine.createSpy('disposeLaunch');
+    readonly registerHandler = jasmine
+      .createSpy('registerHandler')
+      .and.callFake((handler: LaunchHandler) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
   function setup() {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
@@ -5442,6 +5573,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
     localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     const fakeController = new FakeDropController();
+    const fakeLaunch = new FakeLaunchQueueController();
     const snack = { open: jasmine.createSpy('open') };
     TestBed.configureTestingModule({
       imports: [HomeComponent],
@@ -5449,6 +5581,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: DocumentDropController, useValue: fakeController },
+        { provide: LaunchQueueController, useValue: fakeLaunch },
         { provide: MatSnackBar, useValue: snack },
       ],
     });
@@ -5686,6 +5819,18 @@ describe('HomeComponent binary upload rejection (#62)', () => {
       });
   }
 
+  class FakeLaunchQueueController {
+    registeredHandler?: LaunchHandler;
+    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
+    readonly dispose = jasmine.createSpy('disposeLaunch');
+    readonly registerHandler = jasmine
+      .createSpy('registerHandler')
+      .and.callFake((handler: LaunchHandler) => {
+        this.registeredHandler = handler;
+        return this.dispose;
+      });
+  }
+
   function setup() {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
@@ -5693,6 +5838,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     localStorage.removeItem(PANE_VIS_KEY);
     TestBed.resetTestingModule();
     const fakeController = new FakeDropController();
+    const fakeLaunch = new FakeLaunchQueueController();
     const snack = { open: jasmine.createSpy('open') };
     TestBed.configureTestingModule({
       imports: [HomeComponent],
@@ -5700,6 +5846,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
         ...provideFakeAuth(),
         provideRouter([]),
         { provide: DocumentDropController, useValue: fakeController },
+        { provide: LaunchQueueController, useValue: fakeLaunch },
         { provide: MatSnackBar, useValue: snack },
       ],
     });

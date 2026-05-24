@@ -508,6 +508,15 @@ retains `source: rowButton` for the decoded-pill cohort. Normalize the
 extract event before comparing pre- and post-deploy cohorts or joining
 across the two events.
 
+Separately, the `home.extract.banner.*` family and `upload.handle`
+share an additive source enum that was extended in v1.2 to include
+`'osLaunch'` (and the derived extract-source `'upload.osLaunch'`) for
+files delivered via the PWA file_handlers + `launchQueue` ingress.
+Existing dashboards that filter on `'drag'`/`'pick'` or
+`'upload.drag'`/`'upload.pick'` will silently exclude the new bucket;
+update those filters to include the new value (or switch to a
+`startswith "upload."` predicate) to keep totals consistent.
+
 ```kusto
 customEvents
 | where name == "tree.extract.click"
