@@ -264,6 +264,15 @@ export function buildConflictRecord({
   };
 }
 
+// `syncDocument` validates `newDoc._ts` upstream (before reaching here)
+// to avoid an RU spend on a known-malformed doc. The `Number.isFinite`
+// check below is defense-in-depth at the unit boundary: `decideAction`
+// is also exercised by direct unit tests in
+// `scripts/cosmos-back-sync.test.mjs`, and without this check those
+// tests would silently return `'skip-old-fresher'` for a `NaN` _ts
+// (because `NaN < anything === false`) -- worse than throwing.
+// Keep both checks: the upstream throw is the operational hot path
+// (saves a Cosmos read), and this one defends the unit-level contract.
 export function decideAction(oldDoc, newDoc) {
   if (newDoc === null || typeof newDoc !== 'object') {
     throw new Error('A new document is required to decide the sync action.');
@@ -496,7 +505,17 @@ export async function syncDocument({
   conflictsFilePath,
   summary,
 }) {
-  if (!Number.isFinite(sourceDocument?._ts) || sourceDocument._ts < cutoverInstantUnixSeconds) {
+  // Pre-cutover filter: silently skip docs strictly older than the
+  // cutover instant. This guard requires a *finite numeric* _ts; a
+  // missing or non-numeric _ts (NaN, Infinity, -Infinity, null,
+  // undefined, string) is NOT silently skipped here -- it is
+  // classified as 'malformed-source' inside the outer try/catch
+  // below. (A `sourceDocument === null` or `undefined` falls through
+  // because `sourceDocument?._ts` is `undefined`; the destructuring
+  // throw in the try block then catches it as 'malformed-source'
+  // via a different code path.) The change feed has ~1-second
+  // granularity so this filter is correctness, not just perf.
+  if (Number.isFinite(sourceDocument?._ts) && sourceDocument._ts < cutoverInstantUnixSeconds) {
     return;
   }
 
@@ -519,6 +538,15 @@ export async function syncDocument({
       throw new Error(
         `Encountered a source document without a valid id in container ${containerName}.`,
       );
+    }
+
+    // Validate _ts here (after id, before extractPartitionKeyValue) so
+    // missing-_ts isn't masked by an unrelated partition-key throw on
+    // multi-defect docs. Operators see the most actionable failure
+    // mode first in the conflicts file. See decideAction (~line 267)
+    // for the unit-boundary duplicate of this check.
+    if (!Number.isFinite(sourceDocument?._ts)) {
+      throw new Error(`Document ${id} in container ${containerName} is missing a numeric _ts.`);
     }
 
     partitionKey = extractPartitionKeyValue(sourceDocument, partitionKeyPaths);

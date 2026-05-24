@@ -446,3 +446,125 @@ test('malformed source (missing id): outer try/catch logs malformed-source, no w
   assert.equal(failed.reason, 'malformed-source');
   assert.equal(failed.id, '<unknown>');
 });
+
+// ---------------------------------------------------------------------------
+// iter-4: malformed `_ts` is classified as 'malformed-source' (not silently
+// skipped) -- closes the doc/code drift introduced in iter-3 commit 0128f9b.
+// ---------------------------------------------------------------------------
+
+function makeBadTsSource(badTs) {
+  const sourceDocument = {
+    id: 'doc-bad-ts',
+    _etag: 'src-etag',
+    userId: PARTITION_KEY_VALUE,
+  };
+  if (badTs !== 'MISSING') {
+    sourceDocument._ts = badTs;
+  }
+  return sourceDocument;
+}
+
+for (const [label, badTs] of [
+  ['missing', 'MISSING'],
+  ['non-numeric string', '1234'],
+  ['NaN', Number.NaN],
+  ['Infinity', Number.POSITIVE_INFINITY],
+  ['negative Infinity', Number.NEGATIVE_INFINITY],
+  ['null', null],
+]) {
+  test(`malformed _ts (${label}): classified as malformed-source, no read, no write, summary delta pinned`, async () => {
+    // iter-3 commit 0128f9b documented `_ts` validation failures as
+    // 'malformed-source' in the conflict-file contract, but the code
+    // at line 489 silently dropped them via `!Number.isFinite || _ts <
+    // cutover` -- pre-cutover filter and validity gate conflated in
+    // one `||`. iter-4 split them: the pre-cutover filter requires
+    // `Number.isFinite(_ts) && _ts < cutover`, and a separate explicit
+    // throw inside the try block classifies bad _ts as malformed-source.
+    const destinationContainer = createFakeDestinationContainer();
+    const sourceDocument = makeBadTsSource(badTs);
+
+    const { summary } = await runSyncDocument({ sourceDocument, destinationContainer });
+
+    assert.equal(destinationContainer.calls.read.length, 0, 'no read for malformed _ts');
+    assert.equal(destinationContainer.calls.replace.length, 0);
+    assert.equal(destinationContainer.calls.create.length, 0);
+
+    // Full summary delta: docsProcessed MUST stay 0 (throw fires
+    // before the docsProcessed += 1 line), docsMalformed bumps,
+    // conflicts bumps. assert.deepEqual against the full baseline
+    // pins the ordering invariant, not just individual counters.
+    assert.deepEqual(summary, { ...baseSummary(), docsMalformed: 1, conflicts: 1 });
+
+    const conflicts = readConflictsFile();
+    assert.equal(conflicts.length, 1);
+    assert.equal(conflicts[0].reason, 'malformed-source');
+    // id matches actual source id (not '<unknown>'), because the id
+    // check fires BEFORE the _ts check inside the try block.
+    assert.equal(conflicts[0].id, 'doc-bad-ts');
+
+    const failed = getStdoutEvents().find((event) => event.result === 'failed');
+    assert.equal(failed.reason, 'malformed-source');
+    assert.equal(failed.id, 'doc-bad-ts');
+    // Pin the errorCode format so runbook jq examples don't silently
+    // rot under future refactors.
+    assert.match(failed.errorCode, /missing a numeric _ts/);
+  });
+}
+
+test('pre-cutover x non-numeric _ts (regression-prevention): bad _ts is NOT silently skipped by the pre-cutover filter', async () => {
+  // Regression-detection for the very bug iter-4 fixes: a future
+  // "optimize the filter" refactor that reverts the `&&` to `||`
+  // would silently re-drop docs with non-numeric _ts whose numeric
+  // comparison would short-circuit (e.g., `null < cutover` is true,
+  // `'abc' < cutover` is false but NaN propagation differs by engine).
+  // The new `&&` guard means only finite-numeric _ts reaches the
+  // silent-skip return.
+  const destinationContainer = createFakeDestinationContainer();
+  const sourceDocument = makeBadTsSource(null);
+
+  const { summary } = await runSyncDocument({ sourceDocument, destinationContainer });
+
+  assert.equal(destinationContainer.calls.read.length, 0);
+  assert.deepEqual(summary, { ...baseSummary(), docsMalformed: 1, conflicts: 1 });
+  const failed = getStdoutEvents().find((event) => event.result === 'failed');
+  assert.equal(failed.reason, 'malformed-source');
+});
+
+test('_ts === cutover boundary: strictly-less-than semantics means equal _ts is processed (not skipped)', async () => {
+  // Pin strict-less-than. A future off-by-one revert to `<=` would
+  // silently skip docs whose _ts equals the cutover instant.
+  const destinationContainer = createFakeDestinationContainer({ readThrows: { code: 404 } });
+  const sourceDocument = newDoc({ ts: CUTOVER });
+
+  const { summary } = await runSyncDocument({ sourceDocument, destinationContainer });
+
+  assert.equal(destinationContainer.calls.read.length, 1, 'doc at cutover MUST be processed');
+  assert.deepEqual(summary, { ...baseSummary(), docsProcessed: 1, docsCreated: 1 });
+});
+
+test('id missing AND _ts NaN: id check fires first -> conflict logged with id <unknown>', async () => {
+  // Pin the inside-try ordering: id validation runs before _ts
+  // validation. A future reorder (e.g., "validate _ts first because
+  // it is cheaper") would silently change the conflict-row id from
+  // '<unknown>' (operator-friendly) to whatever the doc had. Pin
+  // the user-facing artifact so the reorder doesn't slip through.
+  const destinationContainer = createFakeDestinationContainer();
+  const sourceDocument = {
+    _ts: Number.NaN,
+    _etag: 'src-etag',
+    userId: PARTITION_KEY_VALUE,
+    // no id property -> destructure yields `id = undefined`
+  };
+
+  const { summary } = await runSyncDocument({ sourceDocument, destinationContainer });
+
+  assert.deepEqual(summary, { ...baseSummary(), docsMalformed: 1, conflicts: 1 });
+  const conflicts = readConflictsFile();
+  assert.equal(conflicts[0].id, '<unknown>', 'id check fires before _ts check');
+  const failed = getStdoutEvents().find((event) => event.result === 'failed');
+  assert.match(
+    failed.errorCode,
+    /without a valid id/,
+    'errorCode reflects the id failure, not the _ts failure',
+  );
+});
