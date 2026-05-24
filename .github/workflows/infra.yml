@@ -232,6 +232,12 @@ jobs:
           ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID }}
           ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID }}
           ENTRA_API_AUDIENCE: ${{ secrets.ENTRA_API_AUDIENCE }}
+        # NEVER add `--mode Complete` to this command. rg-jotjson-dev
+        # contains resources (currently: Azure DNS zone jotjson.com) that
+        # are intentionally unmanaged by this template -- see
+        # infra/parameters/dev.bicepparam:existingDnsZoneRg and
+        # docs/migration-westus2.md Phase 0 step 6. Complete mode would
+        # delete them. Incremental mode (the default) is required.
         run: |
           az deployment group create \
             --resource-group rg-jotjson-dev \

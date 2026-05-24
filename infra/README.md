@@ -173,11 +173,15 @@ the zone to Azure nameservers.
 
 **One-time setup:**
 
-1. Deploy infra (`infra.yml` workflow, or the manual command above). Bicep
-   creates the `jotjson.com` DNS zone in `rg-jotjson-dev`. The deployment
-   output `dnsNameServers` lists 4 Azure nameservers, e.g.
-   `ns1-xx.azure-dns.com`, `ns2-xx.azure-dns.net`, etc. (Also visible in the
-   Azure portal -> DNS zone -> Overview.)
+1. Deploy infra (`infra.yml` workflow, or the manual command above). Azure
+   DNS zone `jotjson.com` is **not** managed by this template -- it lives
+   in `rg-jotjson-dns` and was relocated there in Phase 0 of the westus2
+   region migration (see `docs/migration-westus2.md` Phase 0 step 6).
+   `dev.bicepparam` sets `existingDnsZoneRg = 'rg-jotjson-dns'`, which
+   makes the `dns` module conditional skip; the `dnsNameServers`
+   deployment output therefore returns `[]`. To read the live
+   nameservers, use the Azure portal -> DNS zones -> `jotjson.com` ->
+   Overview, or `az network dns zone show -g rg-jotjson-dns -n jotjson.com --query nameServers`.
 2. Log into GoDaddy -> **Domains -> jotjson.com -> Nameservers -> Change**.
    Replace GoDaddy's defaults with the 4 Azure nameservers. Save.
 3. Wait for propagation (usually 15-60 min, up to 48h). Verify with
