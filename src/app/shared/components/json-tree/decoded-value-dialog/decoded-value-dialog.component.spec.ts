@@ -351,9 +351,7 @@ describe('DecodedValueDialogComponent', () => {
       expect(close).toHaveBeenCalledTimes(1);
       expect(close).toHaveBeenCalledWith({ kind: 'applyDecoded' });
       expect(liveAnnounce).toHaveBeenCalledTimes(1);
-      expect(liveAnnounce.calls.mostRecent().args[0]).toBe(
-        'Applied decoded value to source. Use Undo or Ctrl+Z to revert.',
-      );
+      expect(liveAnnounce.calls.mostRecent().args[0]).toBe('Applying decoded value to source.');
       const applyCalls = loggerEvent.calls
         .allArgs()
         .filter((args) => args[0] === 'tree.decoded.apply');

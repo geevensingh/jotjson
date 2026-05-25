@@ -159,17 +159,23 @@ export class DecodedValueDialogComponent {
    * same-version replacement of the raw mangled string with the
    * prefix-decoded form (CRLF for `httpFraming`).
    *
-   * The dialog only emits the intent + a screen-reader announcement
-   * here; the actual document mutation, undo group, snackbar, and
-   * applied-event telemetry are owned by `HomeComponent`
-   * (`onApplyDecodedRequest`). Mirrors how `extract()` hands off to
-   * `HomeComponent.onExtractRequest`.
+   * The dialog only emits the intent + a present-progressive
+   * screen-reader announcement ("Applying decoded value to source.")
+   * here; the actual document mutation, undo group, success snackbar
+   * (which is `politeness: 'assertive'` and announces the confirmed
+   * outcome), and `home.decodedApply.applied` telemetry are owned by
+   * `HomeComponent` (`onApplyDecodedRequest`). The announce is
+   * deliberately present-progressive rather than past-tense: the
+   * request can still be dropped downstream (tree-side `staleClose`
+   * re-validation, home-side `applyFailed`, or a no-op patch), so the
+   * dialog must not claim success at click time. Mirrors how
+   * `extract()` hands off to `HomeComponent.onExtractRequest`.
    */
   applyDecoded(): void {
     const manglingKind = this.detection().kind;
     this.ref.close({ kind: 'applyDecoded' });
     void this.liveAnnouncer.announce(
-      $localize`:@@tree.decoded.dialog.announceApplied:Applied decoded value to source. Use Undo or Ctrl+Z to revert.`,
+      $localize`:@@tree.decoded.dialog.announceApplied:Applying decoded value to source.`,
     );
     this.logger.event('tree.decoded.apply', {
       manglingKind,

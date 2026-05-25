@@ -575,7 +575,7 @@ the tree open-close cycle; no raw value content, no path, no PII.
 
 | name | type | values |
 | --- | --- | --- |
-| manglingKind | string | The detection kind at dialog-open time. Closed-enum: `none` / `httpFraming` (the `none` value can fire here when the live re-detection returned `none` because the document was edited under the open dialog). |
+| manglingKind | string | The detection kind at close time from the live re-detection in `JsonTreeComponent.openDecodedDialog`'s `afterClosed` handler (`detectLossyMangling(currentValue).kind`), not the open-time snapshot. Closed-enum: `none` / `httpFraming`. `none` is a meaningful value here: it indicates the mangling was already cleared (e.g. an earlier edit removed the `??` markers, or the captured value no longer matches the live path) while the dialog was open. |
 
 **Measurements:** none.
 
@@ -608,9 +608,14 @@ Fired by `HomeComponent.onApplyDecodedRequest` when the Apply path
 cannot reach a successful `editor.applyEdit`: the source version
 drifted after `afterClosed`, the patcher threw one of its three
 documented errors, the Monaco editor was not mounted, or
-`applyEdit` reported the edit did not apply. The user sees a
-"Could not apply decoded value" snackbar (non-assertive); the
-document is unchanged.
+`applyEdit` reported the edit did not apply. The document is
+unchanged; no user-facing snackbar is shown -- this mirrors the
+silent failure pattern of every other `*.applyFailed` event
+(`home.upload.applyFailed`, `home.format.applyFailed`,
+`home.minify.applyFailed`, `home.sort.applyFailed`,
+`home.extract.banner.applyFailed`, `tree.extract.applyFailed`).
+The event is the operator's only signal that the click did not
+land; dashboards should alert on a non-zero rate.
 
 **Properties:**
 
