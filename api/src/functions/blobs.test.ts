@@ -787,16 +787,28 @@ describe('access.forbidden telemetry emission from blob handlers', () => {
 
 describe('quota.exceeded telemetry emission from blob handlers', () => {
   function manyBlobsForQuota(count: number): unknown[] {
-    return Array.from({ length: count }, (_, i) => ({
-      id: `existing-${i}`,
-      slug: `slug-${i}`,
-      ownerId: 'u-1',
-      content: '{}',
-      isPublic: false,
-      createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-      updatedAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-      title: i === 0 ? 'oldest title' : undefined,
-    }));
+    return Array.from({ length: count }, (_, i) => {
+      // Date.UTC with day overflow > 31 normalizes correctly (Feb, Mar,
+      // ...) and emits a valid RFC-3339 instant. The previous
+      // `2026-01-${i + 1}` template produced invalid strings like
+      // `2026-01-100T00:00:00Z` at i=99 (PR #403 review comment 1).
+      // The lexicographic minimum was still `existing-0` either way --
+      // string-sort placed `2026-01-100` after `2026-01-09` but before
+      // `2026-01-10`, so the bug never broke the current `existing-0`
+      // assertion. Fix is defensive correctness for any future
+      // second-oldest / N-th-oldest assertion.
+      const timestamp = new Date(Date.UTC(2026, 0, 1 + i)).toISOString();
+      return {
+        id: `existing-${i}`,
+        slug: `slug-${i}`,
+        ownerId: 'u-1',
+        content: '{}',
+        isPublic: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        title: i === 0 ? 'oldest title' : undefined,
+      };
+    });
   }
 
   let mockTrackEvent: jest.Mock;
@@ -847,6 +859,206 @@ describe('quota.exceeded telemetry emission from blob handlers', () => {
 
     expect(res.status).toBe(201);
     expect(deleteBlobByIdSpy).toHaveBeenCalledWith('existing-0', 'u-1');
-    expect(mockTrackEvent).not.toHaveBeenCalled();
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'quota.exceeded' }),
+    );
+  });
+});
+
+// Issue #71 B3 -- server-owned signal for the FIFO auto-delete branch.
+// blob.autoDeleted is the operator-side signal for silent user-data
+// deletion. The frontend toast surfaces the deletion to the user via
+// quota-notification.service.ts but does NOT emit a sister telemetry
+// event (server-owned naming; see docs/telemetry.md Backend events).
+describe('blob.autoDeleted telemetry emission from postBlob', () => {
+  function manyBlobsForQuota(count: number): unknown[] {
+    return Array.from({ length: count }, (_, i) => {
+      // See the matching helper in the `quota.exceeded` describe block
+      // above for the Date.UTC rationale. Both helpers are kept in their
+      // owning describe block per the repo convention "request-shape
+      // helpers at file scope, scenario-shaped test-data builders next
+      // to the scenarios that use them" (cf. `makeRequest` at file
+      // scope vs. `manyBlobs` / `existingDoc` in describe scope).
+      // Consolidating the two into a shared `makeTrackEventSpy()`-style
+      // backend test-builder fixture is tracked as a follow-up issue
+      // (see issue #71 close-out).
+      const timestamp = new Date(Date.UTC(2026, 0, 1 + i)).toISOString();
+      return {
+        id: `existing-${i}`,
+        slug: `slug-${i}`,
+        ownerId: 'u-1',
+        content: '{}',
+        isPublic: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        title: i === 0 ? 'oldest title' : undefined,
+      };
+    });
+  }
+
+  let mockTrackEvent: jest.Mock;
+
+  beforeEach(() => {
+    __resetTelemetryInitForTesting();
+    mockTrackEvent = jest.fn();
+    __setTelemetryClientForTestingT({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+  });
+
+  afterEach(() => {
+    __resetTelemetryInitForTesting();
+    __setTelemetryClientForTestingT(null);
+  });
+
+  it('emits exactly once with {strategy: auto_fifo} on the FIFO eviction path', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobsForQuota(100));
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: { blobQuotaStrategy: 'auto_fifo' },
+    });
+    deleteBlobByIdSpy.mockResolvedValueOnce(true);
+    createBlob.mockResolvedValueOnce(sampleBlob);
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(201);
+    const autoDeletedCalls = mockTrackEvent.mock.calls.filter(
+      ([envelope]) => (envelope as { name: string }).name === 'blob.autoDeleted',
+    );
+    expect(autoDeletedCalls).toEqual([
+      [
+        {
+          name: 'blob.autoDeleted',
+          properties: { strategy: 'auto_fifo' },
+          measurements: undefined,
+        },
+      ],
+    ]);
+  });
+
+  it('does NOT emit when manual-strategy 409 is returned', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobsForQuota(100));
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: { blobQuotaStrategy: 'manual' },
+    });
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(409);
+    expect(deleteBlobByIdSpy).not.toHaveBeenCalled();
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'blob.autoDeleted' }),
+    );
+  });
+
+  it('does NOT emit when deleteBlobById returns false (race lost)', async () => {
+    listBlobsSpy.mockResolvedValueOnce(manyBlobsForQuota(100));
+    readUser.mockResolvedValueOnce({
+      id: 'u-1',
+      preferences: { blobQuotaStrategy: 'auto_fifo' },
+    });
+    deleteBlobByIdSpy.mockResolvedValueOnce(false);
+    createBlob.mockResolvedValueOnce(sampleBlob);
+
+    const res = await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
+
+    expect(res.status).toBe(201);
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'blob.autoDeleted' }),
+    );
+  });
+});
+
+// Issue #71 B3 -- concurrent-editor 412 signal from putBlob. Two emit
+// sites: the same-handler version check and the TOCTOU-race
+// VersionConflictError catch. Both must fire exactly once on their own
+// path. The plan's rubber-duck panel flagged the TOCTOU path as
+// requiring explicit mock orchestration so I split it into a separate
+// test from the same-handler path.
+describe('blob.versionConflict telemetry emission from putBlob', () => {
+  let mockTrackEvent: jest.Mock;
+
+  beforeEach(() => {
+    __resetTelemetryInitForTesting();
+    mockTrackEvent = jest.fn();
+    __setTelemetryClientForTestingT({ trackEvent: mockTrackEvent } as unknown as TelemetryClient);
+  });
+
+  afterEach(() => {
+    __resetTelemetryInitForTesting();
+    __setTelemetryClientForTestingT(null);
+  });
+
+  it('emits exactly once on the same-handler version mismatch path', async () => {
+    // findBlobByIdOrSlug returns a blob whose version does not match
+    // the request's If-Match header -- the line-402 preconditionFailed
+    // branch fires before updateBlob is ever called.
+    findBlob.mockResolvedValueOnce({ ...sampleBlob, version: 99 });
+
+    const res = await putBlob(
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { content: '{}' } }),
+      ctx,
+    );
+
+    expect(res.status).toBe(412);
+    expect(updateBlob).not.toHaveBeenCalled();
+    const conflictCalls = mockTrackEvent.mock.calls.filter(
+      ([envelope]) => (envelope as { name: string }).name === 'blob.versionConflict',
+    );
+    expect(conflictCalls).toEqual([
+      [
+        {
+          name: 'blob.versionConflict',
+          properties: { via: 'put' },
+          measurements: undefined,
+        },
+      ],
+    ]);
+  });
+
+  it('emits exactly once on the TOCTOU path (updateBlob throws VersionConflictError)', async () => {
+    // findBlobByIdOrSlug returns a blob whose version DOES match the
+    // request -- the line-402 check passes -- and then updateBlob
+    // throws VersionConflictError, simulating an outside writer that
+    // committed between the read and the write.
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    updateBlob.mockRejectedValueOnce(
+      new VersionConflictError('etag mismatch on replace -- another writer won'),
+    );
+
+    const res = await putBlob(
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { content: '{}' } }),
+      ctx,
+    );
+
+    expect(res.status).toBe(412);
+    expect(updateBlob).toHaveBeenCalledTimes(1);
+    const conflictCalls = mockTrackEvent.mock.calls.filter(
+      ([envelope]) => (envelope as { name: string }).name === 'blob.versionConflict',
+    );
+    expect(conflictCalls).toEqual([
+      [
+        {
+          name: 'blob.versionConflict',
+          properties: { via: 'put' },
+          measurements: undefined,
+        },
+      ],
+    ]);
+  });
+
+  it('does NOT emit when If-Match matches and the write succeeds', async () => {
+    findBlob.mockResolvedValueOnce(sampleBlob);
+    updateBlob.mockResolvedValueOnce({ ...sampleBlob, version: 2 });
+
+    const res = await putBlob(
+      makeRequest({ params: { id: 'uuid-1' }, headers: currentIfMatch, body: { content: '{}' } }),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'blob.versionConflict' }),
+    );
   });
 });
