@@ -66,12 +66,16 @@ not `swa-jotjson-prod-west`.
   referenced by Bicep or workflows. Likely manually-provisioned Entra
   External ID supporting resources. **Out of scope.** Filing as a
   tracking issue post-migration.
-- `DESIGN_SPEC.md:1966` claims App Insights is in West US 2; it is
+- **[RESOLVED 2026-05-24, this PR]** `DESIGN_SPEC.md` "Data residency"
+  section formerly claimed App Insights is in West US 2; it is
   empirically in eastus2. Per AGENTS.md §1 (`DESIGN_SPEC.md` is
-  source of truth), this contradicts the plan's "Decisions" table
-  at presentation time. **Fix in a separate one-line PR before
-  Phase 0 step 1** (`fix-design-spec-ai-region`). One-line truth
-  fix; doesn't depend on anything else in the migration.
+  source of truth), this contradicted the plan's "Decisions" table
+  at presentation time. Corrected here. The original prescription
+  -- "fix in a separate one-line PR before Phase 0 step 1" -- was
+  authored when the truth fix was a critic-v5 finding to land
+  pre-Phase-0; with PR-A (#376) and #391 already merged, the
+  temporal ordering is moot and the fix folds cleanly into the
+  post-merge cleanup PR (this one) closing #392 and #394.
 
 ## Out of scope (rationale unchanged)
 
@@ -346,10 +350,22 @@ migration.
 
 ## Phase 0: prep + rehearsal (no `dev` impact)
 
-1. **Land the `DESIGN_SPEC.md:1966` truth fix PR** (critic v5
-   finding). One-line correction stating AI is in eastus2; this
-   removes the contradiction between the spec and the plan's
-   "Decisions" table at presentation/review time.
+> **Status convention** (added 2026-05-24): completed steps are
+> prefixed with `**[DONE YYYY-MM-DD, PR #NNN]**` (or `this PR` if
+> the same PR completing the step also introduced the convention).
+> Step numbers never change -- this doc has ~80 "Phase X step Y"
+> cross-references that depend on stable numbers (e.g., line 1070
+> referring to "Phase 0 step 11"; risk-register rows; addenda;
+> critic-history sections). When a step is invalidated rather than
+> completed, prefix with `**[OBSOLETE YYYY-MM-DD, see #NNN]**` and
+> keep the original body (struck through) for the audit trail.
+> Convention applies to all phases below.
+
+1. **[DONE 2026-05-24, this PR]** Land the `DESIGN_SPEC.md` "Data
+   residency" truth fix PR (critic v5 finding). One-line correction
+   stating AI is in eastus2; this removes the contradiction between
+   the spec and the plan's "Decisions" table at presentation/review
+   time. Folded into this same doc cleanup PR (closes #392 and #394).
 2. **Pre-flight global uniqueness checks**:
    ```
    az storage account check-name --name stjotjsonprod
@@ -390,16 +406,22 @@ migration.
 5. **Land PR-A in nonprod first**. Verify Bicep changes deploy
    cleanly with all new params unset (nonprod behavior unchanged).
 6. **Move the `jotjson.com` DNS zone to `rg-jotjson-dns`** (new
-   RG). **Order matters** (critic v5 finding: this step creates a
-   race against `infra.yml` runs unless PR-A's DNS-extraction has
-   already landed):
-   - Confirm PR-A has merged to `main` (step 5 above).
-   - Land a tiny PR setting `existingDnsZoneRg = 'rg-jotjson-dns'`
-     in `dev.bicepparam` -- this tells the Bicep "DNS zone is in
-     `rg-jotjson-dns`, don't try to manage it." Merge this PR
-     BEFORE the move so any `infra.yml` run between move and
-     PR-A doesn't try to create the zone in `rg-jotjson-dev`.
-   - Then:
+   RG). **Order mattered** (critic v5 finding: this step would
+   have raced against `infra.yml` runs unless the DNS-suppression
+   value had already landed in `dev.bicepparam`):
+   - **[DONE 2026-05-23, PR #376]** PR-A landed the
+     `existingDnsZoneRg` parameter in `main.bicep` plus the DNS
+     module conditional gating.
+   - **[DONE 2026-05-24, PR #391]** `existingDnsZoneRg =
+     'rg-jotjson-dns'` is set in `dev.bicepparam`. This tells the
+     Bicep "DNS zone is in `rg-jotjson-dns`, don't try to manage
+     it." `main.bicep:238`'s
+     `if (!empty(dnsZoneName) && empty(existingDnsZoneRg))` gates
+     the `dns` module to false, and `main.bicep:258` short-circuits
+     `output dnsNameServers` to `[]`. Any `infra.yml` run between
+     now and the move below is a no-op against the live zone
+     regardless of which RG currently hosts it.
+   - **Operator-run move (remaining work for this step)**:
      ```
      az group create -n rg-jotjson-dns -l global
      az resource move --destination-group rg-jotjson-dns \
@@ -417,13 +439,33 @@ migration.
    maintenance-banner cache route in `staticwebapp.config.json`.
    PR-C and PR-D are repo-only artifacts (no infra side effects
    from landing).
-9. **Apply PR-A to `dev`**. This enables continuous backup on the
-   source Cosmos account; alone it's a non-disruptive change.
-10. Wait for continuous-backup conversion to complete (Azure docs:
-    several hours; check via portal). **Note the conversion's
-    completion time** -- the first restorable point is only
-    available *after* completion. Subsequent PITRs must use
+9. **[OBSOLETE 2026-05-24, see #376 iter-1 and #399]**
+   ~~Apply PR-A to `dev`. This enables continuous backup on the
+   source Cosmos account; alone it's a non-disruptive change.~~
+   PR-A iter-1 review (#376) made the Periodic branch of
+   `cosmosDb.bicep` a true no-op via `union()`
+   (`infra/modules/cosmosDb.bicep:15-24`), and `dev.bicepparam`
+   does not set `cosmosBackupPolicyType` (defaults to `'Periodic'`
+   per `main.bicep:57`), so `cosmos-jotjson-dev` stays Periodic
+   under the current state of `main`. The Continuous flip that
+   this step originally accomplished is now an explicit
+   prerequisite tracked as **`priority:high` issue #399**: a tiny
+   `dev.bicepparam` PR (mirror of #391's pattern) setting
+   `cosmosBackupPolicyType = 'Continuous'`. **That PR must land
+   before step 10's wait begins**; without it Phase 2 step 1's
+   `tier=Continuous7Days` query fails and Phase 2 step 2's
+   `az cosmosdb restore --account-name cosmos-jotjson-dev` would
+   error on a Periodic source.
+10. **Wait for continuous-backup conversion on `cosmos-jotjson-dev`
+    to complete** (Azure docs: several hours; check via portal).
+    **Note the conversion's completion time** -- the first
+    restorable point is only available *after* completion. Phase 2
+    step 1's `tier=Continuous7Days` query depends on this.
+    Subsequent PITRs must use
     `<pinned-time> >= completion-time + restore-window-padding`.
+    (Wait semantic unchanged from v7; the source-account anchor
+    is now explicit, replacing the previous implicit "PR-A enables
+    it" framing in the now-obsolete step 9.)
 11. **Rehearse end-to-end against nonprod**: create `nonprod-west`
     in westus2, PITR-restore from nonprod's Cosmos, validate every
     Phase 1-3 step:
@@ -1144,8 +1186,8 @@ point, fix-forward on `swa-jotjson-prod` instead.
      1095. Update workbook portal URLs to the new workbook
      resource IDs in `rg-jotjson-prod` (workbook resource IDs
      change post-Phase-4-step-3 redeploy).
-   - **No `DESIGN_SPEC.md:1966` update needed** -- already
-     corrected in Phase 0 step 1.
+   - **No `DESIGN_SPEC.md` "Data residency" update needed** --
+     already corrected in Phase 0 step 1.
 8. **Delete `rg-jotjson-dev`** (the old eastus2 RG). It now
    contains only the old SWA + idle Cosmos + idle Storage +
    disabled Action Group + disabled Workbooks/Alerts. The DNS
@@ -1204,7 +1246,7 @@ removed.)
 | env-label.ts `[unknown]` during pre-cutover smoke-test | Documented | Low | Phase 1 step 7 documents the expected behavior; PR-E is a deferred follow-up |
 | AI/LAW tags carry `env: dev` after move | Documented | Low | Phase 4 step 7 documents the tag wart in `infra/README.md` |
 | Cosmos PITR cancellation not supported | Documented | Med | In-window abort procedure explicitly accounts for "PITR cannot be cancelled" |
-| `DESIGN_SPEC.md:1966` contradicts plan premise | Mitigated | Low | Phase 0 step 1 lands one-line truth fix in a separate PR before plan execution |
+| `DESIGN_SPEC.md` "Data residency" contradicts plan premise | Resolved | Low | Phase 0 step 1 folded into the post-merge doc cleanup PR (this PR) along with #392, #394; closes the side-discovery tracking bullet at the same time |
 
 ## Pre-presentation gate
 
