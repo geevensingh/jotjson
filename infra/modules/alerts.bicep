@@ -246,3 +246,109 @@ AppEvents
     autoMitigate: true
   }
 }
+
+// Issue #71 B3 -- pages when the silent-data-deletion FIFO branch in
+// postBlob fires more than 5 times in a 24-hour window. blob.autoDeleted
+// is the headline event for issue #71's reshape: it's the only backend
+// signal we have for the "save crossed the 100-blob cap" branch, and
+// every fire means a user's oldest blob was silently evicted. Threshold
+// chosen as a more-sensitive starting point (vs. a 10/day default) per
+// the approved-plan §6 #3; tune from there based on observed volume.
+//
+// AppRoleName == 'api' is the structural defense-in-depth mitigation
+// for the cross-tier name-collision risk (rubber-duck architect +
+// skeptic findings). docs/telemetry.md "Backend events" notes record
+// the policy layer above this filter: the frontend MUST NOT emit a
+// sister blob.autoDeleted event.
+resource blobAutoDeletedSpikeAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
+  name: 'alert-${namePrefix}-blob-auto-deleted-spike'
+  location: location
+  tags: tags
+  kind: 'LogAlert'
+  properties: {
+    description: 'JotJSON API silently evicted a user blob via FIFO auto-delete more than 5 times in the last 24h. Each fire means a user save crossed the 100-blob cap. Investigate save-then-evict loops or unexpectedly large user populations.'
+    severity: 2
+    enabled: true
+    evaluationFrequency: 'PT1H'
+    windowSize: 'P1D'
+    scopes: [
+      workspaceId
+    ]
+    criteria: {
+      allOf: [
+        {
+          query: '''
+AppEvents
+| where TimeGenerated > ago(1d)
+| where Name == 'blob.autoDeleted'
+| where AppRoleName == 'api' '''
+          timeAggregation: 'Count'
+          threshold: 5
+          operator: 'GreaterThan'
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        actionGroupId
+      ]
+    }
+    autoMitigate: true
+  }
+}
+
+// Issue #71 B3 -- pages on ANY slug.collisions.exhausted emission in a
+// 24-hour window. Expected production volume is zero: createBlob retries
+// NanoID(6) up to MAX_SLUG_ATTEMPTS (5) before throwing
+// SlugGenerationError and the handler returns 503. A single fire means
+// either NanoID(6) saturation is approaching for the user base (likely
+// after years of growth) or a stuck mock is leaking into production
+// (unlikely but worth a page). Threshold > 0 over 1d per approved-plan
+// §6 #4.
+//
+// AppRoleName == 'api' for the same defense-in-depth reason as
+// blob.autoDeleted above.
+resource slugCollisionsExhaustedAlert 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
+  name: 'alert-${namePrefix}-slug-collisions-exhausted'
+  location: location
+  tags: tags
+  kind: 'LogAlert'
+  properties: {
+    description: 'JotJSON API exhausted MAX_SLUG_ATTEMPTS retries generating a unique NanoID(6) slug. User saw a 503. Investigate slug-namespace saturation or a stuck slugExists mock leaking into production.'
+    severity: 1
+    enabled: true
+    evaluationFrequency: 'PT1H'
+    windowSize: 'P1D'
+    scopes: [
+      workspaceId
+    ]
+    criteria: {
+      allOf: [
+        {
+          query: '''
+AppEvents
+| where TimeGenerated > ago(1d)
+| where Name == 'slug.collisions.exhausted'
+| where AppRoleName == 'api' '''
+          timeAggregation: 'Count'
+          threshold: 0
+          operator: 'GreaterThan'
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        actionGroupId
+      ]
+    }
+    autoMitigate: true
+  }
+}

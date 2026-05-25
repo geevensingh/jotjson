@@ -80,7 +80,7 @@ Classic AI schema (App Insights resource):
 | Table | Source |
 |---|---|
 | `traces` | `LoggerService.info/warn` (severity 1/2) |
-| `customEvents` | Frontend product events via `LoggerService.event` (`pref.changed`, `toolbar.action`, `webVitals`, `paste.handle`, `share.created`, `auth.signedIn`, etc.) and backend events via `trackEvent` in `api/src/shared/telemetry.ts` (`auth.tokenAccepted`, `auth.tokenRejected`, `access.forbidden`, `quota.exceeded`). |
+| `customEvents` | Frontend product events via `LoggerService.event` (`pref.changed`, `toolbar.action`, `webVitals`, `paste.handle`, `share.created`, `auth.signedIn`, etc.) and backend events via `trackEvent` in `api/src/shared/telemetry.ts` (`auth.tokenAccepted`, `auth.tokenRejected`, `access.forbidden`, `quota.exceeded`, `blob.autoDeleted`, `blob.versionConflict`, `slug.collisions.exhausted`). |
 | `exceptions` | `LoggerService.error` and `TelemetryErrorHandler` and replayed `boot.failed` envelopes |
 | `pageViews` | `RouteTracker` on each navigation |
 | `dependencies` | Auto-instrumented browser fetch/XHR (`disableAjaxTracking: false`); also outgoing calls from Functions |
@@ -248,6 +248,9 @@ lands in `customMeasurements`.
 | `auth.tokenRejected` | `requireAuth` in `api/src/shared/auth.ts` | `{reason, authMode: 'required'}` where `reason` is one of `missing_bearer`, `malformed`, `invalid_signature`, `expired`, `wrong_audience`, `wrong_issuer`, `no_kid` | none |
 | `access.forbidden` | `forbidden()` helper in `api/src/shared/http.ts` | `{resource: 'blob' \| 'ruleSet', authMode: 'required'}` | none |
 | `quota.exceeded` | `quotaExceeded()` helper in `api/src/shared/http.ts` | `{resource: 'blob' \| 'ruleSet', authMode: 'required', via: 'create' \| 'clone'}` | `{count, limit}` |
+| `blob.autoDeleted` | `postBlob` in `api/src/functions/blobs.ts` (FIFO eviction branch) | `{strategy: 'auto_fifo'}` | none |
+| `blob.versionConflict` | `putBlob` in `api/src/functions/blobs.ts` (both `If-Match` 412 branches) | `{via: 'put'}` | none |
+| `slug.collisions.exhausted` | `createBlob` in `api/src/shared/blobs.ts` (`SlugGenerationError` throw site) | none | none |
 
 Notes:
 
@@ -259,9 +262,52 @@ Notes:
   today).
 - `quota.exceeded` is **only** emitted on the manual-strategy 409
   path. The `postBlob` `strategy = 'auto_fifo'` path silently
-  evicts the oldest blob and does NOT emit.
+  evicts the oldest blob and emits `blob.autoDeleted` instead.
 - `count` is the raw current count (not clamped to `limit`) so
   reductions in `limit` and historical overages remain queryable.
+- **`blob.autoDeleted` is server-owned.** The backend is the source
+  of truth for FIFO auto-delete events. The frontend toast renderer
+  in `src/app/core/quota/quota-notification.service.ts` shows the
+  deleted blob's title to the user but does **NOT** emit a sister
+  telemetry event with this name. KQL queries can trust a single
+  backend `customEvents` row per auto-delete (the
+  `cloud_RoleName == 'api'` clause in the example below is the
+  structural defense; this prohibition is the policy layer above).
+  A future frontend that wants to telemeter its own view of an
+  auto-delete (e.g., "user dismissed the toast") MUST pick a
+  different event name with a clear vantage prefix (e.g.,
+  `quota.autoDeleted.toastShown`).
+- `blob.versionConflict` measures **true concurrent-editor races**:
+  the read-side `version` check failed (412 before the write), or
+  Cosmos rejected the `If-Match` etag on the write (TOCTOU race).
+  It is NOT a measure of offline-drain activity -- offline-queue
+  clients coalesce-per-id, so 50 offline saves become 1 PUT at
+  drain and the server sees only the final write. Frontend
+  instrumentation owns the offline-drain-conflict signal; the
+  backend signal is the editor-race signal.
+- `slug.collisions.exhausted` is thresholded: expected daily
+  volume is **zero** in production. A single fire means
+  NanoID(6) saturation or a stuck `slugExists` mock is leaking
+  into production. Alert at `>0/day` -- see Alerts section.
+
+**Deferral notes** (filed as follow-up issues during issue #71 work):
+
+- **Sink choice**: backend telemetry stays single-sink
+  (`customEvents`) for now; `api/src/shared/telemetry.ts` exposes
+  only `trackEvent`. If a backend `traces` sink is ever
+  introduced (e.g., for a `trackWarn` helper covering recoverable
+  diagnostic warnings), document the migration plan in this
+  section -- migrating a token across sinks breaks history.
+- **Literal-union catalog**: backend is now at 7 events.
+  AGENTS.md §4's `~10` threshold for introducing a frozen
+  `BackendTelemetryMessageId` literal-union (mirroring
+  `src/app/core/telemetry/telemetry-message-ids.ts`) is
+  approaching. Follow-up issue tracks the catalog work.
+- **Shared test fixture**: each backend test file currently wires
+  `__setTelemetryClientForTesting` / `__resetTelemetryInitForTesting`
+  per-spec. A shared `makeTrackEventSpy()` helper would
+  consolidate the boilerplate; follow-up issue tracks the
+  refactor.
 
 No user content, blob bodies, slugs, rule-set ids, or free-form
 strings are emitted from any backend event. Every dimension is a
@@ -300,15 +346,56 @@ customEvents
 ```
 
 ```kusto
-// Schema drift guard: any unexpected property keys in the four
+// Schema drift guard: any unexpected property keys in the seven
 // backend events? (Catches accidental new dimensions early.)
 customEvents
 | where name in ('auth.tokenAccepted', 'auth.tokenRejected',
-                  'access.forbidden', 'quota.exceeded')
+                  'access.forbidden', 'quota.exceeded',
+                  'blob.autoDeleted', 'blob.versionConflict',
+                  'slug.collisions.exhausted')
 | extend keys = bag_keys(customDimensions)
 | mv-expand key = keys to typeof(string)
 | summarize count() by name, key
 | order by name asc, key asc
+```
+
+```kusto
+// FIFO auto-delete volume by week. blob.autoDeleted is server-owned;
+// the cloud_RoleName == 'api' clause is the structural defense-in-depth
+// against a future frontend collision (the policy is "frontend MUST
+// NOT emit a sister event with this name" -- see Backend events notes).
+customEvents
+| where timestamp > ago(90d)
+| where name == 'blob.autoDeleted'
+| where cloud_RoleName == 'api'
+| summarize evictions = count() by bin(timestamp, 7d)
+| order by timestamp asc
+```
+
+```kusto
+// Concurrent-editor 412 rate, last 30 days. Counts true
+// editor-race conflicts (offline drains are coalesced client-side
+// and not visible here -- see Backend events notes).
+customEvents
+| where timestamp > ago(30d)
+| where name == 'blob.versionConflict'
+| where cloud_RoleName == 'api'
+| summarize conflicts = count() by bin(timestamp, 1d), via = tostring(customDimensions.via)
+| order by timestamp desc
+```
+
+```kusto
+// Slug-collision exhaustion (expected zero in production).
+// Any non-empty result row indicates either NanoID(6) saturation
+// approaching the user base or a stuck slugExists mock leaking
+// into production. Paired with the
+// alert-${namePrefix}-slug-collisions-exhausted threshold-zero alert.
+customEvents
+| where timestamp > ago(30d)
+| where name == 'slug.collisions.exhausted'
+| where cloud_RoleName == 'api'
+| project timestamp, appVersion = tostring(customDimensions.appVersion)
+| order by timestamp desc
 ```
 
 ---
@@ -1248,6 +1335,10 @@ silently breaks evaluation; queries return 0 rows or fail.
 - **API** -- Functions request rate, 4xx/5xx breakdown, p95 duration by
   operation.
 - **Quotas** -- `quota.exceeded` event volume, top quota types.
+- **Blob auto-delete** -- `blob.autoDeleted` count by week (server-owned
+  signal for silent user-data FIFO eviction; the user surface is the
+  toast in `quota-notification.service.ts`). Paired with the
+  `blob-auto-deleted-spike` alert below.
 
 #### Product analytics sections
 
@@ -1339,6 +1430,26 @@ JSON and lints KQL time-binding.
   `Properties.reason in ('wrong_audience', 'wrong_issuer')`. Threshold:
   `count > 0` over a 15-minute window. Severity: 1. Indicates token-validation
   config drift. Broader auth-rejection alert: issue #91.
+- **blob-auto-deleted-spike** -- detects backend `blob.autoDeleted`
+  emissions filtered to `AppRoleName == 'api'`. Threshold:
+  `count > 5` over a 24-hour window, evaluated hourly. Severity: 2.
+  Indicates more than five FIFO auto-delete evictions in a day --
+  each fire silently deletes a user blob, so a spike points to
+  save-then-evict loops, unexpectedly large user populations, or a
+  changed quota threshold. Tune from 5/day based on observed
+  baseline volume (issue #71 B3). The `AppRoleName == 'api'`
+  clause is the structural defense for the server-owned naming
+  policy documented in the Backend events notes.
+- **slug-collisions-exhausted** -- detects backend
+  `slug.collisions.exhausted` emissions filtered to
+  `AppRoleName == 'api'`. Threshold: `count > 0` over a 24-hour
+  window, evaluated hourly. Severity: 1. Expected production volume
+  is zero (`createBlob` retries NanoID(6) up to `MAX_SLUG_ATTEMPTS`
+  before throwing); any fire means slug-namespace saturation or a
+  stuck `slugExists` mock leaking into production. Tuning: none --
+  threshold-zero is correct until a future per-tenant or
+  per-environment `MAX_SLUG_ATTEMPTS` makes the event volume
+  nonzero in steady state (issue #71 B3).
 
 ### Alert query gotcha: row-based, not summarize-based
 
