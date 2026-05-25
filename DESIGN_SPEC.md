@@ -2041,7 +2041,7 @@ the following App Insights origins in `connect-src`:
 
 ### Data residency
 
-The App Insights resource is currently provisioned in **West US 2**.
+The App Insights resource is currently provisioned in **East US 2**.
 EU users would need a regional resource - out of scope for v1.
 
 ---
