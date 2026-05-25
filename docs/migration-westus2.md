@@ -407,6 +407,13 @@ migration.
    Discard the test account immediately.
 5. **Land PR-A in nonprod first**. Verify Bicep changes deploy
    cleanly with all new params unset (nonprod behavior unchanged).
+   Side-effect-via-default note (post-#376 iter-1): with all new
+   params unset, `cosmos-jotjson-nonprod` stays Periodic; a separate
+   nonprod Continuous `bicepparam` PR (mirror of #399, tracked as
+   its own `priority:high` follow-up issue) plus an operator-run
+   `workflow_dispatch` of `infra-nonprod.yml` is required before
+   step 11's rehearsal can run. Same shape as the dev hole #399
+   closes.
 6. **Move the `jotjson.com` DNS zone to `rg-jotjson-dns`** (new
    RG). **Order mattered** (critic v5 finding: this step would
    have raced against `infra.yml` runs unless the DNS-suppression
@@ -471,6 +478,14 @@ migration.
 11. **Rehearse end-to-end against nonprod**: create `nonprod-west`
     in westus2, PITR-restore from nonprod's Cosmos, validate every
     Phase 1-3 step:
+    - **Prerequisite**: `cosmos-jotjson-nonprod` must already be on
+      Continuous backup before this step begins (PITR from a Periodic
+      source fails). The nonprod Continuous `bicepparam` PR flagged
+      in step 5 must land, `infra-nonprod.yml` must be manually
+      dispatched, and the conversion must be verified via
+      `az cosmosdb show -g rg-jotjson-nonprod -n cosmos-jotjson-nonprod
+      --query backupPolicy.continuousModeProperties.tier` returning
+      `"Continuous7Days"`.
     - Cosmos RBAC re-grant against restored account.
     - SWA deploy-token rotation logic (test-only target).
     - SHA-verification of `build-info.json` after deploy.
