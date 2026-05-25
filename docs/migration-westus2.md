@@ -354,12 +354,14 @@ migration.
 > prefixed with `**[DONE YYYY-MM-DD, PR #NNN]**` (or `this PR` if
 > the same PR completing the step also introduced the convention).
 > Step numbers never change -- this doc has ~80 "Phase X step Y"
-> cross-references that depend on stable numbers (e.g., line 1070
-> referring to "Phase 0 step 11"; risk-register rows; addenda;
-> critic-history sections). When a step is invalidated rather than
-> completed, prefix with `**[OBSOLETE YYYY-MM-DD, see #NNN]**` and
-> keep the original body (struck through) for the audit trail.
-> Convention applies to all phases below.
+> cross-references that depend on stable numbers (Phase 4 step 4's
+> email-confirmation note refers to "Phase 0 step 11"; the risk
+> register, the Pre-presentation gate, and the critic-history
+> sections also carry step-number pointers). When a step is
+> invalidated rather than completed, prefix with
+> `**[OBSOLETE YYYY-MM-DD, see #NNN]**` and keep the original body
+> (struck through) for the audit trail. Convention applies to all
+> phases below.
 
 1. **[DONE 2026-05-24, this PR]** Land the `DESIGN_SPEC.md` "Data
    residency" truth fix PR (critic v5 finding). One-line correction
@@ -409,7 +411,7 @@ migration.
    RG). **Order mattered** (critic v5 finding: this step would
    have raced against `infra.yml` runs unless the DNS-suppression
    value had already landed in `dev.bicepparam`):
-   - **[DONE 2026-05-23, PR #376]** PR-A landed the
+   - **[DONE 2026-05-24, PR #376]** PR-A landed the
      `existingDnsZoneRg` parameter in `main.bicep` plus the DNS
      module conditional gating.
    - **[DONE 2026-05-24, PR #391]** `existingDnsZoneRg =
