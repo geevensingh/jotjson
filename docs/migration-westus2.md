@@ -482,10 +482,14 @@ migration.
       Continuous backup before this step begins (PITR from a Periodic
       source fails). The nonprod Continuous `bicepparam` PR flagged
       in step 5 must land, `infra-nonprod.yml` must be manually
-      dispatched, and the conversion must be verified via
-      `az cosmosdb show -g rg-jotjson-nonprod -n cosmos-jotjson-nonprod
-      --query backupPolicy.continuousModeProperties.tier` returning
-      `"Continuous7Days"`.
+      dispatched, and the conversion must be verified via:
+
+      ```
+      az cosmosdb show -g rg-jotjson-nonprod -n cosmos-jotjson-nonprod \
+        --query backupPolicy.continuousModeProperties.tier
+      ```
+
+      Expected: `"Continuous7Days"`.
     - Cosmos RBAC re-grant against restored account.
     - SWA deploy-token rotation logic (test-only target).
     - SHA-verification of `build-info.json` after deploy.
