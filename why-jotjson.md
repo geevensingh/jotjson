@@ -56,9 +56,23 @@ payloads, GUIDs) are awkward in any tree. JotJSON marks those rows
 with a small pill (and a matching `Open decoded value` entry in the
 row's right-click menu); one click opens a dedicated viewer dialog
 that shows the raw string with line numbers, a Copy button, and a
-larger monospace font - mobile-friendly even for long payloads. The
-tree row itself stays one line tall: the dialog never shifts the
-layout. Purely visual; copy still gives you the literal raw string.
+larger monospace font - mobile-friendly even for long payloads. When
+the dialog detects a string with more `??` markers than line breaks -
+the common shape in log payloads where line breaks were lossily
+transcoded into `??` (e.g. flattened HTTP request / response captures
+from Microsoft / Azure dependent-service traces) - it offers an
+opt-in toggle to show the `??` markers as line breaks. Once you've
+previewed the fix, a single **Apply** button rewrites the JSON in
+place (replacing the `??` markers with CRLF line breaks in the
+*string value* - the JSON source still encodes them as `\r\n` escape
+sequences, so the file stays single-line at the source level), with
+a full undo lifecycle: an 8-second snackbar Undo, plus native
+`Ctrl+Z` via a named undo group, so committing the fix is never a
+one-way trip.
+The tree row itself stays one line tall: the dialog never shifts the
+layout. The dialog's Copy button is WYSIWYG: if you flipped to decoded
+view it gives you the CRLF-formatted text, if you left it raw it gives
+you the literal string with the `??` markers.
 
 ### Tree view that doesn't freeze on multi-MB blobs
 
