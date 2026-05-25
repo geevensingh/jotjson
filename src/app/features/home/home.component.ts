@@ -79,6 +79,7 @@ import {
 import { highlightsEqual } from '../../shared/components/json-tree/highlight-resolver';
 import {
   JsonTreeComponent,
+  type TreeApplyDecodedRequest,
   type TreeExtractRequest,
   type TreeSortKeysRequest,
 } from '../../shared/components/json-tree/json-tree.component';
@@ -92,6 +93,7 @@ import {
   ColdBootClipboardBannerComponent,
   type ColdBootClipboardChoice,
 } from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
+import { patchDecodedString, type DecodedApplyPatchResult } from './decoded-apply-patcher';
 import { EditorMode } from './editor-mode';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
 import type { PatchResult } from './extract-json-patcher';
@@ -234,6 +236,7 @@ type ReplaceUndoKind =
   | 'sort.tree'
   | 'extract.banner'
   | 'extract.tree'
+  | 'decoded.apply'
   | 'coldBoot';
 
 /**
@@ -337,6 +340,20 @@ type PendingReplaceUndoExtractBannerExtras = {
 
 type PendingReplaceUndoExtractTreeExtras = {
   kind: 'extract.tree';
+};
+
+/**
+ * Side-state-free Pending extras for the decoded-Apply mutation. No
+ * `priorMode` (decoded.apply doesn't switch editor modes), no
+ * pre-extract candidate (decoded.apply is a surgical splice that
+ * doesn't disturb the extract banner), no highlights / mutatedPaths
+ * snapshot (the splice preserves those by construction since the
+ * patcher's `applyEdits` operates on a single string literal whose
+ * path identity in the tree is stable across the edit). Mirrors
+ * `PendingReplaceUndoExtractTreeExtras` exactly.
+ */
+type PendingReplaceUndoDecodedApplyExtras = {
+  kind: 'decoded.apply';
 };
 
 type PendingReplaceUndoColdBootExtras = {
@@ -484,6 +501,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     | (PendingReplaceUndoBase & PendingReplaceUndoSortTreeExtras)
     | (PendingReplaceUndoBase & PendingReplaceUndoExtractBannerExtras)
     | (PendingReplaceUndoBase & PendingReplaceUndoExtractTreeExtras)
+    | (PendingReplaceUndoBase & PendingReplaceUndoDecodedApplyExtras)
     | (PendingReplaceUndoBase & PendingReplaceUndoColdBootExtras)
     | null = null;
   // Single owner of the 30s `pendingReplaceUndo` cap. Cleared atomically
@@ -1564,6 +1582,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const isShortAssertive =
       pending.kind === 'extract.banner' ||
       pending.kind === 'extract.tree' ||
+      pending.kind === 'decoded.apply' ||
       pending.kind === 'sort.tree';
     const snackRef: MatSnackBarRef<TextOnlySnackBar> | undefined = isShortAssertive
       ? this.snack.open(snackMessage, snackUndoLabel, { duration: 8000, politeness: 'assertive' })
@@ -1676,6 +1695,13 @@ export class HomeComponent implements OnInit, OnDestroy {
           undoLatencyMsBucket,
         });
         return;
+      case 'decoded.apply':
+        this.logger.event(
+          'home.decodedApply.undo',
+          { source, undoLatencyMsBucket },
+          { undoLatencyMs },
+        );
+        return;
       case 'coldBoot':
         // Reserved for a future cold-boot consolidation; no telemetry
         // path today (cold-boot has its own messaging via
@@ -1725,6 +1751,11 @@ export class HomeComponent implements OnInit, OnDestroy {
       case 'extract.tree':
         // No side-state to restore: tree-extract is a surgical edit
         // that preserves highlights and mutatedPaths.
+        return;
+      case 'decoded.apply':
+        // No side-state to restore: decoded-apply is a surgical splice
+        // (single string literal) that preserves highlights and
+        // mutatedPaths by construction.
         return;
       case 'coldBoot':
         return;
@@ -2475,6 +2506,92 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.openReplaceUndoSnack(
       $localize`:@@home.sortKeys.snackbar.applied:Sorted this object's keys.`,
       $localize`:@@home.sortKeys.snackbar.undo:Undo`,
+    );
+  }
+
+  /**
+   * Handler for the Apply button in {@link DecodedValueDialogComponent}.
+   * Re-validates `sourceVersion` against the live tree-string extractor
+   * (the tree-side `afterClosed` handler does its own three-invariant
+   * stale check, but the version-check here defends against a race
+   * where the document changes between dialog-close and event-receive),
+   * calls {@link patchDecodedString} to rewrite the single string
+   * literal at `event.path` to its prefix-decoded (CRLF-bearing) form,
+   * and routes the result through `editor.applyEdit` with a named
+   * undo group (`jotjson-decoded-apply`) so Ctrl+Z surgically reverts
+   * just this edit. Mirrors `onExtractRequest` precedent.
+   */
+  onApplyDecodedRequest(event: TreeApplyDecodedRequest): void {
+    const currentVersion = this.treeStringExtractor.currentVersion();
+    if (event.sourceVersion !== currentVersion) {
+      this.logger.warn('home.decodedApply.applyFailed', { reason: 'staleVersion' });
+      return;
+    }
+
+    const priorText = this.content();
+    let result: DecodedApplyPatchResult;
+    try {
+      result = patchDecodedString(priorText, event.path, event.manglingKind);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : null;
+      let reason: 'parseFailed' | 'pathNotFound' | 'notString' | 'unknown';
+      switch (message) {
+        case 'decoded.apply.parse-failed':
+          reason = 'parseFailed';
+          break;
+        case 'decoded.apply.path-not-found':
+          reason = 'pathNotFound';
+          break;
+        case 'decoded.apply.not-string':
+          reason = 'notString';
+          break;
+        default:
+          reason = 'unknown';
+      }
+      this.logger.warn('home.decodedApply.applyFailed', { reason });
+      return;
+    }
+
+    if (result.patched === priorText) {
+      // No-op splice (e.g. value was already decoded). Bail without
+      // touching the editor or installing a pending undo.
+      return;
+    }
+
+    const editor = this.editor();
+    if (!editor) {
+      this.logger.warn('home.decodedApply.applyFailed', { reason: 'editorUnavailable' });
+      return;
+    }
+    const startOffset = result.targetOffset;
+    const endOffset = startOffset + result.targetLength;
+    if (
+      !editor.applyEdit(startOffset, endOffset, result.replacementText, 'jotjson-decoded-apply')
+    ) {
+      this.logger.warn('home.decodedApply.applyFailed', { reason: 'applyEditFailed' });
+      return;
+    }
+
+    this.logger.event('home.decodedApply.applied', {
+      source: 'decodedDialog',
+      manglingKind: event.manglingKind,
+    });
+    // Bypass the 150 ms tree-pane debounce so the post-apply tree reflects
+    // the new (multi-line) string value immediately. We do NOT bump
+    // `viewResetToken` -- decoded-apply preserves the document
+    // byte-for-byte everywhere except inside the single string literal,
+    // so manually-expanded subtrees elsewhere must survive.
+    this.treeFlush$.next();
+    this.installPendingReplace({
+      priorText,
+      startMs: performance.now(),
+      undoneViaSnackbar: false,
+      kind: 'decoded.apply',
+      viewResetTokenAtAccept: this.viewResetToken(),
+    });
+    this.openReplaceUndoSnack(
+      $localize`:@@home.decodedApply.snackbar.applied:Replaced "??" markers with line breaks in the document.`,
+      $localize`:@@home.decodedApply.snackbar.undo:Undo`,
     );
   }
 

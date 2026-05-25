@@ -1412,13 +1412,25 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Props: { source: 'rowButton' | 'contextMenu';
    *          reason: 'escape' | 'long';
    *          pathDepth: '<100' | '100-1K' | '1K-10K' | '>10K';
-   *          lineCountBucket: '1' | '2-5' | '6-20' | '21-100' | '100+' }.
+   *          lineCountBucket: '1' | '2-5' | '6-20' | '21-100' | '100+';
+   *          manglingKind: 'none' | 'httpFraming' }.
    *          `source` distinguishes the in-row pill from the kebab
    *          context-menu entry; `reason` says whether the predicate
    *          matched escape characters (`escape`) or only the
    *          length > 256 fallback (`long`); `pathDepth` is the
-   *          bucketed depth of the originating row's path; user
-   *          string contents and raw paths are never logged.
+   *          bucketed depth of the originating row's path;
+   *          `manglingKind` is the result of
+   *          `detectLossyMangling(value).kind` (see
+   *          `core/text/lossy-mangling.ts`) and tells us how often the
+   *          dialog opens onto a string that the lossy-mangling
+   *          decoder would recognize. v1.3 detection rule is
+   *          count-based: fires `'httpFraming'` when the value has
+   *          more `??` markers than preserved line breaks. The
+   *          `'httpFraming'` kind name is retained for telemetry
+   *          stability (the decoder still emits HTTP-canonical CRLF
+   *          framing). The prop is forward-compatible: future kinds
+   *          (`stackTrace`, `pem`, ...) extend the enum additively.
+   *          User string contents and raw paths are never logged.
    *
    * Note: this event's `source: 'rowButton'` cohort remains the row
    * Decoded pill click and is NOT comparable to
@@ -1426,6 +1438,59 @@ export const TELEMETRY_MESSAGE_IDS = [
    * milestone. Cross-event joins on `source` must use the new mapping.
    */
   'tree.decoded.viewerOpened',
+
+  /**
+   * Kind: event
+   * Fired by: `DecodedValueDialogComponent.toggleDecoded`
+   *           (`shared/components/json-tree/decoded-value-dialog/...`)
+   *           when the user flips the "Show `??` as line breaks"
+   *           slide toggle in the Inspect-string-value dialog. The
+   *           toggle is only visible when `detectLossyMangling(value)`
+   *           returns a non-`none` kind, so a fire of this event
+   *           necessarily implies a `manglingKind != 'none'` viewer
+   *           open earlier in the same dialog session.
+   * Volume control: bounded-frequency. Fires once per user toggle
+   * flip - capped at "a few times" per dialog open in practice. The
+   * gate (`manglingActive` only when `detectLossyMangling` fires)
+   * keeps the event's overall volume tightly bounded.
+   * Props: { to: 'raw' | 'decoded' }.
+   *          `to` is the post-flip state. The pre-flip state is the
+   *          binary complement; a `from`/`to` pair would be redundant
+   *          cardinality for a two-state toggle. No raw value content,
+   *          no path, no user-derived identifier is logged.
+   */
+  'tree.decoded.manglingToggle',
+
+  /**
+   * Kind: event
+   * Fired by: `DecodedValueDialogComponent.applyDecoded`
+   *           (`shared/components/json-tree/decoded-value-dialog/...`)
+   *           when the user clicks the Apply button in the
+   *           Inspect-string-value dialog. The button is only visible
+   *           when `manglingActive && decoded` -- i.e. the heuristic
+   *           fired AND the user already flipped the decode toggle on,
+   *           so a fire of this event necessarily implies a
+   *           `manglingKind != 'none'` viewer open earlier in the same
+   *           dialog session.
+   *
+   * The dialog only emits this event + a screen-reader announcement;
+   * the actual document mutation happens in
+   * `HomeComponent.onApplyDecodedRequest` and is observable via
+   * `home.decodedApply.applied`. The pair (`tree.decoded.apply` ->
+   * `home.decodedApply.applied`) is the dialog-click-to-doc-mutation
+   * funnel; the gap is the tree-side re-validation that can drop the
+   * request as stale (`tree.decoded.apply.staleClose`).
+   *
+   * Volume control: bounded-frequency. At most one fire per dialog
+   * close (the dialog closes on Apply click).
+   * Props: { manglingKind: 'httpFraming' }.
+   *          Closed-enum; `'none'` is impossible here because the
+   *          visibility gate forbids it. Forward-compatible with future
+   *          `LossyManglingKind` variants (`'stackTrace'`, `'pem'`, ...).
+   * Privacy: no string contents, no path, no PII. The closed-enum
+   *          `manglingKind` is content-derived but bounded-cardinality.
+   */
+  'tree.decoded.apply',
 
   /**
    * Kind: event
@@ -1624,6 +1689,60 @@ export const TELEMETRY_MESSAGE_IDS = [
 
   /**
    * Kind: event
+   * Fired by: `HomeComponent.onApplyDecodedRequest`
+   *           (`features/home/home.component.ts`) after a successful
+   *           non-stale dialog Apply patches the editor text in place
+   *           via `editor.applyEdit` with the `jotjson-decoded-apply`
+   *           named undo group.
+   * Volume control: bounded-frequency. One per successful Apply; a
+   *   stale or no-op request fires `tree.decoded.apply.staleClose` or
+   *   `home.decodedApply.applyFailed` instead.
+   * Props: { source: 'decodedDialog';
+   *          manglingKind: 'httpFraming' }.
+   *          `source` is a single-value closed-enum today (the dialog
+   *          is the only entry point), kept as an enum for forward-
+   *          compat. `manglingKind` mirrors `tree.decoded.apply` for
+   *          a clean funnel join. No path, no string content.
+   */
+  'home.decodedApply.applied',
+
+  /**
+   * Severity: warn
+   * Fired by: `HomeComponent.onApplyDecodedRequest`
+   *           (`features/home/home.component.ts`) when the Apply path
+   *           cannot reach a successful `editor.applyEdit`: the source
+   *           version drifted after `afterClosed`, the patcher threw,
+   *           the editor was not mounted, or `applyEdit` reported the
+   *           edit did not apply.
+   * Props: { reason: 'staleVersion' | 'parseFailed' | 'pathNotFound'
+   *   | 'notString' | 'editorUnavailable' | 'applyEditFailed' | 'unknown' }.
+   *          Closed-enum; `'parseFailed'`, `'pathNotFound'`, `'notString'`
+   *          come from the three documented `decoded.apply.*` throws of
+   *          `patchDecodedString`. `'unknown'` is the catch-all for
+   *          unexpected error messages.
+   */
+  'home.decodedApply.applyFailed',
+
+  /**
+   * Kind: event
+   * Fired by: `HomeComponent.emitUndoTelemetry` (case `'decoded.apply'`)
+   *           on snackbar Undo click or when Ctrl+Z (acting on the
+   *           `jotjson-decoded-apply` named undo group) brings the
+   *           editor back to the pre-apply text within ~30s of a
+   *           successful Apply.
+   * Volume control: bounded-frequency. At most one undo per Apply;
+   *   capped at 30s by `pendingReplaceUndo`'s `REPLACE_UNDO_CAP_MS`.
+   * Props: { source: 'snackbar' | 'ctrlZ';
+   *          undoLatencyMsBucket: '<1s' | '1-5s' | '5s+' }.
+   *          Mirrors `tree.extract.undo` so a misclick-rate KQL works
+   *          the same way across both mutating dialog surfaces.
+   * Measurements: { undoLatencyMs: number }.
+   * Privacy: no string contents or paths.
+   */
+  'home.decodedApply.undo',
+
+  /**
+   * Kind: event
    * Fired by: `HomeComponent` (`features/home/home.component.ts`) on
    *           snackbar Undo click in `openReplaceUndoSnack` and in the
    *           constructor effect when the editor content reverts to the
@@ -1810,6 +1929,32 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Privacy: no content.
    */
   'tree.extract.dialog.staleClose',
+
+  /**
+   * Kind: event
+   * Fired by: `JsonTreeComponent.openDecodedDialog`
+   *           (`shared/components/json-tree/json-tree.component.ts`)
+   *           inside the `dialogRef.afterClosed()` subscription when
+   *           the user clicks the dialog's Apply button but at least
+   *           one of the three stale-detection invariants has been
+   *           violated since dialog-open: (a) the captured
+   *           `sourceVersion` no longer matches
+   *           `extractSourceVersion()`; or (b) the tree-node identity
+   *           in `nodeIndex` has changed (tree rebuild / replace); or
+   *           (c) the current value at this path no longer byte-equals
+   *           the captured `data.value` (a different mutation landed
+   *           at the same path during the dialog session); or the
+   *           live detection returned `'none'` (the mangling was
+   *           already cleared).
+   * Volume control: bounded-frequency. Bounded by decoded-dialog
+   * Apply click frequency.
+   * Props: { manglingKind: 'none' | 'httpFraming' }.
+   *          The live detection's kind, snapshotted at close time.
+   *          `'none'` here is meaningful: it indicates the mangling
+   *          was already cleared by an earlier action.
+   * Privacy: no content.
+   */
+  'tree.decoded.apply.staleClose',
 
   /**
    * Kind: event
