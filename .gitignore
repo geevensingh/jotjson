@@ -88,3 +88,6 @@ Thumbs.db
 /perf-baselines/*.json
 !/perf-baselines/win32-x64-v1-reference.json
 
+
+# Vitest browser-mode attachments
+.vitest-attachments/
