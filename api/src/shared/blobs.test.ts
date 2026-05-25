@@ -1,3 +1,4 @@
+import type { TelemetryClient } from 'applicationinsights';
 import { HIGHLIGHT_PATH_FIXTURES } from '../../../src/testing/fixtures/highlight-paths.fixture';
 import {
   __resetBlobsContainerForTesting,
@@ -18,6 +19,7 @@ import {
   type BlobHighlight,
 } from './blobs';
 import { VersionConflictError } from './cosmos';
+import { __resetTelemetryInitForTesting, __setTelemetryClientForTesting } from './telemetry';
 
 // In-memory fake Cosmos container. Tracks items + exposes the query / create /
 // replace entry points that blobs.ts uses.
@@ -117,9 +119,27 @@ jest.mock('./cosmos', () => {
   };
 });
 
+let trackEventSpy: jest.Mock;
+
 beforeEach(() => {
   fake = makeFakeContainer();
   __resetBlobsContainerForTesting();
+  // Issue #71 B3: createBlob now emits `slug.collisions.exhausted` on
+  // the SlugGenerationError throw path. Install the telemetry seam for
+  // every test in this file so the new trackEvent call routes through
+  // a controlled spy instead of falling through to getClient() and
+  // polluting the module-static cachedClient + emitting a stderr
+  // console.warn. Per-test assertions on emit shape live in the
+  // describe block for createBlob's exhaustion path; other tests get
+  // the spy as a no-op installer.
+  __resetTelemetryInitForTesting();
+  trackEventSpy = jest.fn();
+  __setTelemetryClientForTesting({ trackEvent: trackEventSpy } as unknown as TelemetryClient);
+});
+
+afterEach(() => {
+  __resetTelemetryInitForTesting();
+  __setTelemetryClientForTesting(null);
 });
 
 const VALID_HIGHLIGHT: BlobHighlight = {
@@ -269,6 +289,38 @@ describe('createBlob', () => {
     fake.forceSlugCollision = true;
     await expect(createBlob('owner-2', { content: '[]' })).rejects.toBeInstanceOf(
       SlugGenerationError,
+    );
+  });
+
+  // Issue #71 B3 -- the SlugGenerationError throw path now emits
+  // `slug.collisions.exhausted`. This is a thresholded event (expected
+  // volume zero in production); a >0/day alert on it pages the
+  // operator on NanoID(6) capacity exhaustion.
+  it('emits slug.collisions.exhausted exactly once when every generated slug collides', async () => {
+    fake.forceSlugCollision = true;
+    await expect(createBlob('owner-3', { content: '[]' })).rejects.toBeInstanceOf(
+      SlugGenerationError,
+    );
+
+    const exhaustedCalls = trackEventSpy.mock.calls.filter(
+      ([envelope]) => (envelope as { name: string }).name === 'slug.collisions.exhausted',
+    );
+    expect(exhaustedCalls).toEqual([
+      [
+        {
+          name: 'slug.collisions.exhausted',
+          properties: undefined,
+          measurements: undefined,
+        },
+      ],
+    ]);
+  });
+
+  it('does NOT emit slug.collisions.exhausted on the happy path', async () => {
+    await createBlob('owner-4', { content: '[]' });
+
+    expect(trackEventSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'slug.collisions.exhausted' }),
     );
   });
 });
