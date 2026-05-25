@@ -13,7 +13,34 @@ export interface PatchResult {
   replacementText: string;
 }
 
+/**
+ * Splice the extracted JSON payload over the value at `path` in
+ * `text`. Single call site today: `HomeComponent.onExtractRequest`
+ * (`features/home/home.component.ts`).
+ *
+ * Throws:
+ *   - `'extract.patch.parse-failed'` if `text` has JSONC parse errors
+ *     or has no parse root.
+ *   - `'extract.patch.path-not-found'` if the path does not resolve.
+ *
+ * The handler at the single call site translates these two
+ * discriminators to closed-enum `tree.extract.applyFailed` warn
+ * reasons; any other throw routes to `tree.extract.unexpectedError`
+ * to keep raw exception messages out of `customDimensions` (see
+ * AGENTS.md S4 Telemetry / Privacy). Issue #372 tracks evolving
+ * this string-discriminator contract to a typed error or
+ * `Result<T, E>` shape; until then, the two literals above are the
+ * stable contract surface.
+ */
 export function patchExtractedValue(
+  text: string,
+  path: (string | number)[],
+  replacement: ExtractedJson,
+): PatchResult {
+  return patchExtractedValueImpl(text, path, replacement);
+}
+
+function realPatchExtractedValue(
   text: string,
   path: (string | number)[],
   replacement: ExtractedJson,
@@ -46,4 +73,32 @@ export function patchExtractedValue(
     targetLength: target.length,
     replacementText: indented,
   };
+}
+
+type PatchExtractedValueImpl = (
+  text: string,
+  path: (string | number)[],
+  replacement: ExtractedJson,
+) => PatchResult;
+
+let patchExtractedValueImpl: PatchExtractedValueImpl = realPatchExtractedValue;
+
+/**
+ * Test seam: replace the patcher implementation used by
+ * `patchExtractedValue`. Allows specs to force unexpected throws
+ * (errors outside the two documented `extract.patch.*` discriminators)
+ * to exercise the default branch in `HomeComponent.onExtractRequest`.
+ * Production code must never call this.
+ */
+export function __setPatchExtractedValueImplForTesting(impl: PatchExtractedValueImpl): void {
+  patchExtractedValueImpl = impl;
+}
+
+/**
+ * Test seam: restore the production patcher implementation. Pair every
+ * `__setPatchExtractedValueImplForTesting` call with this in a
+ * `finally` (or `afterEach`) to prevent cross-spec leakage.
+ */
+export function __resetPatchExtractedValueImplForTesting(): void {
+  patchExtractedValueImpl = realPatchExtractedValue;
 }
