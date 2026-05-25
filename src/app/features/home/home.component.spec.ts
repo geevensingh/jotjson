@@ -50,6 +50,10 @@ import {
   type ColdBootClipboardChoice,
 } from './cold-boot-clipboard-banner/cold-boot-clipboard-banner.component';
 import { ExtractJsonBannerComponent } from './extract-json-banner/extract-json-banner.component';
+import {
+  __resetPatchExtractedValueImplForTesting,
+  __setPatchExtractedValueImplForTesting,
+} from './extract-json-patcher';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { EDITOR_COMMIT_DEBOUNCE_MS, HomeComponent } from './home.component';
 import {
@@ -6672,6 +6676,65 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
 
     expect(warnSpy).toHaveBeenCalledWith('tree.extract.applyFailed', {
       reason: 'editorUnavailable',
+    });
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it('onExtractRequest emits applyFailed reason=pathNotFound when the path is missing', () => {
+    const { component, treeExtractor, snack, warnSpy } = setup();
+    treeExtractor.setVersion(20);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}"}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 20,
+        path: ['missing'],
+      }),
+    );
+
+    expect(warnSpy).toHaveBeenCalledWith('tree.extract.applyFailed', {
+      reason: 'pathNotFound',
+    });
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it('onExtractRequest emits applyFailed reason=parseFailed when the document fails to parse', () => {
+    const { component, treeExtractor, snack, warnSpy } = setup();
+    treeExtractor.setVersion(21);
+    component.onValueChange('{"a":}');
+
+    component.onExtractRequest(
+      extractRequest(extracted('{"a":1}'), {
+        sourceVersion: 21,
+      }),
+    );
+
+    expect(warnSpy).toHaveBeenCalledWith('tree.extract.applyFailed', {
+      reason: 'parseFailed',
+    });
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it('onExtractRequest forwards unexpected patcher throws to logger.error', () => {
+    const { component, treeExtractor, snack, errorSpy } = setup();
+    treeExtractor.setVersion(22);
+    component.onValueChange('{"payload":"INFO {\\"a\\":1}"}');
+    const cause = new Error('synthetic patcher failure');
+    __setPatchExtractedValueImplForTesting(() => {
+      throw cause;
+    });
+    try {
+      component.onExtractRequest(
+        extractRequest(extracted('{"a":1}'), {
+          sourceVersion: 22,
+        }),
+      );
+    } finally {
+      __resetPatchExtractedValueImplForTesting();
+    }
+
+    expect(errorSpy).toHaveBeenCalledWith('tree.extract.unexpectedError', cause, {
+      source: 'patcher',
     });
     expect(snack.open).not.toHaveBeenCalled();
   });

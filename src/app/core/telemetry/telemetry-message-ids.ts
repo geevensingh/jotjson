@@ -1518,10 +1518,45 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Fired by: `HomeComponent.onExtractRequest`
    *           (`features/home/home.component.ts`) when a tree extract click
    *           cannot be spliced into the current editor text.
-   * Props: { reason: 'extract.patch.parse-failed' | 'extract.patch.path-not-found'
-   *   | 'unknown' }.
+   * Props: { reason: 'parseFailed' | 'pathNotFound' | 'editorUnavailable'
+   *   | 'applyEditFailed' }. Closed-enum normalized form of the patcher's
+   *   `extract.patch.*` throw discriminators, plus the two editor-side
+   *   gating cases. Off-contract throws route to
+   *   `tree.extract.unexpectedError` instead, so the raw exception
+   *   message never lands in `customDimensions` (AGENTS.md S4 Telemetry
+   *   / Privacy). Mirrors `tree.sortKeys.applyFailed`'s reason
+   *   vocabulary for cross-handler KQL consistency.
+   * Privacy: no path, no document contents.
    */
   'tree.extract.applyFailed',
+
+  /**
+   * Severity: error
+   * Fired by: `HomeComponent.onExtractRequest`
+   *           (`features/home/home.component.ts`) default branch of the
+   *           patcher-error switch, when the thrown error does not match
+   *           either of the two documented `extract.patch.*` discriminators.
+   * Props: { source: 'patcher' }. Single-value closed-enum today;
+   *   reserved for future non-patcher unexpected sources (e.g. Monaco
+   *   edit machinery if a future regression throws synchronously from
+   *   inside the try). No raw exception message leaks into
+   *   `customDimensions`. The original cause is captured in App
+   *   Insights `exceptions` via `logger.error`'s second argument.
+   * Exception: any value caught from `patchExtractedValue(...)` whose
+   *   `error.message` is not `'extract.patch.parse-failed'` or
+   *   `'extract.patch.path-not-found'`. Indicates either a patcher
+   *   contract regression (e.g. a new throw added without updating the
+   *   handler) or an unexpected runtime fault (e.g. an internal
+   *   jsonc-parser error, OOM). Distinct from `applyFailed` warnings
+   *   to keep the closed-enum `warn` channel clean of unknown-shape
+   *   signals. Issue #372 tracks the longer-term contract evolution
+   *   (typed error class or `Result<T, E>`); the seam exists to drive
+   *   this default branch in tests under either contract.
+   * Privacy: stack and message land in `exceptions` (not
+   *   `customDimensions`), where the privacy initializer in
+   *   `TelemetryService` continues to apply.
+   */
+  'tree.extract.unexpectedError',
 
   // Tree extract undo (M7v)
 
