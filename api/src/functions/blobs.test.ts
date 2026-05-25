@@ -787,16 +787,28 @@ describe('access.forbidden telemetry emission from blob handlers', () => {
 
 describe('quota.exceeded telemetry emission from blob handlers', () => {
   function manyBlobsForQuota(count: number): unknown[] {
-    return Array.from({ length: count }, (_, i) => ({
-      id: `existing-${i}`,
-      slug: `slug-${i}`,
-      ownerId: 'u-1',
-      content: '{}',
-      isPublic: false,
-      createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-      updatedAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-      title: i === 0 ? 'oldest title' : undefined,
-    }));
+    return Array.from({ length: count }, (_, i) => {
+      // Date.UTC with day overflow > 31 normalizes correctly (Feb, Mar,
+      // ...) and emits a valid RFC-3339 instant. The previous
+      // `2026-01-${i + 1}` template produced invalid strings like
+      // `2026-01-100T00:00:00Z` at i=99 (PR #403 review comment 1).
+      // The lexicographic minimum was still `existing-0` either way --
+      // string-sort placed `2026-01-100` after `2026-01-09` but before
+      // `2026-01-10`, so the bug never broke the current `existing-0`
+      // assertion. Fix is defensive correctness for any future
+      // second-oldest / N-th-oldest assertion.
+      const timestamp = new Date(Date.UTC(2026, 0, 1 + i)).toISOString();
+      return {
+        id: `existing-${i}`,
+        slug: `slug-${i}`,
+        ownerId: 'u-1',
+        content: '{}',
+        isPublic: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        title: i === 0 ? 'oldest title' : undefined,
+      };
+    });
   }
 
   let mockTrackEvent: jest.Mock;
@@ -860,16 +872,28 @@ describe('quota.exceeded telemetry emission from blob handlers', () => {
 // event (server-owned naming; see docs/telemetry.md Backend events).
 describe('blob.autoDeleted telemetry emission from postBlob', () => {
   function manyBlobsForQuota(count: number): unknown[] {
-    return Array.from({ length: count }, (_, i) => ({
-      id: `existing-${i}`,
-      slug: `slug-${i}`,
-      ownerId: 'u-1',
-      content: '{}',
-      isPublic: false,
-      createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-      updatedAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-      title: i === 0 ? 'oldest title' : undefined,
-    }));
+    return Array.from({ length: count }, (_, i) => {
+      // See the matching helper in the `quota.exceeded` describe block
+      // above for the Date.UTC rationale. Both helpers are kept in their
+      // owning describe block per the repo convention "request-shape
+      // helpers at file scope, scenario-shaped test-data builders next
+      // to the scenarios that use them" (cf. `makeRequest` at file
+      // scope vs. `manyBlobs` / `existingDoc` in describe scope).
+      // Consolidating the two into a shared `makeTrackEventSpy()`-style
+      // backend test-builder fixture is tracked as a follow-up issue
+      // (see issue #71 close-out).
+      const timestamp = new Date(Date.UTC(2026, 0, 1 + i)).toISOString();
+      return {
+        id: `existing-${i}`,
+        slug: `slug-${i}`,
+        ownerId: 'u-1',
+        content: '{}',
+        isPublic: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        title: i === 0 ? 'oldest title' : undefined,
+      };
+    });
   }
 
   let mockTrackEvent: jest.Mock;

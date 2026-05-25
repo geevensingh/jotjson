@@ -227,7 +227,7 @@ Manual `customEvents` emitted from Azure Functions via the
 `trackEvent` helper in `api/src/shared/telemetry.ts`. The Functions
 runtime separately auto-instruments `requests` / `dependencies` /
 `exceptions`, but those pipelines do not produce `customEvents`;
-this section is exclusively about the four explicit events.
+this section is exclusively about the seven explicit events.
 
 The manual `TelemetryClient` is constructed lazily on first call,
 reads `APPLICATIONINSIGHTS_CONNECTION_STRING` from app settings, and
@@ -235,10 +235,17 @@ becomes a permanent no-op after a one-shot `console.warn` if the
 connection string is missing. `useGlobalProviders: false` keeps it
 isolated from the host's OpenTelemetry providers.
 
-All four events run after `requireAuth`, so `authMode` reflects
-which auth gate the call passed (or for `auth.tokenRejected` was
-rejected by). Properties land in `customDimensions`; numeric data
-lands in `customMeasurements`.
+Events emitted through the shared auth-gate helpers
+(`requireAuth` / `optionalAuth` in `api/src/shared/auth.ts`,
+`forbidden()` and `quotaExceeded()` in `api/src/shared/http.ts`)
+carry `authMode` as part of the helper's call contract -- the
+helper injects it on every emission. Events emitted directly from
+handler business-logic sites (`blob.autoDeleted`,
+`blob.versionConflict`, `slug.collisions.exhausted`) do **not**
+carry `authMode` because that dimension is not in scope at the
+emission point and inventing a value would be cargo. Properties
+land in `customDimensions`; numeric data lands in
+`customMeasurements`.
 
 ### Event catalog
 
@@ -390,11 +397,14 @@ customEvents
 // approaching the user base or a stuck slugExists mock leaking
 // into production. Paired with the
 // alert-${namePrefix}-slug-collisions-exhausted threshold-zero alert.
+// No projection is applied so the operator sees the default columns
+// (timestamp, name, customDimensions, etc.) and can correlate to
+// the deploy via the App Insights `app_Version` / `cloud_RoleName`
+// columns or a join against the deploy-marker table.
 customEvents
 | where timestamp > ago(30d)
 | where name == 'slug.collisions.exhausted'
 | where cloud_RoleName == 'api'
-| project timestamp, appVersion = tostring(customDimensions.appVersion)
 | order by timestamp desc
 ```
 
