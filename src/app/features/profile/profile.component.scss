@@ -241,43 +241,12 @@ dl {
 // Material 21 uses --mat-slide-toggle-* and --mat-button-toggle-*
 // tokens (not the legacy --mdc-switch-* / --mat-standard-button-toggle-*
 // names). Scoped to .prefs-card so the rest of the app is unaffected.
+// The slide-toggle token block is shared with the decoded-value
+// dialog's sub-header strip via @mixin compact-mat-slide-toggle().
 // ---------------------------------------------------------------
 .prefs-card {
   .mat-mdc-slide-toggle {
-    --mat-slide-toggle-track-width: 34px;
-    --mat-slide-toggle-track-height: 18px;
-    --mat-slide-toggle-state-layer-size: 28px;
-    --mat-slide-toggle-touch-target-size: 28px;
-    --mat-slide-toggle-track-outline-width: 1px;
-
-    --mat-slide-toggle-unselected-handle-size: 12px;
-    --mat-slide-toggle-selected-handle-size: 14px;
-    --mat-slide-toggle-with-icon-handle-size: 14px;
-    --mat-slide-toggle-pressed-handle-size: 14px;
-
-    // Handle margins are tuned for the default 52px track; rescale
-    // for the 34px track or the thumb pops out of the right edge.
-    --mat-slide-toggle-unselected-handle-horizontal-margin: 0 4px;
-    --mat-slide-toggle-selected-handle-horizontal-margin: 0 18px;
-    --mat-slide-toggle-unselected-pressed-handle-horizontal-margin: 0 2px;
-    --mat-slide-toggle-selected-pressed-handle-horizontal-margin: 0 16px;
-    --mat-slide-toggle-unselected-with-icon-handle-horizontal-margin: 0 2px;
-    --mat-slide-toggle-selected-with-icon-handle-horizontal-margin: 0 18px;
-
-    // Off state - filled mid-gray so it doesn't read as disabled.
-    --mat-slide-toggle-unselected-track-color: rgba(127, 127, 127, 0.45);
-    --mat-slide-toggle-unselected-hover-track-color: rgba(127, 127, 127, 0.55);
-    --mat-slide-toggle-unselected-focus-track-color: rgba(127, 127, 127, 0.6);
-    --mat-slide-toggle-unselected-pressed-track-color: rgba(127, 127, 127, 0.6);
-    --mat-slide-toggle-track-outline-color: rgba(127, 127, 127, 0.55);
-    --mat-slide-toggle-unselected-handle-color: #d0d0d0;
-    --mat-slide-toggle-unselected-hover-handle-color: #e0e0e0;
-    --mat-slide-toggle-unselected-focus-handle-color: #ececec;
-    --mat-slide-toggle-unselected-pressed-handle-color: #ececec;
-    --mat-slide-toggle-unselected-icon-color: transparent;
-    --mat-slide-toggle-unselected-focus-state-layer-color: rgba(127, 127, 127, 0.18);
-    --mat-slide-toggle-unselected-hover-state-layer-color: rgba(127, 127, 127, 0.12);
-    --mat-slide-toggle-unselected-pressed-state-layer-color: rgba(127, 127, 127, 0.2);
+    @include md.compact-mat-slide-toggle();
   }
 
   .mat-button-toggle-group {
