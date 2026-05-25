@@ -276,7 +276,7 @@ describe('DecodedValueDialogComponent', () => {
       const fixture = createWith({ value: MANGLED_RESPONSE, pathString: '$.x' });
       const toggle = toggleElement(fixture);
       expect(toggle?.textContent?.replace(/\s+/g, ' ').trim()).toContain(
-        'Decode HTTP "??" framing as line breaks',
+        'Show "??" as line breaks',
       );
     });
 
@@ -367,7 +367,7 @@ describe('DecodedValueDialogComponent', () => {
       cmp.toggleDecoded(true);
       cmp.toggleDecoded(false);
       expect(liveAnnounce).toHaveBeenCalledTimes(2);
-      expect(liveAnnounce.calls.argsFor(0)[0]).toBe('Showing HTTP framing as multi-line.');
+      expect(liveAnnounce.calls.argsFor(0)[0]).toBe('Showing "??" markers as line breaks.');
       expect(liveAnnounce.calls.argsFor(1)[0]).toBe('Showing raw value.');
     });
 

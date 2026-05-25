@@ -2590,7 +2590,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       viewResetTokenAtAccept: this.viewResetToken(),
     });
     this.openReplaceUndoSnack(
-      $localize`:@@home.decodedApply.snackbar.applied:Replaced HTTP framing with line breaks in the document.`,
+      $localize`:@@home.decodedApply.snackbar.applied:Replaced "??" markers with line breaks in the document.`,
       $localize`:@@home.decodedApply.snackbar.undo:Undo`,
     );
   }

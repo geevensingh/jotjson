@@ -1423,10 +1423,14 @@ export const TELEMETRY_MESSAGE_IDS = [
    *          `detectLossyMangling(value).kind` (see
    *          `core/text/lossy-mangling.ts`) and tells us how often the
    *          dialog opens onto a string that the lossy-mangling
-   *          decoder would recognize. The prop is forward-compatible:
-   *          future kinds (`stackTrace`, `pem`, ...) extend the
-   *          enum additively. User string contents and raw paths are
-   *          never logged.
+   *          decoder would recognize. v1.3 detection rule is
+   *          count-based: fires `'httpFraming'` when the value has
+   *          more `??` markers than preserved line breaks. The
+   *          `'httpFraming'` kind name is retained for telemetry
+   *          stability (the decoder still emits HTTP-canonical CRLF
+   *          framing). The prop is forward-compatible: future kinds
+   *          (`stackTrace`, `pem`, ...) extend the enum additively.
+   *          User string contents and raw paths are never logged.
    *
    * Note: this event's `source: 'rowButton'` cohort remains the row
    * Decoded pill click and is NOT comparable to
@@ -1439,7 +1443,7 @@ export const TELEMETRY_MESSAGE_IDS = [
    * Kind: event
    * Fired by: `DecodedValueDialogComponent.toggleDecoded`
    *           (`shared/components/json-tree/decoded-value-dialog/...`)
-   *           when the user flips the "Decode HTTP `??` framing"
+   *           when the user flips the "Show `??` as line breaks"
    *           slide toggle in the Inspect-string-value dialog. The
    *           toggle is only visible when `detectLossyMangling(value)`
    *           returns a non-`none` kind, so a fire of this event

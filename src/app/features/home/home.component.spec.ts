@@ -6953,7 +6953,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
 
       expect(snack.open).toHaveBeenCalledTimes(1);
       const [message, action, config] = snack.open.calls.mostRecent().args;
-      expect(message).toBe('Replaced HTTP framing with line breaks in the document.');
+      expect(message).toBe('Replaced "??" markers with line breaks in the document.');
       expect(action).toBe('Undo');
       expect(config).toEqual(jasmine.objectContaining({ duration: 8000, politeness: 'assertive' }));
     });

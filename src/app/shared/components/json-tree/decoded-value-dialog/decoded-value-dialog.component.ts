@@ -137,8 +137,8 @@ export class DecodedValueDialogComponent {
     return split.map((text, index) => ({ index: index + 1, text }));
   });
 
-  readonly manglingToggleLabel = $localize`:@@tree.decoded.dialog.manglingToggle.label:Decode HTTP "??" framing as line breaks`;
-  readonly manglingToggleTooltip = $localize`:@@tree.decoded.dialog.manglingToggle.tooltip:This string looks like it contains HTTP request or response framing whose line breaks were replaced with "??". Toggle to render the framing as multi-line. Body content is preserved verbatim.`;
+  readonly manglingToggleLabel = $localize`:@@tree.decoded.dialog.manglingToggle.label:Show "??" as line breaks`;
+  readonly manglingToggleTooltip = $localize`:@@tree.decoded.dialog.manglingToggle.tooltip:This string has more "??" markers than line breaks - they may be where line breaks were lost in transcoding. Toggle to render the "??" markers as line breaks. The underlying value is not modified; use Apply to commit the change.`;
   readonly applyTooltip = $localize`:@@tree.decoded.dialog.apply.tooltip:Replaces the "??" markers in this string with CRLF line breaks. Can be undone via the snackbar or Ctrl+Z.`;
 
   extract(): void {
@@ -186,7 +186,7 @@ export class DecodedValueDialogComponent {
   toggleDecoded(checked: boolean): void {
     this._decoded.set(checked);
     const announce = checked
-      ? $localize`:@@tree.decoded.dialog.announceDecoded:Showing HTTP framing as multi-line.`
+      ? $localize`:@@tree.decoded.dialog.announceDecoded:Showing "??" markers as line breaks.`
       : $localize`:@@tree.decoded.dialog.announceRaw:Showing raw value.`;
     void this.liveAnnouncer.announce(announce);
     this.logger.event('tree.decoded.manglingToggle', {

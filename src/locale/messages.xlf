@@ -2194,7 +2194,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="home.decodedApply.snackbar.applied" datatype="html">
-        <source>Replaced HTTP framing with line breaks in the document.</source>
+        <source>Replaced &quot;??&quot; markers with line breaks in the document.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/features/home/home.component.ts</context>
           <context context-type="linenumber">2575</context>
@@ -3559,14 +3559,14 @@
         </context-group>
       </trans-unit>
       <trans-unit id="tree.decoded.dialog.manglingToggle.label" datatype="html">
-        <source>Decode HTTP &quot;??&quot; framing as line breaks</source>
+        <source>Show &quot;??&quot; as line breaks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/decoded-value-dialog/decoded-value-dialog.component.ts</context>
           <context context-type="linenumber">140</context>
         </context-group>
       </trans-unit>
       <trans-unit id="tree.decoded.dialog.manglingToggle.tooltip" datatype="html">
-        <source>This string looks like it contains HTTP request or response framing whose line breaks were replaced with &quot;??&quot;. Toggle to render the framing as multi-line. Body content is preserved verbatim.</source>
+        <source>This string has more &quot;??&quot; markers than line breaks - they may be where line breaks were lost in transcoding. Toggle to render the &quot;??&quot; markers as line breaks. The underlying value is not modified; use Apply to commit the change.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/decoded-value-dialog/decoded-value-dialog.component.ts</context>
           <context context-type="linenumber">141</context>
@@ -3624,7 +3624,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="tree.decoded.dialog.announceDecoded" datatype="html">
-        <source>Showing HTTP framing as multi-line.</source>
+        <source>Showing &quot;??&quot; markers as line breaks.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/json-tree/decoded-value-dialog/decoded-value-dialog.component.ts</context>
           <context context-type="linenumber">189</context>

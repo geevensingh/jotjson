@@ -1,27 +1,39 @@
 /**
- * Detection + decode helpers for log strings whose CRLF byte pairs were
- * lossy-transcoded to literal "??" characters. This is a common pattern
- * in Microsoft / Azure dependent-service traces where HTTP request and
- * response framing is flattened into a single JSON string with header
- * line breaks replaced by `??` and the headers / body boundary replaced
- * by `????`.
+ * Detection + decode helpers for strings whose line breaks were
+ * lossy-transcoded to literal "??" characters - common in Microsoft /
+ * Azure dependent-service log payloads where multi-line content (HTTP
+ * request / response framing in particular) gets flattened into a
+ * single JSON string with each line break replaced by `??` and any
+ * blank line replaced by `????`.
  *
- * The helpers are intentionally heuristic and approximate. They drive a
- * non-destructive *suggestion* UI affordance (the Decode toggle in the
- * Inspect-string-value dialog), not an automatic rewrite. False
- * negatives are acceptable (no toggle shown - the dialog still works
- * as today). False positives surface a toggle the user can ignore.
+ * The helpers are intentionally heuristic and approximate. They drive
+ * a non-destructive *suggestion* UI affordance (the "Show `??` as line
+ * breaks" toggle in the Inspect-string-value dialog), not an automatic
+ * rewrite. False positives surface a toggle the user can flip on and
+ * back off at zero cost.
+ *
+ * Detection rule (v1.3): a string is flagged as containing lossy line-
+ * break mangling when it has more non-overlapping `??` pairs than
+ * preserved line breaks (any of `\r\n`, `\n`, `\r`). The intuition is
+ * "if the only line-break-shaped runs in this string are `??`, then
+ * `??` probably represents a line break". The rule is permissive on
+ * purpose: a string like `"a ?? b"` will trip it, but the cost of a
+ * false positive is one extra dialog-local toggle flip - the toggle
+ * defaults off, the dialog still works as today when the user ignores
+ * the toggle, and Apply (the only destructive action) is gated behind
+ * an explicit click on the decoded preview.
  *
  * The API shape is discriminated-union-by-`kind` so future mangling
  * shapes (stack traces, PEM blocks, exception details, ...) can be
- * added additively without breaking existing call sites.
+ * added additively without breaking existing call sites. The
+ * `'httpFraming'` kind name is retained for telemetry stability and
+ * because the decoder still emits HTTP-canonical CRLF framing (with
+ * `\r\n\r\n` at any `????` body separator); detection has broadened
+ * since the original HTTP-shape-only gate but the decoder's output
+ * shape is unchanged.
  *
  * Both `detectLossyMangling` and `decodeLossyMangling` are pure,
- * deterministic, and O(n) in the length of the input. The decoder is
- * **prefix-only** for `httpFraming`: only the header section is
- * rewritten; any `??` in the body is preserved verbatim, so URLs,
- * base64 fragments, or recursively mangled payloads inside the body
- * are not silently corrupted.
+ * deterministic, and O(n) in the length of the input.
  */
 
 /**
@@ -36,76 +48,95 @@ export interface LossyManglingDetection {
 }
 
 /**
- * Match shape used to count "??Name: <value>" header-like fragments.
- * Header-name grammar is intentionally narrow (letters then up to 40
- * letters / digits / hyphens) to dodge matching prose like
- * `"What?? Important: ..."`. The `\s\S` tail requires a non-empty
- * value, blocking matches such as `"...?? Hi: "` where the colon is
- * incidental punctuation.
- */
-const HTTP_HEADER_SHAPE_RE = /\?\?[A-Za-z][A-Za-z0-9-]{0,40}:\s\S/g;
-
-/**
- * Minimum number of header-shape matches required to classify a string
- * as `httpFraming`. Real HTTP responses have 5-15 headers, so 3 is
- * conservative; two-header responses fall below the gate by design.
- * Lowering this catches more (single-header / two-header responses)
- * at higher false-positive risk on prose.
- */
-const HTTP_FRAMING_MIN_HEADER_MATCHES = 3;
-
-/**
- * Anchored header-shape regex (same grammar as
- * {@link HTTP_HEADER_SHAPE_RE} but without the leading `??`, since the
- * fallback decoder tests segments produced by `split('??')`).
- */
-const HTTP_HEADER_NAME_RE = /^[A-Za-z][A-Za-z0-9-]{0,40}:\s\S/;
-
-/**
- * The "headers / body" separator in lossy-transcoded HTTP framing: a
- * blank line (CRLF + CRLF) is reduced to `????` by the same transcoder
- * that maps single CRLF to `??`.
+ * The "headers / body" separator that appears when a blank line
+ * (CRLF + CRLF, or any other doubled line break) is lossy-transcoded
+ * by the same pipeline that maps single line breaks to `??`. The
+ * decoder treats `????` as an HTTP-style header/body boundary: the
+ * portion before it is rewritten line-by-line and the portion after
+ * it is preserved verbatim.
  */
 const HTTP_BODY_SEPARATOR = '????';
+
+/**
+ * Regex used for counting "actual" line breaks: CRLF, lone CR, or
+ * lone LF. Matches the dialog preview's own line-splitter, so the
+ * detector counts what the user would see as a line break if the
+ * string were rendered raw.
+ */
+const LINE_BREAK_RE = /\r\n|\r|\n/g;
+
+/**
+ * Count non-overlapping occurrences of `needle` in `haystack`. Used
+ * for the `??` tally in {@link detectLossyMangling}. `String.match`
+ * with a regex literal would do the same job, but the indexOf walk
+ * is allocation-free and stride-correct for an arbitrary literal.
+ */
+function countNonOverlapping(haystack: string, needle: string): number {
+  if (needle.length === 0) return 0;
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) return count;
+    count++;
+    from = at + needle.length;
+  }
+}
 
 /**
  * Classify a string for known lossy-mangling shapes. Pure, O(n), no
  * I/O. Returns `{ kind: 'none' }` when nothing matches; callers should
  * treat `'none'` as "render the raw value as-is".
+ *
+ * v1.3 detection rule: fires `'httpFraming'` when the value contains
+ * more non-overlapping `??` markers than preserved line breaks (any
+ * of `\r\n`, `\n`, `\r`). Strings with no `??` short-circuit to
+ * `'none'`; strings whose line-break count already meets or exceeds
+ * the `??` count are treated as either already-multi-line content
+ * (no recovery needed) or content where `??` is most likely literal
+ * (e.g. JavaScript nullish-coalescing inside a multi-line snippet).
  */
 export function detectLossyMangling(value: string): LossyManglingDetection {
   if (!value.includes('??')) return { kind: 'none' };
-  const matches = value.match(HTTP_HEADER_SHAPE_RE);
-  if (matches === null || matches.length < HTTP_FRAMING_MIN_HEADER_MATCHES) {
-    return { kind: 'none' };
-  }
-  return { kind: 'httpFraming' };
+  const questionPairs = countNonOverlapping(value, '??');
+  const lineBreakMatches = value.match(LINE_BREAK_RE);
+  const lineBreaks = lineBreakMatches === null ? 0 : lineBreakMatches.length;
+  return questionPairs > lineBreaks ? { kind: 'httpFraming' } : { kind: 'none' };
 }
 
 /**
  * Decoder pair to {@link detectLossyMangling}. `kind === 'none'`
  * returns the input unchanged (idempotent for values where no shape
- * was detected). `kind === 'httpFraming'` returns a prefix-decoded
- * variant where `??` between header-shaped segments is replaced with
- * `\r\n` (canonical HTTP CRLF framing); the body (the portion after
- * the first `????`, or after the run of header-shaped segments ends
- * in the fallback case) is preserved verbatim, so any `??` inside
- * the body survives.
+ * was detected). `kind === 'httpFraming'` rewrites `??` to `\r\n`:
  *
- * The dialog preview's line-splitter (`/\r\n|\r|\n/`) handles both
- * CRLF and LF so the rendered output is visually identical regardless
- * of the byte form. The CRLF choice matters when Apply writes the
- * decoded value back into the JSON source (so any tool that later
- * round-trips the string through a real HTTP parser gets spec-canonical
- * framing).
+ * - When the input contains a `????` "header / body" separator the
+ *   decoder is **prefix-only**: only the section before `????` is
+ *   rewritten line-by-line, the separator becomes a CRLF blank line
+ *   (`\r\n\r\n`), and the body (everything after the separator) is
+ *   preserved verbatim so that URLs, base64 fragments, or recursively-
+ *   mangled payloads inside the body are not silently corrupted.
+ * - When the input has no `????` separator the decoder falls back to
+ *   a straight global replace `??` -> `\r\n`. There is no second
+ *   level of body-aware preservation in this case; the user already
+ *   sees the result before committing it via Apply.
  *
- * Worked example (HTTP response):
+ * CRLF (not LF) is emitted so any tool that later round-trips the
+ * string through a real HTTP parser sees spec-canonical framing. The
+ * dialog preview's line-splitter (`/\r\n|\r|\n/`) handles any line-
+ * break form, so the rendered output is visually identical regardless
+ * of the byte choice.
+ *
+ * Worked example (HTTP response with body separator):
  *   in:  `200 OK??Pragma: no-cache??Expires: -1????{"body":"..."}`
  *   out: `200 OK\r\nPragma: no-cache\r\nExpires: -1\r\n\r\n{"body":"..."}`
  *
  * Worked example with `??` in the body:
  *   in:  `200 OK??Foo: a??Bar: b??Baz: c????GET /x?a??b=1`
  *   out: `200 OK\r\nFoo: a\r\nBar: b\r\nBaz: c\r\n\r\nGET /x?a??b=1`
+ *
+ * Worked example with no `????` separator (fallback global replace):
+ *   in:  `Wait what?? Is that real?? Surely not??`
+ *   out: `Wait what\r\n Is that real\r\n Surely not\r\n`
  *
  * Performance: O(n) over input length. The dialog's existing `lines`
  * computed re-runs its line-splitter over the decoded output - also
@@ -138,24 +169,10 @@ function decodeHttpFraming(value: string): string {
     return headerPart + '\r\n\r\n' + bodyPart;
   }
 
-  // Fallback: no `????` separator. Walk `??`-separated segments and
-  // stop at the first non-header segment. Any tail is preserved
-  // verbatim (re-joined with `??` so internal `??` survives).
-  const segments = value.split('??');
-  let lastHeaderIndex = 0;
-  for (let i = 1; i < segments.length; i++) {
-    if (HTTP_HEADER_NAME_RE.test(segments[i] ?? '')) {
-      lastHeaderIndex = i;
-    } else {
-      break;
-    }
-  }
-  if (lastHeaderIndex === 0) {
-    // No header-shaped segments after the first one. Detector should
-    // not have classified this as `httpFraming`, but be defensive.
-    return value;
-  }
-  const head = segments.slice(0, lastHeaderIndex + 1).join('\r\n');
-  const tail = segments.slice(lastHeaderIndex + 1).join('??');
-  return tail.length > 0 ? head + '\r\n' + tail : head;
+  // Fallback: no `????` separator. The detection rule (count('??') >
+  // count(line breaks)) doesn't tell us where a header section ends,
+  // so we just replace every `??` with `\r\n`. The user previews the
+  // result via the toggle before deciding to Apply, so a wrong
+  // decoding is recoverable.
+  return value.split('??').join('\r\n');
 }
