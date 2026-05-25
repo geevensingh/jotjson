@@ -410,7 +410,7 @@ migration.
    Side-effect-via-default note (post-#376 iter-1): with all new
    params unset, `cosmos-jotjson-nonprod` stays Periodic; a separate
    nonprod Continuous `bicepparam` PR (mirror of #399, tracked as
-   its own `priority:high` follow-up issue) plus an operator-run
+   `priority:high` issue #404) plus an operator-run
    `workflow_dispatch` of `infra-nonprod.yml` is required before
    step 11's rehearsal can run. Same shape as the dev hole #399
    closes.
@@ -481,8 +481,8 @@ migration.
     - **Prerequisite**: `cosmos-jotjson-nonprod` must already be on
       Continuous backup before this step begins (PITR from a Periodic
       source fails). The nonprod Continuous `bicepparam` PR flagged
-      in step 5 must land, `infra-nonprod.yml` must be manually
-      dispatched, and the conversion must be verified via:
+      in step 5 (issue #404) must land, `infra-nonprod.yml` must be
+      manually dispatched, and the conversion must be verified via:
 
       ```
       az cosmosdb show -g rg-jotjson-nonprod -n cosmos-jotjson-nonprod \
