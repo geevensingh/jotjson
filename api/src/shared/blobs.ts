@@ -33,6 +33,7 @@ import {
   VersionConflictError,
   type VersionedDocument,
 } from './cosmos';
+import { trackEvent } from './telemetry';
 
 export interface BlobHighlight {
   path: string;
@@ -467,6 +468,12 @@ export async function createBlob(ownerId: string, input: CreateBlobInput): Promi
     }
   }
   if (!slug) {
+    // Capacity warning: NanoID(6) collisions exhausted MAX_SLUG_ATTEMPTS.
+    // The user sees a 503; without this event the operator has no signal.
+    // Issue #71 B3. Bare event name is the signal; the constant value of
+    // MAX_SLUG_ATTEMPTS at emission time is not a measurement worth
+    // shipping (architect/skeptic rubber-duck finding).
+    trackEvent('slug.collisions.exhausted');
     throw new SlugGenerationError(
       `Failed to generate a unique slug after ${MAX_SLUG_ATTEMPTS} attempts`,
     );

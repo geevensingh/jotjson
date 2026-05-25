@@ -39,6 +39,7 @@ import {
   unauthorized,
   withSecurityHeaders,
 } from '../shared/http';
+import { trackEvent } from '../shared/telemetry';
 import { readUser } from '../shared/users';
 
 /**
@@ -216,6 +217,12 @@ export async function postBlob(
           slug: oldest.slug,
           ...(oldest.title ? { title: oldest.title } : {}),
         };
+        // Server-owned silent-data-deletion signal (issue #71 B3).
+        // The frontend toast in quota-notification.service.ts is the
+        // user surface; this customEvent is the operator surface.
+        // Do NOT emit a sister frontend telemetry event with this name -
+        // see docs/telemetry.md "Backend events" notes.
+        trackEvent('blob.autoDeleted', { strategy: 'auto_fifo' });
       }
     }
   } catch (error) {
@@ -399,6 +406,9 @@ export async function putBlob(
       return forbidden('You do not own this blob', 'blob');
     }
     if (existing.version !== expectedVersion) {
+      // Concurrent-editor 412: the read-side version check rejected the
+      // PUT before the write was attempted. Issue #71 B3.
+      trackEvent('blob.versionConflict', { via: 'put' });
       return preconditionFailed(
         `Blob was modified by another writer (expected version ${expectedVersion}, found ${existing.version})`,
       );
@@ -417,7 +427,12 @@ export async function putBlob(
     return withEtag(200, saved);
   } catch (error) {
     if (error instanceof BlobValidationError) return badRequest(error.message);
-    if (error instanceof VersionConflictError) return preconditionFailed(error.message);
+    if (error instanceof VersionConflictError) {
+      // TOCTOU 412: read-side version matched but Cosmos rejected the
+      // replace because another writer committed in between. Issue #71 B3.
+      trackEvent('blob.versionConflict', { via: 'put' });
+      return preconditionFailed(error.message);
+    }
     return internalError(context, 'putBlob write', error);
   }
 }
