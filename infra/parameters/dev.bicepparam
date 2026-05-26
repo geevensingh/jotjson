@@ -33,3 +33,14 @@ param entraApiAudience = ''
 // Operational alerts receiver. See issue #94 and the 5/1 incident
 // retrospective in plan.md for context on why this is set in source.
 param notificationEmail = 'jotjsonadmin@gmail.com'
+
+// Cosmos backup policy: 'Continuous' is required for the
+// continuous-backup-conversion wait at docs/migration-westus2.md
+// Phase 0 step 10 (against cosmos-jotjson-dev), and for Phase 2
+// step 1's tier=Continuous7Days query and step 2's
+// `az cosmosdb restore`. PR-A iter-1 (#376) made the Periodic
+// branch of `cosmosDb.bicep` a true no-op via `union()`, so
+// this param is the only way to enable Continuous explicitly.
+// One-way per Azure -- see `infra/modules/cosmosDb.bicep:6`.
+// Tracking: #399.
+param cosmosBackupPolicyType = 'Continuous'
