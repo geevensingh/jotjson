@@ -1,0 +1,32 @@
+name: Install Playwright Chromium
+description: >-
+  Resolves the @playwright/test version, caches the matching Chromium
+  binary set under ~/.cache/ms-playwright, and installs Chromium with
+  its system deps. Used by both the web-tests (Vitest browser mode)
+  and e2e (Playwright Test) jobs so the cache key is defined in
+  exactly one place (issue #47, Architect #5).
+
+  The cache key is `playwright-${{ runner.os }}-<resolved-version>`.
+  Producer (this action) and consumer (any job that calls it) share
+  the same formula by construction.
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Playwright version
+      id: pw-version
+      # Cache key needs an exact version. Read it from the installed
+      # @playwright/test package so OS + version uniquely identify the
+      # browser binary set.
+      shell: bash
+      run: |
+        version=$(node -p "require('@playwright/test/package.json').version")
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+    - name: Cache Playwright browsers
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+    - name: Install Chromium
+      shell: bash
+      run: npx playwright install --with-deps chromium
