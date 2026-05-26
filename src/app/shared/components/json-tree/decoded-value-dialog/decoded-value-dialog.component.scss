@@ -2,9 +2,20 @@
 // pre-wrap toggle so virtual-scroll rows can stay uniform-height
 // (issue #95 Phase 0). Layout intent: title bar + scrollable
 // monospace body with a left gutter for line numbers + action row.
+// When the lossy-mangling heuristic fires, a sub-header strip with
+// a Decode toggle appears between the title and the body (visually);
+// the strip lives AFTER the content in DOM so the body content is
+// the first tabbable element after dialog open (initial focus lands
+// on the dialog wrapper via `autoFocus: 'dialog'` -> Tab moves to
+// `.decoded-content[tabindex=0]` first, then to the toggle). The
+// host uses flex column with explicit `order` to render the visual
+// layout title -> sub-header -> content -> actions.
+
+@use '../../../../../styles/material-density' as md;
 
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
   // The dialog hosts its own scroller in `.decoded-content`; the
   // mat-dialog default would let the host overflow.
   min-width: 0;
@@ -17,6 +28,7 @@
   // Material's default mat-dialog-title has a generous bottom margin;
   // tighten so the path can sit right under the label.
   margin-bottom: 4px;
+  order: 1;
 }
 
 .decoded-title__label {
@@ -43,8 +55,40 @@
   color: var(--mat-sys-on-surface-variant, #aeb6c2);
 }
 
+.decoded-sub-header {
+  // Visually appears between the title and the content even though
+  // the element lives AFTER `.decoded-content` in DOM (see the host
+  // file header for why). The `order` value sits between
+  // `.decoded-title` (1) and `.decoded-content` (3).
+  order: 2;
+  display: flex;
+  align-items: center;
+  // 24px horizontal inset aligns the toggle with the title, content,
+  // and actions row, which all sit at Material 21's M3 dialog default
+  // padding (see node_modules/@angular/material/dialog/_m3-dialog.scss
+  // for the --mat-dialog-*-padding tokens, all 24px horizontal). The
+  // shorthand tokens carry a multi-value vertical/horizontal pair, so
+  // we hard-code 24px here rather than reading the token directly.
+  padding: 4px 24px 8px;
+  // Forward-compat for additive LossyManglingKind variants that might
+  // place a second control (chip / button / count badge) alongside
+  // the toggle. Matches `.decoded-title`'s 12px gap.
+  gap: 12px;
+}
+
+.decoded-sub-header__toggle {
+  @include md.compact-mat-slide-toggle();
+
+  // Material's `.mat-mdc-slide-toggle .mat-internal-form-field`
+  // selector chain sets the label font-size with equal specificity,
+  // so a host-level `font-size: 13px` is silently overridden. Use
+  // the dedicated Material 21 token to actually deliver 13px.
+  --mat-slide-toggle-label-text-size: 13px;
+}
+
 .decoded-content {
   display: block;
+  order: 3;
   // Cap dialog body so very long decoded payloads scroll instead of
   // pushing the viewport off the screen. 70vh leaves room for the
   // title and action rows on most viewports.
@@ -53,6 +97,15 @@
   // mat-dialog-content already has overflow:auto, but be explicit so
   // the scroller is unambiguous when style cascade changes.
   overflow: auto;
+  // The `tabindex="0"` on this element makes the body the first
+  // tabbable target after the dialog wrapper. Suppress the default
+  // browser focus ring (which paints a thick rectangle around the
+  // whole scroller) and substitute a subtle inset outline that
+  // remains a11y-visible.
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary, #6750a4);
+    outline-offset: -2px;
+  }
 }
 
 .decoded-pre {
@@ -109,6 +162,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  order: 4;
   // mat-dialog-actions defaults align="end" pushes everything right;
   // when present, the extract button uses auto right margin so the
   // copy and close buttons stay grouped at the right edge.
@@ -116,7 +170,8 @@
 }
 
 .decoded-actions__extract,
-.decoded-actions__copy {
+.decoded-actions__copy,
+.decoded-actions__apply {
   // Material 21 projects non-`mat-icon` button content into an
   // auto-injected `<span class="mdc-button__label">` wrapper, so any
   // `display: inline-flex; gap: 6px` applied to the button host never

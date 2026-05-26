@@ -30,6 +30,7 @@ import {
 import { HIGHLIGHT_PALETTE_LIGHT, contrastText } from './highlight-palette';
 import {
   JsonTreeComponent,
+  type TreeApplyDecodedRequest,
   type TreeExtractRequest,
   type TreeSortKeysRequest,
 } from './json-tree.component';
@@ -6333,7 +6334,7 @@ describe('JsonTreeComponent', () => {
         expect(open).not.toHaveBeenCalled();
       });
 
-      it('dialog close result { extract: true } emits extractRequest with decodedDialog source when stable', async () => {
+      it('dialog close result { kind: "extract" } emits extractRequest with decodedDialog source when stable', async () => {
         const dialogClosed$ = new Subject<DecodedValueDialogResult>();
         const replacement = replacementFor('{\n  "answer": 42\n}');
         await createWith({ note: 'abc\ndef' });
@@ -6349,7 +6350,7 @@ describe('JsonTreeComponent', () => {
 
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
-        dialogClosed$.next({ extract: true });
+        dialogClosed$.next({ kind: 'extract' });
         dialogClosed$.complete();
         fixture.detectChanges();
 
@@ -6364,7 +6365,7 @@ describe('JsonTreeComponent', () => {
         expect(focusRestore).toHaveBeenCalledWith('$.note');
       });
 
-      it('dialog close result { extract: true } after sourceVersion bumps logs staleClose and does not emit extractRequest', async () => {
+      it('dialog close result { kind: "extract" } after sourceVersion bumps logs staleClose and does not emit extractRequest', async () => {
         const dialogClosed$ = new Subject<DecodedValueDialogResult>();
         const replacement = replacementFor('{\n  "answer": 42\n}');
         await createWith({ note: 'abc\ndef' });
@@ -6383,7 +6384,7 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         fixture.componentRef.setInput('extractSourceVersion', 8);
         fixture.detectChanges();
-        dialogClosed$.next({ extract: true });
+        dialogClosed$.next({ kind: 'extract' });
         dialogClosed$.complete();
         fixture.detectChanges();
 
@@ -6414,6 +6415,103 @@ describe('JsonTreeComponent', () => {
         expect(events).toEqual([]);
         expect(staleCloseEventCalls(event)).toBe(0);
         expect(focusRestore).toHaveBeenCalledWith('$.note');
+      });
+
+      describe('applyDecoded dispatch (HTTP-framing-shaped value)', () => {
+        const MANGLED =
+          '200 OK??Pragma: no-cache??Strict-Transport-Security: max-age=63072000' +
+          '??x-ms-request-id: e4786c1a-d489-4a6e-99ac-0d91ffb2711b' +
+          '??Cache-Control: no-cache??Content-Type: application/json' +
+          '????{"organizationId":"e674a4a6"}';
+
+        function applyStaleCloseCalls(eventSpy: Mock): number {
+          return eventSpy.mock.calls.filter((args) => args[0] === 'tree.decoded.apply.staleClose')
+            .length;
+        }
+
+        it('dialog close result { kind: "applyDecoded" } emits applyDecodedRequest with manglingKind when stable', async () => {
+          const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+          await createWith({ responseDetails: MANGLED });
+          cmp.expandAll();
+          fixture.detectChanges();
+          fixture.componentRef.setInput('extractSourceVersion', 7);
+          fixture.detectChanges();
+          const focusRestore = vi.spyOn(cmp, 'focusRowByPath');
+          const events: TreeApplyDecodedRequest[] = [];
+          cmp.applyDecodedRequest.subscribe((request) => events.push(request));
+          spyOnDialogOpen(dialogClosed$);
+
+          decodedButtonFor('$.responseDetails')!.click();
+          fixture.detectChanges();
+          dialogClosed$.next({ kind: 'applyDecoded' });
+          dialogClosed$.complete();
+          fixture.detectChanges();
+
+          expect(events).toEqual([
+            {
+              path: ['responseDetails'],
+              sourceVersion: 7,
+              manglingKind: 'httpFraming',
+            },
+          ]);
+          expect(focusRestore).toHaveBeenCalledWith('$.responseDetails');
+        });
+
+        it('dialog close result { kind: "applyDecoded" } after sourceVersion bumps logs apply.staleClose and does not emit', async () => {
+          const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+          await createWith({ responseDetails: MANGLED });
+          cmp.expandAll();
+          fixture.detectChanges();
+          fixture.componentRef.setInput('extractSourceVersion', 7);
+          fixture.detectChanges();
+          const event = vi.spyOn(TestBed.inject(LoggerService), 'event');
+          const focusRestore = vi.spyOn(cmp, 'focusRowByPath');
+          const events: TreeApplyDecodedRequest[] = [];
+          cmp.applyDecodedRequest.subscribe((request) => events.push(request));
+          spyOnDialogOpen(dialogClosed$);
+
+          decodedButtonFor('$.responseDetails')!.click();
+          fixture.detectChanges();
+          fixture.componentRef.setInput('extractSourceVersion', 8);
+          fixture.detectChanges();
+          dialogClosed$.next({ kind: 'applyDecoded' });
+          dialogClosed$.complete();
+          fixture.detectChanges();
+
+          expect(events).toEqual([]);
+          expect(applyStaleCloseCalls(event)).toBe(1);
+          expect(focusRestore).toHaveBeenCalledWith('$.responseDetails');
+        });
+
+        it('dialog close result { kind: "applyDecoded" } after value mutation logs apply.staleClose and does not emit', async () => {
+          const dialogClosed$ = new Subject<DecodedValueDialogResult>();
+          await createWith({ responseDetails: MANGLED });
+          cmp.expandAll();
+          fixture.detectChanges();
+          fixture.componentRef.setInput('extractSourceVersion', 7);
+          fixture.detectChanges();
+          const event = vi.spyOn(TestBed.inject(LoggerService), 'event');
+          const focusRestore = vi.spyOn(cmp, 'focusRowByPath');
+          const events: TreeApplyDecodedRequest[] = [];
+          cmp.applyDecodedRequest.subscribe((request) => events.push(request));
+          spyOnDialogOpen(dialogClosed$);
+
+          decodedButtonFor('$.responseDetails')!.click();
+          fixture.detectChanges();
+          // Replace the value at the same path with a non-mangled string
+          // (simulating a different document update during the dialog
+          // session). The third invariant -- byte-equality of the live
+          // value with the captured value -- must catch this.
+          fixture.componentRef.setInput('value', { responseDetails: 'totally different' });
+          fixture.detectChanges();
+          dialogClosed$.next({ kind: 'applyDecoded' });
+          dialogClosed$.complete();
+          fixture.detectChanges();
+
+          expect(events).toEqual([]);
+          expect(applyStaleCloseCalls(event)).toBe(1);
+          expect(focusRestore).toHaveBeenCalledWith('$.responseDetails');
+        });
       });
     });
 
@@ -6475,6 +6573,7 @@ describe('JsonTreeComponent', () => {
           reason: 'escape',
           pathDepth: bucketCount(2),
           lineCountBucket: '2-5',
+          manglingKind: 'none',
         });
       });
 
@@ -6492,6 +6591,7 @@ describe('JsonTreeComponent', () => {
           reason: 'long',
           pathDepth: bucketCount(2),
           lineCountBucket: '1',
+          manglingKind: 'none',
         });
       });
 
@@ -6512,10 +6612,30 @@ describe('JsonTreeComponent', () => {
             reason: 'escape',
             pathDepth: bucketCount(2),
             lineCountBucket: '2-5',
+            manglingKind: 'none',
           });
         } finally {
           closeOpenMenus();
         }
+      });
+
+      it('logs tree.decoded.viewerOpened with manglingKind="httpFraming" for ??-mangled HTTP framing', async () => {
+        const responseDetails =
+          '200 OK??Pragma: no-cache' +
+          '??Strict-Transport-Security: max-age=63072000' +
+          '??x-ms-request-id: e4786c1a-d489-4a6e-99ac-0d91ffb2711b' +
+          '??Cache-Control: no-cache??Content-Type: application/json' +
+          '????{"organizationId":"e674a4a6"}';
+        await createWith({ details: responseDetails });
+        cmp.expandAll();
+        fixture.detectChanges();
+        const event = vi.spyOn(TestBed.inject(LoggerService), 'event');
+        spyOnDialogOpen();
+        decodedButtonFor('$.details')!.click();
+        fixture.detectChanges();
+        const callArgs = event.mock.calls.find((args) => args[0] === 'tree.decoded.viewerOpened');
+        expect(callArgs).toBeTruthy();
+        expect(callArgs?.[1]).toEqual(expect.objectContaining({ manglingKind: 'httpFraming' }));
       });
     });
   });

@@ -43,6 +43,7 @@ import type { ReplaceAllResult } from '../../shared/components/json-editor/json-
 import { EMPTY_BEACON_INDEX } from '../../shared/components/json-tree/formatting-beacons-index';
 import {
   JsonTreeComponent,
+  type TreeApplyDecodedRequest,
   type TreeExtractRequest,
   type TreeSortKeysRequest,
 } from '../../shared/components/json-tree/json-tree.component';
@@ -6120,6 +6121,17 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     return { path };
   }
 
+  function applyDecodedRequest(
+    overrides: Partial<TreeApplyDecodedRequest> = {},
+  ): TreeApplyDecodedRequest {
+    return {
+      path: ['responseDetails'],
+      sourceVersion: 1,
+      manglingKind: 'httpFraming',
+      ...overrides,
+    };
+  }
+
   const parseJsonCandidate: ParseJsonCandidate = (candidateText: string) => {
     const errors: ParseError[] = [];
     const value: unknown = parse(candidateText, errors, {
@@ -6910,6 +6922,122 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
       { source: 'snackbar', undoLatencyMsBucket: '1-5s' },
       expect.objectContaining({ undoLatencyMs: expect.any(Number) }),
     );
+  });
+
+  describe('onApplyDecodedRequest', () => {
+    // Realistic HTTP-framed mangled body that fires the heuristic
+    // (>= 3 header-shape matches with a `????` body separator).
+    const MANGLED_VALUE =
+      '200 OK??Pragma: no-cache??Strict-Transport-Security: max-age=63072000' +
+      '??x-ms-request-id: e4786c1a-d489-4a6e-99ac-0d91ffb2711b' +
+      '??Cache-Control: no-cache??Content-Type: application/json' +
+      '????{"organizationId":"e674a4a6"}';
+    const PRIOR_DOC = `{"responseDetails":${JSON.stringify(MANGLED_VALUE)}}`;
+    const EXPECTED_DECODED =
+      '200 OK\r\nPragma: no-cache\r\nStrict-Transport-Security: max-age=63072000' +
+      '\r\nx-ms-request-id: e4786c1a-d489-4a6e-99ac-0d91ffb2711b' +
+      '\r\nCache-Control: no-cache\r\nContent-Type: application/json' +
+      '\r\n\r\n{"organizationId":"e674a4a6"}';
+    const EXPECTED_DOC = `{"responseDetails":${JSON.stringify(EXPECTED_DECODED)}}`;
+
+    it('patches the document and replaces ?? with CRLF inside the targeted string literal', () => {
+      const { component, treeExtractor } = setup();
+      treeExtractor.setVersion(1);
+      component.onValueChange(PRIOR_DOC);
+
+      component.onApplyDecodedRequest(applyDecodedRequest());
+
+      expect(component.content()).toBe(EXPECTED_DOC);
+    });
+
+    it('emits home.decodedApply.applied with manglingKind after a successful apply', () => {
+      const { component, treeExtractor, eventSpy } = setup();
+      treeExtractor.setVersion(1);
+      component.onValueChange(PRIOR_DOC);
+      eventSpy.mockClear();
+
+      component.onApplyDecodedRequest(applyDecodedRequest());
+
+      expect(eventSpy).toHaveBeenCalledWith('home.decodedApply.applied', {
+        source: 'decodedDialog',
+        manglingKind: 'httpFraming',
+      });
+    });
+
+    it('opens an assertive 8-second undo snackbar after a successful apply', () => {
+      const { component, treeExtractor, snack } = setup();
+      treeExtractor.setVersion(1);
+      component.onValueChange(PRIOR_DOC);
+
+      component.onApplyDecodedRequest(applyDecodedRequest());
+
+      expect(snack.open).toHaveBeenCalledTimes(1);
+      const [message, action, config] = snack.open.mock.lastCall!;
+      expect(message).toBe('Replaced "??" markers with line breaks in the document.');
+      expect(action).toBe('Undo');
+      expect(config).toEqual(expect.objectContaining({ duration: 8000, politeness: 'assertive' }));
+    });
+
+    it('drops a stale apply (source-version drift) with home.decodedApply.applyFailed', () => {
+      const { component, treeExtractor, warnSpy } = setup();
+      treeExtractor.setVersion(2);
+      component.onValueChange(PRIOR_DOC);
+      const before = component.content();
+
+      component.onApplyDecodedRequest(applyDecodedRequest({ sourceVersion: 1 }));
+
+      expect(component.content()).toBe(before);
+      expect(warnSpy).toHaveBeenCalledWith('home.decodedApply.applyFailed', {
+        reason: 'staleVersion',
+      });
+    });
+
+    it('emits home.decodedApply.applyFailed { reason: "pathNotFound" } when path is absent', () => {
+      const { component, treeExtractor, warnSpy } = setup();
+      treeExtractor.setVersion(1);
+      component.onValueChange('{"other":"plain"}');
+
+      component.onApplyDecodedRequest(applyDecodedRequest());
+
+      expect(warnSpy).toHaveBeenCalledWith('home.decodedApply.applyFailed', {
+        reason: 'pathNotFound',
+      });
+    });
+
+    it('emits home.decodedApply.applyFailed { reason: "notString" } when target is not a string', () => {
+      const { component, treeExtractor, warnSpy } = setup();
+      treeExtractor.setVersion(1);
+      component.onValueChange('{"responseDetails":42}');
+
+      component.onApplyDecodedRequest(applyDecodedRequest());
+
+      expect(warnSpy).toHaveBeenCalledWith('home.decodedApply.applyFailed', {
+        reason: 'notString',
+      });
+    });
+
+    it('snackbar Undo restores the pre-apply document and emits home.decodedApply.undo', () => {
+      let nowMs = 1000;
+      vi.spyOn(performance, 'now').mockImplementation(() => nowMs);
+      const { component, treeExtractor, snackAction, eventSpy } = setup();
+      treeExtractor.setVersion(1);
+      component.onValueChange(PRIOR_DOC);
+
+      nowMs = 1500;
+      component.onApplyDecodedRequest(applyDecodedRequest());
+      expect(component.content()).toBe(EXPECTED_DOC);
+      eventSpy.mockClear();
+
+      nowMs = 2500;
+      snackAction.next();
+
+      expect(component.content()).toBe(PRIOR_DOC);
+      expect(eventSpy).toHaveBeenCalledWith(
+        'home.decodedApply.undo',
+        { source: 'snackbar', undoLatencyMsBucket: '1-5s' },
+        expect.objectContaining({ undoLatencyMs: expect.any(Number) }),
+      );
+    });
   });
 
   it('debounces tree string scans after treeValue changes', fakeAsync(() => {
