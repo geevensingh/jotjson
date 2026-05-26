@@ -88,7 +88,7 @@ export default defineConfig(() => ({
     setupFiles: ['src/test-setup.ts'],
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.perf.ts', 'node_modules/**', 'dist/**'],
-    reporters: ['default', 'junit', new SeedReporter()],
+    reporters: ['default', ['junit', { suiteName: 'web' }], new SeedReporter()],
     outputFile: { junit: 'test-results/web/junit.xml' },
     coverage: {
       provider: 'v8',
