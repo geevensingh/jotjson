@@ -33,3 +33,12 @@ param entraApiAudience = ''
 // Operational alerts receiver. Same address as prod -- the alerting
 // surface is unified across environments by design (see issue #94).
 param notificationEmail = 'jotjsonadmin@gmail.com'
+
+// Cosmos backup policy: 'Continuous' is required for Phase 0
+// step 11's rehearsal PITR-restore from cosmos-jotjson-nonprod
+// (docs/migration-westus2.md). PR-A iter-1 (#376) made the
+// Periodic branch of cosmosDb.bicep a true no-op via union(),
+// so this param is the only way to enable Continuous explicitly.
+// One-way per Azure -- see infra/modules/cosmosDb.bicep:6.
+// Tracking: #404.
+param cosmosBackupPolicyType = 'Continuous'
