@@ -2,7 +2,7 @@ import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of, throwError } from 'rxjs';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 import type {
   FormattingRuleSet,
@@ -65,8 +65,8 @@ function setCache(sets: FormattingRuleSet[] | null): void {
 }
 
 describe('RuleSetsToolbarComponent', () => {
-  let dialogStub: { open: MockInstance };
-  let snackStub: { open: MockInstance };
+  let dialogStub: { open: Mock };
+  let snackStub: { open: Mock };
 
   beforeEach(() => {
     localStorage.removeItem(PREFS_KEY);
@@ -199,7 +199,7 @@ describe('RuleSetsToolbarComponent', () => {
       trigger.click();
 
       expect(dialogStub.open).toHaveBeenCalledTimes(1);
-      expect(dialogStub.open.mock.lastCall[0]).toBe(ClonePresetDialogComponent);
+      expect(dialogStub.open.mock.lastCall![0]).toBe(ClonePresetDialogComponent);
     });
 
     it('auto-activates and toasts on successful clone', async () => {
@@ -235,7 +235,7 @@ describe('RuleSetsToolbarComponent', () => {
       expect(setDefaultsSpy).toHaveBeenCalledWith(['cloned-1']);
       expect(prefs.prefs().activeRuleSetIds).toEqual(['cloned-1']);
       expect(snackStub.open).toHaveBeenCalled();
-      const toastMessage = snackStub.open.mock.lastCall[0] as string;
+      const toastMessage = snackStub.open.mock.lastCall![0] as string;
       expect(toastMessage).toContain('Error detection');
     });
 

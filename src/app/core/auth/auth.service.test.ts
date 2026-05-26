@@ -20,9 +20,12 @@ describe('AuthService', () => {
   let telemetryServiceSpy: Mocked<TelemetryService>;
 
   function configureAuthTestingModule(): void {
-    loggerServiceSpy = { event: vi.fn(), warn: vi.fn() } as Mocked<LoggerService>;
-    telemetryServiceSpy = { setUser: vi.fn(), flush: vi.fn() } as Mocked<TelemetryService>;
-    telemetryServiceSpy.flush.mockResolvedValue();
+    loggerServiceSpy = { event: vi.fn(), warn: vi.fn() } as unknown as Mocked<LoggerService>;
+    telemetryServiceSpy = {
+      setUser: vi.fn(),
+      flush: vi.fn(),
+    } as unknown as Mocked<TelemetryService>;
+    telemetryServiceSpy.flush.mockResolvedValue(undefined);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [

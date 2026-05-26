@@ -359,7 +359,7 @@ describe('ProfileComponent', () => {
       await checkbox.toggle();
 
       expect(updateSpy.mock.calls.length).toBe(1);
-      const actualPatch: unknown = updateSpy.mock.lastCall[0];
+      const actualPatch: unknown = updateSpy.mock.lastCall![0];
       expect(actualPatch).toEqual({
         treeDateAnnotationUnits: { [unitCase.key]: false },
       });
@@ -382,7 +382,7 @@ describe('ProfileComponent', () => {
     await toggle.toggle();
 
     expect(updateSpy.mock.calls.length).toBe(1);
-    expect(updateSpy.mock.lastCall[0]).toEqual({
+    expect(updateSpy.mock.lastCall![0]).toEqual({
       treeDateAnnotationFriendlyForms: false,
     });
     expect(prefs.prefs().treeDateAnnotationFriendlyForms).toBe(false);

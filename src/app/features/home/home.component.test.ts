@@ -7,7 +7,7 @@ import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import type { ParseError } from 'jsonc-parser';
 import { parse } from 'jsonc-parser';
 import { EMPTY, of, Subject, throwError } from 'rxjs';
-import { type Mocked, type MockInstance } from 'vitest';
+import { type Mock, type Mocked } from 'vitest';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import { provideStubEnvLabel } from '../../../testing/env.testing';
 import { installMatchMediaStub } from '../../../testing/match-media.testing';
@@ -1664,14 +1664,14 @@ describe('cold-boot clipboard auto-paste', () => {
   }
 
   interface SnackBarStub {
-    open: MockInstance<
+    open: Mock<
       (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
     >;
   }
 
   interface LoadingSplashStub {
-    beginBootstrapHold: MockInstance<(reason: 'coldBootClipboard', maxMs: number) => () => void>;
-    markBlobRenderComplete: MockInstance<() => void>;
+    beginBootstrapHold: Mock<(reason: 'coldBootClipboard', maxMs: number) => () => void>;
+    markBlobRenderComplete: Mock<() => void>;
   }
 
   interface ColdBootHarness {
@@ -1679,8 +1679,8 @@ describe('cold-boot clipboard auto-paste', () => {
     component: HomeComponent;
     preferences: PreferencesService;
     clipboard: Partial<ClipboardPollingService> & {
-      readGrantedClipboardOnce: MockInstance<(reason: 'coldBootAutoPaste') => Promise<ReadResult>>;
-      awaitPermissionReady: MockInstance<() => Promise<void>>;
+      readGrantedClipboardOnce: Mock<(reason: 'coldBootAutoPaste') => Promise<ReadResult>>;
+      awaitPermissionReady: Mock<() => Promise<void>>;
       permissionReadySignal: ReturnType<typeof signal<boolean>>;
       permissionStateSignal: ReturnType<typeof signal<ClipboardPermissionState>>;
     };
@@ -1688,8 +1688,8 @@ describe('cold-boot clipboard auto-paste', () => {
     snackAction: Subject<void>;
     snackRef: MatSnackBarRef<TextOnlySnackBar>;
     loadingSplash: LoadingSplashStub;
-    releaseSpies: MockInstance<() => void>[];
-    eventSpy: MockInstance<LoggerService['event']>;
+    releaseSpies: Mock<() => void>[];
+    eventSpy: Mock<LoggerService['event']>;
   }
 
   function createDeferredPromise<T>(): DeferredPromise<T> {
@@ -1765,11 +1765,11 @@ describe('cold-boot clipboard auto-paste', () => {
     } satisfies Partial<ClipboardPollingService> & {
       permissionStateSignal: ReturnType<typeof signal<ClipboardPermissionState>>;
       permissionReadySignal: ReturnType<typeof signal<boolean>>;
-      readGrantedClipboardOnce: MockInstance<(reason: 'coldBootAutoPaste') => Promise<ReadResult>>;
-      awaitPermissionReady: MockInstance<() => Promise<void>>;
+      readGrantedClipboardOnce: Mock<(reason: 'coldBootAutoPaste') => Promise<ReadResult>>;
+      awaitPermissionReady: Mock<() => Promise<void>>;
     };
 
-    const releaseSpies: MockInstance<() => void>[] = [];
+    const releaseSpies: Mock<() => void>[] = [];
     const loadingSplash: LoadingSplashStub = {
       beginBootstrapHold: vi.fn().mockImplementation(() => {
         const release = vi.fn();
@@ -1886,7 +1886,7 @@ describe('cold-boot clipboard auto-paste', () => {
     });
   }
 
-  function coldBootTelemetryArgs(eventSpy: MockInstance<LoggerService['event']>): unknown[][] {
+  function coldBootTelemetryArgs(eventSpy: Mock<LoggerService['event']>): unknown[][] {
     return eventSpy.mock.calls.filter(([messageId]) =>
       String(messageId).startsWith('home.clipboard.coldBoot.'),
     );
@@ -2593,19 +2593,19 @@ describe('HomeComponent tree<->editor selection sync (issue #42)', () => {
   // function that returns our fake matches that contract.
 
   interface TreeStub {
-    selectByPathString: MockInstance<(path: string | null) => void>;
-    hasPath: MockInstance<(path: string) => boolean>;
+    selectByPathString: Mock<(path: string | null) => void>;
+    hasPath: Mock<(path: string) => boolean>;
     // Issue #266 defer/retry: editor `setContent` and sync-toggle
     // route through this method; #266 also adds defer behavior to
     // `selectByPathString` which the stub mirrors via the
     // `pending` / `currentSelection` fields below.
-    clearPendingSelectPath: MockInstance<() => void>;
+    clearPendingSelectPath: Mock<() => void>;
     beaconIndex: () => typeof EMPTY_BEACON_INDEX;
     pending: string | null;
     currentSelection: string | null;
   }
   interface EditorStub {
-    revealRange: MockInstance<
+    revealRange: Mock<
       (range: {
         startLineNumber: number;
         startColumn: number;
@@ -3078,15 +3078,15 @@ describe('HomeComponent save() branching (M4a)', () => {
   const sourceHighlight: BlobHighlight = { path: '$.a', color: '#fff59d', cascade: false };
 
   interface StubBlobService {
-    create: MockInstance;
-    update: MockInstance;
-    get: MockInstance;
+    create: Mock;
+    update: Mock;
+    get: Mock;
     events$: typeof EMPTY;
   }
 
   interface StubQuotaService {
-    notifyAutoDeleted: MockInstance;
-    notifyQuotaExceededManual: MockInstance;
+    notifyAutoDeleted: Mock;
+    notifyQuotaExceededManual: Mock;
   }
 
   function setup(opts: {
@@ -3125,8 +3125,8 @@ describe('HomeComponent save() branching (M4a)', () => {
     };
 
     const quota: StubQuotaService = {
-      notifyAutoDeleted: vi.fn().mockResolvedValue(),
-      notifyQuotaExceededManual: vi.fn().mockResolvedValue(),
+      notifyAutoDeleted: vi.fn().mockResolvedValue(undefined),
+      notifyQuotaExceededManual: vi.fn().mockResolvedValue(undefined),
     };
 
     const fakeAuth: Partial<AuthService> = {
@@ -3409,8 +3409,8 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     const dialog = { open: vi.fn().mockReturnValue(dialogRef) };
     const snack = { open: vi.fn() };
     const quota = {
-      notifyAutoDeleted: vi.fn().mockResolvedValue(),
-      notifyQuotaExceededManual: vi.fn().mockResolvedValue(),
+      notifyAutoDeleted: vi.fn().mockResolvedValue(undefined),
+      notifyQuotaExceededManual: vi.fn().mockResolvedValue(undefined),
     };
 
     TestBed.configureTestingModule({
@@ -3655,7 +3655,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
 
     await component.onSave();
 
-    expect(stub.update.mock.lastCall[1]).toEqual({
+    expect(stub.update.mock.lastCall![1]).toEqual({
       content: '{"bar":2}',
       title: 'Saved title',
       isPublic: false,
@@ -3672,7 +3672,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
 
     await component.onSave();
 
-    expect(stub.update.mock.lastCall[1]).toEqual({
+    expect(stub.update.mock.lastCall![1]).toEqual({
       content: '{"foo":',
       title: 'Saved title',
       isPublic: false,
@@ -3699,7 +3699,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
 
     await component.onSave();
 
-    expect(stub.update.mock.lastCall[1]).toEqual({
+    expect(stub.update.mock.lastCall![1]).toEqual({
       content: '{"a":1,"d":3}',
       title: 'Saved title',
       isPublic: false,
@@ -3725,7 +3725,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
 
     await component.onSave();
 
-    expect(stub.update.mock.lastCall[1]).toEqual({
+    expect(stub.update.mock.lastCall![1]).toEqual({
       content: '{"a":1,"d":',
       title: 'Saved title',
       isPublic: false,
@@ -3919,7 +3919,7 @@ describe('HomeComponent browser-title effect (M4a)', () => {
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
     expect(spy).toHaveBeenCalled();
-    const lastArg = spy.mock.lastCall[0];
+    const lastArg = spy.mock.lastCall![0];
     expect(lastArg).toContain('JotJSON');
   });
 
@@ -3984,8 +3984,8 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     TestBed.flushEffects();
   }
 
-  function mostRecentTitle(spy: MockInstance): string {
-    return spy.mock.lastCall[0] as string;
+  function mostRecentTitle(spy: Mock): string {
+    return spy.mock.lastCall![0] as string;
   }
 
   it('adds a star prefix when a loaded blob becomes dirty', () => {
@@ -4101,7 +4101,7 @@ describe('HomeComponent browser-title env-label prefix', () => {
     const spy = vi.spyOn(titleSvc, 'setTitle');
     fixture.componentRef.changeDetectorRef.detectChanges();
     TestBed.flushEffects();
-    const lastArg = spy.mock.lastCall[0];
+    const lastArg = spy.mock.lastCall![0];
     expect(lastArg.startsWith('[nonprod] ')).toBe(true);
     expect(lastArg).toContain('JotJSON');
   });
@@ -4214,7 +4214,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     // restores the original descriptor). spyOnProperty would be more
     // ergonomic but it requires `clipboard` to already exist as an
     // accessor, which is not the case on Linux headless Chrome.
-    let clipboardStub: { writeText: MockInstance } | undefined;
+    let clipboardStub: { writeText: Mock } | undefined;
     if (opts.clipboardAvailable === false) {
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
@@ -4260,7 +4260,7 @@ describe('HomeComponent blob actions (M4b)', () => {
     // Let the clipboard promise flush.
     await Promise.resolve();
     await Promise.resolve();
-    const writeText = (navigator.clipboard as unknown as { writeText: MockInstance }).writeText;
+    const writeText = (navigator.clipboard as unknown as { writeText: Mock }).writeText;
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/s/abc123`);
     expect(snack.open).toHaveBeenCalled();
   });
@@ -4485,7 +4485,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     const warnSpy = vi.spyOn(console, 'warn');
     await fixture.componentInstance.onUpload(makeOversizedFile());
     expect(snack.open).toHaveBeenCalledTimes(1);
-    const args = snack.open.mock.lastCall;
+    const args = snack.open.mock.lastCall!;
     expect(args[0]).toContain('too large');
     expect(fixture.componentInstance.content()).toBe(before);
     expect(warnSpy).toHaveBeenCalledWith('[home.upload.tooLarge]', {
@@ -4503,8 +4503,8 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     await waitForDoubleAnimationFrame();
     expect(fixture.componentInstance.content()).toBe(text);
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('Uploaded sample.json');
-    expect(snack.open.mock.lastCall[1]).toBe('Undo');
+    expect(snack.open.mock.lastCall![0]).toContain('Uploaded sample.json');
+    expect(snack.open.mock.lastCall![1]).toBe('Undo');
     expect(eventSpy).toHaveBeenCalledWith(
       'upload.handle',
       { sizeBytesBucket: bucketBytes(file.size), source: 'pick' },
@@ -4521,7 +4521,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   it('registers a drop handler with DocumentDropController on init', () => {
     const { fakeController } = setup();
     expect(fakeController.registerEditorHandler).toHaveBeenCalledTimes(1);
-    const handler = fakeController.registerEditorHandler.mock.lastCall[0];
+    const handler = fakeController.registerEditorHandler.mock.lastCall![0];
     expect(typeof handler).toBe('function');
   });
 
@@ -4548,8 +4548,8 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     await waitForDoubleAnimationFrame();
     expect(fixture.componentInstance.content()).toBe(text);
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('Uploaded b.json');
-    expect(snack.open.mock.lastCall[1]).toBe('Undo');
+    expect(snack.open.mock.lastCall![0]).toContain('Uploaded b.json');
+    expect(snack.open.mock.lastCall![1]).toBe('Undo');
     expect(eventSpy).toHaveBeenCalledWith(
       'upload.handle',
       { sizeBytesBucket: bucketBytes(file.size), source: 'drag' },
@@ -4572,7 +4572,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('one file');
+    expect(snack.open.mock.lastCall![0]).toContain('one file');
     expect(fixture.componentInstance.content()).toBe(before);
   });
 
@@ -4584,7 +4584,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('too large');
+    expect(snack.open.mock.lastCall![0]).toContain('too large');
     expect(fixture.componentInstance.content()).toBe(before);
     expect(warnSpy).toHaveBeenCalledWith('[home.upload.tooLarge]', {
       sizeBytes: MAX_UPLOAD_BYTES + 1,
@@ -4597,7 +4597,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     fakeController.registeredHandler!([makeRejectingFile()]);
     await waitForTaskQueue();
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('Could not read');
+    expect(snack.open.mock.lastCall![0]).toContain('Could not read');
     expect(eventSpy).not.toHaveBeenCalled();
   });
 
@@ -4623,7 +4623,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   it('registers a launch handler with LaunchQueueController on init', () => {
     const { fakeLaunch } = setup();
     expect(fakeLaunch.registerHandler).toHaveBeenCalledTimes(1);
-    const handler = fakeLaunch.registerHandler.mock.lastCall[0];
+    const handler = fakeLaunch.registerHandler.mock.lastCall![0];
     expect(typeof handler).toBe('function');
   });
 
@@ -4651,8 +4651,8 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     await waitForDoubleAnimationFrame();
     expect(fixture.componentInstance.content()).toBe(text);
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('Opened opened.json');
-    expect(snack.open.mock.lastCall[1]).toBe('Undo');
+    expect(snack.open.mock.lastCall![0]).toContain('Opened opened.json');
+    expect(snack.open.mock.lastCall![1]).toBe('Undo');
     expect(eventSpy).toHaveBeenCalledWith(
       'upload.handle',
       { sizeBytesBucket: bucketBytes(file.size), source: 'osLaunch' },
@@ -4676,8 +4676,8 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     await handler(event);
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('Could not open the file');
-    expect(snack.open.mock.lastCall[1]).toBe('Dismiss');
+    expect(snack.open.mock.lastCall![0]).toContain('Could not open the file');
+    expect(snack.open.mock.lastCall![1]).toBe('Dismiss');
     expect(fixture.componentInstance.content()).toBe(before);
     expect(eventSpy).not.toHaveBeenCalled();
   });
@@ -5069,8 +5069,8 @@ describe('HomeComponent extract-banner telemetry', () => {
   function setupTelemetryBed(): {
     fixture: ReturnType<typeof TestBed.createComponent<HomeComponent>>;
     component: HomeComponent;
-    eventSpy: MockInstance;
-    extractorSpy: MockInstance;
+    eventSpy: Mock;
+    extractorSpy: Mock;
     drop: FakeDropController;
     launch: FakeLaunchQueueController;
   } {
@@ -5101,7 +5101,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     return { fixture, component, eventSpy, extractorSpy, drop, launch };
   }
 
-  function bannerCalls(spy: MockInstance): unknown[][] {
+  function bannerCalls(spy: Mock): unknown[][] {
     return spy.mock.calls.filter(
       (args) =>
         typeof args[0] === 'string' && (args[0] as string).startsWith('home.extract.banner.'),
@@ -5635,8 +5635,8 @@ describe('HomeComponent upload-error banner (#36)', () => {
     // dismissing the banner does not restore the prior content, but
     // the snackbar's Undo button does.
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('Uploaded broken.json');
-    expect(snack.open.mock.lastCall[1]).toBe('Undo');
+    expect(snack.open.mock.lastCall![0]).toContain('Uploaded broken.json');
+    expect(snack.open.mock.lastCall![1]).toBe('Undo');
   });
 
   it('toolbar onUpload with valid JSON does not set uploadError', async () => {
@@ -5891,7 +5891,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     const before = fixture.componentInstance.content();
     await fixture.componentInstance.onUpload(pngFile());
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('does not appear to be a text file');
+    expect(snack.open.mock.lastCall![0]).toContain('does not appear to be a text file');
     expect(fixture.componentInstance.content()).toBe(before);
   });
 
@@ -5921,7 +5921,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.lastCall[0]).toContain('does not appear to be a text file');
+    expect(snack.open.mock.lastCall![0]).toContain('does not appear to be a text file');
     expect(fixture.componentInstance.content()).toBe(before);
   });
 
@@ -5935,8 +5935,8 @@ describe('HomeComponent binary upload rejection (#62)', () => {
     // Binary rejection toast + issue #313 Uploaded-snackbar on the
     // subsequent successful upload = 2 total `snack.open` calls.
     expect(snack.open).toHaveBeenCalledTimes(2);
-    expect(snack.open.mock.lastCall[0]).toContain('Uploaded good.json');
-    expect(snack.open.mock.lastCall[1]).toBe('Undo');
+    expect(snack.open.mock.lastCall![0]).toContain('Uploaded good.json');
+    expect(snack.open.mock.lastCall![1]).toBe('Undo');
   });
 });
 
@@ -6158,19 +6158,19 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
   }
 
   interface ExtractSnackBarStub {
-    open: MockInstance<
+    open: Mock<
       (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
     >;
   }
 
   interface ExtractSnackBarRefHarness {
     action: Subject<void>;
-    dismissSpy: MockInstance;
+    dismissSpy: Mock;
     ref: MatSnackBarRef<TextOnlySnackBar>;
   }
 
   interface ExtractEditorStub {
-    applyEdit: MockInstance<
+    applyEdit: Mock<
       (startOffset: number, endOffset: number, text: string, source: string) => boolean
     >;
   }
@@ -6222,9 +6222,9 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     snackAction: Subject<void>;
     snackRef: MatSnackBarRef<TextOnlySnackBar>;
     editorStub: ExtractEditorStub;
-    eventSpy: MockInstance;
-    warnSpy: MockInstance;
-    errorSpy: MockInstance;
+    eventSpy: Mock;
+    warnSpy: Mock;
+    errorSpy: Mock;
   } {
     clearHomeStorage();
     TestBed.resetTestingModule();
@@ -6446,7 +6446,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     );
 
     expect(snack.open).toHaveBeenCalledTimes(1);
-    const [message, action, config] = snack.open.mock.lastCall;
+    const [message, action, config] = snack.open.mock.lastCall!;
     expect(message).toBe('Extracted embedded JSON into the document.');
     expect(action).toBe('Undo');
     expect(config).toEqual(expect.objectContaining({ duration: 8000, politeness: 'assertive' }));
@@ -6883,7 +6883,7 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     component.onSortKeysRequest(sortKeysRequest([]));
 
     expect(snack.open).toHaveBeenCalledTimes(1);
-    const [message, action, config] = snack.open.mock.lastCall;
+    const [message, action, config] = snack.open.mock.lastCall!;
     expect(message).toBe("Sorted this object's keys.");
     expect(action).toBe('Undo');
     expect(config).toEqual(expect.objectContaining({ duration: 8000, politeness: 'assertive' }));
@@ -6977,14 +6977,14 @@ describe('HomeComponent banner-extract undo (M7v)', () => {
   setupMinimalMonacoStub();
 
   interface ExtractSnackBarStub {
-    open: MockInstance<
+    open: Mock<
       (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
     >;
   }
 
   interface ExtractSnackBarRefHarness {
     action: Subject<void>;
-    dismissSpy: MockInstance;
+    dismissSpy: Mock;
     ref: MatSnackBarRef<TextOnlySnackBar>;
   }
 
@@ -7008,7 +7008,7 @@ describe('HomeComponent banner-extract undo (M7v)', () => {
   }
 
   interface EditorStub {
-    applyEdit: MockInstance<
+    applyEdit: Mock<
       (startOffset: number, endOffset: number, text: string, source: string) => boolean
     >;
   }
@@ -7019,8 +7019,8 @@ describe('HomeComponent banner-extract undo (M7v)', () => {
     snack: ExtractSnackBarStub;
     snackHarness: ExtractSnackBarRefHarness;
     editorStub: EditorStub | null;
-    eventSpy: MockInstance;
-    warnSpy: MockInstance;
+    eventSpy: Mock;
+    warnSpy: Mock;
   } {
     localStorage.removeItem(PREFS_KEY);
     localStorage.removeItem(DRAFT_KEY);
@@ -7317,7 +7317,7 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
   interface SnackHarness {
     action: Subject<void>;
     dismissed: Subject<unknown>;
-    dismissSpy: MockInstance;
+    dismissSpy: Mock;
     ref: MatSnackBarRef<TextOnlySnackBar>;
   }
 
@@ -7352,7 +7352,7 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
   }
 
   interface ReplaceEditorStub {
-    replaceAll: MockInstance<(text: string, source: string) => ReplaceAllResult>;
+    replaceAll: Mock<(text: string, source: string) => ReplaceAllResult>;
   }
 
   /**
@@ -7393,13 +7393,13 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
   interface SetupResult {
     fixture: ComponentFixture<HomeComponent>;
     component: HomeComponent;
-    snackOpenSpy: MockInstance<
+    snackOpenSpy: Mock<
       (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
     >;
     snackHarnesses: readonly SnackHarness[];
     editorStub: ReplaceEditorStub;
-    eventSpy: MockInstance;
-    warnSpy: MockInstance;
+    eventSpy: Mock;
+    warnSpy: Mock;
     launch: FakeLaunchQueueController;
   }
 
@@ -7415,7 +7415,7 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
       const harness = harnesses[Math.min(harnessIndex, harnesses.length - 1)] ?? harnesses[0]!;
       harnessIndex += 1;
       return harness.ref;
-    }) as MockInstance<
+    }) as Mock<
       (message: string, action?: string, config?: unknown) => MatSnackBarRef<TextOnlySnackBar>
     >;
     const snack = { open: snackOpenSpy };
@@ -7896,7 +7896,7 @@ describe('HomeComponent splash render-complete hook (Phase C)', () => {
     // A single rAF runs BEFORE the next paint and would clear the
     // splash on the same tick. This test guards against silent
     // regression to single-rAF.
-    const splash = { markBlobRenderComplete: vi.fn() } as Mocked<LoadingSplashService>;
+    const splash = { markBlobRenderComplete: vi.fn() } as unknown as Mocked<LoadingSplashService>;
     TestBed.configureTestingModule({
       imports: [HomeComponent],
       providers: [

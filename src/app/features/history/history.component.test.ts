@@ -52,7 +52,7 @@ function setup(opts: SetupOpts = {}) {
   const dialogRef = { afterClosed: () => of(!!opts.confirm) };
   const dialog = { open: vi.fn().mockReturnValue(dialogRef) };
   const snack = { open: vi.fn() };
-  const logger = { event: vi.fn(), warn: vi.fn() } as Mocked<LoggerService>;
+  const logger = { event: vi.fn(), warn: vi.fn() } as unknown as Mocked<LoggerService>;
 
   TestBed.configureTestingModule({
     imports: [HistoryComponent],
@@ -78,7 +78,7 @@ function setupWithRealDialog(listResult: HistoryPage) {
     clear: vi.fn().mockReturnValue(of(undefined)),
   };
   const snack = { open: vi.fn() };
-  const logger = { event: vi.fn(), warn: vi.fn() } as Mocked<LoggerService>;
+  const logger = { event: vi.fn(), warn: vi.fn() } as unknown as Mocked<LoggerService>;
 
   TestBed.configureTestingModule({
     imports: [HistoryComponent, MatDialogModule],

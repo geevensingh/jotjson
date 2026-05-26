@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { ClipboardPermissionState, ClipboardPollingService } from './clipboard-polling.service';
 
 type ClipboardLike = Pick<Clipboard, 'readText' | 'writeText'>;
@@ -7,8 +7,8 @@ type ClipboardLike = Pick<Clipboard, 'readText' | 'writeText'>;
 interface PermissionStatusStub {
   state: PermissionState;
   listeners: Array<(e: Event) => void>;
-  addEventListener: MockInstance;
-  removeEventListener: MockInstance;
+  addEventListener: Mock;
+  removeEventListener: Mock;
   dispatchChange(newState: PermissionState): void;
 }
 
@@ -37,7 +37,7 @@ function makeStatus(initial: PermissionState): PermissionStatusStub {
  */
 function installNavigatorStubs(opts: {
   clipboard?: ClipboardLike | null;
-  permissionsQuery?: MockInstance | null;
+  permissionsQuery?: Mock | null;
 }): () => void {
   const origClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   const origPermissions = Object.getOwnPropertyDescriptor(navigator, 'permissions');
@@ -169,8 +169,8 @@ describe('ClipboardPollingService', () => {
   });
 
   function createService(opts: {
-    readText?: MockInstance;
-    permissionsQuery?: MockInstance | null;
+    readText?: Mock;
+    permissionsQuery?: Mock | null;
     clipboardMissing?: boolean;
   }): ClipboardPollingService {
     // Restore any prior stubs first. Without this, back-to-back createService
@@ -203,7 +203,7 @@ describe('ClipboardPollingService', () => {
   it('sets permissionReady after async permission discovery settles', async () => {
     const permissionCases: Array<{
       name: string;
-      permissionsQuery: MockInstance;
+      permissionsQuery: Mock;
       expectedState: ClipboardPermissionState;
     }> = [
       {

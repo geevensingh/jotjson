@@ -61,7 +61,7 @@ describe('HistoryComponent (a11y shell landmarks)', () => {
       open: vi.fn().mockReturnValue({ afterClosed: () => of(false) }),
     };
     const snack = { open: vi.fn() };
-    const logger = { event: vi.fn(), warn: vi.fn() } as Mocked<LoggerService>;
+    const logger = { event: vi.fn(), warn: vi.fn() } as unknown as Mocked<LoggerService>;
 
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -84,7 +84,7 @@ describe('HistoryComponent (a11y shell landmarks)', () => {
       clear: vi.fn().mockReturnValue(of(undefined)),
     };
     const snack = { open: vi.fn() };
-    const logger = { event: vi.fn(), warn: vi.fn() } as Mocked<LoggerService>;
+    const logger = { event: vi.fn(), warn: vi.fn() } as unknown as Mocked<LoggerService>;
 
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

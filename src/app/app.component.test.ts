@@ -27,11 +27,11 @@ describe('AppComponent', () => {
   let teardown: (() => void) | undefined;
 
   beforeEach(async () => {
-    httpClientSpy = { get: vi.fn() } as Mocked<HttpClient>;
+    httpClientSpy = { get: vi.fn() } as unknown as Mocked<HttpClient>;
     httpClientSpy.get.mockReturnValue(of({ active: false, message: '' }));
-    loggerServiceSpy = { event: vi.fn(), connect: vi.fn() } as Mocked<LoggerService>;
-    loggerServiceSpy.connect.mockResolvedValue();
-    routeTrackerSpy = { start: vi.fn(), flushPending: vi.fn() } as Mocked<RouteTracker>;
+    loggerServiceSpy = { event: vi.fn(), connect: vi.fn() } as unknown as Mocked<LoggerService>;
+    loggerServiceSpy.connect.mockResolvedValue(undefined);
+    routeTrackerSpy = { start: vi.fn(), flushPending: vi.fn() } as unknown as Mocked<RouteTracker>;
 
     // Stub DocumentDropController so we don't attach real document-level
     // drag/drop listeners that would leak across the Karma test run after
@@ -154,16 +154,25 @@ describe('AppComponent', () => {
   it('initializes web vitals after app.boot connect during lazy initialization', async () => {
     const initSpy = vi
       .fn<(logger: LoggerService, appVersion: string, buildNumber: string) => Promise<void>>()
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
     const webVitalsModule = await import('./core/telemetry/web-vitals');
     webVitalsModule.__setInitWebVitalsImplForTesting(initSpy);
     try {
       const fixture = TestBed.createComponent(AppComponent);
       fixture.detectChanges();
       await fixture.whenStable();
-      await vi.waitFor(() => expect(initSpy).toHaveBeenCalledTimes(1));
+      // The previous test's AppComponent may have a pending lazy
+      // Promise.all([import(...) ...]).then(callInitWebVitals) chain that
+      // resolves after this test installs the spy. Filter the spy's calls
+      // by *this* test's logger reference (freshly recreated in beforeEach)
+      // so cross-test pollution does not flake the count assertion.
+      await vi.waitFor(() => {
+        const ownCalls = initSpy.mock.calls.filter((args) => args[0] === loggerServiceSpy);
+        expect(ownCalls.length).toBe(1);
+      });
 
-      const [logger, appVersion, buildNumber] = initSpy.mock.lastCall;
+      const ownCalls = initSpy.mock.calls.filter((args) => args[0] === loggerServiceSpy);
+      const [logger, appVersion, buildNumber] = ownCalls[ownCalls.length - 1]!;
       expect(logger).toBe(loggerServiceSpy);
       expect(appVersion).toEqual(expect.any(String));
       expect(buildNumber).toEqual(expect.any(String));

@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of } from 'rxjs';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import type { UserPreferences } from '../api/models';
 import { PreferencesService } from '../preferences/preferences.service';
 import {
@@ -21,9 +21,9 @@ function appendMainFallback(): HTMLElement {
 
 describe('QuotaNotificationService', () => {
   let service: QuotaNotificationService;
-  let snackOpen: MockInstance;
-  let dialogOpen: MockInstance;
-  let prefsUpdate: MockInstance;
+  let snackOpen: Mock;
+  let dialogOpen: Mock;
+  let prefsUpdate: Mock;
   let prefsSignal: UserPreferences;
 
   beforeEach(() => {
@@ -60,14 +60,14 @@ describe('QuotaNotificationService', () => {
       dialogOpen.mockReturnValue({ afterClosed: () => of('keep_auto') });
       await service.notifyAutoDeleted({ id: 'x', slug: 's1', title: 'My Notes' });
       expect(snackOpen).toHaveBeenCalled();
-      const [message] = snackOpen.mock.lastCall;
+      const [message] = snackOpen.mock.lastCall!;
       expect(message).toContain('My Notes');
     });
 
     it('falls back to slug when title is missing or blank', async () => {
       dialogOpen.mockReturnValue({ afterClosed: () => of('keep_auto') });
       await service.notifyAutoDeleted({ id: 'x', slug: 'slug42', title: '   ' });
-      const [message] = snackOpen.mock.lastCall;
+      const [message] = snackOpen.mock.lastCall!;
       expect(message).toContain('slug42');
     });
 

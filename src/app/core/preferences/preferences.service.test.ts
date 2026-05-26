@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { PLATFORM_ID, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
-import { type Mocked, type MockInstance } from 'vitest';
+import { type Mock, type Mocked } from 'vitest';
 import type { User, UserPreferences } from '../api/models';
 import {
   UserApiService,
@@ -105,7 +105,7 @@ describe('PreferencesService', () => {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
-    } as Mocked<LoggerService>;
+    } as unknown as Mocked<LoggerService>;
     TestBed.configureTestingModule({
       providers: [
         { provide: AuthService, useValue: auth },
@@ -813,7 +813,7 @@ describe('PreferencesService', () => {
      */
     function stubMatchMedia(initialPrefersLight: boolean): {
       fireChange: () => void;
-      matchMediaSpy: MockInstance<typeof window.matchMedia>;
+      matchMediaSpy: Mock<typeof window.matchMedia>;
     } {
       let prefersLight = initialPrefersLight;
       const changeListeners: Array<EventListenerOrEventListenerObject> = [];
@@ -1177,7 +1177,7 @@ describe('PreferencesService', () => {
         expect(api.putPreferences).not.toHaveBeenCalled();
         vi.advanceTimersByTime(600);
         expect(api.putPreferences).toHaveBeenCalledTimes(1);
-        const sent = api.putPreferences.mock.lastCall[0] as UserPreferences;
+        const sent = api.putPreferences.mock.lastCall![0] as UserPreferences;
         expect(sent.treeHighlightColors.dark.selectionColor).toBe('#222222');
       } finally {
         vi.useRealTimers();
@@ -1297,7 +1297,7 @@ describe('PreferencesService', () => {
       const end = await svc.__waitForSync();
       expect(end).toBe('synced');
       expect(api.seed).toHaveBeenCalledTimes(1);
-      const seeded = api.seed.mock.lastCall[0] as UserPreferences;
+      const seeded = api.seed.mock.lastCall![0] as UserPreferences;
       expect(seeded.theme).toBe('dark');
     });
 
@@ -1343,7 +1343,7 @@ describe('PreferencesService', () => {
         expect(api.putPreferences).not.toHaveBeenCalled();
         vi.advanceTimersByTime(600);
         expect(api.putPreferences).toHaveBeenCalledTimes(1);
-        const sent = api.putPreferences.mock.lastCall[0] as UserPreferences;
+        const sent = api.putPreferences.mock.lastCall![0] as UserPreferences;
         expect(sent.theme).toBe('dark');
       } finally {
         vi.useRealTimers();
@@ -1378,7 +1378,7 @@ describe('PreferencesService', () => {
         TestBed.flushEffects();
         vi.advanceTimersByTime(600);
         expect(api.putPreferences).toHaveBeenCalledTimes(1);
-        const ifMatch = api.putPreferences.mock.lastCall[1];
+        const ifMatch = api.putPreferences.mock.lastCall![1];
         expect(ifMatch).toBe('"7"');
       } finally {
         vi.useRealTimers();

@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { CloseMatMenuOnWindowBlurDirective } from './close-mat-menu-on-window-blur.directive';
 
 @Component({
@@ -126,7 +126,7 @@ function clickMenuItem(): void {
   menuItem.click();
 }
 
-function getBlurHandler(addSpy: MockInstance): EventListenerOrEventListenerObject {
+function getBlurHandler(addSpy: Mock): EventListenerOrEventListenerObject {
   const blurAddCall = addSpy.mock.calls.find(([type]) => type === 'blur');
   expect(blurAddCall).toBeDefined();
 
@@ -138,7 +138,7 @@ function getBlurHandler(addSpy: MockInstance): EventListenerOrEventListenerObjec
 }
 
 function findBlurRemoveCall(
-  removeSpy: MockInstance,
+  removeSpy: Mock,
   handlerRef: EventListenerOrEventListenerObject,
 ): unknown[] | undefined {
   return removeSpy.mock.calls.find(

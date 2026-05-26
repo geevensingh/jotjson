@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import {
   ClipboardPermissionState,
   ClipboardPollingService,
@@ -14,8 +14,8 @@ import { ClipboardBannerComponent } from './clipboard-banner.component';
 describe('ClipboardBannerComponent', () => {
   let permissionState: ReturnType<typeof signal<ClipboardPermissionState>>;
   let prefsSignal: ReturnType<typeof signal<typeof DEFAULT_PREFERENCES>>;
-  let enableSpy: MockInstance;
-  let updateSpy: MockInstance;
+  let enableSpy: Mock;
+  let updateSpy: Mock;
 
   beforeEach(() => {
     permissionState = signal<ClipboardPermissionState>('prompt');

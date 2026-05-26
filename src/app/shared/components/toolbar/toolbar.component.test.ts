@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
-import { type Mocked, type MockInstance } from 'vitest';
+import { type Mock, type Mocked } from 'vitest';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
@@ -38,7 +38,7 @@ describe('ToolbarComponent', () => {
   });
 
   async function create(options: { signedIn?: boolean } = {}) {
-    const logger = { event: vi.fn() } as Mocked<LoggerService>;
+    const logger = { event: vi.fn() } as unknown as Mocked<LoggerService>;
     await TestBed.configureTestingModule({
       imports: [ToolbarComponent],
       providers: [
@@ -1168,7 +1168,7 @@ describe('ToolbarComponent', () => {
       fixture: ComponentFixture<ToolbarComponent>,
       action: ToolbarAction,
       orderedCalls: string[],
-    ): MockInstance {
+    ): Mock {
       if (action === 'openFile') {
         return vi.spyOn(findFileInput(fixture), 'click').mockImplementation(() => {
           orderedCalls.push('output');

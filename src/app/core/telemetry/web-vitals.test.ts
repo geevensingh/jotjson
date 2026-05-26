@@ -52,7 +52,7 @@ function createFakeApi(): FakeWebVitalsApi {
 }
 
 function createLogger(): Mocked<LoggerService> {
-  return { event: vi.fn() } as Mocked<LoggerService>;
+  return { event: vi.fn() } as unknown as Mocked<LoggerService>;
 }
 
 function createPageHideEvent(): Event {
@@ -107,7 +107,7 @@ describe('setupWebVitals', () => {
     fakeApi.emitLcp(1234.5);
     window.dispatchEvent(createPageHideEvent());
 
-    const measurements = logger.event.mock.lastCall[2];
+    const measurements = logger.event.mock.lastCall![2];
     expect(logger.event).toHaveBeenCalledExactlyOnceWith(
       'webVitals',
       { appVersion: TEST_APP_VERSION, buildNumber: TEST_BUILD_NUMBER },

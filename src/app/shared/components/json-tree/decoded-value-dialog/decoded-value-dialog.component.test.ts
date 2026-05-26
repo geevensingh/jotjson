@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { ClipboardCopyService } from '../../../../core/clipboard/clipboard-copy.service';
 import type { ExtractedJson } from '../../../../core/json/json-extractor.service';
 import {
@@ -9,8 +9,8 @@ import {
 } from './decoded-value-dialog.component';
 
 describe('DecodedValueDialogComponent', () => {
-  let close: MockInstance;
-  let copyWithToast: MockInstance;
+  let close: Mock;
+  let copyWithToast: Mock;
 
   const extractCandidate = {
     text: '{"a":1}',
@@ -88,7 +88,7 @@ describe('DecodedValueDialogComponent', () => {
       ) as HTMLButtonElement;
       button.click();
       expect(copyWithToast).toHaveBeenCalledTimes(1);
-      const args = copyWithToast.mock.lastCall;
+      const args = copyWithToast.mock.lastCall!;
       expect(args[0]).toBe('multi\nline');
       const messages = args[1] as { success: string; failed: string; unsupported: string };
       expect(messages.success.length).toBeGreaterThan(0);

@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { PreferencesNotificationService } from './preferences-notification.service';
 import { PreferencesService } from './preferences.service';
 
 describe('PreferencesNotificationService', () => {
-  let snackOpen: MockInstance;
+  let snackOpen: Mock;
   let events$: Subject<{ kind: 'conflict' }>;
   let originalNow: () => number;
   let nowMs: number;
@@ -37,7 +37,7 @@ describe('PreferencesNotificationService', () => {
     events$.next({ kind: 'conflict' });
 
     expect(snackOpen).toHaveBeenCalledTimes(1);
-    expect(snackOpen.mock.lastCall[0]).toContain('changed in another window');
+    expect(snackOpen.mock.lastCall![0]).toContain('changed in another window');
   });
 
   it('coalesces bursts within the cooldown window', () => {

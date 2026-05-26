@@ -11,7 +11,7 @@ describe('JsonParserService', () => {
 
   beforeEach(() => {
     __resetColdFlagsForTesting();
-    loggerSpy = { event: vi.fn() } as Mocked<LoggerService>;
+    loggerSpy = { event: vi.fn() } as unknown as Mocked<LoggerService>;
     TestBed.configureTestingModule({
       providers: [{ provide: LoggerService, useValue: loggerSpy }],
     });
@@ -69,7 +69,7 @@ describe('JsonParserService', () => {
       svc.parse(text);
 
       expect(loggerSpy.event).toHaveBeenCalledTimes(1);
-      const [messageId, props, measurements] = loggerSpy.event.mock.lastCall;
+      const [messageId, props, measurements] = loggerSpy.event.mock.lastCall!;
       expect(messageId).toBe('parse.slow');
       expect(props).toEqual({
         cold: true,
@@ -130,7 +130,7 @@ describe('JsonParserService', () => {
 
       expect(sizeBytes).toBeGreaterThan(text.length);
       expect(loggerSpy.event).toHaveBeenCalledTimes(1);
-      const [, props, measurements] = loggerSpy.event.mock.lastCall;
+      const [, props, measurements] = loggerSpy.event.mock.lastCall!;
       expect(props).toEqual({
         cold: true,
         sizeBytesBucket: bucketBytes(sizeBytes),

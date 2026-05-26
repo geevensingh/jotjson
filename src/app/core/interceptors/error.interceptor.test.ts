@@ -11,7 +11,11 @@ describe('errorInterceptor', () => {
   let loggerSpy: Mocked<LoggerService>;
 
   beforeEach(() => {
-    loggerSpy = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as Mocked<LoggerService>;
+    loggerSpy = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Mocked<LoggerService>;
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([errorInterceptor])),
@@ -33,7 +37,7 @@ describe('errorInterceptor', () => {
     req.flush('boom', { status: 500, statusText: 'Server Error' });
 
     expect(loggerSpy.warn).toHaveBeenCalledTimes(1);
-    const [messageId, props] = loggerSpy.warn.mock.lastCall;
+    const [messageId, props] = loggerSpy.warn.mock.lastCall!;
     expect(messageId).toBe('api.error');
     expect(props).toEqual(
       expect.objectContaining({
@@ -66,7 +70,7 @@ describe('errorInterceptor', () => {
     const req = httpMock.expectOne('/api/me');
     req.flush('unauthorized', { status: 401, statusText: 'Unauthorized' });
 
-    const props = loggerSpy.warn.mock.lastCall[1] as {
+    const props = loggerSpy.warn.mock.lastCall![1] as {
       status: number;
     };
     expect(props.status).toBe(401);

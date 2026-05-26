@@ -1,7 +1,7 @@
 import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { MatDialogRef } from '@angular/material/dialog';
 import { Observable, of, throwError } from 'rxjs';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import type { FormattingRule, FormattingRuleSet, RuleSetPreset } from '../../../core/api/models';
 import { RuleSetsService } from '../../../core/api/rule-sets.service';
@@ -41,7 +41,7 @@ function makeSet(over: Partial<FormattingRuleSet> = {}): FormattingRuleSet {
 }
 
 describe('ClonePresetDialogComponent', () => {
-  let close: MockInstance;
+  let close: Mock;
 
   beforeEach(() => {
     close = vi.fn();

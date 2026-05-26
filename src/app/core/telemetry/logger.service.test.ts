@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { environment } from '../../../environments/environment';
 import { LoggerService } from './logger.service';
 import { msalBridge } from './msal-bridge';
@@ -9,9 +9,9 @@ import { TelemetryService } from './telemetry.service';
 
 describe('LoggerService', () => {
   let originalCs: string | undefined;
-  let trackEvent: MockInstance;
-  let trackException: MockInstance;
-  let trackTrace: MockInstance;
+  let trackEvent: Mock;
+  let trackException: Mock;
+  let trackTrace: Mock;
 
   beforeEach(() => {
     originalCs = environment.appInsightsConnectionString;
@@ -121,7 +121,7 @@ describe('LoggerService', () => {
     const log = makeWithFakeTelemetry(false);
     trackTrace = ((): void => {
       throw new Error('boom');
-    }) as unknown as MockInstance;
+    }) as unknown as Mock;
     (TestBed.inject(TelemetryService) as TelemetryService).trackTrace = trackTrace;
     log.info('app.unhandled');
     await expect(log.connect()).resolves.toBeUndefined();
@@ -286,7 +286,7 @@ describe('LoggerService', () => {
       const log = makeWithFakeTelemetry(false);
       trackEvent = ((): void => {
         throw new Error('boom');
-      }) as unknown as MockInstance;
+      }) as unknown as Mock;
       (TestBed.inject(TelemetryService) as TelemetryService).trackEvent = trackEvent;
       log.event('app.unhandled');
       await expect(log.connect()).resolves.toBeUndefined();

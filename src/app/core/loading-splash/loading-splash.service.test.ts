@@ -22,7 +22,7 @@ describe('LoadingSplashService', () => {
 
   function init(initialPath = '/'): LoadingSplashService {
     events = new Subject<RouterEvent>();
-    logger = { event: vi.fn() } as Mocked<LoggerService>;
+    logger = { event: vi.fn() } as unknown as Mocked<LoggerService>;
     const routerStub: Partial<Router> = {
       events: events.asObservable() as unknown as Router['events'],
     };
@@ -43,7 +43,7 @@ describe('LoadingSplashService', () => {
     // exercised in this spec, so a bare PLATFORM_ID swap is enough
     // -- no need to bring in @angular/platform-server.
     events = new Subject<RouterEvent>();
-    logger = { event: vi.fn() } as Mocked<LoggerService>;
+    logger = { event: vi.fn() } as unknown as Mocked<LoggerService>;
     const routerStub: Partial<Router> = {
       events: events.asObservable() as unknown as Router['events'],
     };

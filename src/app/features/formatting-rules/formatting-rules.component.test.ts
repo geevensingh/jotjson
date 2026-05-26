@@ -229,7 +229,7 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     fixture.detectChanges();
 
     expect(snack.open).toHaveBeenCalled();
-    expect(snack.open.mock.lastCall[0]).toContain('rule sets are applied');
+    expect(snack.open.mock.lastCall![0]).toContain('rule sets are applied');
   });
 
   it('rename happy path: pencil click -> Enter -> update + snack', async () => {
@@ -376,7 +376,7 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     await fixture.whenStable();
 
     expect(stub.create).toHaveBeenCalled();
-    const sentName = stub.create.mock.lastCall[0].name as string;
+    const sentName = stub.create.mock.lastCall![0].name as string;
     expect(sentName.length).toBe(80);
     expect(sentName.endsWith(' (copy)')).toBe(true);
   });
@@ -422,7 +422,7 @@ describe('FormattingRulesComponent - M6e card actions', () => {
 
     expect(stub.refresh).toHaveBeenCalled();
     expect(preferences.update).toHaveBeenCalledWith({ activeRuleSetIds: [] });
-    expect(snack.open.mock.lastCall[0]).toContain('already deleted');
+    expect(snack.open.mock.lastCall![0]).toContain('already deleted');
   });
 
   it('clone-preset dialog success navigates into the editor', async () => {
@@ -494,6 +494,6 @@ describe('FormattingRulesComponent - M6e card actions', () => {
     await fixture.whenStable();
 
     expect(snack.open).toHaveBeenCalled();
-    expect(snack.open.mock.lastCall[0]).toContain('rule set limit');
+    expect(snack.open.mock.lastCall![0]).toContain('rule set limit');
   });
 });

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import type * as MonacoNS from 'monaco-editor';
-import { type Mocked, type MockInstance } from 'vitest';
+import { type Mock, type Mocked } from 'vitest';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { installMinimalMonacoStub, restoreMonacoStub } from '../../../../testing/monaco.testing';
 import type { JsonParseError } from '../../../core/json/json-parser.service';
@@ -28,8 +28,8 @@ interface FakeModel {
   getValue: () => string;
   getValueInRange: (range: FakeRange) => string;
   getFullModelRange: () => FakeRange;
-  getAlternativeVersionId: MockInstance<() => number>;
-  pushEditOperations: MockInstance<
+  getAlternativeVersionId: Mock<() => number>;
+  pushEditOperations: Mock<
     (
       beforeCursorState: readonly FakeSelection[],
       editOperations: readonly FakeEditOperation[],
@@ -38,24 +38,24 @@ interface FakeModel {
       ) => FakeSelection[] | null,
     ) => FakeSelection[] | null
   >;
-  getOffsetAt: MockInstance<(pos: { lineNumber: number; column: number }) => number>;
-  getPositionAt: MockInstance<(offset: number) => { lineNumber: number; column: number }>;
+  getOffsetAt: Mock<(pos: { lineNumber: number; column: number }) => number>;
+  getPositionAt: Mock<(offset: number) => { lineNumber: number; column: number }>;
 }
 
 interface FakeEditor {
-  getValue: MockInstance<() => string>;
-  setValue: MockInstance<(v: string) => void>;
-  getModel: MockInstance<() => FakeModel | null>;
-  onDidChangeModelContent: MockInstance;
-  onDidChangeCursorPosition: MockInstance;
-  onDidPaste: MockInstance;
-  updateOptions: MockInstance;
-  dispose: MockInstance;
-  executeEdits: MockInstance;
-  trigger: MockInstance;
-  layout: MockInstance;
-  setSelection: MockInstance;
-  revealRangeInCenterIfOutsideViewport: MockInstance;
+  getValue: Mock<() => string>;
+  setValue: Mock<(v: string) => void>;
+  getModel: Mock<() => FakeModel | null>;
+  onDidChangeModelContent: Mock;
+  onDidChangeCursorPosition: Mock;
+  onDidPaste: Mock;
+  updateOptions: Mock;
+  dispose: Mock;
+  executeEdits: Mock;
+  trigger: Mock;
+  layout: Mock;
+  setSelection: Mock;
+  revealRangeInCenterIfOutsideViewport: Mock;
 }
 
 interface FakeSelection {
@@ -67,12 +67,12 @@ interface FakeSelection {
 
 interface FakeMonaco {
   editor: {
-    create: MockInstance<(...args: unknown[]) => FakeEditor>;
-    defineTheme: MockInstance;
-    setTheme: MockInstance;
-    setModelMarkers: MockInstance;
+    create: Mock<(...args: unknown[]) => FakeEditor>;
+    defineTheme: Mock;
+    setTheme: Mock;
+    setModelMarkers: Mock;
   };
-  json: { jsonDefaults: { setDiagnosticsOptions: MockInstance } };
+  json: { jsonDefaults: { setDiagnosticsOptions: Mock } };
   MarkerSeverity: { Error: number };
   Range: new (
     startLineNumber: number,
@@ -90,13 +90,13 @@ interface FakeMonaco {
 }
 
 interface FakeResizeObserver {
-  observe: MockInstance;
-  unobserve: MockInstance;
-  disconnect: MockInstance;
+  observe: Mock;
+  unobserve: Mock;
+  disconnect: Mock;
 }
 
 interface MonacoRequireStub {
-  config: MockInstance<(configuration: { paths: Record<string, string> }) => void>;
+  config: Mock<(configuration: { paths: Record<string, string> }) => void>;
   (modules: string[], onReady: () => void): void;
 }
 
@@ -318,7 +318,7 @@ describe('JsonEditorComponent', () => {
 
     editor = makeFakeEditor('{"a":1}');
     monaco = makeFakeMonaco(editor);
-    logger = { error: vi.fn(), event: vi.fn() } as Mocked<LoggerService>;
+    logger = { error: vi.fn(), event: vi.fn() } as unknown as Mocked<LoggerService>;
     minimalMonacoInstalled = false;
 
     originalMonaco = (window as unknown as { monaco?: unknown }).monaco;
@@ -432,7 +432,7 @@ describe('JsonEditorComponent', () => {
     installRequireThatLeavesMonacoUnavailable();
     await create();
     expect(logger.error).toHaveBeenCalledTimes(1);
-    const [messageId, cause] = logger.error.mock.lastCall;
+    const [messageId, cause] = logger.error.mock.lastCall!;
     expect(messageId).toBe('monaco.loadFailed');
     expect(cause).toEqual(expect.any(Error));
     expectMonacoLoadedNotEmitted();
@@ -515,7 +515,7 @@ describe('JsonEditorComponent', () => {
     fixture.detectChanges();
 
     expect(monaco.editor.setModelMarkers).toHaveBeenCalledTimes(1);
-    const args = monaco.editor.setModelMarkers.mock.lastCall;
+    const args = monaco.editor.setModelMarkers.mock.lastCall!;
     expect(args[1]).toBe('jotjson');
     const markers = args[2] as Array<{
       severity: number;
@@ -544,7 +544,7 @@ describe('JsonEditorComponent', () => {
     fixture.componentRef.setInput('errors', []);
     fixture.detectChanges();
     expect(monaco.editor.setModelMarkers).toHaveBeenCalledTimes(1);
-    expect(monaco.editor.setModelMarkers.mock.lastCall[2]).toEqual([]);
+    expect(monaco.editor.setModelMarkers.mock.lastCall![2]).toEqual([]);
   });
 
   describe('paste output', () => {
@@ -560,7 +560,7 @@ describe('JsonEditorComponent', () => {
       // Simulate Monaco having already inserted the pasted text into the model
       // (onDidPaste fires AFTER the insertion). Single-line paste at (1,1).
       editor.setValue(text);
-      const handler = editor.onDidPaste.mock.lastCall[0] as (event: {
+      const handler = editor.onDidPaste.mock.lastCall![0] as (event: {
         range: {
           startLineNumber: number;
           startColumn: number;
@@ -623,7 +623,7 @@ describe('JsonEditorComponent', () => {
     function fireCursor(line: number, column: number): CursorEvent[] {
       const events: CursorEvent[] = [];
       fixture.componentInstance.cursorPositionChange.subscribe((e) => events.push(e));
-      const handler = editor.onDidChangeCursorPosition.mock.lastCall[0] as (event: {
+      const handler = editor.onDidChangeCursorPosition.mock.lastCall![0] as (event: {
         position: { lineNumber: number; column: number };
       }) => void;
       handler({ position: { lineNumber: line, column } });
@@ -695,7 +695,7 @@ describe('JsonEditorComponent', () => {
       expect(component.replaceAll('{"a":2}', 'spec-replace-all')).toBe('applied');
       expect(editor.getValue()).toBe('{"a":2}');
       expect(editor.executeEdits).toHaveBeenCalledTimes(1);
-      const [editsSource, editOperations] = editor.executeEdits.mock.lastCall;
+      const [editsSource, editOperations] = editor.executeEdits.mock.lastCall!;
       expect(editsSource).toBe('spec-replace-all');
       expect(editOperations.length).toBe(1);
       const edit = editOperations[0];
@@ -825,7 +825,7 @@ describe('JsonEditorComponent', () => {
       // the resulting cursor change reports the start coordinate.
       expect(monaco.__selectionConstructorCalls[0]).toEqual([1, 5, 1, 2]);
       expect(editor.setSelection).toHaveBeenCalledTimes(1);
-      const sel = editor.setSelection.mock.lastCall[0] as FakeSelection;
+      const sel = editor.setSelection.mock.lastCall![0] as FakeSelection;
       // Normalized range is still (1,2)->(1,5).
       expect(sel.startLineNumber).toBe(1);
       expect(sel.startColumn).toBe(2);
@@ -838,7 +838,7 @@ describe('JsonEditorComponent', () => {
       // FakeEditor has no focus spy at all - verify nothing on the editor
       // matches the focus contract.
       const component = await create('{"a":1}');
-      expect((editor as unknown as { focus?: MockInstance }).focus).toBeUndefined();
+      expect((editor as unknown as { focus?: Mock }).focus).toBeUndefined();
       component.revealRange({
         startLineNumber: 1,
         startColumn: 1,

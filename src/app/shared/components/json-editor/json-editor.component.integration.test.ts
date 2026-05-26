@@ -36,7 +36,7 @@
  */
 import { TestBed } from '@angular/core/testing';
 import type * as MonacoNS from 'monaco-editor';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { JsonEditorComponent } from './json-editor.component';
 import { __resetMonacoLoaderForTesting, loadMonaco } from './monaco-loader';
@@ -344,7 +344,7 @@ describe('JsonEditorComponent (browser integration)', () => {
   // a registered theme is not exposed by Monaco's public standalone API.
   describe('JSON syntax token theming (M7f-3a)', () => {
     function findThemeData(
-      spy: MockInstance,
+      spy: Mock,
       name: string,
     ): MonacoNS.editor.IStandaloneThemeData | undefined {
       for (const call of spy.mock.calls) {

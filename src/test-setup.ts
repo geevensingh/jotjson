@@ -1,9 +1,18 @@
-import { setupTestBed } from '@analogjs/vitest-angular/setup-testbed';
-import '@analogjs/vitest-angular/setup-zone';
+// organize-imports-ignore -- import order is load-bearing here:
+// `@angular/compiler` MUST load before any module that imports
+// `@angular/common` (the @analogjs setup-testbed transitively does
+// so via @angular/platform-browser/testing -> @angular/common), or
+// PlatformLocation's static initializer fails to find the JIT
+// compiler facade and throws `_PlatformLocation needs JIT but
+// @angular/compiler is not available`. Without this directive,
+// `prettier-plugin-organize-imports` would re-sort the imports
+// alphabetically and break the test suite.
 import '@angular/compiler';
 import '@angular/localize/init';
 import 'zone.js';
 import 'zone.js/testing';
+import { setupTestBed } from '@analogjs/vitest-angular/setup-testbed';
+import '@analogjs/vitest-angular/setup-zone';
 import './styles.scss';
 
 setupTestBed({

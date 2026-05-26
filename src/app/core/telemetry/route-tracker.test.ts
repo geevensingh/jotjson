@@ -1,13 +1,13 @@
 import { TestBed } from '@angular/core/testing';
 import { NavigationEnd, Router } from '@angular/router';
 import { Subject } from 'rxjs';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { RouteTracker } from './route-tracker';
 import { TelemetryService } from './telemetry.service';
 
 describe('RouteTracker', () => {
   let events: Subject<unknown>;
-  let trackPageView: MockInstance;
+  let trackPageView: Mock;
   let isConnected = false;
   let routerStub: Partial<Router>;
   let tracker: RouteTracker;

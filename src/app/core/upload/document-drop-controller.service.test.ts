@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
-import { type Mocked, type MockInstance } from 'vitest';
+import { type Mock, type Mocked } from 'vitest';
 import { DocumentDropController } from './document-drop-controller.service';
 
 interface DragEventInit {
@@ -38,15 +38,17 @@ function makeFile(name = 'sample.json', body = '{}'): File {
 
 describe('DocumentDropController', () => {
   let controller: DocumentDropController;
-  let snackOpen: MockInstance;
+  let snackOpen: Mock;
   let actionSubject: Subject<void>;
   let snackRef: Mocked<MatSnackBarRef<TextOnlySnackBar>>;
-  let navigateByUrl: MockInstance;
+  let navigateByUrl: Mock;
   let originalHidden: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     actionSubject = new Subject<void>();
-    snackRef = { onAction: vi.fn(), dismiss: vi.fn() } as Mocked<MatSnackBarRef<TextOnlySnackBar>>;
+    snackRef = { onAction: vi.fn(), dismiss: vi.fn() } as unknown as Mocked<
+      MatSnackBarRef<TextOnlySnackBar>
+    >;
     snackRef.onAction.mockReturnValue(actionSubject.asObservable());
     snackOpen = vi.fn().mockReturnValue(snackRef);
     navigateByUrl = vi.fn().mockResolvedValue(true);
@@ -88,7 +90,7 @@ describe('DocumentDropController', () => {
     document.dispatchEvent(makeDragEvent('drop', { files: [file] }));
 
     expect(handler).toHaveBeenCalledTimes(1);
-    const passed = handler.mock.lastCall[0] as readonly File[];
+    const passed = handler.mock.lastCall![0] as readonly File[];
     expect(passed.length).toBe(1);
     expect(passed[0]).toBe(file);
     expect(snackOpen).not.toHaveBeenCalled();
@@ -97,7 +99,7 @@ describe('DocumentDropController', () => {
   it('opens a snackbar with a Go-to-editor action when no handler is registered', () => {
     document.dispatchEvent(makeDragEvent('drop', { files: [makeFile()] }));
     expect(snackOpen).toHaveBeenCalledTimes(1);
-    const args = snackOpen.mock.lastCall;
+    const args = snackOpen.mock.lastCall!;
     expect(args[0]).toContain('editor');
     expect(args[1]).toContain('editor');
 

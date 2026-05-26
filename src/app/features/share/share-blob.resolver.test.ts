@@ -6,7 +6,7 @@ import {
   type RouterStateSnapshot,
 } from '@angular/router';
 import { Observable, firstValueFrom, isObservable, throwError } from 'rxjs';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import { BlobService, type BlobFetchEvent } from '../../core/api/blob.service';
 import type { JsonBlob } from '../../core/api/models';
@@ -40,11 +40,11 @@ describe('shareBlobResolver', () => {
     };
   }
 
-  let getWithProgressSpy: MockInstance<(slug: string) => Observable<BlobFetchEvent>>;
-  let navSpy: MockInstance;
-  let reportProgressSpy: MockInstance;
-  let markBytesCompleteSpy: MockInstance;
-  let eventSpy: MockInstance;
+  let getWithProgressSpy: Mock<(slug: string) => Observable<BlobFetchEvent>>;
+  let navSpy: Mock;
+  let reportProgressSpy: Mock;
+  let markBytesCompleteSpy: Mock;
+  let eventSpy: Mock;
 
   function makeStream(...events: BlobFetchEvent[]): Observable<BlobFetchEvent> {
     return new Observable<BlobFetchEvent>((subscriber) => {

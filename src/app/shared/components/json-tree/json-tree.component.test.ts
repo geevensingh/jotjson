@@ -6,7 +6,7 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { Subject, type Observable } from 'rxjs';
-import { type MockInstance, type Mocked } from 'vitest';
+import { type Mock, type Mocked } from 'vitest';
 import { provideFakeAuth } from '../../../../testing/auth.testing';
 import { HIGHLIGHT_PATH_FIXTURES } from '../../../../testing/fixtures/highlight-paths.fixture';
 import type {
@@ -49,7 +49,7 @@ describe('JsonTreeComponent', () => {
   let fixture: ComponentFixture<JsonTreeComponent>;
   let cmp: JsonTreeComponent;
   let prefs: PreferencesService;
-  let snackOpen: MockInstance;
+  let snackOpen: Mock;
 
   async function createWith(
     value: unknown,
@@ -94,8 +94,8 @@ describe('JsonTreeComponent', () => {
     fixture.detectChanges();
   }
 
-  async function createWithEventSpy(value: unknown): Promise<MockInstance> {
-    let eventSpy: MockInstance | null = null;
+  async function createWithEventSpy(value: unknown): Promise<Mock> {
+    let eventSpy: Mock | null = null;
     await createWith(value, () => {
       eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
     });
@@ -111,7 +111,7 @@ describe('JsonTreeComponent', () => {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
-    } as Mocked<LoggerService>;
+    } as unknown as Mocked<LoggerService>;
     await createWith(value, undefined, logger);
     return logger;
   }
@@ -645,7 +645,7 @@ describe('JsonTreeComponent', () => {
      * font metrics).
      */
     function captureAutoFitEmit(
-      eventSpy: MockInstance,
+      eventSpy: Mock,
     ): { props: Record<string, unknown>; measurements: Record<string, number> } | null {
       const call = eventSpy.mock.calls.find((args) => args[0] === 'tree.expand.autoFit');
       if (!call) return null;
@@ -655,7 +655,7 @@ describe('JsonTreeComponent', () => {
       };
     }
 
-    function expandToLevelCallsFor(spy: MockInstance): { depth: number; internal: boolean }[] {
+    function expandToLevelCallsFor(spy: Mock): { depth: number; internal: boolean }[] {
       return spy.mock.calls.map((args) => ({
         depth: args[0] as number,
         internal: (args[1] as boolean | undefined) ?? false,
@@ -800,12 +800,12 @@ describe('JsonTreeComponent', () => {
   describe('view reset via viewResetToken', () => {
     type AutoFitCall = ['tree.expand.autoFit', Record<string, unknown>, Record<string, number>];
 
-    function autoFitCallsFor(eventSpy: MockInstance): AutoFitCall[] {
+    function autoFitCallsFor(eventSpy: Mock): AutoFitCall[] {
       const calls: readonly unknown[][] = eventSpy.mock.calls;
       return calls.filter((args): args is AutoFitCall => args[0] === 'tree.expand.autoFit');
     }
 
-    function expandToLevelCallsFor(spy: MockInstance): { depth: number; internal: boolean }[] {
+    function expandToLevelCallsFor(spy: Mock): { depth: number; internal: boolean }[] {
       const calls: readonly unknown[][] = spy.mock.calls;
       return calls.map((args) => ({
         depth: args[0] as number,
@@ -1315,7 +1315,7 @@ describe('JsonTreeComponent', () => {
       throw new Error(`No node at path ${path}`);
     }
 
-    function hasExpandSlowEvent(eventSpy: MockInstance): boolean {
+    function hasExpandSlowEvent(eventSpy: Mock): boolean {
       return eventSpy.mock.calls.some((args) => args[0] === 'tree.expand.slow');
     }
 
@@ -3510,7 +3510,7 @@ describe('JsonTreeComponent', () => {
       await createWith({ a: 1 });
     });
 
-    function withClipboard<T>(stub: { writeText?: MockInstance } | undefined, run: () => T): T {
+    function withClipboard<T>(stub: { writeText?: Mock } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
       try {
@@ -3537,7 +3537,7 @@ describe('JsonTreeComponent', () => {
       });
       await vi.waitFor(() => expect(snackOpen).toHaveBeenCalled());
       expect(writeText).toHaveBeenCalledWith('$.a');
-      const message = snackOpen.mock.lastCall[0] as string;
+      const message = snackOpen.mock.lastCall![0] as string;
       expect(message).toContain('copied');
     });
 
@@ -3548,7 +3548,7 @@ describe('JsonTreeComponent', () => {
       });
       await vi.waitFor(() => expect(snackOpen).toHaveBeenCalled());
       expect(writeText).toHaveBeenCalled();
-      const message = snackOpen.mock.lastCall[0] as string;
+      const message = snackOpen.mock.lastCall![0] as string;
       expect(message).toContain('Failed');
     });
 
@@ -3557,7 +3557,7 @@ describe('JsonTreeComponent', () => {
         cmp.copyPath({ pathString: '$.a' } as never);
       });
       expect(snackOpen).toHaveBeenCalled();
-      const message = snackOpen.mock.lastCall[0] as string;
+      const message = snackOpen.mock.lastCall![0] as string;
       expect(message).toContain('not supported');
     });
 
@@ -5536,7 +5536,7 @@ describe('JsonTreeComponent', () => {
     // here). Mirrors the same restore semantics: if `navigator` had
     // no own `clipboard` descriptor before our override, we delete
     // ours so the prototype's getter is restored.
-    function withClipboardStub<T>(stub: { writeText?: MockInstance } | undefined, run: () => T): T {
+    function withClipboardStub<T>(stub: { writeText?: Mock } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
       Object.defineProperty(navigator, 'clipboard', {
@@ -5665,7 +5665,7 @@ describe('JsonTreeComponent', () => {
       await createWith({ a: 1 });
       const logger = TestBed.inject(LoggerService);
       const info = vi.spyOn(logger, 'info');
-      const writeText = vi.fn().mockResolvedValue();
+      const writeText = vi.fn().mockResolvedValue(undefined);
       withClipboardStub({ writeText }, () => cmp.onBreadcrumbCopyPath());
       expect(info).not.toHaveBeenCalled();
       expect(writeText).not.toHaveBeenCalled();
@@ -5677,7 +5677,7 @@ describe('JsonTreeComponent', () => {
       // crumbs = [Root(0), foo(1), bar(2,current)] -> total 3, leaf depth = 2
       const logger = TestBed.inject(LoggerService);
       const info = vi.spyOn(logger, 'info');
-      const writeText = vi.fn().mockResolvedValue();
+      const writeText = vi.fn().mockResolvedValue(undefined);
       withClipboardStub({ writeText }, () => cmp.onBreadcrumbCopyPath());
       expect(info).toHaveBeenCalledWith('tree.breadcrumb.copyPath', {
         depth: 2,
@@ -6069,7 +6069,7 @@ describe('JsonTreeComponent', () => {
 
     function spyOnDialogOpen(
       afterClosed$: Observable<DecodedValueDialogResult> = new Subject<DecodedValueDialogResult>(),
-    ): MockInstance {
+    ): Mock {
       const dialog = TestBed.inject(MatDialog);
       const spy = vi.spyOn(dialog, 'open').mockReturnValue({
         afterClosed: () => afterClosed$,
@@ -6078,7 +6078,7 @@ describe('JsonTreeComponent', () => {
       return spy;
     }
 
-    function staleCloseEventCalls(eventSpy: MockInstance): number {
+    function staleCloseEventCalls(eventSpy: Mock): number {
       return eventSpy.mock.calls.filter((call) => call[0] === 'tree.extract.dialog.staleClose')
         .length;
     }
@@ -6230,7 +6230,7 @@ describe('JsonTreeComponent', () => {
         // to `'90vw'` matches the intent: content-sized, capped at
         // 90vw (the same model the `.jj-tooltip-wide` rule in
         // `src/styles/_material.scss` uses).
-        const config = open.mock.lastCall[1] as {
+        const config = open.mock.lastCall![1] as {
           width?: string;
           maxWidth?: string;
         };
@@ -6246,7 +6246,7 @@ describe('JsonTreeComponent', () => {
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
         expect(open).toHaveBeenCalledTimes(1);
-        const args = open.mock.lastCall;
+        const args = open.mock.lastCall!;
         expect(args[0]).toBe(DecodedValueDialogComponent);
         const config = args[1] as { data: DecodedValueDialogData };
         expect(config.data.value).toBe('first\nsecond');
@@ -6265,7 +6265,7 @@ describe('JsonTreeComponent', () => {
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
 
-        const config = open.mock.lastCall[1] as { data: DecodedValueDialogData };
+        const config = open.mock.lastCall![1] as { data: DecodedValueDialogData };
         expect(config.data.value).toBe('abc\ndef');
         expect(config.data.pathString).toBe('$.note');
         expect(config.data.extractCandidate).toEqual(replacement);
@@ -6298,7 +6298,7 @@ describe('JsonTreeComponent', () => {
           item!.click();
           fixture.detectChanges();
           expect(open).toHaveBeenCalledTimes(1);
-          const args = open.mock.lastCall;
+          const args = open.mock.lastCall!;
           expect(args[0]).toBe(DecodedValueDialogComponent);
         } finally {
           closeOpenMenus();
@@ -6574,7 +6574,7 @@ describe('JsonTreeComponent', () => {
       return item;
     }
 
-    function withCtxClipboard<T>(stub: { writeText?: MockInstance } | undefined, run: () => T): T {
+    function withCtxClipboard<T>(stub: { writeText?: Mock } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
@@ -6941,7 +6941,7 @@ describe('JsonTreeComponent', () => {
         withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
         await Promise.resolve();
         await Promise.resolve();
-        const arg = writeText.mock.lastCall[0] as string;
+        const arg = writeText.mock.lastCall![0] as string;
         expect(arg).toContain('\n');
         expect(arg).toContain('  "a": 1');
         expect(arg).toContain('  "b": "x"');
@@ -6954,7 +6954,7 @@ describe('JsonTreeComponent', () => {
         withCtxClipboard({ writeText }, () => cmp.copyValue(node, 'menu'));
         await Promise.resolve();
         await Promise.resolve();
-        const arg = writeText.mock.lastCall[0] as string;
+        const arg = writeText.mock.lastCall![0] as string;
         expect(arg).toBe('[\n  1,\n  2\n]');
       });
     });
@@ -8446,7 +8446,7 @@ describe('JsonTreeComponent', () => {
         fixture.detectChanges();
         const root = nodeAt('$.root');
         for (let n = 6; n <= 9; n++) {
-          (logger.info as MockInstance).mockClear();
+          (logger.info as Mock).mockClear();
           cmp.expandToDepthFromHere(root, n);
           expect(logger.info).toHaveBeenCalledWith('tree.contextMenu.expandToDepth', {
             relativeDepth: n,
@@ -8699,7 +8699,7 @@ describe('JsonTreeComponent', () => {
   });
 
   describe('dblclick container toggle (issue #109, DOM-level)', () => {
-    function withClipboard<T>(stub: { writeText?: MockInstance } | undefined, run: () => T): T {
+    function withClipboard<T>(stub: { writeText?: Mock } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
@@ -8828,7 +8828,7 @@ describe('JsonTreeComponent', () => {
       return row!;
     }
 
-    function withClipboard<T>(stub: { writeText?: MockInstance } | undefined, run: () => T): T {
+    function withClipboard<T>(stub: { writeText?: Mock } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });
@@ -9342,7 +9342,7 @@ describe('JsonTreeComponent', () => {
   // semantics.
   // ---------------------------------------------------------------------------
   describe('keyboard copy (Ctrl+C / Cmd+C, focused tree row)', () => {
-    function withClipboard<T>(stub: { writeText?: MockInstance } | undefined, run: () => T): T {
+    function withClipboard<T>(stub: { writeText?: Mock } | undefined, run: () => T): T {
       const original = (navigator as { clipboard?: Clipboard }).clipboard;
       const hadOwn = Object.prototype.hasOwnProperty.call(navigator, 'clipboard');
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: stub });

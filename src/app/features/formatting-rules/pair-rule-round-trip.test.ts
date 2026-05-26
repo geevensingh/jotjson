@@ -4,7 +4,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { BehaviorSubject, Subject } from 'rxjs';
 
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import type {
   FormattingRule,
@@ -49,8 +49,8 @@ interface EditorSetup {
   fixture: ComponentFixture<RuleEditorComponent>;
   service: {
     ruleSets: () => FormattingRuleSet[] | null;
-    get: MockInstance;
-    update: MockInstance;
+    get: Mock;
+    update: Mock;
     updateSubjects: Subject<FormattingRuleSet>[];
     getSubjects: Subject<FormattingRuleSet>[];
     events$: Subject<{ kind: 'conflict' | 'error'; id: string; status?: number }>;

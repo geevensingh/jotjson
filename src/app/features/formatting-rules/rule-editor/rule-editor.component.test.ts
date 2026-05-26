@@ -12,7 +12,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { BehaviorSubject, Subject } from 'rxjs';
 
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { provideFakeAuth, signInFakeUser } from '../../../../testing/auth.testing';
 import type {
   FormattingRule,
@@ -92,15 +92,15 @@ interface Setup {
   fixture: ComponentFixture<RuleEditorComponent>;
   service: {
     ruleSets: () => FormattingRuleSet[] | null;
-    get: MockInstance;
-    update: MockInstance;
+    get: Mock;
+    update: Mock;
     updateSubjects: Subject<FormattingRuleSet>[];
     getSubjects: Subject<FormattingRuleSet>[];
     events$: Subject<{ kind: 'conflict' | 'error'; id: string; status?: number }>;
     pendingWriteIds: () => ReadonlySet<string>;
     setPendingIds: (ids: string[]) => void;
   };
-  snack: { open: MockInstance };
+  snack: { open: Mock };
   paramMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
   auth: AuthService;
 }
@@ -453,7 +453,9 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       tick(600);
       ctx.fixture.detectChanges();
       expect(ctx.service.update).toHaveBeenCalledTimes(1);
-      expect(ctx.service.update.mock.lastCall[1]).toEqual(expect.objectContaining({ name: 'ABC' }));
+      expect(ctx.service.update.mock.lastCall![1]).toEqual(
+        expect.objectContaining({ name: 'ABC' }),
+      );
       // Drain the in-flight save so fakeAsync exits cleanly.
       ctx.service.updateSubjects[0].next(ruleSet({ name: 'ABC', version: 2 }));
       ctx.service.updateSubjects[0].complete();
@@ -524,7 +526,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       ctx.service.events$.next({ kind: 'conflict', id: 'rs-1' });
       tick(0);
       expect(ctx.snack.open).toHaveBeenCalled();
-      const args = ctx.snack.open.mock.lastCall;
+      const args = ctx.snack.open.mock.lastCall!;
       expect(String(args[0])).toContain('could not be saved');
     }));
 
@@ -604,7 +606,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       ctx.fixture.componentInstance.setName('Local change');
       await new Promise((r) => setTimeout(r, 600));
       await vi.waitFor(() => expect(ctx.service.update).toHaveBeenCalledTimes(2));
-      const lastVersion = ctx.service.update.mock.lastCall[2];
+      const lastVersion = ctx.service.update.mock.lastCall![2];
       expect(lastVersion).toBe(7);
       ctx.service.updateSubjects[1].next(ruleSet({ name: 'Local change', version: 8 }));
       ctx.service.updateSubjects[1].complete();

@@ -41,7 +41,7 @@ describe('StatusBarComponent', () => {
     buildInfo: BuildInfo,
     copySpy?: Mocked<ClipboardCopyService>,
   ): Mocked<ClipboardCopyService> {
-    const spy = copySpy ?? ({ copyWithToast: vi.fn() } as Mocked<ClipboardCopyService>);
+    const spy = copySpy ?? ({ copyWithToast: vi.fn() } as unknown as Mocked<ClipboardCopyService>);
     spy.copyWithToast.mockResolvedValue(true);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
@@ -279,7 +279,7 @@ describe('StatusBarComponent', () => {
       button?.click();
 
       expect(spy.copyWithToast).toHaveBeenCalledTimes(1);
-      expect(spy.copyWithToast.mock.lastCall[0]).toBe(fullBuildInfo.sha);
+      expect(spy.copyWithToast.mock.lastCall![0]).toBe(fullBuildInfo.sha);
     });
 
     it('renders the fallback span for dev builds', () => {

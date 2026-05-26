@@ -164,7 +164,7 @@ describe('JsonEditorComponent .editor-loading placeholder contrast (#145)', () =
           ...provideFakeAuth(),
           {
             provide: LoggerService,
-            useValue: { error: vi.fn(), event: vi.fn() } as Mocked<LoggerService>,
+            useValue: { error: vi.fn(), event: vi.fn() } as unknown as Mocked<LoggerService>,
           },
         ],
       }).compileComponents();

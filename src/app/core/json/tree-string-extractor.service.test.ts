@@ -128,7 +128,7 @@ describe('TreeStringExtractorService', () => {
 
   beforeEach(() => {
     mockWorker = new MockWorker();
-    logger = { warn: vi.fn() } as Mocked<LoggerService>;
+    logger = { warn: vi.fn() } as unknown as Mocked<LoggerService>;
     const created = createPrefsStub({ ...DEFAULT_PREFERENCES });
     prefsSignal = created.signal;
     prefsStub = created.stub;
@@ -298,7 +298,7 @@ describe('TreeStringExtractorService', () => {
 
   it('marks the scanner unavailable when worker creation fails', () => {
     TestBed.resetTestingModule();
-    logger = { warn: vi.fn() } as Mocked<LoggerService>;
+    logger = { warn: vi.fn() } as unknown as Mocked<LoggerService>;
     const fallbackPrefs = createPrefsStub({ ...DEFAULT_PREFERENCES });
     TestBed.configureTestingModule({
       providers: [

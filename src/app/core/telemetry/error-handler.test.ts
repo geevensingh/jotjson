@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { TelemetryErrorHandler } from './error-handler';
 import { LoggerService } from './logger.service';
 
 describe('TelemetryErrorHandler', () => {
-  let errSpy: MockInstance;
-  let eventSpy: MockInstance;
-  let consoleErr: MockInstance;
+  let errSpy: Mock;
+  let eventSpy: Mock;
+  let consoleErr: Mock;
   let handler: TelemetryErrorHandler;
 
   beforeEach(() => {

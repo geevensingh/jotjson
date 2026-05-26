@@ -4,7 +4,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { provideFakeAuth } from '../../../testing/auth.testing';
 import { BlobService } from '../../core/api/blob.service';
 import type { JsonBlob } from '../../core/api/models';
@@ -123,7 +123,7 @@ function findDialogButton(label: string): HTMLButtonElement {
 describe('BlobsComponent', () => {
   const originalClipboardDesc = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
 
-  function stubClipboard(writeText: MockInstance): void {
+  function stubClipboard(writeText: Mock): void {
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText },
       configurable: true,

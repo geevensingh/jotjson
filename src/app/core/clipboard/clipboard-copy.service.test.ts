@@ -1,14 +1,14 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { ClipboardCopyService } from './clipboard-copy.service';
 
 describe('ClipboardCopyService', () => {
   let service: ClipboardCopyService;
-  let snackOpen: MockInstance;
+  let snackOpen: Mock;
   let originalDescriptor: PropertyDescriptor | undefined;
 
-  function setClipboard(value: { writeText?: MockInstance } | undefined): void {
+  function setClipboard(value: { writeText?: Mock } | undefined): void {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value,

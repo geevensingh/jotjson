@@ -1,6 +1,6 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { type MockInstance } from 'vitest';
+import { type Mock } from 'vitest';
 import { environment } from '../../../environments/environment';
 import { provideFakeAuth, signInFakeUser } from '../../../testing/auth.testing';
 import { AuthUser } from '../auth/auth-user';
@@ -398,7 +398,7 @@ describe('RuleSetsService', () => {
 
   describe('telemetry (M6g-1)', () => {
     let logger: LoggerService;
-    let infoSpy: MockInstance;
+    let infoSpy: Mock;
 
     beforeEach(() => {
       // Re-resolve the logger from the same TestBed used by the outer

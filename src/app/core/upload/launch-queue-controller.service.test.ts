@@ -1,6 +1,6 @@
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { type Mocked, type MockInstance } from 'vitest';
+import { type Mock, type Mocked } from 'vitest';
 import { LoggerService } from '../telemetry/logger.service';
 import { LaunchQueueController, type LaunchEvent } from './launch-queue-controller.service';
 
@@ -29,7 +29,7 @@ function makeRejectingHandle(name: string, cause: unknown): FileSystemFileHandle
 describe('LaunchQueueController', () => {
   let logger: Mocked<LoggerService>;
   let consumer: Consumer | null;
-  let setConsumerSpy: MockInstance;
+  let setConsumerSpy: Mock;
 
   function installLaunchQueue(present: boolean): void {
     consumer = null;
@@ -71,7 +71,7 @@ describe('LaunchQueueController', () => {
       warn: vi.fn(),
       info: vi.fn(),
       event: vi.fn(),
-    } as Mocked<LoggerService>;
+    } as unknown as Mocked<LoggerService>;
   });
 
   afterEach(() => {
@@ -129,14 +129,14 @@ describe('LaunchQueueController', () => {
     const controller = TestBed.inject(LaunchQueueController);
     const file = new File(['{}'], 'data.json', { type: 'application/json' });
     const handle = makeHandle(file);
-    const handler = vi.fn().mockResolvedValue();
+    const handler = vi.fn().mockResolvedValue(undefined);
     controller.registerHandler(handler);
 
     await consumer!({ files: [handle], targetURL: 'https://jotjson.com/' });
     await flush();
 
     expect(handler).toHaveBeenCalledTimes(1);
-    const event = handler.mock.lastCall[0] as LaunchEvent;
+    const event = handler.mock.lastCall![0] as LaunchEvent;
     expect(event.kind).toBe('files');
     if (event.kind === 'files') {
       expect(event.files.length).toBe(1);
@@ -155,7 +155,7 @@ describe('LaunchQueueController', () => {
     const handleA = makeHandle(fileA);
     const handleB = makeHandle(fileB);
     const handleC = makeHandle(fileC);
-    const handler = vi.fn().mockResolvedValue();
+    const handler = vi.fn().mockResolvedValue(undefined);
     controller.registerHandler(handler);
 
     await consumer!({
@@ -167,7 +167,7 @@ describe('LaunchQueueController', () => {
     expect(handleA.getFile).toHaveBeenCalledTimes(1);
     expect(handleB.getFile).not.toHaveBeenCalled();
     expect(handleC.getFile).not.toHaveBeenCalled();
-    const event = handler.mock.lastCall[0] as LaunchEvent;
+    const event = handler.mock.lastCall![0] as LaunchEvent;
     expect(event.kind).toBe('files');
     if (event.kind === 'files') {
       expect(event.files.length).toBe(1);
@@ -181,14 +181,14 @@ describe('LaunchQueueController', () => {
     const controller = TestBed.inject(LaunchQueueController);
     const cause = new DOMException('Permission denied', 'NotAllowedError');
     const handle = makeRejectingHandle('data.json', cause);
-    const handler = vi.fn().mockResolvedValue();
+    const handler = vi.fn().mockResolvedValue(undefined);
     controller.registerHandler(handler);
 
     await consumer!({ files: [handle], targetURL: 'https://jotjson.com/' });
     await flush();
 
     expect(handler).toHaveBeenCalledTimes(1);
-    const event = handler.mock.lastCall[0] as LaunchEvent;
+    const event = handler.mock.lastCall![0] as LaunchEvent;
     expect(event.kind).toBe('error');
     if (event.kind === 'error') {
       expect(event.cause).toBe(cause);
@@ -202,8 +202,8 @@ describe('LaunchQueueController', () => {
     configureBrowserTestBed();
     const controller = TestBed.inject(LaunchQueueController);
     const warn = vi.spyOn(console, 'warn');
-    const first = vi.fn().mockResolvedValue();
-    const second = vi.fn().mockResolvedValue();
+    const first = vi.fn().mockResolvedValue(undefined);
+    const second = vi.fn().mockResolvedValue(undefined);
     controller.registerHandler(first);
     controller.registerHandler(second);
 
@@ -221,8 +221,8 @@ describe('LaunchQueueController', () => {
     configureBrowserTestBed();
     const controller = TestBed.inject(LaunchQueueController);
     vi.spyOn(console, 'warn');
-    const first = vi.fn().mockResolvedValue();
-    const second = vi.fn().mockResolvedValue();
+    const first = vi.fn().mockResolvedValue(undefined);
+    const second = vi.fn().mockResolvedValue(undefined);
     const disposeFirst = controller.registerHandler(first);
     controller.registerHandler(second);
 
@@ -240,7 +240,7 @@ describe('LaunchQueueController', () => {
     installLaunchQueue(true);
     configureBrowserTestBed();
     const controller = TestBed.inject(LaunchQueueController);
-    const handler = vi.fn().mockResolvedValue();
+    const handler = vi.fn().mockResolvedValue(undefined);
     const dispose = controller.registerHandler(handler);
 
     dispose();
@@ -256,7 +256,7 @@ describe('LaunchQueueController', () => {
     installLaunchQueue(true);
     configureBrowserTestBed();
     const controller = TestBed.inject(LaunchQueueController);
-    const handler = vi.fn().mockResolvedValue();
+    const handler = vi.fn().mockResolvedValue(undefined);
     controller.registerHandler(handler);
     expect(controller.currentFileHandle()).toBeNull();
 
