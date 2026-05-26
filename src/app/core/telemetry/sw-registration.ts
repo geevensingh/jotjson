@@ -384,7 +384,7 @@ export function registerServiceWorker(): void {
 // Test-only seams (see AGENTS.md §4 "Test-only seams on production classes").
 // ---------------------------------------------------------------------------
 
-/** Resets the module-scoped state. Karma specs only. */
+/** Resets the module-scoped state. Test-only seam. */
 export function __resetSwRegistrationForTesting(): void {
   loggerConnected = false;
   directEmit = undefined;

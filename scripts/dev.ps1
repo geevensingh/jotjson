@@ -9,7 +9,7 @@
                  split horizontally with `npm run watch` (tsc -w) so
                  `dist/` stays in sync with `src/` after the initial
                  one-shot build below; manual rebuilds aren't needed.
-    3. "tests" - ng test (Karma watch) + jest --watch for the API,
+    3. "tests" - vitest (watch mode) + jest --watch for the API,
                  split vertically in the same tab.
 
   Before launching it:
@@ -23,8 +23,10 @@
   Alternatives:
     - For a debugger-attach workflow (breakpoints, step-through), prefer
       VS Code's F5: `.vscode/launch.json` + `.vscode/tasks.json` wire
-      up `ng serve`, `ng test`, and `func: host start` with the right
-      preLaunchTasks. See README.md "Debugging in VS Code".
+      up `ng serve` and `func: host start` with the right preLaunchTasks.
+      For vitest debug, install the Vitest VS Code extension or run
+      `npm run test:watch` in a terminal. See README.md
+      "Debugging in VS Code".
     - Non-Windows contributors run the two-terminal manual flow
       documented in README.md "Running locally".
 
@@ -232,16 +234,16 @@ $wtArgs = @(
 )
 
 if (-not $SkipTests) {
-  # Tests tab: ng test on top, jest --watch in a split pane below.
-  # ng is a local devDep, not a global tool, so route the call through
-  # `npx` to pick up node_modules/.bin/ng. (`npm start` / `npm run watch`
-  # already get this for free because npm-script PATH includes
-  # node_modules/.bin; bare `ng` in a fresh wt tab does not.)
+  # Tests tab: vitest --watch on top, jest --watch in a split pane below.
+  # vitest is a local devDep, so route the call through `npx` to pick up
+  # node_modules/.bin/vitest. (`npm start` / `npm run watch` already get
+  # this for free because npm-script PATH includes node_modules/.bin;
+  # bare `vitest` in a fresh wt tab does not.)
   $wtArgs += @(
     ';'
     'new-tab',    '--title', 'tests', '-d', $repoRoot,
       'pwsh', '-NoExit', '-Command',
-      'npx ng test --watch=true --browsers=ChromeHeadless'
+      'npx vitest'
     ';'
     'split-pane', '-H', '-d', $apiDir,
       'pwsh', '-NoExit', '-Command', 'npx jest --watch'
@@ -255,7 +257,7 @@ Write-Host "Local dev environment starting:" -ForegroundColor Green
 Write-Host "  web   -> http://localhost:4200"
 Write-Host "  api   -> http://localhost:7071 (func start + tsc --watch split)"
 if (-not $SkipTests) {
-  Write-Host "  tests -> ng test (top) + jest --watch (bottom)"
+  Write-Host "  tests -> vitest --watch (top) + jest --watch (bottom)"
 }
 Write-Host ""
 Write-Host "Close the Windows Terminal tabs to stop each process."

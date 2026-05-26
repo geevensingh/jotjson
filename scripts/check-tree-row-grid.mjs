@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // .tree-row Grid structural lint (issue #278). Promotes the runtime
-// Karma-only structural assertions in
-// `json-tree.component.grid-structural.spec.ts` to a build-time gate
+// browser-only structural assertions in
+// `json-tree.component.grid-structural.test.ts` to a build-time gate
 // so regressions surface in milliseconds at `npm run lint` time
-// instead of seconds-to-minutes inside Karma (and only when the
-// relevant browser path executes).
+// instead of seconds-to-minutes inside the unit-test runner (and only
+// when the relevant browser path executes).
 //
 // Three invariants:
 //   1. Direct-child allowlist of `.tree-row`: every direct DOM child
