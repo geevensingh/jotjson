@@ -92,7 +92,7 @@ describe('setupWebVitals', () => {
     fakeApi.emitCls(0.07);
     window.dispatchEvent(createPageHideEvent());
 
-    expect(logger.event).toHaveBeenCalledOnceWith(
+    expect(logger.event).toHaveBeenCalledExactlyOnceWith(
       'webVitals',
       { appVersion: TEST_APP_VERSION, buildNumber: TEST_BUILD_NUMBER },
       { lcpMs: 1234.5, inpMs: 56, cls: 0.07 },
@@ -108,7 +108,7 @@ describe('setupWebVitals', () => {
     window.dispatchEvent(createPageHideEvent());
 
     const measurements = logger.event.mock.lastCall[2];
-    expect(logger.event).toHaveBeenCalledOnceWith(
+    expect(logger.event).toHaveBeenCalledExactlyOnceWith(
       'webVitals',
       { appVersion: TEST_APP_VERSION, buildNumber: TEST_BUILD_NUMBER },
       { lcpMs: 1234.5 },

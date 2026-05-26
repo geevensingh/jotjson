@@ -59,8 +59,8 @@ describe('FormattingRulesComponent (a11y shell landmarks)', () => {
     const stub = {
       ruleSets: cache.asReadonly(),
       activeRuleSetIds: defaults.asReadonly(),
-      list: jasmine
-        .createSpy('list')
+      list: vi
+        .fn()
         .mockImplementation(() =>
           listResult instanceof Error ? throwError(() => listResult) : of(listResult),
         ),
@@ -112,9 +112,7 @@ describe('FormattingRulesComponent (a11y shell landmarks)', () => {
       refresh: vi.fn(),
       toggleActive: vi.fn(),
       listPresets: vi.fn().mockReturnValue(of([preset()])),
-      clonePreset: jasmine
-        .createSpy('clonePreset')
-        .mockReturnValue(of(ruleSet({ id: 'cloned-1' }))),
+      clonePreset: vi.fn().mockReturnValue(of(ruleSet({ id: 'cloned-1' }))),
     };
     const prefsSig = signal<{ activeRuleSetIds: string[] }>({ activeRuleSetIds: [] });
     const syncStateSig = signal<'synced'>('synced');

@@ -201,27 +201,31 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     expect(liveRegion?.textContent).toContain('Saved offline');
   });
 
-  it('falls back to get() when cache misses', fakeAsync(() => {
+  it('falls back to get() when cache misses', async () => {
     const ctx = setup({ initialCache: [] });
     ctx.fixture.detectChanges();
+    await vi.waitFor(() => expect(ctx.service.getSubjects.length).toBeGreaterThan(0));
     ctx.service.getSubjects[0].next(ruleSet({ name: 'Fetched' }));
     ctx.service.getSubjects[0].complete();
-    flush();
-    ctx.fixture.detectChanges();
+    await vi.waitFor(() => {
+      ctx.fixture.detectChanges();
+      expect(ctx.fixture.componentInstance.editable()?.name).toBe('Fetched');
+    });
     expect(ctx.service.get).toHaveBeenCalledWith('rs-1');
-    expect(ctx.fixture.componentInstance.editable()?.name).toBe('Fetched');
-  }));
+  });
 
-  it('redirects to /formatting-rules with snackbar on 404 during initial load', fakeAsync(() => {
+  it('redirects to /formatting-rules with snackbar on 404 during initial load', async () => {
     const ctx = setup({ initialCache: [] });
     const router = TestBed.inject(Router);
     const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
     ctx.fixture.detectChanges();
+    await vi.waitFor(() => expect(ctx.service.getSubjects.length).toBeGreaterThan(0));
     ctx.service.getSubjects[0].error(new HttpErrorResponse({ status: 404 }));
-    flush();
-    expect(navSpy).toHaveBeenCalledWith(['/formatting-rules']);
-    expect(ctx.snack.open).toHaveBeenCalled();
-  }));
+    await vi.waitFor(() => {
+      expect(navSpy).toHaveBeenCalledWith(['/formatting-rules']);
+      expect(ctx.snack.open).toHaveBeenCalled();
+    });
+  });
 
   describe('mutators', () => {
     it('setName updates editable', () => {
@@ -575,67 +579,78 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       expect(ctx.service.update).toHaveBeenCalledTimes(1);
     }));
 
-    it('Reload re-fetches and rehydrates, clears conflict, resumes autosave', fakeAsync(() => {
+    it('Reload re-fetches and rehydrates, clears conflict, resumes autosave', async () => {
       const ctx = loaded();
       ctx.fixture.componentInstance.setName('A');
-      tick(600);
+      await new Promise((r) => setTimeout(r, 600));
       ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 412 }));
-      flush();
+      await vi.waitFor(() => {
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.conflict()).toBe(true);
+      });
       // Reload
       void ctx.fixture.componentInstance.reload();
-      tick(0);
+      await vi.waitFor(() => expect(ctx.service.getSubjects.length).toBeGreaterThan(0));
       expect(ctx.service.get).toHaveBeenCalled();
       const subj = ctx.service.getSubjects[ctx.service.getSubjects.length - 1];
       subj.next(ruleSet({ name: 'Server name', version: 7, rules: [rule()] }));
       subj.complete();
-      flush();
-      ctx.fixture.detectChanges();
-      expect(ctx.fixture.componentInstance.conflict()).toBe(false);
+      await vi.waitFor(() => {
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.conflict()).toBe(false);
+      });
       expect(ctx.fixture.componentInstance.editable()!.name).toBe('Server name');
       // Editor is responsive again.
       ctx.fixture.componentInstance.setName('Local change');
-      tick(600);
-      expect(ctx.service.update).toHaveBeenCalledTimes(2);
+      await new Promise((r) => setTimeout(r, 600));
+      await vi.waitFor(() => expect(ctx.service.update).toHaveBeenCalledTimes(2));
       const lastVersion = ctx.service.update.mock.lastCall[2];
       expect(lastVersion).toBe(7);
       ctx.service.updateSubjects[1].next(ruleSet({ name: 'Local change', version: 8 }));
       ctx.service.updateSubjects[1].complete();
-      flush();
-    }));
+    });
 
-    it('Reload returning 404 navigates to list with snackbar', fakeAsync(() => {
+    it('Reload returning 404 navigates to list with snackbar', async () => {
       const ctx = loaded();
       const router = TestBed.inject(Router);
       const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
       ctx.fixture.componentInstance.setName('A');
-      tick(600);
+      await new Promise((r) => setTimeout(r, 600));
       ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 412 }));
-      flush();
+      await vi.waitFor(() => {
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.conflict()).toBe(true);
+      });
       void ctx.fixture.componentInstance.reload();
-      tick(0);
+      await vi.waitFor(() => expect(ctx.service.getSubjects.length).toBeGreaterThan(0));
       const subj = ctx.service.getSubjects[ctx.service.getSubjects.length - 1];
       subj.error(new HttpErrorResponse({ status: 404 }));
-      flush();
-      expect(navSpy).toHaveBeenCalledWith(['/formatting-rules']);
-      expect(ctx.snack.open).toHaveBeenCalled();
-    }));
+      await vi.waitFor(() => {
+        expect(navSpy).toHaveBeenCalledWith(['/formatting-rules']);
+        expect(ctx.snack.open).toHaveBeenCalled();
+      });
+    });
 
-    it('Reload returning 5xx keeps the banner and surfaces a toast', fakeAsync(() => {
+    it('Reload returning 5xx keeps the banner and surfaces a toast', async () => {
       const ctx = loaded();
       ctx.fixture.componentInstance.setName('A');
-      tick(600);
+      await new Promise((r) => setTimeout(r, 600));
       ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 412 }));
-      flush();
+      await vi.waitFor(() => {
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.conflict()).toBe(true);
+      });
       void ctx.fixture.componentInstance.reload();
-      tick(0);
+      await vi.waitFor(() => expect(ctx.service.getSubjects.length).toBeGreaterThan(0));
       const subj = ctx.service.getSubjects[ctx.service.getSubjects.length - 1];
       subj.error(new HttpErrorResponse({ status: 500 }));
-      flush();
-      ctx.fixture.detectChanges();
+      await vi.waitFor(() => {
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.reloading()).toBe(false);
+      });
       expect(ctx.fixture.componentInstance.conflict()).toBe(true);
-      expect(ctx.fixture.componentInstance.reloading()).toBe(false);
       expect(ctx.snack.open).toHaveBeenCalled();
-    }));
+    });
   });
 
   describe('save 404 (deleted from another tab)', () => {

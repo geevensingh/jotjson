@@ -117,8 +117,8 @@ describe('ClipboardPollingService', () => {
   // restoring between them - afterAll will still put the originals back so
   // a stub does not leak into adjacent suites that vi.spyOn(navigator.clipboard,
   // 'writeText'/'readText') directly. Without this guard, a leaked stub
-  // whose methods are jasmine spies trips Jasmine's "already been spied
-  // upon" guard in later specs (observed in CI on Linux Chrome Headless).
+  // whose methods are spies trips Vitest's `vi.spyOn` re-stub
+  // failure mode in later specs (observed in CI on Linux Chrome Headless).
   let suiteOrigClipboard: PropertyDescriptor | undefined;
   let suiteOrigPermissions: PropertyDescriptor | undefined;
   beforeAll(() => {
@@ -178,7 +178,7 @@ describe('ClipboardPollingService', () => {
     // would capture the first call's STUB as the "original" descriptor, and
     // afterEach's restore would put the first stub back instead of the real
     // clipboard - leaking a stubbed navigator.clipboard whose writeText is
-    // already a jasmine spy into adjacent suites.
+    // already a vi.fn spy into adjacent suites.
     restore();
     restore = () => {};
 
@@ -309,9 +309,7 @@ describe('ClipboardPollingService', () => {
 
   it('hasJson classification matches the paste predicate', async () => {
     let clipboardText = '';
-    const readText = jasmine
-      .createSpy('readText')
-      .mockImplementation(() => Promise.resolve(clipboardText));
+    const readText = vi.fn().mockImplementation(() => Promise.resolve(clipboardText));
     const svc = createService({
       readText,
       permissionsQuery: vi.fn().mockResolvedValue(makeStatus('granted')),
@@ -341,9 +339,7 @@ describe('ClipboardPollingService', () => {
 
   it('clears preview when clipboard no longer has JSON', async () => {
     let clipboardText = '{"a":1}';
-    const readText = jasmine
-      .createSpy('readText')
-      .mockImplementation(() => Promise.resolve(clipboardText));
+    const readText = vi.fn().mockImplementation(() => Promise.resolve(clipboardText));
     const svc = createService({
       readText,
       permissionsQuery: vi.fn().mockResolvedValue(makeStatus('granted')),
@@ -393,9 +389,7 @@ describe('ClipboardPollingService', () => {
 
   it('readGrantedClipboardOnce returns text and updates derived clipboard state when granted', async () => {
     let clipboardText = 'not json';
-    const readText = jasmine
-      .createSpy('readText')
-      .mockImplementation(() => Promise.resolve(clipboardText));
+    const readText = vi.fn().mockImplementation(() => Promise.resolve(clipboardText));
     const svc = createService({
       readText,
       permissionsQuery: vi.fn().mockResolvedValue(makeStatus('granted')),
@@ -479,9 +473,7 @@ describe('ClipboardPollingService', () => {
 
   it('readGrantedClipboardOnce starts a new read after the previous read settles', async () => {
     let clipboardText = '{"first":true}';
-    const readText = jasmine
-      .createSpy('readText')
-      .mockImplementation(() => Promise.resolve(clipboardText));
+    const readText = vi.fn().mockImplementation(() => Promise.resolve(clipboardText));
     const svc = createService({
       readText,
       permissionsQuery: vi.fn().mockResolvedValue(makeStatus('granted')),

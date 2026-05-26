@@ -95,7 +95,7 @@ describe('parse (pure)', () => {
       expect(JSON.stringify(result.value)).toBe('{"__proto__":1,"a":2}');
     });
 
-    it('pins Jasmine deep-equality across plain vs null prototype', () => {
+    it('pins deep-equality across plain vs null prototype', () => {
       // Regression guard for skeptic finding H1 (issue #365 plan).
       // `parseResult().value` returns null-prototype objects after
       // the #365 fix; existing specs in home.component.spec.ts --
@@ -105,13 +105,13 @@ describe('parse (pure)', () => {
       // can survive", plus any other spec that uses
       // `expect(...parseResult().value).toEqual({ ... })` with a
       // plain-object literal -- depend on this equivalence.
-      // Jasmine 6.2's `eq_` short-circuits the constructor-mismatch
-      // gate when either constructor is `undefined` (which is the
-      // case for null-prototype objects). Mirror that exact pattern
-      // here -- a null-prototype LHS deep-equal to a plain object
-      // literal RHS -- so a future Jasmine upgrade that tightens
-      // the gate fails this spec first instead of breaking the
-      // broader suite silently.
+      // Original concern (under Jasmine 6.2): `eq_` short-circuits
+      // the constructor-mismatch gate when either constructor is
+      // `undefined` (the case for null-prototype objects). Vitest's
+      // deep-equal (via chai) is expected to behave the same way;
+      // this spec pins the equivalence so a future runner upgrade
+      // that tightens the gate fails here first instead of breaking
+      // the broader suite silently.
       const result = parse('{"seed":2}');
       expect(Object.getPrototypeOf(result.value)).toBeNull();
       expect(result.value).toEqual({ seed: 2 });

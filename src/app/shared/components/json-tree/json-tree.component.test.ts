@@ -220,8 +220,7 @@ describe('JsonTreeComponent', () => {
   it('does not warn about mixed flat/nested tree node types', async () => {
     const warn = vi.spyOn(console, 'warn');
     await createWith({ a: { b: 1 } });
-    const warnings = warn.calls
-      .allArgs()
+    const warnings = warn.mock.calls
       .flat()
       .filter((a) => typeof a === 'string' && a.includes('conflicting node types'));
     expect(warnings, 'mat-tree must not emit flat/nested conflict warning').toEqual([]);
@@ -452,14 +451,24 @@ describe('JsonTreeComponent', () => {
   describe('tree build slow telemetry', () => {
     it('does not emit tree.build.slow below the threshold', async () => {
       vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0);
-      vi.spyOn(performance, 'now').and.returnValues(0, 99, 0, 0, 0);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(99)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0);
       const eventSpy = await createWithEventSpy({ a: 1 });
       expect(eventSpy.mock.calls.some((args) => args[0] === 'tree.build.slow')).toBe(false);
     });
 
     it('emits tree.build.slow above the threshold', async () => {
       vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0);
-      vi.spyOn(performance, 'now').and.returnValues(0, 101, 0, 0, 0);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(101)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0);
       const eventSpy = await createWithEventSpy({ a: 1 });
       expect(eventSpy).toHaveBeenCalledWith(
         'tree.build.slow',
@@ -470,14 +479,27 @@ describe('JsonTreeComponent', () => {
 
     it('does not emit tree.build.slow at exactly 100 ms', async () => {
       vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0);
-      vi.spyOn(performance, 'now').and.returnValues(0, 100, 0, 0, 0);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(100)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0);
       const eventSpy = await createWithEventSpy({ a: 1 });
       expect(eventSpy.mock.calls.some((args) => args[0] === 'tree.build.slow')).toBe(false);
     });
 
     it('marks only the first tree.build.slow emission as cold', async () => {
       vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0);
-      vi.spyOn(performance, 'now').and.returnValues(0, 101, 0, 0, 0, 200, 350, 0);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(101)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(200)
+        .mockReturnValueOnce(350)
+        .mockReturnValueOnce(0);
       const eventSpy = await createWithEventSpy({ a: 1 });
       fixture.componentRef.setInput('value', { b: 2 });
       fixture.detectChanges();
@@ -498,7 +520,12 @@ describe('JsonTreeComponent', () => {
 
     it('reports the node count from the build traversal', async () => {
       vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0);
-      vi.spyOn(performance, 'now').and.returnValues(0, 101, 0, 0, 0);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(101)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0);
       const eventSpy = await createWithEventSpy({
         a: { b: 1 },
         c: [2, 3],
@@ -514,7 +541,13 @@ describe('JsonTreeComponent', () => {
   describe('tree render slow telemetry', () => {
     it('does not emit tree.render.slow below the threshold', async () => {
       const callbacks = installAnimationFrameQueue();
-      vi.spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0, 29);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(29);
       const eventSpy = await createWithEventSpy({ a: 1 });
       runQueuedAnimationFrames(callbacks);
       expect(eventSpy.mock.calls.some((args) => args[0] === 'tree.render.slow')).toBe(false);
@@ -522,7 +555,13 @@ describe('JsonTreeComponent', () => {
 
     it('emits tree.render.slow above the threshold', async () => {
       const callbacks = installAnimationFrameQueue();
-      vi.spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 10, 211);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(10)
+        .mockReturnValueOnce(211);
       const eventSpy = await createWithEventSpy({ a: 1 });
       runQueuedAnimationFrames(callbacks);
       expect(eventSpy).toHaveBeenCalledWith(
@@ -534,7 +573,16 @@ describe('JsonTreeComponent', () => {
 
     it('drops a stale tree.render.slow measurement when value changes again', async () => {
       const callbacks = installAnimationFrameQueue();
-      vi.spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0, 0, 0, 1000, 1251);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(1000)
+        .mockReturnValueOnce(1251);
       const eventSpy = await createWithEventSpy({ first: 1 });
       fixture.componentRef.setInput('value', { second: { leaf: 2 } });
       fixture.detectChanges();
@@ -560,7 +608,12 @@ describe('JsonTreeComponent', () => {
 
     it('does not emit tree.render.slow after component destroy', async () => {
       const callbacks = installAnimationFrameQueue();
-      vi.spyOn(performance, 'now').and.returnValues(0, 0, 0, 0, 0);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0);
       const eventSpy = await createWithEventSpy({ a: 1 });
       fixture.destroy();
       // Drain manually with per-callback try/catch: CDK's virtual scroll
@@ -737,9 +790,7 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
       runQueuedAnimationFrames(callbacks);
       // Only the second (current-generation) rAF should emit.
-      const autoFitCalls = eventSpy.calls
-        .allArgs()
-        .filter((args) => args[0] === 'tree.expand.autoFit');
+      const autoFitCalls = eventSpy.mock.calls.filter((args) => args[0] === 'tree.expand.autoFit');
       expect(autoFitCalls.length).toBe(1);
       const measurements = autoFitCalls[0]![2] as Record<string, number>;
       expect(measurements['totalNodes']).toBe(2);
@@ -1271,7 +1322,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit for expandAll below the threshold', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 9);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(9);
       cmp.expandAll();
       expect(hasExpandSlowEvent(eventSpy)).toBe(false);
     });
@@ -1279,7 +1330,11 @@ describe('JsonTreeComponent', () => {
     it('emits for expandAll above the threshold and toggles cold', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(51)
+        .mockReturnValueOnce(100)
+        .mockReturnValueOnce(152);
       cmp.expandAll();
       cmp.expandAll();
       expect(eventSpy.mock.calls.filter((args) => args[0] === 'tree.expand.slow')).toEqual([
@@ -1291,7 +1346,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit for expandToLevel below the threshold', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 9);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(9);
       cmp.expandToLevel(2);
       expect(hasExpandSlowEvent(eventSpy)).toBe(false);
     });
@@ -1299,7 +1354,11 @@ describe('JsonTreeComponent', () => {
     it('emits for expandToLevel above the threshold and toggles cold', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(51)
+        .mockReturnValueOnce(100)
+        .mockReturnValueOnce(152);
       cmp.expandToLevel(2);
       cmp.expandToLevel(2);
       expect(eventSpy.mock.calls.filter((args) => args[0] === 'tree.expand.slow')).toEqual([
@@ -1311,7 +1370,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit for expandAllFromHere below the threshold', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 9);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(9);
       cmp.expandAllFromHere(nodeAt('$.a'), 'topRow');
       expect(hasExpandSlowEvent(eventSpy)).toBe(false);
     });
@@ -1319,7 +1378,11 @@ describe('JsonTreeComponent', () => {
     it('emits for expandAllFromHere above the threshold and toggles cold', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(51)
+        .mockReturnValueOnce(100)
+        .mockReturnValueOnce(152);
       const startNode = nodeAt('$.a');
       cmp.expandAllFromHere(startNode, 'topRow');
       cmp.expandAllFromHere(startNode, 'topRow');
@@ -1332,7 +1395,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit for expandToDepthFromHere below the threshold', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 9);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(9);
       cmp.expandToDepthFromHere(nodeAt('$.a'), 2);
       expect(hasExpandSlowEvent(eventSpy)).toBe(false);
     });
@@ -1340,7 +1403,11 @@ describe('JsonTreeComponent', () => {
     it('emits for expandToDepthFromHere above the threshold and toggles cold', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 51, 100, 152);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(51)
+        .mockReturnValueOnce(100)
+        .mockReturnValueOnce(152);
       const startNode = nodeAt('$.a');
       cmp.expandToDepthFromHere(startNode, 2);
       cmp.expandToDepthFromHere(startNode, 2);
@@ -1352,7 +1419,12 @@ describe('JsonTreeComponent', () => {
 
     it('does not emit for the initial expandToLevel even when it is slow', async () => {
       vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0);
-      vi.spyOn(performance, 'now').and.returnValues(0, 0, 0, 100, 0);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(100)
+        .mockReturnValueOnce(0);
       const eventSpy = await createWithEventSpy(expandSample);
       expect(hasExpandSlowEvent(eventSpy)).toBe(false);
     });
@@ -1360,7 +1432,7 @@ describe('JsonTreeComponent', () => {
     it('does not emit at exactly the threshold (10 ms)', async () => {
       await createExpandFixture();
       const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-      vi.spyOn(performance, 'now').and.returnValues(0, 10);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(10);
       cmp.expandAll();
       expect(hasExpandSlowEvent(eventSpy)).toBe(false);
     });
@@ -3027,7 +3099,7 @@ describe('JsonTreeComponent', () => {
 
         cmp.removeManualHighlight(node);
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.remove', {
+        expect(logger.info).toHaveBeenCalledExactlyOnceWith('tree.highlight.remove', {
           kind: 'single',
           removedFromAncestor: 'false',
         });
@@ -3041,7 +3113,7 @@ describe('JsonTreeComponent', () => {
 
         cmp.removeManualTreeHighlight(node);
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.remove', {
+        expect(logger.info).toHaveBeenCalledExactlyOnceWith('tree.highlight.remove', {
           kind: 'cascade',
           removedFromAncestor: 'false',
         });
@@ -3055,7 +3127,7 @@ describe('JsonTreeComponent', () => {
 
         cmp.removeManualTreeHighlight(node);
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.remove', {
+        expect(logger.info).toHaveBeenCalledExactlyOnceWith('tree.highlight.remove', {
           kind: 'cascade',
           removedFromAncestor: 'true',
         });
@@ -3066,7 +3138,7 @@ describe('JsonTreeComponent', () => {
 
         cmp.onSwatchMenuOpened('single');
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.swatchOpened', {
+        expect(logger.info).toHaveBeenCalledExactlyOnceWith('tree.highlight.swatchOpened', {
           kind: 'single',
         });
       });
@@ -3076,7 +3148,7 @@ describe('JsonTreeComponent', () => {
 
         cmp.onSwatchMenuOpened('cascade');
 
-        expect(logger.info).toHaveBeenCalledOnceWith('tree.highlight.swatchOpened', {
+        expect(logger.info).toHaveBeenCalledExactlyOnceWith('tree.highlight.swatchOpened', {
           kind: 'cascade',
         });
       });
@@ -3458,29 +3530,27 @@ describe('JsonTreeComponent', () => {
       }
     }
 
-    it('opens a success snackbar after writeText resolves', fakeAsync(() => {
+    it('opens a success snackbar after writeText resolves', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       withClipboard({ writeText }, () => {
         cmp.copyPath({ pathString: '$.a' } as never);
       });
-      flushMicrotasks();
+      await vi.waitFor(() => expect(snackOpen).toHaveBeenCalled());
       expect(writeText).toHaveBeenCalledWith('$.a');
-      expect(snackOpen).toHaveBeenCalled();
       const message = snackOpen.mock.lastCall[0] as string;
       expect(message).toContain('copied');
-    }));
+    });
 
-    it('opens a failure snackbar when writeText rejects', fakeAsync(() => {
+    it('opens a failure snackbar when writeText rejects', async () => {
       const writeText = vi.fn().mockRejectedValue(new Error('denied'));
       withClipboard({ writeText }, () => {
         cmp.copyPath({ pathString: '$.a' } as never);
       });
-      flushMicrotasks();
+      await vi.waitFor(() => expect(snackOpen).toHaveBeenCalled());
       expect(writeText).toHaveBeenCalled();
-      expect(snackOpen).toHaveBeenCalled();
       const message = snackOpen.mock.lastCall[0] as string;
       expect(message).toContain('Failed');
-    }));
+    });
 
     it('opens an unsupported snackbar when navigator.clipboard is missing', () => {
       withClipboard(undefined, () => {
@@ -5286,11 +5356,7 @@ describe('JsonTreeComponent', () => {
       fixture.detectChanges();
 
       expect(cmp.selectedPath()).toBeNull();
-      expect(events).not.toContain(
-        jasmine.arrayWithExactContents(['bar']) as unknown as readonly (string | number)[],
-      );
-      // Explicit form for clarity: assert no emission had a
-      // single-element path equal to 'bar'.
+      // Assert no emission had a single-element path equal to 'bar'.
       const barEmissions = events.filter(
         (path) => path !== null && path.length === 1 && path[0] === 'bar',
       );
@@ -6013,9 +6079,8 @@ describe('JsonTreeComponent', () => {
     }
 
     function staleCloseEventCalls(eventSpy: MockInstance): number {
-      return eventSpy.calls
-        .all()
-        .filter((call) => call.args[0] === 'tree.extract.dialog.staleClose').length;
+      return eventSpy.mock.calls.filter((call) => call[0] === 'tree.extract.dialog.staleClose')
+        .length;
     }
 
     describe('decodedCandidate predicate', () => {
@@ -6156,8 +6221,8 @@ describe('JsonTreeComponent', () => {
         decodedButtonFor('$.note')!.click();
         fixture.detectChanges();
         expect(open).toHaveBeenCalledTimes(1);
-        // Two explicit assertions instead of `jasmine.objectContaining`:
-        // the latter only checks listed keys and does NOT assert
+        // Two explicit assertions instead of a partial-match like
+        // `expect.objectContaining`: the latter only checks listed keys and does NOT assert
         // absence, so a future PR re-introducing `width: '90vw'`
         // would silently satisfy `objectContaining({ maxWidth: '90vw' })`
         // and re-introduce the "narrow content, wide dialog" bug.

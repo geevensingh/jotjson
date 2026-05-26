@@ -82,9 +82,8 @@ describe('JsonEditorComponent .editor-loading placeholder contrast (#145)', () =
   // (`theme-{dark|light|system}`) and inline `--highlight-*` properties
   // on `body.style`. If we don't restore both, downstream specs that scan
   // for contrast (e.g. `JsonBreadcrumbComponent (a11y)`) get confused
-  // about the page background and axe-core walks up to the Karma /
-  // Jasmine reporter chrome (`.jasmine_html-reporter { background: #eee }`)
-  // for its background fallback, producing false-positive
+  // about the page background and axe-core walks up to the test-runner
+  // reporter chrome for its background fallback, producing false-positive
   // `color-contrast` violations whose colors are NEITHER theme's tokens.
   let originalClassName: string;
   let originalStyleCssText: string;

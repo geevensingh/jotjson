@@ -351,10 +351,10 @@ describe('LoadingSplashService', () => {
     service.markBlobRenderComplete();
     expect(service.renderPending()).toBe(false);
     expect(logger.event).toHaveBeenCalledTimes(1);
-    const call = logger.event.calls.mostRecent();
-    expect(call.args[0]).toBe('blob.coldBoot.firstPaint');
-    expect(call.args[1], 'event has no closed-enum properties').toBeUndefined();
-    const measurements = call.args[2] ?? {};
+    const call = logger.event.mock.calls[logger.event.mock.calls.length - 1];
+    expect(call[0]).toBe('blob.coldBoot.firstPaint');
+    expect(call[1], 'event has no closed-enum properties').toBeUndefined();
+    const measurements = call[2] ?? {};
     expect(typeof measurements['durationMs']).toBe('number');
     expect(Number.isFinite(measurements['durationMs'])).toBe(true);
     expect(

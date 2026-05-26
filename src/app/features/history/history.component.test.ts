@@ -41,8 +41,8 @@ function setup(opts: SetupOpts = {}) {
       const result = listCalls === 1 ? opts.listResult : (opts.listSecondResult ?? opts.listResult);
       return result instanceof Error ? throwError(() => result) : of(result ?? { entries: [] });
     }),
-    clear: jasmine
-      .createSpy('clear')
+    clear: vi
+      .fn()
       .mockImplementation(() =>
         opts.clearResult instanceof Error
           ? throwError(() => opts.clearResult as Error)
@@ -289,7 +289,11 @@ describe('HistoryComponent', () => {
     const spy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
     await fixture.componentInstance.openEntry(entry({ slug: 'abc' }));
     expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
-    expect(logger.event).toHaveBeenCalledOnceWith('history.entry.restored', undefined, undefined);
+    expect(logger.event).toHaveBeenCalledExactlyOnceWith(
+      'history.entry.restored',
+      undefined,
+      undefined,
+    );
   });
 
   it('openEntry is a no-op when slug is missing', async () => {
@@ -314,9 +318,9 @@ describe('HistoryComponent', () => {
     const { fixture, logger } = setup();
     const router = TestBed.inject(Router);
     const spy = vi.spyOn(router, 'navigate').mockRejectedValue(new Error('blocked'));
-    await expectAsync(
-      fixture.componentInstance.openEntry(entry({ slug: 'abc' })),
-    ).toBeRejectedWithError('blocked');
+    await expect(fixture.componentInstance.openEntry(entry({ slug: 'abc' }))).rejects.toThrow(
+      'blocked',
+    );
     expect(spy).toHaveBeenCalledWith(['/s', 'abc']);
     expect(logger.event).not.toHaveBeenCalled();
   });

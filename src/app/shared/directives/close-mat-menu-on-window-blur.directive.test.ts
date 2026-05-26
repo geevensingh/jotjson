@@ -141,7 +141,7 @@ function findBlurRemoveCall(
   removeSpy: MockInstance,
   handlerRef: EventListenerOrEventListenerObject,
 ): unknown[] | undefined {
-  return removeSpy.calls
-    .allArgs()
-    .find(([type, listener]) => type === 'blur' && listener === handlerRef);
+  return removeSpy.mock.calls.find(
+    ([type, listener]) => type === 'blur' && listener === handlerRef,
+  );
 }

@@ -71,7 +71,7 @@ describe('sw-registration', () => {
 
   describe('attachSwEventDirectEmit', () => {
     it('attaches direct-emit even when the pre-bootstrap queue is empty (S1 regression)', () => {
-      const emit = jasmine.createSpy<(event: SwEvent) => void>('emit');
+      const emit = vi.fn<(event: SwEvent) => void>();
       attachSwEventDirectEmit(emit);
       // No drain expected.
       expect(emit).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe('sw-registration', () => {
 
     it('survives malformed queue', () => {
       sessionStorage.setItem(SW_EVENTS_KEY, 'not-json-{{{');
-      const emit = jasmine.createSpy<(event: SwEvent) => void>('emit');
+      const emit = vi.fn<(event: SwEvent) => void>();
       // Should not throw.
       attachSwEventDirectEmit(emit);
       expect(emit).not.toHaveBeenCalled();
@@ -123,7 +123,7 @@ describe('sw-registration', () => {
         throw new DOMException('blocked', 'SecurityError');
       };
       try {
-        const emit = jasmine.createSpy<(event: SwEvent) => void>('emit');
+        const emit = vi.fn<(event: SwEvent) => void>();
         // Must not throw despite storage failure.
         expect(() => attachSwEventDirectEmit(emit)).not.toThrow();
         expect(emit).not.toHaveBeenCalled();
@@ -131,7 +131,7 @@ describe('sw-registration', () => {
         Storage.prototype.getItem = original;
       }
       // Direct-emit is wired: post-attach events bypass sessionStorage.
-      const directSpy = jasmine.createSpy<(event: SwEvent) => void>('directSpy');
+      const directSpy = vi.fn<(event: SwEvent) => void>();
       // The first attach already won (idempotent). Force a fresh attach
       // here for the wiring assertion by resetting state.
       __resetSwRegistrationForTesting();
@@ -149,7 +149,7 @@ describe('sw-registration', () => {
       Storage.prototype.removeItem = function thrower(): void {
         throw new DOMException('blocked', 'SecurityError');
       };
-      const emit = jasmine.createSpy<(event: SwEvent) => void>('emit');
+      const emit = vi.fn<(event: SwEvent) => void>();
       try {
         // Must not throw despite removeItem failure.
         expect(() => attachSwEventDirectEmit(emit)).not.toThrow();
@@ -165,7 +165,7 @@ describe('sw-registration', () => {
       // (next page load) can drain it once if removeItem succeeds.
       expect(sessionStorage.getItem('jotjson.sw.events')).toBe(queuedRaw);
       // Direct-emit is still wired so post-attach events flow.
-      const directSpy = jasmine.createSpy<(event: SwEvent) => void>('directSpy');
+      const directSpy = vi.fn<(event: SwEvent) => void>();
       __resetSwRegistrationForTesting();
       attachSwEventDirectEmit(directSpy);
       queueSwEvent({ name: 'sw.activated' });
@@ -173,8 +173,8 @@ describe('sw-registration', () => {
     });
 
     it('is idempotent: a second attach call is a no-op', () => {
-      const first = jasmine.createSpy<(event: SwEvent) => void>('first');
-      const second = jasmine.createSpy<(event: SwEvent) => void>('second');
+      const first = vi.fn<(event: SwEvent) => void>();
+      const second = vi.fn<(event: SwEvent) => void>();
       attachSwEventDirectEmit(first);
       // Re-invoke; should NOT switch the emit target or re-drain.
       attachSwEventDirectEmit(second);

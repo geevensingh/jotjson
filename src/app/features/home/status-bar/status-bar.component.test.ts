@@ -360,14 +360,12 @@ describe('StatusBarComponent', () => {
       return window.getComputedStyle(el).display;
     }
 
-    it('hides Chars/Cursor/Nodes/Depth/Obj/Arr/Build at narrow widths', () => {
-      if (!isNarrow()) {
-        pending(
-          `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
-            'cannot exercise narrow SCSS media query. Skipping.',
-        );
-        return;
-      }
+    it('hides Chars/Cursor/Nodes/Depth/Obj/Arr/Build at narrow widths', (ctx) => {
+      ctx.skip(
+        !isNarrow(),
+        `Browser iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+          'cannot exercise narrow SCSS media query. Skipping.',
+      );
       const text = '{"a":[1,2]}';
       const f = create({ text, parseResult: svc.parse(text) });
 
@@ -380,14 +378,12 @@ describe('StatusBarComponent', () => {
       expect(displayOf(f, '.stat-build')).toBe('none');
     });
 
-    it('hides Comments at narrow widths when present', () => {
-      if (!isNarrow()) {
-        pending(
-          `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
-            'cannot exercise narrow SCSS media query. Skipping.',
-        );
-        return;
-      }
+    it('hides Comments at narrow widths when present', (ctx) => {
+      ctx.skip(
+        !isNarrow(),
+        `Browser iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+          'cannot exercise narrow SCSS media query. Skipping.',
+      );
       // .stat-comments is conditionally rendered (showComments must be
       // true), so a separate fixture with a JSONC document is needed
       // to put the element in the DOM under SCSS scrutiny.
@@ -396,14 +392,12 @@ describe('StatusBarComponent', () => {
       expect(displayOf(f, '.stat-comments')).toBe('none');
     });
 
-    it('keeps Lines/Size/Mode visible at narrow widths', () => {
-      if (!isNarrow()) {
-        pending(
-          `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
-            'cannot exercise narrow SCSS media query. Skipping.',
-        );
-        return;
-      }
+    it('keeps Lines/Size/Mode visible at narrow widths', (ctx) => {
+      ctx.skip(
+        !isNarrow(),
+        `Browser iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+          'cannot exercise narrow SCSS media query. Skipping.',
+      );
       const text = '{"a":[1,2]}';
       const f = create({ text, parseResult: svc.parse(text) });
 
@@ -412,14 +406,12 @@ describe('StatusBarComponent', () => {
       expect(displayOf(f, '.stat-mode')).not.toBe('none');
     });
 
-    it('does not flex-wrap the surviving stats at narrow widths', () => {
-      if (!isNarrow()) {
-        pending(
-          `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
-            'cannot exercise narrow SCSS media query. Skipping.',
-        );
-        return;
-      }
+    it('does not flex-wrap the surviving stats at narrow widths', (ctx) => {
+      ctx.skip(
+        !isNarrow(),
+        `Browser iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+          'cannot exercise narrow SCSS media query. Skipping.',
+      );
       const f = create();
       const left = f.nativeElement.querySelector('.left') as HTMLElement | null;
       const right = f.nativeElement.querySelector('.right') as HTMLElement | null;

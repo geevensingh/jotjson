@@ -124,7 +124,7 @@ describe('LoggerService', () => {
     }) as unknown as MockInstance;
     (TestBed.inject(TelemetryService) as TelemetryService).trackTrace = trackTrace;
     log.info('app.unhandled');
-    await expectAsync(log.connect()).toBeResolved();
+    await expect(log.connect()).resolves.toBeUndefined();
   });
 
   it('drains MSAL bridge buffer once consumer is attached', async () => {
@@ -289,7 +289,7 @@ describe('LoggerService', () => {
       }) as unknown as MockInstance;
       (TestBed.inject(TelemetryService) as TelemetryService).trackEvent = trackEvent;
       log.event('app.unhandled');
-      await expectAsync(log.connect()).toBeResolved();
+      await expect(log.connect()).resolves.toBeUndefined();
     });
   });
 

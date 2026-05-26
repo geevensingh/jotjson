@@ -41,8 +41,8 @@ class UserApiServiceStub {
       etag: '"1"',
     }),
   );
-  putPreferences = jasmine
-    .createSpy('putPreferences')
+  putPreferences = vi
+    .fn()
     .mockImplementation((p: UserPreferences, _ifMatch: string) =>
       of<PreferencesWithEtag>({ preferences: p, etag: '"2"' }),
     );
@@ -455,9 +455,7 @@ describe('PreferencesService', () => {
       // the effective theme moves, so the global spy can see more than
       // one call. Still assert exactly one `pref.changed` so a
       // regression that duplicates the pref-change emit would fail.
-      const prefChangedCalls = logger.event.calls
-        .allArgs()
-        .filter((args) => args[0] === 'pref.changed');
+      const prefChangedCalls = logger.event.mock.calls.filter((args) => args[0] === 'pref.changed');
       expect(prefChangedCalls.length).toBe(1);
       expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
@@ -471,7 +469,7 @@ describe('PreferencesService', () => {
 
       svc.update({ coldBootClipboardAutoPaste: 'always' });
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         {
           key: 'coldBootClipboardAutoPaste',
@@ -488,7 +486,7 @@ describe('PreferencesService', () => {
 
       svc.update({ searchMatchMode: 'starts_with' });
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         { key: 'searchMatchMode', source: 'user', kind: 'string', value: 'starts_with' },
         undefined,
@@ -500,7 +498,7 @@ describe('PreferencesService', () => {
 
       svc.update({ editorFontSize: 18 });
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         { key: 'editorFontSize', source: 'user', kind: 'number', valueBucket: '17-20' },
         { value: 18 },
@@ -512,7 +510,7 @@ describe('PreferencesService', () => {
 
       svc.update({ activeRuleSetIds: ['a', 'b'] });
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         { key: 'activeRuleSetIds', source: 'user', kind: 'count', countBucket: '<100' },
         { count: 2 },
@@ -524,7 +522,7 @@ describe('PreferencesService', () => {
 
       svc.update(makeTreeDateAnnotationUnitsPatch({ year: false, second: false }));
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         {
           key: 'treeDateAnnotationUnits',
@@ -541,7 +539,7 @@ describe('PreferencesService', () => {
 
       svc.update({ treeShowTypeLabels: false });
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         { key: 'treeShowTypeLabels', source: 'user', kind: 'boolean', value: 'false' },
         undefined,
@@ -553,7 +551,7 @@ describe('PreferencesService', () => {
 
       svc.update({ treeDateAnnotationFriendlyForms: false });
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         {
           key: 'treeDateAnnotationFriendlyForms',
@@ -570,7 +568,7 @@ describe('PreferencesService', () => {
 
       svc.update(makeTreeHighlightPatch({ dark: { selectionColor: '#ff0000' } }));
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         {
           key: 'treeHighlightColors.dark.selectionColor',
@@ -588,7 +586,7 @@ describe('PreferencesService', () => {
 
       svc.update(makeTreeHighlightPatch({ dark: { manualHighlightColor: '#ff0000' } }));
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         {
           key: 'treeHighlightColors.dark.manualHighlightColor',
@@ -606,7 +604,7 @@ describe('PreferencesService', () => {
 
       svc.update(makeTreeHighlightPatch({ light: { manualHighlightColor: '#00ff00' } }));
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         {
           key: 'treeHighlightColors.light.manualHighlightColor',
@@ -626,9 +624,7 @@ describe('PreferencesService', () => {
 
       svc.reset();
 
-      const prefChangedCalls = logger.event.calls
-        .allArgs()
-        .filter((args) => args[0] === 'pref.changed');
+      const prefChangedCalls = logger.event.mock.calls.filter((args) => args[0] === 'pref.changed');
       expect(prefChangedCalls.length).toBe(3);
       expect(prefChangedCalls.map((callArguments) => callArguments[1]?.['source'])).toEqual([
         'user',
@@ -650,9 +646,7 @@ describe('PreferencesService', () => {
       TestBed.flushEffects();
       await svc.__waitForSync();
 
-      const prefChangedCalls = logger.event.calls
-        .allArgs()
-        .filter((args) => args[0] === 'pref.changed');
+      const prefChangedCalls = logger.event.mock.calls.filter((args) => args[0] === 'pref.changed');
       expect(prefChangedCalls.length).toBe(2);
       expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
@@ -677,9 +671,7 @@ describe('PreferencesService', () => {
       auth.signOut();
       TestBed.flushEffects();
 
-      const prefChangedCalls = logger.event.calls
-        .allArgs()
-        .filter((args) => args[0] === 'pref.changed');
+      const prefChangedCalls = logger.event.mock.calls.filter((args) => args[0] === 'pref.changed');
       expect(prefChangedCalls.length).toBe(2);
       expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
@@ -698,9 +690,7 @@ describe('PreferencesService', () => {
 
       svc.update({ theme: 'dark', editorFontSize: 18 });
 
-      const prefChangedCalls = logger.event.calls
-        .allArgs()
-        .filter((args) => args[0] === 'pref.changed');
+      const prefChangedCalls = logger.event.mock.calls.filter((args) => args[0] === 'pref.changed');
       expect(prefChangedCalls.length).toBe(2);
       expect(logger.event).toHaveBeenCalledWith(
         'pref.changed',
@@ -744,9 +734,7 @@ describe('PreferencesService', () => {
       // The constructor emits exactly one `theme.applied` boot event;
       // it must NOT emit any `pref.changed` events because no
       // preference actually changed (only resolution happened).
-      const prefChangedCalls = logger.event.calls
-        .allArgs()
-        .filter((args) => args[0] === 'pref.changed');
+      const prefChangedCalls = logger.event.mock.calls.filter((args) => args[0] === 'pref.changed');
       expect(prefChangedCalls.length).toBe(0);
     });
 
@@ -808,7 +796,7 @@ describe('PreferencesService', () => {
 
       svc.update({ treeAutoFitToWindow: false });
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'pref.changed',
         { key: 'treeAutoFitToWindow', source: 'user', kind: 'boolean', value: 'false' },
         undefined,
@@ -1508,10 +1496,9 @@ describe('PreferencesService', () => {
       const svc = TestBed.inject(PreferencesService);
       // First getMe says no doc; seed races and gets 409; the recovery
       // getMe returns the winning tab's user state.
-      api.getMe.and.returnValues(
-        of(null),
-        of(makeUserResponse({ theme: 'light', editorFontSize: 22 }, '"1"')),
-      );
+      api.getMe
+        .mockReturnValueOnce(of(null))
+        .mockReturnValueOnce(of(makeUserResponse({ theme: 'light', editorFontSize: 22 }, '"1"')));
       api.seed.mockReturnValue(
         throwError(() => new HttpErrorResponse({ status: 409, statusText: 'C' })),
       );

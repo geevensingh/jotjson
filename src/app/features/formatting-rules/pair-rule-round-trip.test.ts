@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import { ComponentFixture, TestBed, fakeAsync, flush, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { BehaviorSubject, Subject } from 'rxjs';
@@ -451,7 +451,7 @@ describe('pair rule editor and engine round trip', () => {
       expect(restoredPairRule.valueMatch).toEqual({ kind: 'predicate', predicate: 'is_not_null' });
     });
 
-    it('saves a pair rule, reloads it through the mocked service, and evaluates it', fakeAsync(() => {
+    it('saves a pair rule, reloads it through the mocked service, and evaluates it', async () => {
       const firstEditorSetup = loadedEditor(
         ruleSet({ rules: [simpleRule({ style: { ...PAIR_STYLE } })] }),
       );
@@ -461,12 +461,19 @@ describe('pair rule editor and engine round trip', () => {
       firstComponent.patchPairKeyMatch(0, { matchValue: 'testHeader' });
       firstComponent.setPairValueMatchMode(0, 'predicate');
       firstComponent.setPairPredicate(0, 'is_not_null');
-      tick(600);
+      // Real-time wait for the 600ms editor debounce. Vitest's
+      // fakeAsync zone does not drain native Promise.then chains
+      // (the rule-editor uses `await firstValueFrom(...)`), so we
+      // wait on a real timer and a vi.waitFor below.
+      await new Promise((resolve) => setTimeout(resolve, 700));
       firstEditorSetup.fixture.detectChanges();
 
-      expect(firstEditorSetup.service.update).toHaveBeenCalledTimes(1);
-      const savePayload = firstEditorSetup.service.update.calls.mostRecent()
-        .args[1] as RuleSetPayload;
+      await vi.waitFor(() => expect(firstEditorSetup.service.update).toHaveBeenCalledTimes(1));
+      const savePayloadCall =
+        firstEditorSetup.service.update.mock.calls[
+          firstEditorSetup.service.update.mock.calls.length - 1
+        ];
+      const savePayload = savePayloadCall[1] as RuleSetPayload;
       const savedPairRule = expectPairRule(savePayload.rules[0]);
       expect(savedPairRule.keyMatch.matchValue).toBe('testHeader');
       expect(savedPairRule.valueMatch).toEqual({ kind: 'predicate', predicate: 'is_not_null' });
@@ -475,7 +482,7 @@ describe('pair rule editor and engine round trip', () => {
       const updateSubject = requiredSubject(firstEditorSetup.service.updateSubjects, 0, 'update');
       updateSubject.next(savedRuleSet);
       updateSubject.complete();
-      flush();
+      await Promise.resolve();
       firstEditorSetup.fixture.destroy();
 
       const secondEditorSetup = setupEditor({ initialCache: [] });
@@ -483,7 +490,15 @@ describe('pair rule editor and engine round trip', () => {
       const getSubject = requiredSubject(secondEditorSetup.service.getSubjects, 0, 'get');
       getSubject.next(savedRuleSet);
       getSubject.complete();
-      flush();
+      // Wait for the second editor to load the rule (its `get(id)` flow
+      // uses `await firstValueFrom(...)`). Drain microtasks and CD until
+      // the rule is editable.
+      await vi.waitFor(() => {
+        secondEditorSetup.fixture.detectChanges();
+        expect(
+          secondEditorSetup.fixture.componentInstance.editable()?.rules.length ?? 0,
+        ).toBeGreaterThan(0);
+      });
       secondEditorSetup.fixture.detectChanges();
 
       const reloadedPairRule = expectPairRule(
@@ -497,7 +512,7 @@ describe('pair rule editor and engine round trip', () => {
         engineNode({ key: 'testHeader', valueText: 'v1', valueKind: 'string' }),
       );
       expectPairInlineStyle(engineResult);
-    }));
+    });
   });
 
   describe('engine behavior on real JSON tree nodes', () => {

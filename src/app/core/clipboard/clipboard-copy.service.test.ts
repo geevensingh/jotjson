@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { type MockInstance } from 'vitest';
 import { ClipboardCopyService } from './clipboard-copy.service';
@@ -41,69 +41,59 @@ describe('ClipboardCopyService', () => {
     unsupported: 'Copy is not supported in this browser.',
   };
 
-  it('opens the unsupported snackbar and resolves false when navigator.clipboard is missing', fakeAsync(() => {
+  it('opens the unsupported snackbar and resolves false when navigator.clipboard is missing', async () => {
     setClipboard(undefined);
-    let result: boolean | undefined;
-    void service.copyWithToast('hello', messages).then((r) => (result = r));
-    flushMicrotasks();
+    const result = await service.copyWithToast('hello', messages);
     expect(result).toBe(false);
     expect(snackOpen).toHaveBeenCalledTimes(1);
-    expect(snackOpen.mock.lastCall[0]).toBe(messages.unsupported);
-    expect(snackOpen.mock.lastCall[2]).toEqual({ duration: 4000 });
-  }));
+    expect(snackOpen.mock.lastCall![0]).toBe(messages.unsupported);
+    expect(snackOpen.mock.lastCall![2]).toEqual({ duration: 4000 });
+  });
 
-  it('opens the unsupported snackbar when writeText is missing on the clipboard', fakeAsync(() => {
+  it('opens the unsupported snackbar when writeText is missing on the clipboard', async () => {
     setClipboard({});
-    let result: boolean | undefined;
-    void service.copyWithToast('hello', messages).then((r) => (result = r));
-    flushMicrotasks();
+    const result = await service.copyWithToast('hello', messages);
     expect(result).toBe(false);
     expect(snackOpen).toHaveBeenCalledTimes(1);
-    expect(snackOpen.mock.lastCall[0]).toBe(messages.unsupported);
-  }));
+    expect(snackOpen.mock.lastCall![0]).toBe(messages.unsupported);
+  });
 
-  it('writes text, passes the Dismiss action label, and resolves true on success', fakeAsync(() => {
+  it('writes text, passes the Dismiss action label, and resolves true on success', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     setClipboard({ writeText });
-    let result: boolean | undefined;
-    void service.copyWithToast('hello', messages).then((r) => (result = r));
-    flushMicrotasks();
+    const result = await service.copyWithToast('hello', messages);
     expect(result).toBe(true);
     expect(writeText).toHaveBeenCalledWith('hello');
     expect(snackOpen).toHaveBeenCalledTimes(1);
-    expect(snackOpen.mock.lastCall[0]).toBe(messages.success);
-    expect(snackOpen.mock.lastCall[1]).toBe('Dismiss');
-    expect(snackOpen.mock.lastCall[2]).toEqual({ duration: 3000 });
-  }));
+    expect(snackOpen.mock.lastCall![0]).toBe(messages.success);
+    expect(snackOpen.mock.lastCall![1]).toBe('Dismiss');
+    expect(snackOpen.mock.lastCall![2]).toEqual({ duration: 3000 });
+  });
 
-  it('opens the failure snackbar and resolves false when writeText rejects', fakeAsync(() => {
+  it('opens the failure snackbar and resolves false when writeText rejects', async () => {
     const writeText = vi.fn().mockRejectedValue(new Error('denied'));
     setClipboard({ writeText });
-    let result: boolean | undefined;
-    void service.copyWithToast('hello', messages).then((r) => (result = r));
-    flushMicrotasks();
+    const result = await service.copyWithToast('hello', messages);
     expect(result).toBe(false);
     expect(snackOpen).toHaveBeenCalledTimes(1);
-    expect(snackOpen.mock.lastCall[0]).toBe(messages.failed);
-    expect(snackOpen.mock.lastCall[2]).toEqual({ duration: 4000 });
-  }));
+    expect(snackOpen.mock.lastCall![0]).toBe(messages.failed);
+    expect(snackOpen.mock.lastCall![2]).toEqual({ duration: 4000 });
+  });
 
-  it('honors custom durations when provided', fakeAsync(() => {
+  it('honors custom durations when provided', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     setClipboard({ writeText });
-    void service.copyWithToast('hello', messages, {
+    await service.copyWithToast('hello', messages, {
       successDurationMs: 1234,
       failedDurationMs: 5678,
       unsupportedDurationMs: 9012,
     });
-    flushMicrotasks();
-    expect(snackOpen.mock.lastCall[2]).toEqual({ duration: 1234 });
-  }));
+    expect(snackOpen.mock.lastCall![2]).toEqual({ duration: 1234 });
+  });
 
-  it('honors custom unsupportedDurationMs when clipboard is missing', fakeAsync(() => {
+  it('honors custom unsupportedDurationMs when clipboard is missing', async () => {
     setClipboard(undefined);
-    void service.copyWithToast('hello', messages, { unsupportedDurationMs: 7777 });
-    flushMicrotasks();
-    expect(snackOpen.mock.lastCall[2]).toEqual({ duration: 7777 });
-  }));
+    await service.copyWithToast('hello', messages, { unsupportedDurationMs: 7777 });
+    expect(snackOpen.mock.lastCall![2]).toEqual({ duration: 7777 });
+  });
 });

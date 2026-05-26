@@ -14,6 +14,15 @@ describe('provideEnvIndicatorInitializer', () => {
   let setup: FaviconLinkSetup;
 
   beforeEach(() => {
+    // Remove any pre-existing favicon links from the test page's index.html
+    // so the initializer's querySelector matches our test fixtures, not stale
+    // links left in the document.
+    document
+      .querySelectorAll(
+        'link[rel="icon"][type="image/x-icon"], link[rel="icon"][type="image/svg+xml"], link[rel="apple-touch-icon"]',
+      )
+      .forEach((node) => node.remove());
+
     const ico = document.createElement('link');
     ico.rel = 'icon';
     ico.type = 'image/x-icon';

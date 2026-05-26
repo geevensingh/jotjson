@@ -46,8 +46,8 @@ describe('BlobsComponent (a11y shell landmarks)', () => {
 
   function configure(listResult: JsonBlob[] | Error): void {
     const stub = {
-      list: jasmine
-        .createSpy('list')
+      list: vi
+        .fn()
         .mockImplementation(() =>
           listResult instanceof Error ? throwError(() => listResult) : of(listResult),
         ),

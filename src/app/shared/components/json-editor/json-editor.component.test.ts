@@ -157,11 +157,9 @@ function makeFakeEditor(initial: string): FakeEditor {
         endColumn: endPosition.column,
       };
     },
-    getAlternativeVersionId: jasmine
-      .createSpy('getAlternativeVersionId')
-      .mockImplementation(() => alternativeVersionId),
-    pushEditOperations: jasmine
-      .createSpy('pushEditOperations')
+    getAlternativeVersionId: vi.fn().mockImplementation(() => alternativeVersionId),
+    pushEditOperations: vi
+      .fn()
       .mockImplementation(
         (
           _beforeCursorState: readonly FakeSelection[],
@@ -174,14 +172,12 @@ function makeFakeEditor(initial: string): FakeEditor {
           return null;
         },
       ),
-    getOffsetAt: jasmine
-      .createSpy('getOffsetAt')
+    getOffsetAt: vi
+      .fn()
       .mockImplementation((position: { lineNumber: number; column: number }) =>
         toOffset(position.lineNumber, position.column),
       ),
-    getPositionAt: jasmine
-      .createSpy('getPositionAt')
-      .mockImplementation((offset: number) => toPosition(offset)),
+    getPositionAt: vi.fn().mockImplementation((offset: number) => toPosition(offset)),
   };
   return {
     getValue: vi.fn().mockImplementation(() => current),
@@ -192,12 +188,10 @@ function makeFakeEditor(initial: string): FakeEditor {
       emitModelContentChange();
     }),
     getModel: vi.fn().mockReturnValue(model),
-    onDidChangeModelContent: jasmine
-      .createSpy('onDidChangeModelContent')
-      .mockImplementation((handler: () => void) => {
-        modelContentHandlers.push(handler);
-        return { dispose: () => undefined };
-      }),
+    onDidChangeModelContent: vi.fn().mockImplementation((handler: () => void) => {
+      modelContentHandlers.push(handler);
+      return { dispose: () => undefined };
+    }),
     onDidChangeCursorPosition: vi.fn().mockReturnValue({
       dispose: () => undefined,
     }),
@@ -206,26 +200,24 @@ function makeFakeEditor(initial: string): FakeEditor {
     }),
     updateOptions: vi.fn(),
     dispose: vi.fn(),
-    executeEdits: jasmine
-      .createSpy('executeEdits')
+    executeEdits: vi
+      .fn()
       .mockImplementation((_source: string, edits: readonly FakeEditOperation[]) => {
         applyEditOperations(edits);
         return true;
       }),
-    trigger: jasmine
-      .createSpy('trigger')
-      .mockImplementation((_source: string, handlerId: string, _payload: unknown) => {
-        if (handlerId !== 'undo') {
-          return;
-        }
-        const previousState = undoStack.pop();
-        if (previousState === undefined) {
-          return;
-        }
-        current = previousState.value;
-        alternativeVersionId = previousState.alternativeVersionId;
-        emitModelContentChange();
-      }),
+    trigger: vi.fn().mockImplementation((_source: string, handlerId: string, _payload: unknown) => {
+      if (handlerId !== 'undo') {
+        return;
+      }
+      const previousState = undoStack.pop();
+      if (previousState === undefined) {
+        return;
+      }
+      current = previousState.value;
+      alternativeVersionId = previousState.alternativeVersionId;
+      emitModelContentChange();
+    }),
     layout: vi.fn(),
     setSelection: vi.fn(),
     revealRangeInCenterIfOutsideViewport: vi.fn(),
@@ -376,10 +368,7 @@ describe('JsonEditorComponent', () => {
         onReady();
       },
       {
-        config:
-          jasmine.createSpy<(configuration: { paths: Record<string, string> }) => void>(
-            'require.config',
-          ),
+        config: vi.fn<(configuration: { paths: Record<string, string> }) => void>(),
       },
     );
     window.require = requireStub;
@@ -392,19 +381,14 @@ describe('JsonEditorComponent', () => {
         onReady();
       },
       {
-        config:
-          jasmine.createSpy<(configuration: { paths: Record<string, string> }) => void>(
-            'require.config',
-          ),
+        config: vi.fn<(configuration: { paths: Record<string, string> }) => void>(),
       },
     );
     window.require = requireStub;
   }
 
   function expectMonacoLoadedNotEmitted(): void {
-    const emitted = logger.event.calls
-      .allArgs()
-      .some(([messageId]) => messageId === 'monaco.loaded');
+    const emitted = logger.event.mock.calls.some(([messageId]) => messageId === 'monaco.loaded');
     expect(emitted).toBe(false);
   }
 
@@ -424,9 +408,7 @@ describe('JsonEditorComponent', () => {
     // PreferencesService also emits `theme.applied` (source: 'boot')
     // during construction, so the spy receives more than one call.
     // Verify `monaco.loaded` itself was emitted exactly once.
-    const monacoLoadedCalls = logger.event.calls
-      .allArgs()
-      .filter((args) => args[0] === 'monaco.loaded');
+    const monacoLoadedCalls = logger.event.mock.calls.filter((args) => args[0] === 'monaco.loaded');
     expect(monacoLoadedCalls.length).toBe(1);
     const measurements = monacoLoadedCalls[0]?.[2];
     if (!measurements) {
@@ -801,7 +783,7 @@ describe('JsonEditorComponent', () => {
 
       component.triggerUndo();
 
-      expect(editor.trigger).toHaveBeenCalledOnceWith('jotjson', 'undo', null);
+      expect(editor.trigger).toHaveBeenCalledExactlyOnceWith('jotjson', 'undo', null);
     });
 
     it('keeps undo history when valueChange is echoed back through the value input', async () => {

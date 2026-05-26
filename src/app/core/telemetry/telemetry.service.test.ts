@@ -60,14 +60,14 @@ describe('TelemetryService', () => {
     environment.appInsightsConnectionString = '';
     const svc = make();
     await svc.connect();
-    await expectAsync(svc.flush()).toBeResolved();
+    await expect(svc.flush()).resolves.toBeUndefined();
   });
 
   it('flush() resolves before connect() even completes (no buffer)', async () => {
     environment.appInsightsConnectionString = '';
     const svc = make();
     // Pre-connect: appInsights is null so flush is a no-op.
-    await expectAsync(svc.flush()).toBeResolved();
+    await expect(svc.flush()).resolves.toBeUndefined();
   });
 
   it('caches setUser before connect; applies safely after disabled', async () => {

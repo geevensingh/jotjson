@@ -1,23 +1,14 @@
 /**
- * Global per-test isolation hook (issue #350).
+ * Global per-test isolation hook -- verifier specs (issue #350).
  *
- * Top-level `beforeEach` / `afterEach` in any spec file run globally
- * under Karma + Jasmine. This file installs a cleanup pass that runs
- * after every spec across the entire suite to undo two classes of
- * cross-spec state leakage:
+ * The actual `afterEach` cleanup that runs after every spec across
+ * the entire suite lives in `src/test-setup.ts` (Vitest setupFile).
+ * In Karma+Jasmine the same cleanup lived here as a top-level
+ * `afterEach`; under Vitest, top-level `afterEach` in a `.test.ts`
+ * is file-scoped, so the hook was moved into the setup file to
+ * preserve the global semantics.
  *
- *   1. `localStorage` / `sessionStorage` entries left behind by a
- *      test that forgot its own `afterEach`.
- *   2. `Storage.prototype` patches (e.g., a spy on
- *      `Storage.prototype.setItem` that never gets restored).
- *
- * Failure mode this prevents: a spec that runs in random order
- * before its victim passes locally and on the first CI attempt,
- * then fails on a retry when the order changes. See PR #351 for
- * the original `sw-registration` -> `LoggerService` flake that
- * motivated this hook.
- *
- * What this hook deliberately does NOT cover:
+ * What the global hook does NOT cover:
  *   - New top-level properties on `window`. An earlier draft
  *     deleted any key not present at module-load snapshot. That
  *     overreached: legitimate `beforeAll`-seeded state (notably
@@ -41,72 +32,98 @@
  *     `__reset*ForTesting` placed in `beforeEach` is also placed
  *     in the matching `afterEach`.
  *
- * Design decisions:
- *   - `beforeEach` is deliberately absent. Clearing storages
- *     globally before each spec would silently delete data that
- *     `beforeAll` seeded for a whole describe block. Defense
- *     happens in `afterEach` only, so the next spec inherits a
- *     clean slate without the current spec's setup being clobbered.
- *   - `getOwnPropertyDescriptors` is used on `Storage.prototype` to
- *     capture the `length` accessor's getter, not just enumerable
- *     methods.
- *   - Storage-prototype restoration is wrapped in `try / catch` per
- *     descriptor because some properties are non-configurable in
- *     some environments; one rogue test must not brick the hook
- *     for every later spec.
- *   - `restoreStoragePrototype()` runs *before* the `localStorage` /
- *     `sessionStorage` clears in the `afterEach`. A spec that
- *     patches `Storage.prototype.clear` (e.g., to a no-op or to
- *     throw) would otherwise defeat the cleanup, because the global
- *     `clear()` calls would inherit the patch. Restoring the
- *     prototype first ensures `clear()` invokes the original
- *     implementation.
+ * This file is verifier-only: the specs below deliberately leak
+ * state in one test and assert clean state in the next. If a future
+ * refactor breaks the hook in `test-setup.ts`, these specs fail.
  */
 
-const cleanStorageProto: Readonly<Record<string, PropertyDescriptor>> = Object.freeze({
-  ...Object.getOwnPropertyDescriptors(Storage.prototype),
+/**
+ * Permanent verifier: deliberately leaks state in one spec and
+ * asserts clean state in the next. If a future refactor breaks the
+ * `afterEach` hook in `test-setup.ts`, this fails.
+ *
+ * Under Vitest's `sequence.shuffle: true` the two specs may run in either
+ * order. The verifier proves the hook works regardless:
+ * - If "leaks" runs first, "observes clean" sees the cleared state.
+ * - If "observes clean" runs first, it sees the clean state at
+ *   module-load time (no prior spec leaked).
+ */
+describe('global test isolation hook (verifier)', () => {
+  const STORAGE_KEY = 'jj-global-hook-verifier';
+
+  it('leaks state (deliberate)', () => {
+    localStorage.setItem(STORAGE_KEY, 'leaked');
+    sessionStorage.setItem(STORAGE_KEY, 'leaked');
+
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('leaked');
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBe('leaked');
+  });
+
+  it('observes clean state (no prior leakage from sibling)', () => {
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
 });
 
-function restoreStoragePrototype(): void {
-  const currentProto = Object.getOwnPropertyDescriptors(Storage.prototype);
-  for (const key of Object.keys(cleanStorageProto)) {
-    const original = cleanStorageProto[key];
-    const live = currentProto[key];
-    if (descriptorsEqual(original, live)) continue;
-    try {
-      Object.defineProperty(Storage.prototype, key, original);
-    } catch {
-      // Non-configurable in this environment; nothing we can do.
-      // Log via console.warn so the failure is observable.
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[global-hooks] could not restore Storage.prototype.${key} -- ` +
-          'descriptor non-configurable in this environment.',
-      );
-    }
-  }
-}
+/**
+ * Permanent verifier for `Storage.prototype` restoration: patches
+ * `Storage.prototype.setItem` in one spec and asserts the original
+ * is restored in the next.
+ */
+describe('global test isolation hook -- Storage.prototype restore', () => {
+  const SENTINEL_KEY = 'jj-storage-proto-verifier';
 
-function descriptorsEqual(
-  a: PropertyDescriptor | undefined,
-  b: PropertyDescriptor | undefined,
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return (
-    a.value === b.value &&
-    a.get === b.get &&
-    a.set === b.set &&
-    a.writable === b.writable &&
-    a.enumerable === b.enumerable &&
-    a.configurable === b.configurable
-  );
-}
+  it('patches Storage.prototype.setItem (deliberate)', () => {
+    const patched = function patched(this: Storage, key: string, _value: string): void {
+      void _value;
+      // Deliberately a no-op; the next spec will assert real setItem
+      // works again.
+      void key;
+    };
+    Storage.prototype.setItem = patched as Storage['setItem'];
+    localStorage.setItem(SENTINEL_KEY, 'should-be-discarded-by-patch');
+    expect(localStorage.getItem(SENTINEL_KEY)).toBeNull();
+  });
 
-afterEach(() => {
-  restoreStoragePrototype();
-  localStorage.clear();
-  sessionStorage.clear();
+  it('observes original Storage.prototype.setItem restored', () => {
+    localStorage.setItem(SENTINEL_KEY, 'real-write');
+    expect(localStorage.getItem(SENTINEL_KEY)).toBe('real-write');
+  });
+});
+
+/**
+ * Permanent verifier for `Storage.prototype.clear`-patch ordering:
+ * patches `Storage.prototype.clear` to a no-op in one spec, leaks
+ * data, and asserts the next spec sees clean state. Proves the
+ * `afterEach` ordering (`restoreStoragePrototype()` before the
+ * `clear()` calls) works: even with `clear` patched, the prototype
+ * is restored first, so the subsequent global `clear()` calls
+ * invoke the original implementation and remove the leaked data.
+ *
+ * If a future refactor swaps the ordering back to `clear; clear;
+ * restore`, this verifier fails.
+ */
+describe('global test isolation hook -- clear-patch ordering', () => {
+  const SENTINEL_KEY = 'jj-clear-patch-verifier';
+
+  it('patches Storage.prototype.clear to a no-op and leaks data (deliberate)', () => {
+    Storage.prototype.clear = function noopClear(this: Storage): void {
+      // Deliberately a no-op. If the afterEach clears storage
+      // *before* restoring Storage.prototype, this patch would
+      // silently defeat the global cleanup.
+    } as Storage['clear'];
+
+    localStorage.setItem(SENTINEL_KEY, 'leaked-under-patched-clear');
+    sessionStorage.setItem(SENTINEL_KEY, 'leaked-under-patched-clear');
+
+    expect(localStorage.getItem(SENTINEL_KEY)).toBe('leaked-under-patched-clear');
+    expect(sessionStorage.getItem(SENTINEL_KEY)).toBe('leaked-under-patched-clear');
+  });
+
+  it('observes clean state (restore must run before clear in afterEach)', () => {
+    expect(localStorage.getItem(SENTINEL_KEY)).toBeNull();
+    expect(sessionStorage.getItem(SENTINEL_KEY)).toBeNull();
+  });
 });
 
 /**
@@ -114,7 +131,7 @@ afterEach(() => {
  * asserts clean state in the next. If a future refactor breaks the
  * `afterEach` hook above, this fails.
  *
- * Under Jasmine `random: true` the two specs may run in either
+ * Under Vitest's `sequence.shuffle: true` the two specs may run in either
  * order. The verifier proves the hook works regardless:
  * - If "leaks" runs first, "observes clean" sees the cleared state.
  * - If "observes clean" runs first, it sees the clean state at

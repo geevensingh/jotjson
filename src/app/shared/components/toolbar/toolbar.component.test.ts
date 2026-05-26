@@ -477,14 +477,12 @@ describe('ToolbarComponent', () => {
         return window.getComputedStyle(segment).display;
       }
 
-      it('hides both-horizontal and both-vertical segments at narrow widths', async () => {
-        if (!isNarrow()) {
-          pending(
-            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
-              'cannot exercise narrow SCSS media query. Skipping.',
-          );
-          return;
-        }
+      it('hides both-horizontal and both-vertical segments at narrow widths', async (ctx) => {
+        ctx.skip(
+          !isNarrow(),
+          `Browser iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+            'cannot exercise narrow SCSS media query. Skipping.',
+        );
         const { fixture } = await create();
         fixture.componentRef.setInput('paneLayout', 'tree-only');
         fixture.detectChanges();
@@ -493,14 +491,12 @@ describe('ToolbarComponent', () => {
         expect(displayOf(fixture, 'both-vertical')).toBe('none');
       });
 
-      it('keeps editor-only and tree-only segments visible at narrow widths', async () => {
-        if (!isNarrow()) {
-          pending(
-            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
-              'cannot exercise narrow SCSS media query. Skipping.',
-          );
-          return;
-        }
+      it('keeps editor-only and tree-only segments visible at narrow widths', async (ctx) => {
+        ctx.skip(
+          !isNarrow(),
+          `Browser iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+            'cannot exercise narrow SCSS media query. Skipping.',
+        );
         const { fixture } = await create();
         fixture.componentRef.setInput('paneLayout', 'tree-only');
         fixture.detectChanges();
@@ -509,14 +505,12 @@ describe('ToolbarComponent', () => {
         expect(displayOf(fixture, 'tree-only')).not.toBe('none');
       });
 
-      it('highlights tree-only when paneLayout is tree-only at narrow widths', async () => {
-        if (!isNarrow()) {
-          pending(
-            `Karma iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
-              'cannot exercise narrow SCSS media query. Skipping.',
-          );
-          return;
-        }
+      it('highlights tree-only when paneLayout is tree-only at narrow widths', async (ctx) => {
+        ctx.skip(
+          !isNarrow(),
+          `Browser iframe width=${window.innerWidth}px is not narrow (< ${NARROW_THRESHOLD}); ` +
+            'cannot exercise narrow SCSS media query. Skipping.',
+        );
         const { fixture } = await create();
         fixture.componentRef.setInput('paneLayout', 'tree-only');
         fixture.detectChanges();
@@ -773,7 +767,7 @@ describe('ToolbarComponent', () => {
       titleInput.dispatchEvent(new Event('input', { bubbles: true }));
       fixture.detectChanges();
 
-      expect(titleChange).toHaveBeenCalledOnceWith('Renamed title');
+      expect(titleChange).toHaveBeenCalledExactlyOnceWith('Renamed title');
     });
   });
 
@@ -1181,9 +1175,12 @@ describe('ToolbarComponent', () => {
         });
       }
 
-      const outputSpy = jasmine.createSpy(`${action} output`).mockImplementation(() => {
-        orderedCalls.push('output');
-      });
+      const outputSpy = vi
+        .fn()
+        .mockName(`${action} output`)
+        .mockImplementation(() => {
+          orderedCalls.push('output');
+        });
       const component = fixture.componentInstance;
       switch (action) {
         case 'paste':
@@ -1230,9 +1227,9 @@ describe('ToolbarComponent', () => {
     }
 
     function expectNoToolbarActionEvent(logger: Mocked<LoggerService>): void {
-      const toolbarActionCalls = logger.event.calls
-        .allArgs()
-        .filter(([messageId]) => messageId === 'toolbar.action');
+      const toolbarActionCalls = logger.event.mock.calls.filter(
+        ([messageId]) => messageId === 'toolbar.action',
+      );
       expect(toolbarActionCalls).toEqual([]);
     }
 
@@ -1249,7 +1246,7 @@ describe('ToolbarComponent', () => {
 
         findTriggerGesture(makeToolbarActionCases(fixture), expectedAction)();
 
-        expect(logger.event).toHaveBeenCalledOnceWith(
+        expect(logger.event).toHaveBeenCalledExactlyOnceWith(
           'toolbar.action',
           { action: expectedAction },
           undefined,
@@ -1303,7 +1300,7 @@ describe('ToolbarComponent', () => {
 
       triggerTitleEnterKeydown(fixture);
 
-      expect(logger.event).toHaveBeenCalledOnceWith(
+      expect(logger.event).toHaveBeenCalledExactlyOnceWith(
         'toolbar.action',
         { action: 'save' },
         undefined,

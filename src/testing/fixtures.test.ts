@@ -14,10 +14,10 @@ import { provideFakeAuth } from './auth.testing';
  *   1. The parser accepts the raw file text (no errors, AST exists).
  *   2. The JsonTreeComponent renders without throwing given the parsed value.
  *
- * Files are served by the Karma dev server at `/fixtures/<name>` via
- * the assets entry in `angular.json`'s test configuration.
+ * Files are served by Vitest at `/fixtures/<name>` via the static-mount
+ * entry in `vitest.config.mts`.
  *
- * The catalogue is a static list so individual specs show up in the Jasmine
+ * The catalogue is a static list so individual specs show up in the test
  * reporter; adding a new fixture requires adding one line here.
  */
 const FIXTURE_FILES = [

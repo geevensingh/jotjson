@@ -54,8 +54,8 @@ describe('shareBlobResolver', () => {
   }
 
   beforeEach(() => {
-    getWithProgressSpy = jasmine
-      .createSpy<(slug: string) => Observable<BlobFetchEvent>>('getWithProgress')
+    getWithProgressSpy = vi
+      .fn<(slug: string) => Observable<BlobFetchEvent>>()
       .mockReturnValue(makeStream({ kind: 'bytesComplete' }, { kind: 'blob', blob: blob() }));
     reportProgressSpy = vi.fn();
     markBytesCompleteSpy = vi.fn();
@@ -98,8 +98,8 @@ describe('shareBlobResolver', () => {
     // and BEFORE the terminal blob event - this is the entire point
     // of the v0.10.7 fix.
     expect(reportProgressSpy.mock.calls.length).toBeGreaterThan(0);
-    const lastReportCall = reportProgressSpy.calls.mostRecent();
-    expect(lastReportCall.args).toEqual([1024, 1024]);
+    const lastReportCall = reportProgressSpy.mock.calls[reportProgressSpy.mock.calls.length - 1];
+    expect(lastReportCall).toEqual([1024, 1024]);
   });
 
   it('navigates to /404 with attemptedSlug and returns null on error', async () => {

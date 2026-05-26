@@ -710,7 +710,7 @@ describe('RuleSetsService', () => {
       expect(svc.ruleSets()?.[0].version).toBe(8);
     });
 
-    it('emits a conflict event and resyncs on 412 during drain', (done) => {
+    it('emits a conflict event and resyncs on 412 during drain', () => {
       const svc = signedInService();
       svc.list().subscribe();
       httpMock.expectOne(BASE).flush([makeSet({ id: 'a', version: 7 })]);
@@ -732,7 +732,6 @@ describe('RuleSetsService', () => {
       expect(events).toEqual([{ kind: 'conflict', id: 'a' }]);
       expect(svc.pendingWriteCount()).toBe(0);
       expect(svc.ruleSets()?.[0].name).toBe('ServerWon');
-      done();
     });
 
     it('leaves the queue intact when drain hits a 5xx', () => {

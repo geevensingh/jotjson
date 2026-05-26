@@ -74,7 +74,7 @@ describe('DraftService', () => {
     svc.set('{"d":4}');
     TestBed.flushEffects();
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
-    spyOnProperty(document, 'visibilityState').mockReturnValue('hidden');
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     document.dispatchEvent(new Event('visibilitychange'));
     expect(localStorage.getItem(DRAFT_KEY)).toBe('{"d":4}');
     tick(DRAFT_WRITE_DEBOUNCE_MS);

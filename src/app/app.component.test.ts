@@ -120,6 +120,13 @@ describe('AppComponent', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+    // The lazy Promise.all([import(...)...]).then(...) chain in ngOnInit
+    // runs after Angular reports stable; wait for the event spy to actually
+    // be called with 'app.boot' before asserting argument shape.
+    await vi.waitFor(() => {
+      const calls = loggerServiceSpy.event.mock.calls.filter((args) => args[0] === 'app.boot');
+      expect(calls.length).toBe(1);
+    });
 
     expect(loggerServiceSpy.event).toHaveBeenCalledWith(
       'app.boot',
@@ -139,18 +146,14 @@ describe('AppComponent', () => {
     // PreferencesService also emits `theme.applied` (source: 'boot') during
     // construction, so the spy receives more than one call. Verify
     // `app.boot` itself was emitted exactly once.
-    const appBootCalls = loggerServiceSpy.event.calls
-      .allArgs()
-      .filter((args) => args[0] === 'app.boot');
+    const appBootCalls = loggerServiceSpy.event.mock.calls.filter((args) => args[0] === 'app.boot');
     expect(appBootCalls.length).toBe(1);
     expect(callOrder).toEqual(['event', 'connect']);
   });
 
   it('initializes web vitals after app.boot connect during lazy initialization', async () => {
-    const initSpy = jasmine
-      .createSpy<
-        (logger: LoggerService, appVersion: string, buildNumber: string) => Promise<void>
-      >('initWebVitals')
+    const initSpy = vi
+      .fn<(logger: LoggerService, appVersion: string, buildNumber: string) => Promise<void>>()
       .mockResolvedValue();
     const webVitalsModule = await import('./core/telemetry/web-vitals');
     webVitalsModule.__setInitWebVitalsImplForTesting(initSpy);
@@ -158,9 +161,8 @@ describe('AppComponent', () => {
       const fixture = TestBed.createComponent(AppComponent);
       fixture.detectChanges();
       await fixture.whenStable();
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await vi.waitFor(() => expect(initSpy).toHaveBeenCalledTimes(1));
 
-      expect(initSpy).toHaveBeenCalledTimes(1);
       const [logger, appVersion, buildNumber] = initSpy.mock.lastCall;
       expect(logger).toBe(loggerServiceSpy);
       expect(appVersion).toEqual(expect.any(String));
@@ -193,7 +195,7 @@ describe('AppComponent', () => {
       // The double-rAF / paint-barrier semantics are covered by
       // static-splash-removal.spec.ts in isolation, free of
       // cross-spec rAF bleed (see #170).
-      const spy = jasmine.createSpy<() => void>('scheduleStaticSplashRemoval');
+      const spy = vi.fn<() => void>();
       staticSplashRemoval.__setScheduleStaticSplashRemovalImplForTesting(spy);
       try {
         const fixture = TestBed.createComponent(AppComponent);

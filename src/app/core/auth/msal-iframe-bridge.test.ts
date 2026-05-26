@@ -101,9 +101,7 @@ describe('postAuthResponseToParent', () => {
 
   it('calls broadcastResponseToMainFrame exactly once when loader resolves', async () => {
     const broadcastSpy = vi.fn().mockResolvedValue(undefined);
-    const loader = jasmine
-      .createSpy('loader')
-      .mockResolvedValue({ broadcastResponseToMainFrame: broadcastSpy });
+    const loader = vi.fn().mockResolvedValue({ broadcastResponseToMainFrame: broadcastSpy });
 
     await postAuthResponseToParent(loader);
 
@@ -116,12 +114,10 @@ describe('postAuthResponseToParent', () => {
     // Regression guard for the unhandled-rejection bug: if the bridge
     // call were not awaited, this test would pass with the rejection
     // bubbling out asynchronously after the function returned.
-    const broadcastSpy = jasmine
-      .createSpy('broadcast')
-      .mockRejectedValue(new Error('No payload found in URL'));
+    const broadcastSpy = vi.fn().mockRejectedValue(new Error('No payload found in URL'));
     const loader = () => Promise.resolve({ broadcastResponseToMainFrame: broadcastSpy });
 
-    await expectAsync(postAuthResponseToParent(loader)).toBeResolved();
+    await expect(postAuthResponseToParent(loader)).resolves.toBeUndefined();
     expect(broadcastSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -143,8 +139,10 @@ describe('postAuthResponseToParent', () => {
   it('swallows sessionStorage failures', async () => {
     const broadcastSpy = vi.fn().mockRejectedValue(new Error('boom'));
     const loader = () => Promise.resolve({ broadcastResponseToMainFrame: broadcastSpy });
-    vi.spyOn(sessionStorage, 'setItem').and.throwError('QuotaExceededError');
+    vi.spyOn(sessionStorage, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
 
-    await expectAsync(postAuthResponseToParent(loader)).toBeResolved();
+    await expect(postAuthResponseToParent(loader)).resolves.toBeUndefined();
   });
 });

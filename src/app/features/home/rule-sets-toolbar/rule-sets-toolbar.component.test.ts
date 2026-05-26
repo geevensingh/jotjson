@@ -202,7 +202,7 @@ describe('RuleSetsToolbarComponent', () => {
       expect(dialogStub.open.mock.lastCall[0]).toBe(ClonePresetDialogComponent);
     });
 
-    it('auto-activates and toasts on successful clone', fakeAsync(() => {
+    it('auto-activates and toasts on successful clone', async () => {
       const ruleSets = TestBed.inject(RuleSetsService);
       const prefs = TestBed.inject(PreferencesService);
       const cloned = makeSet({ id: 'cloned-1', name: 'Errors' });
@@ -227,14 +227,17 @@ describe('RuleSetsToolbarComponent', () => {
         '[data-testid="clone-preset-trigger"]',
       ) as HTMLButtonElement;
       trigger.click();
-      tick();
+      // Component uses `await firstValueFrom(ref.afterClosed())`; native
+      // promise microtasks do not drain in Vitest's fakeAsync zone, so
+      // we wait on a real microtask drain.
+      await vi.waitFor(() => expect(setDefaultsSpy).toHaveBeenCalled());
 
       expect(setDefaultsSpy).toHaveBeenCalledWith(['cloned-1']);
       expect(prefs.prefs().activeRuleSetIds).toEqual(['cloned-1']);
       expect(snackStub.open).toHaveBeenCalled();
       const toastMessage = snackStub.open.mock.lastCall[0] as string;
       expect(toastMessage).toContain('Error detection');
-    }));
+    });
 
     it('does nothing when the user cancels the clone dialog', fakeAsync(() => {
       const ruleSets = TestBed.inject(RuleSetsService);

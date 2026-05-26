@@ -54,7 +54,7 @@ describe('JsonParserService', () => {
 
   describe('parse - slow telemetry', () => {
     it('does not emit parse.slow for a fast parse', () => {
-      vi.spyOn(performance, 'now').and.returnValues(0, 1);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(1);
 
       svc.parse('{"a":1}');
 
@@ -62,7 +62,7 @@ describe('JsonParserService', () => {
     });
 
     it('emits parse.slow with cold=true on the first slow parse', () => {
-      vi.spyOn(performance, 'now').and.returnValues(0, 51);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(51);
       const text = '{"a":1}';
       const sizeBytes = new Blob([text]).size;
 
@@ -85,7 +85,11 @@ describe('JsonParserService', () => {
     });
 
     it('emits parse.slow with cold=false on the second slow parse', () => {
-      vi.spyOn(performance, 'now').and.returnValues(0, 51, 100, 151);
+      vi.spyOn(performance, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(51)
+        .mockReturnValueOnce(100)
+        .mockReturnValueOnce(151);
       const text = '{"a":1}';
       const sizeBytes = new Blob([text]).size;
 
@@ -109,7 +113,7 @@ describe('JsonParserService', () => {
     });
 
     it('does not emit parse.slow when elapsed time is exactly 50ms', () => {
-      vi.spyOn(performance, 'now').and.returnValues(0, 50);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(50);
 
       svc.parse('{"a":1}');
 
@@ -117,7 +121,7 @@ describe('JsonParserService', () => {
     });
 
     it('reports UTF-8 byte length instead of UTF-16 character count', () => {
-      vi.spyOn(performance, 'now').and.returnValues(0, 51);
+      vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(51);
       const chineseText = String.fromCharCode(0x4e2d, 0x6587);
       const text = '{"name":"' + chineseText + '"}';
       const sizeBytes = new Blob([text]).size;

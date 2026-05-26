@@ -50,13 +50,9 @@ describe('RuleSetsToolbarComponent (a11y overlays)', () => {
       activeRuleSetIds: activeIds.asReadonly(),
       list: vi.fn().mockReturnValue(of(cache() ?? [])),
       toggleActive: vi.fn(),
-      setActives: jasmine
-        .createSpy('setActives')
-        .mockImplementation((next: string[]) => activeIds.set(next)),
+      setActives: vi.fn().mockImplementation((next: string[]) => activeIds.set(next)),
       listPresets: vi.fn().mockReturnValue(of([preset()])),
-      clonePreset: jasmine
-        .createSpy('clonePreset')
-        .mockReturnValue(of(ruleSet({ id: 'cloned-1' }))),
+      clonePreset: vi.fn().mockReturnValue(of(ruleSet({ id: 'cloned-1' }))),
     };
 
     await TestBed.configureTestingModule({

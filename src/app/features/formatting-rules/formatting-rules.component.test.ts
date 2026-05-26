@@ -84,14 +84,12 @@ function setup(opts: SetupOpts = {}) {
   const preferences = {
     prefs: prefsSig.asReadonly(),
     syncState: syncStateSig.asReadonly(),
-    update: jasmine
-      .createSpy('preferences.update')
-      .mockImplementation((patch: { activeRuleSetIds?: string[] }) => {
-        if (patch.activeRuleSetIds) {
-          prefsSig.set({ activeRuleSetIds: patch.activeRuleSetIds });
-          defaultsSig.set(patch.activeRuleSetIds);
-        }
-      }),
+    update: vi.fn().mockImplementation((patch: { activeRuleSetIds?: string[] }) => {
+      if (patch.activeRuleSetIds) {
+        prefsSig.set({ activeRuleSetIds: patch.activeRuleSetIds });
+        defaultsSig.set(patch.activeRuleSetIds);
+      }
+    }),
     __syncStateSig: syncStateSig,
   };
 

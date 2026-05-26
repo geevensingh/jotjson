@@ -29,21 +29,15 @@ describe('SignedInDirective', () => {
       return { fixture, auth };
     }
 
-    it('does not render when signed out', () => {
+    it('does not render when signed out', (ctx) => {
       const { fixture, auth } = create();
-      if (!auth.isConfigured) {
-        pending('Auth not configured in this environment build.');
-        return;
-      }
+      ctx.skip(!auth.isConfigured, 'Auth not configured in this environment build.');
       expect(fixture.nativeElement.querySelector('.target')).toBeNull();
     });
 
-    it('renders when a user signs in and hides again on sign out', () => {
+    it('renders when a user signs in and hides again on sign out', (ctx) => {
       const { fixture, auth } = create();
-      if (!auth.isConfigured) {
-        pending('Auth not configured in this environment build.');
-        return;
-      }
+      ctx.skip(!auth.isConfigured, 'Auth not configured in this environment build.');
       const userSignal = (auth as unknown as { userSignal: { set(v: AuthUser | null): void } })
         .userSignal;
 

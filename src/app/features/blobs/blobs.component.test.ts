@@ -34,15 +34,15 @@ function setup(opts: SetupOpts = {}) {
   TestBed.resetTestingModule();
 
   const stub = {
-    list: jasmine
-      .createSpy('list')
+    list: vi
+      .fn()
       .mockImplementation(() =>
         opts.listResult instanceof Error
           ? throwError(() => opts.listResult as Error)
           : of(opts.listResult ?? []),
       ),
-    delete: jasmine
-      .createSpy('delete')
+    delete: vi
+      .fn()
       .mockImplementation(() =>
         opts.deleteResult instanceof Error
           ? throwError(() => opts.deleteResult as Error)

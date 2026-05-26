@@ -276,7 +276,7 @@ describe('TreeStringExtractorService', () => {
 
     expect(service.scannerUnavailable()).toBe(true);
     expect(mockWorker.postedMessages.length).toBe(1);
-    expect(logger.warn).toHaveBeenCalledOnceWith('tree.stringExtractor.workerUnavailable', {
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('tree.stringExtractor.workerUnavailable', {
       reason: 'error',
     });
   });
@@ -318,7 +318,7 @@ describe('TreeStringExtractorService', () => {
     service.enqueueScan([rawJsonString(24)]);
 
     expect(service.scannerUnavailable()).toBe(true);
-    expect(logger.warn).toHaveBeenCalledOnceWith('tree.stringExtractor.workerUnavailable', {
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('tree.stringExtractor.workerUnavailable', {
       reason: 'factory',
     });
   });
@@ -330,7 +330,7 @@ describe('TreeStringExtractorService', () => {
 
     expect(service.scannerUnavailable()).toBe(true);
     expect(mockWorker.postedMessages.length).toBe(0);
-    expect(logger.warn).toHaveBeenCalledOnceWith('tree.stringExtractor.workerUnavailable', {
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('tree.stringExtractor.workerUnavailable', {
       reason: 'postMessage',
     });
   });
@@ -400,7 +400,7 @@ describe('TreeStringExtractorService', () => {
     expect(service.scannerUnavailable()).toBe(true);
     expect(service.scanInFlight()).toBe(false);
     expect(mockWorker.postedMessages.length).toBe(1);
-    expect(logger.warn).toHaveBeenCalledOnceWith('tree.stringExtractor.workerUnavailable', {
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith('tree.stringExtractor.workerUnavailable', {
       reason: 'messageerror',
     });
   });

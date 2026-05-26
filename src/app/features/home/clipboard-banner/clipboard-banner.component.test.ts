@@ -21,11 +21,9 @@ describe('ClipboardBannerComponent', () => {
     permissionState = signal<ClipboardPermissionState>('prompt');
     prefsSignal = signal({ ...DEFAULT_PREFERENCES });
     enableSpy = vi.fn().mockResolvedValue('granted');
-    updateSpy = jasmine
-      .createSpy('update')
-      .mockImplementation((patch: Partial<typeof DEFAULT_PREFERENCES>) => {
-        prefsSignal.set({ ...prefsSignal(), ...patch });
-      });
+    updateSpy = vi.fn().mockImplementation((patch: Partial<typeof DEFAULT_PREFERENCES>) => {
+      prefsSignal.set({ ...prefsSignal(), ...patch });
+    });
 
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

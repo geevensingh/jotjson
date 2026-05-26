@@ -255,9 +255,9 @@ describe('AuthService', () => {
     }
 
     function signedInEventCount(): number {
-      return loggerServiceSpy.event.calls
-        .allArgs()
-        .filter((callArguments) => callArguments[0] === 'auth.signedIn').length;
+      return loggerServiceSpy.event.mock.calls.filter(
+        (callArguments) => callArguments[0] === 'auth.signedIn',
+      ).length;
     }
 
     it('emits auth.signedIn with dev mode on a null-to-user transition', () => {
@@ -266,7 +266,7 @@ describe('AuthService', () => {
 
       callSetCurrentUser(auth, USER_A);
 
-      expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+      expect(loggerServiceSpy.event).toHaveBeenCalledExactlyOnceWith(
         'auth.signedIn',
         { mode: 'dev' },
         undefined,
@@ -279,7 +279,7 @@ describe('AuthService', () => {
 
       callSetCurrentUser(auth, USER_A);
 
-      expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+      expect(loggerServiceSpy.event).toHaveBeenCalledExactlyOnceWith(
         'auth.signedIn',
         { mode: 'msal' },
         undefined,
@@ -334,7 +334,7 @@ describe('AuthService', () => {
 
       await auth.signOut();
 
-      expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+      expect(loggerServiceSpy.event).toHaveBeenCalledExactlyOnceWith(
         'auth.signedOut',
         { mode: 'dev' },
         undefined,
@@ -370,7 +370,7 @@ describe('AuthService', () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(loggerServiceSpy.event).toHaveBeenCalledOnceWith(
+      expect(loggerServiceSpy.event).toHaveBeenCalledExactlyOnceWith(
         'auth.signedOut',
         { mode: 'msal' },
         undefined,

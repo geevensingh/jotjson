@@ -34,11 +34,9 @@ describe('QuotaNotificationService', () => {
 
     snackOpen = vi.fn();
     dialogOpen = vi.fn();
-    prefsUpdate = jasmine
-      .createSpy('prefs.update')
-      .mockImplementation((patch: Partial<UserPreferences>) => {
-        Object.assign(prefsSignal, patch);
-      });
+    prefsUpdate = vi.fn().mockImplementation((patch: Partial<UserPreferences>) => {
+      Object.assign(prefsSignal, patch);
+    });
 
     TestBed.configureTestingModule({
       providers: [

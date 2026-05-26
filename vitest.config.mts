@@ -110,6 +110,14 @@ export default defineConfig(() => ({
       shuffle: true,
       ...(seedForConfig !== undefined ? { seed: seedForConfig } : {}),
     },
+    // Karma+Jasmine parity: restore vi.spyOn / vi.stubGlobal / vi.stubEnv
+    // before every test, mirroring Jasmine's per-spec sandbox. Without
+    // this, spies on document.createElement, Storage.prototype, etc.
+    // accumulate across tests in a single file and cause recursive
+    // wrapping (e.g., home.component.test.ts onDownload stack overflow).
+    restoreMocks: true,
+    unstubGlobals: true,
+    unstubEnvs: true,
     browser: {
       enabled: true,
       headless: true,
@@ -127,6 +135,15 @@ export default defineConfig(() => ({
       deps: {
         inline: ['monaco-editor'],
       },
+    },
+    optimizeDeps: {
+      include: [
+        '@angular/localize/init',
+        'zone.js',
+        'zone.js/testing',
+        'zone.js/plugins/proxy',
+        'zone.js/plugins/sync-test',
+      ],
     },
   },
 }));

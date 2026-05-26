@@ -112,18 +112,19 @@ describe('OverflowMeasurementQueue', () => {
     expect(calls).toEqual(['first', 'second']);
   });
 
-  it('uses requestAnimationFrame in production paths', (done) => {
-    let writeCount = 0;
-    queue.enqueue(
-      () => 'value',
-      () => {
-        writeCount++;
-      },
-    );
-    expect(writeCount).toBe(0);
-    requestAnimationFrame(() => {
-      expect(writeCount).toBe(1);
-      done();
-    });
-  });
+  it('uses requestAnimationFrame in production paths', () =>
+    new Promise<void>((resolve) => {
+      let writeCount = 0;
+      queue.enqueue(
+        () => 'value',
+        () => {
+          writeCount++;
+        },
+      );
+      expect(writeCount).toBe(0);
+      requestAnimationFrame(() => {
+        expect(writeCount).toBe(1);
+        resolve();
+      });
+    }));
 });

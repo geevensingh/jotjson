@@ -70,7 +70,9 @@ describe('persistedStringSignal', () => {
 
   it('tolerates localStorage.setItem throwing', () => {
     const host = makeStringHost();
-    vi.spyOn(Storage.prototype, 'setItem').and.throwError('quota');
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
     expect(() => {
       host.value.set('alpha');
       TestBed.flushEffects();
@@ -79,7 +81,9 @@ describe('persistedStringSignal', () => {
   });
 
   it('tolerates localStorage.getItem throwing on hydrate', () => {
-    vi.spyOn(Storage.prototype, 'getItem').and.throwError('blocked');
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
     const host = makeStringHost();
     expect(host.value()).toBe('');
   });

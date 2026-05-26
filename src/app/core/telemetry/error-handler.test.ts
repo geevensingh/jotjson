@@ -32,7 +32,9 @@ describe('TelemetryErrorHandler', () => {
     });
 
     it('does not recurse when logger.error throws', () => {
-      errSpy.and.throwError('telemetry boom');
+      errSpy.mockImplementation(() => {
+        throw new Error('telemetry boom');
+      });
       expect(() => handler.handleError(new Error('x'))).not.toThrow();
       expect(errSpy).toHaveBeenCalledTimes(1);
     });
@@ -68,7 +70,9 @@ describe('TelemetryErrorHandler', () => {
     });
 
     it('does not throw when logger.event itself throws', () => {
-      eventSpy.and.throwError('event boom');
+      eventSpy.mockImplementation(() => {
+        throw new Error('event boom');
+      });
       const e = Object.assign(new Error('Canceled'), { name: 'Canceled' });
       expect(() => handler.handleError(e)).not.toThrow();
       expect(eventSpy).toHaveBeenCalledTimes(1);
