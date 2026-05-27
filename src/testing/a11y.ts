@@ -178,7 +178,7 @@ export async function runA11yScan(
 
 /**
  * Format an axe violation list as a multi-line string suitable for a
- * Jasmine `expect.fail()` message. Each violation includes the rule id, impact,
+ * test-runner `expect.fail()` message. Each violation includes the rule id, impact,
  * help URL, and the first few offending node selectors.
  */
 function formatViolations(violations: ReadonlyArray<Result>): string {
