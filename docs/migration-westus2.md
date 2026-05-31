@@ -368,7 +368,7 @@ migration.
    stating AI is in eastus2; this removes the contradiction between
    the spec and the plan's "Decisions" table at presentation/review
    time. Folded into this same doc cleanup PR (closes #392 and #394).
-2. **Pre-flight global uniqueness checks**:
+2. **[DONE 2026-05-30, operator az CLI]** Pre-flight global uniqueness checks:
    ```
    az storage account check-name --name stjotjsonprod
    az cosmosdb check-name-exists -n cosmos-jotjson-prod
@@ -382,7 +382,7 @@ migration.
      in Phase 2's `az cosmosdb restore` invocation (NOT in any
      `.bicepparam` file), so fallback handling is just in the
      PR-C script.
-3. **Pre-flight SKU availability**:
+3. **[DONE 2026-05-30, operator az CLI]** Pre-flight SKU availability:
    ```
    az rest --method GET \
      --url "https://management.azure.com/subscriptions/<sub-id>/providers/Microsoft.Storage/skus?api-version=2023-01-01" \
@@ -394,7 +394,7 @@ migration.
    future SKU rotation. (Use the providers SKUs REST API rather than
    the obvious-looking `az storage account list-skus` -- the latter
    is not a real subcommand.)
-4. **End-to-end GZRS deployability check** (critic v5 finding:
+4. **[DONE 2026-05-30, operator az CLI]** End-to-end GZRS deployability check (critic v5 finding:
    "listed" != "deployable"; subscription enrollment in zone-
    redundant offers may differ):
    ```
@@ -412,15 +412,16 @@ migration.
    `stjjskucheck` prefix) gives 2^48 entropy -- still squat-proof.
    The `.ToLower()` is defensive: storage account names must be
    lowercase alphanumeric. Discard the test account immediately.
-5. **Land PR-A in nonprod first**. Verify Bicep changes deploy
+5. **[DONE 2026-05-30, PR #376 + PR #416 + operator-run dispatch]** Land PR-A in nonprod first. Verify Bicep changes deploy
    cleanly with all new params unset (nonprod behavior unchanged).
    Side-effect-via-default note (post-#376 iter-1): with all new
-   params unset, `cosmos-jotjson-nonprod` stays Periodic; a separate
+   params unset, `cosmos-jotjson-nonprod` stayed Periodic; a separate
    nonprod Continuous `bicepparam` PR (mirror of #399, tracked as
    `priority:high` issue #404) plus an operator-run
-   `workflow_dispatch` of `infra-nonprod.yml` is required before
-   step 11's rehearsal can run. Same shape as the dev hole #399
-   closes.
+   `workflow_dispatch` of `infra-nonprod.yml` was required before
+   step 11's rehearsal could run; satisfied 2026-05-30 (PR #416
+   merged, dispatch run id 26481970250, conversion verified
+   `Continuous7Days`). Same shape as the dev hole #399 closed.
 6. **Move the `jotjson.com` DNS zone to `rg-jotjson-dns`** (new
    RG). **Order mattered** (critic v5 finding: this step would
    have raced against `infra.yml` runs unless the DNS-suppression
@@ -437,7 +438,7 @@ migration.
      `output dnsNameServers` to `[]`. Any `infra.yml` run between
      now and the move below is a no-op against the live zone
      regardless of which RG currently hosts it.
-   - **Operator-run move (remaining work for this step)**:
+   - **[DONE 2026-05-30, operator az CLI]** Operator-run move:
      ```
      az group create -n rg-jotjson-dns -l westus2
      az resource move --destination-group rg-jotjson-dns \
@@ -446,6 +447,9 @@ migration.
      (DNS zones are global resources, but the RG itself requires
      a real region in its metadata; `-l global` is rejected.
      `westus2` chosen to align metadata with the migration target.)
+     Move completed in 98.7s with zero external DNS impact (NS
+     records preserved across the RG move; public recursive
+     resolvers returned unchanged answers post-move).
    - Apex resolution and SOA records unaffected.
 7. **AI/LAW move is DEFERRED to Phase 4** (critic v4 finding).
    Moving them in Phase 0 strands the existing alerts in
@@ -475,8 +479,8 @@ migration.
    `tier=Continuous7Days` query fails and Phase 2 step 2's
    `az cosmosdb restore --account-name cosmos-jotjson-dev` would
    error on a Periodic source.
-10. **Wait for continuous-backup conversion on `cosmos-jotjson-dev`
-    to complete** (Azure docs: several hours; check via portal).
+10. **[DONE 2026-05-30, PR #405 (dev) + PR #416 (nonprod); both Continuous7Days]** Wait for continuous-backup conversion on `cosmos-jotjson-dev`
+    to complete (Azure docs: several hours; check via portal).
     **Note the conversion's completion time** -- the first
     restorable point is only available *after* completion. Phase 2
     step 1's `tier=Continuous7Days` query depends on this.
@@ -499,7 +503,10 @@ migration.
         --query backupPolicy.continuousModeProperties.tier
       ```
 
-      Expected: `"Continuous7Days"`.
+      Expected: `"Continuous7Days"`. (Satisfied 2026-05-30 -- see
+      step 5's marker above. The check is still worth re-running
+      immediately before step 11 to confirm the state hasn't
+      regressed.)
     - Cosmos RBAC re-grant against restored account.
     - SWA deploy-token rotation logic (test-only target).
     - SHA-verification of `build-info.json` after deploy.
