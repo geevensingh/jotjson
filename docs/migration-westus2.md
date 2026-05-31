@@ -412,7 +412,7 @@ migration.
    `stjjskucheck` prefix) gives 2^48 entropy -- still squat-proof.
    The `.ToLower()` is defensive: storage account names must be
    lowercase alphanumeric. Discard the test account immediately.
-5. **[DONE 2026-05-24, PR #376; nonprod Continuous follow-up DONE 2026-05-30 via PR #416 + operator-run dispatch]** Land PR-A in nonprod first. Verify Bicep changes deploy
+5. **[DONE 2026-05-30, PR #376 + PR #416 + operator-run dispatch]** Land PR-A in nonprod first. Verify Bicep changes deploy
    cleanly with all new params unset (nonprod behavior unchanged).
    Side-effect-via-default note (post-#376 iter-1): with all new
    params unset, `cosmos-jotjson-nonprod` stayed Periodic; a separate
@@ -479,7 +479,7 @@ migration.
    `tier=Continuous7Days` query fails and Phase 2 step 2's
    `az cosmosdb restore --account-name cosmos-jotjson-dev` would
    error on a Periodic source.
-10. **[DONE: dev verified 2026-05-25 post-#405; nonprod verified 2026-05-30 post-#416. Both Continuous7Days. PITR window opens after each account's conversion-completion timestamp.]** Wait for continuous-backup conversion on `cosmos-jotjson-dev`
+10. **[DONE 2026-05-30, PR #405 (dev) + PR #416 (nonprod); both Continuous7Days]** Wait for continuous-backup conversion on `cosmos-jotjson-dev`
     to complete (Azure docs: several hours; check via portal).
     **Note the conversion's completion time** -- the first
     restorable point is only available *after* completion. Phase 2
