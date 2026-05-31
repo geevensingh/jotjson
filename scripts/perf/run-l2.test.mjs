@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { extractRows } from './run-l2.mjs';
+import { extractRows, resolveRunner } from './run-l2.mjs';
 
 test('extractRows returns [] for text containing no sentinels', () => {
   assert.deepEqual(extractRows('no sentinels here'), []);
@@ -31,7 +31,7 @@ test('extractRows parses multiple sentinels embedded in surrounding log noise', 
   const rowA = { layer: 2, scenario: 'initial-render', size: '10k' };
   const rowB = { layer: 2, scenario: 'scroll-after-expand', size: '10k' };
   const text = [
-    'Karma chunk 1 begins...',
+    'Vitest chunk 1 begins...',
     `@@PERF_L2@@${JSON.stringify(rowA)}@@END@@`,
     'some interleaved stdout',
     `@@PERF_L2@@${JSON.stringify(rowB)}@@END@@`,
@@ -56,4 +56,34 @@ test('extractRows preserves valid rows even when a malformed sentinel is interle
   const rows = extractRows(text);
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0], valid);
+});
+
+test('extractRows recovers sentinels split across stdout and stderr', () => {
+  // Vitest browser mode occasionally splits provider output between
+  // stdout and stderr. The wrapper independently scans each stream
+  // (rather than concatenating, which could splice a sentinel
+  // across the boundary). Verify each stream still yields its
+  // sentinel when looked at in isolation.
+  const stdoutRow = { layer: 2, scenario: 'initial-render', size: '10k' };
+  const stderrRow = { layer: 2, scenario: 'scroll-after-expand', size: '10k' };
+  const stdoutStream = `noise\n@@PERF_L2@@${JSON.stringify(stdoutRow)}@@END@@\nmore noise\n`;
+  const stderrStream = `warn\n@@PERF_L2@@${JSON.stringify(stderrRow)}@@END@@\ntrailing warn\n`;
+  const combined = [...extractRows(stdoutStream), ...extractRows(stderrStream)];
+  assert.equal(combined.length, 2);
+  assert.deepEqual(combined[0], stdoutRow);
+  assert.deepEqual(combined[1], stderrRow);
+});
+
+test('resolveRunner returns the Karma harness by default', () => {
+  const resolved = resolveRunner({ vitest: false });
+  assert.equal(resolved.runnerLabel, 'ng test');
+  assert.deepEqual(resolved.args, ['ng', 'test', '--configuration', 'perf']);
+  assert.ok(resolved.cmd === 'npx' || resolved.cmd === 'npx.cmd');
+});
+
+test('resolveRunner returns the Vitest harness when --vitest is set', () => {
+  const resolved = resolveRunner({ vitest: true });
+  assert.equal(resolved.runnerLabel, 'vitest');
+  assert.deepEqual(resolved.args, ['vitest', 'run', '--config', 'vitest.perf.config.mts']);
+  assert.ok(resolved.cmd === 'npx' || resolved.cmd === 'npx.cmd');
 });
