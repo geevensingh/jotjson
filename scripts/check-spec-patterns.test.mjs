@@ -37,7 +37,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { REGEX_RULES, scanRegex, scanText, validateRules } from './check-spec-patterns.mjs';
+import {
+  REGEX_RULES,
+  listSpecFiles,
+  scanRegex,
+  scanText,
+  validateRules,
+} from './check-spec-patterns.mjs';
 
 const SPEC_PATH = 'src/example.spec.ts';
 
@@ -564,4 +570,43 @@ test('scanRegex throws actionable error if a rule pattern is non-global', () => 
   } finally {
     REGEX_RULES[0].pattern = savedPattern;
   }
+});
+
+// --- listSpecFiles non-empty guard ------------------------------------
+//
+// Issue #47 (Karma -> Vitest cutover) renamed every unit test from
+// `*.spec.ts` to `*.test.ts`. The original `listSpecFiles` filter
+// matched only `.spec.ts`, which would have made the lint a silent
+// no-op for the entire vitest suite. These tests guard against a
+// future regression of the same shape (someone renames the suite
+// again, or types the filter wrong) by asserting the live
+// `listSpecFiles()` returns a non-empty set drawn from the
+// convention(s) the repo actually uses.
+
+test('listSpecFiles returns a non-empty list of unit-test files', () => {
+  const files = listSpecFiles();
+  assert.ok(files.length > 0, 'listSpecFiles() returned 0 files');
+});
+
+test('listSpecFiles includes .test.ts files (current vitest convention)', () => {
+  const files = listSpecFiles();
+  const testTsFiles = files.filter((p) => p.endsWith('.test.ts'));
+  assert.ok(
+    testTsFiles.length > 0,
+    'listSpecFiles() returned no `.test.ts` files; the vitest suite under' +
+      ' `src/` should contribute the bulk of matches.',
+  );
+});
+
+test('listSpecFiles scopes to frontend src/** only', () => {
+  const files = listSpecFiles();
+  const outOfScope = files.filter(
+    (p) => p.startsWith('api/') || p.startsWith('e2e/') || p.startsWith('perf/'),
+  );
+  assert.equal(
+    outOfScope.length,
+    0,
+    'listSpecFiles() should only match frontend `src/**` tests. Found' +
+      ` ${outOfScope.length} out-of-scope file(s): ${outOfScope.slice(0, 3).join(', ')}`,
+  );
 });

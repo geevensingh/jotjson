@@ -2329,8 +2329,8 @@ Out of scope (for v1):
   programmatic focus to `<main>` on every router `NavigationEnd`
   after the initial bootstrap navigation, so screen-reader and
   keyboard users hear / start from the new page on every in-app
-  transition. Audit tooling (axe-core inside Karma, the
-  `*.a11y.spec.ts` convention, the `src/testing/a11y.ts` harness with
+  transition. Audit tooling (axe-core inside Vitest browser mode, the
+  `*.a11y.test.ts` convention, the `src/testing/a11y.ts` harness with
   WCAG-AA-only `critical` + `serious` strict gating) landed in the
   same milestone and gates the foundations against regression. Later
   M7g waves (3b tree, 3c Monaco, 3d contrast, 3e focus polish,

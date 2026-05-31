@@ -637,7 +637,7 @@ jobs:
   web-tests:
     name: Web unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     # Publishes test results via dorny/test-reporter@v3.
     permissions:
       contents: read
@@ -649,6 +649,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install Playwright Chromium
+        uses: ./.github/actions/install-playwright-chromium
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
       - name: Run tests with coverage
@@ -676,7 +678,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Upload web JUnit
-        if: always()
+        # Guard on hashFiles so a Vitest worker crash that fails to
+        # write JUnit at all doesn't mask the real failure with a
+        # noisy "no JUnit file found" error from the upload action
+        # (issue #47, Skeptic #13).
+        if: always() && hashFiles('test-results/web/junit.xml') != ''
         uses: actions/upload-artifact@v7
         with:
           name: web-junit
@@ -684,7 +690,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Publish web test results
-        if: always()
+        if: always() && hashFiles('test-results/web/junit.xml') != ''
         uses: dorny/test-reporter@v3
         with:
           name: Web test results
@@ -718,20 +724,8 @@ jobs:
         run: npm run build:info
       - name: Build production bundle
         run: npm run build
-      - name: Resolve Playwright version
-        id: pw-version
-        # Cache key needs an exact version. Read it from the installed package
-        # so OS + version uniquely identify the browser binary set.
-        run: |
-          version=$(node -p "require('@playwright/test/package.json').version")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Cache Playwright browsers
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright Chromium
+        uses: ./.github/actions/install-playwright-chromium
       - name: Run smoke e2e
         id: run-e2e-tests
         run: npm run test:e2e
