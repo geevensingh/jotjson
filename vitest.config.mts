@@ -4,11 +4,10 @@
 
 import angular from '@analogjs/vite-plugin-angular';
 import { playwright } from '@vitest/browser-playwright';
-import { createReadStream, existsSync, statSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
+import { staticMount } from './scripts/static-mount.mjs';
 
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 
@@ -21,45 +20,6 @@ if (rawSeed !== undefined && !Number.isFinite(numericSeed)) {
   console.warn(
     `[vitest.config] JASMINE_SEED was set but did not parse as a number; using random seed.`,
   );
-}
-
-function staticMount(urlPrefix: string, sourceDir: string): Plugin {
-  const absoluteSource = resolve(sourceDir);
-  return {
-    name: `static-mount-${urlPrefix.replace(/[^a-z0-9]/gi, '-')}`,
-    configureServer(server) {
-      server.middlewares.use(urlPrefix, (req, res, next) => {
-        const rawPath = (req.url ?? '/').split('?')[0] ?? '/';
-        const filePath = join(absoluteSource, rawPath);
-        if (!filePath.startsWith(absoluteSource)) {
-          res.statusCode = 403;
-          res.end('Forbidden');
-          return;
-        }
-        if (!existsSync(filePath) || !statSync(filePath).isFile()) {
-          next();
-          return;
-        }
-        const ext = extname(filePath).toLowerCase();
-        const mime =
-          ext === '.js' || ext === '.mjs'
-            ? 'application/javascript'
-            : ext === '.json'
-              ? 'application/json'
-              : ext === '.css'
-                ? 'text/css'
-                : ext === '.html'
-                  ? 'text/html'
-                  : ext === '.svg'
-                    ? 'image/svg+xml'
-                    : ext === '.ttf'
-                      ? 'font/ttf'
-                      : 'application/octet-stream';
-        res.setHeader('Content-Type', mime);
-        createReadStream(filePath).pipe(res);
-      });
-    },
-  };
 }
 
 class SeedReporter {
