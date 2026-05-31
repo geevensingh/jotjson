@@ -288,21 +288,16 @@ Remove-Item Env:\PERF_BUILD_SEED_HASHES
 node scripts/perf/build.mjs    # confirm green
 ```
 
-## Layer 2: Karma component bench
-
-> **Note:** Layer 2 is the only remaining consumer of Karma+Jasmine in
-> the repo. The unit-test suite was migrated to Vitest browser mode
-> (issue #47). Issue #417 tracks migrating the perf bench off Karma;
-> the GC-exposure / synchronous-iteration constraints documented below
-> are why it wasn't included in #47.
+## Layer 2: Vitest browser-mode component bench
 
 `src/app/shared/components/json-tree/json-tree.component.perf.ts` runs
-under a perf-only Angular `test` configuration:
+under a perf-only Vitest configuration:
 
 - `tsconfig.perf-l2.json` includes `*.perf.ts` and excludes `*.test.ts`.
-- `karma.perf.conf.js` adds `--js-flags=--expose-gc` so the spec can
-  call `globalThis.gc()` between iterations, and bumps the Jasmine
-  per-test timeout (`timeoutInterval`) to 15 minutes.
+- `vitest.perf.config.mts` launches Playwright Chromium with
+  `--js-flags=--expose-gc` so the spec can call `globalThis.gc()`
+  between iterations, and uses a 15-minute `testTimeout` to allow
+  100K / 1M opt-in tiers.
 
 ### L2 scenarios
 
@@ -316,15 +311,14 @@ under a perf-only Angular `test` configuration:
   the scroll alone; diff comparisons are still valid because every
   iteration runs the same fixed sequence. **10K only** in L2 --
   mat-tree is not virtualized in v1, so 100K/1M scroll would OOM
-  Karma. L3's `scroll-after-expand.spec.ts` runs the larger sizes in
-  a real browser.
+  the browser. L3's `scroll-after-expand.spec.ts` runs the larger
+  sizes in a real browser.
 
 Default fixture matrix: deep25 + wide-aoo at 10K. Set
 `window.__perfL2Force100K = true` (or `?force100k=1`) to also bench
 at 100K, and `window.__perfL2Force1M = true` (or `?force1m=1`) to add
-1M. Each 100K iter is ~50s; the 1M iter is multiple minutes. Karma's
-watchdog timeouts (`browserNoActivityTimeout`,
-`browserDisconnectTimeout`) are likewise bumped to 15 minutes so
+1M. Each 100K iter is ~50s; the 1M iter is multiple minutes. Vitest's
+`testTimeout` is set to 15 minutes in `vitest.perf.config.mts` so
 opt-in runs have room.
 
 `scroll-after-expand: wide-aoo @ 10k` is additionally gated behind
@@ -332,7 +326,7 @@ opt-in runs have room.
 `expandAll` materializes all 910 sibling nodes at depth 1
 synchronously and each iter takes ~12 minutes on the v1 reference
 machine; without the gate, default `npm run perf:all` would hit the
-15-min Jasmine timeout. `initial-render: wide-aoo @ 10k` and
+15-min Vitest timeout. `initial-render: wide-aoo @ 10k` and
 `scroll-after-expand: deep25 @ 10k` continue to run by default.
 Tracked in issue #219; the underlying fix is mat-tree virtualization.
 
@@ -342,10 +336,10 @@ into `perf-results/<utc>/layer-2.jsonl`. If zero rows are captured,
 `run-l2.mjs` exits non-zero unless `PERF_ALLOW_EMPTY=1` is set
 (parity with `run-bench.mjs`).
 
-L2 is **never** in `verify:fast` / `npm test`. The
-`scripts/perf/check-perf-ts-excluded.mjs` script asserts
-`tsconfig.spec.json` excludes `src/**/*.perf.ts`; it runs as a
-prestep of `perf:l2`.
+L2 is **never** in `verify:fast` / `npm test`. `*.perf.ts` files
+are excluded from `tsconfig.spec.json` (unit `include` is the
+positive-list `src/**/*.test.ts`) and from `vitest.config.mts`'s
+test glob, so they only execute via `npm run perf:l2`.
 
 ## Layer 3: Playwright + CDP flame-graph
 
@@ -437,10 +431,10 @@ Coverage per layer:
   default-on. Adding the catalog entry surfaces the row in
   `1.parse.mixed-d10.380k` and `1.build-tree.mixed-d10.380k` without
   any opt-in.
-- **L2** (Karma in-browser benches): opt-in via `?force5mb=1` URL
+- **L2** (Vitest browser-mode benches): opt-in via `?force5mb=1` URL
   query string or `window.__perfL2Force5MB = true`. A 380K-node
-  fixture is heavier than the default 100K cap and would risk Karma's
-  `browserNoActivityTimeout` watchdog on unattended runs. Both the
+  fixture is heavier than the default 100K cap and could risk the
+  15-min Vitest `testTimeout` on unattended runs. Both the
   `initial-render` and `scroll-after-expand` paths participate when
   the flag is set.
 - **L3** (Playwright + CDP `paste-large`): ceiling-enforced default-on.
@@ -517,10 +511,10 @@ npm run perf:clean -- --dry-run
   follow-up issue (priority:low, requires self-hosted runner).
 - **L2 caps default at 10K nodes**: 100K deep25 mat-tree (NOT
   virtualized) takes ~50s per iteration synchronously, and the
-  browser thread is blocked during the timed loop so Karma's
-  socket-ping watchdog disconnects before completion at the default
-  timeouts. The L2 spec gates 100K behind `?force100k=1` (the
-  Karma config sets a 15-min watchdog so the opt-in still works).
+  browser thread is blocked during the timed loop. The L2 spec
+  gates 100K behind `?force100k=1` (Vitest's `testTimeout` is set
+  to 15 minutes in `vitest.perf.config.mts` so the opt-in still
+  works).
   1M is gated similarly behind `?force1m=1`.
 - **L2 `scroll-after-expand: wide-aoo` gated by default**: on a
   910-node depth-1 fan-out, `JsonTreeComponent.expandAll` triggers
@@ -558,13 +552,12 @@ npm run perf:clean -- --dry-run
   `onDidPaste`. Tracked in issue #218; re-enabling is a one-line
   change in `pickPasteMethod` once #218 lands.
 - **L2 `mixed-d10 @ 380k` opt-in**: the F-2 NFR-anchor fixture is
-  ~5 MB / ~380K nodes. At Karma's default settings the
-  `initial-render` and `scroll-after-expand` scenarios at this size
-  risk the `browserNoActivityTimeout` watchdog. The L2 spec gates
-  this fixture behind `?force5mb=1` or
-  `window.__perfL2Force5MB = true` (mirrors the existing `?force1m=1`
-  pattern). L1 and L3 enforce on this fixture default-on; only L2
-  needs the opt-in.
+  ~5 MB / ~380K nodes. At default settings the `initial-render`
+  and `scroll-after-expand` scenarios at this size risk the
+  15-min Vitest `testTimeout`. The L2 spec gates this fixture
+  behind `?force5mb=1` or `window.__perfL2Force5MB = true`
+  (mirrors the existing `?force1m=1` pattern). L1 and L3
+  enforce on this fixture default-on; only L2 needs the opt-in.
 
 See `plan.md` -> "Out of scope" in the session for the full
 follow-up issue list.

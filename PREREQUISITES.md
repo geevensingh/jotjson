@@ -17,7 +17,7 @@ pin. Windows, macOS, and Linux steps are listed where they diverge.
 | Azure CLI                   | latest  | Deploying / inspecting Azure resources |
 | Bicep                       | latest  | Authoring + deploying `infra/` |
 | Git                         | 2.30+   | Everything            |
-| A Chromium-based browser    | latest  | `npm test` (Vitest browser via Playwright Chromium); perf bench (Karma) |
+| A Chromium-based browser    | latest  | `npm test` and `npm run perf:l2` (Vitest browser via Playwright Chromium) |
 | Windows Terminal (`wt`)     | latest  | `scripts/dev.ps1` (Windows only) |
 | VS Code (optional)          | latest  | Shipped debug configs in `.vscode/` |
 
@@ -339,16 +339,12 @@ prefetch the browser explicitly:
 npx playwright install chromium
 ```
 
-The perf bench (`npm run perf:l2`) is still on Karma+Jasmine and
-*does* require a Chromium-family browser on PATH via `CHROME_BIN`.
-That migration is tracked separately; see `docs/perf.md`.
+The perf bench (`npm run perf:l2`) also runs under Vitest browser
+mode via Playwright Chromium (no separate `CHROME_BIN` setup
+needed); see `docs/perf.md`.
 
 - **Chrome**: https://www.google.com/chrome/
-- **Edge** (Chromium-based, ships with Windows): no install needed, but
-  point Karma at it via `CHROME_BIN` if Chrome itself isn't present:
-  ```powershell
-  $env:CHROME_BIN = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-  ```
+- **Edge** (Chromium-based, ships with Windows): no install needed.
 - **Chromium** on Linux: `sudo apt install chromium-browser`
 
 CI runs Vitest browser mode against the Playwright-bundled Chromium
@@ -427,10 +423,7 @@ bound to a port other than 7071. Check `proxy.conf.json`.
 
 **Vitest browser mode fails to launch Chromium** - run
 `npx playwright install chromium` to provision the bundled browser.
-
-**Karma can't find Chrome (perf bench only)** - set `CHROME_BIN` to a
-Chromium-family browser, or `npm install` a fresh Chrome from
-https://www.google.com/chrome/. Only affects `npm run perf:l2`.
+Affects both `npm test` and `npm run perf:l2`.
 
 **`az bicep install` fails** - upgrade Azure CLI first
 (`az upgrade`), then retry.
