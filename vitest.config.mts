@@ -1,15 +1,13 @@
 /// <reference types="vitest" />
 //
-// Vitest configuration for JotJSON (issue #47: Karma -> Vitest migration).
+// Vitest configuration for JotJSON unit tests (issue #47: Karma ->
+// Vitest migration). Plugins, browser launch args, polyfills, and
+// optimizeDeps are factored into `vitest.shared.mts` and reused by
+// `vitest.perf.config.mts` (issue #417). Edit shared substrate
+// there, not here.
 
-import angular from '@analogjs/vite-plugin-angular';
-import { playwright } from '@vitest/browser-playwright';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import { staticMount } from './scripts/static-mount.mjs';
-
-const projectRoot = fileURLToPath(new URL('.', import.meta.url));
+import { makeBrowserConfig, sharedPlugins, sharedTestBase } from './vitest.shared.mts';
 
 const rawSeed = process.env['JASMINE_SEED'];
 const trimmedSeed = typeof rawSeed === 'string' ? rawSeed.trim() : '';
@@ -38,14 +36,9 @@ class SeedReporter {
 }
 
 export default defineConfig(() => ({
-  plugins: [
-    angular(),
-    staticMount('/fixtures', join(projectRoot, 'src/testing/fixtures')),
-    staticMount('/vs', join(projectRoot, 'node_modules/monaco-editor/min/vs')),
-  ],
+  plugins: sharedPlugins,
   test: {
-    globals: true,
-    setupFiles: ['src/test-setup.ts'],
+    ...sharedTestBase,
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.perf.ts', 'node_modules/**', 'dist/**'],
     reporters: ['default', ['junit', { suiteName: 'web' }], new SeedReporter()],
@@ -78,32 +71,6 @@ export default defineConfig(() => ({
     restoreMocks: true,
     unstubGlobals: true,
     unstubEnvs: true,
-    browser: {
-      enabled: true,
-      headless: true,
-      provider: playwright(),
-      instances: [
-        {
-          browser: 'chromium',
-          launch: {
-            args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
-          },
-        },
-      ],
-    },
-    server: {
-      deps: {
-        inline: ['monaco-editor'],
-      },
-    },
-    optimizeDeps: {
-      include: [
-        '@angular/localize/init',
-        'zone.js',
-        'zone.js/testing',
-        'zone.js/plugins/proxy',
-        'zone.js/plugins/sync-test',
-      ],
-    },
+    browser: makeBrowserConfig(),
   },
 }));
