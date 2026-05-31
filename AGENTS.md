@@ -74,7 +74,8 @@ Place new code in the correct bucket:
   and test-helper modules under `src/testing/` or named `*.testing.ts`
   may use `as unknown as X` for partial framework stubs (`HttpRequest`,
   `Router`, `SwUpdate`, `MatSnackBarRef`, etc.) -- prefer
-  `jasmine.SpyObj<T>` or `Partial<T>` intermediaries when feasible.
+  vitest's `Mocked<T>` / `MockedObject<T>` or `Partial<T>` intermediaries
+  when feasible.
 - Production code must have **zero** `as any`. The single test-file
   occurrence is grandfathered; do not add more.
 - Test-only seams on production classes use the `__<verb>ForTesting`
@@ -507,10 +508,13 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
 ## 5. Testing
 
 - **Always add/update tests** for logic changes. No test = not done.
-- Frontend: **Karma + Jasmine** (configured via `karma.conf.js` with a
-  `ChromeHeadlessCI` launcher for GitHub Actions). Run with `npm test`
-  locally and `npm run test:ci` in CI (adds `--code-coverage`). Co-locate
-  specs as `*.spec.ts` alongside the unit under test.
+- Frontend: **Vitest in browser mode** (configured via `vitest.config.mts`
+  with a ChromeHeadless launcher backed by Playwright). Run with
+  `npm test` locally (single-run) or `npm run test:watch` for iteration;
+  `npm run test:ci` adds `--coverage` for CI. Co-locate specs as
+  `*.test.ts` alongside the unit under test. (The perf bench
+  `npm run perf:l2` still uses Karma+Jasmine via `karma.perf.conf.js`
+  pending a separate migration; see `docs/perf.md`.)
 - Functions: Jest with mocked Cosmos / Blob clients.
 - Test names describe behavior: `it('returns 404 when blob slug is unknown')`.
 - Run the full lint + test + build suite before declaring completion (see §7).
@@ -519,7 +523,7 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
 
 After each test job, CI uploads the suite's JUnit XML to Mergify CI Insights
 via `mergifyio/gha-mergify-ci@v17`. Wired suites: **api unit**, **api
-integration**, **web unit** (Karma), **e2e** (Playwright). Dashboards live
+integration**, **web unit** (Vitest), **e2e** (Playwright). Dashboards live
 at `https://dashboard.mergify.com/ci-insights/jobs`. JUnit artifacts and
 `dorny/test-reporter` PR check-runs are unchanged and remain the canonical
 in-repo signal; Mergify is an additive cross-PR view for flake and
@@ -553,9 +557,10 @@ For incremental work, prefer the fast inner loop over the full
 Definition of Done cycle (§7) on every iteration:
 
 - **`npm run verify:fast`** runs `lint` + `test:scripts` (Node-built-in
-  unit tests for `scripts/*.mjs`) + `ng test` in one shot,
-  **without** the production build or i18n extraction. Use this as
-  the default check during iteration. **Smoke e2e** (`npm run test:e2e`)
+  unit tests for `scripts/*.mjs`) + `npm run build:info` + `vitest run`
+  in one shot, **without** the production build or i18n extraction.
+  Use this as the default check during iteration. **Smoke e2e**
+  (`npm run test:e2e`)
   is intentionally NOT part of `verify:fast` - it builds a production
   bundle and starts a real browser, which takes much longer than the
   fast inner loop. Run e2e only when you've changed code under `e2e/`,
@@ -565,12 +570,16 @@ Definition of Done cycle (§7) on every iteration:
   `verify:fast` - they require a real Cosmos DB account (`COSMOS_CI_*`
   env vars) and are CI-only by default. Run locally only when you've
   changed code under `api/integration/` or `api/src/shared/blobs.ts`.
-- For focused iteration, pass `--include` through to `ng test`:
+- For focused iteration, run `vitest` directly against the file you
+  care about:
   ```
-  npm run verify:fast -- --include='**/extract-json-banner/**'
+  npx vitest run src/app/path/to/extract-json-banner/banner.test.ts
+  npx vitest run --reporter=verbose src/app/features/home/
   ```
-  Runs only specs matching the glob - seconds instead of a full
-  ~1500-test suite.
+  Vitest accepts positional path arguments (file or directory) so you
+  don't need a glob. Note: Vitest's `--include` *replaces* the config
+  include rather than intersecting with it, so positional paths are
+  the preferred way to narrow the run.
 - **Skip `npm run extract-i18n`** unless you added, removed, or
   renamed user-visible strings (`i18n=` attributes or `$localize`
   tagged templates). It does a full Angular build (~20s) and is
@@ -588,12 +597,12 @@ in background terminals so each save checks incrementally:
 
 ```
 npx tsc --noEmit -p tsconfig.app.json --watch
-ng test --watch --browsers=ChromeHeadless --include='**/<focus>/**'
+npx vitest src/app/<focus>/
 ```
 
 After the initial cold start, every save reports type errors and
 re-runs affected tests in seconds. Stop the watchers before running
-the full DoD cycle to avoid Karma port collisions.
+the full DoD cycle to free up CPU / RAM.
 
 **Align local with CI before non-trivial work.** Run `npm ci` (root)
 and `npm --prefix api ci` once at the start of a meaningful change
