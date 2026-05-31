@@ -1,10 +1,11 @@
 // knip configuration. See https://knip.dev/reference/configuration.
 //
-// This config enables ONLY unused-dependency detection (rules.dependencies +
-// .devDependencies + .unlisted + .binaries + .unresolved). The unused-
-// exports, unused-files, and unused-types checks are disabled in this PR
-// because their false-positive surfaces are different and need their own
-// allowlist-tuning passes; follow-up issues track enabling each.
+// This config enables ONLY unused-dependency detection (rules.dependencies
+// + .devDependencies + .optionalPeerDependencies + .unlisted + .binaries
+// + .unresolved). The unused-exports, unused-files, and unused-types
+// checks are disabled in this PR because their false-positive surfaces
+// are different and need their own allowlist-tuning passes; follow-up
+// issues track enabling each.
 //
 // Run via `npm run lint:unused-deps` (also runs as part of the compound
 // `npm run lint`).
