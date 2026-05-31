@@ -235,15 +235,25 @@ $wtArgs = @(
 
 if (-not $SkipTests) {
   # Tests tab: vitest --watch on top, jest --watch in a split pane below.
-  # vitest is a local devDep, so route the call through `npx` to pick up
-  # node_modules/.bin/vitest. (`npm start` / `npm run watch` already get
-  # this for free because npm-script PATH includes node_modules/.bin;
-  # bare `vitest` in a fresh wt tab does not.)
+  #
+  # The root call goes through `npm run test:watch` (not bare `vitest` or
+  # `npx vitest`) for two reasons:
+  #   1. npm-script PATH includes node_modules/.bin, so vitest resolves the
+  #      same way `npx` would have -- no regression on the original PATH
+  #      concern that drove `npx`.
+  #   2. The `pretest:watch` npm hook runs `scripts/write-build-info.mjs`
+  #      first, keeping `src/generated/build-info.ts` fresh before vitest
+  #      starts. The tab will print a few lines of build-info output before
+  #      vitest's watch UI takes over -- that is intentional.
+  #
+  # The api split-pane stays on `npx jest --watch` because api/ has no
+  # `test:watch` script (and no pretest:watch hook); routing through `npm
+  # run` would add no value.
   $wtArgs += @(
     ';'
     'new-tab',    '--title', 'tests', '-d', $repoRoot,
       'pwsh', '-NoExit', '-Command',
-      'npx vitest'
+      'npm run test:watch'
     ';'
     'split-pane', '-H', '-d', $apiDir,
       'pwsh', '-NoExit', '-Command', 'npx jest --watch'
