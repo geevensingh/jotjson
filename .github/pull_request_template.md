@@ -33,7 +33,7 @@ AGENTS.md for the full guidelines.
 - [ ] Follows the conventions in [`AGENTS.md`](../AGENTS.md)
 - [ ] Aligned with [`DESIGN_SPEC.md`](../DESIGN_SPEC.md) (spec updated if
       behavior or architecture changed)
-- [ ] Unit tests added or updated (`*.spec.ts`)
+- [ ] Unit tests added or updated (`*.test.ts`)
 - [ ] `npm run lint:all` passes (root lint + api workspace lint)
 - [ ] `npm test` passes (frontend and `api/`)
 - [ ] `npm run build` / `ng build --configuration production` succeeds
