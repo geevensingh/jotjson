@@ -4,11 +4,15 @@
 
 .DESCRIPTION
   Finds processes listening on the well-known dev ports (4200 web,
-  7071 api, 9876 karma), then walks each process tree and kills it
+  7071 api), then walks each process tree and kills it
   along with everything below it. Use this when:
     - The dev.ps1 supervisor crashed.
     - You closed the wrong window first and ports are stuck.
     - Anything else that left zombies behind.
+
+  (The vitest browser-mode dev server binds to an ephemeral port that
+  Vitest does not surface to a stable config knob today; we don't try
+  to kill it from here. Close the wt tab instead.)
 
   Idempotent: if no dev ports are bound, prints "Nothing to stop"
   and exits 0.
@@ -18,7 +22,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$ports = 4200, 7071, 9876
+$ports = 4200, 7071
 
 function Get-DescendantPids([int]$rootPid) {
   $all = Get-CimInstance Win32_Process |

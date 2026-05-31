@@ -88,3 +88,12 @@ Thumbs.db
 /perf-baselines/*.json
 !/perf-baselines/win32-x64-v1-reference.json
 
+
+# Vitest browser-mode attachments
+.vitest-attachments/
+
+# Vitest browser-mode screenshots (@vitest/browser auto-captures into
+# __screenshots__ folders alongside specs). No visual-regression
+# baselines are committed for this project, so all such captures are
+# ephemeral debug artifacts.
+__screenshots__/
