@@ -4,9 +4,10 @@
 // files and test helpers.
 //
 // Why this exists (separate from check-spec-patterns.mjs):
-//   `check-spec-patterns.mjs` scans `*.spec.ts` for fragile testing
-//   patterns. This script scans the rest of the production source for
-//   patterns that defeat type-safety guarantees we want to keep.
+//   `check-spec-patterns.mjs` scans `*.test.ts` (and lingering
+//   `*.spec.ts`) for fragile testing patterns. This script scans the
+//   rest of the production source for patterns that defeat type-safety
+//   guarantees we want to keep.
 //
 // Current rules:
 //   1. `as TelemetryMessageId`
@@ -66,8 +67,8 @@
 //   - frontend production: `src/**/*.ts`
 //   - backend production:  `api/src/**/*.ts`
 // Exclusions:
-//   - any `*.spec.ts` (Karma frontend specs)
-//   - any `*.test.ts` (Jest backend tests)
+//   - any `*.spec.ts` or `*.test.ts` (frontend Vitest unit tests
+//     + backend Jest unit tests)
 //   - any path containing `/testing/` or ending in `.testing.ts`
 //
 // Adding new rules:

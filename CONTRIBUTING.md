@@ -41,7 +41,7 @@ frameworks, or cloud services without prior approval.
    `*.md` files; to skip the hook for a specific commit (rarely needed), use
    `git commit --no-verify`.
 4. **Code** following the conventions in `AGENTS.md` (strict TS, `OnPush`,
-   `inject()`, Signals, kebab-case filenames, co-located `*.spec.ts`).
+   `inject()`, Signals, kebab-case filenames, co-located `*.test.ts`).
 5. **Test** - add or update tests for any logic change. No test = not done.
 6. **Validate** locally:
    - `npm run lint:all` (root lint + api workspace lint - canonical local gate)
