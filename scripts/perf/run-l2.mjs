@@ -1,9 +1,16 @@
-// Runs `ng test --configuration perf`, captures `@@PERF_L2@@<json>@@END@@`
-// sentinels emitted by `*.perf.ts` specs from stdout, and writes a
+// Runs the L2 perf-bench harness (Karma by default, or Vitest with
+// `--vitest`), captures `@@PERF_L2@@<json>@@END@@` sentinels emitted
+// by `*.perf.ts` specs from stdout AND stderr, and writes a
 // `perf-results/<utc>/layer-2.jsonl`.
 //
 // Invoked as:
-//   npm run perf:l2
+//   npm run perf:l2          (Karma; `ng test --configuration perf`)
+//   npm run perf:l2:vitest   (Vitest; `vitest run --config vitest.perf.config.mts`)
+//
+// Both stdout and stderr are scanned for sentinels because Vitest
+// browser mode occasionally interleaves provider/dev-server output
+// across the two streams. The Karma path historically only emitted
+// to stdout, but scanning both is safe.
 
 import { execSync, spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -47,7 +54,31 @@ export function extractRows(text) {
   return rows;
 }
 
+/**
+ * Resolve the spawn command + args for the requested harness.
+ *
+ * @param {{ vitest: boolean }} opts
+ * @returns {{ runnerLabel: string, cmd: string, args: string[] }}
+ */
+export function resolveRunner(opts) {
+  const isWin = process.platform === 'win32';
+  const cmd = isWin ? 'npx.cmd' : 'npx';
+  if (opts.vitest) {
+    return {
+      runnerLabel: 'vitest',
+      cmd,
+      args: ['vitest', 'run', '--config', 'vitest.perf.config.mts'],
+    };
+  }
+  return {
+    runnerLabel: 'ng test',
+    cmd,
+    args: ['ng', 'test', '--configuration', 'perf'],
+  };
+}
+
 async function main() {
+  const useVitest = process.argv.includes('--vitest');
   const machineLabel = process.env['PERF_MACHINE'] ?? suggestMachineLabel();
   const sha = codeSha();
   const capturedAtUtc = new Date().toISOString();
@@ -58,27 +89,32 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   const outFile = join(outDir, 'layer-2.jsonl');
 
+  const { runnerLabel, cmd, args } = resolveRunner({ vitest: useVitest });
   const isWin = process.platform === 'win32';
-  const cmd = isWin ? 'npx.cmd' : 'npx';
-  const args = ['ng', 'test', '--configuration', 'perf'];
 
   const child = spawn(cmd, args, { cwd: REPO_ROOT, shell: isWin });
-  let buffered = '';
+  let bufferedStdout = '';
+  let bufferedStderr = '';
 
   child.stdout.on('data', (chunk) => {
     const text = chunk.toString();
-    buffered += text;
+    bufferedStdout += text;
     process.stdout.write(text);
   });
   child.stderr.on('data', (chunk) => {
-    process.stderr.write(chunk);
+    const text = chunk.toString();
+    bufferedStderr += text;
+    process.stderr.write(text);
   });
 
   const exitCode = await /** @type {Promise<number>} */ (
     new Promise((resolve) => child.on('close', (code) => resolve(code ?? 1)))
   );
 
-  const rows = extractRows(buffered);
+  // Scan stdout and stderr independently to avoid splicing sentinels
+  // across stream boundaries (a sentinel split between streams was
+  // already broken in the source spec; we cannot recover from that).
+  const rows = [...extractRows(bufferedStdout), ...extractRows(bufferedStderr)];
   const lines = rows.map((row) =>
     JSON.stringify({ machineLabel, codeSha: sha, capturedAtUtc, ...row }),
   );
@@ -86,7 +122,7 @@ async function main() {
   process.stdout.write(`perf:l2  wrote ${lines.length} rows to ${outFile}\n`);
 
   if (exitCode !== 0) {
-    process.stderr.write(`perf:l2  ng test exited ${exitCode}\n`);
+    process.stderr.write(`perf:l2  ${runnerLabel} exited ${exitCode}\n`);
     process.exit(exitCode);
   }
   if (rows.length === 0) {
