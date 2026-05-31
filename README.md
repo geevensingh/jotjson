@@ -22,7 +22,7 @@ architecture spec.
 | Auth       | MSAL Angular + Microsoft Entra External ID                  |
 | Hosting    | Azure Static Web Apps with managed Functions                |
 | IaC        | Bicep (`/infra`)                                            |
-| Testing    | Karma + Jasmine (frontend); Jest (API)                      |
+| Testing    | Vitest browser mode + Playwright Chromium (frontend); Jest (API) |
 | CI/CD      | GitHub Actions (build, test, Bicep validate, SWA deploy)    |
 
 Node **24** is required locally and in CI (pinned via `.nvmrc`, engines, and
@@ -39,11 +39,12 @@ infra/             Bicep templates
 public/            Static assets copied as-is at build
 scripts/           Repo tooling (check-ascii.mjs, generate-icons.mjs, ...)
 .github/           Workflows (ci.yml, cd.yml, infra.yml) + dependabot.yml
-.vscode/           Launch + tasks configs (ng serve / ng test in Chrome)
+.vscode/           Launch + tasks configs (ng serve in Chrome)
 DESIGN_SPEC.md     Product + architecture source of truth
 AGENTS.md          Coding/AI-agent instructions (linted against by humans too)
 CONTRIBUTING.md    Contributor guide
-karma.conf.js      Karma config with ChromeHeadlessCI launcher
+vitest.config.mts  Vitest config (browser mode, ChromeHeadless via Playwright)
+karma.perf.conf.js Karma config used by the perf bench (perf:l2) only
 proxy.conf.json    ng serve proxy that forwards /api/* to func start on :7071
 ```
 
@@ -90,10 +91,10 @@ running to exercise the full stack.
 
 `scripts/dev.ps1` checks prereqs, runs `npm install` if needed, verifies
 your env files exist, and opens a Windows Terminal with three tabs:
-`web` (ng serve), `api` (func start), and `tests` (ng test + jest
+`web` (ng serve), `api` (func start), and `tests` (vitest + jest
 --watch split pane). Use `-SkipTests` to skip the tests tab.
 
-If a previous run left zombies on dev ports 4200, 7071, or 9876, run
+If a previous run left zombies on dev ports 4200 or 7071, run
 `scripts/dev-stop.ps1` to free them. `scripts/dev.ps1` also pre-flight checks
 those ports on launch and tells you to run `dev-stop.ps1` first if any are
 already in use.
@@ -125,14 +126,16 @@ clients must use `X-Jotjson-Authorization`). See
 
 ### Debugging in VS Code
 
-`.vscode/launch.json` includes two configs:
+`.vscode/launch.json` includes one config:
 
 - **`ng serve`** - launches Chrome against `http://localhost:4200/` and runs
   `npm: start` as a preLaunchTask. Set breakpoints in `.ts` files and they
   bind through the Angular source map.
-- **`ng test`** - launches the Karma debug runner at
-  `http://localhost:9876/debug.html` with `npm: test` as preLaunchTask so you
-  can step through spec execution.
+
+To debug Vitest specs, install the
+[Vitest VS Code extension](https://marketplace.visualstudio.com/items?itemName=vitest.explorer)
+(or run `npm run test:watch` in a terminal). The extension reads
+`vitest.config.mts` directly; no extra launch config is needed.
 
 For the Functions API, run `cd api; npm start` in a terminal and attach
 VS Code's Node debugger to the spawned `func` process (Attach to Node
@@ -147,13 +150,14 @@ npm run build          # production build to dist/jotjson
 npm run lint           # tsc + ASCII + spec/prod patterns + prettier
 npm run lint:all       # root lint + api workspace lint (CI-equivalent)
 npm run lint:ascii     # fail if non-allowlisted non-ASCII sneaks in
-npm test               # Karma + Jasmine, ChromeHeadless, single run
+npm test               # Vitest (browser mode, ChromeHeadless via Playwright), single run
 npm run test:ci        # Same, with coverage reporter (CI profile)
+npm run test:watch     # Vitest in watch mode
 ```
 
-Tests are co-located as `*.spec.ts`. Run a single spec with
-`npx ng test --include=src/app/path/to/file.spec.ts` or focus interactively
-with Jasmine's `fdescribe` / `fit`.
+Tests are co-located as `*.test.ts`. Run a single file with
+`npx vitest run src/app/path/to/file.test.ts` or focus interactively
+with Vitest's `describe.only` / `it.only`.
 
 Coverage reports land in `coverage/jotjson/` (`index.html` for browse,
 `lcov.info` for tooling).
