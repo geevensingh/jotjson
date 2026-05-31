@@ -64,6 +64,17 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install api/ dependencies (cross-workspace knip)
+        # The web job's npm ci installs only the root workspace. knip runs
+        # from the root and analyzes both root + api/ per knip.jsonc, so it
+        # needs api/node_modules present to resolve binaries that
+        # api/devDependencies provides (e.g. `jest` referenced by api's
+        # `"test": "jest"` script). Installing api/ at the top of the job
+        # mirrors the local `lint:all` flow and keeps install-vs-lint
+        # failure attribution unambiguous in the Actions UI: an npm ci
+        # failure here is clearly an "install" failure, not a "knip
+        # finding" failure misattributed to `lint-unused-deps`.
+        run: npm --prefix api ci
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
       - name: Generate build-info.ts
@@ -126,24 +137,15 @@ jobs:
         id: lint-sw-shape
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:sw-shape
-      - name: Install api/ dependencies for cross-workspace knip
-        # knip runs from the root and analyzes both root + api/ workspaces
-        # in one pass per knip.jsonc. The web job only `npm ci`s the root
-        # by default, which leaves api/node_modules empty -- knip then
-        # cannot resolve binaries that api/devDependencies provides (e.g.
-        # `jest` invoked by api/package.json `"test": "jest"`) and flags
-        # them as "unlisted binary". Installing api/ here mirrors the
-        # local `lint:all` flow (`npm ci` in both workspaces) and is the
-        # minimal-change fix vs splitting knip into per-workspace jobs.
-        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
-        run: npm --prefix api ci
       - name: Lint - Unused dependencies
         # knip-driven detection of orphan npm deps across the root SPA +
         # api/ workspaces. Scoped to deps only via knip.jsonc rule
         # severities (unused-exports and unused-files are configured at
         # "off" and tracked as follow-ups #425 and #426). Allowlist
         # entries in knip.jsonc require a rationale comment naming the
-        # specific mechanism by which the dep is used.
+        # specific mechanism by which the dep is used. The api/ workspace
+        # is `npm ci`d at the top of this job so knip can resolve
+        # cross-workspace binaries.
         id: lint-unused-deps
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:unused-deps
@@ -178,11 +180,12 @@ jobs:
         # because failure() is job-wide and would fire for every later
         # gate once any earlier gate failed.
         #
-        # Covers the 9 lint gates plus the Script tests step, which sits
-        # in this same fast-check phase of the web job. Without wiring
-        # test-scripts in here, a Script tests failure would still let
-        # this summary print "all gates passed" because of the custom
-        # `if:` condition above.
+        # Covers every lint gate above plus the Script tests and Perf
+        # script tests phases. When a new gate is added, append its
+        # outcome to the env block below and its emit row to the run
+        # script. The trailing "All N gates passed" line still uses a
+        # hand-maintained literal pending issue #429 (replace with a
+        # derived count) -- bump the literal too.
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         env:
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}

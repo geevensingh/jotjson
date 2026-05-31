@@ -16,7 +16,7 @@
 // can't name a specific mechanism, the dep is probably actually unused.
 // Comments may span multiple lines; see the existing entries for examples.
 {
-  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "$schema": "https://unpkg.com/knip@6.14.2/schema-jsonc.json",
   "rules": {
     "dependencies": "error",
     "devDependencies": "error",
