@@ -1,16 +1,15 @@
 /// <reference types="vitest" />
 //
-// Vitest configuration for JotJSON L2 perf benches (issue #417:
-// retire `karma.perf.conf.js`). Picks up `src/**/*.perf.ts`, runs
+// Vitest configuration for the JotJSON L2 perf bench
+// (`npm run perf:l2`). Picks up `src/**/*.perf.ts`, runs
 // under Chromium with `--js-flags=--expose-gc`, and writes
 // `@@PERF_L2@@<json>@@END@@` sentinel rows to stdout for
 // `scripts/perf/run-l2.mjs` to parse.
 //
 // Deltas vs `vitest.config.mts`:
 //   - include perf files, exclude unit files
-//   - testTimeout: 15 minutes (matches the previous Karma perf
-//     `timeoutInterval` for 1M-node initial-render and opt-in 100K
-//     iterations)
+//   - testTimeout: 15 minutes (sized for the default 10K + 100K
+//     tiers; the opt-in 1M tier may need more headroom -- see #437)
 //   - browser launch args add `--js-flags=--expose-gc` so the spec's
 //     `ensureGc()` precondition holds
 //   - browser `fileParallelism: false` so benches are not racing

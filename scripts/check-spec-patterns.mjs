@@ -3,7 +3,7 @@
 // files (`*.test.ts` under `src/`; new `*.spec.ts` files are also
 // scanned so the rule keeps flagging regressions during the Karma ->
 // Vitest cutover (issue #47) tail. Playwright e2e specs (`e2e/**`)
-// and Karma perf benches (`perf/browser/**`) are out of scope).
+// and perf benches (`perf/browser/**`) are out of scope).
 //
 // Why this exists:
 //
@@ -196,7 +196,7 @@ export function listSpecFiles() {
   //    `.spec.ts` (stale Karma+Jasmine convention, retained as a
   //    forward guard so the lint still flags a regression if anyone
   //    introduces a new `.spec.ts` under `src/`).
-  //  - Excludes Playwright e2e (`e2e/**`) and Karma perf benches
+  //  - Excludes Playwright e2e (`e2e/**`) and perf benches
   //    (`perf/**`): those are not vitest unit tests.
   const out = execFileSync(
     'git',
