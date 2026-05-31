@@ -1,7 +1,8 @@
-// Layer-2 perf bench: in-browser, in-Karma render benches for
-// `JsonTreeComponent`. NOT a `.spec.ts` -- excluded from `verify:fast`
-// via `tsconfig.spec.json`. Picked up by `tsconfig.perf-l2.json` and
-// `karma.perf.conf.js`.
+// Layer-2 perf bench: in-browser render benches for
+// `JsonTreeComponent`. NOT a `.test.ts` -- excluded from
+// `verify:fast` / `npm test` via `tsconfig.spec.json` and
+// `vitest.config.mts`. Picked up by `vitest.perf.config.mts` and
+// driven by `scripts/perf/run-l2.mjs`.
 //
 // Invoked as:
 //   npm run perf:l2
@@ -57,8 +58,8 @@ const TIMED_ITERS = 5;
 function defaultFixtures(): FixtureSpec[] {
   // Size gating (post-Phase 2 virtualization; issue #95):
   //   - 10K + 100K are enabled by default. Virtualization made 100K
-  //     viable inside Karma; each iter is now bounded by the viewport
-  //     window, not the full node count.
+  //     viable; each iter is now bounded by the viewport window, not
+  //     the full node count.
   //   - 1M is opt-in via `window.__perfL2Force1M = true` or `?force1m=1`.
   //     Each iter is many minutes (build/expand traversal dominates);
   //     reserve for deliberate diagnostic runs.
@@ -66,10 +67,11 @@ function defaultFixtures(): FixtureSpec[] {
   //     is opt-in via `window.__perfL2Force5MB = true` or
   //     `?force5mb=1`. Per skeptic #4: at default settings a 380K-
   //     node fixture extrapolated linearly from 100K's ~50 s/iter
-  //     risks Karma's browserNoActivityTimeout watchdog. The flag
-  //     mirrors the existing `?force1m=1` pattern.
+  //     risks the per-test timeout. The flag mirrors the existing
+  //     `?force1m=1` pattern.
   // Defaults intentionally cap so unattended `npm run perf:l2`
-  // stays well under the Karma browserNoActivityTimeout watchdog.
+  // stays well under the per-test timeout (15 min in
+  // `vitest.perf.config.mts`).
   type ForceWindow = Window & {
     __perfL2Force1M?: boolean;
     __perfL2Force5MB?: boolean;
@@ -107,7 +109,8 @@ function ensureGc(): () => void {
   const gc = (window as unknown as { gc?: () => void }).gc;
   if (typeof gc !== 'function') {
     throw new Error(
-      'L2 perf spec: window.gc is undefined. Karma launcher must pass --js-flags=--expose-gc.',
+      'L2 perf spec: window.gc is undefined. Vitest must launch Chromium with --js-flags=--expose-gc ' +
+        '(see `vitest.perf.config.mts` -> `makeBrowserConfig`).',
     );
   }
   return gc;
@@ -228,7 +231,7 @@ describe('JsonTreeComponent perf (L2)', () => {
   //
   // wide-aoo @ 10K previously needed a force-flag because `expandAll`
   // materialized all siblings synchronously on the non-virtualized
-  // mat-tree and tripped Karma's Jasmine timeout (#219).
+  // mat-tree and tripped the per-test timeout (#219).
   // Virtualization replaced the DOM-materialization cost with a single
   // `setExpandedBulk` Set write, so the gate is no longer needed.
   //
