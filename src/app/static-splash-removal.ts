@@ -10,9 +10,9 @@
  * identical `.jot-splash` markup).
  *
  * Extracted into its own module so the double-rAF behavior can be tested
- * in isolation, without a `TestBed` fixture in the same Karma session
- * queuing cross-spec rAFs into a controlled rAF shim. See #170 and
- * `static-splash-removal.spec.ts` for the bleed-isolation rationale.
+ * in isolation, without a `TestBed` fixture in the same test-runner
+ * session queuing cross-spec rAFs into a controlled rAF shim. See #170
+ * and `static-splash-removal.test.ts` for the bleed-isolation rationale.
  *
  * The module uses the `__<verb>ForTesting` seam convention documented in
  * `AGENTS.md` §4 so callers (AppComponent) can be unit-tested via a spy
