@@ -5,8 +5,8 @@ import { EnvLabelService } from '../app/core/env/env-label.service';
 /**
  * Spec-side stub for `EnvLabelService` that lets tests pick a fixed
  * env label (and, for preview, an optional PR number) and exercise
- * the post-bootstrap prefix logic without depending on the Karma
- * server's actual hostname.
+ * the post-bootstrap prefix logic without depending on the test
+ * runner's actual hostname.
  *
  * Defaults to `'prod'` / no PR number, which makes `withPrefix(t)`
  * an identity function -- the safe default for the vast majority of

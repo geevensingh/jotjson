@@ -3,7 +3,10 @@
  * Differs from `tsconfig.spec.json` ONLY by include/exclude:
  *   - INCLUDES `src/`*`*`/`*.perf.ts` (the perf-bench files).
  *   - INCLUDES `perf/fixtures/`*`*`/`*.ts` (shared generator helpers).
- *   - EXCLUDES `src/`*`*`/`*.spec.ts` (the regular unit specs).
+ *   - EXCLUDES `src/`*`*`/`*.test.ts` (the regular vitest unit tests;
+ *     the include glob above is narrow enough on its own, but the
+ *     explicit exclude is kept as belt-and-suspenders against a
+ *     future include broadening).
  *
  * Used by `ng test --configuration perf` (see angular.json -> test ->
  * configurations.perf), driven by `karma.perf.conf.js`.
@@ -18,5 +21,5 @@
     "types": ["jasmine", "@angular/localize"]
   },
   "include": ["src/**/*.perf.ts", "src/**/*.d.ts", "perf/fixtures/**/*.ts"],
-  "exclude": ["src/**/*.spec.ts"]
+  "exclude": ["src/**/*.test.ts"]
 }
