@@ -1,0 +1,98 @@
+// knip configuration. See https://knip.dev/reference/configuration.
+//
+// This config enables ONLY unused-dependency detection (rules.dependencies
+// + .devDependencies + .optionalPeerDependencies + .unlisted + .binaries
+// + .unresolved). The unused-exports, unused-files, and unused-types
+// checks are disabled in this PR because their false-positive surfaces
+// are different and need their own allowlist-tuning passes; follow-up
+// issues track enabling each.
+//
+// Run via `npm run lint:unused-deps` (also runs as part of the compound
+// `npm run lint`).
+//
+// To add a new entry to `ignoreDependencies` or `ignoreBinaries`, include
+// a rationale comment naming the SPECIFIC mechanism by which the dep is
+// used (e.g. "compiler-injected via importHelpers: true", not the generic
+// "config-referenced"). The specificity is the forcing function -- if you
+// can't name a specific mechanism, the dep is probably actually unused.
+// Comments may span multiple lines; see the existing entries for examples.
+{
+  "$schema": "https://unpkg.com/knip@6.14.2/schema-jsonc.json",
+  "rules": {
+    "dependencies": "error",
+    "devDependencies": "error",
+    "optionalPeerDependencies": "error",
+    "unlisted": "error",
+    "binaries": "error",
+    "unresolved": "error",
+    "exports": "off",
+    "types": "off",
+    "nsExports": "off",
+    "nsTypes": "off",
+    "enumMembers": "off",
+    "duplicates": "off",
+    "files": "off",
+  },
+  "ignoreBinaries": [
+    // Azure Functions Core Tools, installed separately (winget, brew, or
+    // the VS Code Azure Functions extension); invoked by api/package.json
+    // `"start": "func start"`. Not an npm dep.
+    "func",
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/sw.worker.ts",
+        "src/environments/environment.example.ts",
+        "karma.perf.conf.js",
+        "perf/browser/playwright.perf.config.ts",
+        "perf/bench/**/*.bench.ts",
+        "perf/fixtures/**/*.ts",
+        "src/**/*.perf.ts",
+        "e2e/**/*.ts",
+        "scripts/**/*.mjs",
+      ],
+      "project": ["src/**/*.ts", "perf/**/*.ts", "e2e/**/*.ts", "scripts/**/*.mjs"],
+      "ignore": ["dist/**", "dist-perf/**", ".angular/**"],
+      "ignoreDependencies": [
+        // Imported by scripts/generate-icons.mjs at line 25-26, but
+        // deliberately NOT in package.json -- the script docstring (lines
+        // 5-6) invokes it via `npx --yes --package=sharp@0.33.5
+        // --package=png-to-ico@2.1.8 -- node scripts/generate-icons.mjs`
+        // so the heavy native modules are only installed when manually
+        // regenerating icons, not on every npm install.
+        "png-to-ico",
+        "sharp",
+        // Loaded as TypeScript global type definitions via the `types`
+        // array in tsconfig.spec.json and tsconfig.perf-l2.json. knip's
+        // static analysis follows ES imports but not tsconfig `types`
+        // entries, so it cannot see this dependency. Required by the
+        // `lint:tsc-spec` check and the perf-bench tsc pass. Can be
+        // dropped once the Karma+Jasmine perf bench (karma.perf.conf.js)
+        // migrates to Vitest -- tracked in issue #417.
+        "@types/jasmine",
+        // Referenced indirectly by angular.json's `test` target via the
+        // `@angular-devkit/build-angular:karma` builder, which loads
+        // karma-coverage only when `codeCoverage: true` (currently
+        // always `false` in this repo). PR #418 dropped karma-coverage
+        // from package.json devDependencies as part of the Karma->
+        // Vitest migration; the angular.json `test` target survives
+        // only because the perf bench (karma.perf.conf.js) still uses
+        // the karma builder. Reassess once #417 migrates the perf bench
+        // off Karma and the angular.json `test` target can be removed.
+        "karma-coverage",
+      ],
+    },
+    "api": {
+      "entry": [
+        "src/functions/**/*.ts",
+        "src/**/*.test.ts",
+        "integration/**/*.ts",
+        "scripts/**/*.mjs",
+      ],
+      "project": ["src/**/*.ts", "integration/**/*.ts", "scripts/**/*.mjs"],
+      "ignore": ["dist/**"],
+      "ignoreDependencies": [],
+    },
+  },
+}
