@@ -1787,7 +1787,7 @@ ID test tenant.
 | Accessibility smoke | v1 gate (active) | `@axe-core/playwright` invoked from each smoke flow, blocking on `serious` + `critical` impact only; pre-existing violations are allow-listed with dated review-by comments. Backs the WCAG 2.1 AA commitment in the Accessibility section (axe-green is necessary but not sufficient for WCAG-green - keyboard-only nav, screen-reader announcements, and dynamic focus order remain manual concerns). Tracked in issue #66. |
 | Visual regression | post-v1 | Pixel-diff of representative screens against a baseline. Post-v1 unless visual bugs become recurring. Tracked in issue #67. |
 | Perf L1 (Node bench) | local-only (v1) | Isolate `parse()` + `buildTree()` wall time and heap allocation on representative fixtures. Headless Node under `--expose-gc`; per-iteration GC bracketing. Documented in `docs/perf.md`. |
-| Perf L2 (Karma component bench) | local-only (v1) | Isolate Angular change-detection costs around `JsonTreeComponent` against the pure tree-build cost L1 measures. Karma + Chromium; opt-in 100K / 1M tiers. Documented in `docs/perf.md`. |
+| Perf L2 (Vitest browser-mode component bench) | local-only (v1) | Isolate Angular change-detection costs around `JsonTreeComponent` against the pure tree-build cost L1 measures. Vitest browser mode + Playwright Chromium with `--js-flags=--expose-gc`; opt-in 100K / 1M tiers. Documented in `docs/perf.md`. |
 | Perf L3 (Playwright + CDP) | local-only (v1) | End-to-end paste / expand-all / scroll-after-expand wall time + longest-task duration on the real SPA. Chromium DevTools Protocol captures CPU profile + tracing. Documented in `docs/perf.md`. |
 
 What this layer model deliberately does *not* claim:
@@ -1804,8 +1804,8 @@ Layer names above are runner-neutral so this model survives runner migrations
 Static-shape invariants (structural rules that can be answered by parsing a
 file as text or AST) go in `scripts/check-*.mjs` and run at `npm run lint`
 time. Computed-style invariants, dynamic-class invariants, and anything
-that requires the live DOM or Angular change-detection stay in Karma
-`*.spec.ts`. The two layers are belt-and-suspenders: the lint catches
+that requires the live DOM or Angular change-detection stay in
+Vitest browser-mode `*.test.ts`. The two layers are belt-and-suspenders: the lint catches
 regressions in milliseconds without needing a browser; the runtime spec
 catches regressions that only manifest at render time. `.tree-row` Grid
 structural invariants follow this split (see `scripts/check-tree-row-grid.mjs`
