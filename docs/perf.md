@@ -44,7 +44,7 @@ falls back to its own UTC stamp when `PERF_RESULTS_DIR` is unset.
 | Layer | What it measures           | Tooling                                          | Output                                             |
 | ----- | -------------------------- | ------------------------------------------------ | -------------------------------------------------- |
 | 1     | Pure functions (no DOM)    | `node --expose-gc` against compiled `.bench.js`  | `perf-results/<utc>/layer-1.jsonl`                 |
-| 2     | Angular components in DOM  | `ng test --configuration perf` + headless Chrome | `perf-results/<utc>/layer-2.jsonl`                 |
+| 2     | Angular components in DOM  | Vitest browser mode (Playwright Chromium)        | `perf-results/<utc>/layer-2.jsonl`                 |
 | 3     | Full browser, user actions | Playwright + CDP                                 | `perf-results/<utc>/layer-{3.jsonl,traces/*}.json` |
 
 L1 isolates algorithmic perf (parse, build-tree). L2 catches Angular
@@ -296,8 +296,9 @@ under a perf-only Vitest configuration:
 - `tsconfig.perf-l2.json` includes `*.perf.ts` and excludes `*.test.ts`.
 - `vitest.perf.config.mts` launches Playwright Chromium with
   `--js-flags=--expose-gc` so the spec can call `globalThis.gc()`
-  between iterations, and uses a 15-minute `testTimeout` to allow
-  100K / 1M opt-in tiers.
+  between iterations, and uses a 15-minute `testTimeout` sized for
+  the default 10K + 100K tiers (the opt-in 1M tier may exceed it;
+  tracked in #437).
 
 ### L2 scenarios
 
@@ -318,8 +319,8 @@ Default fixture matrix: deep25 + wide-aoo at 10K. Set
 `window.__perfL2Force100K = true` (or `?force100k=1`) to also bench
 at 100K, and `window.__perfL2Force1M = true` (or `?force1m=1`) to add
 1M. Each 100K iter is ~50s; the 1M iter is multiple minutes. Vitest's
-`testTimeout` is set to 15 minutes in `vitest.perf.config.mts` so
-opt-in runs have room.
+`testTimeout` is set to 15 minutes in `vitest.perf.config.mts` --
+sized for the default tiers; a 1M opt-in run may exceed it (#437).
 
 `scroll-after-expand: wide-aoo @ 10k` is additionally gated behind
 `window.__perfL2ForceWideAooScroll = true` (or `?forcewideaooscroll=1`).

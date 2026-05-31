@@ -8,8 +8,8 @@
 //
 // Deltas vs `vitest.config.mts`:
 //   - include perf files, exclude unit files
-//   - testTimeout: 15 minutes (allows 1M-node initial-render
-//     and opt-in 100K iterations)
+//   - testTimeout: 15 minutes (sized for the default 10K + 100K
+//     tiers; the opt-in 1M tier may need more headroom -- see #437)
 //   - browser launch args add `--js-flags=--expose-gc` so the spec's
 //     `ensureGc()` precondition holds
 //   - browser `fileParallelism: false` so benches are not racing
