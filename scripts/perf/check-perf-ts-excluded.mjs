@@ -1,12 +1,13 @@
-// Asserts that no `*.perf.ts` files are included in the Karma test set.
-// Used as a prestep of `perf:l2` so the perf-bench files do not get
-// pulled into `verify:fast` / `npm test` and balloon Karma runtimes.
+// Asserts that no `*.perf.ts` files are included in the Vitest test
+// set. Used as a prestep of `perf:l2` so the perf-bench files do not
+// get pulled into `verify:fast` / `npm test` and either balloon the
+// unit-test runtime or contaminate the vitest config.
 //
 // Implementation: parse `tsconfig.spec.json` for an `exclude` entry
 // matching `src/**/*.perf.ts` (or equivalent). This is empirical: the
-// glob actually appears in the file. We do NOT try to introspect ng
-// test's resolved file set -- that requires booting Angular CLI,
-// which is too expensive for a prestep.
+// glob actually appears in the file. We do NOT try to introspect
+// vitest's resolved file set -- that requires booting vitest, which is
+// too expensive for a prestep.
 //
 // `tsconfig.spec.json` is JSONC (comments + trailing commas), so we
 // parse with `jsonc-parser` rather than `JSON.parse`. Per AGENTS.md s2,
@@ -51,7 +52,7 @@ async function main() {
       `check-perf-ts-excluded FAILED\n` +
         `${tsconfigPath} is missing these "exclude" entries:\n` +
         missing.map((entry) => `  - ${entry}`).join('\n') +
-        '\nAdd them so *.perf.ts files do not run in Karma unit tests.\n',
+        '\nAdd them so *.perf.ts files do not run in Vitest unit tests.\n',
     );
     process.exit(1);
   }
