@@ -28,6 +28,7 @@
     "perf:build": "node scripts/perf/build.mjs",
     "perf:l1": "node scripts/perf/run-bench.mjs",
     "perf:l2": "node scripts/perf/run-l2.mjs",
+    "perf:l2:vitest": "node scripts/perf/run-l2.mjs --vitest",
     "perf:l3": "node scripts/perf/run-l3.mjs",
     "perf:all": "node scripts/perf/run-all.mjs",
     "perf:baseline": "node scripts/perf/baseline.mjs",
