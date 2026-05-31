@@ -96,6 +96,13 @@ jobs:
           echo "::add-matcher::${GITHUB_WORKSPACE}/.github/problem-matchers/tsc.json"
           npm run lint:tsc-spec
           echo "::remove-matcher owner=tsc-jotjson::"
+      - name: Lint - TypeScript (perf L2)
+        id: lint-tsc-perf-l2
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: |
+          echo "::add-matcher::${GITHUB_WORKSPACE}/.github/problem-matchers/tsc.json"
+          npm run lint:tsc-perf-l2
+          echo "::remove-matcher owner=tsc-jotjson::"
       - name: Lint - ASCII allowlist
         id: lint-ascii
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
@@ -190,6 +197,7 @@ jobs:
         env:
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
           OUTCOME_TSC_SPEC: ${{ steps.lint-tsc-spec.outcome }}
+          OUTCOME_TSC_PERF_L2: ${{ steps.lint-tsc-perf-l2.outcome }}
           OUTCOME_ASCII: ${{ steps.lint-ascii.outcome }}
           OUTCOME_SPEC: ${{ steps.lint-spec-patterns.outcome }}
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
@@ -221,6 +229,7 @@ jobs:
             }
             emit "TypeScript (tsc)"        "$OUTCOME_TSC"          "fix the type error reported above"
             emit "TypeScript specs (tsc)"  "$OUTCOME_TSC_SPEC"     "fix the type error reported above"
+            emit "TypeScript perf L2 (tsc)" "$OUTCOME_TSC_PERF_L2" "fix the type error reported above (tsconfig.perf-l2.json)"
             emit "ASCII allowlist"         "$OUTCOME_ASCII"        "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
             emit "Spec patterns"           "$OUTCOME_SPEC"         "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
             emit "Production patterns"     "$OUTCOME_PROD"         "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
