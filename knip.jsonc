@@ -44,7 +44,6 @@
       "entry": [
         "src/sw.worker.ts",
         "src/environments/environment.example.ts",
-        "karma.perf.conf.js",
         "perf/browser/playwright.perf.config.ts",
         "perf/bench/**/*.bench.ts",
         "perf/fixtures/**/*.ts",
@@ -63,24 +62,6 @@
         // regenerating icons, not on every npm install.
         "png-to-ico",
         "sharp",
-        // Loaded as TypeScript global type definitions via the `types`
-        // array in tsconfig.spec.json and tsconfig.perf-l2.json. knip's
-        // static analysis follows ES imports but not tsconfig `types`
-        // entries, so it cannot see this dependency. Required by the
-        // `lint:tsc-spec` check and the perf-bench tsc pass. Can be
-        // dropped once the Karma+Jasmine perf bench (karma.perf.conf.js)
-        // migrates to Vitest -- tracked in issue #417.
-        "@types/jasmine",
-        // Referenced indirectly by angular.json's `test` target via the
-        // `@angular-devkit/build-angular:karma` builder, which loads
-        // karma-coverage only when `codeCoverage: true` (currently
-        // always `false` in this repo). PR #418 dropped karma-coverage
-        // from package.json devDependencies as part of the Karma->
-        // Vitest migration; the angular.json `test` target survives
-        // only because the perf bench (karma.perf.conf.js) still uses
-        // the karma builder. Reassess once #417 migrates the perf bench
-        // off Karma and the angular.json `test` target can be removed.
-        "karma-coverage",
       ],
     },
     "api": {

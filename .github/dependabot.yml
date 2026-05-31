@@ -29,28 +29,8 @@ updates:
     # compiling against the newer @types/node is intentional. Block major
     # bumps for @types/node so we don't jump ahead of our local Node 24.
     # Revisit when we move to the next LTS (or SWA raises the ceiling).
-    #
-    # Karma + Jasmine surface is frozen on the perf-suite-only Karma
-    # config (karma.perf.conf.js) per the issue #47 partial-cutover
-    # decision. We can't fully test major bumps for these packages in CI
-    # without running the perf bench (which is local-only), so block
-    # majors until the perf-suite is migrated off Karma. See issue #417.
     ignore:
       - dependency-name: '@types/node'
-        update-types: ['version-update:semver-major']
-      - dependency-name: 'karma'
-        update-types: ['version-update:semver-major']
-      - dependency-name: 'karma-chrome-launcher'
-        update-types: ['version-update:semver-major']
-      - dependency-name: 'karma-jasmine'
-        update-types: ['version-update:semver-major']
-      - dependency-name: 'karma-jasmine-html-reporter'
-        update-types: ['version-update:semver-major']
-      - dependency-name: 'karma-spec-reporter'
-        update-types: ['version-update:semver-major']
-      - dependency-name: 'jasmine-core'
-        update-types: ['version-update:semver-major']
-      - dependency-name: '@types/jasmine'
         update-types: ['version-update:semver-major']
     groups:
       # Angular runtime + dev tooling are peer-locked: @angular/compiler-cli
