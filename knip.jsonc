@@ -10,10 +10,11 @@
 // `npm run lint`).
 //
 // To add a new entry to `ignoreDependencies` or `ignoreBinaries`, include
-// a one-line comment naming the SPECIFIC mechanism by which the dep is
+// a rationale comment naming the SPECIFIC mechanism by which the dep is
 // used (e.g. "compiler-injected via importHelpers: true", not the generic
 // "config-referenced"). The specificity is the forcing function -- if you
 // can't name a specific mechanism, the dep is probably actually unused.
+// Comments may span multiple lines; see the existing entries for examples.
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   "rules": {

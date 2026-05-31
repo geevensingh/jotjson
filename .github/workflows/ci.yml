@@ -126,14 +126,24 @@ jobs:
         id: lint-sw-shape
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:sw-shape
+      - name: Install api/ dependencies for cross-workspace knip
+        # knip runs from the root and analyzes both root + api/ workspaces
+        # in one pass per knip.jsonc. The web job only `npm ci`s the root
+        # by default, which leaves api/node_modules empty -- knip then
+        # cannot resolve binaries that api/devDependencies provides (e.g.
+        # `jest` invoked by api/package.json `"test": "jest"`) and flags
+        # them as "unlisted binary". Installing api/ here mirrors the
+        # local `lint:all` flow (`npm ci` in both workspaces) and is the
+        # minimal-change fix vs splitting knip into per-workspace jobs.
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: npm --prefix api ci
       - name: Lint - Unused dependencies
-        # Issue (TBD on land) -- knip-driven detection of orphan npm
-        # deps across the root SPA + api/ workspaces. Scoped to deps
-        # only via knip.jsonc rule severities (unused-exports and
-        # unused-files are configured at "off" and tracked as
-        # follow-ups). Allowlist entries in knip.jsonc require a
-        # specific (not generic) one-line rationale comment naming
-        # the mechanism by which the dep is used.
+        # knip-driven detection of orphan npm deps across the root SPA +
+        # api/ workspaces. Scoped to deps only via knip.jsonc rule
+        # severities (unused-exports and unused-files are configured at
+        # "off" and tracked as follow-ups #425 and #426). Allowlist
+        # entries in knip.jsonc require a rationale comment naming the
+        # specific mechanism by which the dep is used.
         id: lint-unused-deps
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:unused-deps
@@ -215,7 +225,7 @@ jobs:
             emit "SWA config"              "$OUTCOME_SWA_CONFIG"   "npm run lint:swa-config - fix the assertion failure printed above; see scripts/check-swa-config.mjs"
             emit "Deploy freshness CLI"    "$OUTCOME_FRESHNESS_CLI" "npm run lint:deploy-freshness-cli - workflow argv must match scripts/check-deploy-freshness.mjs CLI; see error printed above"
             emit "SW shape"                "$OUTCOME_SW_SHAPE"     "npm run lint:sw-shape - if src/sw.worker.ts changed intentionally, update EXPECTED_SW_SOURCE_SHA256 in scripts/check-sw-shape.mjs"
-            emit "Unused dependencies"     "$OUTCOME_UNUSED_DEPS"  "npm run lint:unused-deps - either remove the unused dep from package.json or add it to knip.jsonc ignoreDependencies with a specific (not generic) one-line rationale comment"
+            emit "Unused dependencies"     "$OUTCOME_UNUSED_DEPS"  "npm run lint:unused-deps - either remove the unused dep from package.json or add it to knip.jsonc ignoreDependencies with a rationale comment naming the specific (not generic) mechanism by which the dep is used"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
             emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
             emit "Perf script tests"       "$OUTCOME_TEST_PERF_SCRIPTS" "npm run test:perf-scripts - then fix the failing assertion in perf/fixtures/*.test.mjs"
