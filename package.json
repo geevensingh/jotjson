@@ -116,7 +116,7 @@
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.2.0",
     "karma-spec-reporter": "^0.0.36",
-    "lint-staged": "^17.0.5",
+    "lint-staged": "^17.0.7",
     "playwright": "^1.60.0",
     "prettier": "^3.8.3",
     "prettier-plugin-organize-imports": "^4.3.0",
