@@ -384,27 +384,34 @@ migration.
      PR-C script.
 3. **Pre-flight SKU availability**:
    ```
-   az storage account list-skus -l westus2 \
-     --query "[?name=='Standard_GZRS']"
+   az rest --method GET \
+     --url "https://management.azure.com/subscriptions/<sub-id>/providers/Microsoft.Storage/skus?api-version=2023-01-01" \
+     --query "value[?name=='Standard_GZRS' && resourceType=='storageAccounts'].locations" \
+     -o json
    ```
-   Confirm non-empty result. GZRS is supported in westus2 today;
-   this is a defensive guard against future SKU rotation.
+   Confirm `westus2` appears in the returned locations array. GZRS
+   is supported in westus2 today; this is a defensive guard against
+   future SKU rotation. (Use the providers SKUs REST API rather than
+   the obvious-looking `az storage account list-skus` -- the latter
+   is not a real subcommand.)
 4. **End-to-end GZRS deployability check** (critic v5 finding:
    "listed" != "deployable"; subscription enrollment in zone-
    redundant offers may differ):
    ```
-   $rnd = (New-Guid).Guid -replace '-','' | Select-Object -First 1
-   $sa = "stjjskucheck$($rnd.Substring(0,16))"
+   $rnd = ((New-Guid).Guid -replace '-','').Substring(0,12).ToLower()
+   $sa = "stjjskucheck$rnd"
    az group create -n rg-jotjson-skucheck -l westus2
    az storage account create -n $sa -g rg-jotjson-skucheck \
      -l westus2 --sku Standard_GZRS
    az storage account delete -n $sa -g rg-jotjson-skucheck --yes
    az group delete -n rg-jotjson-skucheck --yes --no-wait
    ```
-   Validates the GZRS path end-to-end. The 16-char random
-   suffix (critic v7 finding: 4-digit was weak entropy / squat
-   risk) makes collision and squat essentially impossible.
-   Discard the test account immediately.
+   Validates the GZRS path end-to-end. The 12-char random suffix
+   (critic v7 finding: 4-digit was weak entropy / squat risk; 16
+   would overflow the 24-char storage-account-name cap with the
+   `stjjskucheck` prefix) gives 2^48 entropy -- still squat-proof.
+   The `.ToLower()` is defensive: storage account names must be
+   lowercase alphanumeric. Discard the test account immediately.
 5. **Land PR-A in nonprod first**. Verify Bicep changes deploy
    cleanly with all new params unset (nonprod behavior unchanged).
    Side-effect-via-default note (post-#376 iter-1): with all new
@@ -432,10 +439,13 @@ migration.
      regardless of which RG currently hosts it.
    - **Operator-run move (remaining work for this step)**:
      ```
-     az group create -n rg-jotjson-dns -l global
+     az group create -n rg-jotjson-dns -l westus2
      az resource move --destination-group rg-jotjson-dns \
        --ids <zone-id>
      ```
+     (DNS zones are global resources, but the RG itself requires
+     a real region in its metadata; `-l global` is rejected.
+     `westus2` chosen to align metadata with the migration target.)
    - Apex resolution and SOA records unaffected.
 7. **AI/LAW move is DEFERRED to Phase 4** (critic v4 finding).
    Moving them in Phase 0 strands the existing alerts in
