@@ -290,10 +290,16 @@ node scripts/perf/build.mjs    # confirm green
 
 ## Layer 2: Karma component bench
 
+> **Note:** Layer 2 is the only remaining consumer of Karma+Jasmine in
+> the repo. The unit-test suite was migrated to Vitest browser mode
+> (issue #47). Issue #417 tracks migrating the perf bench off Karma;
+> the GC-exposure / synchronous-iteration constraints documented below
+> are why it wasn't included in #47.
+
 `src/app/shared/components/json-tree/json-tree.component.perf.ts` runs
 under a perf-only Angular `test` configuration:
 
-- `tsconfig.perf-l2.json` includes `*.perf.ts` and excludes `*.spec.ts`.
+- `tsconfig.perf-l2.json` includes `*.perf.ts` and excludes `*.test.ts`.
 - `karma.perf.conf.js` adds `--js-flags=--expose-gc` so the spec can
   call `globalThis.gc()` between iterations, and bumps the Jasmine
   per-test timeout (`timeoutInterval`) to 15 minutes.

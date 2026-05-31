@@ -143,7 +143,7 @@ export const OVERLAY_EXCLUDES: ReadonlyArray<string> = [
 
 export function getOverlayContainerElement(): HTMLElement {
   const overlayContainer = document.querySelector<HTMLElement>('.cdk-overlay-container');
-  expect(overlayContainer).withContext('expected CDK overlay container').not.toBeNull();
+  expect(overlayContainer, 'expected CDK overlay container').not.toBeNull();
   if (!overlayContainer) {
     throw new Error('Expected CDK overlay container.');
   }
@@ -178,7 +178,7 @@ export async function runA11yScan(
 
 /**
  * Format an axe violation list as a multi-line string suitable for a
- * Jasmine `fail()` message. Each violation includes the rule id, impact,
+ * test-runner `expect.fail()` message. Each violation includes the rule id, impact,
  * help URL, and the first few offending node selectors.
  */
 function formatViolations(violations: ReadonlyArray<Result>): string {
@@ -240,7 +240,7 @@ export function assertNoStrictA11yViolations(results: AxeResults): void {
       ? 'No critical or serious WCAG 2.1 AA violations'
       : `Accessibility (WCAG 2.1 AA) check failed with ${strict.length} ` +
         `critical/serious violation(s):\n${formatViolations(strict)}`;
-  expect(strict.length).withContext(message).toBe(0);
+  expect(strict.length, message).toBe(0);
 }
 
 /**

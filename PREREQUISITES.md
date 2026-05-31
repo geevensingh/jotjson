@@ -17,7 +17,7 @@ pin. Windows, macOS, and Linux steps are listed where they diverge.
 | Azure CLI                   | latest  | Deploying / inspecting Azure resources |
 | Bicep                       | latest  | Authoring + deploying `infra/` |
 | Git                         | 2.30+   | Everything            |
-| A Chromium-based browser    | latest  | `npm test` (Karma `ChromeHeadlessCI`) |
+| A Chromium-based browser    | latest  | `npm test` (Vitest browser via Playwright Chromium); perf bench (Karma) |
 | Windows Terminal (`wt`)     | latest  | `scripts/dev.ps1` (Windows only) |
 | VS Code (optional)          | latest  | Shipped debug configs in `.vscode/` |
 
@@ -329,8 +329,19 @@ rotating it forces every contributor to refresh.
 
 ## 5. Headless Chrome (required for `npm test`)
 
-The Karma test runner uses a `ChromeHeadlessCI` launcher defined in
-`karma.conf.js`. You need a Chromium-family browser available on PATH.
+The Vitest unit-test runner uses **browser mode**, driving a real
+Chromium via Playwright. Vitest provisions its own Chromium binary
+under `~/.cache/ms-playwright/` the first time you run the suite -- you
+don't need a system Chrome on PATH for the vitest unit tests. To
+prefetch the browser explicitly:
+
+```bash
+npx playwright install chromium
+```
+
+The perf bench (`npm run perf:l2`) is still on Karma+Jasmine and
+*does* require a Chromium-family browser on PATH via `CHROME_BIN`.
+That migration is tracked separately; see `docs/perf.md`.
 
 - **Chrome**: https://www.google.com/chrome/
 - **Edge** (Chromium-based, ships with Windows): no install needed, but
@@ -340,13 +351,13 @@ The Karma test runner uses a `ChromeHeadlessCI` launcher defined in
   ```
 - **Chromium** on Linux: `sudo apt install chromium-browser`
 
-CI uses `ChromeHeadlessCI` (adds `--no-sandbox`); locally `ng test` uses
-whatever browser you configure via `npm test`.
+CI runs Vitest browser mode against the Playwright-bundled Chromium
+(installed by `npx playwright install --with-deps chromium`).
 
 ### Verify
 
 ```bash
-npm test            # web unit tests
+npm test            # web unit tests (vitest)
 (cd api && npm test)  # API unit tests (jest, no browser needed)
 ```
 
@@ -382,8 +393,12 @@ The repo ships VS Code launch configs in `.vscode/` that Just Work:
 
 - **Web: ng serve (Chrome)** - starts Angular + opens Chrome with the
   debugger attached.
-- **Web: ng test** - runs Karma with the Jasmine debugger.
 - **Api: attach** - attaches to `func start` running in a terminal.
+
+For Vitest, install the
+[Vitest VS Code extension](https://marketplace.visualstudio.com/items?itemName=vitest.explorer)
+or run `npm run test:watch` in a terminal. The extension reads
+`vitest.config.mts` directly.
 
 Install VS Code from https://code.visualstudio.com/. Recommended
 extensions:
@@ -410,9 +425,12 @@ secrets in GitHub Actions if you have access.
 **`ng serve` can't reach the API** - `func start` isn't running, or it's
 bound to a port other than 7071. Check `proxy.conf.json`.
 
-**Karma can't find Chrome** - set `CHROME_BIN` to a Chromium-family
-browser, or `npm install` a fresh Chrome from
-https://www.google.com/chrome/.
+**Vitest browser mode fails to launch Chromium** - run
+`npx playwright install chromium` to provision the bundled browser.
+
+**Karma can't find Chrome (perf bench only)** - set `CHROME_BIN` to a
+Chromium-family browser, or `npm install` a fresh Chrome from
+https://www.google.com/chrome/. Only affects `npm run perf:l2`.
 
 **`az bicep install` fails** - upgrade Azure CLI first
 (`az upgrade`), then retry.

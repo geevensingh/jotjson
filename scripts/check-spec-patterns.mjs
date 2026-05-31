@@ -1,20 +1,25 @@
 #!/usr/bin/env node
-// Spec-pattern lint: rejects known-fragile testing patterns in *.spec.ts.
+// Spec-pattern lint: rejects known-fragile testing patterns in test
+// files (`*.test.ts` under `src/`; new `*.spec.ts` files are also
+// scanned so the rule keeps flagging regressions during the Karma ->
+// Vitest cutover (issue #47) tail. Playwright e2e specs (`e2e/**`)
+// and Karma perf benches (`perf/browser/**`) are out of scope).
 //
 // Why this exists:
 //
 //  Rule #1 - `spyOnProperty(navigator, 'clipboard', 'get')`:
-//   Requires `navigator.clipboard` to already exist as an accessor
+//   Originally written against Jasmine's `spyOnProperty`, which
+//   required `navigator.clipboard` to already exist as an accessor
 //   property. Linux headless Chrome (the CI runner) exposes it as a
-//   data property (or omits it entirely outside a secure context), so
-//   the spy throws "Property clipboard does not have access type get"
-//   and crashes the test. Windows headless Chrome happens to expose a
-//   getter, so locally green and CI red. We have already paid for this
-//   once (see the M4b clipboard fix that introduced this script). The
-//   rest of the codebase uses
+//   data property (or omits it entirely outside a secure context),
+//   so the spy threw "Property clipboard does not have access type
+//   get" and crashed the test. Windows headless Chrome happens to
+//   expose a getter, so locally green and CI red. The rule is kept
+//   as a forward guard: a regression to the Jasmine API in a new
+//   vitest test would silently re-introduce the platform-divergent
+//   flake. The fix is the same regardless of runner:
 //   `Object.defineProperty(navigator, 'clipboard', { configurable: true,
-//   get: () => ... })` in beforeEach + restore in afterEach, which
-//   works on every platform.
+//   get: () => ... })` in beforeEach + restore in afterEach.
 //
 //  Rule #2 - `__reset*ForTesting()` symmetry (issue #350):
 //   Module-scoped state inside ES modules is a singleton that external
@@ -181,6 +186,18 @@ const RESET_ASYMMETRY_MESSAGE =
 export function listSpecFiles() {
   // Match check-ascii.mjs: include both tracked and untracked-but-not-ignored
   // files so a fresh local file is scanned BEFORE it is staged.
+  //
+  // Scope:
+  //  - Frontend unit tests under `src/**` only. This is a frontend
+  //    spec-pattern lint; the api workspace has its own tooling
+  //    (`api/jest.config.ts`, `npm --prefix api run lint`) and is
+  //    explicitly out of scope.
+  //  - Includes both `.test.ts` (current vitest convention) and
+  //    `.spec.ts` (stale Karma+Jasmine convention, retained as a
+  //    forward guard so the lint still flags a regression if anyone
+  //    introduces a new `.spec.ts` under `src/`).
+  //  - Excludes Playwright e2e (`e2e/**`) and Karma perf benches
+  //    (`perf/**`): those are not vitest unit tests.
   const out = execFileSync(
     'git',
     ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
@@ -190,7 +207,8 @@ export function listSpecFiles() {
     .toString('utf8')
     .split('\0')
     .filter(Boolean)
-    .filter((p) => p.endsWith('.spec.ts'));
+    .filter((p) => p.startsWith('src/'))
+    .filter((p) => p.endsWith('.test.ts') || p.endsWith('.spec.ts'));
 }
 
 /**
@@ -419,6 +437,20 @@ export function scan(path) {
 
 export function main() {
   const files = listSpecFiles();
+  if (files.length === 0) {
+    // Defense against a future rename or filter typo silently turning
+    // the gate into a no-op (issue #47 cutover took the suite from
+    // `.spec.ts` to `.test.ts`; the original filter would have matched
+    // zero files and trivially passed). The lint scans the live tree;
+    // a healthy repo always has at least one spec file. If you genuinely
+    // have zero, widen `listSpecFiles` in scripts/check-spec-patterns.mjs.
+    console.error(
+      'check-spec-patterns: FAILED -- listSpecFiles() returned 0 files. The' +
+        ' filter in scripts/check-spec-patterns.mjs is likely out of date with' +
+        ' the suite naming convention (currently `*.test.ts` under `src/`).',
+    );
+    return 1;
+  }
   const allViolations = files.flatMap(scan);
 
   if (allViolations.length === 0) {
