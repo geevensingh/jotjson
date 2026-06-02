@@ -291,6 +291,13 @@
           <context context-type="linenumber">144,146</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.appInsights.baseTypeColon" datatype="html">
+        <source><x id="baseType" equiv-text="baseType"/>: <x id="detail" equiv-text="detail"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/application-insights-telemetry.ts</context>
+          <context context-type="linenumber">41</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="toolbar.titleSuggestion.shape.armTemplate" datatype="html">
         <source>ARM template</source>
         <context-group purpose="location">
@@ -312,6 +319,31 @@
           <context context-type="linenumber">24</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.cloudEvent.fromSource" datatype="html">
+        <source><x id="type" equiv-text="type"/> from <x id="source" equiv-text="sourceSegment"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/cloud-event.ts</context>
+          <context context-type="linenumber">31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.cloudEvent.typeOnly" datatype="html">
+        <source><x id="type" equiv-text="type"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/cloud-event.ts</context>
+          <context context-type="linenumber">32</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.composite.eventDashProduct" datatype="html">
+        <source><x id="eventVerb" equiv-text="verb"/> -- <x id="product" equiv-text="anchorB.value"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/event-envelope.ts</context>
+          <context context-type="linenumber">79</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/microsoft-commerce-billing-event.ts</context>
+          <context context-type="linenumber">38</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="toolbar.titleSuggestion.shape.geojsonFeatureCollection" datatype="html">
         <source>GeoJSON: <x id="n" equiv-text="features.length"/> features</source>
         <context-group purpose="location">
@@ -331,6 +363,83 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/title-suggester/strategies/github-actions-workflow.ts</context>
           <context context-type="linenumber">31</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.invoice" datatype="html">
+        <source>Invoice <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">59</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.order" datatype="html">
+        <source>Order <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">61</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.transaction" datatype="html">
+        <source>Transaction <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">63</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.confirmation" datatype="html">
+        <source>Confirmation <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">65</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.booking" datatype="html">
+        <source>Booking <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">67</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.case" datatype="html">
+        <source>Case <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">69</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.ticket" datatype="html">
+        <source>Ticket <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">71</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.incident" datatype="html">
+        <source>Incident <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">73</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.identifier.reference" datatype="html">
+        <source>Reference <x id="id" equiv-text="id"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/identifier-field.ts</context>
+          <context context-type="linenumber">75</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.jwt.withIssuer" datatype="html">
+        <source>JWT: <x id="issuer" equiv-text="iss"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/jwt-payload.ts</context>
+          <context context-type="linenumber">39</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="toolbar.titleSuggestion.jwt.generic" datatype="html">
+        <source>JWT payload</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/title-suggester/strategies/jwt-payload.ts</context>
+          <context context-type="linenumber">40</context>
         </context-group>
       </trans-unit>
       <trans-unit id="toolbar.titleSuggestion.shape.objectWithNKeys" datatype="html">

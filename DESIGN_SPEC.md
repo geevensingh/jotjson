@@ -412,19 +412,32 @@ The primary page. Available to **all users** (anonymous + registered).
     preserved across format/minify/title-edit). Strategies cover known
     formats (`package.json`, Kubernetes manifests, OpenAPI / Swagger, JSON
     Schema, GeoJSON, ARM templates, `tsconfig`, GitHub Actions workflows,
-    Postman collections), HAL `_links.self.href` and `selfUrl` / `self_url`,
-    common identifier fields (`name > title > displayName > subject > label
-    > id > slug`, with UUID/numeric/long values rejected for `id`/`slug`),
+    Postman collections, CloudEvents v1.0, JWT payloads, Microsoft Commerce
+    billing events, Application Insights telemetry envelopes), HAL
+    `_links.self.href` and `selfUrl` / `self_url`, common identifier fields
+    (`name > title > displayName > subject > label > id > slug`, with
+    UUID/numeric/long values rejected for `id`/`slug`), business identifier
+    fields (`invoiceId`, `orderId`, `transactionId`, etc. - producing
+    titles like `"Invoice G138888993"` - with privacy-adjacent prefixes
+    `traceId` / `requestId` / `correlationId` / `eventId` deliberately
+    excluded), a composite "event envelope" template
+    (`{eventType|type|action} -- {product|resourceType|sku|service}`),
     type discriminators (`@type`, `__typename`, `resourceType`), top-level
     keys, the first sentence of `description`/`summary`, generic shape
     descriptions (`Object with N keys`, `List of N items`, `Number {value}`,
     etc.), the first 40 characters of the raw text, and a final `Untitled`
     fallback. A post-dedupe synthetic floor (`Untitled - YYYY-MM-DD` then
     `Untitled (n)`) guarantees at least 2 menu items so the button is
-    never useful-but-empty. **Privacy:** acceptance fires the
-    `toolbar.titleSuggestionAccepted` telemetry event with the strategy
-    `source` and the menu's candidate count -- the candidate's literal text
-    is never logged. Hidden on narrow viewports alongside the title input.
+    never useful-but-empty. The acceptance criterion for new vendor /
+    domain recognizers is documented at the top of
+    `core/title-suggester/strategies/index.ts`. **Privacy:** acceptance
+    fires the `toolbar.titleSuggestionAccepted` telemetry event with the
+    strategy `source` and the menu's candidate count -- the candidate's
+    literal text is never logged. Titles are persisted server-side as blob
+    metadata, so the JWT-payload strategy never falls back to `sub` (a
+    stable principal identifier) and `identifierField` rejects long-hex
+    machine tokens via `looksLikeBusinessId`. Hidden on narrow viewports
+    alongside the title input.
 
 - **JSON Input Panel** (left or top, depending on layout preference)
   - Monaco Editor for syntax highlighting, line numbers, error markers, and JSON/JSONC-specific IntelliSense. Loaded lazily to offset its ~2 MB bundle size. The editor and parser unconditionally accept comments and trailing commas; an editor "mode" tag (`json` vs `jsonc`) is auto-derived from content (presence of `//` or `/* */` comments) purely to drive the status-bar badge label and the download filename extension. There is no manual mode switch - mode reflects the document, not user choice.
