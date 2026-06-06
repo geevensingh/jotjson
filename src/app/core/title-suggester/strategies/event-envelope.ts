@@ -24,9 +24,10 @@ import { verbalize } from './humanize';
  * strings but suppressing early keeps the menu lean for envelopes
  * with stronger recognizers.
  *
- * Anchor B passes a `looksLikeBusinessId`-inverse check: a pure-SKU
- * second anchor like `"1D9-00001"` reads worse than the bare verb,
- * so reject and fall back to the verb-only output.
+ * Anchor B rejection: a "pure SKU" second anchor (matches
+ * `SKU_LIKE_RE` and contains no whitespace) like `"1D9-00001"`
+ * reads worse than the bare verb, so the strategy returns null
+ * entirely in that case rather than producing a misleading title.
  */
 const ANCHOR_A_KEYS = ['eventType', 'type', 'action'] as const;
 const ANCHOR_B_KEYS = ['product', 'resourceType', 'sku', 'service'] as const;

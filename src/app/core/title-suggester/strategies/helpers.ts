@@ -69,16 +69,16 @@ export function looksLikeMachineId(value: string, maxLen = 40): boolean {
  * invoice or order number).
  *
  * Rejects:
- *  - UUIDs (handled by `looksLikeMachineId`-style check)
- *  - pure-numeric tokens longer than 4 digits (e.g. database surrogate
- *    keys; "Invoice 6567005828" reads as noise)
- *  - pure-hex tokens of length 16 or more (W3C trace IDs, opaque
- *    machine tokens)
- *  - strings with whitespace
- *  - strings without at least one letter (forces some lexical
- *    distinctness beyond a raw number)
  *  - strings outside the 3-24 char window (too short to be
  *    meaningful, too long to read like a quotable ID)
+ *  - strings with whitespace
+ *  - strings without at least one letter (rejects raw numeric
+ *    surrogate keys like `"6567005828"`)
+ *  - UUIDs
+ *  - any remaining pure-numeric string (defensive belt-and-braces
+ *    against future relaxations of the letter requirement)
+ *  - strings of length 16 or more containing only hex digits (W3C
+ *    trace IDs, opaque machine tokens)
  *
  * Accepts: "G138888993", "ABC-123", "INV-2026-001", etc.
  */

@@ -19,7 +19,7 @@ import { isPlainObject, readString } from './helpers';
  * principal identifier. Titles are persisted server-side as blob
  * metadata, so leaking principal IDs into titles is a privacy issue.
  */
-const REGISTERED_TIME_CLAIMS = ['aud', 'exp', 'iat', 'nbf'] as const;
+const SUPPORTING_REGISTERED_CLAIMS = ['aud', 'exp', 'iat', 'nbf'] as const;
 const NON_HEX_RE = /[^0-9a-f]/i;
 
 export const jwtPayloadStrategy: SuggestionStrategy = (input) => {
@@ -29,7 +29,7 @@ export const jwtPayloadStrategy: SuggestionStrategy = (input) => {
   if (iss === null) return null;
 
   let supportingHits = 0;
-  for (const claim of REGISTERED_TIME_CLAIMS) {
+  for (const claim of SUPPORTING_REGISTERED_CLAIMS) {
     if (Object.prototype.hasOwnProperty.call(obj, claim)) supportingHits++;
   }
   if (supportingHits < 2) return null;
