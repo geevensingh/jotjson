@@ -29,7 +29,6 @@ describe('BlobService', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       ownerId: 'owner-1',
-      isPublic: false,
       version: 1,
       ...overrides,
     };
@@ -62,37 +61,34 @@ describe('BlobService', () => {
   });
 
   it('POSTs the correct payload shape to /api/blobs on create', () => {
-    service.create('{"a":1}', 'My Blob', true).subscribe();
+    service.create('{"a":1}', 'My Blob').subscribe();
     const req = httpMock.expectOne(base);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({
       content: '{"a":1}',
       title: 'My Blob',
-      isPublic: true,
     });
-    req.flush(makeBlob({ isPublic: true }));
+    req.flush(makeBlob());
   });
 
-  it('defaults isPublic to false and omits title when not provided on create', () => {
+  it('omits title when not provided on create', () => {
     service.create('{}').subscribe();
     const req = httpMock.expectOne(base);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({
       content: '{}',
       title: undefined,
-      isPublic: false,
     });
     req.flush(makeBlob({ content: '{}' }));
   });
 
   it('POSTs highlights on create when provided', () => {
-    service.create('{}', undefined, false, [highlight]).subscribe();
+    service.create('{}', undefined, [highlight]).subscribe();
     const req = httpMock.expectOne(base);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({
       content: '{}',
       title: undefined,
-      isPublic: false,
       highlights: [highlight],
     });
     req.flush(makeBlob({ content: '{}', highlights: [highlight] }));
@@ -133,11 +129,10 @@ describe('BlobService', () => {
   for (const testCase of [
     { name: 'content', patch: { content: '{"x":2}' } },
     { name: 'title', patch: { title: 'Renamed' } },
-    { name: 'isPublic', patch: { isPublic: true } },
     { name: 'highlights', patch: { highlights: [highlight] } },
   ] satisfies Array<{
     name: string;
-    patch: Partial<Pick<JsonBlob, 'content' | 'title' | 'isPublic' | 'highlights'>>;
+    patch: Partial<Pick<JsonBlob, 'content' | 'title' | 'highlights'>>;
   }>) {
     it(`includes If-Match for ${testCase.name} updates`, () => {
       service.get(id).subscribe();

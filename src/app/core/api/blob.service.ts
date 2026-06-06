@@ -200,13 +200,12 @@ export class BlobService {
   create(
     content: string,
     title?: string,
-    isPublic = false,
     highlights?: readonly BlobHighlight[],
   ): Observable<CreateBlobResponse> {
     const body =
       highlights === undefined
-        ? { content, title, isPublic }
-        : { content, title, isPublic, highlights: [...highlights] };
+        ? { content, title }
+        : { content, title, highlights: [...highlights] };
     return this.http.post<CreateBlobResponse>(this.base, body).pipe(
       tap((created) => {
         const { autoDeleted: _autoDeleted, ...blob } = created;
@@ -218,7 +217,7 @@ export class BlobService {
 
   update(
     id: string,
-    patch: Partial<Pick<JsonBlob, 'content' | 'title' | 'isPublic' | 'highlights'>>,
+    patch: Partial<Pick<JsonBlob, 'content' | 'title' | 'highlights'>>,
   ): Observable<JsonBlob> {
     const version = this.versionsByKey.get(id) ?? 1;
     const headers = new HttpHeaders({ 'If-Match': `"${version}"` });

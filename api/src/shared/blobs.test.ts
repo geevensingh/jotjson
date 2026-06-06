@@ -2,6 +2,7 @@ import type { TelemetryClient } from 'applicationinsights';
 import { HIGHLIGHT_PATH_FIXTURES } from '../../../src/testing/fixtures/highlight-paths.fixture';
 import {
   __resetBlobsContainerForTesting,
+  __resetIsPublicStripLoggedIdsForTesting,
   assertHighlightPath,
   assertHighlights,
   BlobValidationError,
@@ -124,6 +125,7 @@ let trackEventSpy: jest.Mock;
 beforeEach(() => {
   fake = makeFakeContainer();
   __resetBlobsContainerForTesting();
+  __resetIsPublicStripLoggedIdsForTesting();
   // Issue #71 B3: createBlob now emits `slug.collisions.exhausted` on
   // the SlugGenerationError throw path. Install the telemetry seam for
   // every test in this file so the new trackEvent call routes through
@@ -207,7 +209,6 @@ describe('createBlob', () => {
     expect(doc.slug).toMatch(/^[A-Za-z0-9]{6}$/);
     expect(doc.content).toBe('{"a":1}');
     expect(doc.ownerId).toBe('owner-1');
-    expect(doc.isPublic).toBe(false);
     expect(doc.title).toBeUndefined();
     expect(doc.version).toBe(1);
     expect(doc.createdAt).toBe(doc.updatedAt);
@@ -222,13 +223,6 @@ describe('createBlob', () => {
   it('drops empty-string titles to undefined', async () => {
     const doc = await createBlob('owner-1', { content: '[]', title: '   ' });
     expect(doc.title).toBeUndefined();
-  });
-
-  it('honors isPublic when supplied, defaulting to false', async () => {
-    const a = await createBlob('owner-1', { content: '[]' });
-    const b = await createBlob('owner-1', { content: '[]', isPublic: true });
-    expect(a.isPublic).toBe(false);
-    expect(b.isPublic).toBe(true);
   });
 
   it('stores highlights supplied on create', async () => {
@@ -366,11 +360,10 @@ describe('updateBlob', () => {
     );
   });
 
-  it('updates title and isPublic independently', async () => {
+  it('updates title independently of content', async () => {
     const orig = await seed();
-    const updated = await updateBlob(orig, { title: 'new', isPublic: true }, orig.version);
+    const updated = await updateBlob(orig, { title: 'new' }, orig.version);
     expect(updated.title).toBe('new');
-    expect(updated.isPublic).toBe(true);
     expect(updated.content).toBe(orig.content);
   });
 
@@ -411,10 +404,18 @@ describe('updateBlob', () => {
 
   it('ignores undefined patch fields', async () => {
     const orig = await seed();
-    const updated = await updateBlob(orig, {}, orig.version);
+    const updated = await updateBlob(orig, { content: orig.content }, orig.version);
     expect(updated.content).toBe(orig.content);
     expect(updated.title).toBe(orig.title);
-    expect(updated.isPublic).toBe(orig.isPublic);
+  });
+
+  it('empty patch is a no-op: returns existing doc without bumping version', async () => {
+    const orig = await seed();
+    const updated = await updateBlob(orig, {}, orig.version);
+    expect(updated.version).toBe(orig.version);
+    expect(updated.updatedAt).toBe(orig.updatedAt);
+    expect(updated.content).toBe(orig.content);
+    expect(updated.title).toBe(orig.title);
   });
 
   it('rejects stale expected versions before replacing', async () => {
@@ -504,5 +505,79 @@ describe('listBlobsByOwner', () => {
   it('returns an empty list when given an empty ownerId', async () => {
     const list = await listBlobsByOwner('');
     expect(list).toEqual([]);
+  });
+});
+
+describe('normalizeBlobDocument legacy isPublic strip (1.1.0)', () => {
+  // Stored docs from the v1.0.x era may still carry an `isPublic: boolean`
+  // field that v1.1.0 deliberately removed. `normalizeBlobDocument` (the
+  // single funnel for every read path) drops it on the way out so it never
+  // reaches the wire, and emits one `blob.legacy.isPublic.stripped`
+  // telemetry event per blob id per process to give the
+  // `followup-blob-ispublic-strip` cleanup a measurable exit signal.
+  // See DESIGN_SPEC.md §Schema evolution and plan.md.
+
+  it('strips isPublic from the response of findBlobByIdOrSlug', async () => {
+    const legacy = await createBlob('owner-1', { content: '{"x":1}' });
+    fake.items[0] = { ...legacy, isPublic: true } as unknown as BlobDocument;
+
+    const found = await findBlobByIdOrSlug(legacy.id);
+    expect(found).not.toBeNull();
+    expect((found as unknown as Record<string, unknown>).isPublic).toBeUndefined();
+  });
+
+  it('strips isPublic from every entry returned by listBlobsByOwner', async () => {
+    const a = await createBlob('owner-1', { content: '{"a":1}' });
+    const b = await createBlob('owner-1', { content: '{"b":2}' });
+    fake.items[0] = { ...a, isPublic: true } as unknown as BlobDocument;
+    fake.items[1] = { ...b, isPublic: false } as unknown as BlobDocument;
+
+    const list = await listBlobsByOwner('owner-1');
+    expect(list).toHaveLength(2);
+    for (const item of list) {
+      expect((item as unknown as Record<string, unknown>).isPublic).toBeUndefined();
+    }
+  });
+
+  it('emits blob.legacy.isPublic.stripped exactly once per blob id per process', async () => {
+    const a = await createBlob('owner-1', { content: '{"a":1}' });
+    fake.items[0] = { ...a, isPublic: true } as unknown as BlobDocument;
+
+    trackEventSpy.mockClear();
+    await findBlobByIdOrSlug(a.id);
+    await findBlobByIdOrSlug(a.id);
+    await findBlobByIdOrSlug(a.id);
+
+    const stripEvents = trackEventSpy.mock.calls.filter(
+      ([call]) => (call as { name?: string }).name === 'blob.legacy.isPublic.stripped',
+    );
+    expect(stripEvents).toHaveLength(1);
+    expect(stripEvents[0]?.[0]).toEqual({
+      name: 'blob.legacy.isPublic.stripped',
+      properties: undefined,
+      measurements: undefined,
+    });
+  });
+
+  it('does NOT emit the signal for docs that never had isPublic', async () => {
+    const a = await createBlob('owner-1', { content: '{"a":1}' });
+
+    trackEventSpy.mockClear();
+    await findBlobByIdOrSlug(a.id);
+
+    expect(trackEventSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'blob.legacy.isPublic.stripped' }),
+    );
+  });
+
+  it('writes back the stripped doc on next update (self-healing)', async () => {
+    const created = await createBlob('owner-1', { content: '{"x":1}' });
+    fake.items[0] = { ...created, isPublic: true } as unknown as BlobDocument;
+
+    const found = await findBlobByIdOrSlug(created.id);
+    await updateBlob(found!, { title: 'updated' }, 1);
+
+    // After the write, the stored doc no longer has isPublic.
+    expect((fake.items[0] as unknown as Record<string, unknown>).isPublic).toBeUndefined();
   });
 });

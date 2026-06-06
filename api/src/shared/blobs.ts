@@ -11,13 +11,17 @@
  *   content: string,      // raw JSON/JSONC text
  *   title?: string,
  *   ownerId: string,      // Entra oid of the owner; partition key
- *   isPublic: boolean,
  *   highlights?: BlobHighlight[],
  *   version: number,      // monotonic client-facing revision
  *   createdAt: string,    // ISO
  *   updatedAt: string     // ISO
  * }
  * ```
+ *
+ * Legacy stored docs may still carry an `isPublic: boolean` field from the
+ * v1.0.x era. `normalizeBlobDocument` strips it on read so it never reaches
+ * the wire; see DESIGN_SPEC.md -> Versioning -> Schema evolution and the
+ * `followup-blob-ispublic-strip` cleanup issue.
  *
  * GET lookups can accept either `id` or `slug`. Neither is the partition key
  * alone, so lookups are cross-partition queries. The `blobs` container is
@@ -47,7 +51,6 @@ export interface BlobDocument extends VersionedDocument {
   content: string;
   title?: string;
   ownerId: string;
-  isPublic: boolean;
   highlights?: BlobHighlight[];
   version: number;
   createdAt: string;
@@ -57,14 +60,12 @@ export interface BlobDocument extends VersionedDocument {
 export interface CreateBlobInput {
   content: unknown;
   title?: unknown;
-  isPublic?: unknown;
   highlights?: unknown;
 }
 
 export interface UpdateBlobPatch {
   content?: unknown;
   title?: unknown;
-  isPublic?: unknown;
   highlights?: unknown;
 }
 
@@ -137,6 +138,16 @@ export function __resetBlobsContainerForTesting(): void {
   cached = undefined;
 }
 
+/**
+ * Reset the per-process dedupe Set used by `normalizeBlobDocument`'s
+ * legacy-`isPublic`-strip telemetry. Test-only seam - production code never
+ * calls this. See AGENTS.md §4 "Test-only seams use the `__<verb>ForTesting`
+ * prefix".
+ */
+export function __resetIsPublicStripLoggedIdsForTesting(): void {
+  stripLoggedIds.clear();
+}
+
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const IDENTIFIER_START = /^[A-Za-z_$]$/;
 const IDENTIFIER_PART = /^[A-Za-z0-9_$]$/;
@@ -154,8 +165,31 @@ function normalizeVersion(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 1;
 }
 
-function normalizeBlobDocument(doc: BlobDocument): BlobDocument {
+/**
+ * Per-process dedupe of legacy-`isPublic`-strip telemetry emissions. The
+ * stored field carries no semantics post-1.1.0 but lingers on documents
+ * written under v1.0.x. `normalizeBlobDocument` strips it on read; we emit
+ * a `blob.legacy.isPublic.stripped` event once per unique blob id per
+ * function-instance lifetime so the `followup-blob-ispublic-strip` cleanup
+ * has a measurable exit criterion ("event count goes to zero in App
+ * Insights across enough deploys"). The id itself is held in memory only
+ * and never crosses the wire - backend telemetry has no PII redaction
+ * (AGENTS.md §4 Telemetry), so the emitted event carries no properties.
+ */
+const stripLoggedIds = new Set<string>();
+
+function normalizeBlobDocument(doc: BlobDocument & { isPublic?: unknown }): BlobDocument {
   const version = normalizeVersion(doc.version);
+  if ('isPublic' in doc) {
+    if (doc.id && !stripLoggedIds.has(doc.id)) {
+      stripLoggedIds.add(doc.id);
+      trackEvent('blob.legacy.isPublic.stripped');
+    }
+    const { isPublic: _stripped, ...rest } = doc;
+    void _stripped;
+    const stripped = rest as BlobDocument;
+    return stripped.version === version ? stripped : { ...stripped, version };
+  }
   return doc.version === version ? doc : { ...doc, version };
 }
 
@@ -410,14 +444,6 @@ function validateTitle(title: unknown): string | undefined {
   return trimmed;
 }
 
-function validateIsPublic(isPublic: unknown): boolean {
-  if (isPublic === undefined) return false;
-  if (typeof isPublic !== 'boolean') {
-    throw new BlobValidationError('isPublic must be a boolean');
-  }
-  return isPublic;
-}
-
 /**
  * Look up a blob by either its UUID `id` or its NanoID `slug`. Cross-partition
  * query - returns null if not found.
@@ -454,7 +480,6 @@ export async function createBlob(ownerId: string, input: CreateBlobInput): Promi
   }
   const content = validateContent(input.content);
   const title = validateTitle(input.title);
-  const isPublic = validateIsPublic(input.isPublic);
   const highlights =
     input.highlights !== undefined ? assertHighlights(input.highlights) : undefined;
   validateBlobDocumentSize(content, highlights);
@@ -486,7 +511,6 @@ export async function createBlob(ownerId: string, input: CreateBlobInput): Promi
     content,
     ...(title !== undefined ? { title } : {}),
     ownerId,
-    isPublic,
     ...(highlights !== undefined ? { highlights } : {}),
     version: 1,
     createdAt: now,
@@ -515,6 +539,14 @@ export async function updateBlob(
     );
   }
 
+  // Empty-patch early-out: a patch that touches no recognized field is a
+  // no-op (e.g. a stale-client PUT carrying only the dropped `isPublic`).
+  // Returning unchanged avoids spurious version + `updatedAt` bumps and
+  // wasted Cosmos RUs. See plan §10 (skeptic finding #11).
+  if (patch.content === undefined && patch.title === undefined && patch.highlights === undefined) {
+    return current;
+  }
+
   const result = await replaceWithIfMatch<BlobDocument>(
     getBlobsContainer(),
     current.ownerId,
@@ -530,9 +562,6 @@ export async function updateBlob(
         } else {
           draft.title = title;
         }
-      }
-      if (patch.isPublic !== undefined) {
-        draft.isPublic = validateIsPublic(patch.isPublic);
       }
       if (patch.highlights !== undefined) {
         draft.highlights = assertHighlights(patch.highlights);

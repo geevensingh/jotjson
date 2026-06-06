@@ -129,7 +129,6 @@ const sampleBlob = {
   slug: 'abc123',
   content: '{"hello":"world"}',
   ownerId: 'u-1',
-  isPublic: false,
   version: 1,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
@@ -157,24 +156,31 @@ describe('POST /api/blobs', () => {
 
   it('creates a blob for the authenticated caller', async () => {
     createBlob.mockResolvedValueOnce(sampleBlob);
-    const res = await postBlob(
-      makeRequest({ body: { content: '{}', title: 'hi', isPublic: false } }),
-      ctx,
-    );
+    const res = await postBlob(makeRequest({ body: { content: '{}', title: 'hi' } }), ctx);
     expect(res.status).toBe(201);
     expect(res.headers).toEqual({ ETag: '"1"' });
     expect(res.jsonBody).toEqual(sampleBlob);
     expect(createBlob).toHaveBeenCalledWith('u-1', {
       content: '{}',
       title: 'hi',
-      isPublic: false,
     });
   });
 
-  it('omits title/isPublic when missing from the payload', async () => {
+  it('omits title when missing from the payload', async () => {
     createBlob.mockResolvedValueOnce(sampleBlob);
     await postBlob(makeRequest({ body: { content: '{}' } }), ctx);
     expect(createBlob).toHaveBeenCalledWith('u-1', { content: '{}' });
+  });
+
+  it('silently drops unknown payload fields like the legacy isPublic flag', async () => {
+    // Pre-1.1.0 SPA bundles cached in tabs still send `isPublic` on save;
+    // the handler must accept-and-drop rather than 400. See plan.md.
+    createBlob.mockResolvedValueOnce(sampleBlob);
+    await postBlob(makeRequest({ body: { content: '{}', title: 'hi', isPublic: true } }), ctx);
+    expect(createBlob).toHaveBeenCalledWith('u-1', {
+      content: '{}',
+      title: 'hi',
+    });
   });
 
   it('passes highlights through when supplied', async () => {
@@ -222,7 +228,6 @@ describe('POST /api/blobs - quota enforcement', () => {
       slug: `slug-${i}`,
       ownerId: 'u-1',
       content: '{}',
-      isPublic: false,
       // Older indices are older (smaller updatedAt).
       createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
       updatedAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
@@ -434,7 +439,7 @@ describe('PUT /api/blobs/:id', () => {
 
   it.each([
     ['title-only', { title: 'renamed' }],
-    ['isPublic-only', { isPublic: true }],
+    ['highlights-only', { highlights: [{ path: '$.x', color: '#abcdef', cascade: false }] }],
   ])('returns 412 for stale %s updates', async (_name, body) => {
     findBlob.mockResolvedValueOnce({ ...sampleBlob, version: 2 });
     const response = await putBlob(
@@ -803,7 +808,6 @@ describe('quota.exceeded telemetry emission from blob handlers', () => {
         slug: `slug-${i}`,
         ownerId: 'u-1',
         content: '{}',
-        isPublic: false,
         createdAt: timestamp,
         updatedAt: timestamp,
         title: i === 0 ? 'oldest title' : undefined,
@@ -888,7 +892,6 @@ describe('blob.autoDeleted telemetry emission from postBlob', () => {
         slug: `slug-${i}`,
         ownerId: 'u-1',
         content: '{}',
-        isPublic: false,
         createdAt: timestamp,
         updatedAt: timestamp,
         title: i === 0 ? 'oldest title' : undefined,

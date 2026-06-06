@@ -2,5 +2,6 @@ User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /404
+Disallow: /s/
 
 Sitemap: https://jotjson.com/sitemap.xml

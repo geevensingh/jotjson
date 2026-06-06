@@ -1,78 +1,32 @@
 import { Injectable, inject } from '@angular/core';
 import { Meta } from '@angular/platform-browser';
-import type { JsonBlob } from '../api/models';
 
 /**
- * Centralizes `<meta>` tag management for per-route SEO / social concerns.
+ * Centralizes the `<meta name="robots">` noindex toggle.
  *
- * Note: JotJSON is a client-rendered SPA, so tags set here are only honored by
- * crawlers that execute JavaScript (e.g. LinkedIn, Slack unfurl partially).
- * Universal support requires pre-rendering, which is tracked as milestone M7h.
+ * Post-1.1.0 surface: only the robots noindex toggle. Per-blob Open Graph
+ * and Twitter tags were retired alongside the `isPublic` blob visibility
+ * flag - all blobs are unlisted and every `/s/:slug` page emits
+ * `<meta name="robots" content="noindex">` always-on. The static homepage
+ * OG defaults from `src/index.html` survive into the prerendered
+ * `index.html` without any client-side per-blob OG emission.
  */
 @Injectable({ providedIn: 'root' })
 export class SeoService {
   private readonly meta = inject(Meta);
 
-  private static readonly OG_TAGS = [
-    'og:title',
-    'og:description',
-    'og:type',
-    'og:url',
-    'og:site_name',
-  ] as const;
-
-  private static readonly TWITTER_TAGS = ['twitter:card'] as const;
-
-  /** Set Open Graph tags for a publicly-shared blob. Removes any prior noindex. */
-  setOpenGraphForBlob(blob: JsonBlob): void {
-    this.setNoindex(false);
-    const title = (blob.title ?? '').trim();
-    const displayTitle = title.length > 0 ? title : 'Untitled JSON';
-    const description =
-      title.length > 0 ? `${title} - JSON shared on JotJSON` : 'JSON shared on JotJSON';
-
-    this.upsert('og:title', displayTitle);
-    this.upsert('og:description', description);
-    this.upsert('og:type', 'website');
-    this.upsert('og:url', this.currentUrl());
-    this.upsert('og:site_name', 'JotJSON');
-    this.upsert('twitter:card', 'summary', { nameAttr: true });
-  }
-
-  /** Toggle the robots=noindex tag. */
+  /** Toggle the `robots=noindex` meta tag. */
   setNoindex(on: boolean): void {
     if (on) {
-      this.upsert('robots', 'noindex', { nameAttr: true });
+      const selector = 'name="robots"';
+      const definition = { name: 'robots', content: 'noindex' };
+      if (this.meta.getTag(selector)) {
+        this.meta.updateTag(definition, selector);
+      } else {
+        this.meta.addTag(definition);
+      }
     } else {
       this.meta.removeTag('name="robots"');
     }
-  }
-
-  /** Remove every per-blob tag we might have emitted. Safe to call repeatedly. */
-  clearBlobTags(): void {
-    for (const property of SeoService.OG_TAGS) {
-      this.meta.removeTag(`property="${property}"`);
-    }
-    for (const name of SeoService.TWITTER_TAGS) {
-      this.meta.removeTag(`name="${name}"`);
-    }
-    this.setNoindex(false);
-  }
-
-  private upsert(key: string, content: string, opts: { nameAttr?: boolean } = {}): void {
-    const selector = opts.nameAttr ? `name="${key}"` : `property="${key}"`;
-    const definition: Record<string, string> = opts.nameAttr
-      ? { name: key, content }
-      : { property: key, content };
-    if (this.meta.getTag(selector)) {
-      this.meta.updateTag(definition, selector);
-    } else {
-      this.meta.addTag(definition);
-    }
-  }
-
-  private currentUrl(): string {
-    if (typeof window === 'undefined') return 'https://jotjson.com/';
-    return window.location.href;
   }
 }

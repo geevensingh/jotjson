@@ -131,6 +131,14 @@ check(
   'robots.txt missing sitemap reference',
   /Sitemap:\s*https:\/\/jotjson\.com\/sitemap\.xml/i.test(robotsTxt),
 );
+// 1.1.0: all blob share URLs are unlisted. `Disallow: /s/` is the
+// pre-fetch crawler signal; pair with the `/s/*` X-Robots-Tag header
+// route in staticwebapp.config.json (asserted by check-swa-config.mjs)
+// and the client-side always-on `<meta name="robots" content="noindex">`
+// in HomeComponent for full layered defense. Asserting this here so a
+// future robots.txt edit can't silently regress the strongest
+// forward-looking crawler signal.
+check('robots.txt missing Disallow: /s/ rule', /Disallow:\s*\/s\//i.test(robotsTxt));
 check('sitemap.xml missing root URL', sitemapXml.includes('https://jotjson.com/'));
 check('og.png not deployed to dist', existsSync(ogPng));
 
