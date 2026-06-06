@@ -450,10 +450,11 @@ test('checkShareRouteNoindex passes on the actual staticwebapp.config.json', () 
 test('/s/* route removed fails', () => {
   const config = cloneConfig();
   config.routes = config.routes.filter((entry) => entry.route !== SHARE_ROUTE_PATTERN);
-  assertHasErrorMatching(
-    checkShareRouteNoindex(config),
-    new RegExp(SHARE_ROUTE_PATTERN.replace(/[*/]/g, '\\$&')),
-  );
+  // Pass the literal pattern string directly so assertHasErrorMatching
+  // does a substring search; avoids the manual regex-escape utility
+  // CodeQL flagged for incomplete escape coverage on the prior
+  // `new RegExp(...replace(/[*/]/g, ...))` form.
+  assertHasErrorMatching(checkShareRouteNoindex(config), SHARE_ROUTE_PATTERN);
 });
 
 test('/s/* X-Robots-Tag header value drift fails', () => {
