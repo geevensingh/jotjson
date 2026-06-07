@@ -56,7 +56,6 @@ export class BlobsComponent implements OnInit {
   readonly isEmpty = computed(() => this.state() === 'ready' && this.blobList().length === 0);
 
   ngOnInit(): void {
-    this.seo.clearBlobTags();
     this.seo.setNoindex(true);
     void this.reload();
   }

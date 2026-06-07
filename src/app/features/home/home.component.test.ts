@@ -151,7 +151,6 @@ function makeIdentityBlob(overrides: Partial<JsonBlob> = {}): JsonBlob {
     content: '{"saved":true}',
     title: 'Saved title',
     ownerId: 'owner-me',
-    isPublic: false,
     version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
@@ -273,7 +272,6 @@ describe('HomeComponent (unit-level)', () => {
       content: '{"a":1}',
       title: 'hello',
       ownerId: 'me',
-      isPublic: false,
       highlights: [{ path: '$.a', color: '#ffff00', cascade: false }],
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
@@ -294,7 +292,6 @@ describe('HomeComponent (unit-level)', () => {
       content: '{"a":1}',
       title: 'hello',
       ownerId: 'me',
-      isPublic: false,
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
@@ -327,7 +324,6 @@ describe('HomeComponent (unit-level)', () => {
       content: '{"a":1}',
       title: 'hello',
       ownerId: 'me',
-      isPublic: false,
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
@@ -377,7 +373,6 @@ describe('HomeComponent (unit-level)', () => {
       content: '{"a":1}',
       title: 'hello',
       ownerId: 'me',
-      isPublic: false,
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
@@ -388,7 +383,6 @@ describe('HomeComponent (unit-level)', () => {
       content: '{"b":2}',
       title: 'world',
       ownerId: 'me',
-      isPublic: false,
       version: 1,
       createdAt: '2024-02-01T00:00:00Z',
       updatedAt: '2024-02-01T00:00:00Z',
@@ -420,7 +414,6 @@ describe('HomeComponent (unit-level)', () => {
       content: '{"a":1}',
       title: 'hello',
       ownerId: 'me',
-      isPublic: false,
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
@@ -3069,7 +3062,6 @@ describe('HomeComponent save() branching (M4a)', () => {
     content: '{"a":1}',
     title: 'Hello',
     ownerId: 'owner-me',
-    isPublic: false,
     version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
@@ -3176,14 +3168,12 @@ describe('HomeComponent save() branching (M4a)', () => {
     fixture.componentInstance.content.set(content);
     fixture.componentInstance.title.set('My title');
     await fixture.componentInstance.onSave();
-    expect(stub.create).toHaveBeenCalledWith(content, 'My title', false, []);
+    expect(stub.create).toHaveBeenCalledWith(content, 'My title', []);
     expect(fixture.componentInstance.loadedBlob()).toEqual(created);
     expect(navSpy).toHaveBeenCalledWith(['/s', 'newslug']);
-    expect(eventSpy).toHaveBeenCalledExactlyOnceWith(
-      'share.created',
-      { visibility: 'private' },
-      { sizeBytes: new Blob([content]).size },
-    );
+    expect(eventSpy).toHaveBeenCalledExactlyOnceWith('share.created', undefined, {
+      sizeBytes: new Blob([content]).size,
+    });
   });
 
   it('create path: forks when loaded blob belongs to someone else', async () => {
@@ -3213,7 +3203,7 @@ describe('HomeComponent save() branching (M4a)', () => {
 
     await fixture.componentInstance.onSave();
 
-    expect(stub.create).toHaveBeenCalledWith('{"a":1}', 'Hello', false, [sourceHighlight]);
+    expect(stub.create).toHaveBeenCalledWith('{"a":1}', 'Hello', [sourceHighlight]);
     expect(stub.update).not.toHaveBeenCalled();
     expect(fixture.componentInstance.highlights()).toEqual([sourceHighlight]);
     expect(fixture.componentInstance.canEditHighlights()).toBe(true);
@@ -3229,7 +3219,7 @@ describe('HomeComponent save() branching (M4a)', () => {
 
     await fixture.componentInstance.onSave();
 
-    expect(stub.create).toHaveBeenCalledWith('{"a":1}', 'Hello', false, []);
+    expect(stub.create).toHaveBeenCalledWith('{"a":1}', 'Hello', []);
     expect(stub.update).not.toHaveBeenCalled();
     expect(fixture.componentInstance.highlights()).toEqual([]);
   });
@@ -3255,7 +3245,7 @@ describe('HomeComponent save() branching (M4a)', () => {
 
     await fixture.componentInstance.onSave();
 
-    expect(stub.create).toHaveBeenCalledWith(content, 'Hello', false, sourceHighlights);
+    expect(stub.create).toHaveBeenCalledWith(content, 'Hello', sourceHighlights);
     expect(stub.update).not.toHaveBeenCalled();
     expect(fixture.componentInstance.highlights()).toEqual(sourceHighlights);
   });
@@ -3278,7 +3268,6 @@ describe('HomeComponent save() branching (M4a)', () => {
     expect(stub.update).toHaveBeenCalledWith('id-1', {
       content: '{"a":2}',
       title: 'New',
-      isPublic: false,
       highlights: [],
     });
     expect(stub.create).not.toHaveBeenCalled();
@@ -3292,7 +3281,7 @@ describe('HomeComponent save() branching (M4a)', () => {
     fixture.componentInstance.content.set('{"a":1}');
     fixture.componentInstance.title.set('   ');
     await fixture.componentInstance.onSave();
-    expect(stub.create).toHaveBeenCalledWith('{"a":1}', undefined, false, []);
+    expect(stub.create).toHaveBeenCalledWith('{"a":1}', undefined, []);
   });
 
   it('save sets saveInFlight during request and clears it after', async () => {
@@ -3366,7 +3355,6 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     content: '{"foo":1,"bar":2}',
     title: 'Saved title',
     ownerId: 'owner-me',
-    isPublic: false,
     version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
@@ -3563,7 +3551,6 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     return blob({
       content: '{"parent":{"child":{"leaf":1}}}',
       ownerId,
-      isPublic: true,
       highlights: [
         { path: '$.parent', color: '#7e6500', cascade: true },
         { path: '$.parent.child', color: '#fff59d', cascade: false },
@@ -3571,7 +3558,7 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     });
   }
 
-  it('passes canEditHighlights false and hides highlight menu actions for anonymous public viewers', async () => {
+  it('passes canEditHighlights false and hides highlight menu actions for anonymous viewers', async () => {
     const { fixture } = setup({ userId: null });
     const component = fixture.componentInstance;
     component.__loadBlobForTesting(highlightedReadOnlyBlob('owner-me'));
@@ -3637,7 +3624,6 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     expect(stub.update).toHaveBeenCalledWith('blob-1', {
       content: '{"foo":1,"bar":2}',
       title: 'Saved title',
-      isPublic: false,
       highlights: [highlightFoo],
     });
     expect(component.highlights()).toEqual([serverHighlight]);
@@ -3659,7 +3645,6 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     expect(stub.update.mock.lastCall![1]).toEqual({
       content: '{"bar":2}',
       title: 'Saved title',
-      isPublic: false,
       highlights: [],
     });
   });
@@ -3676,7 +3661,6 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     expect(stub.update.mock.lastCall![1]).toEqual({
       content: '{"foo":',
       title: 'Saved title',
-      isPublic: false,
       highlights: [highlightFoo],
     });
   });
@@ -3703,7 +3687,6 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     expect(stub.update.mock.lastCall![1]).toEqual({
       content: '{"a":1,"d":3}',
       title: 'Saved title',
-      isPublic: false,
       highlights: survivingHighlights,
     });
     expect(component.highlights()).toEqual(survivingHighlights);
@@ -3729,7 +3712,6 @@ describe('HomeComponent manual highlights save flow (Phase 4)', () => {
     expect(stub.update.mock.lastCall![1]).toEqual({
       content: '{"a":1,"d":',
       title: 'Saved title',
-      isPublic: false,
       highlights: allHighlights,
     });
     expect(component.highlights()).toEqual(allHighlights);
@@ -3934,7 +3916,6 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       content: '{}',
       title: 'My Config',
       ownerId: 'o1',
-      isPublic: false,
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
@@ -3953,7 +3934,6 @@ describe('HomeComponent browser-title effect (M4a)', () => {
       slug: 's1',
       content: '{}',
       ownerId: 'o1',
-      isPublic: false,
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
@@ -4077,7 +4057,6 @@ describe('HomeComponent document-title dirty indicator (issue #84)', () => {
     expect(blobService.update).toHaveBeenCalledWith('identity-blob-1', {
       content: '{"saved":false}',
       title: 'Saved title',
-      isPublic: false,
       highlights: [],
     });
     expect(mostRecentTitle(titleSpy)).toBe('Saved title | JotJSON');
@@ -4117,7 +4096,6 @@ describe('HomeComponent browser-title env-label prefix', () => {
       content: '{}',
       title: 'My Config',
       ownerId: 'o1',
-      isPublic: false,
       version: 1,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
@@ -4159,7 +4137,6 @@ describe('HomeComponent blob actions (M4b)', () => {
     slug: 'abc123',
     content: '{"a":1}',
     ownerId: 'owner-me',
-    isPublic: false,
     version: 1,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
@@ -4280,67 +4257,6 @@ describe('HomeComponent blob actions (M4b)', () => {
     const { fixture, snack } = setup({ userId: 'owner-me' });
     fixture.componentInstance.onCopyShareLink();
     expect(snack.open).not.toHaveBeenCalled();
-  });
-
-  it('onTogglePublic emits public visibility telemetry after a private-to-public update', async () => {
-    const updated = blob({ isPublic: true });
-    const { fixture, stub, snack } = setup({
-      userId: 'owner-me',
-      loaded: blob({ isPublic: false }),
-      updateResult: updated,
-    });
-    const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-    await fixture.componentInstance.onTogglePublic();
-    expect(stub.update).toHaveBeenCalledWith('blob-1', { isPublic: true });
-    expect(fixture.componentInstance.loadedBlob()?.isPublic).toBe(true);
-    expect(snack.open).toHaveBeenCalled();
-    expect(eventSpy).toHaveBeenCalledExactlyOnceWith(
-      'share.visibility.changed',
-      { newVisibility: 'public' },
-      undefined,
-    );
-  });
-
-  it('onTogglePublic emits private visibility telemetry after a public-to-private update', async () => {
-    const updated = blob({ isPublic: false });
-    const { fixture, stub, snack } = setup({
-      userId: 'owner-me',
-      loaded: blob({ isPublic: true }),
-      updateResult: updated,
-    });
-    const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-    await fixture.componentInstance.onTogglePublic();
-    expect(stub.update).toHaveBeenCalledWith('blob-1', { isPublic: false });
-    expect(fixture.componentInstance.loadedBlob()?.isPublic).toBe(false);
-    expect(snack.open).toHaveBeenCalled();
-    expect(eventSpy).toHaveBeenCalledExactlyOnceWith(
-      'share.visibility.changed',
-      { newVisibility: 'private' },
-      undefined,
-    );
-  });
-
-  it('onTogglePublic toasts an error without visibility telemetry when the update fails', async () => {
-    const { fixture, snack } = setup({
-      userId: 'owner-me',
-      loaded: blob(),
-      updateResult: new Error('nope'),
-    });
-    const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-    const warnSpy = vi.spyOn(console, 'warn');
-    await fixture.componentInstance.onTogglePublic();
-    expect(snack.open).toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith('[share.visibility.failed]', {});
-    expect(eventSpy).not.toHaveBeenCalled();
-  });
-
-  it('onTogglePublic does nothing when the user does not own the blob', async () => {
-    const { fixture, stub } = setup({
-      userId: 'someone-else',
-      loaded: blob(),
-    });
-    await fixture.componentInstance.onTogglePublic();
-    expect(stub.update).not.toHaveBeenCalled();
   });
 
   it('onDeleteBlob confirms, deletes, clears state, and navigates home', async () => {
