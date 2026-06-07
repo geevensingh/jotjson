@@ -9,18 +9,21 @@ interface DragEventInit {
   types?: readonly string[];
   files?: readonly File[];
   relatedTarget?: EventTarget | null;
+  items?: readonly Partial<DataTransferItem>[];
 }
 
 function makeDragEvent(type: string, init: DragEventInit = {}): DragEvent {
   const types = init.types ?? ['Files'];
   const files = init.files ?? [];
+  const items =
+    init.items ?? files.map(() => ({ kind: 'file' as const }) as Partial<DataTransferItem>);
   const event = new Event(type, { bubbles: true, cancelable: true }) as DragEvent;
   Object.defineProperty(event, 'dataTransfer', {
     configurable: true,
     value: {
       types,
       files,
-      items: files.map(() => ({ kind: 'file' })),
+      items,
     },
   });
   if (init.relatedTarget !== undefined) {
@@ -34,6 +37,24 @@ function makeDragEvent(type: string, init: DragEventInit = {}): DragEvent {
 
 function makeFile(name = 'sample.json', body = '{}'): File {
   return new File([body], name, { type: 'application/json' });
+}
+
+function makeFakeHandle(name = 'sample.json'): FileSystemFileHandle {
+  return {
+    kind: 'file' as const,
+    name,
+  } as unknown as FileSystemFileHandle;
+}
+
+/**
+ * Microtask-flush helper. The async drop dispatcher awaits
+ * `Promise.all(items.map(...))` before invoking the handler; specs that
+ * inspect handler invocation need to drain the microtask queue first.
+ */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    await Promise.resolve();
+  }
 }
 
 describe('DocumentDropController', () => {
@@ -81,19 +102,114 @@ describe('DocumentDropController', () => {
     expect(controller.dropActive()).toBe(false);
   });
 
-  it('forwards drops to a registered handler and skips the snackbar', () => {
+  it('forwards drops to a registered handler and skips the snackbar', async () => {
     const handler = vi.fn();
     controller.registerEditorHandler(handler);
     const file = makeFile();
 
     document.dispatchEvent(makeDragEvent('dragenter', { files: [file] }));
     document.dispatchEvent(makeDragEvent('drop', { files: [file] }));
+    await flushMicrotasks();
 
     expect(handler).toHaveBeenCalledTimes(1);
-    const passed = handler.mock.lastCall![0] as readonly File[];
-    expect(passed.length).toBe(1);
-    expect(passed[0]).toBe(file);
+    const callArgs = handler.mock.lastCall as readonly unknown[];
+    const passedFiles = callArgs[0] as readonly File[];
+    const passedHandles = callArgs[1] as readonly (FileSystemFileHandle | null)[];
+    expect(passedFiles.length).toBe(1);
+    expect(passedFiles[0]).toBe(file);
+    expect(passedHandles.length).toBe(1);
+    // No getAsFileSystemHandle on the item stub -> null slot.
+    expect(passedHandles[0]).toBeNull();
     expect(snackOpen).not.toHaveBeenCalled();
+  });
+
+  it('populates handles[i] when DataTransferItem.getAsFileSystemHandle resolves to a file handle', async () => {
+    const handler = vi.fn();
+    controller.registerEditorHandler(handler);
+    const file = makeFile();
+    const handle = makeFakeHandle('sample.json');
+    const item: Partial<DataTransferItem> = {
+      kind: 'file',
+      getAsFileSystemHandle: vi.fn().mockResolvedValue(handle),
+    };
+
+    document.dispatchEvent(makeDragEvent('drop', { files: [file], items: [item] }));
+    await flushMicrotasks();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const passedHandles = handler.mock.lastCall![1] as readonly (FileSystemFileHandle | null)[];
+    expect(passedHandles[0]).toBe(handle);
+  });
+
+  it('writes null per item when getAsFileSystemHandle rejects (per-item, not whole-drop)', async () => {
+    const handler = vi.fn();
+    controller.registerEditorHandler(handler);
+    const fileA = makeFile('a.json');
+    const fileB = makeFile('b.json');
+    const handleA = makeFakeHandle('a.json');
+    const itemA: Partial<DataTransferItem> = {
+      kind: 'file',
+      getAsFileSystemHandle: vi.fn().mockResolvedValue(handleA),
+    };
+    const itemB: Partial<DataTransferItem> = {
+      kind: 'file',
+      getAsFileSystemHandle: vi.fn().mockRejectedValue(new Error('per-item failure')),
+    };
+
+    document.dispatchEvent(makeDragEvent('drop', { files: [fileA, fileB], items: [itemA, itemB] }));
+    await flushMicrotasks();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const passedFiles = handler.mock.lastCall![0] as readonly File[];
+    const passedHandles = handler.mock.lastCall![1] as readonly (FileSystemFileHandle | null)[];
+    expect(passedFiles.length).toBe(2);
+    expect(passedHandles.length).toBe(2);
+    expect(passedHandles[0]).toBe(handleA);
+    expect(passedHandles[1]).toBeNull();
+  });
+
+  it('writes null when the handle kind is "directory" (not "file")', async () => {
+    const handler = vi.fn();
+    controller.registerEditorHandler(handler);
+    const file = makeFile();
+    const directoryHandle = {
+      kind: 'directory' as const,
+      name: 'someDir',
+    } as unknown as FileSystemHandle;
+    const item: Partial<DataTransferItem> = {
+      kind: 'file',
+      getAsFileSystemHandle: vi.fn().mockResolvedValue(directoryHandle),
+    };
+
+    document.dispatchEvent(makeDragEvent('drop', { files: [file], items: [item] }));
+    await flushMicrotasks();
+
+    const passedHandles = handler.mock.lastCall![1] as readonly (FileSystemFileHandle | null)[];
+    expect(passedHandles[0]).toBeNull();
+  });
+
+  it('flips dropActive=false synchronously even when handle resolution is in flight', () => {
+    let resolveHandle: (value: FileSystemFileHandle | null) => void = () => {};
+    const handler = vi.fn();
+    controller.registerEditorHandler(handler);
+    const file = makeFile();
+    const pendingPromise = new Promise<FileSystemFileHandle | null>((resolve) => {
+      resolveHandle = resolve;
+    });
+    const item: Partial<DataTransferItem> = {
+      kind: 'file',
+      getAsFileSystemHandle: vi.fn().mockReturnValue(pendingPromise),
+    };
+
+    document.dispatchEvent(makeDragEvent('dragenter', { files: [file], items: [item] }));
+    document.dispatchEvent(makeDragEvent('drop', { files: [file], items: [item] }));
+
+    // dropActive flips false synchronously inside onDrop, before the
+    // per-item getAsFileSystemHandle promise resolves.
+    expect(controller.dropActive()).toBe(false);
+    expect(handler).not.toHaveBeenCalled();
+
+    resolveHandle(null);
   });
 
   it('opens a snackbar with a Go-to-editor action when no handler is registered', () => {
@@ -171,17 +287,18 @@ describe('DocumentDropController', () => {
     expect(controller.dropActive()).toBe(false);
   });
 
-  it('disposes a registered handler so subsequent drops fall back to the snackbar', () => {
+  it('disposes a registered handler so subsequent drops fall back to the snackbar', async () => {
     const handler = vi.fn();
     const dispose = controller.registerEditorHandler(handler);
     dispose();
 
     document.dispatchEvent(makeDragEvent('drop', { files: [makeFile()] }));
+    await flushMicrotasks();
     expect(handler).not.toHaveBeenCalled();
     expect(snackOpen).toHaveBeenCalledTimes(1);
   });
 
-  it('replaces the active handler when register is called twice', () => {
+  it('replaces the active handler when register is called twice', async () => {
     const warn = vi.spyOn(console, 'warn');
     const first = vi.fn();
     const second = vi.fn();
@@ -189,12 +306,13 @@ describe('DocumentDropController', () => {
     controller.registerEditorHandler(second);
 
     document.dispatchEvent(makeDragEvent('drop', { files: [makeFile()] }));
+    await flushMicrotasks();
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalled();
   });
 
-  it('ignores a stale dispose so it does not clobber the new handler', () => {
+  it('ignores a stale dispose so it does not clobber the new handler', async () => {
     const first = vi.fn();
     const second = vi.fn();
     const disposeFirst = controller.registerEditorHandler(first);
@@ -205,6 +323,7 @@ describe('DocumentDropController', () => {
     disposeFirst();
 
     document.dispatchEvent(makeDragEvent('drop', { files: [makeFile()] }));
+    await flushMicrotasks();
     expect(second).toHaveBeenCalledTimes(1);
     expect(snackOpen).not.toHaveBeenCalled();
   });

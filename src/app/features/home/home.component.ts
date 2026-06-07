@@ -2934,7 +2934,13 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.disposeDropHandler = this.dropController.registerEditorHandler((files) => {
+    this.disposeDropHandler = this.dropController.registerEditorHandler((files, _handles) => {
+      // Phase 3a: closure accepts the new (files, handles) signature
+      // for the DocumentDropController async upgrade. The `_handles`
+      // companion array is not yet consumed; Phase 3b will plumb it
+      // through `onFilesReceived(files, source, handles?)` so the
+      // file-backed DocumentBacking variant gets a non-null handle on
+      // drag-drop adoption.
       void this.onFilesReceived(files, 'drag');
     });
     this.disposeLaunchHandler = this.launchQueueController.registerHandler(async (event) => {

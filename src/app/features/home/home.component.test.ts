@@ -4333,14 +4333,24 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
 
   class FakeDropController {
     readonly dropActive = signal(false);
-    registeredHandler?: (files: readonly File[]) => void;
+    registeredHandler?: (
+      files: readonly File[],
+      handles: readonly (FileSystemFileHandle | null)[],
+    ) => void | Promise<void>;
     readonly dispose = vi.fn();
     readonly registerEditorHandler = vi
       .fn()
-      .mockImplementation((handler: (files: readonly File[]) => void) => {
-        this.registeredHandler = handler;
-        return this.dispose;
-      });
+      .mockImplementation(
+        (
+          handler: (
+            files: readonly File[],
+            handles: readonly (FileSystemFileHandle | null)[],
+          ) => void | Promise<void>,
+        ) => {
+          this.registeredHandler = handler;
+          return this.dispose;
+        },
+      );
   }
 
   class FakeLaunchQueueController {
@@ -4459,7 +4469,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
       text: () => Promise.resolve(text),
       arrayBuffer: () => Promise.resolve(new TextEncoder().encode(text).buffer),
     } as unknown as File;
-    handler([file]);
+    handler([file], [null]);
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
     expect(fixture.componentInstance.content()).toBe(text);
@@ -4484,7 +4494,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     const before = fixture.componentInstance.content();
     const file1 = new File(['{"a":1}'], 'a.json');
     const file2 = new File(['{"b":2}'], 'b.json');
-    fakeController.registeredHandler!([file1, file2]);
+    fakeController.registeredHandler!([file1, file2], [null, null]);
     await Promise.resolve();
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
@@ -4496,7 +4506,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
     const { fixture, fakeController, snack } = setup();
     const before = fixture.componentInstance.content();
     const warnSpy = vi.spyOn(console, 'warn');
-    fakeController.registeredHandler!([makeOversizedFile()]);
+    fakeController.registeredHandler!([makeOversizedFile()], [null]);
     await Promise.resolve();
     await Promise.resolve();
     expect(snack.open).toHaveBeenCalledTimes(1);
@@ -4510,7 +4520,7 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
   it('drop where File.text() rejects toasts readFailed without upload.handle telemetry', async () => {
     const { fakeController, snack } = setup();
     const eventSpy = vi.spyOn(TestBed.inject(LoggerService), 'event');
-    fakeController.registeredHandler!([makeRejectingFile()]);
+    fakeController.registeredHandler!([makeRejectingFile()], [null]);
     await waitForTaskQueue();
     expect(snack.open).toHaveBeenCalledTimes(1);
     expect(snack.open.mock.lastCall![0]).toContain('Could not read');
@@ -4966,14 +4976,24 @@ describe('HomeComponent extract-banner telemetry', () => {
 
   class FakeDropController {
     readonly dropActive = signal(false);
-    registeredHandler?: (files: readonly File[]) => void;
+    registeredHandler?: (
+      files: readonly File[],
+      handles: readonly (FileSystemFileHandle | null)[],
+    ) => void | Promise<void>;
     readonly dispose = vi.fn();
     readonly registerEditorHandler = vi
       .fn()
-      .mockImplementation((handler: (files: readonly File[]) => void) => {
-        this.registeredHandler = handler;
-        return this.dispose;
-      });
+      .mockImplementation(
+        (
+          handler: (
+            files: readonly File[],
+            handles: readonly (FileSystemFileHandle | null)[],
+          ) => void | Promise<void>,
+        ) => {
+          this.registeredHandler = handler;
+          return this.dispose;
+        },
+      );
   }
 
   class FakeLaunchQueueController {
@@ -5088,7 +5108,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     });
     expect(drop.registeredHandler).toBeDefined();
 
-    drop.registeredHandler!([file]);
+    drop.registeredHandler!([file], [null]);
     await waitForTaskQueue();
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -5313,7 +5333,7 @@ describe('HomeComponent extract-banner telemetry', () => {
     const file = new File(['INFO log {"a":1}'], 'capture.log', {
       type: 'text/plain',
     });
-    drop.registeredHandler!([file]);
+    drop.registeredHandler!([file], [null]);
     await waitForTaskQueue();
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -5367,7 +5387,7 @@ describe('HomeComponent extract-banner telemetry', () => {
       type: 'text/plain',
     });
 
-    drop.registeredHandler!([file]);
+    drop.registeredHandler!([file], [null]);
     await waitForTaskQueue();
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -5491,14 +5511,24 @@ describe('HomeComponent upload-error banner (#36)', () => {
 
   class FakeDropController {
     readonly dropActive = signal(false);
-    registeredHandler?: (files: readonly File[]) => void;
+    registeredHandler?: (
+      files: readonly File[],
+      handles: readonly (FileSystemFileHandle | null)[],
+    ) => void | Promise<void>;
     readonly dispose = vi.fn();
     readonly registerEditorHandler = vi
       .fn()
-      .mockImplementation((handler: (files: readonly File[]) => void) => {
-        this.registeredHandler = handler;
-        return this.dispose;
-      });
+      .mockImplementation(
+        (
+          handler: (
+            files: readonly File[],
+            handles: readonly (FileSystemFileHandle | null)[],
+          ) => void | Promise<void>,
+        ) => {
+          this.registeredHandler = handler;
+          return this.dispose;
+        },
+      );
   }
 
   class FakeLaunchQueueController {
@@ -5690,7 +5720,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
       arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":').buffer),
     } as unknown as File;
 
-    fakeController.registeredHandler!([file]);
+    fakeController.registeredHandler!([file], [null]);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -5709,7 +5739,7 @@ describe('HomeComponent upload-error banner (#36)', () => {
       arrayBuffer: () => Promise.resolve(new TextEncoder().encode('{"a":1}').buffer),
     } as unknown as File;
 
-    fakeController.registeredHandler!([file]);
+    fakeController.registeredHandler!([file], [null]);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -5753,14 +5783,24 @@ describe('HomeComponent binary upload rejection (#62)', () => {
 
   class FakeDropController {
     readonly dropActive = signal(false);
-    registeredHandler?: (files: readonly File[]) => void;
+    registeredHandler?: (
+      files: readonly File[],
+      handles: readonly (FileSystemFileHandle | null)[],
+    ) => void | Promise<void>;
     readonly dispose = vi.fn();
     readonly registerEditorHandler = vi
       .fn()
-      .mockImplementation((handler: (files: readonly File[]) => void) => {
-        this.registeredHandler = handler;
-        return this.dispose;
-      });
+      .mockImplementation(
+        (
+          handler: (
+            files: readonly File[],
+            handles: readonly (FileSystemFileHandle | null)[],
+          ) => void | Promise<void>,
+        ) => {
+          this.registeredHandler = handler;
+          return this.dispose;
+        },
+      );
   }
 
   class FakeLaunchQueueController {
@@ -5837,7 +5877,7 @@ describe('HomeComponent binary upload rejection (#62)', () => {
       text: () => Promise.resolve(''),
       arrayBuffer: () => Promise.resolve(pngBytes.buffer),
     } as unknown as File;
-    fakeController.registeredHandler!([fakePng]);
+    fakeController.registeredHandler!([fakePng], [null]);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();

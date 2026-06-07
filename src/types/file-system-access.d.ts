@@ -63,3 +63,16 @@ interface Window {
   showOpenFilePicker?(options?: OpenFilePickerOptions): Promise<FileSystemFileHandle[]>;
   showSaveFilePicker?(options?: SaveFilePickerOptions): Promise<FileSystemFileHandle>;
 }
+
+/**
+ * Drag-and-drop entry point for the File System Access API. Returns a
+ * `FileSystemHandle` (or `null` when the item is not representable as a
+ * file-system entry, e.g., a synthetic clipboard item). The drop
+ * controller awaits this per-item to populate the `handles` companion
+ * array on its async `DropHandler`.
+ *
+ * MDN: https://developer.mozilla.org/docs/Web/API/DataTransferItem/getAsFileSystemHandle
+ */
+interface DataTransferItem {
+  getAsFileSystemHandle?(): Promise<FileSystemHandle | null>;
+}
