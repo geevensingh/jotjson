@@ -1,13 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
-import {
-  ComponentFixture,
-  fakeAsync,
-  flush,
-  flushMicrotasks,
-  TestBed,
-  tick,
-} from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { BehaviorSubject, Subject } from 'rxjs';
@@ -410,176 +403,236 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
   });
 
   describe('autosave gated on empty matchValue (fu1)', () => {
-    it('autosave does not fire while a rule has empty matchValue', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.addRule();
-      tick(600);
-      ctx.fixture.detectChanges();
-      expect(ctx.service.update).not.toHaveBeenCalled();
-      expect(ctx.fixture.componentInstance.pillState().kind).toBe('invalid');
-    }));
+    it('autosave does not fire while a rule has empty matchValue', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.addRule();
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.fixture.detectChanges();
+        expect(ctx.service.update).not.toHaveBeenCalled();
+        expect(ctx.fixture.componentInstance.pillState().kind).toBe('invalid');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('filling matchValue clears the reason and unblocks autosave', fakeAsync(() => {
-      const ctx = loaded(ruleSet({ rules: [rule({ matchValue: '' })] }));
-      // Initial validity is invalid (loaded with empty matchValue).
-      expect(ctx.fixture.componentInstance.validity().kind).toBe('invalid');
-      ctx.fixture.componentInstance.patchRule(0, { matchValue: 'foo' });
-      tick(600);
-      ctx.fixture.detectChanges();
-      expect(ctx.service.update).toHaveBeenCalledTimes(1);
-      ctx.service.updateSubjects[0].next(ruleSet({ name: 'My set', version: 2 }));
-      ctx.service.updateSubjects[0].complete();
-      flush();
-    }));
+    it('filling matchValue clears the reason and unblocks autosave', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded(ruleSet({ rules: [rule({ matchValue: '' })] }));
+        // Initial validity is invalid (loaded with empty matchValue).
+        expect(ctx.fixture.componentInstance.validity().kind).toBe('invalid');
+        ctx.fixture.componentInstance.patchRule(0, { matchValue: 'foo' });
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.fixture.detectChanges();
+        expect(ctx.service.update).toHaveBeenCalledTimes(1);
+        ctx.service.updateSubjects[0].next(ruleSet({ name: 'My set', version: 2 }));
+        ctx.service.updateSubjects[0].complete();
+        await Promise.resolve();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('autosave pipeline', () => {
-    it('does NOT save invalid drafts', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.patchStyle(0, { backgroundColor: '#abc' });
-      tick(600);
-      ctx.fixture.detectChanges();
-      expect(ctx.service.update).not.toHaveBeenCalled();
-      expect(ctx.fixture.componentInstance.pillState().kind).toBe('invalid');
-    }));
+    it('does NOT save invalid drafts', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.patchStyle(0, { backgroundColor: '#abc' });
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.fixture.detectChanges();
+        expect(ctx.service.update).not.toHaveBeenCalled();
+        expect(ctx.fixture.componentInstance.pillState().kind).toBe('invalid');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('debounces multiple rapid edits into a single save', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.setName('A');
-      tick(100);
-      ctx.fixture.componentInstance.setName('AB');
-      tick(100);
-      ctx.fixture.componentInstance.setName('ABC');
-      tick(600);
-      ctx.fixture.detectChanges();
-      expect(ctx.service.update).toHaveBeenCalledTimes(1);
-      expect(ctx.service.update.mock.lastCall![1]).toEqual(
-        expect.objectContaining({ name: 'ABC' }),
-      );
-      // Drain the in-flight save so fakeAsync exits cleanly.
-      ctx.service.updateSubjects[0].next(ruleSet({ name: 'ABC', version: 2 }));
-      ctx.service.updateSubjects[0].complete();
-      flush();
-    }));
+    it('debounces multiple rapid edits into a single save', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(100);
+        ctx.fixture.componentInstance.setName('AB');
+        await vi.advanceTimersByTimeAsync(100);
+        ctx.fixture.componentInstance.setName('ABC');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.fixture.detectChanges();
+        expect(ctx.service.update).toHaveBeenCalledTimes(1);
+        expect(ctx.service.update.mock.lastCall![1]).toEqual(
+          expect.objectContaining({ name: 'ABC' }),
+        );
+        // Drain the in-flight save so the pipeline settles cleanly.
+        ctx.service.updateSubjects[0].next(ruleSet({ name: 'ABC', version: 2 }));
+        ctx.service.updateSubjects[0].complete();
+        await Promise.resolve();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('queues a second save (concatMap) and uses the new version returned by the first', fakeAsync(() => {
-      const ctx = loaded();
-      // Edit 1
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      ctx.fixture.detectChanges();
-      expect(ctx.service.update).toHaveBeenCalledTimes(1);
-      expect(ctx.service.update.mock.calls[0][2]).toBe(1);
-      // Save 1 still in flight; user edits again.
-      ctx.fixture.componentInstance.setName('AB');
-      tick(600);
-      // No 2nd call yet because save 1 is still pending.
-      expect(ctx.service.update).toHaveBeenCalledTimes(1);
-      // Resolve save 1 with version 2.
-      ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
-      ctx.service.updateSubjects[0].complete();
-      flush();
-      ctx.fixture.detectChanges();
-      // Now save 2 fires - and uses the freshly acknowledged version 2.
-      expect(ctx.service.update).toHaveBeenCalledTimes(2);
-      expect(ctx.service.update.mock.calls[1][2]).toBe(2);
-      // Drain.
-      ctx.service.updateSubjects[1].next(ruleSet({ name: 'AB', version: 3 }));
-      ctx.service.updateSubjects[1].complete();
-      flush();
-    }));
+    it('queues a second save (concatMap) and uses the new version returned by the first', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        // Edit 1
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.fixture.detectChanges();
+        expect(ctx.service.update).toHaveBeenCalledTimes(1);
+        expect(ctx.service.update.mock.calls[0][2]).toBe(1);
+        // Save 1 still in flight; user edits again.
+        ctx.fixture.componentInstance.setName('AB');
+        await vi.advanceTimersByTimeAsync(600);
+        // No 2nd call yet because save 1 is still pending.
+        expect(ctx.service.update).toHaveBeenCalledTimes(1);
+        // Resolve save 1 with version 2.
+        ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
+        ctx.service.updateSubjects[0].complete();
+        await Promise.resolve();
+        ctx.fixture.detectChanges();
+        // Now save 2 fires - and uses the freshly acknowledged version 2.
+        expect(ctx.service.update).toHaveBeenCalledTimes(2);
+        expect(ctx.service.update.mock.calls[1][2]).toBe(2);
+        // Drain.
+        ctx.service.updateSubjects[1].next(ruleSet({ name: 'AB', version: 3 }));
+        ctx.service.updateSubjects[1].complete();
+        await Promise.resolve();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('flips Editing -> Saving -> Saved on success', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.setName('A');
-      ctx.fixture.detectChanges();
-      expect(ctx.fixture.componentInstance.pillState().kind).toBe('editing');
-      tick(600);
-      ctx.fixture.detectChanges();
-      expect(ctx.fixture.componentInstance.pillState().kind).toBe('saving');
-      ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
-      ctx.service.updateSubjects[0].complete();
-      tick(0);
-      ctx.fixture.detectChanges();
-      expect(ctx.fixture.componentInstance.pillState().kind).toBe('saved');
-      // Drain the saved-flash timer to leave fakeAsync clean.
-      tick(2000);
-    }));
+    it('flips Editing -> Saving -> Saved on success', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.setName('A');
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.pillState().kind).toBe('editing');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.pillState().kind).toBe('saving');
+        ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
+        ctx.service.updateSubjects[0].complete();
+        await Promise.resolve();
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.pillState().kind).toBe('saved');
+        // Drain the saved-flash timer to leave the pipeline clean.
+        await vi.advanceTimersByTimeAsync(2000);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('shows savedOffline pill when the rule set has a pending queued write (M6g-4)', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      // Service marks this id as having a pending offline write before
-      // the optimistic next() arrives.
-      ctx.service.setPendingIds(['rs-1']);
-      ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
-      ctx.service.updateSubjects[0].complete();
-      tick(0);
-      ctx.fixture.detectChanges();
-      expect(ctx.fixture.componentInstance.pillState().kind).toBe('savedOffline');
-      tick(2000);
-    }));
+    it('shows savedOffline pill when the rule set has a pending queued write (M6g-4)', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        // Service marks this id as having a pending offline write before
+        // the optimistic next() arrives.
+        ctx.service.setPendingIds(['rs-1']);
+        ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
+        ctx.service.updateSubjects[0].complete();
+        await Promise.resolve();
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.pillState().kind).toBe('savedOffline');
+        await vi.advanceTimersByTimeAsync(2000);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('toasts a conflict message on a service sync conflict event (M6g-4)', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.service.events$.next({ kind: 'conflict', id: 'rs-1' });
-      tick(0);
-      expect(ctx.snack.open).toHaveBeenCalled();
-      const args = ctx.snack.open.mock.lastCall!;
-      expect(String(args[0])).toContain('could not be saved');
-    }));
+    it('toasts a conflict message on a service sync conflict event (M6g-4)', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.service.events$.next({ kind: 'conflict', id: 'rs-1' });
+        await Promise.resolve();
+        expect(ctx.snack.open).toHaveBeenCalled();
+        const args = ctx.snack.open.mock.lastCall!;
+        expect(String(args[0])).toContain('could not be saved');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('ignores sync events for other rule sets (M6g-4)', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.service.events$.next({ kind: 'conflict', id: 'some-other-id' });
-      tick(0);
-      expect(ctx.snack.open).not.toHaveBeenCalled();
-    }));
+    it('ignores sync events for other rule sets (M6g-4)', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.service.events$.next({ kind: 'conflict', id: 'some-other-id' });
+        await Promise.resolve();
+        expect(ctx.snack.open).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('flips to Save failed - retry on a generic 500', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 500 }));
-      flush();
-      ctx.fixture.detectChanges();
-      expect(ctx.fixture.componentInstance.pillState().kind).toBe('error');
-    }));
+    it('flips to Save failed - retry on a generic 500', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 500 }));
+        await Promise.resolve();
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.pillState().kind).toBe('error');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    it('retrySave fires another update after a failure', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 500 }));
-      flush();
-      ctx.fixture.componentInstance.retrySave();
-      tick(600);
-      expect(ctx.service.update).toHaveBeenCalledTimes(2);
-      ctx.service.updateSubjects[1].next(ruleSet({ name: 'A', version: 2 }));
-      ctx.service.updateSubjects[1].complete();
-      flush();
-    }));
+    it('retrySave fires another update after a failure', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 500 }));
+        await Promise.resolve();
+        ctx.fixture.componentInstance.retrySave();
+        await vi.advanceTimersByTimeAsync(600);
+        expect(ctx.service.update).toHaveBeenCalledTimes(2);
+        ctx.service.updateSubjects[1].next(ruleSet({ name: 'A', version: 2 }));
+        ctx.service.updateSubjects[1].complete();
+        await Promise.resolve();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('412 conflict', () => {
-    it('surfaces banner, freezes form, pauses autosave', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 412 }));
-      flush();
-      ctx.fixture.detectChanges();
-      expect(ctx.fixture.componentInstance.conflict()).toBe(true);
-      expect(ctx.fixture.componentInstance.formDisabled()).toBe(true);
-      // Form mutators are no-ops while frozen.
-      const before = ctx.fixture.componentInstance.editable()!.name;
-      ctx.fixture.componentInstance.setName('IGNORED');
-      expect(ctx.fixture.componentInstance.editable()!.name).toBe(before);
-      // Autosave paused: no second update call.
-      tick(2000);
-      expect(ctx.service.update).toHaveBeenCalledTimes(1);
-    }));
+    it('surfaces banner, freezes form, pauses autosave', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 412 }));
+        await Promise.resolve();
+        ctx.fixture.detectChanges();
+        expect(ctx.fixture.componentInstance.conflict()).toBe(true);
+        expect(ctx.fixture.componentInstance.formDisabled()).toBe(true);
+        // Form mutators are no-ops while frozen.
+        const before = ctx.fixture.componentInstance.editable()!.name;
+        ctx.fixture.componentInstance.setName('IGNORED');
+        expect(ctx.fixture.componentInstance.editable()!.name).toBe(before);
+        // Autosave paused: no second update call.
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(ctx.service.update).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
     it('Reload re-fetches and rehydrates, clears conflict, resumes autosave', async () => {
       const ctx = loaded();
@@ -656,85 +709,104 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
   });
 
   describe('save 404 (deleted from another tab)', () => {
-    it('navigates to list with snackbar', fakeAsync(() => {
-      const ctx = loaded();
-      const router = TestBed.inject(Router);
-      const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 404 }));
-      flush();
-      expect(navSpy).toHaveBeenCalledWith(['/formatting-rules']);
-      expect(ctx.snack.open).toHaveBeenCalled();
-    }));
+    it('navigates to list with snackbar', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        const router = TestBed.inject(Router);
+        const navSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.service.updateSubjects[0].error(new HttpErrorResponse({ status: 404 }));
+        await Promise.resolve();
+        expect(navSpy).toHaveBeenCalledWith(['/formatting-rules']);
+        expect(ctx.snack.open).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('sign-out guard', () => {
-    it('does not mutate signals on save success after sign-out', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      // Sign the user out while save is in flight.
-      (ctx.auth as unknown as { userSignal: { set(v: unknown): void } }).userSignal.set(null);
-      const fingerprintBefore = ctx.fixture.componentInstance.lastSavedFingerprint();
-      ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 99 }));
-      ctx.service.updateSubjects[0].complete();
-      flush();
-      // serverMeta and lastSavedFingerprint must not have been mutated.
-      expect(ctx.fixture.componentInstance.serverMeta()?.version).toBe(1);
-      expect(ctx.fixture.componentInstance.lastSavedFingerprint()).toBe(fingerprintBefore);
-    }));
+    it('does not mutate signals on save success after sign-out', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        // Sign the user out while save is in flight.
+        (ctx.auth as unknown as { userSignal: { set(v: unknown): void } }).userSignal.set(null);
+        const fingerprintBefore = ctx.fixture.componentInstance.lastSavedFingerprint();
+        ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 99 }));
+        ctx.service.updateSubjects[0].complete();
+        await Promise.resolve();
+        // serverMeta and lastSavedFingerprint must not have been mutated.
+        expect(ctx.fixture.componentInstance.serverMeta()?.version).toBe(1);
+        expect(ctx.fixture.componentInstance.lastSavedFingerprint()).toBe(fingerprintBefore);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('saved flash timer', () => {
-    it('savedFlash auto-clears after 2 seconds', fakeAsync(() => {
-      const ctx = loaded();
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
-      ctx.service.updateSubjects[0].complete();
-      flushMicrotasks();
-      expect(ctx.fixture.componentInstance.savedFlash()).toBe(true);
-      tick(1500);
-      expect(ctx.fixture.componentInstance.savedFlash()).toBe(true);
-      tick(700); // total 2200, > 2000
-      expect(ctx.fixture.componentInstance.savedFlash()).toBe(false);
-    }));
+    it('savedFlash auto-clears after 2 seconds', async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
+        ctx.service.updateSubjects[0].complete();
+        await Promise.resolve();
+        expect(ctx.fixture.componentInstance.savedFlash()).toBe(true);
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(ctx.fixture.componentInstance.savedFlash()).toBe(true);
+        await vi.advanceTimersByTimeAsync(700); // total 2200, > 2000
+        expect(ctx.fixture.componentInstance.savedFlash()).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-    // KNOWN ISSUE: this fakeAsync sequence (subject.complete() then a
-    // later setName) doesn't always re-emit the second save through
-    // the autosave pipeline under Karma + fakeAsync interactions. The
-    // savedFlashToken logic in the component is exercised at runtime
-    // and verified manually; we accept this gap rather than fight the
-    // test harness. Tracked for follow-up.
-    it.skip("a newer save's Saved is not cleared early by an older save's timer", fakeAsync(() => {
-      const ctx = loaded();
-      // Save 1
-      ctx.fixture.componentInstance.setName('A');
-      tick(600);
-      ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
-      ctx.service.updateSubjects[0].complete();
-      // Allow rxjs/concatMap to settle that completion before we
-      // queue more work.
-      flushMicrotasks();
-      tick(50);
-      ctx.fixture.componentInstance.setName('AB');
-      ctx.fixture.detectChanges();
-      flushMicrotasks();
-      tick(700);
-      flushMicrotasks();
-      expect(ctx.service.update).toHaveBeenCalledTimes(2);
-      ctx.service.updateSubjects[1].next(ruleSet({ name: 'AB', version: 3 }));
-      ctx.service.updateSubjects[1].complete();
-      flushMicrotasks();
-      // Save 1's older 2000ms timer fires soon. Verify it does not
-      // clear save 2's flash.
-      tick(2200);
-      expect(ctx.fixture.componentInstance.savedFlash()).toBe(true);
-      // Save 2's timer eventually clears it.
-      tick(1500);
-      expect(ctx.fixture.componentInstance.savedFlash()).toBe(false);
-    }));
+    // KNOWN ISSUE: this sequence (subject.complete() then a later
+    // setName) doesn't always re-emit the second save through the
+    // autosave pipeline. The savedFlashToken logic in the component is
+    // exercised at runtime and verified manually; we accept this gap
+    // rather than fight the test harness. Tracked for follow-up.
+    it.skip("a newer save's Saved is not cleared early by an older save's timer", async () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = loaded();
+        // Save 1
+        ctx.fixture.componentInstance.setName('A');
+        await vi.advanceTimersByTimeAsync(600);
+        ctx.service.updateSubjects[0].next(ruleSet({ name: 'A', version: 2 }));
+        ctx.service.updateSubjects[0].complete();
+        // Allow rxjs/concatMap to settle that completion before we
+        // queue more work.
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(50);
+        ctx.fixture.componentInstance.setName('AB');
+        ctx.fixture.detectChanges();
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(700);
+        await Promise.resolve();
+        expect(ctx.service.update).toHaveBeenCalledTimes(2);
+        ctx.service.updateSubjects[1].next(ruleSet({ name: 'AB', version: 3 }));
+        ctx.service.updateSubjects[1].complete();
+        await Promise.resolve();
+        // Save 1's older 2000ms timer fires soon. Verify it does not
+        // clear save 2's flash.
+        await vi.advanceTimersByTimeAsync(2200);
+        expect(ctx.fixture.componentInstance.savedFlash()).toBe(true);
+        // Save 2's timer eventually clears it.
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(ctx.fixture.componentInstance.savedFlash()).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('previewDraft (M6d-3 live preview)', () => {
@@ -780,7 +852,7 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
     // assert through the JsonTreeComponent's `ruleStyleVars` API
     // (the same CSS-var seam the template binds to) rather than via
     // computed styles, since CDK virtualization can keep the actual
-    // DOM nodes from being attached during a fakeAsync test.
+    // DOM nodes from being attached during a unit test.
     function getTree(ctx: Setup): JsonTreeComponent {
       const debugEl = ctx.fixture.debugElement.query(
         (el) => el.componentInstance instanceof JsonTreeComponent,
@@ -982,21 +1054,21 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       }
     }
 
-    it("addRule focuses the new rule's match-value input", fakeAsync(() => {
+    it("addRule focuses the new rule's match-value input", async () => {
       const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' })] }));
       try {
         ctx.fixture.componentInstance.addRule();
         ctx.fixture.detectChanges();
-        flush();
+        await ctx.fixture.whenStable();
         const editable = ctx.fixture.componentInstance.editable()!;
         const newId = editable.rules[editable.rules.length - 1].id;
         expect((document.activeElement as HTMLElement | null)?.id).toBe(`match-value-${newId}`);
       } finally {
         detach(ctx);
       }
-    }));
+    });
 
-    it("removeRule on a middle rule focuses the next surviving rule's remove button", fakeAsync(() => {
+    it("removeRule on a middle rule focuses the next surviving rule's remove button", async () => {
       const ctx = attached(
         ruleSet({
           rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })],
@@ -1005,40 +1077,40 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
       try {
         ctx.fixture.componentInstance.removeRule(1);
         ctx.fixture.detectChanges();
-        flush();
+        await ctx.fixture.whenStable();
         // rules[1] (r2) was removed; rules[1] is now r3 which should
         // receive focus on its remove button.
         expect((document.activeElement as HTMLElement | null)?.id).toBe('remove-rule-r3');
       } finally {
         detach(ctx);
       }
-    }));
+    });
 
-    it("removeRule on the last rule focuses the new last rule's remove button", fakeAsync(() => {
+    it("removeRule on the last rule focuses the new last rule's remove button", async () => {
       const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' }), rule({ id: 'r2' })] }));
       try {
         ctx.fixture.componentInstance.removeRule(1);
         ctx.fixture.detectChanges();
-        flush();
+        await ctx.fixture.whenStable();
         expect((document.activeElement as HTMLElement | null)?.id).toBe('remove-rule-r1');
       } finally {
         detach(ctx);
       }
-    }));
+    });
 
-    it('removeRule on the only rule focuses the "+ Add rule" button', fakeAsync(() => {
+    it('removeRule on the only rule focuses the "+ Add rule" button', async () => {
       const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' })] }));
       try {
         ctx.fixture.componentInstance.removeRule(0);
         ctx.fixture.detectChanges();
-        flush();
+        await ctx.fixture.whenStable();
         expect((document.activeElement as HTMLElement | null)?.id).toBe('add-rule-button');
       } finally {
         detach(ctx);
       }
-    }));
+    });
 
-    it('moveRule keeps focus on the same direction button when not at edge', fakeAsync(() => {
+    it('moveRule keeps focus on the same direction button when not at edge', async () => {
       const ctx = attached(
         ruleSet({
           rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })],
@@ -1049,14 +1121,14 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         // move-down would be disabled - expect fallback to move-up.
         ctx.fixture.componentInstance.moveRule(1, 1);
         ctx.fixture.detectChanges();
-        flush();
+        await ctx.fixture.whenStable();
         expect((document.activeElement as HTMLElement | null)?.id).toBe('move-up-r2');
       } finally {
         detach(ctx);
       }
-    }));
+    });
 
-    it('moveRule falls back to opposite direction when same direction hits the edge', fakeAsync(() => {
+    it('moveRule falls back to opposite direction when same direction hits the edge', async () => {
       const ctx = attached(
         ruleSet({
           rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' })],
@@ -1067,14 +1139,14 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         // so focus falls back to move-down.
         ctx.fixture.componentInstance.moveRule(1, -1);
         ctx.fixture.detectChanges();
-        flush();
+        await ctx.fixture.whenStable();
         expect((document.activeElement as HTMLElement | null)?.id).toBe('move-down-r2');
       } finally {
         detach(ctx);
       }
-    }));
+    });
 
-    it('moveRule keeps focus on the moved button when neither end is reached', fakeAsync(() => {
+    it('moveRule keeps focus on the moved button when neither end is reached', async () => {
       const ctx = attached(
         ruleSet({
           rules: [rule({ id: 'r1' }), rule({ id: 'r2' }), rule({ id: 'r3' }), rule({ id: 'r4' })],
@@ -1085,12 +1157,12 @@ describe('RuleEditorComponent (M6d-2 autosave)', () => {
         // enabled and focus stays on it.
         ctx.fixture.componentInstance.moveRule(1, 1);
         ctx.fixture.detectChanges();
-        flush();
+        await ctx.fixture.whenStable();
         expect((document.activeElement as HTMLElement | null)?.id).toBe('move-down-r2');
       } finally {
         detach(ctx);
       }
-    }));
+    });
 
     it('every color picker is described by its sibling hex code', () => {
       const ctx = attached(ruleSet({ rules: [rule({ id: 'r1' })] }));

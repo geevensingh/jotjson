@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { type Mocked } from 'vitest';
@@ -25,6 +25,19 @@ describe('AppComponent', () => {
   let loggerServiceSpy: Mocked<LoggerService>;
   let routeTrackerSpy: Mocked<RouteTracker>;
   let teardown: (() => void) | undefined;
+
+  // Track every AppComponent fixture so `afterEach` can destroy it. Under
+  // the zoneless test runtime nothing auto-destroys orphan fixtures, so a
+  // component's lazy ngOnInit telemetry chain could resolve against an
+  // already-torn-down injector (NG0205) after the test ends. Destroying
+  // the fixture runs `ngOnDestroy`, which trips the component's destroyed
+  // guard and makes the in-flight chain a no-op.
+  const createdFixtures: ComponentFixture<AppComponent>[] = [];
+  function createApp(): ComponentFixture<AppComponent> {
+    const fixture = TestBed.createComponent(AppComponent);
+    createdFixtures.push(fixture);
+    return fixture;
+  }
 
   beforeEach(async () => {
     httpClientSpy = { get: vi.fn() } as unknown as Mocked<HttpClient>;
@@ -56,7 +69,14 @@ describe('AppComponent', () => {
     }).compileComponents();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Destroy fixtures first so each component's `ngOnDestroy` runs while
+    // its injector is still alive, then flush a microtask so any pending
+    // lazy ngOnInit promise chain observes the destroyed flag and bails.
+    for (const fixture of createdFixtures.splice(0)) {
+      fixture.destroy();
+    }
+    await Promise.resolve();
     teardown?.();
     teardown = undefined;
     // Clean up any static-splash element a test left behind so it
@@ -65,31 +85,31 @@ describe('AppComponent', () => {
   });
 
   it('creates the component', () => {
-    const fixture = TestBed.createComponent(AppComponent);
+    const fixture = createApp();
     expect(fixture.componentInstance).toBeTruthy();
   });
 
   it('has the JotJSON title', () => {
-    const fixture = TestBed.createComponent(AppComponent);
+    const fixture = createApp();
     expect(fixture.componentInstance.title).toBe('JotJSON');
   });
 
   it('has no critical or serious WCAG 2.1 AA violations in the shell (dark theme)', async () => {
-    const fixture = TestBed.createComponent(AppComponent);
+    const fixture = createApp();
     teardown = attachFixtureToBody(fixture, 'dark');
 
     await expectNoStrictA11yViolations(fixture);
   });
 
   it('has no critical or serious WCAG 2.1 AA violations in the shell (light theme)', async () => {
-    const fixture = TestBed.createComponent(AppComponent);
+    const fixture = createApp();
     teardown = attachFixtureToBody(fixture, 'light');
 
     await expectNoStrictA11yViolations(fixture);
   });
 
   it('eagerly instantiates DocumentDropController so drag-drop listeners attach at app start', () => {
-    TestBed.createComponent(AppComponent);
+    createApp();
     const controller = TestBed.inject(DocumentDropController);
     expect(controller).toBeTruthy();
     // dropActive signal exists and is initially false
@@ -101,7 +121,7 @@ describe('AppComponent', () => {
     // this test asserted that AppUpdateService.initialize was called;
     // that service was removed when @angular/service-worker was replaced
     // with the minimal pass-through SW (see plan: SW migration).
-    const fixture = TestBed.createComponent(AppComponent);
+    const fixture = createApp();
     fixture.detectChanges();
     expect(fixture.componentInstance).toBeTruthy();
   });
@@ -117,7 +137,7 @@ describe('AppComponent', () => {
       callOrder.push('connect');
       return Promise.resolve();
     });
-    const fixture = TestBed.createComponent(AppComponent);
+    const fixture = createApp();
     fixture.detectChanges();
     await fixture.whenStable();
     // The lazy Promise.all([import(...)...]).then(...) chain in ngOnInit
@@ -158,7 +178,7 @@ describe('AppComponent', () => {
     const webVitalsModule = await import('./core/telemetry/web-vitals');
     webVitalsModule.__setInitWebVitalsImplForTesting(initSpy);
     try {
-      const fixture = TestBed.createComponent(AppComponent);
+      const fixture = createApp();
       fixture.detectChanges();
       await fixture.whenStable();
       // The previous test's AppComponent may have a pending lazy
@@ -207,7 +227,7 @@ describe('AppComponent', () => {
       const spy = vi.fn<() => void>();
       staticSplashRemoval.__setScheduleStaticSplashRemovalImplForTesting(spy);
       try {
-        const fixture = TestBed.createComponent(AppComponent);
+        const fixture = createApp();
         fixture.detectChanges();
         await fixture.whenStable();
         // Flush one macrotask so any after-render callbacks scheduled
@@ -235,7 +255,7 @@ describe('AppComponent', () => {
       const splash = setUpStaticSplash();
       expect(document.getElementById('jot-static-splash')).toBe(splash);
 
-      const fixture = TestBed.createComponent(AppComponent);
+      const fixture = createApp();
       fixture.detectChanges();
       await fixture.whenStable();
       await waitForDoubleAnimationFrame();
@@ -249,7 +269,7 @@ describe('AppComponent', () => {
       // null-safe via optional chaining and must not throw.
       expect(document.getElementById('jot-static-splash')).toBeNull();
 
-      const fixture = TestBed.createComponent(AppComponent);
+      const fixture = createApp();
       fixture.detectChanges();
       await fixture.whenStable();
       await waitForDoubleAnimationFrame();

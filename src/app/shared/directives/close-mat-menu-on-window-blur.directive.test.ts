@@ -1,5 +1,5 @@
 import { Component, viewChild } from '@angular/core';
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 
@@ -28,72 +28,92 @@ describe('CloseMatMenuOnWindowBlurDirective', () => {
     });
   });
 
-  it('closes the open menu on window.blur and returns focus to the trigger', fakeAsync(() => {
-    const fixture = TestBed.createComponent(TestHostComponent);
-    const teardown = attachToBody(fixture);
-    const trigger = fixture.componentInstance.trigger;
-
+  it('closes the open menu on window.blur and returns focus to the trigger', () => {
+    vi.useFakeTimers();
     try {
-      fixture.detectChanges();
-      const triggerButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
-      triggerButton.focus();
-      openMenu(fixture, trigger());
+      const fixture = TestBed.createComponent(TestHostComponent);
+      const teardown = attachToBody(fixture);
+      const trigger = fixture.componentInstance.trigger;
 
-      window.dispatchEvent(new Event('blur'));
+      try {
+        fixture.detectChanges();
+        const triggerButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+        triggerButton.focus();
+        openMenu(fixture, trigger());
+
+        window.dispatchEvent(new Event('blur'));
+        flushMenu(fixture);
+
+        expect(trigger().menuOpen).toBe(false);
+        expect(document.activeElement).toBe(triggerButton);
+      } finally {
+        teardown();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('is a no-op when window.blur fires while no menu is open', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(TestHostComponent);
+      const trigger = fixture.componentInstance.trigger;
+      const warnSpy = vi.spyOn(console, 'warn');
+
+      fixture.detectChanges();
+
+      expect(() => window.dispatchEvent(new Event('blur'))).not.toThrow();
       flushMenu(fixture);
 
       expect(trigger().menuOpen).toBe(false);
-      expect(document.activeElement).toBe(triggerButton);
+      expect(warnSpy).not.toHaveBeenCalled();
     } finally {
-      teardown();
+      vi.useRealTimers();
     }
-  }));
+  });
 
-  it('is a no-op when window.blur fires while no menu is open', fakeAsync(() => {
-    const fixture = TestBed.createComponent(TestHostComponent);
-    const trigger = fixture.componentInstance.trigger;
-    const warnSpy = vi.spyOn(console, 'warn');
+  it('removes the listener after the menu closes via item selection', () => {
+    vi.useFakeTimers();
+    try {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+      const fixture = TestBed.createComponent(TestHostComponent);
+      const trigger = fixture.componentInstance.trigger;
 
-    fixture.detectChanges();
+      fixture.detectChanges();
+      openMenu(fixture, trigger());
+      const handlerRef = getBlurHandler(addSpy);
 
-    expect(() => window.dispatchEvent(new Event('blur'))).not.toThrow();
-    flushMenu(fixture);
+      clickMenuItem();
+      flushMenu(fixture);
 
-    expect(trigger().menuOpen).toBe(false);
-    expect(warnSpy).not.toHaveBeenCalled();
-  }));
+      expect(trigger().menuOpen).toBe(false);
+      expect(findBlurRemoveCall(removeSpy, handlerRef)).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-  it('removes the listener after the menu closes via item selection', fakeAsync(() => {
-    const addSpy = vi.spyOn(window, 'addEventListener');
-    const removeSpy = vi.spyOn(window, 'removeEventListener');
-    const fixture = TestBed.createComponent(TestHostComponent);
-    const trigger = fixture.componentInstance.trigger;
+  it('removes the listener when the directive is destroyed mid-open', () => {
+    vi.useFakeTimers();
+    try {
+      const addSpy = vi.spyOn(window, 'addEventListener');
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+      const fixture = TestBed.createComponent(TestHostComponent);
+      const trigger = fixture.componentInstance.trigger;
 
-    fixture.detectChanges();
-    openMenu(fixture, trigger());
-    const handlerRef = getBlurHandler(addSpy);
+      fixture.detectChanges();
+      openMenu(fixture, trigger());
+      const handlerRef = getBlurHandler(addSpy);
 
-    clickMenuItem();
-    flushMenu(fixture);
+      fixture.destroy();
 
-    expect(trigger().menuOpen).toBe(false);
-    expect(findBlurRemoveCall(removeSpy, handlerRef)).toBeDefined();
-  }));
-
-  it('removes the listener when the directive is destroyed mid-open', fakeAsync(() => {
-    const addSpy = vi.spyOn(window, 'addEventListener');
-    const removeSpy = vi.spyOn(window, 'removeEventListener');
-    const fixture = TestBed.createComponent(TestHostComponent);
-    const trigger = fixture.componentInstance.trigger;
-
-    fixture.detectChanges();
-    openMenu(fixture, trigger());
-    const handlerRef = getBlurHandler(addSpy);
-
-    fixture.destroy();
-
-    expect(findBlurRemoveCall(removeSpy, handlerRef)).toBeDefined();
-  }));
+      expect(findBlurRemoveCall(removeSpy, handlerRef)).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 function attachToBody(fixture: ComponentFixture<unknown>): () => void {
@@ -111,7 +131,7 @@ function openMenu(fixture: ComponentFixture<TestHostComponent>, trigger: MatMenu
 
 function flushMenu(fixture: ComponentFixture<TestHostComponent>): void {
   fixture.detectChanges();
-  tick(0);
+  vi.advanceTimersByTime(1);
   fixture.detectChanges();
 }
 

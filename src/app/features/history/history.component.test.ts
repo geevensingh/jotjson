@@ -1,4 +1,4 @@
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
@@ -363,18 +363,26 @@ describe('HistoryComponent', () => {
     expect(stub.list).not.toHaveBeenCalled();
   });
 
-  it('onSearchInput pipes through a 300ms debounce', fakeAsync(() => {
-    const { fixture, stub } = setup({ listResult: { entries: [entry()] } });
-    fixture.componentInstance.reload();
-    tick();
-    stub.list.mockClear();
+  it('onSearchInput pipes through a 300ms debounce', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fixture, stub } = setup({ listResult: { entries: [entry()] } });
+      // Run ngOnInit (which kicks off an initial reload) deterministically so
+      // its list call cannot land mid-test when a pending render flushes.
+      fixture.detectChanges();
+      await fixture.whenStable();
+      stub.list.mockClear();
 
-    fixture.componentInstance.onSearchInput('foo');
-    tick(299);
-    expect(stub.list).not.toHaveBeenCalled();
-    tick(2);
-    expect(stub.list).toHaveBeenCalledWith({ pageSize: 50, q: 'foo' });
-  }));
+      fixture.componentInstance.onSearchInput('foo');
+      vi.advanceTimersByTime(299);
+      expect(stub.list).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(2);
+      await Promise.resolve();
+      expect(stub.list).toHaveBeenCalledWith({ pageSize: 50, q: 'foo' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('clearSearch resets the search term and reloads immediately', async () => {
     const { fixture, stub } = setup({ listResult: { entries: [entry()] } });

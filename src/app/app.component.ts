@@ -1,5 +1,13 @@
 import { isPlatformBrowser } from '@angular/common';
-import { afterNextRender, Component, inject, Injector, OnInit, PLATFORM_ID } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  inject,
+  Injector,
+  OnDestroy,
+  OnInit,
+  PLATFORM_ID,
+} from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { EnvLabelService } from './core/env/env-label.service';
 import { LoadingSplashService } from './core/loading-splash/loading-splash.service';
@@ -23,7 +31,7 @@ import { scheduleStaticSplashRemoval } from './static-splash-removal';
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   readonly title = 'JotJSON';
 
   // Fields assigned in the constructor body below. Other eager
@@ -33,6 +41,13 @@ export class AppComponent implements OnInit {
   // the singleton (and its event subscriptions) is the whole point.
   private readonly injector: Injector;
   private readonly isBrowser: boolean;
+
+  // Set in `ngOnDestroy`. The lazy telemetry chain in `ngOnInit`
+  // resolves dynamic `import()`s asynchronously and then reads from
+  // `this.injector`; if the host injector is torn down first (e.g.
+  // between unit tests) those reads would throw NG0205. Guard on this
+  // flag so a destroyed component quietly drops the in-flight work.
+  private destroyed = false;
 
   constructor() {
     this.injector = inject(Injector);
@@ -129,6 +144,12 @@ export class AppComponent implements OnInit {
       import('./core/telemetry/route-tracker'),
       import('../generated/build-info'),
     ]).then(async ([loggerModule, trackerModule, buildInfoModule]) => {
+      // The component may have been destroyed while the dynamic imports
+      // were resolving (notably during unit-test teardown). Reading from
+      // a destroyed injector throws NG0205, so bail out early.
+      if (this.destroyed) {
+        return;
+      }
       const routeTracker = this.injector.get(trackerModule.RouteTracker);
       // Start subscribing to NavigationEnd before connect() resolves so
       // the bootstrap navigation is captured even though it fires
@@ -156,6 +177,9 @@ export class AppComponent implements OnInit {
         undefined,
       );
       await loggerService.connect();
+      if (this.destroyed) {
+        return;
+      }
       routeTracker.flushPending();
       // Keep web-vitals in a lazy chunk; it emits one webVitals event on pagehide.
       void import('./core/telemetry/web-vitals').then(({ initWebVitals }) => {
@@ -166,5 +190,9 @@ export class AppComponent implements OnInit {
         );
       });
     });
+  }
+
+  ngOnDestroy(): void {
+    this.destroyed = true;
   }
 }

@@ -1,4 +1,4 @@
-import { ComponentFixture, fakeAsync, flush, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import {
   BreadcrumbClick,
@@ -436,42 +436,49 @@ describe('JsonBreadcrumbComponent', () => {
       expect((observed as HTMLElement).tagName.toLowerCase()).toBe('ol');
     });
 
-    it('debounces ResizeObserver fires by 100ms (trailing edge)', fakeAsync(() => {
-      TestBed.configureTestingModule({
-        imports: [JsonBreadcrumbComponent, NoopAnimationsModule],
-      });
-      const fixture = TestBed.createComponent(JsonBreadcrumbComponent);
-      fixture.componentRef.setInput('crumbs', makeCrumbs(5));
-      fixture.detectChanges();
+    it('debounces ResizeObserver fires by 100ms (trailing edge)', () => {
+      vi.useFakeTimers();
+      try {
+        TestBed.configureTestingModule({
+          imports: [JsonBreadcrumbComponent, NoopAnimationsModule],
+        });
+        const fixture = TestBed.createComponent(JsonBreadcrumbComponent);
+        fixture.componentRef.setInput('crumbs', makeCrumbs(5));
+        fixture.detectChanges();
 
-      expect(observerCallbacks.length).toBe(1);
-      const fire = observerCallbacks[0]!;
+        expect(observerCallbacks.length).toBe(1);
+        const fire = observerCallbacks[0]!;
 
-      // Pretend the algorithm has previously hidden three middle
-      // crumbs. The resize-debounce trailing-edge fire is the only
-      // thing that should reset that signal back to 0.
-      fixture.componentInstance.hiddenMiddleCount.set(3);
+        // Pretend the algorithm has previously hidden three middle
+        // crumbs. The resize-debounce trailing-edge fire is the only
+        // thing that should reset that signal back to 0.
+        fixture.componentInstance.hiddenMiddleCount.set(3);
 
-      // Fire the callback rapidly in succession.
-      fire([], {} as ResizeObserver);
-      tick(50);
-      fire([], {} as ResizeObserver);
-      tick(50);
-      fire([], {} as ResizeObserver);
+        // Fire the callback rapidly in succession.
+        fire([], {} as ResizeObserver);
+        vi.advanceTimersByTime(50);
+        fire([], {} as ResizeObserver);
+        vi.advanceTimersByTime(50);
+        fire([], {} as ResizeObserver);
 
-      // Just before the trailing 100ms expires (relative to the
-      // last fire), no reset has occurred.
-      tick(99);
-      expect(fixture.componentInstance.hiddenMiddleCount()).toBe(3);
+        // Just before the trailing 100ms expires (relative to the
+        // last fire), no reset has occurred.
+        vi.advanceTimersByTime(99);
+        expect(fixture.componentInstance.hiddenMiddleCount()).toBe(3);
 
-      // After the trailing 100ms expires, the debounced callback
-      // runs exactly once and resets hiddenMiddleCount to 0.
-      tick(1);
-      expect(fixture.componentInstance.hiddenMiddleCount()).toBe(0);
+        // After the trailing 100ms expires, the debounced callback
+        // runs exactly once and resets hiddenMiddleCount to 0.
+        vi.advanceTimersByTime(1);
+        expect(fixture.componentInstance.hiddenMiddleCount()).toBe(0);
 
-      // Drain any pending RAF that the trailing-edge fire scheduled.
-      flush();
-    }));
+        // Drain any pending RAF that the trailing-edge fire scheduled.
+        // Bounded advance (never vi.runAllTimers, which can hang under the
+        // zoneless scheduler); a single frame is enough to flush the RAF.
+        vi.advanceTimersByTime(100);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('decodedLabel (escape-rendered keys)', () => {

@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of, throwError } from 'rxjs';
@@ -239,26 +239,34 @@ describe('RuleSetsToolbarComponent', () => {
       expect(toastMessage).toContain('Error detection');
     });
 
-    it('does nothing when the user cancels the clone dialog', fakeAsync(() => {
-      const ruleSets = TestBed.inject(RuleSetsService);
-      setCache([]);
-      const setDefaultsSpy = vi.spyOn(ruleSets, 'setActives');
+    it('does nothing when the user cancels the clone dialog', async () => {
+      vi.useFakeTimers();
+      try {
+        const ruleSets = TestBed.inject(RuleSetsService);
+        setCache([]);
+        const setDefaultsSpy = vi.spyOn(ruleSets, 'setActives');
 
-      const ref = {
-        afterClosed: () => of(undefined),
-      } as unknown as MatDialogRef<ClonePresetDialogComponent>;
-      dialogStub.open.mockReturnValue(ref);
+        const ref = {
+          afterClosed: () => of(undefined),
+        } as unknown as MatDialogRef<ClonePresetDialogComponent>;
+        dialogStub.open.mockReturnValue(ref);
 
-      const fixture = render();
-      const trigger = (fixture.nativeElement as HTMLElement).querySelector(
-        '[data-testid="clone-preset-trigger"]',
-      ) as HTMLButtonElement;
-      trigger.click();
-      tick();
+        const fixture = render();
+        const trigger = (fixture.nativeElement as HTMLElement).querySelector(
+          '[data-testid="clone-preset-trigger"]',
+        ) as HTMLButtonElement;
+        trigger.click();
+        // Drain the `await firstValueFrom(ref.afterClosed())` microtask chain.
+        vi.advanceTimersByTime(1);
+        await Promise.resolve();
+        await Promise.resolve();
 
-      expect(setDefaultsSpy).not.toHaveBeenCalled();
-      expect(snackStub.open).not.toHaveBeenCalled();
-    }));
+        expect(setDefaultsSpy).not.toHaveBeenCalled();
+        expect(snackStub.open).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
     it('does not crash when list() fails (the toolbar simply stays empty)', () => {
       const ruleSets = TestBed.inject(RuleSetsService);

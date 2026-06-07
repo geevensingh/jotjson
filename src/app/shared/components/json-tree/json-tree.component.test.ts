@@ -1,5 +1,5 @@
 import { HttpTestingController } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed, fakeAsync, flushMicrotasks } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
@@ -3562,44 +3562,44 @@ describe('JsonTreeComponent', () => {
       expect(message).toContain('not supported');
     });
 
-    it('writes the canonical $-prefixed path by default (jsonpath mode)', fakeAsync(() => {
+    it('writes the canonical $-prefixed path by default (jsonpath mode)', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       withClipboard({ writeText }, () => {
         cmp.copyPath({ pathString: '$.foo[0].bar' } as never);
       });
-      flushMicrotasks();
+      await Promise.resolve();
       expect(writeText).toHaveBeenCalledWith('$.foo[0].bar');
-    }));
+    });
 
-    it('writes a lodash-style path when treePathRoot is "none"', fakeAsync(() => {
+    it('writes a lodash-style path when treePathRoot is "none"', async () => {
       prefs.update({ treePathRoot: 'none' });
       const writeText = vi.fn().mockResolvedValue(undefined);
       withClipboard({ writeText }, () => {
         cmp.copyPath({ pathString: '$.foo[0].bar' } as never);
       });
-      flushMicrotasks();
+      await Promise.resolve();
       expect(writeText).toHaveBeenCalledWith('foo[0].bar');
-    }));
+    });
 
-    it('writes a root-prefixed path when treePathRoot is "root"', fakeAsync(() => {
+    it('writes a root-prefixed path when treePathRoot is "root"', async () => {
       prefs.update({ treePathRoot: 'root' });
       const writeText = vi.fn().mockResolvedValue(undefined);
       withClipboard({ writeText }, () => {
         cmp.copyPath({ pathString: '$.foo[0].bar' } as never);
       });
-      flushMicrotasks();
+      await Promise.resolve();
       expect(writeText).toHaveBeenCalledWith('root.foo[0].bar');
-    }));
+    });
 
-    it('writes a Data-prefixed path with capital D when treePathRoot is "data"', fakeAsync(() => {
+    it('writes a Data-prefixed path with capital D when treePathRoot is "data"', async () => {
       prefs.update({ treePathRoot: 'data' });
       const writeText = vi.fn().mockResolvedValue(undefined);
       withClipboard({ writeText }, () => {
         cmp.copyPath({ pathString: '$.foo[0].bar' } as never);
       });
-      flushMicrotasks();
+      await Promise.resolve();
       expect(writeText).toHaveBeenCalledWith('Data.foo[0].bar');
-    }));
+    });
   });
 
   describe('date annotations', () => {

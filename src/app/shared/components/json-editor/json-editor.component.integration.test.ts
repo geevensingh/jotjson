@@ -96,13 +96,38 @@ describe('JsonEditorComponent (browser integration)', () => {
   let monaco: typeof MonacoNS;
   let noopWorkerBlobUrl: string | undefined;
 
+  /**
+   * Suppress Monaco's internal `Canceled` cancellation rejections.
+   *
+   * Disposing a Monaco editor (via `fixture.destroy()`) cancels any
+   * in-flight worker/model promise. Monaco rejects that promise with a
+   * `CancellationError` (`name === 'Canceled'`) that nothing awaits, so it
+   * surfaces as an unhandled rejection. Under zone.js this was swallowed by
+   * the zone; under the zoneless TestBed it reaches the global handler and
+   * fails the run. These cancellations are benign teardown noise, so this
+   * listener intercepts only Monaco's `Canceled` rejections and leaves every
+   * other rejection to fail the suite as normal.
+   */
+  function isMonacoCancellation(reason: unknown): boolean {
+    return (reason instanceof Error && reason.name === 'Canceled') || reason === 'Canceled';
+  }
+
+  function suppressMonacoCancellation(event: PromiseRejectionEvent): void {
+    if (isMonacoCancellation(event.reason)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }
+
   beforeAll(async () => {
+    window.addEventListener('unhandledrejection', suppressMonacoCancellation, true);
     __resetMonacoLoaderForTesting();
     monaco = await loadMonaco();
     installNoopMonacoWorker();
   });
 
   afterAll(() => {
+    window.removeEventListener('unhandledrejection', suppressMonacoCancellation, true);
     if (noopWorkerBlobUrl) {
       URL.revokeObjectURL(noopWorkerBlobUrl);
       noopWorkerBlobUrl = undefined;

@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import { ComponentFixture, fakeAsync, flushMicrotasks, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarRef, TextOnlySnackBar } from '@angular/material/snack-bar';
 import { By, Title } from '@angular/platform-browser';
@@ -1150,41 +1150,51 @@ describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
   // Spec 1: typing path is debounced once the editor is non-empty.
   // (The empty -> non-empty toggle path is covered by spec 5; this
   // spec specifically guards the steady-state debounce.)
-  it('onValueChange does not update treePaneInputs synchronously when editor is non-empty', fakeAsync(() => {
-    const fixture = TestBed.createComponent(HomeComponent);
-    const component = fixture.componentInstance;
-    fixture.detectChanges();
-    // Prime to a non-empty steady state.
-    component.onValueChange('{"seed":1}');
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
-    const baseline = component.treePaneInputs();
-    expect(baseline.value).toEqual({ seed: 1 });
+  it('onValueChange does not update treePaneInputs synchronously when editor is non-empty', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      fixture.detectChanges();
+      // Prime to a non-empty steady state.
+      component.onValueChange('{"seed":1}');
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
+      const baseline = component.treePaneInputs();
+      expect(baseline.value).toEqual({ seed: 1 });
 
-    // A non-empty -> non-empty change is debounced; treePaneInputs
-    // stays on the previous reference until the timer elapses.
-    component.onValueChange('{"seed":2}');
-    fixture.detectChanges();
-    expect(component.parseResult().value).toEqual({ seed: 2 });
-    expect(component.treePaneInputs()).toBe(baseline);
+      // A non-empty -> non-empty change is debounced; treePaneInputs
+      // stays on the previous reference until the timer elapses.
+      component.onValueChange('{"seed":2}');
+      fixture.detectChanges();
+      expect(component.parseResult().value).toEqual({ seed: 2 });
+      expect(component.treePaneInputs()).toBe(baseline);
 
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
-    expect(component.treePaneInputs().value).toEqual({ seed: 2 });
-  }));
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
+      expect(component.treePaneInputs().value).toEqual({ seed: 2 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   // Spec 2: debounce window elapses -> tree pane catches up.
-  it('treePaneInputs matches parseResult after the debounce window elapses', fakeAsync(() => {
-    const fixture = TestBed.createComponent(HomeComponent);
-    const component = fixture.componentInstance;
-    fixture.detectChanges();
+  it('treePaneInputs matches parseResult after the debounce window elapses', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      fixture.detectChanges();
 
-    component.onValueChange('{"after":true}');
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
+      component.onValueChange('{"after":true}');
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
 
-    expect(component.treePaneInputs().value).toEqual({ after: true });
-  }));
+      expect(component.treePaneInputs().value).toEqual({ after: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   // Spec 3: replaceDocument flushes synchronously.
   it('replaceDocument-style discrete swap updates treePaneInputs in the same tick', () => {
@@ -1217,55 +1227,70 @@ describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
   });
 
   // Spec 5: empty -> non-empty toggle flushes synchronously.
-  it('first character into empty editor flushes the tree pane on the empty toggle', fakeAsync(() => {
-    const fixture = TestBed.createComponent(HomeComponent);
-    const component = fixture.componentInstance;
-    fixture.detectChanges();
+  it('first character into empty editor flushes the tree pane on the empty toggle', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      fixture.detectChanges();
 
-    expect(component.treePaneInputs().value).toBeUndefined();
-    component.onValueChange('{"first":1}');
-    // Drain the toObservable microtask without ticking the timer.
-    flushMicrotasks();
-    fixture.detectChanges();
+      expect(component.treePaneInputs().value).toBeUndefined();
+      component.onValueChange('{"first":1}');
+      // Drain the toObservable microtask without advancing the timer.
+      await Promise.resolve();
+      fixture.detectChanges();
 
-    expect(component.treePaneInputs().value).toEqual({ first: 1 });
-    tick(EDITOR_COMMIT_DEBOUNCE_MS); // discharge any pending timer
-  }));
+      expect(component.treePaneInputs().value).toEqual({ first: 1 });
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS); // discharge any pending timer
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   // Spec 6: non-empty -> empty toggle flushes synchronously.
-  it('deleting to empty flushes the tree pane on the non-empty -> empty toggle', fakeAsync(() => {
-    const fixture = TestBed.createComponent(HomeComponent);
-    const component = fixture.componentInstance;
-    component.onValueChange('{"x":1}');
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
-    expect(component.treePaneInputs().value).toEqual({ x: 1 });
+  it('deleting to empty flushes the tree pane on the non-empty -> empty toggle', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      component.onValueChange('{"x":1}');
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
+      expect(component.treePaneInputs().value).toEqual({ x: 1 });
 
-    component.onValueChange('');
-    flushMicrotasks();
-    fixture.detectChanges();
-    expect(component.treePaneInputs().value).toBeUndefined();
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-  }));
+      component.onValueChange('');
+      await Promise.resolve();
+      fixture.detectChanges();
+      expect(component.treePaneInputs().value).toBeUndefined();
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   // Spec 7: Format/Minify don't visually shift the tree (same shape).
-  it('onFormat does not visually shift the tree after debounce (same shape)', fakeAsync(() => {
-    const fixture = TestBed.createComponent(HomeComponent);
-    const component = fixture.componentInstance;
-    const source = '{"a":1,"b":[2,3]}';
-    component.onValueChange(source);
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
-    const before = component.treePaneInputs().value;
+  it('onFormat does not visually shift the tree after debounce (same shape)', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      const source = '{"a":1,"b":[2,3]}';
+      component.onValueChange(source);
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
+      const before = component.treePaneInputs().value;
 
-    component.onFormat();
-    component.__flushTreePaneForTesting();
-    fixture.detectChanges();
+      component.onFormat();
+      component.__flushTreePaneForTesting();
+      fixture.detectChanges();
 
-    // Same value graph, structurally identical.
-    expect(component.treePaneInputs().value).toEqual(before);
-    expect(component.content()).not.toBe(source); // text is re-indented
-  }));
+      // Same value graph, structurally identical.
+      expect(component.treePaneInputs().value).toEqual(before);
+      expect(component.content()).not.toBe(source); // text is re-indented
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   // Spec 8: view-reset semantics differ between setContent and replaceDocument.
   it('setContent leaves viewResetToken unchanged; replaceDocument bumps it', () => {
@@ -1286,26 +1311,31 @@ describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
 
   // Spec 9: Format with active selection preserves selectedPath.
   // (Phase 1b tree-component contract - signal-level assertion.)
-  it('onFormat preserves the existing parseResult shape so tree selection can survive', fakeAsync(() => {
-    const fixture = TestBed.createComponent(HomeComponent);
-    const component = fixture.componentInstance;
-    component.onValueChange('{"users":[{"name":"alice"}]}');
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
-    const shapeBefore = component.parseResult().value;
+  it('onFormat preserves the existing parseResult shape so tree selection can survive', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      component.onValueChange('{"users":[{"name":"alice"}]}');
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
+      const shapeBefore = component.parseResult().value;
 
-    component.onFormat();
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
+      component.onFormat();
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
 
-    // Format preserves the parsed value graph (it only re-indents
-    // text). The tree-component effect (Phase 1b) reads this graph
-    // and decides whether to preserve `selectedPath` based on
-    // path resolution against the new tree - identical shape means
-    // every prior path still resolves, so selection survives.
-    expect(component.parseResult().value).toEqual(shapeBefore);
-    expect(component.viewResetTokenValue()).toBe(0);
-  }));
+      // Format preserves the parsed value graph (it only re-indents
+      // text). The tree-component effect (Phase 1b) reads this graph
+      // and decides whether to preserve `selectedPath` based on
+      // path resolution against the new tree - identical shape means
+      // every prior path still resolves, so selection survives.
+      expect(component.parseResult().value).toEqual(shapeBefore);
+      expect(component.viewResetTokenValue()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   // Spec 10: Extract preserves expansion of other subtrees (no token bump).
   it('onExtractRequest does NOT bump viewResetToken (other subtrees survive)', async () => {
@@ -1360,21 +1390,26 @@ describe('HomeComponent tree-pane debounce (issue: editing perf)', () => {
   // selection-clear-when-path-gone branch directly; this spec
   // just locks in that the home-side projection rebinds the
   // comments map after a debounced commit.
-  it('treePaneInputs.commentsByPath rebinds to the latest parseResult after debounce', fakeAsync(() => {
-    const fixture = TestBed.createComponent(HomeComponent);
-    const component = fixture.componentInstance;
-    component.onValueChange('{"x":1}');
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
-    const first = component.parseResult().commentsByPath;
-    expect(component.treePaneInputs().commentsByPath).toBe(first);
+  it('treePaneInputs.commentsByPath rebinds to the latest parseResult after debounce', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(HomeComponent);
+      const component = fixture.componentInstance;
+      component.onValueChange('{"x":1}');
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
+      const first = component.parseResult().commentsByPath;
+      expect(component.treePaneInputs().commentsByPath).toBe(first);
 
-    component.onValueChange('{"x":2}');
-    tick(EDITOR_COMMIT_DEBOUNCE_MS);
-    fixture.detectChanges();
-    const second = component.parseResult().commentsByPath;
-    expect(component.treePaneInputs().commentsByPath).toBe(second);
-  }));
+      component.onValueChange('{"x":2}');
+      vi.advanceTimersByTime(EDITOR_COMMIT_DEBOUNCE_MS);
+      fixture.detectChanges();
+      const second = component.parseResult().commentsByPath;
+      expect(component.treePaneInputs().commentsByPath).toBe(second);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   // Spec 12: Extract path flushes tree before expandNodeAtPath runs.
   it('discrete flush + setContent produces the new parseResult synchronously', () => {
@@ -1828,10 +1863,9 @@ describe('cold-boot clipboard auto-paste', () => {
   }
 
   async function flushColdBootEvaluation(): Promise<void> {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 12; i++) {
+      await Promise.resolve();
+    }
   }
 
   async function createAskBannerHarness(text = '{"clipboard":true}'): Promise<ColdBootHarness> {
@@ -3133,7 +3167,11 @@ describe('HomeComponent save() branching (M4a)', () => {
       imports: [HomeComponent],
       providers: [
         ...provideFakeAuth(),
-        provideRouter([]),
+        // The create/share path navigates to /s/:slug (home.component.ts).
+        // Provide a terminal stub route so that navigation resolves instead
+        // of rejecting with NG04002 (under the zoneless TestBed an unmatched
+        // navigation surfaces as an unhandled rejection and fails the run).
+        provideRouter([{ path: 's/:slug', children: [] }]),
         { provide: BlobService, useValue: stub },
         { provide: AuthService, useValue: fakeAuth },
         { provide: QuotaNotificationService, useValue: quota },
@@ -6532,42 +6570,47 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     });
   });
 
-  it('releases pendingExtractUndo state after the 30s wall-clock cap even without further edits', fakeAsync(() => {
-    let nowMs = 1000;
-    vi.spyOn(performance, 'now').mockImplementation(() => nowMs);
-    const { fixture, component, treeExtractor, eventSpy, snack } = setup();
-    snack.open.mockReturnValue(createExtractSnackBarRefHarness().ref);
-    treeExtractor.setVersion(99);
-    const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
-    component.onValueChange(priorText);
+  it('releases pendingExtractUndo state after the 30s wall-clock cap even without further edits', async () => {
+    vi.useFakeTimers();
+    try {
+      let nowMs = 1000;
+      vi.spyOn(performance, 'now').mockImplementation(() => nowMs);
+      const { fixture, component, treeExtractor, eventSpy, snack } = setup();
+      snack.open.mockReturnValue(createExtractSnackBarRefHarness().ref);
+      treeExtractor.setVersion(99);
+      const priorText = '{"payload":"INFO {\\"a\\":1}","keep":true}';
+      component.onValueChange(priorText);
 
-    component.onExtractRequest(
-      extractRequest(extracted('{"a":1}'), {
-        sourceVersion: 99,
-      }),
-    );
-    eventSpy.mockClear();
+      component.onExtractRequest(
+        extractRequest(extracted('{"a":1}'), {
+          sourceVersion: 99,
+        }),
+      );
+      eventSpy.mockClear();
 
-    // Advance the real scheduler past the 30s cap. The wall-clock
-    // timer scheduled in `onExtractRequest` fires and clears
-    // `pendingExtractUndo` via `clearPendingExtractUndo()` regardless
-    // of whether the user has typed anything.
-    tick(30_001);
-    fixture.detectChanges();
+      // Advance the scheduler past the 30s cap. The wall-clock
+      // timer scheduled in `onExtractRequest` fires and clears
+      // `pendingExtractUndo` via `clearPendingExtractUndo()` regardless
+      // of whether the user has typed anything.
+      vi.advanceTimersByTime(30_001);
+      fixture.detectChanges();
 
-    // Simulate a Ctrl+Z back to priorText. The state has been
-    // cleared, so the effect's content-match guard at the top
-    // returns early and no `tree.extract.undo` is logged.
-    nowMs = 35_000;
-    component.onValueChange(priorText);
-    fixture.detectChanges();
-    TestBed.flushEffects();
+      // Simulate a Ctrl+Z back to priorText. The state has been
+      // cleared, so the effect's content-match guard at the top
+      // returns early and no `tree.extract.undo` is logged.
+      nowMs = 35_000;
+      component.onValueChange(priorText);
+      fixture.detectChanges();
+      TestBed.flushEffects();
 
-    expect(eventSpy).not.toHaveBeenCalledWith(
-      'tree.extract.undo',
-      expect.objectContaining({ source: 'ctrlZ' }),
-    );
-  }));
+      expect(eventSpy).not.toHaveBeenCalledWith(
+        'tree.extract.undo',
+        expect.objectContaining({ source: 'ctrlZ' }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('treats snackbar Undo as a no-op when ctrlZ already cleared the pending state', () => {
     let nowMs = 1000;
@@ -6956,65 +6999,85 @@ describe('HomeComponent tree extract wiring (M7s)', () => {
     });
   });
 
-  it('debounces tree string scans after treeValue changes', fakeAsync(() => {
-    const { fixture, component, treeExtractor } = setup();
+  it('debounces tree string scans after treeValue changes', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fixture, component, treeExtractor } = setup();
 
-    component.onValueChange('{"payload":"INFO {\\"a\\":1}","other":"plain"}');
-    fixture.detectChanges();
-    tick(999);
+      component.onValueChange('{"payload":"INFO {\\"a\\":1}","other":"plain"}');
+      fixture.detectChanges();
+      vi.advanceTimersByTime(999);
 
-    expect(treeExtractor.beginGeneration).not.toHaveBeenCalled();
+      expect(treeExtractor.beginGeneration).not.toHaveBeenCalled();
 
-    tick(1);
+      vi.advanceTimersByTime(1);
 
-    expect(treeExtractor.beginGeneration).toHaveBeenCalledTimes(1);
-    expect(treeExtractor.enqueueScan).toHaveBeenCalledWith(['INFO {"a":1}', 'plain']);
-  }));
+      expect(treeExtractor.beginGeneration).toHaveBeenCalledTimes(1);
+      expect(treeExtractor.enqueueScan).toHaveBeenCalledWith(['INFO {"a":1}', 'plain']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-  it('cancels the pending tree string scan when treeValue changes again', fakeAsync(() => {
-    const { fixture, component, treeExtractor } = setup();
+  it('cancels the pending tree string scan when treeValue changes again', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fixture, component, treeExtractor } = setup();
 
-    component.onValueChange('{"payload":"first {\\"a\\":1}"}');
-    fixture.detectChanges();
-    tick(500);
-    component.onValueChange('{"payload":"second {\\"b\\":2}"}');
-    fixture.detectChanges();
-    tick(999);
+      component.onValueChange('{"payload":"first {\\"a\\":1}"}');
+      fixture.detectChanges();
+      vi.advanceTimersByTime(500);
+      component.onValueChange('{"payload":"second {\\"b\\":2}"}');
+      fixture.detectChanges();
+      vi.advanceTimersByTime(999);
 
-    expect(treeExtractor.beginGeneration).not.toHaveBeenCalled();
+      expect(treeExtractor.beginGeneration).not.toHaveBeenCalled();
 
-    tick(1);
+      vi.advanceTimersByTime(1);
 
-    expect(treeExtractor.beginGeneration).toHaveBeenCalledTimes(1);
-    expect(treeExtractor.enqueueScan).toHaveBeenCalledWith(['second {"b":2}']);
-  }));
+      expect(treeExtractor.beginGeneration).toHaveBeenCalledTimes(1);
+      expect(treeExtractor.enqueueScan).toHaveBeenCalledWith(['second {"b":2}']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-  it('emits shown telemetry once the tree string scan completes', fakeAsync(() => {
-    const { fixture, component, treeExtractor, eventSpy } = setup();
-    treeExtractor.enqueueScan.mockImplementation(() => {
-      treeExtractor.scanInFlightSignal.set(true);
-    });
-    component.onValueChange(
-      '{"a":"dup {\\"x\\":1}","b":"dup {\\"x\\":1}","c":"other {\\"y\\":2}"}',
-    );
-    fixture.detectChanges();
-    tick(1000);
+  it('emits shown telemetry once the tree string scan completes', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fixture, component, treeExtractor, eventSpy } = setup();
+      treeExtractor.enqueueScan.mockImplementation(() => {
+        treeExtractor.scanInFlightSignal.set(true);
+      });
+      component.onValueChange(
+        '{"a":"dup {\\"x\\":1}","b":"dup {\\"x\\":1}","c":"other {\\"y\\":2}"}',
+      );
+      fixture.detectChanges();
+      vi.advanceTimersByTime(1000);
 
-    expect(eventSpy).not.toHaveBeenCalledWith('tree.extract.shown', undefined, expect.any(Object));
+      expect(eventSpy).not.toHaveBeenCalledWith(
+        'tree.extract.shown',
+        undefined,
+        expect.any(Object),
+      );
 
-    treeExtractor.setCandidates(
-      new Map<string, ExtractedJson>([['dup {"x":1}', extracted('{"x":1}')]]),
-    );
-    treeExtractor.scanInFlightSignal.set(false);
-    fixture.detectChanges();
-    tick();
+      treeExtractor.setCandidates(
+        new Map<string, ExtractedJson>([['dup {"x":1}', extracted('{"x":1}')]]),
+      );
+      treeExtractor.scanInFlightSignal.set(false);
+      fixture.detectChanges();
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
 
-    expect(eventSpy).toHaveBeenCalledWith('tree.extract.shown', undefined, {
-      uniqueStringsScanned: 2,
-      uniqueCandidates: 1,
-      candidateNodes: 2,
-    });
-  }));
+      expect(eventSpy).toHaveBeenCalledWith('tree.extract.shown', undefined, {
+        uniqueStringsScanned: 2,
+        uniqueCandidates: 1,
+        candidateNodes: 2,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('HomeComponent banner-extract undo (M7v)', () => {

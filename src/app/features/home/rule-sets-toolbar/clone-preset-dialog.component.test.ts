@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { MatDialogRef } from '@angular/material/dialog';
 import { Observable, of, throwError } from 'rxjs';
 import { type Mock } from 'vitest';
@@ -94,45 +94,59 @@ describe('ClonePresetDialogComponent', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Could not load presets');
   });
 
-  it('clones the picked preset and closes with the result on success', fakeAsync(() => {
-    const ruleSets = TestBed.inject(RuleSetsService);
-    const preset = makePreset({ id: 'p1', name: 'Errors' });
-    const cloned = makeSet({ id: 'cloned-1', name: 'Errors' });
-    vi.spyOn(ruleSets, 'listPresets').mockReturnValue(of([preset]));
-    const cloneSpy = vi.spyOn(ruleSets, 'clonePreset').mockReturnValue(of(cloned));
+  it('clones the picked preset and closes with the result on success', async () => {
+    vi.useFakeTimers();
+    try {
+      const ruleSets = TestBed.inject(RuleSetsService);
+      const preset = makePreset({ id: 'p1', name: 'Errors' });
+      const cloned = makeSet({ id: 'cloned-1', name: 'Errors' });
+      vi.spyOn(ruleSets, 'listPresets').mockReturnValue(of([preset]));
+      const cloneSpy = vi.spyOn(ruleSets, 'clonePreset').mockReturnValue(of(cloned));
 
-    const fixture = render();
-    const button = (fixture.nativeElement as HTMLElement).querySelector(
-      '.preset-button',
-    ) as HTMLButtonElement;
-    button.click();
-    tick();
+      const fixture = render();
+      const button = (fixture.nativeElement as HTMLElement).querySelector(
+        '.preset-button',
+      ) as HTMLButtonElement;
+      button.click();
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
 
-    expect(cloneSpy).toHaveBeenCalledWith('p1');
-    expect(close).toHaveBeenCalledWith({ preset, cloned });
-  }));
+      expect(cloneSpy).toHaveBeenCalledWith('p1');
+      expect(close).toHaveBeenCalledWith({ preset, cloned });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-  it('shows an inline retry error and stays open if the clone POST fails', fakeAsync(() => {
-    const ruleSets = TestBed.inject(RuleSetsService);
-    const preset = makePreset({ id: 'p1', name: 'Errors' });
-    vi.spyOn(ruleSets, 'listPresets').mockReturnValue(of([preset]));
-    vi.spyOn(ruleSets, 'clonePreset').mockReturnValue(throwError(() => new Error('boom')));
+  it('shows an inline retry error and stays open if the clone POST fails', async () => {
+    vi.useFakeTimers();
+    try {
+      const ruleSets = TestBed.inject(RuleSetsService);
+      const preset = makePreset({ id: 'p1', name: 'Errors' });
+      vi.spyOn(ruleSets, 'listPresets').mockReturnValue(of([preset]));
+      vi.spyOn(ruleSets, 'clonePreset').mockReturnValue(throwError(() => new Error('boom')));
 
-    const fixture = render();
-    const button = (fixture.nativeElement as HTMLElement).querySelector(
-      '.preset-button',
-    ) as HTMLButtonElement;
-    button.click();
-    tick();
-    fixture.detectChanges();
+      const fixture = render();
+      const button = (fixture.nativeElement as HTMLElement).querySelector(
+        '.preset-button',
+      ) as HTMLButtonElement;
+      button.click();
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+      fixture.detectChanges();
 
-    expect(close).not.toHaveBeenCalled();
-    const err = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="clone-error"]');
-    expect(err).not.toBeNull();
-    expect(err?.textContent).toContain('Clone failed');
-    // Buttons re-enabled.
-    expect(button.disabled).toBe(false);
-  }));
+      expect(close).not.toHaveBeenCalled();
+      const err = (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="clone-error"]',
+      );
+      expect(err).not.toBeNull();
+      expect(err?.textContent).toContain('Clone failed');
+      // Buttons re-enabled.
+      expect(button.disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('disables preset buttons while a clone is in flight', () => {
     const ruleSets = TestBed.inject(RuleSetsService);
