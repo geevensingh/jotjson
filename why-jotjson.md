@@ -167,9 +167,16 @@ expand/collapse choices afterwards stick.
 Hit the wand icon next to the title input. JotJSON looks at your document
 and proposes 2-7 candidate titles. It recognizes `package.json`,
 Kubernetes manifests, OpenAPI specs, JSON Schema, GeoJSON, ARM templates,
-`tsconfig`, GitHub Actions workflows, Postman collections, and HAL
-self-links, plus common identifier fields (`name`, `title`, `displayName`,
-the first sentence of `description`).
+`tsconfig`, GitHub Actions workflows, Postman collections, CloudEvents
+v1.0 envelopes, JWT payloads, Microsoft Commerce billing events,
+Application Insights telemetry envelopes, and HAL self-links. It also
+hunts for business identifier fields (`invoiceId`, `orderId`,
+`transactionId`, ...) and produces composed titles like
+`"Charge Invoiced -- Microsoft 365 Business Basic"` or
+`"Invoice G138888993"` instead of just echoing the raw `eventType` or
+`product` field. Trace IDs, request IDs, and other opaque machine
+tokens are excluded on purpose -- titles you'd want to read aloud, not
+copy-paste from a log.
 
 ### Configurable date/time annotations
 
