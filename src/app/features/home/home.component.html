@@ -10,7 +10,6 @@
       [isOwnedBlob]="isOwnedBlob()"
       [saveInFlight]="saveInFlight()"
       [isOwner]="isOwnedBlob()"
-      [isPublic]="isBlobPublic()"
       [clipboardState]="clipboardState()"
       [clipboardPreview]="clipboardPreview()"
       [paneLayout]="paneLayout()"
@@ -34,7 +33,6 @@
       (signInRequested)="onSignInRequested()"
       (titleChange)="onTitleChange($event)"
       (copyShareLink)="onCopyShareLink()"
-      (togglePublic)="onTogglePublic()"
       (deleteBlob)="onDeleteBlob()"
       (suggestRequested)="onSuggestRequested()"
     ></jj-toolbar>
