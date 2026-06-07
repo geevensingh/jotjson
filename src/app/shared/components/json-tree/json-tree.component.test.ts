@@ -2557,6 +2557,34 @@ describe('JsonTreeComponent', () => {
       // the selected row after Phase 2's template rewrite.
       expect(xRow.getAttribute('aria-selected')).toBe('true');
     });
+
+    // Regression guard for issue #366: in light theme the type badge inside
+    // a selected row must use the darkened #4a4a4a text color (>=4.5:1 over
+    // the effective #c0d5e5 selection-pill background) instead of the default
+    // muted #5c5c5c (4.42:1, below WCAG AA). The wrapping element is tagged
+    // `.theme-light` so the component's `:host-context(.theme-light)` override
+    // resolves.
+    it('darkens the selected-row type badge in light theme for WCAG AA contrast', async () => {
+      await createWith({ a: 1 });
+      const wrapper = (fixture.nativeElement as HTMLElement).closest('div') as HTMLElement | null;
+      expect(wrapper, 'expected the fixture viewport wrapper').toBeTruthy();
+      wrapper!.classList.add('theme-light');
+      try {
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.selectedPath.set('$.a');
+        fixture.detectChanges();
+        const badge = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-row.is-selected .tree-type-badge',
+        ) as HTMLElement | null;
+        expect(badge, 'expected a type badge inside the selected row').toBeTruthy();
+        expect(getComputedStyle(badge!).color).toBe('rgb(74, 74, 74)');
+      } finally {
+        wrapper!.classList.remove('theme-light');
+        cmp.selectedPath.set(null);
+        fixture.detectChanges();
+      }
+    });
   });
 
   describe('manual highlights', () => {

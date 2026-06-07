@@ -814,6 +814,17 @@
   font-weight: 500;
 }
 
+// issue #366: On a selected row in light theme the badge's translucent
+// pill (`rgba(127, 127, 127, 0.15)`) blends over the selection background
+// (`--highlight-selection` = #cce4f7) to an effective #c0d5e5. The default
+// light-theme muted text (#5c5c5c) yields only 4.42:1 against that -- below
+// WCAG AA (4.5:1) for this ~10px text. Darken to #4a4a4a (~5.5:1). Scoped to
+// `.theme-light` to match the `--tree-muted-color` split above; the dark
+// selected state (#a0a0a0 over #264f78) already clears AA.
+:host-context(.theme-light) .tree-row.is-selected .tree-type-badge {
+  color: #4a4a4a;
+}
+
 // Phase 2 (issue #95) - the `.tree-children` wrapper and the
 // Material tree-node host neutralizers below were removed when
 // `<mat-tree>` was replaced by `<cdk-virtual-scroll-viewport>` +
