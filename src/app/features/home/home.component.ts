@@ -112,6 +112,11 @@ import { patchExtractedValue } from './extract-json-patcher';
 import { DropOverlayComponent } from './file-upload/drop-overlay.component';
 import { RuleSetsToolbarComponent } from './rule-sets-toolbar/rule-sets-toolbar.component';
 import {
+  SaveAsBlobDialogComponent,
+  type SaveAsBlobDialogData,
+  type SaveAsBlobDialogResult,
+} from './save-as-blob-dialog/save-as-blob-dialog.component';
+import {
   patchSortKeysAtPath,
   patchSortKeysDeep,
   type SortDocumentResult,
@@ -3099,20 +3104,111 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Toolbar emits this when the user clicks `Save as blob...` in the
-   * overflow menu (file-backed + signed-in only). Phase 4c will wire
-   * the `SaveAsBlobDialog` component; for now this is a placeholder
-   * that surfaces a snackbar so an early click does not silently no-op.
+   * Opens the {@link SaveAsBlobDialogComponent} to create a cloud copy
+   * of the current file-backed document. The local file binding is
+   * preserved (fire-and-forget semantics per skeptic v2 #6 + plan v2
+   * user decision): subsequent Save still writes the file; subsequent
+   * Save-as-blob creates another new cloud copy.
+   *
+   * Only reachable from the toolbar overflow when the document is
+   * file-backed AND the user is signed in. Defensive checks guard
+   * against accidental invocation outside that gate.
    */
-  onSaveAsBlob(): void {
-    // TODO(phase-4c): open SaveAsBlobDialog and on confirm call the
-    // existing blob-create path with a fire-and-forget snapshot. For
-    // now, signal that the feature is coming.
-    this.snack.open(
-      $localize`:@@home.saveAsBlob.comingSoon:Save as blob is coming soon.`,
-      $localize`:@@common.dismiss:Dismiss`,
-      { duration: 4000 },
-    );
+  async onSaveAsBlob(): Promise<void> {
+    const backing = this._documentBacking();
+    if (backing.kind !== 'file') return;
+    const user = this.auth.user();
+    if (!user) return;
+    if (this.saveInFlight()) return;
+
+    const parsed = this.parseResult();
+    const data: SaveAsBlobDialogData = {
+      initialTitle: this.suggestedBlobTitleForFile(backing.filename),
+      jsonText: this.content(),
+      parsed: parsed.empty ? undefined : parsed.value,
+      hasParseErrors: parsed.errors.length > 0,
+      filename: backing.filename,
+    };
+    const dialogRef = this.dialog.open<
+      SaveAsBlobDialogComponent,
+      SaveAsBlobDialogData,
+      SaveAsBlobDialogResult | undefined
+    >(SaveAsBlobDialogComponent, {
+      data,
+      width: '480px',
+      autoFocus: 'first-tabbable',
+    });
+    const result = await firstValueFrom(dialogRef.afterClosed());
+    if (!result) return; // user cancelled
+
+    this.saveInFlight.set(true);
+    this.saveError.set(null);
+    const submittedContent = this.content();
+    const submittedHighlights = this.pruneHighlightsForSave(submittedContent, this.highlights());
+    try {
+      const created = await firstValueFrom(
+        this.blobs.create(submittedContent, result.title, [...submittedHighlights]),
+      );
+      this.logger.event('share.created', undefined, {
+        sizeBytes: new Blob([submittedContent]).size,
+      });
+      const { autoDeleted, ...blob } = created;
+      // Fire-and-forget: do NOT transition documentBacking. The
+      // local file remains the primary save target. Surface a
+      // snackbar so the user knows the cloud copy succeeded; the
+      // snackbar's action navigates to the new blob's share URL in
+      // a new tab so the user does not lose their file-backed
+      // editing context.
+      const ref = this.snack.open(
+        $localize`:@@home.saveAsBlob.success:Cloud copy created.`,
+        $localize`:@@home.saveAsBlob.openAction:Open`,
+        { duration: 8000 },
+      );
+      if (ref) {
+        ref
+          .onAction()
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe(() => {
+            // Open the share URL in a new tab so the file-backed
+            // editing session in this tab is preserved.
+            window.open(`/s/${blob.slug}`, '_blank', 'noopener');
+          });
+      }
+      if (autoDeleted) {
+        void this.quota.notifyAutoDeleted(autoDeleted);
+      }
+    } catch (error) {
+      const httpError = error as { status?: number; error?: { code?: string } };
+      if (httpError.status === 409 && httpError.error?.code === 'quota_exceeded') {
+        void this.quota.notifyQuotaExceededManual();
+        this.snack.open(
+          $localize`:@@save.error.quotaExceeded:Blob limit reached - delete one from your saved blobs to save a new blob.`,
+          $localize`:@@common.dismiss:Dismiss`,
+          { duration: 6000 },
+        );
+      } else {
+        const message = this.formatSaveError(error);
+        this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, { duration: 6000 });
+      }
+      this.logger.warn('home.save.failed');
+    } finally {
+      this.saveInFlight.set(false);
+    }
+  }
+
+  /**
+   * Compose a sensible seed title for the SaveAsBlobDialog when the
+   * source is a file-backed document. Strips the file extension from
+   * the filename (the cloud blob's title is a freeform string, not a
+   * filename, so the `.json` suffix is noise) and trims whitespace.
+   * Falls back to the current document title or 'Untitled'.
+   */
+  private suggestedBlobTitleForFile(filename: string): string {
+    const cleaned = filename.replace(/\.(json|jsonc|json5|geojson|jsonl|webmanifest)$/i, '').trim();
+    if (cleaned.length > 0) return cleaned;
+    const fromTitle = this.title().trim();
+    if (fromTitle.length > 0) return fromTitle;
+    return $localize`:@@app.title.untitled:Untitled`;
   }
 
   private async onFilesReceived(
