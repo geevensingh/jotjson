@@ -21,7 +21,7 @@
 
 import type { TreeNode } from './build-tree';
 
-export type FlatItemKind = 'leaf' | 'open' | 'close';
+type FlatItemKind = 'leaf' | 'open' | 'close';
 
 export interface FlatItem {
   /** `'leaf'` for primitives and empty containers; `'open'`/`'close'` bracket expanded non-empty containers; collapsed non-empty containers emit a lone `'open'` (no `'close'`). */

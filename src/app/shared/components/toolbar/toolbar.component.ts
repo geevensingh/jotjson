@@ -33,7 +33,6 @@ type ToolbarAction =
   | 'clear'
   | 'save'
   | 'copyShareLink'
-  | 'togglePublic'
   | 'deleteBlob'
   | 'fileChange';
 
@@ -87,12 +86,9 @@ export class ToolbarComponent {
   readonly isOwnedBlob = input<boolean>(false);
   /**
    * Set to true when a blob is loaded AND the signed-in user owns it.
-   * Controls whether the 3-dot overflow menu (copy link / toggle visibility
-   * / delete) is shown.
+   * Controls whether the 3-dot overflow menu (copy link / delete) is shown.
    */
   readonly isOwner = input<boolean>(false);
-  /** Current isPublic flag of the loaded blob, drives the visibility toggle label. */
-  readonly isPublic = input<boolean>(false);
 
   /**
    * Title-suggester candidates (M7p). Lazily populated by the parent
@@ -158,7 +154,6 @@ export class ToolbarComponent {
   readonly titleChange = output<string>();
   readonly signInRequested = output<void>();
   readonly copyShareLink = output<void>();
-  readonly togglePublic = output<void>();
   readonly deleteBlob = output<void>();
 
   /**
@@ -265,12 +260,6 @@ export class ToolbarComponent {
    */
   readonly showOverflowMenu = computed(() => this.ownsLoadedBlob());
 
-  readonly visibilityMenuLabel = computed(() =>
-    this.isPublic()
-      ? $localize`:@@toolbar.overflow.makePrivate:Make private`
-      : $localize`:@@toolbar.overflow.makePublic:Make public`,
-  );
-
   readonly saveTooltip = computed(() => {
     if (!this.saveInFlight() && this.saveDisabled()) {
       return $localize`:@@toolbar.save.disabledTooltip:No changes to save`;
@@ -369,11 +358,6 @@ export class ToolbarComponent {
   onCopyShareLinkClick(): void {
     this.emitToolbarAction('copyShareLink');
     this.copyShareLink.emit();
-  }
-
-  onTogglePublicClick(): void {
-    this.emitToolbarAction('togglePublic');
-    this.togglePublic.emit();
   }
 
   onDeleteBlobClick(): void {

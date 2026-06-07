@@ -48,7 +48,7 @@
  * kind, call site, props, and (for events) measurements (see
  * `AGENTS.md` -> Logging).
  */
-export const TELEMETRY_MESSAGE_IDS = [
+const TELEMETRY_MESSAGE_IDS = [
   // Generic
 
   /**
@@ -893,40 +893,18 @@ export const TELEMETRY_MESSAGE_IDS = [
   'home.clipboard.coldBoot.autoPaste.undo',
 
   /**
-   * Severity: warn
-   * Fired by: `HomeComponent.onToggleVisibility`
-   *           (`features/home/home.component.ts`)
-   * Props: none
-   */
-  'share.visibility.failed',
-
-  /**
    * Kind: event
    * Fired by: `HomeComponent.onSave`
    *           (`features/home/home.component.ts`) after a successful
    *           `BlobService.create` (create branch only -- the
    *           update branch has no creation semantic).
-   * Props: { visibility: 'public' | 'private' }. Today always
-   *   `'private'` (create passes `isPublic=false`); the dimension
-   *   shape is locked now so a future public-create flow can reuse
-   *   the token without renaming.
+   * Props: none. (Pre-1.3.0 carried `{ visibility: 'public' | 'private' }`
+   *   which was a constant `'private'` after the `isPublic` flag was
+   *   removed; dropped to avoid a dead dimension.)
    * Measurements: { sizeBytes: number }. UTF-8 byte count of the
    *   saved content.
    */
   'share.created',
-
-  /**
-   * Kind: event
-   * Fired by: `HomeComponent.onToggleVisibility`
-   *           (`features/home/home.component.ts`) after a successful
-   *           `BlobService.update({ isPublic })`. Failures keep the
-   *           existing `share.visibility.failed` warn token.
-   * Props: { newVisibility: 'public' | 'private' }. The new value;
-   *   `oldVisibility` is the opposite by definition of a toggle and
-   *   is not separately logged.
-   * Measurements: none.
-   */
-  'share.visibility.changed',
 
   /**
    * Severity: warn
@@ -1175,9 +1153,6 @@ export const TELEMETRY_MESSAGE_IDS = [
    *   `clear`         -- Clear button.
    *   `save`          -- Save button (or Enter on title field).
    *   `copyShareLink` -- overflow menu "Copy share link".
-   *   `togglePublic`  -- overflow menu "Make public/private".
-   *                      The resulting visibility flip is logged
-   *                      separately as `share.visibility.changed`.
    *   `deleteBlob`    -- overflow menu "Delete".
    *   `fileChange`    -- a file was actually selected from the
    *                      picker (post-`openFile`, gives funnel

@@ -4,8 +4,8 @@
  * POST   /api/blobs                -> create a new blob owned by the caller
  * GET    /api/blobs                -> list the caller's blobs (auth required)
  * GET    /api/blobs/{idOrSlug}     -> read any blob by UUID id or NanoID slug
- *                                     (auth optional - private/unlisted blobs
- *                                     are viewable by anyone with the link)
+ *                                     (auth optional - blobs are unlisted but
+ *                                     viewable by anyone with the link)
  * PUT    /api/blobs/{id}           -> update an owned blob in place
  * DELETE /api/blobs/{id}           -> delete an owned blob
  *
@@ -183,7 +183,6 @@ export async function postBlob(
   const payload = body as {
     content?: unknown;
     title?: unknown;
-    isPublic?: unknown;
     highlights?: unknown;
   };
 
@@ -233,7 +232,6 @@ export async function postBlob(
     const saved = await createBlob(principal.id, {
       content: payload.content,
       ...(payload.title !== undefined ? { title: payload.title } : {}),
-      ...(payload.isPublic !== undefined ? { isPublic: payload.isPublic } : {}),
       ...(payload.highlights !== undefined ? { highlights: payload.highlights } : {}),
     });
     const response = withEtag(201, saved);
@@ -390,7 +388,6 @@ export async function putBlob(
   const patch = body as {
     content?: unknown;
     title?: unknown;
-    isPublic?: unknown;
     highlights?: unknown;
   };
 
@@ -419,7 +416,6 @@ export async function putBlob(
       {
         ...(patch.content !== undefined ? { content: patch.content } : {}),
         ...(patch.title !== undefined ? { title: patch.title } : {}),
-        ...(patch.isPublic !== undefined ? { isPublic: patch.isPublic } : {}),
         ...(patch.highlights !== undefined ? { highlights: patch.highlights } : {}),
       },
       expectedVersion,

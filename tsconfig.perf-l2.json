@@ -1,24 +1,22 @@
-/* Layer-2 (Karma) perf-bench tsconfig.
+/* Perf-bench tsconfig (vitest browser-mode L2).
  *
- * Differs from `tsconfig.spec.json` ONLY by include/exclude:
- *   - INCLUDES `src/`*`*`/`*.perf.ts` (the perf-bench files).
- *   - INCLUDES `perf/fixtures/`*`*`/`*.ts` (shared generator helpers).
- *   - EXCLUDES `src/`*`*`/`*.test.ts` (the regular vitest unit tests;
- *     the include glob above is narrow enough on its own, but the
- *     explicit exclude is kept as belt-and-suspenders against a
- *     future include broadening).
+ * Owns the type-check graph for `src/`*`*`/`*.perf.ts` and
+ * `perf/fixtures/`*`*`/`*.ts` when run under vitest browser mode.
+ * Separate from `tsconfig.spec.json` so a perf-only ambient (e.g.
+ * `window.__perfL2Force100K`) does not leak into the unit-suite
+ * type-check graph and vice versa.
  *
- * Used by `ng test --configuration perf` (see angular.json -> test ->
- * configurations.perf), driven by `karma.perf.conf.js`.
+ * Distinct from `tsconfig.perf.json` (Layer 1 Node bench under
+ * `scripts/perf/build.mjs`), which owns the pure-module + bench
+ * harness type-check graph for `--expose-gc` runs.
  *
- * We keep this file separate from `tsconfig.spec.json` so the perf
- * file-set never bleeds into `npm test` / `verify:fast`.
+ * Wired into `npm run lint:tsc-perf-l2` (called from `lint`).
  */
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/perf-l2",
-    "types": ["jasmine", "@angular/localize"]
+    "types": ["vitest/globals", "@angular/localize"]
   },
   "include": ["src/**/*.perf.ts", "src/**/*.d.ts", "perf/fixtures/**/*.ts"],
   "exclude": ["src/**/*.test.ts"]
