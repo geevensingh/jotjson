@@ -24,10 +24,14 @@ export function readString(obj: Record<string, unknown>, key: string): string | 
  * any intermediate step is not a plain object or the leaf is not a
  * non-empty string.
  *
- * Uses `isPlainObject` at every step rather than the `in` operator so
- * null-prototype objects produced by the production parser
+ * Uses `isPlainObject` at every step (rather than `obj.hasOwnProperty`
+ * or other `Object.prototype`-derived helpers) so null-prototype
+ * objects produced by the production parser
  * (`src/app/core/json/parse.ts` allocates via `Object.create(null)`
- * to preserve `__proto__` keys per #365) are handled safely.
+ * to preserve `__proto__` keys per #365) are handled safely --
+ * calling `nullProto.hasOwnProperty('x')` throws because
+ * `Object.prototype` is not on the chain, but bracket access and
+ * `typeof` work fine.
  */
 export function readStringDeep(
   obj: Record<string, unknown>,

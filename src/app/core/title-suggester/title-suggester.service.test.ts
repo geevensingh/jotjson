@@ -575,6 +575,62 @@ describe('TitleSuggesterService', () => {
       const entry = result.find((c) => c.source === 'jwtPayload');
       expect(entry?.value).not.toContain('alice@example.com');
     });
+
+    it('rejects: claim slots present but null (e.g. skeleton config)', () => {
+      const result = service.suggest(
+        inputFor('{"iss":"https://accounts.google.com","exp":null,"iat":null,"nbf":null}'),
+      );
+      expect(result.find((c) => c.source === 'jwtPayload')).toBeUndefined();
+    });
+
+    it('rejects: exp/iat as strings (NumericDate is a number per RFC 7519)', () => {
+      const result = service.suggest(
+        inputFor('{"iss":"https://accounts.google.com","exp":"9999999999","iat":"1000000000"}'),
+      );
+      expect(result.find((c) => c.source === 'jwtPayload')).toBeUndefined();
+    });
+
+    it('rejects: aud as an empty string or empty array', () => {
+      const emptyString = service.suggest(
+        inputFor('{"iss":"https://accounts.google.com","aud":"","exp":9999999999}'),
+      );
+      expect(emptyString.find((c) => c.source === 'jwtPayload')).toBeUndefined();
+
+      const emptyArray = service.suggest(
+        inputFor('{"iss":"https://accounts.google.com","aud":[],"exp":9999999999}'),
+      );
+      expect(emptyArray.find((c) => c.source === 'jwtPayload')).toBeUndefined();
+    });
+
+    it('rejects: aud as an array containing blanks or non-strings', () => {
+      const arrayOfBlank = service.suggest(
+        inputFor('{"iss":"https://accounts.google.com","aud":["   "],"exp":9999999999}'),
+      );
+      expect(arrayOfBlank.find((c) => c.source === 'jwtPayload')).toBeUndefined();
+
+      const arrayOfNumber = service.suggest(
+        inputFor('{"iss":"https://accounts.google.com","aud":[42],"exp":9999999999}'),
+      );
+      expect(arrayOfNumber.find((c) => c.source === 'jwtPayload')).toBeUndefined();
+    });
+
+    it('accepts: aud as a non-empty array of non-empty strings', () => {
+      const result = service.suggest(
+        inputFor(
+          '{"iss":"https://accounts.google.com","aud":["api://default","https://other.example.com"],"exp":9999999999}',
+        ),
+      );
+      const entry = result.find((c) => c.source === 'jwtPayload');
+      expect(entry?.value).toBe('JWT: https://accounts.google.com');
+    });
+
+    it('accepts: finite numeric exp/iat (including zero and negative -- RFC permits)', () => {
+      const result = service.suggest(
+        inputFor('{"iss":"https://accounts.google.com","exp":0,"iat":-1}'),
+      );
+      const entry = result.find((c) => c.source === 'jwtPayload');
+      expect(entry?.value).toBe('JWT: https://accounts.google.com');
+    });
   });
 
   describe('microsoftCommerceBillingEvent strategy', () => {
