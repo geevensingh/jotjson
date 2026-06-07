@@ -12,7 +12,6 @@ export interface JsonBlob {
   createdAt: string;
   updatedAt: string;
   ownerId: string;
-  isPublic: boolean;
   highlights?: BlobHighlight[];
   version: number;
 }
