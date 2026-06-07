@@ -1,13 +1,14 @@
 // knip configuration. See https://knip.dev/reference/configuration.
 //
-// This config enables ONLY unused-dependency detection (rules.dependencies
-// + .devDependencies + .optionalPeerDependencies + .unlisted + .binaries
-// + .unresolved). The unused-exports, unused-files, and unused-types
-// checks are disabled in this PR because their false-positive surfaces
-// are different and need their own allowlist-tuning passes; follow-up
-// issues track enabling each.
+// This config enables knip's full unused-detection surface for both
+// dependencies (rules.dependencies + .devDependencies +
+// .optionalPeerDependencies + .unlisted + .binaries + .unresolved) and
+// exports (rules.exports + .types + .nsExports + .nsTypes). The
+// unused-files check is still disabled in this PR because its
+// false-positive surface is different and needs its own allowlist-tuning
+// pass; follow-up issue #426 tracks enabling it.
 //
-// Run via `npm run lint:unused-deps` (also runs as part of the compound
+// Run via `npm run lint:unused` (also runs as part of the compound
 // `npm run lint`).
 //
 // To add a new entry to `ignoreDependencies` or `ignoreBinaries`, include
@@ -25,10 +26,10 @@
     "unlisted": "error",
     "binaries": "error",
     "unresolved": "error",
-    "exports": "off",
-    "types": "off",
-    "nsExports": "off",
-    "nsTypes": "off",
+    "exports": "error",
+    "types": "error",
+    "nsExports": "error",
+    "nsTypes": "error",
     "enumMembers": "off",
     "duplicates": "off",
     "files": "off",

@@ -49,7 +49,7 @@ export class UserAlreadyExistsError extends Error {
 
 let cached: Container | undefined;
 
-export function getUsersContainer(): Container {
+function getUsersContainer(): Container {
   if (!cached) {
     cached = getCosmos().database.container('users');
   }
