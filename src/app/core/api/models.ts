@@ -192,7 +192,7 @@ export interface UserPreferences {
   treeHighlightColors: TreeHighlightColors;
 }
 
-export type HistoryAction = 'viewed';
+type HistoryAction = 'viewed';
 
 export interface HistoryEntry {
   id: string;
