@@ -67,6 +67,12 @@ import { LoggerService } from '../../core/telemetry/logger.service';
 import type { TelemetryMeasurements } from '../../core/telemetry/telemetry.service';
 import { TitleSuggesterService } from '../../core/title-suggester/title-suggester.service';
 import type { SuggestionCandidate } from '../../core/title-suggester/types';
+import {
+  DRAFT_BACKING,
+  getSavedSnapshot,
+  type DocumentBacking,
+  type LoadedSnapshot,
+} from '../../core/upload/document-backing';
 import { DocumentDropController } from '../../core/upload/document-drop-controller.service';
 import { LaunchQueueController } from '../../core/upload/launch-queue-controller.service';
 import { validateAndReadSingleFile } from '../../core/upload/upload-file-validator';
@@ -203,12 +209,6 @@ type SignInRestoreSnapshot = {
   slug: string | null;
   content: string;
   title: string;
-};
-
-type LoadedSnapshot = {
-  content: string;
-  title: string;
-  highlights: readonly BlobHighlight[];
 };
 
 const SIGN_IN_RESTORE_KEY = 'jotjson.signInRestore.v1';
@@ -620,8 +620,11 @@ export class HomeComponent implements OnInit, OnDestroy {
    * extract-banner accept, file upload). Typing and reformat use `setContent`
    * directly.
    */
-  private replaceDocument(text: string): void {
+  private replaceDocument(text: string, newBacking?: DocumentBacking): void {
     this.setContent(text);
+    if (newBacking !== undefined) {
+      this._documentBacking.set(newBacking);
+    }
     // Bypass the 150 ms tree-pane debounce: a full-document swap is
     // a discrete action and should be visible to the user in the
     // same CD tick as the editor.
@@ -686,14 +689,37 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** The currently-loaded server blob, if any. Null when editing an anonymous draft. */
-  readonly loadedBlob = signal<JsonBlob | null>(null);
+  /**
+   * Single source of truth for the editor document's persistence target.
+   * One of `'draft'` (no target), `'blob'` (a saved server blob is
+   * loaded), or `'file'` (a writable `FileSystemFileHandle` is bound).
+   * See `core/upload/document-backing.ts` for the union shape and
+   * helpers.
+   *
+   * Setters in this component must mutate this signal directly OR pass
+   * a backing argument to {@link replaceDocument}. The convenience
+   * `loadedBlob` computed below preserves the legacy reader contract
+   * for callers that only care about the blob variant; new call sites
+   * should switch on `_documentBacking().kind` for exhaustiveness.
+   */
+  private readonly _documentBacking = signal<DocumentBacking>(DRAFT_BACKING);
+
+  /**
+   * The currently-loaded server blob, if any. `null` when the document
+   * is an anonymous draft or backed by a local file. Computed alias over
+   * `_documentBacking` so the underlying union remains the single source
+   * of truth.
+   */
+  readonly loadedBlob = computed<JsonBlob | null>(() => {
+    const backing = this._documentBacking();
+    return backing.kind === 'blob' ? backing.blob : null;
+  });
+
   readonly title = signal<string>('');
   readonly highlights = signal<readonly BlobHighlight[]>([]);
   readonly saveInFlight = signal<boolean>(false);
   readonly saveError = signal<string | null>(null);
 
-  private readonly loadedSnapshot = signal<LoadedSnapshot | null>(null);
   private readonly mutatedPaths = signal<Set<string>>(new Set<string>());
 
   /**
@@ -854,7 +880,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly hasContent = computed(() => this.content().trim().length > 0);
 
   readonly dirty = computed(() => {
-    const snapshot = this.loadedSnapshot();
+    const snapshot = getSavedSnapshot(this._documentBacking());
     if (snapshot === null) {
       return this.content().length > 0 || this.title().length > 0 || this.highlights().length > 0;
     }
@@ -1865,28 +1891,27 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private applyLoadedBlob(blob: JsonBlob): void {
-    const snapshot = this.snapshotFromBlob(blob);
-    this.loadedBlob.set(blob);
-    this.replaceDocument(snapshot.content);
-    this.title.set(snapshot.title);
-    this.highlights.set(snapshot.highlights);
-    this.loadedSnapshot.set(snapshot);
+    const savedSnapshot = this.snapshotFromBlob(blob);
+    this.replaceDocument(savedSnapshot.content, { kind: 'blob', blob, savedSnapshot });
+    this.title.set(savedSnapshot.title);
+    this.highlights.set(savedSnapshot.highlights);
     this.mutatedPaths.set(new Set<string>());
   }
 
   private applySavedBlobResponse(blob: JsonBlob, submitted: LoadedSnapshot): void {
-    const snapshot = this.snapshotFromBlob(blob);
-    this.loadedBlob.set(blob);
-    if (this.content() === submitted.content && this.content() !== snapshot.content) {
-      this.replaceDocument(snapshot.content);
+    const savedSnapshot = this.snapshotFromBlob(blob);
+    const newBacking: DocumentBacking = { kind: 'blob', blob, savedSnapshot };
+    if (this.content() === submitted.content && this.content() !== savedSnapshot.content) {
+      this.replaceDocument(savedSnapshot.content, newBacking);
+    } else {
+      this._documentBacking.set(newBacking);
     }
     if (this.title() === submitted.title) {
-      this.title.set(snapshot.title);
+      this.title.set(savedSnapshot.title);
     }
     if (highlightsEqual(this.highlights(), submitted.highlights)) {
-      this.highlights.set(snapshot.highlights);
+      this.highlights.set(savedSnapshot.highlights);
     }
-    this.loadedSnapshot.set(snapshot);
     this.mutatedPaths.set(new Set<string>());
   }
 
@@ -1907,9 +1932,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private resetLoadedBlobState(): void {
-    this.loadedBlob.set(null);
+    this._documentBacking.set(DRAFT_BACKING);
     this.highlights.set([]);
-    this.loadedSnapshot.set(null);
     this.mutatedPaths.set(new Set<string>());
   }
 
@@ -1923,9 +1947,11 @@ export class HomeComponent implements OnInit, OnDestroy {
       }
       return mergedPaths;
     });
-    if (this.loadedBlob() === null) {
-      this.loadedSnapshot.set(null);
-    }
+    // Note: the prior `if (this.loadedBlob() === null) this.loadedSnapshot.set(null);`
+    // dead code was removed in the M-PWA-write-back DocumentBacking
+    // refactor. With the union, `'draft'` has no `savedSnapshot` to clear
+    // and the other variants intentionally retain their snapshot when
+    // highlights reset for a non-replacing flow.
   }
 
   __loadBlobForTesting(blob: JsonBlob): void {
@@ -2009,7 +2035,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       { duration: 5000 },
     );
 
-    const baseSnapshot = this.loadedSnapshot();
+    const baseSnapshot = getSavedSnapshot(this._documentBacking());
     if (baseSnapshot === null) {
       this.applyLoadedBlob(remoteBlob);
       return;
@@ -2048,10 +2074,15 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.mutatedPaths(),
     );
 
-    this.loadedBlob.set(remoteBlob);
-    this.loadedSnapshot.set(remoteSnapshot);
+    const newBacking: DocumentBacking = {
+      kind: 'blob',
+      blob: remoteBlob,
+      savedSnapshot: remoteSnapshot,
+    };
     if (this.content() !== nextContent) {
-      this.replaceDocument(nextContent);
+      this.replaceDocument(nextContent, newBacking);
+    } else {
+      this._documentBacking.set(newBacking);
     }
     this.title.set(nextTitle);
     this.highlights.set(nextHighlights);
@@ -2915,7 +2946,14 @@ export class HomeComponent implements OnInit, OnDestroy {
         );
         return;
       }
-      await this.onFilesReceived(event.files, 'osLaunch');
+      // Phase 1: pass only the resolved Files through the existing
+      // upload pipeline. Phase 3 will plumb `entry.handle` through to
+      // `onFilesReceived` so file-backed Save can write back. The
+      // handle reaching `LaunchQueueController` already provides the
+      // single source of truth for the upcoming `DocumentBacking`
+      // file variant (see core/upload/document-backing.ts).
+      const files = event.entries.map((entry) => entry.file);
+      await this.onFilesReceived(files, 'osLaunch');
     });
   }
 

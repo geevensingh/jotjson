@@ -4345,7 +4345,6 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -4562,7 +4561,11 @@ describe('HomeComponent drag-drop upload (M7b)', () => {
       arrayBuffer: () => Promise.resolve(new TextEncoder().encode(text).buffer),
     } as unknown as File;
     const handler = fakeLaunch.registeredHandler!;
-    const event: LaunchEvent = { kind: 'files', files: [file] };
+    const event: LaunchEvent = {
+      kind: 'files',
+      entries: [{ file, handle: null }],
+      targetURL: 'https://jotjson.com/',
+    };
     await handler(event);
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -4975,7 +4978,6 @@ describe('HomeComponent extract-banner telemetry', () => {
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -5109,7 +5111,11 @@ describe('HomeComponent extract-banner telemetry', () => {
     });
     expect(launch.registeredHandler).toBeDefined();
 
-    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    await launch.registeredHandler!({
+      kind: 'files',
+      entries: [{ file, handle: null }],
+      targetURL: 'https://jotjson.com/',
+    });
     await waitForTaskQueue();
     await waitForTaskQueue();
     await waitForDoubleAnimationFrame();
@@ -5497,7 +5503,6 @@ describe('HomeComponent upload-error banner (#36)', () => {
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -5760,7 +5765,6 @@ describe('HomeComponent binary upload rejection (#62)', () => {
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -7387,7 +7391,6 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
 
   class FakeLaunchQueueController {
     registeredHandler?: LaunchHandler;
-    readonly currentFileHandle = signal<FileSystemFileHandle | null>(null);
     readonly dispose = vi.fn();
     readonly registerHandler = vi.fn().mockImplementation((handler: LaunchHandler) => {
       this.registeredHandler = handler;
@@ -7617,7 +7620,11 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
 
     expect(launch.registeredHandler).toBeDefined();
     const file = new File(['{"next":1}'], 'launched.json');
-    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    await launch.registeredHandler!({
+      kind: 'files',
+      entries: [{ file, handle: null }],
+      targetURL: 'https://jotjson.com/',
+    });
     expect(component.content()).toBe('{"next":1}');
     expect(component.lastFilename()).toBe('launched.json');
 
@@ -7642,7 +7649,11 @@ describe('HomeComponent upload/format/minify/sort undo (issue #313)', () => {
 
     expect(launch.registeredHandler).toBeDefined();
     const file = new File(['{"next":2}'], 'launched.json');
-    await launch.registeredHandler!({ kind: 'files', files: [file] });
+    await launch.registeredHandler!({
+      kind: 'files',
+      entries: [{ file, handle: null }],
+      targetURL: 'https://jotjson.com/',
+    });
     expect(component.content()).toBe('{"next":2}');
 
     eventSpy.mockClear();
