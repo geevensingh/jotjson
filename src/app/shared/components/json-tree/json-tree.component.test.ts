@@ -2561,14 +2561,14 @@ describe('JsonTreeComponent', () => {
     // Regression guard for issue #366: in light theme the type badge inside
     // a selected row must use the darkened #4a4a4a text color (>=4.5:1 over
     // the effective #c0d5e5 selection-pill background) instead of the default
-    // muted #5c5c5c (4.42:1, below WCAG AA). The wrapping element is tagged
-    // `.theme-light` so the component's `:host-context(.theme-light)` override
-    // resolves.
+    // muted #5c5c5c (4.42:1, below WCAG AA). The theme class is applied to
+    // `<body>` to mirror production -- PreferencesService scopes theme classes
+    // (and Material's light theme emission) to `body.theme-light` -- so the
+    // component's `:host-context(.theme-light)` override resolves the same way
+    // it does at runtime.
     it('darkens the selected-row type badge in light theme for WCAG AA contrast', async () => {
       await createWith({ a: 1 });
-      const wrapper = (fixture.nativeElement as HTMLElement).closest('div') as HTMLElement | null;
-      expect(wrapper, 'expected the fixture viewport wrapper').toBeTruthy();
-      wrapper!.classList.add('theme-light');
+      document.body.classList.add('theme-light');
       try {
         cmp.expandAll();
         fixture.detectChanges();
@@ -2580,7 +2580,7 @@ describe('JsonTreeComponent', () => {
         expect(badge, 'expected a type badge inside the selected row').toBeTruthy();
         expect(getComputedStyle(badge!).color).toBe('rgb(74, 74, 74)');
       } finally {
-        wrapper!.classList.remove('theme-light');
+        document.body.classList.remove('theme-light');
         cmp.selectedPath.set(null);
         fixture.detectChanges();
       }
