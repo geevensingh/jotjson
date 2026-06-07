@@ -28,9 +28,7 @@ import type { Container } from '@azure/cosmos';
 import { randomUUID } from 'crypto';
 import { getCosmos } from './cosmos';
 
-export type HistoryAction = 'viewed';
-
-export const HISTORY_ACTIONS: ReadonlySet<HistoryAction> = new Set<HistoryAction>(['viewed']);
+type HistoryAction = 'viewed';
 
 export interface HistoryDocument {
   id: string;
@@ -75,12 +73,12 @@ export interface ListEntriesResult {
 
 export const HISTORY_RETENTION_PER_USER = 1000;
 export const VIEW_DEBOUNCE_SECONDS = 300;
-export const DEFAULT_PAGE_SIZE = 50;
-export const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
 
 let cached: Container | undefined;
 
-export function getHistoryContainer(): Container {
+function getHistoryContainer(): Container {
   if (!cached) {
     cached = getCosmos().database.container('history');
   }
