@@ -3,7 +3,7 @@
  * Owns the type-check graph for `src/`*`*`/`*.perf.ts` and
  * `perf/fixtures/`*`*`/`*.ts` when run under vitest browser mode.
  * Separate from `tsconfig.spec.json` so a perf-only ambient (e.g.
- * `window.__perfL2Force100K`) does not leak into the unit-suite
+ * `window.__perfL2Force1M`) does not leak into the unit-suite
  * type-check graph and vice versa.
  *
  * Distinct from `tsconfig.perf.json` (Layer 1 Node bench under
