@@ -13,6 +13,12 @@
       "allowedRoles": ["anonymous", "authenticated"]
     },
     {
+      "route": "/s/*",
+      "headers": {
+        "X-Robots-Tag": "noindex"
+      }
+    },
+    {
       "route": "/index.html",
       "headers": {
         "Cache-Control": "no-cache, must-revalidate"

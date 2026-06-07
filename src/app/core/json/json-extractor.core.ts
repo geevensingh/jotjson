@@ -30,14 +30,14 @@ export interface ExtractedJson {
   hasComments: boolean;
 }
 
-export interface JsonExtractorParseResult {
+interface JsonExtractorParseResult {
   value: unknown;
   errors: readonly unknown[];
 }
 
 export type ParseJsonCandidate = (candidateText: string) => JsonExtractorParseResult;
 
-export interface JsonExtractorCandidate {
+interface JsonExtractorCandidate {
   startIndex: number;
   endIndex: number;
   slice: string;
@@ -45,7 +45,7 @@ export interface JsonExtractorCandidate {
   hasComments: boolean;
 }
 
-export interface CloseScan {
+interface CloseScan {
   closeIndex: number;
   hasComments: boolean;
 }
@@ -292,10 +292,7 @@ function jsonStringifyValue(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
-export function scan(
-  text: string,
-  parseJsonCandidate: ParseJsonCandidate,
-): JsonExtractorCandidate[] {
+function scan(text: string, parseJsonCandidate: ParseJsonCandidate): JsonExtractorCandidate[] {
   const candidates: JsonExtractorCandidate[] = [];
   const textLength = text.length;
   let index = 0;
@@ -331,7 +328,7 @@ export function scan(
   return candidates;
 }
 
-export function formatExtractedJson(slice: string, tabSize: IndentSize): string {
+function formatExtractedJson(slice: string, tabSize: IndentSize): string {
   const edits = formatJsonc(slice, undefined, {
     tabSize,
     insertSpaces: true,
@@ -339,7 +336,7 @@ export function formatExtractedJson(slice: string, tabSize: IndentSize): string 
   return applyEdits(slice, edits);
 }
 
-export function findCloseIndex(text: string, startIndex: number): CloseScan {
+function findCloseIndex(text: string, startIndex: number): CloseScan {
   const textLength = text.length;
   let depth = 1;
   let inString = false;

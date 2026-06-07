@@ -1,16 +1,14 @@
-// Runs the L2 perf-bench harness (Karma by default, or Vitest with
-// `--vitest`), captures `@@PERF_L2@@<json>@@END@@` sentinels emitted
-// by `*.perf.ts` specs from stdout AND stderr, and writes a
+// Runs the L2 perf-bench harness (Vitest browser mode), captures
+// `@@PERF_L2@@<json>@@END@@` sentinels emitted by `*.perf.ts` specs
+// from stdout AND stderr, and writes a
 // `perf-results/<utc>/layer-2.jsonl`.
 //
 // Invoked as:
-//   npm run perf:l2          (Karma; `ng test --configuration perf`)
-//   npm run perf:l2:vitest   (Vitest; `vitest run --config vitest.perf.config.mts`)
+//   npm run perf:l2          (vitest run --config vitest.perf.config.mts)
 //
 // Both stdout and stderr are scanned for sentinels because Vitest
 // browser mode occasionally interleaves provider/dev-server output
-// across the two streams. The Karma path historically only emitted
-// to stdout, but scanning both is safe.
+// across the two streams.
 
 import { execSync, spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -54,31 +52,7 @@ export function extractRows(text) {
   return rows;
 }
 
-/**
- * Resolve the spawn command + args for the requested harness.
- *
- * @param {{ vitest: boolean }} opts
- * @returns {{ runnerLabel: string, cmd: string, args: string[] }}
- */
-export function resolveRunner(opts) {
-  const isWin = process.platform === 'win32';
-  const cmd = isWin ? 'npx.cmd' : 'npx';
-  if (opts.vitest) {
-    return {
-      runnerLabel: 'vitest',
-      cmd,
-      args: ['vitest', 'run', '--config', 'vitest.perf.config.mts'],
-    };
-  }
-  return {
-    runnerLabel: 'ng test',
-    cmd,
-    args: ['ng', 'test', '--configuration', 'perf'],
-  };
-}
-
 async function main() {
-  const useVitest = process.argv.includes('--vitest');
   const machineLabel = process.env['PERF_MACHINE'] ?? suggestMachineLabel();
   const sha = codeSha();
   const capturedAtUtc = new Date().toISOString();
@@ -89,8 +63,10 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   const outFile = join(outDir, 'layer-2.jsonl');
 
-  const { runnerLabel, cmd, args } = resolveRunner({ vitest: useVitest });
   const isWin = process.platform === 'win32';
+  const cmd = isWin ? 'npx.cmd' : 'npx';
+  const args = ['vitest', 'run', '--config', 'vitest.perf.config.mts'];
+  const runnerLabel = 'vitest';
 
   const child = spawn(cmd, args, { cwd: REPO_ROOT, shell: isWin });
   let bufferedStdout = '';
