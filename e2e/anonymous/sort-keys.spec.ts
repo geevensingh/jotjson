@@ -75,13 +75,7 @@ test('sort-keys toolbar smoke sorts the whole document and preserves whitespace 
   const snackbar = page.getByText('Sorted keys.');
   await expect(snackbar).toBeVisible();
 
-  // reason: disable color-contrast for this spec only. After Sort, Monaco's
-  // cursor resets to offset 0, which selection-sync maps to the root tree
-  // row (.is-selected). The .tree-type-badge inside the selected row fails
-  // WCAG AA color contrast (#5c5c5c on #c0d5e5 = 4.42:1, needs 4.5:1).
-  // This is a pre-existing tree-row styling bug independent of Sort;
-  // tracked in issue #366. Remove this override once #366 lands.
-  await assertNoSeriousA11yViolations(page, { disableRules: ['color-contrast'] });
+  await assertNoSeriousA11yViolations(page);
 });
 
 test('sort-keys toolbar preserves a leading-document comment', async ({ page }) => {
