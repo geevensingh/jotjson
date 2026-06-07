@@ -72,15 +72,14 @@ export interface UpdateBlobPatch {
 export const MAX_BLOB_BYTES = 1_000_000; // 1 MB, per DESIGN_SPEC section Constraints
 export const MAX_HIGHLIGHTS = 100;
 export const MAX_HIGHLIGHT_PATH_LENGTH = 1024;
-export const MAX_HIGHLIGHTS_SERIALIZED_CHARS = 16_384;
+const MAX_HIGHLIGHTS_SERIALIZED_CHARS = 16_384;
 // Keeps the existing 1 MB raw-content allowance while bounding highlight overhead
 // to 16 KB plus a small JSON envelope.
-export const MAX_BLOB_DOCUMENT_SERIALIZED_CHARS =
-  MAX_BLOB_BYTES + MAX_HIGHLIGHTS_SERIALIZED_CHARS + 128;
+const MAX_BLOB_DOCUMENT_SERIALIZED_CHARS = MAX_BLOB_BYTES + MAX_HIGHLIGHTS_SERIALIZED_CHARS + 128;
 export const MAX_TITLE_LENGTH = 200;
 export const MAX_BLOBS_PER_USER = 100; // free-tier quota, DESIGN_SPEC section Constraints
-export const SLUG_LENGTH = 6;
-export const MAX_SLUG_ATTEMPTS = 5;
+const SLUG_LENGTH = 6;
+const MAX_SLUG_ATTEMPTS = 5;
 
 // Alphanumeric only - avoids URL-unfriendly or visually ambiguous characters.
 // This is effectively a tiny in-process NanoID implementation using
@@ -88,7 +87,7 @@ export const MAX_SLUG_ATTEMPTS = 5;
 // ships ESM-only and would drag in package.json "type": "module" changes).
 const SLUG_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-export function generateSlug(length: number = SLUG_LENGTH): string {
+function generateSlug(length: number = SLUG_LENGTH): string {
   const mask = 63; // 6 bits, SLUG_ALPHABET.length === 62 < 64
   const step = Math.ceil((length * 1.6) | 0) || 1;
   let result = '';
@@ -120,7 +119,7 @@ export class SlugGenerationError extends Error {
 
 let cached: Container | undefined;
 
-export function getBlobsContainer(): Container {
+function getBlobsContainer(): Container {
   if (!cached) {
     // Container name is overridable via env var so the api-integration
     // test harness can point at a per-run isolated container in the
@@ -364,14 +363,14 @@ export function assertHighlightPath(value: unknown): string {
   return value;
 }
 
-export function assertHighlightColor(value: unknown): string {
+function assertHighlightColor(value: unknown): string {
   if (typeof value !== 'string' || !HEX_COLOR.test(value)) {
     throw new BlobValidationError('highlight color must be a #RRGGBB hex color');
   }
   return value;
 }
 
-export function assertHighlight(value: unknown): BlobHighlight {
+function assertHighlight(value: unknown): BlobHighlight {
   if (!isRecord(value)) {
     throw new BlobValidationError('highlight must be an object');
   }

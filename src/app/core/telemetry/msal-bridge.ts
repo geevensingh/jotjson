@@ -17,7 +17,7 @@ import { TelemetryProps } from './telemetry.service';
 const BUFFER_CAP = 50;
 const MAX_MSG = 500;
 
-export interface MsalBridgeEntry {
+interface MsalBridgeEntry {
   props: TelemetryProps;
 }
 

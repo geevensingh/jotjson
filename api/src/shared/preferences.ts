@@ -8,7 +8,7 @@
  * `DESIGN_SPEC.md`.
  */
 
-export interface ThemeColorSet {
+interface ThemeColorSet {
   selectionColor: string;
   matchingValueColor: string;
   ancestorColor: string;
@@ -21,14 +21,14 @@ export interface ThemeColorSet {
  * `SearchMatchMode` in `src/app/core/api/models.ts` (cannot import
  * across workspaces). Tokens must stay in lockstep with that file.
  */
-export type SearchMatchMode = 'exact' | 'contains' | 'starts_with' | 'ends_with' | 'regex';
+type SearchMatchMode = 'exact' | 'contains' | 'starts_with' | 'ends_with' | 'regex';
 
-export interface TreeHighlightColors {
+interface TreeHighlightColors {
   dark: ThemeColorSet;
   light: ThemeColorSet;
 }
 
-export interface TreeDateAnnotationUnits {
+interface TreeDateAnnotationUnits {
   year: boolean;
   month: boolean;
   day: boolean;
