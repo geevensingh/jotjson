@@ -4,7 +4,9 @@
 // the unit-test config (`vitest.config.mts`) and the L2 perf-bench
 // config (`vitest.perf.config.mts`) so the two stay in sync on the
 // asset/polyfill surface they both need (Angular plugin, fixtures
-// mount, Monaco mount, zone.js polyfills, monaco inline).
+// mount, Monaco mount, monaco inline). The test runtime is zoneless
+// (issue #450): change detection is validated via
+// `provideZonelessChangeDetection()` and no zone.js polyfills are loaded.
 //
 // Architectural note (issue #417): we factor out *named exports*
 // rather than a single mergeable config object. Vitest's
@@ -62,13 +64,7 @@ export const sharedTestBase = {
     },
   },
   optimizeDeps: {
-    include: [
-      '@angular/localize/init',
-      'zone.js',
-      'zone.js/testing',
-      'zone.js/plugins/proxy',
-      'zone.js/plugins/sync-test',
-    ],
+    include: ['@angular/localize/init'],
   },
 } as const;
 

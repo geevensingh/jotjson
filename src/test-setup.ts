@@ -9,14 +9,11 @@
 // alphabetically and break the test suite.
 import '@angular/compiler';
 import '@angular/localize/init';
-import 'zone.js';
-import 'zone.js/testing';
 import { setupTestBed } from '@analogjs/vitest-angular/setup-testbed';
-import '@analogjs/vitest-angular/setup-zone';
 import './styles.scss';
 
 setupTestBed({
-  zoneless: false,
+  zoneless: true,
 });
 
 // Global per-test isolation hook (issue #350 / Karma-Vitest migration).
