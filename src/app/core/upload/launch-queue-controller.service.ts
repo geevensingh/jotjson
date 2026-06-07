@@ -53,8 +53,14 @@ import { LoggerService } from '../telemetry/logger.service';
  * (see `DocumentDropController.DropHandler`) so consumers have one
  * uniform `(file, handle | null)` contract across all three adoption
  * paths: launchQueue, file picker, and drag-drop.
+ *
+ * Internal: kept un-exported until Phase 3 of M-PWA-write-back wires
+ * `HomeComponent.onFilesReceived` to consume the handle. Inlined as a
+ * named interface (rather than an anonymous tuple) so the JSDoc has a
+ * home; flip to `export` when the first non-test cross-module consumer
+ * lands.
  */
-export interface LaunchFileEntry {
+interface LaunchFileEntry {
   readonly file: File;
   readonly handle: FileSystemFileHandle | null;
 }
