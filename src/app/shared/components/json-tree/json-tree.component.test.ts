@@ -2557,6 +2557,34 @@ describe('JsonTreeComponent', () => {
       // the selected row after Phase 2's template rewrite.
       expect(xRow.getAttribute('aria-selected')).toBe('true');
     });
+
+    // Regression guard for issue #366: in light theme the type badge inside
+    // a selected row must use the darkened #4a4a4a text color (>=4.5:1 over
+    // the effective #c0d5e5 selection-pill background) instead of the default
+    // muted #5c5c5c (4.42:1, below WCAG AA). The theme class is applied to
+    // `<body>` to mirror production -- PreferencesService scopes theme classes
+    // (and Material's light theme emission) to `body.theme-light` -- so the
+    // component's `:host-context(.theme-light)` override resolves the same way
+    // it does at runtime.
+    it('darkens the selected-row type badge in light theme for WCAG AA contrast', async () => {
+      await createWith({ a: 1 });
+      document.body.classList.add('theme-light');
+      try {
+        cmp.expandAll();
+        fixture.detectChanges();
+        cmp.selectedPath.set('$.a');
+        fixture.detectChanges();
+        const badge = (fixture.nativeElement as HTMLElement).querySelector(
+          '.tree-row.is-selected .tree-type-badge',
+        ) as HTMLElement | null;
+        expect(badge, 'expected a type badge inside the selected row').toBeTruthy();
+        expect(getComputedStyle(badge!).color).toBe('rgb(74, 74, 74)');
+      } finally {
+        document.body.classList.remove('theme-light');
+        cmp.selectedPath.set(null);
+        fixture.detectChanges();
+      }
+    });
   });
 
   describe('manual highlights', () => {
