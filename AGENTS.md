@@ -359,6 +359,15 @@ Events catalog.
 - Files: `kebab-case.ts`. Angular: `thing.component.ts`, `thing.service.ts`,
   `thing.pipe.ts`, `thing.guard.ts`.
 - Classes: `PascalCase`. Variables/functions: `camelCase`. Constants: `UPPER_SNAKE`.
+- **First-party environment variables use the `JOTJSON_*` prefix.**
+  Examples in the repo today: `JOTJSON_DEV_AUTH_BYPASS`,
+  `JOTJSON_BUILD_SHA`, `JOTJSON_MIGRATION_CONFIRMED`,
+  `JOTJSON_TEST_SEED`. The prefix is runner- and tool-agnostic so the
+  variable name does not couple to a current implementation choice (the
+  predecessor `JASMINE_SEED` outlived Jasmine -- see issue #436). Do not
+  introduce a `JJ_*` env-var prefix; `JJ_` is reserved for in-code
+  symbol prefixes (e.g. `JJ_MENU_IMPORTS`) and i18n placeholder tags
+  (e.g. `x-jj_icon`).
 - **Use descriptive names.** Variables, parameters, and functions must
   use whole-word, intention-revealing names - not single letters or
   ad-hoc abbreviations like `a`, `b`, `x`, `y`, `tmp`, `val`, `data2`.
@@ -524,7 +533,7 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
 ### CI Insights (Mergify)
 
 After each test job, CI uploads the suite's JUnit XML to Mergify CI Insights
-via `mergifyio/gha-mergify-ci@v17`. Wired suites: **api unit**, **api
+via `mergifyio/gha-mergify-ci@v20`. Wired suites: **api unit**, **api
 integration**, **web unit** (Vitest), **e2e** (Playwright). Dashboards live
 at `https://dashboard.mergify.com/ci-insights/jobs`. JUnit artifacts and
 `dorny/test-reporter` PR check-runs are unchanged and remain the canonical

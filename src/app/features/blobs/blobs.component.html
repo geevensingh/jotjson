@@ -48,16 +48,6 @@
               <span class="blob-slug">/s/{{ blob.slug }}</span>
               <span class="blob-dot">&middot;</span>
               <span class="blob-time">{{ relativeTime(blob.updatedAt) }}</span>
-              @if (blob.isPublic) {
-                <span class="blob-dot">&middot;</span>
-                <span
-                  class="blob-badge"
-                  i18n="@@blobs.public"
-                  matTooltip="Anyone with the link and search engines can see this blob."
-                  i18n-matTooltip="@@blobs.public.tooltip"
-                  >public</span
-                >
-              }
             </div>
           </div>
           <button
