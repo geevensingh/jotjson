@@ -21,7 +21,7 @@
 import { pathToString } from '../../../core/json/json-path';
 import { jsonTypeOf, type JsonValueType } from '../../../core/json/json-value-type';
 
-export { pathToString as formatPath, jsonTypeOf, type JsonValueType };
+export { pathToString as formatPath, jsonTypeOf };
 
 export interface TreeNode {
   segment: string | number | undefined;

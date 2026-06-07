@@ -364,7 +364,6 @@ export async function tryAuth(req: HttpRequest): Promise<AuthenticatedPrincipal 
   }
 }
 
-// Re-exports retained for any pre-existing imports. Both SWA's x-ms-client-
-// principal and Entra JWT models are now valid code paths; the SWA path is
-// legacy and should not be used for new routes.
-export type { JwtPayload };
+// (Previously re-exported `JwtPayload` here for any pre-existing
+// imports. Removed: the type is imported from 'jsonwebtoken' directly
+// where needed, and the re-export had no in-repo consumers.)

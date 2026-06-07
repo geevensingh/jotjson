@@ -48,7 +48,7 @@
  * kind, call site, props, and (for events) measurements (see
  * `AGENTS.md` -> Logging).
  */
-export const TELEMETRY_MESSAGE_IDS = [
+const TELEMETRY_MESSAGE_IDS = [
   // Generic
 
   /**
