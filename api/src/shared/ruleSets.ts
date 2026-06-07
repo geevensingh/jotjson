@@ -43,17 +43,14 @@ import {
 
 // -------- Document types --------
 
-export type RuleTarget = 'key' | 'value' | 'key_and_value';
+type RuleTarget = 'key' | 'value' | 'key_and_value';
 
 /**
  * Match-type union for v1. The `regex` option is deferred to v1.1
  * pending a safe-evaluation strategy (see DESIGN_SPEC.md §Features 7,
  * "Regex policy"). Add `'regex'` back here when the engine ships it.
  */
-export type FormattingRuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
-
-// Backwards-compatible alias for older API workspace callers.
-export type RuleMatchType = FormattingRuleMatchType;
+type FormattingRuleMatchType = 'exact' | 'contains' | 'starts_with' | 'ends_with';
 
 export type ValuePredicate =
   | 'is_null'
@@ -81,7 +78,7 @@ export type ValuePredicate =
  * because new icons require a spec amendment, not a user-supplied
  * free-form string.
  */
-export type FormattingIcon = 'warning' | 'check' | 'star' | 'info' | 'error' | 'flag' | 'bookmark';
+type FormattingIcon = 'warning' | 'check' | 'star' | 'info' | 'error' | 'flag' | 'bookmark';
 
 const FORMATTING_ICONS: readonly FormattingIcon[] = [
   'warning',
@@ -141,13 +138,13 @@ export interface FormattingStyle {
   icon?: FormattingIcon;
 }
 
-export interface KeyMatch {
+interface KeyMatch {
   matchType: FormattingRuleMatchType;
   matchValue: string;
   caseSensitive: boolean;
 }
 
-export type ValueMatch =
+type ValueMatch =
   | {
       kind: 'text';
       matchType: FormattingRuleMatchType;
@@ -349,7 +346,7 @@ function assertSimpleRule(raw: unknown, field: string): FormattingRuleSimple {
   return { id, kind, target, matchType, matchValue, caseSensitive, style };
 }
 
-export function assertKeyMatch(value: unknown, field = 'keyMatch'): KeyMatch {
+function assertKeyMatch(value: unknown, field = 'keyMatch'): KeyMatch {
   if (!isRecord(value)) {
     throw new RuleSetValidationError(`${field} must be an object`);
   }
@@ -361,7 +358,7 @@ export function assertKeyMatch(value: unknown, field = 'keyMatch'): KeyMatch {
   };
 }
 
-export function assertTextMatch(
+function assertTextMatch(
   value: unknown,
   field = 'valueMatch',
 ): Extract<ValueMatch, { kind: 'text' }> {
@@ -377,7 +374,7 @@ export function assertTextMatch(
   };
 }
 
-export function assertPredicateMatch(
+function assertPredicateMatch(
   value: unknown,
   field = 'valueMatch',
 ): Extract<ValueMatch, { kind: 'predicate' }> {
@@ -391,7 +388,7 @@ export function assertPredicateMatch(
   };
 }
 
-export function assertValueMatch(value: unknown, field = 'valueMatch'): ValueMatch {
+function assertValueMatch(value: unknown, field = 'valueMatch'): ValueMatch {
   if (!isRecord(value)) {
     throw new RuleSetValidationError(`${field} must be an object`);
   }
@@ -399,7 +396,7 @@ export function assertValueMatch(value: unknown, field = 'valueMatch'): ValueMat
   return kind === 'text' ? assertTextMatch(value, field) : assertPredicateMatch(value, field);
 }
 
-export function assertPairRule(raw: unknown, field = 'rule'): FormattingRulePair {
+function assertPairRule(raw: unknown, field = 'rule'): FormattingRulePair {
   if (!isRecord(raw)) {
     throw new RuleSetValidationError(`${field} must be an object`);
   }
@@ -479,7 +476,7 @@ export function assertRuleSetPayload(payload: unknown): UpdateRuleSetPayload {
 
 let cached: Container | undefined;
 
-export function getRuleSetsContainer(): Container {
+function getRuleSetsContainer(): Container {
   if (!cached) {
     cached = getCosmos().database.container('rule-sets');
   }
@@ -621,10 +618,10 @@ export async function deleteRuleSetById(id: string, userId: string): Promise<boo
   }
 }
 
-// Re-export limits so callers can `import { MAX_RULE_SETS_PER_USER } from './ruleSets'`.
-export {
-  MAX_RULES_PER_SET,
-  MAX_RULE_MATCH_VALUE_LENGTH,
-  MAX_RULE_SETS_PER_USER,
-  MAX_RULE_SET_NAME_LENGTH,
-};
+// (Re-export of MAX_RULES_PER_SET / MAX_RULE_MATCH_VALUE_LENGTH /
+// MAX_RULE_SET_NAME_LENGTH removed: callers reference these constants
+// inside `jest.mock('../shared/ruleSets', () => ({ ... }))` factories
+// as literal values, not via import, so the re-export was unused.
+// MAX_RULE_SETS_PER_USER stays because tests import it directly via
+// `from '../shared/ruleSets'`.)
+export { MAX_RULE_SETS_PER_USER };
