@@ -9,14 +9,21 @@
 import { defineConfig } from 'vitest/config';
 import { makeBrowserConfig, sharedPlugins, sharedTestBase } from './vitest.shared.mts';
 
-const rawSeed = process.env['JASMINE_SEED'];
+// Env-var name for replay-seed override. Per AGENTS.md Section 4 Naming,
+// first-party env vars use the `JOTJSON_*` prefix so the name does not
+// couple to a current implementation choice (the predecessor `JASMINE_SEED`
+// outlived Jasmine; see issue #436). Defined once so the three callsites
+// below cannot drift.
+const SEED_ENV_VAR = 'JOTJSON_TEST_SEED' as const;
+
+const rawSeed = process.env[SEED_ENV_VAR];
 const trimmedSeed = typeof rawSeed === 'string' ? rawSeed.trim() : '';
 const numericSeed = trimmedSeed ? Number(trimmedSeed) : NaN;
 const seedForConfig = Number.isFinite(numericSeed) ? numericSeed : undefined;
 
 if (rawSeed !== undefined && !Number.isFinite(numericSeed)) {
   console.warn(
-    `[vitest.config] JASMINE_SEED was set but did not parse as a number; using random seed.`,
+    `[vitest.config] ${SEED_ENV_VAR} was set but did not parse as a number; using random seed.`,
   );
 }
 
@@ -27,7 +34,7 @@ class SeedReporter {
     const seedStr = String(seed);
     console.log(
       `[reporter.seed] Vitest random order, seed=${seedStr} (replay key).` +
-        ` Replay: JASMINE_SEED=${seedStr} npm test`,
+        ` Replay: ${SEED_ENV_VAR}=${seedStr} npm test`,
     );
     if (process.env['GITHUB_ACTIONS'] === 'true') {
       console.log(`::notice title=Vitest seed::seed=${seedStr} (browser chromium)`);
