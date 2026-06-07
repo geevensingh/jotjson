@@ -26,6 +26,17 @@ export class StatusBarComponent {
   readonly parseResult = input<JsonParseResult | undefined>(undefined);
   readonly cursor = input<{ line: number; column: number } | undefined>(undefined);
 
+  /**
+   * Display name of the local file the document is bound to via the
+   * M-PWA-write-back flow (`DocumentBacking` kind === 'file'). When
+   * non-null, the status bar surfaces this as a left-side stat so
+   * multi-window PWA users can distinguish their tabs at a glance
+   * (complements the browser tab title which also carries the
+   * filename for file-backed docs - see `HomeComponent`'s title
+   * effect). `null` for draft + blob-backed documents.
+   */
+  readonly filename = input<string | null>(null);
+
   readonly textStats = computed(() => computeTextStats(this.text()));
 
   /**

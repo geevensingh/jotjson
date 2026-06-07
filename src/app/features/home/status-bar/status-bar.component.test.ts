@@ -420,3 +420,47 @@ describe('StatusBarComponent', () => {
     });
   });
 });
+
+describe('StatusBarComponent file-backed filename stat (M-PWA write-back Phase 4b)', () => {
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ imports: [StatusBarComponent] });
+  });
+
+  function createWithFilename(filename: string | null) {
+    const fixture = TestBed.createComponent(StatusBarComponent);
+    fixture.componentRef.setInput('filename', filename);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders the filename stat when filename input is non-null', () => {
+    const fixture = createWithFilename('data.json');
+    const stat = fixture.nativeElement.querySelector('.stat-filename');
+    expect(stat).not.toBeNull();
+    const value = (stat as HTMLElement).querySelector('.value')!;
+    expect(value.textContent?.trim()).toBe('data.json');
+  });
+
+  it('omits the filename stat when filename input is null', () => {
+    const fixture = createWithFilename(null);
+    expect(fixture.nativeElement.querySelector('.stat-filename')).toBeNull();
+  });
+
+  it('updates the rendered name when the filename input changes', () => {
+    const fixture = createWithFilename('a.json');
+    expect(
+      (
+        fixture.nativeElement.querySelector('.stat-filename .value') as HTMLElement
+      ).textContent?.trim(),
+    ).toBe('a.json');
+
+    fixture.componentRef.setInput('filename', 'b.json');
+    fixture.detectChanges();
+    expect(
+      (
+        fixture.nativeElement.querySelector('.stat-filename .value') as HTMLElement
+      ).textContent?.trim(),
+    ).toBe('b.json');
+  });
+});

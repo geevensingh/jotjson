@@ -1,5 +1,17 @@
 <div class="status-bar jj-no-select" role="status" aria-live="polite">
   <div class="left">
+    @if (filename(); as fname) {
+      <span
+        class="stat stat-filename"
+        aria-label="Bound local file name"
+        i18n-aria-label="@@status.filename.aria"
+        title="Editing local file"
+        i18n-title="@@status.filename.title"
+      >
+        <jj-icon name="save" [size]="14"></jj-icon>
+        <span class="value">{{ fname }}</span>
+      </span>
+    }
     <span
       class="stat stat-chars"
       aria-label="Meaningful characters (whitespace and comments excluded)"
