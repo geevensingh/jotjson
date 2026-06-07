@@ -19,7 +19,6 @@ export class NotFoundComponent implements OnInit {
 
   ngOnInit(): void {
     // A 404 page should never be indexed, regardless of prior page state.
-    this.seo.clearBlobTags();
     this.seo.setNoindex(true);
   }
 

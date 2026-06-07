@@ -512,9 +512,11 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
   with a ChromeHeadless launcher backed by Playwright). Run with
   `npm test` locally (single-run) or `npm run test:watch` for iteration;
   `npm run test:ci` adds `--coverage` for CI. Co-locate specs as
-  `*.test.ts` alongside the unit under test. (The perf bench
-  `npm run perf:l2` still uses Karma+Jasmine via `karma.perf.conf.js`
-  pending a separate migration; see `docs/perf.md`.)
+  `*.test.ts` alongside the unit under test. The perf bench
+  `npm run perf:l2` runs under Vitest browser mode too
+  (`vitest.perf.config.mts`); `*.perf.ts` files live alongside their
+  unit under test but are excluded from the unit-test config so
+  they only run via `perf:l2`.
 - Functions: Jest with mocked Cosmos / Blob clients.
 - Test names describe behavior: `it('returns 404 when blob slug is unknown')`.
 - Run the full lint + test + build suite before declaring completion (see §7).

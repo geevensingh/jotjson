@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { extractRows, resolveRunner } from './run-l2.mjs';
+import { extractRows } from './run-l2.mjs';
 
 test('extractRows returns [] for text containing no sentinels', () => {
   assert.deepEqual(extractRows('no sentinels here'), []);
@@ -72,18 +72,4 @@ test('extractRows recovers sentinels split across stdout and stderr', () => {
   assert.equal(combined.length, 2);
   assert.deepEqual(combined[0], stdoutRow);
   assert.deepEqual(combined[1], stderrRow);
-});
-
-test('resolveRunner returns the Karma harness by default', () => {
-  const resolved = resolveRunner({ vitest: false });
-  assert.equal(resolved.runnerLabel, 'ng test');
-  assert.deepEqual(resolved.args, ['ng', 'test', '--configuration', 'perf']);
-  assert.ok(resolved.cmd === 'npx' || resolved.cmd === 'npx.cmd');
-});
-
-test('resolveRunner returns the Vitest harness when --vitest is set', () => {
-  const resolved = resolveRunner({ vitest: true });
-  assert.equal(resolved.runnerLabel, 'vitest');
-  assert.deepEqual(resolved.args, ['vitest', 'run', '--config', 'vitest.perf.config.mts']);
-  assert.ok(resolved.cmd === 'npx' || resolved.cmd === 'npx.cmd');
 });

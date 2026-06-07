@@ -12,7 +12,6 @@ export interface JsonBlob {
   createdAt: string;
   updatedAt: string;
   ownerId: string;
-  isPublic: boolean;
   highlights?: BlobHighlight[];
   version: number;
 }
@@ -192,7 +191,7 @@ export interface UserPreferences {
   treeHighlightColors: TreeHighlightColors;
 }
 
-export type HistoryAction = 'viewed';
+type HistoryAction = 'viewed';
 
 export interface HistoryEntry {
   id: string;

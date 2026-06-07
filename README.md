@@ -44,7 +44,7 @@ DESIGN_SPEC.md     Product + architecture source of truth
 AGENTS.md          Coding/AI-agent instructions (linted against by humans too)
 CONTRIBUTING.md    Contributor guide
 vitest.config.mts  Vitest config (browser mode, ChromeHeadless via Playwright)
-karma.perf.conf.js Karma config used by the perf bench (perf:l2) only
+vitest.perf.config.mts  Vitest config for the L2 perf bench (perf:l2)
 proxy.conf.json    ng serve proxy that forwards /api/* to func start on :7071
 ```
 
