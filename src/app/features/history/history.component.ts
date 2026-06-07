@@ -151,7 +151,6 @@ export class HistoryComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    this.seo.clearBlobTags();
     this.seo.setNoindex(true);
     void this.reload();
   }

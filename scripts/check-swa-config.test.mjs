@@ -23,10 +23,13 @@ import {
   checkNavigationFallback,
   checkPlatform,
   checkRoutes,
+  checkShareRouteNoindex,
   expandBraceGlob,
   getExcludedExtensions,
   readConfig,
   routeMatchesPath,
+  SHARE_ROUTE_PATTERN,
+  SHARE_ROUTE_X_ROBOTS_TAG,
   SHELL_CACHE_CONTROL,
   SHELL_PATHS,
   SUPPORTED_API_RUNTIMES,
@@ -431,6 +434,53 @@ test('mimeTypes key without leading dot fails (proves dot-prefix is intentional)
   config.mimeTypes['webmanifest'] = config.mimeTypes['.webmanifest'];
   delete config.mimeTypes['.webmanifest'];
   assertHasErrorMatching(checkMimeTypes(config), /\.webmanifest/);
+});
+
+// --- Negative: /s/* X-Robots-Tag header (1.3.0 crawler-defense layer B) ---
+// The header pairs with `Disallow: /s/` in public/robots.txt (asserted
+// by scripts/check-prerender.mjs) and the always-on client-side
+// `<meta name="robots" content="noindex">` injected by HomeComponent.
+// Drift here re-opens the JS-less-crawler indexing gap that motivated
+// the 1.3.0 isPublic-removal change.
+
+test('checkShareRouteNoindex passes on the actual staticwebapp.config.json', () => {
+  assert.deepEqual(checkShareRouteNoindex(readConfig()), []);
+});
+
+test('/s/* route removed fails', () => {
+  const config = cloneConfig();
+  config.routes = config.routes.filter((entry) => entry.route !== SHARE_ROUTE_PATTERN);
+  // Pass the literal pattern string directly so assertHasErrorMatching
+  // does a substring search; avoids the manual regex-escape utility
+  // CodeQL flagged for incomplete escape coverage on the prior
+  // `new RegExp(...replace(/[*/]/g, ...))` form.
+  assertHasErrorMatching(checkShareRouteNoindex(config), SHARE_ROUTE_PATTERN);
+});
+
+test('/s/* X-Robots-Tag header value drift fails', () => {
+  const config = cloneConfig();
+  const route = config.routes.find((entry) => entry.route === SHARE_ROUTE_PATTERN);
+  assert.ok(route, `expected base config to contain a '${SHARE_ROUTE_PATTERN}' route`);
+  route.headers['X-Robots-Tag'] = 'all';
+  assertHasErrorMatching(checkShareRouteNoindex(config), /X-Robots-Tag/);
+});
+
+test('/s/* X-Robots-Tag header removed fails', () => {
+  const config = cloneConfig();
+  const route = config.routes.find((entry) => entry.route === SHARE_ROUTE_PATTERN);
+  delete route.headers['X-Robots-Tag'];
+  assertHasErrorMatching(checkShareRouteNoindex(config), /X-Robots-Tag/);
+});
+
+test('/s/* route with explicit rewrite fails (breaks SPA navigation fallback)', () => {
+  const config = cloneConfig();
+  const route = config.routes.find((entry) => entry.route === SHARE_ROUTE_PATTERN);
+  route.rewrite = '/shell.html';
+  assertHasErrorMatching(checkShareRouteNoindex(config), /rewrite/);
+});
+
+test('SHARE_ROUTE_X_ROBOTS_TAG export is the canonical noindex value', () => {
+  assert.equal(SHARE_ROUTE_X_ROBOTS_TAG, 'noindex');
 });
 
 // --- checkConfig aggregator -----------------------------------------------

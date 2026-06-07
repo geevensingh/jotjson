@@ -131,6 +131,19 @@ export const SHELL_CACHE_CONTROL = 'no-cache, must-revalidate';
 // Allowlist (not a regex floor) because SWA's supported Functions runtime
 // set is small and explicit. A regex like `^node:\d+$` would silently
 // accept `node:14` or `node:16` (both EOL on Azure).
+export const SHARE_ROUTE_PATTERN = '/s/*';
+export const SHARE_ROUTE_X_ROBOTS_TAG = 'noindex';
+
+// 1.3.0: per-blob crawler-defense layer B. The X-Robots-Tag header
+// ships on every `/s/*` response (which then falls through the SPA
+// navigation rewrite to `shell.html`); together with `Disallow: /s/`
+// in `public/robots.txt` (layer C, asserted by check-prerender.mjs)
+// and the always-on `<meta name="robots" content="noindex">` injected
+// by HomeComponent (layer A), this prevents `/s/:slug` URLs from
+// being indexed by any major crawler regardless of JS-execution
+// behavior. Asserting structurally here so a future SWA-config edit
+// can't silently regress the deindex defense.
+
 export const SUPPORTED_API_RUNTIMES = Object.freeze(['node:20', 'node:22']);
 
 // PWA install requires this exact MIME for `.webmanifest` files.
@@ -465,6 +478,44 @@ export function checkRoutes(config) {
   return errors;
 }
 
+export function checkShareRouteNoindex(config) {
+  const errors = [];
+  const routes = Array.isArray(config?.routes) ? config.routes : [];
+  if (routes.length === 0) {
+    // checkRoutes already reports the missing-routes case.
+    return errors;
+  }
+  const route = routes.find((entry) => entry?.route === SHARE_ROUTE_PATTERN);
+  if (!route) {
+    errors.push(
+      `routes is missing the '${SHARE_ROUTE_PATTERN}' entry. The 1.3.0 ` +
+        `crawler-defense layer relies on an 'X-Robots-Tag: ${SHARE_ROUTE_X_ROBOTS_TAG}' ` +
+        `header on every /s/:slug response. See DESIGN_SPEC.md ` +
+        `§Visibility and scripts/check-prerender.mjs (asserts the paired ` +
+        `robots.txt rule).`,
+    );
+    return errors;
+  }
+  const xRobotsTag = route?.headers?.['X-Robots-Tag'];
+  if (xRobotsTag !== SHARE_ROUTE_X_ROBOTS_TAG) {
+    errors.push(
+      `routes['${SHARE_ROUTE_PATTERN}'].headers['X-Robots-Tag'] must be ` +
+        `'${SHARE_ROUTE_X_ROBOTS_TAG}' (got: ${JSON.stringify(xRobotsTag)}). ` +
+        `Drift re-opens the JS-less-crawler indexing gap that motivated the ` +
+        `1.3.0 isPublic-removal change.`,
+    );
+  }
+  if (route.rewrite !== undefined) {
+    errors.push(
+      `routes['${SHARE_ROUTE_PATTERN}'] must NOT specify a 'rewrite'. ` +
+        `Omitting rewrite lets navigationFallback take effect (which serves ` +
+        `/shell.html) while still attaching the header to the original /s/* ` +
+        `URL. An explicit rewrite here would short-circuit SPA routing.`,
+    );
+  }
+  return errors;
+}
+
 export function checkPlatform(config) {
   const errors = [];
   const apiRuntime = config?.platform?.apiRuntime;
@@ -536,6 +587,7 @@ export function checkConfig(config) {
     ...checkGlobalHeaders(config),
     ...checkNavigationFallback(config),
     ...checkRoutes(config),
+    ...checkShareRouteNoindex(config),
     ...checkImmutableAssets(config),
     ...checkPlatform(config),
     ...checkMimeTypes(config),
