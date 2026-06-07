@@ -4,7 +4,7 @@ import { Meta } from '@angular/platform-browser';
 /**
  * Centralizes the `<meta name="robots">` noindex toggle.
  *
- * Post-1.1.0 surface: only the robots noindex toggle. Per-blob Open Graph
+ * Post-1.3.0 surface: only the robots noindex toggle. Per-blob Open Graph
  * and Twitter tags were retired alongside the `isPublic` blob visibility
  * flag - all blobs are unlisted and every `/s/:slug` page emits
  * `<meta name="robots" content="noindex">` always-on. The static homepage

@@ -134,7 +134,7 @@ export const SHELL_CACHE_CONTROL = 'no-cache, must-revalidate';
 export const SHARE_ROUTE_PATTERN = '/s/*';
 export const SHARE_ROUTE_X_ROBOTS_TAG = 'noindex';
 
-// 1.1.0: per-blob crawler-defense layer B. The X-Robots-Tag header
+// 1.3.0: per-blob crawler-defense layer B. The X-Robots-Tag header
 // ships on every `/s/*` response (which then falls through the SPA
 // navigation rewrite to `shell.html`); together with `Disallow: /s/`
 // in `public/robots.txt` (layer C, asserted by check-prerender.mjs)
@@ -488,7 +488,7 @@ export function checkShareRouteNoindex(config) {
   const route = routes.find((entry) => entry?.route === SHARE_ROUTE_PATTERN);
   if (!route) {
     errors.push(
-      `routes is missing the '${SHARE_ROUTE_PATTERN}' entry. The 1.1.0 ` +
+      `routes is missing the '${SHARE_ROUTE_PATTERN}' entry. The 1.3.0 ` +
         `crawler-defense layer relies on an 'X-Robots-Tag: ${SHARE_ROUTE_X_ROBOTS_TAG}' ` +
         `header on every /s/:slug response. See DESIGN_SPEC.md ` +
         `§Visibility and scripts/check-prerender.mjs (asserts the paired ` +
@@ -502,7 +502,7 @@ export function checkShareRouteNoindex(config) {
       `routes['${SHARE_ROUTE_PATTERN}'].headers['X-Robots-Tag'] must be ` +
         `'${SHARE_ROUTE_X_ROBOTS_TAG}' (got: ${JSON.stringify(xRobotsTag)}). ` +
         `Drift re-opens the JS-less-crawler indexing gap that motivated the ` +
-        `1.1.0 isPublic-removal change.`,
+        `1.3.0 isPublic-removal change.`,
     );
   }
   if (route.rewrite !== undefined) {

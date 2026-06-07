@@ -15,7 +15,7 @@ import { RenderMode, ServerRoute } from '@angular/ssr';
  * client with the actual auth state.
  *
  * `/s/:slug` is parameterized over an unbounded slug space and is
- * not prerendered. Crawler defense for `/s/:slug` lands in v1.1.0 via
+ * not prerendered. Crawler defense for `/s/:slug` lands in v1.3.0 via
  * three layers (client-side `<meta name="robots" content="noindex">`,
  * `X-Robots-Tag: noindex` HTTP header from `staticwebapp.config.json`,
  * and `Disallow: /s/` in `robots.txt`); per-blob Open Graph is

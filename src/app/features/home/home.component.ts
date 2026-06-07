@@ -1115,7 +1115,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (this.isBrowser) {
         // All blobs are unlisted (see DESIGN_SPEC.md §Visibility) and the
         // SPA never emits per-blob Open Graph tags. Three crawler-defense
-        // layers ship together in 1.1.0:
+        // layers ship together in 1.3.0:
         //   1. `Disallow: /s/` in public/robots.txt
         //   2. `X-Robots-Tag: noindex` header from staticwebapp.config.json
         //      for /s/* responses

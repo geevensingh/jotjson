@@ -508,9 +508,9 @@ describe('listBlobsByOwner', () => {
   });
 });
 
-describe('normalizeBlobDocument legacy isPublic strip (1.1.0)', () => {
+describe('normalizeBlobDocument legacy isPublic strip (1.3.0)', () => {
   // Stored docs from the v1.0.x era may still carry an `isPublic: boolean`
-  // field that v1.1.0 deliberately removed. `normalizeBlobDocument` (the
+  // field that v1.3.0 deliberately removed. `normalizeBlobDocument` (the
   // single funnel for every read path) drops it on the way out so it never
   // reaches the wire, and emits one `blob.legacy.isPublic.stripped`
   // telemetry event per blob id per process to give the

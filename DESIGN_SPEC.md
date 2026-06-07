@@ -620,7 +620,7 @@ Available to **registered users** (create/manage). **Anonymous users can view an
 - After submitting JSON, a registered user can click **"Save & Share"**.
 - Generates a short, unique URL: `jotjson.com/s/abc123` (using the blob's NanoID slug).
 - The link loads the saved JSON blob into the editor + tree view.
-- **Visibility**: every saved blob is **unlisted**. The link works for anyone who has it, but the blob is not listed on any public index. Three crawler-defense layers ship together in 1.1.0 to prevent search-engine indexing of `/s/:slug`: a `Disallow: /s/` rule in `public/robots.txt` (pre-fetch signal, honored by every conformant crawler), an `X-Robots-Tag: noindex` HTTP header from the SWA route config (post-fetch signal for crawlers that bypass robots.txt), and a client-side `<meta name="robots" content="noindex">` injected on every blob load (last-resort signal for JS-executing crawlers). v1 deliberately does not surface a visibility toggle - keeps the share model simple. The 1.0.x `isPublic` flag, which never gated access (any blob was readable by anyone with the slug), was removed in 1.1.0; legacy stored documents have the field stripped on read via `normalizeBlobDocument` per DESIGN_SPEC -> Versioning -> Schema evolution.
+- **Visibility**: every saved blob is **unlisted**. The link works for anyone who has it, but the blob is not listed on any public index. Three crawler-defense layers ship together in 1.3.0 to prevent search-engine indexing of `/s/:slug`: a `Disallow: /s/` rule in `public/robots.txt` (pre-fetch signal, honored by every conformant crawler), an `X-Robots-Tag: noindex` HTTP header from the SWA route config (post-fetch signal for crawlers that bypass robots.txt), and a client-side `<meta name="robots" content="noindex">` injected on every blob load (last-resort signal for JS-executing crawlers). v1 deliberately does not surface a visibility toggle - keeps the share model simple. The 1.0.x `isPublic` flag, which never gated access (any blob was readable by anyone with the slug), was removed in 1.3.0; legacy stored documents have the field stripped on read via `normalizeBlobDocument` per DESIGN_SPEC -> Versioning -> Schema evolution.
 - Owner can update or delete the blob.
 - **Fork-on-save**: a signed-in non-owner who saves edits to a shared blob
   creates a new blob owned by that user with its own slug. The original blob is
@@ -1198,7 +1198,7 @@ is not enforced by code is a *lying flag* and creates the structural risk
 of users acting on a guarantee the system does not provide. Motivating
 case study: the 1.0.x `isPublic` blob flag named a privacy boundary that
 the `GET /api/blobs/{idOrSlug}` handler never honored (any blob was
-readable by anyone with the slug); the flag was removed in 1.1.0 once it
+readable by anyone with the slug); the flag was removed in 1.3.0 once it
 became clear it controlled only client-side SEO meta tags and a UI label.
 Future visibility / sharing features must ship with the access-control
 enforcement and the field together in the same PR, or not at all.
@@ -1279,7 +1279,7 @@ enforcement and the field together in the same PR, or not at all.
   `provideAppInitializer(AuthService.initializeFromRedirect)`.
 - **Open Graph + Twitter defaults** on `src/index.html` cover the homepage
   and survive into the prerendered `index.html`. Per-blob OG/Twitter was
-  retired in 1.1.0 alongside the `isPublic` flag removal - every `/s/:slug`
+  retired in 1.3.0 alongside the `isPublic` flag removal - every `/s/:slug`
   page is unlisted, so emitting per-blob rich previews would only create
   social-share friction without indexing benefit. Crawler defense for
   `/s/:slug` uses three independent layers (see Visibility above): the
@@ -1305,7 +1305,7 @@ enforcement and the field together in the same PR, or not at all.
   (npm `check:prerender`) validates the dist layout, marker placement,
   brand text, OG defaults, noindex, and asset presence after every build.
 - **Out of scope for v1** (tracked as priority:low follow-up issues):
-  - ~~Server-visible OG / `noindex` for `/s/:slug`.~~ **Resolved in 1.1.0.**
+  - ~~Server-visible OG / `noindex` for `/s/:slug`.~~ **Resolved in 1.3.0.**
     The `noindex` half is delivered via the three-layer crawler defense
     documented above (robots.txt `Disallow`, X-Robots-Tag header, client-
     side meta). The OG half is retired - no per-blob OG is emitted by any

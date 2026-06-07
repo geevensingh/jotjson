@@ -898,7 +898,7 @@ export const TELEMETRY_MESSAGE_IDS = [
    *           (`features/home/home.component.ts`) after a successful
    *           `BlobService.create` (create branch only -- the
    *           update branch has no creation semantic).
-   * Props: none. (Pre-1.1.0 carried `{ visibility: 'public' | 'private' }`
+   * Props: none. (Pre-1.3.0 carried `{ visibility: 'public' | 'private' }`
    *   which was a constant `'private'` after the `isPublic` flag was
    *   removed; dropped to avoid a dead dimension.)
    * Measurements: { sizeBytes: number }. UTF-8 byte count of the

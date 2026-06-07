@@ -167,7 +167,7 @@ function normalizeVersion(value: unknown): number {
 
 /**
  * Per-process dedupe of legacy-`isPublic`-strip telemetry emissions. The
- * stored field carries no semantics post-1.1.0 but lingers on documents
+ * stored field carries no semantics post-1.3.0 but lingers on documents
  * written under v1.0.x. `normalizeBlobDocument` strips it on read; we emit
  * a `blob.legacy.isPublic.stripped` event once per unique blob id per
  * function-instance lifetime so the `followup-blob-ispublic-strip` cleanup

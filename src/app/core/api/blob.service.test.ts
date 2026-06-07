@@ -77,7 +77,6 @@ describe('BlobService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({
       content: '{}',
-      title: undefined,
     });
     req.flush(makeBlob({ content: '{}' }));
   });
@@ -88,7 +87,6 @@ describe('BlobService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({
       content: '{}',
-      title: undefined,
       highlights: [highlight],
     });
     req.flush(makeBlob({ content: '{}', highlights: [highlight] }));

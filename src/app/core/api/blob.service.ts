@@ -202,10 +202,11 @@ export class BlobService {
     title?: string,
     highlights?: readonly BlobHighlight[],
   ): Observable<CreateBlobResponse> {
-    const body =
-      highlights === undefined
-        ? { content, title }
-        : { content, title, highlights: [...highlights] };
+    const body = {
+      content,
+      ...(title !== undefined ? { title } : {}),
+      ...(highlights !== undefined ? { highlights: [...highlights] } : {}),
+    };
     return this.http.post<CreateBlobResponse>(this.base, body).pipe(
       tap((created) => {
         const { autoDeleted: _autoDeleted, ...blob } = created;

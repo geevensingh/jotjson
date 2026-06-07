@@ -173,7 +173,7 @@ describe('POST /api/blobs', () => {
   });
 
   it('silently drops unknown payload fields like the legacy isPublic flag', async () => {
-    // Pre-1.1.0 SPA bundles cached in tabs still send `isPublic` on save;
+    // Pre-1.3.0 SPA bundles cached in tabs still send `isPublic` on save;
     // the handler must accept-and-drop rather than 400. See plan.md.
     createBlob.mockResolvedValueOnce(sampleBlob);
     await postBlob(makeRequest({ body: { content: '{}', title: 'hi', isPublic: true } }), ctx);

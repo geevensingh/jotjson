@@ -436,12 +436,12 @@ test('mimeTypes key without leading dot fails (proves dot-prefix is intentional)
   assertHasErrorMatching(checkMimeTypes(config), /\.webmanifest/);
 });
 
-// --- Negative: /s/* X-Robots-Tag header (1.1.0 crawler-defense layer B) ---
+// --- Negative: /s/* X-Robots-Tag header (1.3.0 crawler-defense layer B) ---
 // The header pairs with `Disallow: /s/` in public/robots.txt (asserted
 // by scripts/check-prerender.mjs) and the always-on client-side
 // `<meta name="robots" content="noindex">` injected by HomeComponent.
 // Drift here re-opens the JS-less-crawler indexing gap that motivated
-// the 1.1.0 isPublic-removal change.
+// the 1.3.0 isPublic-removal change.
 
 test('checkShareRouteNoindex passes on the actual staticwebapp.config.json', () => {
   assert.deepEqual(checkShareRouteNoindex(readConfig()), []);
