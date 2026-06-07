@@ -1,22 +1,20 @@
 // knip configuration. See https://knip.dev/reference/configuration.
 //
-// This config enables knip's full unused-detection surface for both
-// dependencies (rules.dependencies + .devDependencies +
-// .optionalPeerDependencies + .unlisted + .binaries + .unresolved) and
-// exports (rules.exports + .types + .nsExports + .nsTypes). The
-// unused-files check is still disabled in this PR because its
-// false-positive surface is different and needs its own allowlist-tuning
-// pass; follow-up issue #426 tracks enabling it.
+// This config enables knip's full unused-detection surface across
+// every rule class (deps + exports + types + ns* + files +
+// enumMembers + duplicates). No rule is silently disabled.
 //
 // Run via `npm run lint:unused` (also runs as part of the compound
 // `npm run lint`).
 //
-// To add a new entry to `ignoreDependencies` or `ignoreBinaries`, include
-// a rationale comment naming the SPECIFIC mechanism by which the dep is
-// used (e.g. "compiler-injected via importHelpers: true", not the generic
-// "config-referenced"). The specificity is the forcing function -- if you
-// can't name a specific mechanism, the dep is probably actually unused.
-// Comments may span multiple lines; see the existing entries for examples.
+// Allowlist policy: adding an entry to `ignoreDependencies`,
+// `ignoreBinaries`, or the workspace `entry` list requires a
+// rationale comment naming the SPECIFIC mechanism by which the dep
+// or entry is used (e.g. "compiler-injected via importHelpers:
+// true", not the generic "config-referenced"). The specificity is
+// the forcing function -- if you can't name a specific mechanism,
+// the dep/entry is probably actually unused. Comments may span
+// multiple lines; see the existing entries for examples.
 {
   "$schema": "https://unpkg.com/knip@6.14.2/schema-jsonc.json",
   "rules": {
@@ -30,9 +28,9 @@
     "types": "error",
     "nsExports": "error",
     "nsTypes": "error",
-    "enumMembers": "off",
-    "duplicates": "off",
-    "files": "off",
+    "enumMembers": "error",
+    "duplicates": "error",
+    "files": "error",
   },
   "ignoreBinaries": [
     // Azure Functions Core Tools, installed separately (winget, brew, or
@@ -46,6 +44,25 @@
         "src/sw.worker.ts",
         "src/environments/environment.example.ts",
         "perf/browser/playwright.perf.config.ts",
+        // Perf-browser Playwright specs. knip's playwright plugin does
+        // not auto-detect the custom config file name
+        // (playwright.perf.config.ts) or its relative
+        // `testDir: './scenarios'`, so these spec files are listed
+        // explicitly per-file rather than as a glob. The per-file
+        // convention preserves orphan-detection: a future WIP scenario
+        // dropped into `perf/browser/scenarios/` would NOT be
+        // auto-promoted to entry (the playwright bench is human-invoked
+        // via `npm run perf:l3`, not exercised by any CI workflow, so a
+        // glob would silently mask abandoned WIP specs). Util files
+        // under `perf/browser/util/*.ts` reach transitively via imports
+        // from these specs and stay detectable. Remove these per-file
+        // entries when knip's playwright plugin gains custom-config-name
+        // detection (track upstream if appetite arises; otherwise
+        // adding a new scenario here is a deliberate per-file act).
+        "perf/browser/scenarios/expand-all.spec.ts",
+        "perf/browser/scenarios/harness-attach.spec.ts",
+        "perf/browser/scenarios/paste-large.spec.ts",
+        "perf/browser/scenarios/scroll-after-expand.spec.ts",
         "perf/bench/**/*.bench.ts",
         "perf/fixtures/**/*.ts",
         "src/**/*.perf.ts",
