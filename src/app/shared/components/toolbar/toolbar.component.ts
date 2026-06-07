@@ -15,6 +15,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { PreferencesService } from '../../../core/preferences/preferences.service';
 import { LoggerService } from '../../../core/telemetry/logger.service';
 import type { SuggestionCandidate } from '../../../core/title-suggester/types';
+import { FileAccessError, FileAccessService } from '../../../core/upload/file-access.service';
 import { SignedInDirective } from '../../directives/signed-in.directive';
 import { JJ_MENU_IMPORTS } from '../../material/jj-menu-imports';
 import { IconComponent, JjIconName } from '../icon/icon.component';
@@ -32,6 +33,8 @@ type ToolbarAction =
   | 'sort'
   | 'clear'
   | 'save'
+  | 'saveAsNewFile'
+  | 'saveAsBlob'
   | 'copyShareLink'
   | 'deleteBlob'
   | 'fileChange';
@@ -75,6 +78,7 @@ export class ToolbarComponent {
   private readonly auth = inject(AuthService);
   private readonly prefs = inject(PreferencesService);
   private readonly loggerService = inject(LoggerService);
+  private readonly fileAccess = inject(FileAccessService);
 
   readonly hasContent = input<boolean>(false);
   readonly title = input<string>('');
@@ -89,6 +93,23 @@ export class ToolbarComponent {
    * Controls whether the 3-dot overflow menu (copy link / delete) is shown.
    */
   readonly isOwner = input<boolean>(false);
+
+  /**
+   * True when the document is bound to a local `FileSystemFileHandle`
+   * via the M-PWA-write-back flow (`DocumentBacking` kind === 'file').
+   * Drives:
+   * - Pill state: `saved` / `modified` regardless of cloud sign-in.
+   * - Save button visibility for anonymous users.
+   * - Overflow menu items: `Save as new file...` + (if signed-in)
+   *   `Save as blob...`, replacing the blob-owner items.
+   */
+  readonly isFileBacked = input<boolean>(false);
+
+  /**
+   * Filename of the bound local file, surfaced in tooltips and the
+   * Save-as-blob dialog's suggested name. `null` when not file-backed.
+   */
+  readonly filename = input<string | null>(null);
 
   /**
    * Title-suggester candidates (M7p). Lazily populated by the parent
@@ -142,6 +163,18 @@ export class ToolbarComponent {
   readonly copyRequested = output<void>();
   readonly copyEscaped = output<void>();
   readonly upload = output<File>();
+  /**
+   * Emitted when the user picks a local file via
+   * `window.showOpenFilePicker` (Chromium-installed-PWA + Chromium-tab).
+   * Carries both the resolved `File` and the writable
+   * `FileSystemFileHandle` so the parent can bind the document to a
+   * `kind: 'file'` `DocumentBacking` variant for the M-PWA-write-back
+   * flow. The legacy `upload` event continues to fire for the
+   * `<input type="file">` fallback path on Safari/Firefox (no handle).
+   */
+  readonly localFilePicked = output<{ file: File; handle: FileSystemFileHandle }>();
+  readonly saveAsNewFile = output<void>();
+  readonly saveAsBlob = output<void>();
   readonly download = output<void>();
   readonly clear = output<void>();
   readonly format = output<void>();
@@ -232,6 +265,13 @@ export class ToolbarComponent {
   readonly ownsLoadedBlob = computed(() => this.isOwner() || this.isOwnedBlob());
   readonly pillState = computed<PillState>(() => {
     if (this.saveInFlight()) return 'saving';
+    // File-backed shortcut: anonymous-OK; pill mirrors dirty/clean
+    // against the saved snapshot. This branch runs BEFORE the
+    // signInToSave branch so file-backed anonymous users never see
+    // a cloud-auth nag.
+    if (this.isFileBacked()) {
+      return this.isDirty() ? 'modified' : 'saved';
+    }
     if (!this.isSavedBlob()) return 'draft';
     if (!this.isSignedIn()) return 'signInToSave';
     if (this.isDirty()) return 'modified';
@@ -255,14 +295,40 @@ export class ToolbarComponent {
   readonly saveDisabled = computed(() => !this.canSave() || this.saveInFlight());
 
   /**
-   * The overflow menu is visible only when the parent tells us the current
-   * signed-in user owns the loaded blob.
+   * The overflow menu is visible when:
+   * - The signed-in user owns the loaded blob (existing blob actions),
+   *   OR
+   * - The document is file-backed (file actions: `Save as new file...`
+   *   + signed-in-only `Save as blob...`).
+   *
+   * Mutually exclusive: the M-PWA-write-back flow keeps file backing
+   * even after Save-as-blob (fire-and-forget snapshot) so a single
+   * document is either blob-backed or file-backed, never both.
    */
-  readonly showOverflowMenu = computed(() => this.ownsLoadedBlob());
+  readonly showOverflowMenu = computed(() => this.ownsLoadedBlob() || this.isFileBacked());
+
+  /**
+   * Whether the toolbar Save button + overflow menu should render. Lifts
+   * the historical `*jjSignedIn` wrapper around the Save block so
+   * anonymous file-backed users can save to their local file (no cloud
+   * auth required for the write-target).
+   *
+   * Truth table (verified in toolbar.component.test.ts):
+   * - anonymous draft (isFileBacked=false, isSignedIn=false) -> false
+   *   (no Save button shown; matches today's behavior).
+   * - anonymous file-backed (isFileBacked=true, isSignedIn=false) ->
+   *   true (Save button visible; new for M-PWA-write-back).
+   * - signed-in draft / blob (isSignedIn=true) -> true.
+   * - signed-in file-backed -> true.
+   */
+  readonly showSaveBlock = computed(() => this.isFileBacked() || this.isSignedIn());
 
   readonly saveTooltip = computed(() => {
     if (!this.saveInFlight() && this.saveDisabled()) {
       return $localize`:@@toolbar.save.disabledTooltip:No changes to save`;
+    }
+    if (!this.saveInFlight() && this.isFileBacked() && this.filename() !== null) {
+      return $localize`:@@toolbar.save.fileTooltip:Save changes to ${this.filename()}:filename:`;
     }
     if (!this.saveInFlight() && this.isSavedBlob() && !this.ownsLoadedBlob()) {
       return $localize`:@@toolbar.save.asCopyTooltip:Save your changes as a new blob`;
@@ -312,7 +378,46 @@ export class ToolbarComponent {
 
   triggerFilePicker(): void {
     this.emitToolbarAction('openFile');
+    // Chromium-installed-PWA + Chromium-tab: use the File System Access
+    // picker so the resulting handle is writable. The promise resolves
+    // null on user-cancel; rejects only for unexpected failures, which
+    // we log + fall through to the legacy input. Safari/Firefox: the
+    // feature-detect returns false and we go straight to the legacy
+    // `<input type="file">` click.
+    if (this.fileAccess.hasFileSystemAccess()) {
+      void this.openViaPicker();
+      return;
+    }
+    this.loggerService.info('file.openPicker.unsupported');
     this.fileInput().nativeElement.click();
+  }
+
+  private async openViaPicker(): Promise<void> {
+    try {
+      const result = await this.fileAccess.openLocalFile();
+      if (result === null) return; // user-cancel
+      this.localFilePicked.emit({ file: result.file, handle: result.handle });
+    } catch (cause) {
+      // Permission denied, picker failure, etc. The service has already
+      // mapped to a typed FileAccessError; the parent's snackbar layer
+      // is the user-facing surface for save failures, but a failed
+      // picker open at the toolbar level is silent + logged.
+      if (cause instanceof FileAccessError) {
+        this.loggerService.warn('file.save.failed', { cause: cause.kind });
+      } else {
+        this.loggerService.warn('file.save.failed', { cause: 'writeError' });
+      }
+    }
+  }
+
+  onSaveAsNewFileClick(): void {
+    this.emitToolbarAction('saveAsNewFile');
+    this.saveAsNewFile.emit();
+  }
+
+  onSaveAsBlobClick(): void {
+    this.emitToolbarAction('saveAsBlob');
+    this.saveAsBlob.emit();
   }
 
   onFileChange(event: Event): void {

@@ -947,6 +947,24 @@ export class HomeComponent implements OnInit, OnDestroy {
     return !!user && user.id === blob.ownerId;
   });
 
+  /**
+   * True when the document is bound to a local file via the
+   * M-PWA-write-back flow (`DocumentBacking` kind === 'file').
+   * Drives the toolbar's file-backed pill state, lifted Save block
+   * for anonymous users, and overflow menu items.
+   */
+  readonly isFileBacked = computed(() => this._documentBacking().kind === 'file');
+
+  /**
+   * Filename of the bound local file, or `null` when the document is
+   * not file-backed. Passed to the toolbar for the Save tooltip and
+   * to the SaveAsBlobDialog as a suggested-name seed.
+   */
+  readonly fileBackedFilename = computed<string | null>(() => {
+    const backing = this._documentBacking();
+    return backing.kind === 'file' ? backing.filename : null;
+  });
+
   readonly canEditHighlights = computed(() => this.loadedBlob() === null || this.isOwnedBlob());
 
   /**
@@ -3058,13 +3076,43 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   async onUpload(file: File): Promise<void> {
     // Phase 3: toolbar Upload still goes through `<input type="file">`
-    // which yields a `File` without a writable handle. Phase 4 will
-    // upgrade the toolbar Upload click to `showOpenFilePicker({mode:
+    // which yields a `File` without a writable handle. Phase 4 upgrades
+    // the toolbar Upload click to `showOpenFilePicker({mode:
     // 'readwrite'})` on Chromium so the picker path also produces a
-    // file-backed `DocumentBacking` variant. Pass `[null]` for handles
-    // so the unified `onFilesReceived` path can still gate on the
-    // handle availability.
+    // file-backed `DocumentBacking` variant (see `onLocalFilePicked`).
+    // This handler covers the Safari/Firefox fallback path and any
+    // future surface that delivers a bare `File`. Pass `[null]` for
+    // handles so the unified `onFilesReceived` path can still gate on
+    // the handle availability.
     await this.onFilesReceived([file], 'pick', [null]);
+  }
+
+  /**
+   * Toolbar emits this when the Chromium `showOpenFilePicker` resolved
+   * with `{ file, handle }`. Routes through the same
+   * `onFilesReceived` pipeline as drag-drop / osLaunch / legacy
+   * upload, but with a non-null handle slot so the document binds to
+   * the `'file'` DocumentBacking variant.
+   */
+  async onLocalFilePicked(picked: { file: File; handle: FileSystemFileHandle }): Promise<void> {
+    await this.onFilesReceived([picked.file], 'pick', [picked.handle]);
+  }
+
+  /**
+   * Toolbar emits this when the user clicks `Save as blob...` in the
+   * overflow menu (file-backed + signed-in only). Phase 4c will wire
+   * the `SaveAsBlobDialog` component; for now this is a placeholder
+   * that surfaces a snackbar so an early click does not silently no-op.
+   */
+  onSaveAsBlob(): void {
+    // TODO(phase-4c): open SaveAsBlobDialog and on confirm call the
+    // existing blob-create path with a fire-and-forget snapshot. For
+    // now, signal that the feature is coming.
+    this.snack.open(
+      $localize`:@@home.saveAsBlob.comingSoon:Save as blob is coming soon.`,
+      $localize`:@@common.dismiss:Dismiss`,
+      { duration: 4000 },
+    );
   }
 
   private async onFilesReceived(
