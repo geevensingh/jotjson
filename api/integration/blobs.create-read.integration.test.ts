@@ -43,7 +43,6 @@ describe('api-integration: blob create -> read round-trip', () => {
     const created = await createBlob(ownerId, {
       content,
       title,
-      isPublic: false,
     });
 
     expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -51,7 +50,6 @@ describe('api-integration: blob create -> read round-trip', () => {
     expect(created.ownerId).toBe(ownerId);
     expect(created.content).toBe(content);
     expect(created.title).toBe(title);
-    expect(created.isPublic).toBe(false);
     expect(created.version).toBe(1);
     expect(created.createdAt).toBe(created.updatedAt);
     expect(new Date(created.createdAt).toString()).not.toBe('Invalid Date');
@@ -63,7 +61,6 @@ describe('api-integration: blob create -> read round-trip', () => {
     expect(byId?.ownerId).toBe(ownerId);
     expect(byId?.content).toBe(content);
     expect(byId?.title).toBe(title);
-    expect(byId?.isPublic).toBe(false);
     expect(byId?.version).toBe(1);
 
     const bySlug = await findBlobByIdOrSlug(created.slug);

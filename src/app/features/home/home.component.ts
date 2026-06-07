@@ -208,7 +208,6 @@ type SignInRestoreSnapshot = {
 type LoadedSnapshot = {
   content: string;
   title: string;
-  isPublic: boolean;
   highlights: readonly BlobHighlight[];
 };
 
@@ -690,7 +689,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** The currently-loaded server blob, if any. Null when editing an anonymous draft. */
   readonly loadedBlob = signal<JsonBlob | null>(null);
   readonly title = signal<string>('');
-  readonly isPublic = signal<boolean>(false);
   readonly highlights = signal<readonly BlobHighlight[]>([]);
   readonly saveInFlight = signal<boolean>(false);
   readonly saveError = signal<string | null>(null);
@@ -863,7 +861,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     return (
       this.content() !== snapshot.content ||
       this.title() !== snapshot.title ||
-      this.isPublic() !== snapshot.isPublic ||
       !highlightsEqual(this.highlights(), snapshot.highlights)
     );
   });
@@ -895,8 +892,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.hasContent() &&
       (this.loadedBlob() === null || !this.isOwnedBlob() || this.dirty()),
   );
-
-  readonly isBlobPublic = computed(() => this.loadedBlob() !== null && this.isPublic());
 
   /**
    * Title-suggester wand-enable predicate (M7r). The wand is enabled
@@ -1110,7 +1105,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         // homepage's og:title / og:description / og:type / og:url /
         // og:site_name / twitter:card without an Angular-side wipe.
         if (this.isBrowser) {
-          this.seo.clearBlobTags();
+          this.seo.setNoindex(false);
         }
         return;
       }
@@ -1118,12 +1113,15 @@ export class HomeComponent implements OnInit, OnDestroy {
         title.trim().length > 0 ? title.trim() : $localize`:@@app.title.untitled:Untitled`;
       this.titleService.setTitle(this.envLabel.withPrefix(`${dirtyPrefix}${label} | JotJSON`));
       if (this.isBrowser) {
-        if (blob.isPublic) {
-          this.seo.setOpenGraphForBlob(blob);
-        } else {
-          this.seo.clearBlobTags();
-          this.seo.setNoindex(true);
-        }
+        // All blobs are unlisted (see DESIGN_SPEC.md §Visibility) and the
+        // SPA never emits per-blob Open Graph tags. Three crawler-defense
+        // layers ship together in 1.3.0:
+        //   1. `Disallow: /s/` in public/robots.txt
+        //   2. `X-Robots-Tag: noindex` header from staticwebapp.config.json
+        //      for /s/* responses
+        //   3. This client-side `<meta name="robots" content="noindex">`
+        //      tag for JS-executing crawlers
+        this.seo.setNoindex(true);
       }
     });
 
@@ -1871,7 +1869,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.loadedBlob.set(blob);
     this.replaceDocument(snapshot.content);
     this.title.set(snapshot.title);
-    this.isPublic.set(snapshot.isPublic);
     this.highlights.set(snapshot.highlights);
     this.loadedSnapshot.set(snapshot);
     this.mutatedPaths.set(new Set<string>());
@@ -1886,9 +1883,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (this.title() === submitted.title) {
       this.title.set(snapshot.title);
     }
-    if (this.isPublic() === submitted.isPublic) {
-      this.isPublic.set(snapshot.isPublic);
-    }
     if (highlightsEqual(this.highlights(), submitted.highlights)) {
       this.highlights.set(snapshot.highlights);
     }
@@ -1900,7 +1894,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     return {
       content: blob.content,
       title: blob.title ?? '',
-      isPublic: blob.isPublic,
       highlights: [...(blob.highlights ?? [])],
     };
   }
@@ -1909,14 +1902,12 @@ export class HomeComponent implements OnInit, OnDestroy {
     return {
       content: this.content(),
       title: this.title(),
-      isPublic: this.isPublic(),
       highlights: [...this.highlights()],
     };
   }
 
   private resetLoadedBlobState(): void {
     this.loadedBlob.set(null);
-    this.isPublic.set(false);
     this.highlights.set([]);
     this.loadedSnapshot.set(null);
     this.mutatedPaths.set(new Set<string>());
@@ -2034,14 +2025,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       localSnapshot.title !== baseSnapshot.title &&
       remoteSnapshot.title !== baseSnapshot.title &&
       localSnapshot.title !== remoteSnapshot.title;
-    const publicConflicts =
-      localSnapshot.isPublic !== baseSnapshot.isPublic &&
-      remoteSnapshot.isPublic !== baseSnapshot.isPublic &&
-      localSnapshot.isPublic !== remoteSnapshot.isPublic;
     const replaceRemote =
-      contentConflicts || titleConflicts || publicConflicts
-        ? await this.promptConflictResolution()
-        : false;
+      contentConflicts || titleConflicts ? await this.promptConflictResolution() : false;
 
     const nextContent = this.rebaseCoarseField(
       baseSnapshot.content,
@@ -2057,13 +2042,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       titleConflicts,
       replaceRemote,
     );
-    const nextIsPublic = this.rebaseCoarseField(
-      baseSnapshot.isPublic,
-      localSnapshot.isPublic,
-      remoteSnapshot.isPublic,
-      publicConflicts,
-      replaceRemote,
-    );
     const nextHighlights = this.rebaseHighlights(
       remoteSnapshot.highlights,
       localSnapshot.highlights,
@@ -2076,7 +2054,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.replaceDocument(nextContent);
     }
     this.title.set(nextTitle);
-    this.isPublic.set(nextIsPublic);
     this.highlights.set(nextHighlights);
     this.mutatedPaths.set(new Set<string>());
   }
@@ -3230,7 +3207,6 @@ export class HomeComponent implements OnInit, OnDestroy {
             .update(existing.id, {
               content: submitted.content,
               title: titlePatch,
-              isPublic: submitted.isPublic,
               highlights: [...highlights],
             })
             .subscribe({ next: resolve, error: reject });
@@ -3239,14 +3215,12 @@ export class HomeComponent implements OnInit, OnDestroy {
       } else {
         const created = await new Promise<CreateBlobResponse>((resolve, reject) => {
           this.blobs
-            .create(submitted.content, titlePatch, false, [...highlights])
+            .create(submitted.content, titlePatch, [...highlights])
             .subscribe({ next: resolve, error: reject });
         });
-        this.logger.event(
-          'share.created',
-          { visibility: 'private' },
-          { sizeBytes: new Blob([submitted.content]).size },
-        );
+        this.logger.event('share.created', undefined, {
+          sizeBytes: new Blob([submitted.content]).size,
+        });
         // Strip the auxiliary quota marker before we treat it as a JsonBlob
         // so loadedBlob stays clean.
         const { autoDeleted, ...blob } = created;
@@ -3443,41 +3417,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       failed: $localize`:@@share.copyLink.failed:Failed to copy share link.`,
       unsupported: $localize`:@@share.copyLink.unsupported:Copy is not supported in this browser.`,
     });
-  }
-
-  async onTogglePublic(): Promise<void> {
-    const blob = this.loadedBlob();
-    if (!blob) return;
-    const user = this.auth.user();
-    if (!user || user.id !== blob.ownerId) return;
-    const next = !this.isPublic();
-    try {
-      const updated = await firstValueFrom(this.blobs.update(blob.id, { isPublic: next }));
-      this.loadedBlob.set(updated);
-      this.isPublic.set(updated.isPublic);
-      this.loadedSnapshot.set(this.snapshotFromBlob(updated));
-      this.logger.event(
-        'share.visibility.changed',
-        { newVisibility: updated.isPublic ? 'public' : 'private' },
-        undefined,
-      );
-      const message = updated.isPublic
-        ? $localize`:@@share.visibility.public:Blob is now public.`
-        : $localize`:@@share.visibility.private:Blob is now private.`;
-      this.snack.open(message, $localize`:@@common.dismiss:Dismiss`, { duration: 3000 });
-    } catch (error) {
-      const httpError = error as { status?: number };
-      if (httpError.status === 412) {
-        return;
-      }
-      this.logger.warn('share.visibility.failed');
-      void error;
-      this.snack.open(
-        $localize`:@@share.visibility.failed:Failed to update visibility.`,
-        $localize`:@@common.dismiss:Dismiss`,
-        { duration: 4000 },
-      );
-    }
   }
 
   async onDeleteBlob(): Promise<void> {

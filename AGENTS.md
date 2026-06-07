@@ -359,6 +359,15 @@ Events catalog.
 - Files: `kebab-case.ts`. Angular: `thing.component.ts`, `thing.service.ts`,
   `thing.pipe.ts`, `thing.guard.ts`.
 - Classes: `PascalCase`. Variables/functions: `camelCase`. Constants: `UPPER_SNAKE`.
+- **First-party environment variables use the `JOTJSON_*` prefix.**
+  Examples in the repo today: `JOTJSON_DEV_AUTH_BYPASS`,
+  `JOTJSON_BUILD_SHA`, `JOTJSON_MIGRATION_CONFIRMED`,
+  `JOTJSON_TEST_SEED`. The prefix is runner- and tool-agnostic so the
+  variable name does not couple to a current implementation choice (the
+  predecessor `JASMINE_SEED` outlived Jasmine -- see issue #436). Do not
+  introduce a `JJ_*` env-var prefix; `JJ_` is reserved for in-code
+  symbol prefixes (e.g. `JJ_MENU_IMPORTS`) and i18n placeholder tags
+  (e.g. `x-jj_icon`).
 - **Use descriptive names.** Variables, parameters, and functions must
   use whole-word, intention-revealing names - not single letters or
   ad-hoc abbreviations like `a`, `b`, `x`, `y`, `tmp`, `val`, `data2`.
@@ -512,9 +521,11 @@ Set `JOTJSON_DEV_AUTH_BYPASS=true` in `api/local.settings.json` (under
   with a ChromeHeadless launcher backed by Playwright). Run with
   `npm test` locally (single-run) or `npm run test:watch` for iteration;
   `npm run test:ci` adds `--coverage` for CI. Co-locate specs as
-  `*.test.ts` alongside the unit under test. (The perf bench
-  `npm run perf:l2` still uses Karma+Jasmine via `karma.perf.conf.js`
-  pending a separate migration; see `docs/perf.md`.)
+  `*.test.ts` alongside the unit under test. The perf bench
+  `npm run perf:l2` runs under Vitest browser mode too
+  (`vitest.perf.config.mts`); `*.perf.ts` files live alongside their
+  unit under test but are excluded from the unit-test config so
+  they only run via `perf:l2`.
 - Functions: Jest with mocked Cosmos / Blob clients.
 - Test names describe behavior: `it('returns 404 when blob slug is unknown')`.
 - Run the full lint + test + build suite before declaring completion (see §7).

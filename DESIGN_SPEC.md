@@ -64,7 +64,6 @@ Browser (Angular SPA)
   createdAt: DateTime,
   updatedAt: DateTime,
   ownerId: string (every server-persisted blob has an owner; anonymous users keep their JSON only in localStorage),
-  isPublic: boolean,
   highlights?: BlobHighlight[] (optional sidecar manual highlights; absent on legacy blobs; max 100 entries; paths unique),
   version: number (monotonic concurrency token; surfaced as the strong ETag and required via If-Match on PUT)
 }
@@ -550,7 +549,7 @@ The primary page. Available to **all users** (anonymous + registered).
       BlobHighlight[]`, a sidecar on the blob. They are edited in
       memory until save; `POST /api/blobs` and `PUT /api/blobs/:id`
       carry them with the other blob fields. Read-only viewers
-      (anonymous public/unlisted readers and signed-in non-owners) see
+      (anonymous readers and signed-in non-owners) see
       existing highlights but cannot add, change, or remove them.
       Fork-on-save copies the source blob's highlights into the new
       owner-owned blob.
@@ -616,12 +615,12 @@ The primary page. Available to **all users** (anonymous + registered).
 
 ### 2. Persistent Link / Share  (`/s/:id`)
 
-Available to **registered users** (create/manage). **Anonymous users can view any shared link** they have the slug for (both unlisted and public blobs).
+Available to **registered users** (create/manage). **Anonymous users can view any shared link** they have the slug for.
 
 - After submitting JSON, a registered user can click **"Save & Share"**.
 - Generates a short, unique URL: `jotjson.com/s/abc123` (using the blob's NanoID slug).
 - The link loads the saved JSON blob into the editor + tree view.
-- **Visibility**: every saved blob is **private (unlisted) by default** - the link works for anyone who has it, but the blob is not listed on any public index, has a `noindex` meta tag, and does not emit rich Open Graph previews. The owner can toggle the blob to **public**, which enables Open Graph previews on `/s/:id` and allows indexing.
+- **Visibility**: every saved blob is **unlisted**. The link works for anyone who has it, but the blob is not listed on any public index. Three crawler-defense layers ship together in 1.3.0 to prevent search-engine indexing of `/s/:slug`: a `Disallow: /s/` rule in `public/robots.txt` (pre-fetch signal, honored by every conformant crawler), an `X-Robots-Tag: noindex` HTTP header from the SWA route config (post-fetch signal for crawlers that bypass robots.txt), and a client-side `<meta name="robots" content="noindex">` injected on every blob load (last-resort signal for JS-executing crawlers). v1 deliberately does not surface a visibility toggle - keeps the share model simple. The 1.0.x `isPublic` flag, which never gated access (any blob was readable by anyone with the slug), was removed in 1.3.0; legacy stored documents have the field stripped on read via `normalizeBlobDocument` per DESIGN_SPEC -> Versioning -> Schema evolution.
 - Owner can update or delete the blob.
 - **Fork-on-save**: a signed-in non-owner who saves edits to a shared blob
   creates a new blob owned by that user with its own slug. The original blob is
@@ -640,7 +639,7 @@ the event timeline (3b) took over that URL. The component and its
 per-row behavior are unchanged.
 
 - Lists the signed-in user's saved blobs, sorted by `updatedAt` DESC.
-- Each row shows: title (or "Untitled" when the blob has no title) linking to `/s/:slug` to open it, the slug, a relative updated-at time (e.g., "3 hours ago"), and a `public` badge when `isPublic` is true.
+- Each row shows: title (or "Untitled" when the blob has no title) linking to `/s/:slug` to open it, the slug, and a relative updated-at time (e.g., "3 hours ago").
 - Per-row actions: **Copy link** (writes `https://jotjson.com/s/:slug` to the clipboard) and **Delete** (confirms via dialog, then removes the blob server-side and from the list).
 - Loading state renders a three-row pulsing skeleton; empty state reads "You haven't saved any JSON blobs yet." with an "Open the editor" CTA.
 - No pagination needed in v1 - the 100-blob quota keeps the list small.
@@ -648,7 +647,6 @@ per-row behavior are unchanged.
   - Fallback title: show the first ~80 characters of the JSON body when `title` is absent, instead of "Untitled".
   - Additional metadata per row: save date (absolute) and byte size.
   - Search and filter by date range or keyword.
-  - Inline public/private toggle on the list row (today this lives in the toolbar overflow menu on `/s/:slug`).
   - Infinite scroll if/when quotas increase.
 
 #### 3b. Recently viewed page (`/history`, M5b - narrowed in v1)
@@ -1127,8 +1125,8 @@ for setup. The bypass cannot engage in any Azure-hosted environment.
 | GET | `/api/health` | None | Liveness probe |
 | POST | `/api/blobs` | Required | Create a new JSON blob |
 | GET | `/api/blobs` | Required | List caller's blobs (newest first) |
-| GET | `/api/blobs/:id` | Optional | Get a blob by UUID or slug. Public / unlisted blobs do not require auth; owner-only blobs (post-v1) will. |
-| PUT | `/api/blobs/:id` | Required (owner) | Update a blob's content, title, `isPublic` flag, or manual highlights |
+| GET | `/api/blobs/:id` | Optional | Get a blob by UUID or slug. Unlisted blobs do not require auth; owner-only blobs (post-v1) will. |
+| PUT | `/api/blobs/:id` | Required (owner) | Update a blob's content, title, or manual highlights |
 | DELETE | `/api/blobs/:id` | Required (owner) | Delete a blob |
 | GET | `/api/me` | Required | Read the current user document. Returns 404 if not yet seeded. Response carries `ETag: "<version>"`. |
 | POST | `/api/me` | Required | First-time seed: create the user document from the request body (typically the anon user's local preferences). Idempotent; 409 if already seeded. Response carries `ETag: "<version>"`. |
@@ -1192,6 +1190,18 @@ tripwires together make IfMatch protection the default for every
 - Must be valid JSON or JSONC (server re-validates using JSONC-aware parser).
 - Rate limiting: 60 requests/min per IP (anonymous), 120/min (authenticated).
 - **Blob quota (free tier: 100 blobs per user)** - when a user saves their 101st blob, the server automatically deletes the **oldest** blob (by `updatedAt`, then `createdAt` as tiebreaker) to make room. The user is notified via a toast: "Deleted oldest blob '[title]' to stay within your 100-blob limit." The first time this happens per user, a one-time modal explains the auto-delete behavior and offers "OK, got it" or "Let me manage manually" (which instead aborts the save with a prompt to delete blobs from `/blobs`). This choice is remembered as a user preference (`blobQuotaStrategy`: `"auto_fifo"` default or `"manual"`).
+- **Access-control semantics must be enforced at the access-control layer.**
+API fields that imply an access-control semantic (visibility, ownership,
+permissions, sharing scope) MUST be enforced at the access-control layer
+at the time of the field's introduction. A field whose declared meaning
+is not enforced by code is a *lying flag* and creates the structural risk
+of users acting on a guarantee the system does not provide. Motivating
+case study: the 1.0.x `isPublic` blob flag named a privacy boundary that
+the `GET /api/blobs/{idOrSlug}` handler never honored (any blob was
+readable by anyone with the slug); the flag was removed in 1.3.0 once it
+became clear it controlled only client-side SEO meta tags and a UI label.
+Future visibility / sharing features must ship with the access-control
+enforcement and the field together in the same PR, or not at all.
 
 ---
 
@@ -1268,19 +1278,25 @@ tripwires together make IfMatch protection the default for every
   provides MSAL no-op stubs and skips `provideServiceWorker` /
   `provideAppInitializer(AuthService.initializeFromRedirect)`.
 - **Open Graph + Twitter defaults** on `src/index.html` cover the homepage
-  and survive into the prerendered `index.html`. Per-blob OG/Twitter and
-  `noindex` for unlisted blobs are still set client-side by `SeoService`
-  (M4c). `home.component.ts`'s constructor effect that wipes OG tags when
-  no blob is loaded is gated on `isBrowser` so the static defaults are not
-  stripped during prerender.
+  and survive into the prerendered `index.html`. Per-blob OG/Twitter was
+  retired in 1.3.0 alongside the `isPublic` flag removal - every `/s/:slug`
+  page is unlisted, so emitting per-blob rich previews would only create
+  social-share friction without indexing benefit. Crawler defense for
+  `/s/:slug` uses three independent layers (see Visibility above): the
+  pre-fetch `Disallow: /s/` rule in `public/robots.txt`, the
+  `X-Robots-Tag: noindex` HTTP header from `staticwebapp.config.json`
+  (asserted by `scripts/check-swa-config.mjs`), and the always-on
+  client-side `<meta name="robots" content="noindex">` injected by
+  `HomeComponent` for every blob load (covers JS-executing crawlers that
+  bypass the first two).
 - **`og.png`** at `public/og.png` (1200x630, `summary_large_image`).
 - **`robots.txt` + `sitemap.xml`** at `public/robots.txt` and
   `public/sitemap.xml`, listing `https://jotjson.com/` (homepage only;
   /404 is excluded from sitemaps).
 - **404 noindex.** `NotFoundComponent.ngOnInit()` calls
-  `seo.setNoindex(true)` and `seo.clearBlobTags()`, both of which fire
-  during the `/404` prerender so the emitted HTML carries
-  `<meta name="robots" content="noindex">` for crawlers.
+  `seo.setNoindex(true)`, which fires during the `/404` prerender so
+  the emitted HTML carries `<meta name="robots" content="noindex">`
+  for crawlers.
 - **Navigation fallback.** SWA's `navigationFallback.rewrite` points at
   `/shell.html` so unknown navigation URLs land on the SPA shell.
   Prerendered `/index.html` and `/404/index.html`, plus `og.png`,
@@ -1289,9 +1305,11 @@ tripwires together make IfMatch protection the default for every
   (npm `check:prerender`) validates the dist layout, marker placement,
   brand text, OG defaults, noindex, and asset presence after every build.
 - **Out of scope for v1** (tracked as priority:low follow-up issues):
-  - Server-visible OG / `noindex` for `/s/:slug`. Slug space is unbounded
-    and per-blob visibility is dynamic, so static prerender cannot
-    satisfy this. Issue: `followup-share-og`.
+  - ~~Server-visible OG / `noindex` for `/s/:slug`.~~ **Resolved in 1.3.0.**
+    The `noindex` half is delivered via the three-layer crawler defense
+    documented above (robots.txt `Disallow`, X-Robots-Tag header, client-
+    side meta). The OG half is retired - no per-blob OG is emitted by any
+    code path now that all blobs are unlisted.
   - True HTTP 404 status for unknown paths. SWA's `navigationFallback`
     returns 200 and would need `responseOverrides` config. Issue:
     `followup-true-404`.
@@ -1787,7 +1805,7 @@ ID test tenant.
 | Accessibility smoke | v1 gate (active) | `@axe-core/playwright` invoked from each smoke flow, blocking on `serious` + `critical` impact only; pre-existing violations are allow-listed with dated review-by comments. Backs the WCAG 2.1 AA commitment in the Accessibility section (axe-green is necessary but not sufficient for WCAG-green - keyboard-only nav, screen-reader announcements, and dynamic focus order remain manual concerns). Tracked in issue #66. |
 | Visual regression | post-v1 | Pixel-diff of representative screens against a baseline. Post-v1 unless visual bugs become recurring. Tracked in issue #67. |
 | Perf L1 (Node bench) | local-only (v1) | Isolate `parse()` + `buildTree()` wall time and heap allocation on representative fixtures. Headless Node under `--expose-gc`; per-iteration GC bracketing. Documented in `docs/perf.md`. |
-| Perf L2 (Karma component bench) | local-only (v1) | Isolate Angular change-detection costs around `JsonTreeComponent` against the pure tree-build cost L1 measures. Karma + Chromium; opt-in 100K / 1M tiers. Documented in `docs/perf.md`. |
+| Perf L2 (Vitest browser-mode component bench) | local-only (v1) | Isolate Angular change-detection costs around `JsonTreeComponent` against the pure tree-build cost L1 measures. Vitest browser mode + Playwright Chromium with `--js-flags=--expose-gc`; opt-in 100K / 1M tiers. Documented in `docs/perf.md`. |
 | Perf L3 (Playwright + CDP) | local-only (v1) | End-to-end paste / expand-all / scroll-after-expand wall time + longest-task duration on the real SPA. Chromium DevTools Protocol captures CPU profile + tracing. Documented in `docs/perf.md`. |
 
 What this layer model deliberately does *not* claim:
@@ -1804,8 +1822,8 @@ Layer names above are runner-neutral so this model survives runner migrations
 Static-shape invariants (structural rules that can be answered by parsing a
 file as text or AST) go in `scripts/check-*.mjs` and run at `npm run lint`
 time. Computed-style invariants, dynamic-class invariants, and anything
-that requires the live DOM or Angular change-detection stay in Karma
-`*.spec.ts`. The two layers are belt-and-suspenders: the lint catches
+that requires the live DOM or Angular change-detection stay in
+Vitest browser-mode `*.test.ts`. The two layers are belt-and-suspenders: the lint catches
 regressions in milliseconds without needing a browser; the runtime spec
 catches regressions that only manifest at render time. `.tree-row` Grid
 structural invariants follow this split (see `scripts/check-tree-row-grid.mjs`
@@ -3334,6 +3352,39 @@ Out of scope (for v1):
   effect across the four `system`+OS / `dark` / `light` permutations,
   the `color-scheme` rules via stylesheet introspection, and the
   boot-theme helper.
+- **1.3.0**: Remove the `isPublic` blob visibility flag. Investigation
+  found the 1.x flag was a *lying flag* - its declared "private vs
+  public" semantic was not enforced at the access-control layer (any
+  blob was readable by anyone with the slug; `GET /api/blobs/{idOrSlug}`
+  has no `isPublic` check). The flag controlled only client-side SEO
+  meta tags and an overflow-menu UI label. Removed end-to-end: dropped
+  from `JsonBlob`, `BlobDocument`, `CreateBlobInput`, `UpdateBlobPatch`,
+  POST/PUT wire payloads; removed the toolbar overflow item, the
+  `/blobs` "public" badge, the 3-way merge branch + snapshot field +
+  dirty-flag term + `onTogglePublic` chain in `HomeComponent`, the
+  `share.visibility.changed` / `.failed` telemetry tokens, the
+  `share.created` event's `visibility` dimension, and seven i18n
+  strings. `SeoService` shrinks to a single `setNoindex(boolean)`
+  method (per-blob OG/Twitter retired alongside the flag).
+  Schema-evolution Removal (DESIGN_SPEC §2102): `normalizeBlobDocument`
+  strips any legacy `isPublic` key on read with a typed in-only field
+  guard preserving the existing reference-equality optimization, and
+  emits a deduplicated `blob.legacy.isPublic.stripped` event once per
+  blob id per process so the cleanup follow-up
+  (`followup-blob-ispublic-strip`) has a measurable exit signal. The
+  `updateBlob` handler gains an empty-patch early-out so a stale-client
+  `{ isPublic: true }`-only PUT no longer bumps version / `updatedAt`.
+  All `/s/:slug` URLs are now layered-defended from search-engine
+  indexing: `Disallow: /s/` in `public/robots.txt`,
+  `X-Robots-Tag: noindex` header from `staticwebapp.config.json` for
+  `/s/*` (asserted by extended `scripts/check-swa-config.mjs`), and
+  always-on client-side `<meta name="robots" content="noindex">` on
+  every blob load. Verified empirically before merge that no `/s/*`
+  URLs were indexed by any major search engine, eliminating the
+  orphan-index failure mode for the single-deploy rollout. New spec
+  rule §Security: API fields with access-control semantics must be
+  enforced at the access-control layer at the time of the field's
+  introduction. Resolves `followup-share-og`.
 - **Pre-V1**: stays at the current pre-v1 version for non-feature work;
   minor bumps applied for new user-visible features per the rules above. The
   build counter + SHA in the status-bar badge remain the per-build

@@ -35,7 +35,7 @@
 
 import { BUILD_INFO } from '../../../generated/build-info';
 
-export interface BuildIdentity {
+interface BuildIdentity {
   readonly version: string;
   readonly sha: string;
   readonly branch: string;
@@ -69,8 +69,6 @@ export type SwEvent =
       props: BuildIdentity & BrowserBucket;
       timestamp: number;
     };
-
-export type SwEventName = SwEvent['name'];
 
 export const SW_EVENTS_KEY = 'jotjson.sw.events';
 

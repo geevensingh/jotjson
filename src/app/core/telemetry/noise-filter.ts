@@ -1,5 +1,3 @@
-import { TelemetryMessageId } from './telemetry-message-ids';
-
 /**
  * Single seam where the global `TelemetryErrorHandler` decides whether
  * an escaped error is real signal worth forwarding to App Insights or
@@ -15,9 +13,9 @@ import { TelemetryMessageId } from './telemetry-message-ids';
  * the handler.
  */
 
-export type NoiseClassification = 'forward' | 'suppress';
+type NoiseClassification = 'forward' | 'suppress';
 
-export type SuppressReason = 'monacoCanceled';
+type SuppressReason = 'monacoCanceled';
 
 export interface NoiseClassificationResult {
   readonly kind: NoiseClassification;
@@ -67,10 +65,3 @@ function isMonacoCancellation(error: unknown): boolean {
   const candidate = error as { name?: unknown; message?: unknown };
   return candidate.name === 'Canceled' && candidate.message === 'Canceled';
 }
-
-/**
- * Convenience: the messageId used by the suppress-path counter event.
- * Re-exported as a typed `TelemetryMessageId` so call sites get the
- * literal-union safety check.
- */
-export const SUPPRESSED_EVENT_ID: TelemetryMessageId = 'errorHandler.suppressed';
