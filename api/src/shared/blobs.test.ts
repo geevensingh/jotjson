@@ -580,4 +580,33 @@ describe('normalizeBlobDocument legacy isPublic strip (1.3.0)', () => {
     // After the write, the stored doc no longer has isPublic.
     expect((fake.items[0] as unknown as Record<string, unknown>).isPublic).toBeUndefined();
   });
+
+  it('uses an own-property check so a hypothetical prototype-polluted `Object.prototype.isPublic` cannot trigger a false-positive strip + telemetry', async () => {
+    // Defense against an upstream prototype-pollution gadget (a defective
+    // dep that sets Object.prototype.isPublic via __proto__-injection).
+    // `'isPublic' in doc` would walk the prototype chain and trigger a
+    // strip + telemetry emit on every read. The own-property guard
+    // sidesteps that. Test reproduces the failure mode by setting the
+    // pollution explicitly. Restore Object.prototype in a finally so
+    // sibling tests don't see it.
+    const a = await createBlob('owner-1', { content: '{"a":1}' });
+    trackEventSpy.mockClear();
+    Object.defineProperty(Object.prototype, 'isPublic', {
+      value: true,
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
+    try {
+      const found = await findBlobByIdOrSlug(a.id);
+      expect(found).not.toBeNull();
+      // Importantly: no strip telemetry, because the field is NOT on the
+      // doc itself even though `in` would have reported it as present.
+      expect(trackEventSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'blob.legacy.isPublic.stripped' }),
+      );
+    } finally {
+      delete (Object.prototype as Record<string, unknown>)['isPublic'];
+    }
+  });
 });

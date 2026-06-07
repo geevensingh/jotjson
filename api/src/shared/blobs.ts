@@ -175,13 +175,25 @@ function normalizeVersion(value: unknown): number {
  * Insights across enough deploys"). The id itself is held in memory only
  * and never crosses the wire - backend telemetry has no PII redaction
  * (AGENTS.md §4 Telemetry), so the emitted event carries no properties.
+ *
+ * The Set is capped at `MAX_STRIP_LOGGED_IDS` entries so a long-lived
+ * Functions instance cannot accumulate unbounded memory if the legacy
+ * population is large or slow to drain. Once the cap is reached, further
+ * strips no longer log -- but at that point the cap itself proves we
+ * still have a non-zero legacy population (10k unique ids is way more
+ * than enough signal for the cleanup decision), so the dropped emissions
+ * lose no useful information.
  */
+const MAX_STRIP_LOGGED_IDS = 10_000;
 const stripLoggedIds = new Set<string>();
 
 function normalizeBlobDocument(doc: BlobDocument & { isPublic?: unknown }): BlobDocument {
   const version = normalizeVersion(doc.version);
-  if ('isPublic' in doc) {
-    if (doc.id && !stripLoggedIds.has(doc.id)) {
+  // `Object.prototype.hasOwnProperty.call(...)` over `'isPublic' in doc`
+  // so a hypothetical prototype-polluted `Object.prototype.isPublic`
+  // cannot trigger false-positive strips + telemetry on every read.
+  if (Object.prototype.hasOwnProperty.call(doc, 'isPublic')) {
+    if (doc.id && stripLoggedIds.size < MAX_STRIP_LOGGED_IDS && !stripLoggedIds.has(doc.id)) {
       stripLoggedIds.add(doc.id);
       trackEvent('blob.legacy.isPublic.stripped');
     }
