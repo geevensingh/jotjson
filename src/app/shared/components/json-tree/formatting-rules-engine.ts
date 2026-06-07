@@ -46,7 +46,7 @@ import type {
  * different concerns), but a single row can only have one text
  * color or one boldness state.
  */
-export interface RuleStyleProjection {
+interface RuleStyleProjection {
   color?: string;
   bold?: boolean;
   italic?: boolean;
@@ -58,7 +58,7 @@ export interface RuleStyleProjection {
  * Row-level style. Renders against the tree row container, not the
  * inline key/value tokens.
  */
-export interface RuleRowStyle {
+interface RuleRowStyle {
   backgroundColor?: string;
   borderColor?: string;
 }
@@ -68,7 +68,7 @@ export interface RuleRowStyle {
  * surfaced in tooltips and the editor's matched-rule list. `label` is
  * the auto-generated, human-readable description from `describeRule`.
  */
-export interface MatchedRuleRef {
+interface MatchedRuleRef {
   setId: string;
   ruleId: string;
   label: string;

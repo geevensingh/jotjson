@@ -51,7 +51,7 @@
     "lint:sw-shape": "node scripts/check-sw-shape.mjs",
     "lint:deprecated-telemetry": "node scripts/check-deprecated-telemetry.mjs",
     "lint:lockfile": "node scripts/check-lockfile.mjs",
-    "lint:unused-deps": "knip",
+    "lint:unused": "knip",
     "lint:no-sentinel-ceilings": "node scripts/perf/check-no-sentinel-ceilings.mjs",
     "lint:format": "node scripts/check-format.mjs",
     "lint:all": "npm run lint && npm run lint:reduced-motion && npm --prefix api run lint",
