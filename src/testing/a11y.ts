@@ -98,15 +98,13 @@ interface RunAxeOptions {
    * snackbars), pass `target: document.body` so the CDK
    * `cdk-overlay-container` (which renders as a sibling of the fixture
    * wrapper) is included. Overlay specs typically also pass an `exclude`
-   * list to filter out Karma/Jasmine UI -- see the `OVERLAY_EXCLUDES`
-   * convenience export.
+   * list to filter out third-party reporter chrome from the scan.
    */
   target?: Element;
   /**
    * Selectors to exclude from the scan. Useful for third-party widgets
    * whose internal a11y is tracked upstream (e.g., the Monaco editor's
-   * `.monaco-editor` subtree) and for the Karma/Jasmine reporter chrome
-   * that lives in `document.body` alongside the fixture wrapper.
+   * `.monaco-editor` subtree).
    */
   exclude?: string[];
   /**
@@ -121,25 +119,6 @@ interface RunAxeOptions {
    */
   skipWhenStable?: boolean;
 }
-
-/**
- * Selectors that filter Karma + Jasmine + Angular debug UI out of an
- * overlay-state scan. Intended for callers that pass `target:
- * document.body` to capture the CDK overlay container.
- */
-export const OVERLAY_EXCLUDES: ReadonlyArray<string> = [
-  '.jasmine_html-reporter',
-  '.jasmine-overall-result',
-  '.jasmine-banner',
-  '.jasmine-runner',
-  '.jasmine-symbol-summary',
-  '.jasmine-alert',
-  '.jasmine-results',
-  '.jasmine-suite',
-  '.jasmine-spec',
-  '#karma-context',
-  'div[id^="karma"]',
-];
 
 export function getOverlayContainerElement(): HTMLElement {
   const overlayContainer = document.querySelector<HTMLElement>('.cdk-overlay-container');
@@ -158,7 +137,7 @@ export function getOverlayContainerElement(): HTMLElement {
  * filters to `critical` + `serious` impact and asserts the resulting list
  * is empty with a readable failure message.
  */
-export async function runA11yScan(
+async function runA11yScan(
   fixture: ComponentFixture<unknown>,
   options: RunAxeOptions = {},
 ): Promise<AxeResults> {
@@ -219,7 +198,7 @@ function formatNodeTarget(node: NodeResult): string {
  * Always registers a Jasmine expectation, even on the success path, so
  * specs are never flagged as expectation-less.
  */
-export function assertNoStrictA11yViolations(results: AxeResults): void {
+function assertNoStrictA11yViolations(results: AxeResults): void {
   const strict = results.violations.filter(
     (violation) => violation.impact !== undefined && STRICT_IMPACTS.includes(violation.impact),
   );
