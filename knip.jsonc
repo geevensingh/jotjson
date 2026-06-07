@@ -41,8 +41,19 @@
   "workspaces": {
     ".": {
       "entry": [
+        // Service worker source. Compiled separately by
+        // tsconfig.worker.json to a standalone browser-context file
+        // (dist/.../sw.js); not reached via TypeScript imports from
+        // the main bundle, so knip would otherwise see it as orphan.
         "src/sw.worker.ts",
+        // Environment template. Contributors copy this to
+        // `environment.ts` (gitignored) at setup; the template itself
+        // is checked in as documentation and is not imported by source.
         "src/environments/environment.example.ts",
+        // Layer-3 perf-browser Playwright config. Invoked via
+        // `npm run perf:l3`. knip's playwright plugin does not
+        // auto-detect the custom config file name (vs the standard
+        // `playwright.config.ts`).
         "perf/browser/playwright.perf.config.ts",
         // Perf-browser Playwright specs. knip's playwright plugin does
         // not auto-detect the custom config file name
@@ -63,10 +74,24 @@
         "perf/browser/scenarios/harness-attach.spec.ts",
         "perf/browser/scenarios/paste-large.spec.ts",
         "perf/browser/scenarios/scroll-after-expand.spec.ts",
+        // Layer-2 perf benches and shared fixtures. Compiled by
+        // `scripts/perf/build.mjs` (tsconfig.perf.json) to dist-perf/
+        // and executed by `node scripts/perf/run-bench.mjs` and friends;
+        // not imported by app source.
         "perf/bench/**/*.bench.ts",
         "perf/fixtures/**/*.ts",
+        // SPA perf tests (Vitest browser mode). Run via `npx vitest
+        // --config vitest.perf.config.mts`. Not reached via imports
+        // from the main bundle.
         "src/**/*.perf.ts",
+        // End-to-end Playwright specs and helpers. Spec files are
+        // runtime-discovered by the root `playwright.config.ts`
+        // `testDir`; util files in `e2e/util/` are reached transitively
+        // via spec imports.
         "e2e/**/*.ts",
+        // CLI scripts invoked from package.json `scripts/` entries
+        // (e.g. `node scripts/build-sw.mjs`) and CI workflows. Not
+        // imported by source.
         "scripts/**/*.mjs",
       ],
       "project": ["src/**/*.ts", "perf/**/*.ts", "e2e/**/*.ts", "scripts/**/*.mjs"],
@@ -84,9 +109,21 @@
     },
     "api": {
       "entry": [
+        // Azure Functions endpoint handlers. Registered by the
+        // @azure/functions runtime via filesystem discovery (per
+        // api/host.json -> dist/src/functions/*.js); not imported by
+        // other modules, so knip would otherwise see them as orphan.
         "src/functions/**/*.ts",
+        // Jest test files (api workspace uses *.test.ts colocated
+        // with the source under test).
         "src/**/*.test.ts",
+        // Integration tests (real Cosmos backend). Run via
+        // `npm --prefix api run test:integration` against a CI Cosmos
+        // account; not part of the default `npm test` suite.
         "integration/**/*.ts",
+        // api workspace CLI scripts (e.g. cleanup-orphan-cosmos-
+        // containers.mjs). Invoked manually or from CI workflows;
+        // not imported by source.
         "scripts/**/*.mjs",
       ],
       "project": ["src/**/*.ts", "integration/**/*.ts", "scripts/**/*.mjs"],
