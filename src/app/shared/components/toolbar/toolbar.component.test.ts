@@ -23,7 +23,6 @@ type ToolbarAction =
   | 'clear'
   | 'save'
   | 'copyShareLink'
-  | 'togglePublic'
   | 'deleteBlob'
   | 'fileChange';
 
@@ -928,7 +927,6 @@ describe('ToolbarComponent', () => {
       'clear',
       'save',
       'copyShareLink',
-      'togglePublic',
       'deleteBlob',
     ];
 
@@ -937,7 +935,6 @@ describe('ToolbarComponent', () => {
       fixture.componentRef.setInput('canSave', true);
       fixture.componentRef.setInput('saveInFlight', false);
       fixture.componentRef.setInput('isOwner', true);
-      fixture.componentRef.setInput('isPublic', false);
       fixture.detectChanges();
     }
 
@@ -1094,10 +1091,6 @@ describe('ToolbarComponent', () => {
       triggerMenuItemClick(fixture, 'Copy share link');
     }
 
-    function triggerTogglePublicMenuClick(fixture: ComponentFixture<ToolbarComponent>): void {
-      triggerMenuItemClick(fixture, 'Make public');
-    }
-
     function triggerDeleteBlobMenuClick(fixture: ComponentFixture<ToolbarComponent>): void {
       triggerMenuItemClick(fixture, 'Delete this blob');
     }
@@ -1148,7 +1141,6 @@ describe('ToolbarComponent', () => {
         ['clear', () => triggerClearButtonClick(fixture)],
         ['save', () => triggerSaveButtonClick(fixture)],
         ['copyShareLink', () => triggerCopyShareLinkMenuClick(fixture)],
-        ['togglePublic', () => triggerTogglePublicMenuClick(fixture)],
         ['deleteBlob', () => triggerDeleteBlobMenuClick(fixture)],
       ];
     }
@@ -1215,9 +1207,6 @@ describe('ToolbarComponent', () => {
           break;
         case 'copyShareLink':
           component.copyShareLink.subscribe(() => outputSpy());
-          break;
-        case 'togglePublic':
-          component.togglePublic.subscribe(() => outputSpy());
           break;
         case 'deleteBlob':
           component.deleteBlob.subscribe(() => outputSpy());
@@ -1493,30 +1482,16 @@ describe('ToolbarComponent', () => {
       expect(fixture.componentInstance.showOverflowMenu()).toBe(true);
     });
 
-    it('visibilityMenuLabel flips based on isPublic', async () => {
-      const { fixture } = await create();
-      fixture.componentRef.setInput('isPublic', false);
-      fixture.detectChanges();
-      expect(fixture.componentInstance.visibilityMenuLabel()).toBe('Make public');
-      fixture.componentRef.setInput('isPublic', true);
-      fixture.detectChanges();
-      expect(fixture.componentInstance.visibilityMenuLabel()).toBe('Make private');
-    });
-
-    it('copyShareLink, togglePublic, deleteBlob outputs emit when invoked', async () => {
+    it('copyShareLink and deleteBlob outputs emit when invoked', async () => {
       const { fixture } = await create();
       const cmp = fixture.componentInstance;
       const copy = vi.fn();
-      const toggle = vi.fn();
       const del = vi.fn();
       cmp.copyShareLink.subscribe(copy);
-      cmp.togglePublic.subscribe(toggle);
       cmp.deleteBlob.subscribe(del);
       cmp.copyShareLink.emit();
-      cmp.togglePublic.emit();
       cmp.deleteBlob.emit();
       expect(copy).toHaveBeenCalledTimes(1);
-      expect(toggle).toHaveBeenCalledTimes(1);
       expect(del).toHaveBeenCalledTimes(1);
     });
   });

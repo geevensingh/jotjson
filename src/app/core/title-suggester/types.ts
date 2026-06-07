@@ -16,7 +16,7 @@
  * `toolbar.titleSuggestionAccepted` telemetry event, so total
  * cardinality is bounded by this list.
  */
-export type SuggestionSource =
+type SuggestionSource =
   | 'filename'
   | 'packageJson'
   | 'kubernetes'

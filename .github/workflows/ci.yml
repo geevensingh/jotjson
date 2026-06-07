@@ -73,7 +73,7 @@ jobs:
         # mirrors the local `lint:all` flow and keeps install-vs-lint
         # failure attribution unambiguous in the Actions UI: an npm ci
         # failure here is clearly an "install" failure, not a "knip
-        # finding" failure misattributed to `lint-unused-deps`.
+        # finding" failure misattributed to `lint-unused`.
         run: npm --prefix api ci
       - name: Materialize environment.ts
         run: cp src/environments/environment.example.ts src/environments/environment.ts
@@ -95,6 +95,13 @@ jobs:
         run: |
           echo "::add-matcher::${GITHUB_WORKSPACE}/.github/problem-matchers/tsc.json"
           npm run lint:tsc-spec
+          echo "::remove-matcher owner=tsc-jotjson::"
+      - name: Lint - TypeScript (perf L2)
+        id: lint-tsc-perf-l2
+        if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
+        run: |
+          echo "::add-matcher::${GITHUB_WORKSPACE}/.github/problem-matchers/tsc.json"
+          npm run lint:tsc-perf-l2
           echo "::remove-matcher owner=tsc-jotjson::"
       - name: Lint - ASCII allowlist
         id: lint-ascii
@@ -137,18 +144,17 @@ jobs:
         id: lint-sw-shape
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
         run: npm run lint:sw-shape
-      - name: Lint - Unused dependencies
-        # knip-driven detection of orphan npm deps across the root SPA +
-        # api/ workspaces. Scoped to deps only via knip.jsonc rule
-        # severities (unused-exports and unused-files are configured at
-        # "off" and tracked as follow-ups #425 and #426). Allowlist
-        # entries in knip.jsonc require a rationale comment naming the
-        # specific mechanism by which the dep is used. The api/ workspace
-        # is `npm ci`d at the top of this job so knip can resolve
-        # cross-workspace binaries.
-        id: lint-unused-deps
+      - name: Lint - Unused code
+        # knip-driven detection of orphan npm deps and unused exports/types
+        # across the root SPA + api/ workspaces. Severity per rule set in
+        # knip.jsonc (deps/exports/types/ns* = error; files = off, tracked
+        # as follow-up #426). Allowlist entries in knip.jsonc require a
+        # rationale comment naming the specific mechanism by which the dep
+        # is used. The api/ workspace is `npm ci`d at the top of this job
+        # so knip can resolve cross-workspace binaries.
+        id: lint-unused
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
-        run: npm run lint:unused-deps
+        run: npm run lint:unused
       - name: Lint - Prettier formatting
         id: lint-format
         if: ${{ !cancelled() && steps.lint-tsc.conclusion != 'skipped' }}
@@ -190,6 +196,7 @@ jobs:
         env:
           OUTCOME_TSC: ${{ steps.lint-tsc.outcome }}
           OUTCOME_TSC_SPEC: ${{ steps.lint-tsc-spec.outcome }}
+          OUTCOME_TSC_PERF_L2: ${{ steps.lint-tsc-perf-l2.outcome }}
           OUTCOME_ASCII: ${{ steps.lint-ascii.outcome }}
           OUTCOME_SPEC: ${{ steps.lint-spec-patterns.outcome }}
           OUTCOME_PROD: ${{ steps.lint-prod-patterns.outcome }}
@@ -197,7 +204,7 @@ jobs:
           OUTCOME_SWA_CONFIG: ${{ steps.lint-swa-config.outcome }}
           OUTCOME_FRESHNESS_CLI: ${{ steps.lint-deploy-freshness-cli.outcome }}
           OUTCOME_SW_SHAPE: ${{ steps.lint-sw-shape.outcome }}
-          OUTCOME_UNUSED_DEPS: ${{ steps.lint-unused-deps.outcome }}
+          OUTCOME_UNUSED: ${{ steps.lint-unused.outcome }}
           OUTCOME_FORMAT: ${{ steps.lint-format.outcome }}
           OUTCOME_TEST_SCRIPTS: ${{ steps.test-scripts.outcome }}
           OUTCOME_TEST_PERF_SCRIPTS: ${{ steps.test-perf-scripts.outcome }}
@@ -221,6 +228,7 @@ jobs:
             }
             emit "TypeScript (tsc)"        "$OUTCOME_TSC"          "fix the type error reported above"
             emit "TypeScript specs (tsc)"  "$OUTCOME_TSC_SPEC"     "fix the type error reported above"
+            emit "TypeScript perf L2 (tsc)" "$OUTCOME_TSC_PERF_L2" "fix the type error reported above (tsconfig.perf-l2.json)"
             emit "ASCII allowlist"         "$OUTCOME_ASCII"        "edit ALLOWED in scripts/check-ascii.mjs or remove the codepoint"
             emit "Spec patterns"           "$OUTCOME_SPEC"         "see scripts/check-spec-patterns.mjs for the rule and approved alternative"
             emit "Production patterns"     "$OUTCOME_PROD"         "see scripts/check-prod-patterns.mjs for the rule and approved alternative"
@@ -228,7 +236,7 @@ jobs:
             emit "SWA config"              "$OUTCOME_SWA_CONFIG"   "npm run lint:swa-config - fix the assertion failure printed above; see scripts/check-swa-config.mjs"
             emit "Deploy freshness CLI"    "$OUTCOME_FRESHNESS_CLI" "npm run lint:deploy-freshness-cli - workflow argv must match scripts/check-deploy-freshness.mjs CLI; see error printed above"
             emit "SW shape"                "$OUTCOME_SW_SHAPE"     "npm run lint:sw-shape - if src/sw.worker.ts changed intentionally, update EXPECTED_SW_SOURCE_SHA256 in scripts/check-sw-shape.mjs"
-            emit "Unused dependencies"     "$OUTCOME_UNUSED_DEPS"  "npm run lint:unused-deps - either remove the unused dep from package.json or add it to knip.jsonc ignoreDependencies with a rationale comment naming the specific (not generic) mechanism by which the dep is used"
+            emit "Unused code"             "$OUTCOME_UNUSED"       "npm run lint:unused - either remove the unused export/dep or add it to knip.jsonc ignoreDependencies with a rationale comment naming the specific (not generic) mechanism by which the dep is used"
             emit "Prettier formatting"     "$OUTCOME_FORMAT"       "npm run format"
             emit "Script tests"            "$OUTCOME_TEST_SCRIPTS" "npm run test:scripts - then fix the failing assertion in scripts/*.test.mjs"
             emit "Perf script tests"       "$OUTCOME_TEST_PERF_SCRIPTS" "npm run test:perf-scripts - then fix the failing assertion in perf/fixtures/*.test.mjs"

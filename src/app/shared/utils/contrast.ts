@@ -20,8 +20,6 @@ export const THEME_DEFAULTS = {
   dark: { bg: '#1e1e1e', fg: '#e4e4e4' },
 } as const;
 
-export type Theme = keyof typeof THEME_DEFAULTS;
-
 /**
  * WCAG AA contrast threshold for normal-size body text. Large text
  * (18pt regular / 14pt bold) is allowed at 3.0, but tree rows are
